@@ -43,8 +43,7 @@
     "sqlState" : "23000"
   },
   "FAILED_EXECUTE_UDF" : {
-    "message" : [ "Failed to execute user defined function (%s: (%s) => %s)" ],
-    "sqlState" : "45000"
+    "message" : [ "Failed to execute user defined function (%s: (%s) => %s)" ]
   },
   "FAILED_RENAME_PATH" : {
     "message" : [ "Failed to rename %s to %s as destination already exists" ],
@@ -141,6 +140,10 @@
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
   },
+  "UNRECOGNIZED_SQL_TYPE" : {
+    "message" : [ "Unrecognized SQL type %s" ],
+    "sqlState" : "42000"
+  },
   "UNSUPPORTED_CHANGE_COLUMN" : {
     "message" : [ "Please add an implementation for a column change here" ],
     "sqlState" : "0A000"
@@ -155,10 +158,6 @@
   },
   "UNSUPPORTED_SIMPLE_STRING_WITH_NODEID" : {
     "message" : [ "%s does not implement simpleStringWithNodeId" ]
-  },
-  "UNRECOGNIZED_SQL_TYPE" : {
-    "message" : [ "Unrecognized SQL type %s" ],
-    "sqlState" : "42000"
   },
   "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER" : {
     "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],
