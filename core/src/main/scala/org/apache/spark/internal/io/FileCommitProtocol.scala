@@ -51,6 +51,11 @@ abstract class FileCommitProtocol extends Logging {
   import FileCommitProtocol._
 
   /**
+   * The output path of this committer.
+   */
+  def outputPath: Path
+
+  /**
    * Setups up a job. Must be called on the driver before any other methods can be invoked.
    */
   def setupJob(jobContext: JobContext): Unit

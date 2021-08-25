@@ -160,6 +160,14 @@ class HadoopMapReduceCommitProtocol(
     f"part-$split%05d-$jobId$ext"
   }
 
+  override def outputPath: Path = {
+    if (dynamicPartitionOverwrite) {
+      stagingDir
+    } else {
+      new Path(path)
+    }
+  }
+
   override def setupJob(jobContext: JobContext): Unit = {
     // Setup IDs
     val jobId = SparkHadoopWriterUtils.createJobID(new Date, 0)
