@@ -471,7 +471,7 @@ object DataSourceStrategy
    */
   protected[sql] def normalizeExprs(
       exprs: Seq[Expression],
-      attributes: Seq[AttributeReference]): Seq[Expression] = {
+      attributes: Seq[Attribute]): Seq[Expression] = {
     exprs.map { e =>
       e transform {
         case a: AttributeReference =>
