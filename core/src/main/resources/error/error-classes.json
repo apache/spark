@@ -31,6 +31,9 @@
     "message" : [ "Casting %s to %s causes overflow" ],
     "sqlState" : "22018"
   },
+  "CONCURRENT_QUERY_ERROR" : {
+    "message" : [ "Another instance of this query was just started by a concurrent session." ]
+  },
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero" ],
     "sqlState" : "22012"
@@ -42,6 +45,13 @@
   "FAILED_EXECUTE_UDF" : {
     "message" : [ "Failed to execute user defined function (%s: (%s) => %s)" ],
     "sqlState" : "45000"
+  },
+  "FAILED_RENAME_PATH" : {
+    "message" : [ "Failed to rename %s to %s as destination already exists" ],
+    "sqlState" : "22023"
+  },
+  "FAILED_SET_ORIGINAL_PERMISSION_BACK" : {
+    "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ]
   },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [ "Column of grouping (%s) can't be found in grouping columns %s" ],
@@ -61,12 +71,23 @@
     "message" : [ "Invalid pivot column '%s'. Pivot columns must be comparable." ],
     "sqlState" : "42000"
   },
+  "INCOMPATIBLE_DATASOURCE_REGISTER" : {
+    "message" : [ "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: %s" ]
+  },
+  "INDEX_OUT_OF_BOUNDS" : {
+    "message" : [ "Index %s must be between 0 and the length of the ArrayData." ],
+    "sqlState" : "22023"
+  },
   "INVALID_ARRAY_INDEX" : {
     "message" : [ "Invalid index: %s, numElements: %s" ]
   },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name %s is invalid: %s is not a struct." ],
     "sqlState" : "42000"
+  },
+  "INVALID_FRACTION_OF_SECOND" : {
+    "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]." ],
+    "sqlState" : "22023"
   },
   "INVALID_INPUT_SYNTAX_FOR_NUMERIC" : {
     "message" : [ "invalid input syntax for type numeric: %s" ],
@@ -85,6 +106,10 @@
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
     "sqlState" : "42000"
   },
+  "MISSING_METHOD" : {
+    "message" : [ "A method named \"%s\" is not declared in any enclosing class nor any supertype" ],
+    "sqlState" : "42000"
+  },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [ "Unknown static partition column: %s" ],
     "sqlState" : "42000"
@@ -100,6 +125,10 @@
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
     "sqlState" : "42000"
+  },
+  "RENAME_SRC_PATH_NOT_FOUND" : {
+    "message" : [ "Failed to rename as %s was not found" ],
+    "sqlState" : "22023"
   },
   "ROW_FROM_CSV_PARSER_NOT_EXPECTED" : {
     "message" : [ "Expected one row from CSV parser." ],
@@ -120,8 +149,19 @@
     "message" : [ "Unsupported data type %s %s" ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_LITERAL_TYPE" : {
+    "message" : [ "Unsupported literal type %s %s" ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_SIMPLE_STRING_WITH_NODEID" : {
-    "message" : [ "%s does not implement simpleStringWithNodeId" ],
+    "message" : [ "%s does not implement simpleStringWithNodeId" ]
+  },
+  "UNRECOGNIZED_SQL_TYPE" : {
+    "message" : [ "Unrecognized SQL type %s" ],
+    "sqlState" : "42000"
+  },
+  "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER" : {
+    "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],
     "sqlState" : "0A000"
   },
   "WRITING_JOB_ABORTED" : {

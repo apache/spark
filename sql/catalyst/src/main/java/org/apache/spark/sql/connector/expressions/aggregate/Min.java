@@ -15,28 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions;
+package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
-
-import java.io.Serializable;
+import org.apache.spark.sql.connector.expressions.FieldReference;
 
 /**
- * Aggregation in SQL statement.
+ * An aggregate function that returns the minimum value in a group.
  *
  * @since 3.2.0
  */
 @Evolving
-public final class Aggregation implements Serializable {
-  private final AggregateFunc[] aggregateExpressions;
-  private final FieldReference[] groupByColumns;
+public final class Min implements AggregateFunc {
+  private final FieldReference column;
 
-  public Aggregation(AggregateFunc[] aggregateExpressions, FieldReference[] groupByColumns) {
-    this.aggregateExpressions = aggregateExpressions;
-    this.groupByColumns = groupByColumns;
-  }
+  public Min(FieldReference column) { this.column = column; }
 
-  public AggregateFunc[] aggregateExpressions() { return aggregateExpressions; }
+  public FieldReference column() { return column; }
 
-  public FieldReference[] groupByColumns() { return groupByColumns; }
+  @Override
+  public String toString() { return "MIN(" + column.describe() + ")"; }
+
+  @Override
+  public String describe() { return this.toString(); }
 }

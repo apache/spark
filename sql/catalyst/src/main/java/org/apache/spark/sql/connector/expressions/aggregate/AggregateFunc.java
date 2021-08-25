@@ -15,26 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions;
+package org.apache.spark.sql.connector.expressions.aggregate;
+
+import java.io.Serializable;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
- * An aggregate function that returns the maximum value in a group.
+ * Base class of the Aggregate Functions.
  *
  * @since 3.2.0
  */
 @Evolving
-public final class Max implements AggregateFunc {
-  private final FieldReference column;
-
-  public Max(FieldReference column) { this.column = column; }
-
-  public FieldReference column() { return column; }
-
-  @Override
-  public String toString() { return "MAX(" + column.describe() + ")"; }
-
-  @Override
-  public String describe() { return this.toString(); }
+public interface AggregateFunc extends Expression, Serializable {
 }

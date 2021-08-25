@@ -32,7 +32,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
-import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkException, SparkIllegalArgumentException, SparkIllegalStateException, SparkNoSuchElementException, SparkNumberFormatException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIllegalStateException, SparkIndexOutOfBoundsException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -174,7 +174,7 @@ object QueryExecutionErrors {
   }
 
   def invalidFractionOfSecondError(): DateTimeException = {
-    new DateTimeException("The fraction of sec must be zero. Valid range is [0, 60].")
+    new SparkDateTimeException(errorClass = "INVALID_FRACTION_OF_SECOND", Array.empty)
   }
 
   def overflowInSumOfDecimalError(): ArithmeticException = {
@@ -196,7 +196,8 @@ object QueryExecutionErrors {
   }
 
   def literalTypeUnsupportedError(v: Any): RuntimeException = {
-    new RuntimeException(s"Unsupported literal type ${v.getClass} $v")
+    new SparkRuntimeException("UNSUPPORTED_LITERAL_TYPE",
+      Array(v.getClass.toString, v.toString))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
@@ -278,8 +279,7 @@ object QueryExecutionErrors {
   }
 
   def methodNotDeclaredError(name: String): Throwable = {
-    new NoSuchMethodException(s"""A method named "$name" is not declared """ +
-      "in any enclosing class nor any supertype")
+    new SparkNoSuchMethodException(errorClass = "MISSING_METHOD", Array(name))
   }
 
   def constructorNotFoundError(cls: String): Throwable = {
@@ -466,11 +466,7 @@ object QueryExecutionErrors {
   }
 
   def incompatibleDataSourceRegisterError(e: Throwable): Throwable = {
-    new ClassNotFoundException(
-      s"""
-         |Detected an incompatible DataSourceRegister. Please remove the incompatible
-         |library from classpath or upgrade it. Error: ${e.getMessage}
-       """.stripMargin, e)
+    new SparkClassNotFoundException("INCOMPATIBLE_DATASOURCE_REGISTER", Array(e.getMessage), e)
   }
 
   def unrecognizedFileFormatError(format: String): Throwable = {
@@ -692,7 +688,7 @@ object QueryExecutionErrors {
   }
 
   def unrecognizedSqlTypeError(sqlType: Int): Throwable = {
-    new SQLException(s"Unrecognized SQL type $sqlType")
+    new SparkSQLException(errorClass = "UNRECOGNIZED_SQL_TYPE", Array(sqlType.toString))
   }
 
   def unsupportedJdbcTypeError(content: String): Throwable = {
@@ -719,8 +715,8 @@ object QueryExecutionErrors {
   }
 
   def transactionUnsupportedByJdbcServerError(): Throwable = {
-    new SQLFeatureNotSupportedException("The target JDBC server does not support " +
-      "transaction and can only support ALTER TABLE with a single action.")
+    new SparkSQLFeatureNotSupportedException(errorClass = "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER",
+      Array.empty)
   }
 
   def dataTypeUnsupportedYetError(dataType: DataType): Throwable = {
@@ -969,8 +965,7 @@ object QueryExecutionErrors {
   }
 
   def concurrentQueryInstanceError(): Throwable = {
-    new ConcurrentModificationException(
-      "Another instance of this query was just started by a concurrent session.")
+    new SparkConcurrentModificationException("CONCURRENT_QUERY_ERROR", Array.empty)
   }
 
   def cannotParseJsonArraysAsStructsError(): Throwable = {
@@ -1250,8 +1245,7 @@ object QueryExecutionErrors {
   }
 
   def indexOutOfBoundsOfArrayDataError(idx: Int): Throwable = {
-    new IndexOutOfBoundsException(
-      s"Index $idx must be between 0 and the length of the ArrayData.")
+    new SparkIndexOutOfBoundsException(errorClass = "INDEX_OUT_OF_BOUNDS", Array(idx.toString))
   }
 
   def malformedRecordsDetectedInRecordParsingError(e: BadRecordException): Throwable = {
@@ -1371,8 +1365,8 @@ object QueryExecutionErrors {
   }
 
   def renamePathAsExistsPathError(srcPath: Path, dstPath: Path): Throwable = {
-    new FileAlreadyExistsException(
-      s"Failed to rename $srcPath to $dstPath as destination already exists")
+    new SparkFileAlreadyExistsException(errorClass = "FAILED_RENAME_PATH",
+      Array(srcPath.toString, dstPath.toString))
   }
 
   def renameAsExistsPathError(dstPath: Path): Throwable = {
@@ -1380,7 +1374,8 @@ object QueryExecutionErrors {
   }
 
   def renameSrcPathNotFoundError(srcPath: Path): Throwable = {
-    new FileNotFoundException(s"Failed to rename as $srcPath was not found")
+    new SparkFileNotFoundException(errorClass = "RENAME_SRC_PATH_NOT_FOUND",
+      Array(srcPath.toString))
   }
 
   def failedRenameTempFileError(srcPath: Path, dstPath: Path): Throwable = {
@@ -1577,8 +1572,8 @@ object QueryExecutionErrors {
       permission: FsPermission,
       path: Path,
       e: Throwable): Throwable = {
-    new SecurityException(s"Failed to set original permission $permission back to " +
-      s"the created path: $path. Exception: ${e.getMessage}")
+    new SparkSecurityException(errorClass = "FAILED_SET_ORIGINAL_PERMISSION_BACK",
+      Array(permission.toString, path.toString, e.getMessage))
   }
 
   def failToSetOriginalACLBackError(aclEntries: String, path: Path, e: Throwable): Throwable = {
