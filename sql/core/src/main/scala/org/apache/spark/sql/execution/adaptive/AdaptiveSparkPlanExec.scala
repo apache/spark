@@ -694,8 +694,8 @@ case class AdaptiveSparkPlanExec(
     val newPhysicalPlans = if (optimizedPhysicalPlan.fastEquals(optimizedWithSkewedJoin)) {
       updateBroadcastExchange(optimizedPhysicalPlan) :: Nil
     } else {
-      updateBroadcastExchange(optimizedPhysicalPlan) ::
-        updateBroadcastExchange(optimizedWithSkewedJoin) :: Nil
+      updateBroadcastExchange(optimizedWithSkewedJoin) ::
+        updateBroadcastExchange(optimizedPhysicalPlan) :: Nil
     }
     (newPhysicalPlans, optimized)
   }
