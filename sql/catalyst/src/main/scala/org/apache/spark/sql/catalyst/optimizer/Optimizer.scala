@@ -800,6 +800,11 @@ object ColumnPruning extends Rule[LogicalPlan] {
       }
       a.copy(child = Expand(newProjects, newOutput, grandChild))
 
+    // Prune and drop AttachDistributedSequence if the produced attribute is not referred.
+    case p @ Project(_, a @ AttachDistributedSequence(_, grandChild))
+        if !p.references.contains(a.sequenceAttr) =>
+      p.copy(child = prunedChild(grandChild, p.references))
+
     // Prunes the unused columns from child of `DeserializeToObject`
     case d @ DeserializeToObject(_, _, child) if !child.outputSet.subsetOf(d.references) =>
       d.copy(child = prunedChild(child, d.references))
