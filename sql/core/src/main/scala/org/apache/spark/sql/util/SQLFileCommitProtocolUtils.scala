@@ -69,7 +69,7 @@ object SQLFileCommitProtocolUtils extends Logging {
       jobId)
   }
 
-  private def getStagingDir(
+  def getStagingDir(
       inputPath: Path,
       hadoopConf: Configuration,
       stagingDir: String,

@@ -129,8 +129,10 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     if (hiveVersionsUsingOldExternalTempPath.contains(hiveVersion)) {
       oldVersionExternalTempPath(path, hadoopConf, scratchDir)
     } else if (hiveVersionsUsingNewExternalTempPath.contains(hiveVersion)) {
-      newVersionExternalTempPath(
+      val externalTempPath = newVersionExternalTempPath(
         path, hadoopConf, stagingDir, "hive", TaskRunner.getTaskRunnerID.toString)
+      createdTempDir = Some(externalTempPath.getParent)
+      externalTempPath
     } else {
       throw new IllegalStateException("Unsupported hive version: " + hiveVersion.fullVersion)
     }
