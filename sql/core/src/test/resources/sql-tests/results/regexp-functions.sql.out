@@ -7,7 +7,7 @@ SELECT regexp_extract('1a 2b 14m', '\\d+')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
+org.apache.spark.SparkIllegalArgumentException
 Regex group count is 0, but the specified group index is 1
 
 
@@ -24,7 +24,7 @@ SELECT regexp_extract('1a 2b 14m', '\\d+', 1)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
+org.apache.spark.SparkIllegalArgumentException
 Regex group count is 0, but the specified group index is 1
 
 
@@ -33,7 +33,7 @@ SELECT regexp_extract('1a 2b 14m', '\\d+', 2)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
+org.apache.spark.SparkIllegalArgumentException
 Regex group count is 0, but the specified group index is 2
 
 
@@ -42,7 +42,7 @@ SELECT regexp_extract('1a 2b 14m', '\\d+', -1)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
+org.apache.spark.SparkIllegalArgumentException
 The specified group index cannot be less than zero
 
 
@@ -99,7 +99,7 @@ SELECT regexp_extract('1a 2b 14m', '(\\d+)([a-z]+)', 3)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
+org.apache.spark.SparkIllegalArgumentException
 Regex group count is 2, but the specified group index is 3
 
 
@@ -108,7 +108,7 @@ SELECT regexp_extract('1a 2b 14m', '(\\d+)([a-z]+)', -1)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
+org.apache.spark.SparkIllegalArgumentException
 The specified group index cannot be less than zero
 
 
@@ -133,7 +133,7 @@ SELECT regexp_extract_all('1a 2b 14m', '\\d+')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
+org.apache.spark.SparkIllegalArgumentException
 Regex group count is 0, but the specified group index is 1
 
 
@@ -150,7 +150,7 @@ SELECT regexp_extract_all('1a 2b 14m', '\\d+', 1)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
+org.apache.spark.SparkIllegalArgumentException
 Regex group count is 0, but the specified group index is 1
 
 
@@ -159,7 +159,7 @@ SELECT regexp_extract_all('1a 2b 14m', '\\d+', 2)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
+org.apache.spark.SparkIllegalArgumentException
 Regex group count is 0, but the specified group index is 2
 
 
@@ -168,7 +168,7 @@ SELECT regexp_extract_all('1a 2b 14m', '\\d+', -1)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
+org.apache.spark.SparkIllegalArgumentException
 The specified group index cannot be less than zero
 
 
@@ -225,7 +225,7 @@ SELECT regexp_extract_all('1a 2b 14m', '(\\d+)([a-z]+)', 3)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
+org.apache.spark.SparkIllegalArgumentException
 Regex group count is 2, but the specified group index is 3
 
 
@@ -234,7 +234,7 @@ SELECT regexp_extract_all('1a 2b 14m', '(\\d+)([a-z]+)', -1)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
+org.apache.spark.SparkIllegalArgumentException
 The specified group index cannot be less than zero
 
 
