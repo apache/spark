@@ -19,7 +19,6 @@ package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
-import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * A filter that evaluates to `true` iff `child` is evaluated to `false`.
