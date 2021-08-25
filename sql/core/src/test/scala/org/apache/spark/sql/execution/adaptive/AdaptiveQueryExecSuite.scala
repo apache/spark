@@ -96,6 +96,12 @@ class AdaptiveQueryExecSuite
     (dfAdaptive.queryExecution.sparkPlan, adaptivePlan)
   }
 
+  private def findTopLevelShuffle(plan: SparkPlan): Seq[ShuffleExchangeExec] = {
+    collect(plan) {
+      case s: ShuffleExchangeExec => s
+    }
+  }
+
   private def findTopLevelBroadcastHashJoin(plan: SparkPlan): Seq[BroadcastHashJoinExec] = {
     collect(plan) {
       case j: BroadcastHashJoinExec => j
@@ -1928,23 +1934,45 @@ class AdaptiveQueryExecSuite
           .selectExpr("id % 1 as key2", "id as value2")
           .createOrReplaceTempView("skewData2")
 
-        val (_, adaptive) = runAdaptiveAndVerifyResult(
-          "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1")
-        val smj = findTopLevelSortMergeJoin(adaptive)
-        assert(smj.size == 1 && smj.forall(_.isSkewJoin))
-        checkNumLocalShuffleReads(adaptive, 3)
+        // check if optimized skewed join does not satisfy the required distribution
+        Seq(true, false).foreach { hasRequiredDistribution =>
+          Seq(true, false).foreach { hasPartitionNumber =>
+            val repartition = if (hasRequiredDistribution) {
+              s"/*+ repartition(${ if (hasPartitionNumber) "10," else ""}key1) */"
+            } else {
+              ""
+            }
 
-        val (_, adaptive2) = runAdaptiveAndVerifyResult(
-          "SELECT /*+ repartition */ key1 FROM skewData1 JOIN skewData2 ON key1 = key2")
-        val smj2 = findTopLevelSortMergeJoin(adaptive2)
-        assert(smj2.size == 1 && smj2.forall(_.isSkewJoin))
-        // top level shuffle reader is local
-        checkNumLocalShuffleReads(adaptive2, 2)
+            // check required distribution and extra shuffle
+            val (_, adaptive1) =
+              runAdaptiveAndVerifyResult(s"SELECT $repartition key1 FROM skewData1 " +
+                s"JOIN skewData2 ON key1 = key2 GROUP BY key1")
+            val shuffles1 = findTopLevelShuffle(adaptive1)
+            assert(shuffles1.size == 3)
+            assert(shuffles1.head.shuffleOrigin == ENSURE_REQUIREMENTS)
+            val smj1 = findTopLevelSortMergeJoin(adaptive1)
+            assert(smj1.size == 1 && smj1.exists(_.isSkewJoin))
 
-        val (_, adaptive3) = runAdaptiveAndVerifyResult(
-          "SELECT /*+ repartition(key1) */ key1 FROM skewData1 JOIN skewData2 ON key1 = key2")
-        val smj3 = findTopLevelSortMergeJoin(adaptive3)
-        assert(smj3.size == 1 && !smj3.exists(_.isSkewJoin))
+            // only check required distribution
+            val (_, adaptive2) =
+              runAdaptiveAndVerifyResult(s"SELECT $repartition key1 FROM skewData1 " +
+                s"JOIN skewData2 ON key1 = key2")
+            val shuffles2 = findTopLevelShuffle(adaptive2)
+            if (hasRequiredDistribution) {
+              assert(shuffles2.size == 3)
+              val finalShuffle = shuffles2.head
+              if (hasPartitionNumber) {
+                assert(finalShuffle.shuffleOrigin == REPARTITION_BY_NUM)
+              } else {
+                assert(finalShuffle.shuffleOrigin == REPARTITION_BY_COL)
+              }
+            } else {
+              assert(shuffles2.size == 2)
+            }
+            val smj2 = findTopLevelSortMergeJoin(adaptive2)
+            assert(smj2.size == 1 && smj2.exists(_.isSkewJoin))
+          }
+        }
       }
     }
   }

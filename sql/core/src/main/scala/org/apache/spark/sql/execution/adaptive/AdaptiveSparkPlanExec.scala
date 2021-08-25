@@ -154,8 +154,22 @@ case class AdaptiveSparkPlanExec(
     val optimized = queryStageOptimizerRules.foldLeft(plan) { case (latestPlan, rule) =>
       val applied = rule.apply(latestPlan)
       val result = rule match {
-        case _: AQEShuffleReadRule =>
-          checkDistribution(applied, latestPlan, isFinalStage, rule.ruleName)
+        case _: AQEShuffleReadRule if !applied.fastEquals(latestPlan) =>
+          val distribution = if (isFinalStage) {
+            // If `requiredDistribution` is None, it means `EnsureRequirements` will not optimize
+            // out the user-specified repartition, thus we don't have a distribution requirement
+            // for the final plan.
+            requiredDistribution.getOrElse(UnspecifiedDistribution)
+          } else {
+            UnspecifiedDistribution
+          }
+          if (ValidateRequirements.validate(applied, distribution)) {
+            applied
+          } else {
+            logDebug(s"Rule ${rule.ruleName} is not applied as it breaks the " +
+              "distribution requirement of the query plan.")
+            latestPlan
+          }
         case _ => applied
       }
       planChangeLogger.logRule(rule.ruleName, latestPlan, result)
@@ -163,29 +177,6 @@ case class AdaptiveSparkPlanExec(
     }
     planChangeLogger.logBatch("AQE Query Stage Optimization", plan, optimized)
     optimized
-  }
-
-  private def checkDistribution(
-      newPlan: SparkPlan,
-      originPlan: SparkPlan,
-      isFinalStage: Boolean,
-      ruleName: String): SparkPlan = {
-    if (newPlan.fastEquals(originPlan)) return originPlan
-    val distribution = if (isFinalStage) {
-      // If `requiredDistribution` is None, it means `EnsureRequirements` will not optimize
-      // out the user-specified repartition, thus we don't have a distribution requirement
-      // for the final plan.
-      requiredDistribution.getOrElse(UnspecifiedDistribution)
-    } else {
-      UnspecifiedDistribution
-    }
-    if (ValidateRequirements.validate(newPlan, distribution)) {
-      newPlan
-    } else {
-      logDebug(s"Rule $ruleName is not applied as it breaks the " +
-        "distribution requirement of the query plan.")
-      originPlan
-    }
   }
 
   @transient private val costEvaluator =
@@ -701,13 +692,9 @@ case class AdaptiveSparkPlanExec(
       preprocessingRules ++ queryStagePreparationRules(true),
       Some((planChangeLogger, "AQE Replanning With Optimize Skewed Join")))
 
-    // respect the requiredDistribution for final stage
+    // ensure the output partitioning for requiredDistribution
     val validatedWithSkewedJoin =
-      checkDistribution(
-        optimizedWithSkewedJoin,
-        optimizedPhysicalPlan,
-        isFinalStage(optimizedWithSkewedJoin),
-        OptimizeSkewedJoin.ruleName)
+      AQEUtils.ensureRequiredDistribution(optimizedWithSkewedJoin, requiredDistribution)
 
     // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
     // add the `BroadcastExchangeExec` node manually in the DPP subquery,
