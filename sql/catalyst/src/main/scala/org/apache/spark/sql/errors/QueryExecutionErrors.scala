@@ -170,90 +170,88 @@ object QueryExecutionErrors {
   }
 
   def inputTypeUnsupportedError(dataType: DataType): Throwable = {
-    new IllegalArgumentException(s"Unsupported input type ${dataType.catalogString}")
+    new SparkIllegalArgumentException("UNSUPPORTED_INPUT_TYPE", Array(dataType.catalogString))
   }
 
   def invalidFractionOfSecondError(): DateTimeException = {
-    new SparkDateTimeException(errorClass = "INVALID_FRACTION_OF_SECOND", Array.empty)
+    new SparkDateTimeException("INVALID_FRACTION_OF_SECOND", Array.empty)
   }
 
   def overflowInSumOfDecimalError(): ArithmeticException = {
-    new ArithmeticException("Overflow in sum of decimals.")
+    new SparkArithmeticException("SUM_OF_DECIMAL_OVERFLOW", Array.empty)
   }
 
   def overflowInIntegralDivideError(): ArithmeticException = {
-    new ArithmeticException("Overflow in integral divide.")
+    new SparkArithmeticException("INTEGRAL_DIVIDE_OVERFLOW", Array.empty)
   }
 
   def mapSizeExceedArraySizeWhenZipMapError(size: Int): RuntimeException = {
-    new RuntimeException(s"Unsuccessful try to zip maps with $size " +
-      "unique keys due to exceeding the array size limit " +
-      s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+    new SparkRuntimeException("EXCEED_ARRAY_SIZE_WHEN_ZIP_MAP",
+      Array(size.toString, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString))
   }
 
   def copyNullFieldNotAllowedError(): Throwable = {
-    new IllegalStateException("Do not attempt to copy a null field")
+    new SparkIllegalStateException("COPY_NULL_FIELD", Array.empty)
   }
 
   def literalTypeUnsupportedError(v: Any): RuntimeException = {
-    new SparkRuntimeException("UNSUPPORTED_LITERAL_TYPE",
-      Array(v.getClass.toString, v.toString))
+    new SparkRuntimeException("UNSUPPORTED_LITERAL_TYPE", Array(v.getClass.toString, v.toString))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
-    new RuntimeException(s"no default for type $dataType")
+    new SparkRuntimeException("NO_DEFAULT_FOR_TYPE", Array(dataType.toString))
   }
 
   def doGenCodeOfAliasShouldNotBeCalledError(): Throwable = {
-    new IllegalStateException("Alias.doGenCode should not be called.")
+    new SparkIllegalStateException("SHOULD_NOT_CALL_ALIAS_DO_GEN_CODE", Array.empty)
   }
 
   def orderedOperationUnsupportedByDataTypeError(dataType: DataType): Throwable = {
-    new IllegalArgumentException(s"Type $dataType does not support ordered operations")
+    new SparkIllegalArgumentException("NOT_SUPPORT_ORDERED_OPERATIONS", Array(dataType.toString))
   }
 
   def regexGroupIndexLessThanZeroError(): Throwable = {
-    new IllegalArgumentException("The specified group index cannot be less than zero")
+    new SparkIllegalArgumentException("GROUP_INDEX_LESS_THAN_ZERO", Array.empty)
   }
 
   def regexGroupIndexExceedGroupCountError(
       groupCount: Int, groupIndex: Int): Throwable = {
-    new IllegalArgumentException(
-      s"Regex group count is $groupCount, but the specified group index is $groupIndex")
+    new SparkIllegalArgumentException("GROUP_INDEX_EXCEED_GROUP_COUNT",
+      Array(groupCount.toString, groupIndex.toString))
   }
 
   def invalidUrlError(url: UTF8String, e: URISyntaxException): Throwable = {
-    new IllegalArgumentException(s"Find an invaild url string ${url.toString}", e)
+    new SparkIllegalArgumentException("INVALID_URL", Array(url.toString), cause = e)
   }
 
   def dataTypeOperationUnsupportedError(): Throwable = {
-    new UnsupportedOperationException("dataType")
+    new SparkUnsupportedOperationException("UNSUPPORTED_DATA_TYPE_OPERATION", Array.empty)
   }
 
   def mergeUnsupportedByWindowFunctionError(): Throwable = {
-    new UnsupportedOperationException("Window Functions do not support merging.")
+    new SparkUnsupportedOperationException("WINDOW_NOT_SUPPORT_MERGING", Array.empty)
   }
 
   def dataTypeUnexpectedError(dataType: DataType): Throwable = {
-    new UnsupportedOperationException(s"Unexpected data type ${dataType.catalogString}")
+    new SparkUnsupportedOperationException("UNEXPECTED_DATATYPE", Array(dataType.catalogString))
   }
 
   def typeUnsupportedError(dataType: DataType): Throwable = {
-    new IllegalArgumentException(s"Unexpected type $dataType")
+    new SparkIllegalArgumentException("UNEXPECTED_TYPE", Array(dataType.toString))
   }
 
   def negativeValueUnexpectedError(frequencyExpression : Expression): Throwable = {
-    new SparkException(s"Negative values found in ${frequencyExpression.sql}")
+    new SparkException(errorClass = "FOUND_NEGATIVE_VALUES",
+      messageParameters = Array(frequencyExpression.sql), cause = null)
   }
 
   def addNewFunctionMismatchedWithFunctionError(funcName: String): Throwable = {
-    new IllegalArgumentException(s"$funcName is not matched at addNewFunction")
+    new SparkIllegalArgumentException("NOT_MATCH_FUNCTION_NAME", Array(funcName))
   }
 
-  def cannotGenerateCodeForUncomparableTypeError(
+  def cannotGenerateCodeForIncomparableTypeError(
       codeType: String, dataType: DataType): Throwable = {
-    new IllegalArgumentException(
-      s"cannot generate $codeType code for un-comparable type: ${dataType.catalogString}")
+    new SparkIllegalArgumentException("INCOMPARABLE_TYPE", Array(codeType, dataType.catalogString))
   }
 
   def cannotGenerateCodeForUnsupportedTypeError(dataType: DataType): Throwable = {
