@@ -1029,7 +1029,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
     def test_dot(self):
         psdf = self.psdf
 
-        with self.assertRaisesRegex(ValueError, "Unsupported type DataFrame"):
+        with self.assertRaisesRegex(TypeError, "Unsupported type DataFrame"):
             psdf.dot(psdf)
 
     def test_dot_in_column_name(self):
