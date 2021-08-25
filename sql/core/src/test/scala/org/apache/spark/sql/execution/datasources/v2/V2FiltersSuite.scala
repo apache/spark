@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.IntegerType
 
 class FiltersV2Suite extends SparkFunSuite {
 
-  test("References with nested columns") {
+  test("nested columns") {
     val filter1 = new EqualTo(ref("a", "B"), LiteralValue(1, IntegerType))
     assert(filter1.references.map(_.describe()).toSeq == Seq("a.B"))
     assert(filter1.describe.equals("a.B = 1"))
@@ -39,43 +39,43 @@ class FiltersV2Suite extends SparkFunSuite {
     assert(filter3.describe.equals("```a``.b`.c = 1"))
   }
 
-  test("EqualTo references") {
+  test("EqualTo") {
     val filter = new EqualTo(ref("a"), LiteralValue(1, IntegerType))
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
     assert(filter.describe.equals("a = 1"))
   }
 
-  test("EqualNullSafe references") {
+  test("EqualNullSafe") {
     val filter = new EqualNullSafe(ref("a"), LiteralValue(1, IntegerType))
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
     assert(filter.describe.equals("a <=> 1"))
   }
 
-  test("GreaterThan references") {
+  test("GreaterThan") {
     val filter = new GreaterThan(ref("a"), LiteralValue(1, IntegerType))
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
     assert(filter.describe.equals("a > 1"))
   }
 
-  test("GreaterThanOrEqual references") {
+  test("GreaterThanOrEqual") {
     val filter = new GreaterThanOrEqual(ref("a"), LiteralValue(1, IntegerType))
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
     assert(filter.describe.equals("a >= 1"))
   }
 
-  test("LessThan references") {
+  test("LessThan") {
     val filter = new LessThan(ref("a"), LiteralValue(1, IntegerType))
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
     assert(filter.describe.equals("a < 1"))
   }
 
-  test("LessThanOrEqual references") {
+  test("LessThanOrEqual") {
     val filter = new LessThanOrEqual(ref("a"), LiteralValue(1, IntegerType))
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
     assert(filter.describe.equals("a <= 1"))
   }
 
-  test("In references") {
+  test("In") {
     val filter1 = new In[Integer](ref("a"),
       Array(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType),
         LiteralValue(3, IntegerType), LiteralValue(4, IntegerType)))
@@ -87,51 +87,51 @@ class FiltersV2Suite extends SparkFunSuite {
     assert(filter1.describe.equals("a in (1, 2, 3, 4)"))
   }
 
-  test("IsNull references") {
+  test("IsNull") {
     val filter = new IsNull(ref("a"))
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
     assert(filter.describe.equals("a IsNull"))
   }
 
-  test("IsNotNull references") {
+  test("IsNotNull") {
     val filter = new IsNotNull(ref("a"))
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
     assert(filter.describe.equals("a IsNotNull"))
   }
 
-  test("Not references") {
+  test("Not") {
     val filter = new Not(new LessThan(ref("a"), LiteralValue(1, IntegerType)))
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
     assert(filter.describe.equals("Not a < 1"))
   }
 
-  test("And references") {
+  test("And") {
     val filter = new And(new EqualTo(ref("a"), LiteralValue(1, IntegerType)),
       new EqualTo(ref("b"), LiteralValue(1, IntegerType)))
     assert(filter.references.map(_.describe()).toSeq == Seq("a", "b"))
     assert(filter.describe.equals("a = 1 and b = 1"))
   }
 
-  test("Or references") {
+  test("Or") {
     val filter = new Or(new EqualTo(ref("a"), LiteralValue(1, IntegerType)),
       new EqualTo(ref("b"), LiteralValue(1, IntegerType)))
     assert(filter.references.map(_.describe()).toSeq == Seq("a", "b"))
     assert(filter.describe.equals("a = 1 or b = 1"))
   }
 
-  test("StringStartsWith references") {
+  test("StringStartsWith") {
     val filter = new StringStartsWith(ref("a"), "str")
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
     assert(filter.describe.equals("a StringStartsWith str"))
   }
 
-  test("StringEndsWith references") {
+  test("StringEndsWith") {
     val filter = new StringEndsWith(ref("a"), "str")
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
     assert(filter.describe.equals("a StringEndsWith str"))
   }
 
-  test("StringContains references") {
+  test("StringContains") {
     val filter = new StringContains(ref("a"), "str")
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
     assert(filter.describe.equals("a StringContains str"))
