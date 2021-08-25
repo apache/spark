@@ -215,7 +215,6 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
             pser = pser.astype(CategoricalDtype(categories=[1, 2, 3], ordered=True))
 
         self.assert_eq(pser, psser)
-
         self.assert_eq(pdf, psdf)
 
         # as_unordered
@@ -446,7 +445,11 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
             pdf.groupby("a").transform(identity).sort_values("b").reset_index(drop=True),
         )
 
-        dtype = CategoricalDtype(categories=["a", "b", "c", "d"])
+        # The behavior for CategoricalDtype is changed from pandas 1.3
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            dtype = CategoricalDtype(categories=["a", "b", "c", "d"])
+        else:
+            dtype = pdf.b.dtype
 
         def astype(x) -> ps.Series[dtype]:
             return x.astype(dtype)
