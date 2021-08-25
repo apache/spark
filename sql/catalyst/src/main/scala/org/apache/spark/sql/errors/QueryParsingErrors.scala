@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.trees.Origin
  * Object for grouping all error messages of the query parsing.
  * Currently it includes all ParseException.
  */
-private[spark] object QueryParsingErrors {
+object QueryParsingErrors {
 
   def invalidInsertIntoError(ctx: InsertIntoContext): Throwable = {
     new ParseException("Invalid InsertIntoContext", ctx)
