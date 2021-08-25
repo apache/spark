@@ -654,25 +654,6 @@ case class AdaptiveSparkPlanExec(
     logicalPlan
   }
 
-  private def isFinalStage(sparkPlan: SparkPlan): Boolean = {
-    sparkPlan match {
-      // avoid top level node is Exchange
-      case _: Exchange => false
-      case plan =>
-        // Plan is regarded as a final plan iff all shuffle nodes are wrapped inside query stage
-        // and all query stages are materialized.
-        plan.find {
-          case p if p.children.exists(
-            child => child.isInstanceOf[Exchange] || child.isInstanceOf[ReusedExchangeExec]) =>
-            p match {
-              case stage: QueryStageExec if stage.isMaterialized => false
-              case _ => true
-            }
-          case _ => false
-        }.isEmpty
-    }
-  }
-
   /**
    * Re-optimize and run physical planning on the current logical plan based on the latest stats.
    */
