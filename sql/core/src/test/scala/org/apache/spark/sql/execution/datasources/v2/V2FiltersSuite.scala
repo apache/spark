@@ -134,7 +134,7 @@ class FiltersV2Suite extends SparkFunSuite {
   test("StringContains") {
     val filter = new StringContains(ref("a"), "str")
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
-    assert(filter.describe.equals("STRING CONTAINS(a, str)"))
+    assert(filter.describe.equals("a CONTAINS str"))
   }
 }
 

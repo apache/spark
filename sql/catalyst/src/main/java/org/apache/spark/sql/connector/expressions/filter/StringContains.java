@@ -40,7 +40,7 @@ public final class StringContains extends Filter {
   public String value() { return value; }
 
   @Override
-  public String toString() { return "STRING CONTAINS(" + column.describe() + ", " + value + ")"; }
+  public String toString() { return column.describe() + " CONTAINS " + value; }
 
   @Override
   public Expression[] references() { return new Expression[] { column }; }
