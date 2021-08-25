@@ -26,14 +26,14 @@ import org.apache.spark.sql.connector.read.streaming.MicroBatchStream
  *
  * See [[AvailableNowDataStreamWrapper]] for more details.
  */
-class AvailableNowMicroBatchStreamWrapper(source: MicroBatchStream)
-  extends AvailableNowDataStreamWrapper(source) with MicroBatchStream {
+class AvailableNowMicroBatchStreamWrapper(delegate: MicroBatchStream)
+  extends AvailableNowDataStreamWrapper(delegate) with MicroBatchStream {
 
   override def latestOffset(): streaming.Offset = throw new UnsupportedOperationException(
     "latestOffset(Offset, ReadLimit) should be called instead of this method")
 
   override def planInputPartitions(start: streaming.Offset, end: streaming.Offset):
-  Array[InputPartition] = source.planInputPartitions(start, end)
+  Array[InputPartition] = delegate.planInputPartitions(start, end)
 
-  override def createReaderFactory(): PartitionReaderFactory = source.createReaderFactory()
+  override def createReaderFactory(): PartitionReaderFactory = delegate.createReaderFactory()
 }

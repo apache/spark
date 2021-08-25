@@ -27,31 +27,29 @@ import org.apache.spark.sql.connector.read.streaming
  * first called. It is as if there is no new data coming in from the source after the first
  * [[latestOffset]] call.
  */
-class AvailableNowDataStreamWrapper(source: SparkDataStream)
+class AvailableNowDataStreamWrapper(val delegate: SparkDataStream)
   extends SparkDataStream with SupportsTriggerAvailableNow with Logging {
-
-  def getSource: SparkDataStream = source
 
   private var fetchedOffset: Option[streaming.Offset] = _
 
-  override def initialOffset(): streaming.Offset = source.initialOffset()
+  override def initialOffset(): streaming.Offset = delegate.initialOffset()
 
-  override def deserializeOffset(json: String): streaming.Offset = source.deserializeOffset(json)
+  override def deserializeOffset(json: String): streaming.Offset = delegate.deserializeOffset(json)
 
-  override def commit(end: streaming.Offset): Unit = source.commit(end)
+  override def commit(end: streaming.Offset): Unit = delegate.commit(end)
 
-  override def stop(): Unit = source.stop()
+  override def stop(): Unit = delegate.stop()
 
   override def prepareForTriggerAvailableNow(): Unit = {}
 
   /**
    * Always return [[ReadLimit.allAvailable]]
    */
-  override def getDefaultReadLimit: ReadLimit = source match {
+  override def getDefaultReadLimit: ReadLimit = delegate match {
     case s: SupportsAdmissionControl =>
       val limit = s.getDefaultReadLimit
       if (limit != ReadLimit.allAvailable()) {
-        logWarning(s"The read limit $limit is ignored because source $source does not " +
+        logWarning(s"The read limit $limit is ignored because source $delegate does not " +
           "support running Trigger.AvailableNow queries.")
       }
       ReadLimit.allAvailable()
@@ -67,7 +65,7 @@ class AvailableNowDataStreamWrapper(source: SparkDataStream)
    */
   override def latestOffset(startOffset: streaming.Offset, limit: ReadLimit): streaming.Offset = {
     if (fetchedOffset == null) {
-      fetchedOffset = source match {
+      fetchedOffset = delegate match {
         case s: SupportsAdmissionControl =>
           Option(s.latestOffset(startOffset, ReadLimit.allAvailable()))
         case s: Source => s.getOffset
@@ -78,7 +76,7 @@ class AvailableNowDataStreamWrapper(source: SparkDataStream)
     fetchedOffset.orNull
   }
 
-  override def reportLatestOffset: streaming.Offset = source match {
+  override def reportLatestOffset: streaming.Offset = delegate match {
     // Return the real latest offset here since this is only used for metrics
     case s: SupportsAdmissionControl => s.reportLatestOffset()
     case s: Source => s.getOffset.orNull

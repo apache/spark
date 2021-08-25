@@ -405,7 +405,7 @@ class MicroBatchExecution(
     // Generate a map from each unique source to the next available offset.
     val (nextOffsets, recentOffsets) = uniqueSources.toSeq.map {
       case (s: AvailableNowDataStreamWrapper, limit) =>
-        val originalSource = s.getSource
+        val originalSource = s.delegate
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("latestOffset") {
           val startOffsetOpt = availableOffsets.get(originalSource)

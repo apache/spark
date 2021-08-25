@@ -25,13 +25,14 @@ import org.apache.spark.sql.types.StructType
  *
  * See [[AvailableNowDataStreamWrapper]] for more details.
  */
-class AvailableNowSourceWrapper(source: Source)
-  extends AvailableNowDataStreamWrapper(source) with Source {
+class AvailableNowSourceWrapper(delegate: Source)
+  extends AvailableNowDataStreamWrapper(delegate) with Source {
 
-  override def schema: StructType = source.schema
+  override def schema: StructType = delegate.schema
 
   override def getOffset: Option[Offset] = throw new UnsupportedOperationException(
     "latestOffset(Offset, ReadLimit) should be called instead of this method")
 
-  override def getBatch(start: Option[Offset], end: Offset): DataFrame = source.getBatch(start, end)
+  override def getBatch(start: Option[Offset], end: Offset): DataFrame =
+    delegate.getBatch(start, end)
 }

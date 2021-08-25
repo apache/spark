@@ -2749,6 +2749,14 @@ Here are the different kinds of triggers that are supported.
     </td>
   </tr>
   <tr>
+    <td><b>Available-now micro-batch</b></td>
+    <td>
+        Similar to queries one-time micro-batch trigger, the query will process all the available data and then
+        stop on its own. The difference is that it will process the data in multiple micro-bathes,
+        which will result in better query scalability.
+    </td>
+  </tr>
+  <tr>
     <td><b>Continuous with fixed checkpoint interval</b><br/><i>(experimental)</i></td>
     <td>
         The query will be executed in the new low-latency, continuous processing mode. Read more
@@ -2782,6 +2790,12 @@ df.writeStream
   .trigger(Trigger.Once())
   .start()
 
+// Available-now trigger
+df.writeStream
+  .format("console")
+  .trigger(Trigger.AvailableNow())
+  .start()
+
 // Continuous trigger with one-second checkpointing interval
 df.writeStream
   .format("console")
@@ -2812,6 +2826,12 @@ df.writeStream
 df.writeStream
   .format("console")
   .trigger(Trigger.Once())
+  .start();
+
+// Available-now trigger
+df.writeStream
+  .format("console")
+  .trigger(Trigger.AvailableNow())
   .start();
 
 // Continuous trigger with one-second checkpointing interval
