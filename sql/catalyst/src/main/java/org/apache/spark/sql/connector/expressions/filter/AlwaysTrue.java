@@ -29,8 +29,8 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
 public final class AlwaysTrue extends Filter {
 
   @Override
-  public String toString() { return "AlwaysTrue"; }
+  public String toString() { return "TRUE"; }
 
   @Override
-  public NamedReference[] references() { return new NamedReference[0]; }
+  public NamedReference[] references() { return EMPTY_REFERENCE; }
 }

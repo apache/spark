@@ -45,9 +45,5 @@ public final class GreaterThan<T> extends Filter {
   public String toString() { return column.describe() + " > " + value.describe(); }
 
   @Override
-  public NamedReference[] references() {
-    NamedReference[] arr = new NamedReference[1];
-    arr[0] = column;
-    return arr;
-  }
+  public NamedReference[] references() { return new NamedReference[] { column }; }
 }

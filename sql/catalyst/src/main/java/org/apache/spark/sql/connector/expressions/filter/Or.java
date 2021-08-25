@@ -39,7 +39,7 @@ public final class Or extends Filter {
   public Filter right() { return right; }
 
   @Override
-  public String toString() { return left.describe() + " or " + right.describe(); }
+  public String toString() { return left.describe() + " OR " + right.describe(); }
 
   @Override
   public NamedReference[] references() {

@@ -18,6 +18,8 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import java.util.Arrays;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.FieldReference;
@@ -43,41 +45,26 @@ public final class In<T> extends Filter {
   public Literal<T>[] values() { return values; }
 
   @Override
-  public int hashCode() {
-    int h = column.hashCode();
-    for (Literal v : values) {
-      h *= 41;
-      h += v.hashCode();
-    }
-    return h;
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    In<?> in = (In<?>) o;
+    return Objects.equals(column, in.column) && Arrays.equals(values, in.values);
   }
 
   @Override
-  public boolean equals(Object obj) {
-    if (obj instanceof In) {
-      return (((In) obj).column.equals(column) && Arrays.equals(((In) obj).values, values));
-    } else {
-      return false;
-    }
+  public int hashCode() {
+    int result = Objects.hash(column);
+    result = 31 * result + Arrays.hashCode(values);
+    return result;
   }
 
   @Override
   public String toString() {
-    StringBuilder str = new StringBuilder();
-    for (Literal v : values) {
-      str.append(v.describe()).append(", ");
-    }
-    String res = "";
-    if (!str.toString().isEmpty()) {
-      res = str.substring(0, str.length() - 2);
-    }
-    return column.describe() + " in (" + res + ")";
+    String res = Arrays.stream(values).map(Literal::describe).collect(Collectors.joining(", "));
+    return column.describe() + " IN (" + res + ")";
   }
 
   @Override
-  public NamedReference[] references() {
-    NamedReference[] arr = new NamedReference[1];
-    arr[0] = column;
-    return arr;
-  }
+  public NamedReference[] references() { return new NamedReference[] { column }; }
 }

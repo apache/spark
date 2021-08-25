@@ -37,12 +37,8 @@ public final class IsNotNull extends Filter {
   public FieldReference column() { return column; }
 
   @Override
-  public String toString() { return column.describe() + " IsNotNull"; }
+  public String toString() { return column.describe() + " IS NOT NULL"; }
 
   @Override
-  public NamedReference[] references() {
-    NamedReference[] arr = new NamedReference[1];
-    arr[0] = column;
-    return arr;
-  }
+  public NamedReference[] references() { return new NamedReference[] { column }; }
 }

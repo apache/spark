@@ -29,7 +29,8 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
 @Evolving
 public abstract class Filter implements Expression {
 
-  private static final NamedReference[] EMPTY_REFERENCE = new NamedReference[0];
+  protected static final NamedReference[] EMPTY_REFERENCE = new NamedReference[0];
+
   /**
    * Returns list of columns that are referenced by this filter.
    */

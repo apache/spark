@@ -39,7 +39,7 @@ public final class And extends Filter {
   public Filter right() { return right; }
 
   @Override
-  public String toString() { return left.describe() + " and " + right.describe(); }
+  public String toString() { return left.describe() + " AND " + right.describe(); }
 
   @Override
   public NamedReference[] references() {

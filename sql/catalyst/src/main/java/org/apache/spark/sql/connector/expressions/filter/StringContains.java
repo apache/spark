@@ -41,12 +41,8 @@ public final class StringContains extends Filter {
   public String value() { return value; }
 
   @Override
-  public String toString() { return column.describe() + " StringContains " + value; }
+  public String toString() { return "STRING CONTAINS(" + column.describe() + ", " + value + ")"; }
 
   @Override
-  public NamedReference[] references() {
-    NamedReference[] arr = new NamedReference[1];
-    arr[0] = column;
-    return arr;
-  }
+  public NamedReference[] references() { return new NamedReference[] { column }; }
 }

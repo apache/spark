@@ -84,57 +84,57 @@ class FiltersV2Suite extends SparkFunSuite {
         LiteralValue(3, IntegerType), LiteralValue(4, IntegerType)))
     assert(filter1.equals(filter2))
     assert(filter1.references.map(_.describe()).toSeq == Seq("a"))
-    assert(filter1.describe.equals("a in (1, 2, 3, 4)"))
+    assert(filter1.describe.equals("a IN (1, 2, 3, 4)"))
   }
 
   test("IsNull") {
     val filter = new IsNull(ref("a"))
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
-    assert(filter.describe.equals("a IsNull"))
+    assert(filter.describe.equals("a IS NULL"))
   }
 
   test("IsNotNull") {
     val filter = new IsNotNull(ref("a"))
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
-    assert(filter.describe.equals("a IsNotNull"))
+    assert(filter.describe.equals("a IS NOT NULL"))
   }
 
   test("Not") {
     val filter = new Not(new LessThan(ref("a"), LiteralValue(1, IntegerType)))
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
-    assert(filter.describe.equals("Not a < 1"))
+    assert(filter.describe.equals("NOT a < 1"))
   }
 
   test("And") {
     val filter = new And(new EqualTo(ref("a"), LiteralValue(1, IntegerType)),
       new EqualTo(ref("b"), LiteralValue(1, IntegerType)))
     assert(filter.references.map(_.describe()).toSeq == Seq("a", "b"))
-    assert(filter.describe.equals("a = 1 and b = 1"))
+    assert(filter.describe.equals("a = 1 AND b = 1"))
   }
 
   test("Or") {
     val filter = new Or(new EqualTo(ref("a"), LiteralValue(1, IntegerType)),
       new EqualTo(ref("b"), LiteralValue(1, IntegerType)))
     assert(filter.references.map(_.describe()).toSeq == Seq("a", "b"))
-    assert(filter.describe.equals("a = 1 or b = 1"))
+    assert(filter.describe.equals("a = 1 OR b = 1"))
   }
 
   test("StringStartsWith") {
     val filter = new StringStartsWith(ref("a"), "str")
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
-    assert(filter.describe.equals("a StringStartsWith str"))
+    assert(filter.describe.equals("a STARTS WITH str"))
   }
 
   test("StringEndsWith") {
     val filter = new StringEndsWith(ref("a"), "str")
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
-    assert(filter.describe.equals("a StringEndsWith str"))
+    assert(filter.describe.equals("a ENDS WITH str"))
   }
 
   test("StringContains") {
     val filter = new StringContains(ref("a"), "str")
     assert(filter.references.map(_.describe()).toSeq == Seq("a"))
-    assert(filter.describe.equals("a StringContains str"))
+    assert(filter.describe.equals("STRING CONTAINS(a, str)"))
   }
 }
 
