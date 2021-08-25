@@ -23,7 +23,9 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.util.SQLFileCommitProtocolUtils
 
 /**
  * A variant of [[HadoopMapReduceCommitProtocol]] that allows specifying the actual
@@ -35,6 +37,11 @@ class SQLHadoopMapReduceCommitProtocol(
     dynamicPartitionOverwrite: Boolean = false)
   extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
     with Serializable with Logging {
+
+  override val stagingDir: Path =
+    SQLFileCommitProtocolUtils.newVersionExternalTempPath(
+      new Path(path), SparkSession.getActiveSession.get.sessionState.newHadoopConf(),
+      SQLConf.get.fileCommitStagingDir, "spark", jobId)
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     var committer = super.setupCommitter(context)

@@ -1216,6 +1216,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val FILE_COMMIT_STAGING_DIR =
+    buildConf("spark.sql.source.stagingDir")
+      .doc("The staging directory of Spark job. Spark uses it to deal with files with " +
+        "absolute output path, or writing data into partitioned directory when " +
+        "dynamic partition overwrite mode.")
+      .version("3.3.0")
+      .internal()
+      .stringConf
+      .createWithDefault(".spark-staging")
+
   // The output committer class used by data sources. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   val OUTPUT_COMMITTER_CLASS = buildConf("spark.sql.sources.outputCommitterClass")
@@ -3823,6 +3833,8 @@ class SQLConf extends Serializable with Logging {
 
   def partitionColumnTypeInferenceEnabled: Boolean =
     getConf(SQLConf.PARTITION_COLUMN_TYPE_INFERENCE)
+
+  def fileCommitStagingDir: String = getConf(SQLConf.FILE_COMMIT_STAGING_DIR)
 
   def fileCommitProtocolClass: String = getConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS)
 
