@@ -24,6 +24,8 @@ import org.apache.spark.annotation.Evolving;
  * will process all the available data at the beginning of the query in (possibly) multiple batches.
  *
  * This mode will have better scalability comparing to Trigger.Once mode.
+ *
+ * @since 3.3.0
  */
 @Evolving
 public interface SupportsTriggerAvailableNow extends SupportsAdmissionControl {

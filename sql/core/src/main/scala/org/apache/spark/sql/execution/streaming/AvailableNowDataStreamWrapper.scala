@@ -27,8 +27,10 @@ import org.apache.spark.sql.connector.read.streaming
  * first called. It is as if there is no new data coming in from the source after the first
  * [[latestOffset]] call.
  */
-class FakeLatestOffsetSupportsTriggerAvailableNow(source: SparkDataStream)
+class AvailableNowDataStreamWrapper(source: SparkDataStream)
   extends SparkDataStream with SupportsTriggerAvailableNow with Logging {
+
+  def getSource: SparkDataStream = source
 
   private var fetchedOffset: Option[streaming.Offset] = _
 

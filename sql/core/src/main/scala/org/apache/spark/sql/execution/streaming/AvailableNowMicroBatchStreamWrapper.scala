@@ -24,12 +24,13 @@ import org.apache.spark.sql.connector.read.streaming.MicroBatchStream
 /**
  * This class wraps a [[MicroBatchStream]] and makes it supports Trigger.AvailableNow.
  *
- * See [[FakeLatestOffsetSupportsTriggerAvailableNow]] for more details.
+ * See [[AvailableNowDataStreamWrapper]] for more details.
  */
-class FakeLatestOffsetMicroBatchStream(source: MicroBatchStream)
-  extends FakeLatestOffsetSupportsTriggerAvailableNow(source) with MicroBatchStream {
+class AvailableNowMicroBatchStreamWrapper(source: MicroBatchStream)
+  extends AvailableNowDataStreamWrapper(source) with MicroBatchStream {
 
-  override def latestOffset(): streaming.Offset = source.latestOffset()
+  override def latestOffset(): streaming.Offset = throw new UnsupportedOperationException(
+    "latestOffset(Offset, ReadLimit) should be called instead of this method")
 
   override def planInputPartitions(start: streaming.Offset, end: streaming.Offset):
   Array[InputPartition] = source.planInputPartitions(start, end)

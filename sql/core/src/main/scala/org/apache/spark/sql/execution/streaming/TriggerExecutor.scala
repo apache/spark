@@ -31,7 +31,7 @@ trait TriggerExecutor {
 /**
  * A trigger executor that runs a single batch only, then terminates.
  */
-case class OneBatchExecutor() extends TriggerExecutor {
+case class SingleBatchExecutor() extends TriggerExecutor {
 
   /**
    * Execute a single batch using `batchRunner`.

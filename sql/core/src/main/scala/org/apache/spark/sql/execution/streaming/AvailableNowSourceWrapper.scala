@@ -23,14 +23,15 @@ import org.apache.spark.sql.types.StructType
 /**
  * This class wraps a [[Source]] and makes it supports Trigger.AvailableNow.
  *
- * See [[FakeLatestOffsetSupportsTriggerAvailableNow]] for more details.
+ * See [[AvailableNowDataStreamWrapper]] for more details.
  */
-class FakeLatestOffsetSource(source: Source)
-  extends FakeLatestOffsetSupportsTriggerAvailableNow(source) with Source {
+class AvailableNowSourceWrapper(source: Source)
+  extends AvailableNowDataStreamWrapper(source) with Source {
 
   override def schema: StructType = source.schema
 
-  override def getOffset: Option[Offset] = source.getOffset
+  override def getOffset: Option[Offset] = throw new UnsupportedOperationException(
+    "latestOffset(Offset, ReadLimit) should be called instead of this method")
 
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = source.getBatch(start, end)
 }

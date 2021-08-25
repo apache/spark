@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import scala.collection.mutable.{HashMap => MutableHashMap, Map => MutableMap}
+import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
@@ -47,13 +47,10 @@ class MicroBatchExecution(
     triggerClock, plan.outputMode, plan.deleteCheckpointOnStop) {
 
   @volatile protected var sources: Seq[SparkDataStream] = Seq.empty
-  @volatile protected var originalSources: MutableMap[
-    FakeLatestOffsetSupportsTriggerAvailableNow, SparkDataStream] = new
-      MutableHashMap[FakeLatestOffsetSupportsTriggerAvailableNow, SparkDataStream]()
 
   private val triggerExecutor = trigger match {
     case t: ProcessingTimeTrigger => ProcessingTimeExecutor(t, triggerClock)
-    case OneTimeTrigger => OneBatchExecutor()
+    case OneTimeTrigger => SingleBatchExecutor()
     case AvailableNowTrigger => MultiBatchExecutor()
     case _ => throw new IllegalStateException(s"Unknown type of trigger: $trigger")
   }
@@ -126,7 +123,7 @@ class MicroBatchExecution(
       case r: StreamingDataSourceV2Relation => r.stream
     }
     uniqueSources = triggerExecutor match {
-      case _: OneBatchExecutor =>
+      case _: SingleBatchExecutor =>
         sources.distinct.map {
           case s: SupportsAdmissionControl =>
             val limit = s.getDefaultReadLimit
@@ -142,14 +139,8 @@ class MicroBatchExecution(
       case _: MultiBatchExecutor =>
         sources.distinct.map {
           case s: SupportsTriggerAvailableNow => s
-          case s: Source =>
-            val newSource = new FakeLatestOffsetSource(s)
-            originalSources += (newSource -> s)
-            newSource
-          case s: MicroBatchStream =>
-            val newSource = new FakeLatestOffsetMicroBatchStream(s)
-            originalSources += (newSource -> s)
-            newSource
+          case s: Source => new AvailableNowSourceWrapper(s)
+          case s: MicroBatchStream => new AvailableNowMicroBatchStreamWrapper(s)
         }.map { s =>
           s.prepareForTriggerAvailableNow()
           s -> s.getDefaultReadLimit
@@ -413,9 +404,8 @@ class MicroBatchExecution(
 
     // Generate a map from each unique source to the next available offset.
     val (nextOffsets, recentOffsets) = uniqueSources.toSeq.map {
-      case (s: FakeLatestOffsetSupportsTriggerAvailableNow, limit) =>
-        val originalSource = originalSources.getOrElse(s, throw new IllegalStateException(
-          s"Failed to get the original source for $s"))
+      case (s: AvailableNowDataStreamWrapper, limit) =>
+        val originalSource = s.getSource
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("latestOffset") {
           val startOffsetOpt = availableOffsets.get(originalSource)

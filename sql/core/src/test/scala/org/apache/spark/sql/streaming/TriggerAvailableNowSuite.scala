@@ -37,6 +37,8 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
     def toDF: DataFrame
 
     def incrementAvailableOffset(numNewRows: Int): Unit
+
+    def sourceName: String
   }
 
   class TestSource extends TestDataFrameProvider with Source {
@@ -70,6 +72,8 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
         case _ => throw new IllegalArgumentException("incorrect offset type: " + offset)
       }
     }
+
+    override def sourceName: String = this.getClass.getName
   }
 
   class TestSourceWithAdmissionControl extends TestSource with SupportsAdmissionControl {
@@ -95,6 +99,9 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
         memoryStream.addData(currentOffset)
       }
     }
+
+    // remove the trailing `$` in the class name
+    override def sourceName: String = MemoryStream.getClass.getSimpleName.dropRight(1)
   }
 
   Seq(
@@ -143,6 +150,9 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
           assert(q.awaitTermination(streamingTimeout.toMillis))
           // only one batch has data in both sources, thus counted, see SPARK-24050
           assert(q.recentProgress.count(_.numInputRows != 0) == 1)
+          q.recentProgress.foreach { p =>
+            assert(p.sources.exists(_.description.startsWith(testSource.sourceName)))
+          }
           checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"),
             Seq(1, 2, 3, 7, 8, 9).map(_.toString).toDF())
         } finally {
@@ -160,6 +170,9 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
           assert(q2.awaitTermination(streamingTimeout.toMillis))
           // only one batch has data in both sources, thus counted, see SPARK-24050
           assert(q2.recentProgress.count(_.numInputRows != 0) == 1)
+          q2.recentProgress.foreach { p =>
+            assert(p.sources.exists(_.description.startsWith(testSource.sourceName)))
+          }
           checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 12).map(_.toString).toDF())
         } finally {
           q2.stop()
@@ -193,6 +206,9 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
         try {
           assert(q.awaitTermination(streamingTimeout.toMillis))
           assert(q.recentProgress.count(_.numInputRows != 0) == 1)
+          q.recentProgress.foreach { p =>
+            assert(p.sources.exists(_.description.startsWith(testSource.sourceName)))
+          }
           checkAnswer(spark.table(tableName), (1 to 3).toDF())
         } finally {
           q.stop()
@@ -205,6 +221,9 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
         try {
           assert(q2.awaitTermination(streamingTimeout.toMillis))
           assert(q2.recentProgress.count(_.numInputRows != 0) == 1)
+          q2.recentProgress.foreach { p =>
+            assert(p.sources.exists(_.description.startsWith(testSource.sourceName)))
+          }
           checkAnswer(spark.table(tableName), (1 to 6).toDF())
         } finally {
           q2.stop()
