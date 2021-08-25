@@ -1839,6 +1839,40 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         pscov = psser1.cov(psser2, min_periods=3)
         self.assert_eq(pcov, pscov, almost=True)
 
+    def test_combine(self):
+        def run_test_combine(pser1, pser2):
+            psser1 = ps.from_pandas(pser1)
+            psser2 = ps.from_pandas(pser2)
+
+            self.assert_eq(pser1.combine(pser2, max), psser1.combine(psser2, max))
+            self.assert_eq(
+                pser1.combine(pser2, max, fill_value=1),
+                psser1.combine(psser2, max, fill_value=1),
+            )
+            self.assert_eq(pser2.combine(300, max), psser2.combine(300, max))
+            self.assert_eq(
+                pser2.combine(300, max, fill_value=100),
+                psser2.combine(300, max, fill_value=100),
+            )
+
+        pser1 = pd.Series({"falcon": 330.0, "eagle": 160.0}, name="s1")
+        pser2 = pd.Series({"falcon": 345.0, "eagle": 200.0, "duck": 30.0}, name="s2")
+        run_test_combine(pser1, pser2)
+
+        pser1 = pd.Series({"falcon": 330.0, "eagle": 160.0}, name="same-name")
+        pser2 = pd.Series({"falcon": 345.0, "eagle": 200.0, "duck": 30.0}, name="same-name")
+        run_test_combine(pser1, pser2)
+
+        psser1 = ps.from_pandas(pser1)
+        with self.assertRaisesRegex(TypeError, "unsupported type: <class 'list'>"):
+            psser1.combine([345.0, 200.0, 30.0], max)
+
+        pser1 = pd.Series([330.0, 160.0], index=pd.MultiIndex.from_tuples([(1, 2), (3, 4)]))
+        pser2 = pd.Series(
+            [345.0, 200.0, np.nan], index=pd.MultiIndex.from_tuples([(1, 2), (1, 1), (3, 4)])
+        )
+        run_test_combine(pser1, pser2)
+
 
 class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
     @classmethod

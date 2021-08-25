@@ -50,6 +50,7 @@ from pandas.io.formats.printing import pprint_thing
 from pandas.api.types import is_list_like, is_hashable
 from pandas.tseries.frequencies import DateOffset
 from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
+from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
@@ -109,6 +110,8 @@ from pyspark.pandas.typedef import (
     ScalarType,
     SeriesType,
     create_type_for_series_type,
+    as_spark_type,
+    UnknownType,
 )
 
 if TYPE_CHECKING:
@@ -4462,6 +4465,157 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             current = F.when(cond, value).otherwise(self.spark.column)
 
         return self._with_new_scol(current)  # TODO: dtype?
+
+    def combine(
+        self,
+        other: "Series",
+        func: Callable,
+        fill_value: Optional[Any] = None,
+    ) -> "Series":
+        """
+        Combine the Series with a Series or scalar according to `func`.
+
+        Combine the Series and `other` using `func` to perform elementwise
+        selection for combined Series.
+        `fill_value` is assumed when value is missing at some index
+        from one of the two objects being combined.
+
+        .. versionadded:: 3.3.0
+
+        .. note:: this API executes the function once to infer the type which is
+             potentially expensive, for instance, when the dataset is created after
+             aggregations or sorting.
+
+             To avoid this, specify return type in ``func``, for instance, as below:
+
+             >>> def foo(x, y) -> np.int32:
+             ...     return x * y
+
+             pandas-on-Spark uses return type hint and does not try to infer the type.
+
+        Parameters
+        ----------
+        other : Series or scalar
+            The value(s) to be combined with the `Series`.
+        func : function
+            Function that takes two scalars as inputs and returns an element.
+            Note that type hint for return type is required.
+        fill_value : scalar, optional
+            The value to assume when an index is missing from
+            one Series or the other. The default specifies to use the
+            appropriate NaN value for the underlying dtype of the Series.
+
+        Returns
+        -------
+        Series
+            The result of combining the Series with the other object.
+
+        See Also
+        --------
+        Series.combine_first : Combine Series values, choosing the calling
+            Series' values first.
+
+        Examples
+        --------
+        Consider 2 Datasets ``s1`` and ``s2`` containing
+        highest clocked speeds of different birds.
+
+        >>> from pyspark.pandas.config import set_option, reset_option
+        >>> set_option("compute.ops_on_diff_frames", True)
+        >>> s1 = ps.Series({'falcon': 330.0, 'eagle': 160.0})
+        >>> s1
+        falcon    330.0
+        eagle     160.0
+        dtype: float64
+        >>> s2 = ps.Series({'falcon': 345.0, 'eagle': 200.0, 'duck': 30.0})
+        >>> s2
+        falcon    345.0
+        eagle     200.0
+        duck       30.0
+        dtype: float64
+
+        Now, to combine the two datasets and view the highest speeds
+        of the birds across the two datasets
+
+        >>> s1.combine(s2, max)
+        duck        NaN
+        eagle     200.0
+        falcon    345.0
+        dtype: float64
+
+        In the previous example, the resulting value for duck is missing,
+        because the maximum of a NaN and a float is a NaN.
+        So, in the example, we set ``fill_value=0``,
+        so the maximum value returned will be the value from some dataset.
+
+        >>> s1.combine(s2, max, fill_value=0)
+        duck       30.0
+        eagle     200.0
+        falcon    345.0
+        dtype: float64
+        >>> reset_option("compute.ops_on_diff_frames")
+        """
+        if not isinstance(other, Series) and not np.isscalar(other):
+            raise TypeError("unsupported type: %s" % type(other))
+
+        assert callable(func), "argument func must be a callable function."
+
+        if np.isscalar(other):
+            tmp_other_col = verify_temp_column_name(self._internal.spark_frame, "__tmp_other_col__")
+            combined = self.to_frame()
+            combined[tmp_other_col] = other
+            combined = DataFrame(combined._internal.resolved_copy)
+        elif same_anchor(self, other):
+            combined = self._psdf[self._column_label, other._column_label]
+        elif fill_value is None:
+            combined = combine_frames(self.to_frame(), other.to_frame())
+        else:
+            combined = self._combine_frame_with_fill_value(other, fill_value=fill_value)
+
+        try:
+            sig_return = infer_return_type(func)
+            if isinstance(sig_return, UnknownType):
+                raise TypeError()
+            return_type = sig_return.spark_type
+        except TypeError:
+            limit = ps.get_option("compute.shortcut_limit")
+            pdf = combined.head(limit + 1)._to_internal_pandas()
+            combined_pser = pdf.iloc[:, 0].combine(pdf.iloc[:, 1], func, fill_value=fill_value)
+            return_type = as_spark_type(combined_pser.dtype)
+
+        @pandas_udf(returnType=return_type)  # type: ignore
+        def wrapped_func(x: pd.Series, y: pd.Series) -> pd.Series:
+            return x.combine(y, func)
+
+        combined_sdf = combined._internal.spark_frame.select(
+            *combined._internal.index_spark_columns,
+            wrapped_func(*combined._internal.data_spark_columns),
+            NATURAL_ORDER_COLUMN_NAME
+        )
+        internal = InternalFrame(
+            spark_frame=combined_sdf,
+            index_spark_columns=combined._internal.index_spark_columns,
+        )
+        result = first_series(DataFrame(internal))
+        result.name = None if isinstance(other, Series) and (self.name != other.name) else self.name
+
+        return result
+
+    def _combine_frame_with_fill_value(self, other: "Series", fill_value: Any) -> DataFrame:
+        return combine_frames(
+            self._fill_value_for_missing_index(other, fill_value=fill_value),
+            other._fill_value_for_missing_index(self, fill_value=fill_value),
+        )
+
+    def _fill_value_for_missing_index(self, other: "Series", fill_value: Any) -> DataFrame:
+        filled_self = self._internal.spark_frame.select(
+            *self._internal.index_spark_column_names, *self._internal.data_spark_column_names
+        ).union(
+            other.index.difference(self.index)._internal.spark_frame.select(
+                *self._internal.index_spark_column_names, F.lit(fill_value)
+            )
+        )
+        return DataFrame(self._internal.with_new_sdf(filled_self))
 
     def update(self, other: "Series") -> None:
         """

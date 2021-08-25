@@ -2982,6 +2982,59 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pscov = psdf["s1"].cov(psdf["s2"], min_periods=4)
         self.assert_eq(pcov, pscov, almost=True)
 
+    def test_combine(self):
+        pdf = pd.DataFrame(
+            {"s1": [330.0, 160.0, np.nan], "s2": [345.0, 0.0, 30.0], "s3": [345.0, 0.0, 30.0]}
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            pdf["s1"].combine(pdf["s2"], max),
+            psdf["s1"].combine(psdf["s2"], max),
+        )
+        self.assert_eq(
+            pdf["s1"].combine(pdf["s2"], max, fill_value=100),
+            psdf["s1"].combine(psdf["s2"], max, fill_value=100),
+        )
+        self.assert_eq(
+            pdf["s1"].combine(100, max),
+            psdf["s1"].combine(100, max),
+        )
+        self.assert_eq(
+            pdf["s1"].combine(100, max, fill_value=100),
+            psdf["s1"].combine(100, max, fill_value=100),
+        )
+
+        pdf = pd.DataFrame({"s1": ["a a", "b", ""], "s2": [345.0, np.nan, 30.0]})
+        psdf = ps.from_pandas(pdf)
+
+        def concat_strings(s1: str, s2: str) -> str:
+            return s1 + ": " + str(s2)
+
+        self.assert_eq(
+            pdf["s1"].combine(pdf["s2"], concat_strings),
+            psdf["s1"].combine(psdf["s2"], concat_strings),
+        )
+        self.assert_eq(
+            pdf["s1"].combine(pdf["s2"], concat_strings, fill_value=10.0),
+            psdf["s1"].combine(psdf["s2"], concat_strings, fill_value=10.0),
+        )
+        self.assert_eq(
+            pdf["s1"].combine(100, concat_strings),
+            psdf["s1"].combine(100, concat_strings),
+        )
+
+        pdf = pd.DataFrame({"s1": [1, 2, 3], "s2": [4, 5, 6]})
+        psdf = ps.from_pandas(pdf)
+
+        def true_div(s1: int, s2: int) -> float:
+            return s1 / s2
+
+        self.assert_eq(
+            pdf["s1"].combine(pdf["s2"], true_div),
+            psdf["s1"].combine(psdf["s2"], true_div),
+        )
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.test_series import *  # noqa: F401
