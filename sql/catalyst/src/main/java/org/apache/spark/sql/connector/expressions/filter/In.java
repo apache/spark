@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
+import java.util.Arrays;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
-
-import java.util.Arrays;
-import java.util.stream.Stream;
 
 /**
  * A filter that evaluates to `true` iff the field evaluates to one of the values in the array.
@@ -31,18 +30,19 @@ import java.util.stream.Stream;
  * @since 3.3.0
  */
 @Evolving
-public final class In extends Filter {
+public final class In<T> extends Filter {
   private final FieldReference column;
-  private final Literal[] values;
+  private final Literal<T>[] values;
 
-  public In(FieldReference column, Literal[] values) {
+  public In(FieldReference column, Literal<T>[] values) {
     this.column = column;
     this.values = values;
   }
 
   public FieldReference column() { return column; }
-  public Literal[] values() { return values; }
+  public Literal<T>[] values() { return values; }
 
+  @Override
   public int hashCode() {
     int h = column.hashCode();
     for (Literal v : values) {
@@ -50,6 +50,15 @@ public final class In extends Filter {
       h += v.hashCode();
     }
     return h;
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (obj instanceof In) {
+      return (((In) obj).column.equals(column) && Arrays.equals(((In) obj).values, values));
+    } else {
+      return false;
+    }
   }
 
   @Override
@@ -62,23 +71,13 @@ public final class In extends Filter {
     if (!str.toString().isEmpty()) {
       res = str.substring(0, str.length() - 2);
     }
-    return column.describe() + " in: (" + res + ")";
+    return column.describe() + " in (" + res + ")";
   }
 
   @Override
-  public String describe() { return this.toString(); }
-
-  @Override
   public NamedReference[] references() {
-    Stream<NamedReference> stream = Stream.of();
     NamedReference[] arr = new NamedReference[1];
     arr[0] = column;
-    stream = Stream.concat(stream, Arrays.stream(arr));
-    for (Literal value : values) {
-      NamedReference[] ref = findReferences(value);
-      stream = Stream.concat(stream, Arrays.stream(ref));
-    }
-
-    return stream.toArray(NamedReference[]::new);
+    return arr;
   }
 }

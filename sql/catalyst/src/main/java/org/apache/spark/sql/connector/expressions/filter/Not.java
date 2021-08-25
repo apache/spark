@@ -34,10 +34,7 @@ public final class Not extends Filter {
   public Filter child() { return child; }
 
   @Override
-  public String toString() { return child.describe() + " Not"; }
-
-  @Override
-  public String describe() { return this.toString(); }
+  public String toString() { return "Not " + child.describe(); }
 
   @Override
   public NamedReference[] references() { return child.references(); }

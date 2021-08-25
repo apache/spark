@@ -30,30 +30,25 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * @since 3.3.0
  */
 @Evolving
-public final class EqualNullSafe extends Filter {
+public final class EqualNullSafe<T> extends Filter {
   private final FieldReference column;
-  private final Literal value;
+  private final Literal<T> value;
 
-  public EqualNullSafe(FieldReference column, Literal value) {
+  public EqualNullSafe(FieldReference column, Literal<T> value) {
     this.column = column;
     this.value = value;
   }
 
   public FieldReference column() { return column; }
-  public Literal value() { return value; }
+  public Literal<T> value() { return value; }
 
   @Override
   public String toString() { return column.describe() + " <=> " + value.describe(); }
 
   @Override
-  public String describe() { return this.toString(); }
-
-  @Override
   public NamedReference[] references() {
-    NamedReference[] refs = findReferences(value);
-    NamedReference[] arr = new NamedReference[1 + refs.length];
+    NamedReference[] arr = new NamedReference[1];
     arr[0] = column;
-    System.arraycopy(refs, 0, arr, 1, refs.length);
     return arr;
   }
 }

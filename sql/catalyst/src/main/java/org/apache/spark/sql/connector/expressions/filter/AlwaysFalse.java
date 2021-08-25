@@ -32,8 +32,5 @@ public final class AlwaysFalse extends Filter {
   public String toString() { return "AlwaysFalse"; }
 
   @Override
-  public String describe() { return this.toString(); }
-
-  @Override
   public NamedReference[] references() { return new NamedReference[0]; }
 }

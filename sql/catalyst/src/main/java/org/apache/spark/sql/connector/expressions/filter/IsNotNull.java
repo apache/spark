@@ -40,9 +40,6 @@ public final class IsNotNull extends Filter {
   public String toString() { return column.describe() + " IsNotNull"; }
 
   @Override
-  public String describe() { return this.toString(); }
-
-  @Override
   public NamedReference[] references() {
     NamedReference[] arr = new NamedReference[1];
     arr[0] = column;

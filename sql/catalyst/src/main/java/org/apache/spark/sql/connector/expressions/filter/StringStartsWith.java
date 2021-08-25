@@ -41,10 +41,7 @@ public final class StringStartsWith extends Filter {
   public String value() { return value; }
 
   @Override
-  public String toString() { return column.describe() + " StringStartsWith: " + value; }
-
-  @Override
-  public String describe() { return this.toString(); }
+  public String toString() { return column.describe() + " StringStartsWith " + value; }
 
   @Override
   public NamedReference[] references() {

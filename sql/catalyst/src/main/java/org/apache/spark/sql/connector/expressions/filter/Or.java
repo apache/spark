@@ -42,9 +42,6 @@ public final class Or extends Filter {
   public String toString() { return left.describe() + " or " + right.describe(); }
 
   @Override
-  public String describe() { return this.toString(); }
-
-  @Override
   public NamedReference[] references() {
     NamedReference[] refLeft = left.references();
     NamedReference[] refRight = right.references();

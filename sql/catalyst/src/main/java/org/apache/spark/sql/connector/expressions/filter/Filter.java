@@ -28,6 +28,8 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  */
 @Evolving
 public abstract class Filter implements Expression {
+
+  private static final NamedReference[] EMPTY_REFERENCE = new NamedReference[0];
   /**
    * Returns list of columns that are referenced by this filter.
    */
@@ -37,7 +39,10 @@ public abstract class Filter implements Expression {
     if (filter instanceof Filter) {
       return ((Filter) filter).references();
     } else {
-      return new NamedReference[0];
+      return EMPTY_REFERENCE;
     }
   }
+
+  @Override
+  public String describe() { return this.toString(); }
 }

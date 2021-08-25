@@ -41,10 +41,7 @@ public final class StringEndsWith extends Filter {
   public String value() { return value; }
 
   @Override
-  public String toString() { return column.describe() + " StringEndsWith: " + value; }
-
-  @Override
-  public String describe() { return this.toString(); }
+  public String toString() { return column.describe() + " StringEndsWith " + value; }
 
   @Override
   public NamedReference[] references() {
