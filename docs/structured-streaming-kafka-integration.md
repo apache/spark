@@ -477,23 +477,26 @@ The following configurations are optional:
   <td>maxOffsetsPerTrigger</td>
   <td>long</td>
   <td>none</td>
-  <td>streaming and batch</td>
+  <td>streaming query</td>
   <td>Rate limit on maximum number of offsets processed per trigger interval. The specified total number of offsets will be proportionally split across topicPartitions of different volume.</td>
 </tr>
 <tr>
   <td>minOffsetsPerTrigger</td>
   <td>long</td>
   <td>none</td>
-  <td>streaming and batch</td>
-  <td>Minimum number of offsets to be processed per trigger interval. The specified total number of offsets will
-   be proportionally split across topicPartitions of different volume.</td>
+  <td>streaming query</td>
+  <td>Minimum number of offsets to be processed per trigger interval. The specified total number of
+  offsets will be proportionally split across topicPartitions of different volume. Note, if the
+  maxTriggerDelay is exceeded, a trigger will be fired even if the number of available offsets
+  doesn't reach minOffsetsPerTrigger.</td>
 </tr>
 <tr>
   <td>maxTriggerDelay</td>
   <td>time with units</td>
   <td>15m</td>
-  <td>streaming and batch</td>
-  <td>Maximum amount of time for which trigger can be delayed between two triggers provided some data is available from the source.</td>
+  <td>streaming query</td>
+  <td>Maximum amount of time for which trigger can be delayed between two triggers provided some
+  data is available from the source. This option is only applicable if minOffsetsPerTrigger is set.</td>
 </tr>
 <tr>
   <td>minPartitions</td>

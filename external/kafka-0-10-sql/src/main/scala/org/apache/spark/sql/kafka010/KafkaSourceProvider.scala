@@ -322,6 +322,15 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         s"Option 'kafka.${ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG}' must be specified for " +
           s"configuring Kafka consumer")
     }
+
+    if (params.contains(MIN_OFFSET_PER_TRIGGER) && params.contains(MAX_OFFSET_PER_TRIGGER)) {
+      val minOffsets = params.get(MIN_OFFSET_PER_TRIGGER).get.toLong
+      val maxOffsets = params.get(MAX_OFFSET_PER_TRIGGER).get.toLong
+      if (minOffsets > maxOffsets) {
+        throw new IllegalArgumentException(s"The value of minOffsetPerTrigger($minOffsets) is " +
+          s"higher than the maxOffsetsPerTrigger($maxOffsets).")
+      }
+    }
   }
 
   private def validateStreamOptions(params: CaseInsensitiveMap[String]) = {
@@ -381,6 +390,10 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
     if (params.contains(MIN_OFFSET_PER_TRIGGER)) {
       logWarning("minOffsetsPerTrigger option ignored in batch queries")
+    }
+
+    if (params.contains(MAX_TRIGGER_DELAY)) {
+      logWarning("maxTriggerDelay option ignored in batch queries")
     }
   }
 

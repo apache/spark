@@ -26,6 +26,26 @@ license: |
 
   - Since Spark 3.3, Spark turns a non-nullable schema into nullable for API `DataFrameReader.schema(schema: StructType).json(jsonDataset: Dataset[String])` and `DataFrameReader.schema(schema: StructType).csv(csvDataset: Dataset[String])` when the schema is specified by the user and contains non-nullable fields.
 
+  - Since Spark 3.3, when the date or timestamp pattern is not specified, Spark converts an input string to a date/timestamp using the `CAST` expression approach. The changes affect CSV/JSON datasources and parsing of partition values. In Spark 3.2 or earlier, when the date or timestamp pattern is not set, Spark uses the default patterns: `yyyy-MM-dd` for dates and `yyyy-MM-dd HH:mm:ss` for timestamps. After the changes, Spark still recognizes the pattern together with
+    
+    Date patterns:
+      * `[+-]yyyy*`
+      * `[+-]yyyy*-[m]m`
+      * `[+-]yyyy*-[m]m-[d]d`
+      * `[+-]yyyy*-[m]m-[d]d `
+      * `[+-]yyyy*-[m]m-[d]d *`
+      * `[+-]yyyy*-[m]m-[d]dT*`
+    
+    Timestamp patterns:
+      * `[+-]yyyy*`
+      * `[+-]yyyy*-[m]m`
+      * `[+-]yyyy*-[m]m-[d]d`
+      * `[+-]yyyy*-[m]m-[d]d `
+      * `[+-]yyyy*-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+      * `[+-]yyyy*-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+      * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+      * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+
 ## Upgrading from Spark SQL 3.1 to 3.2
 
   - Since Spark 3.2, ADD FILE/JAR/ARCHIVE commands require each path to be enclosed by `"` or `'` if the path contains whitespaces.

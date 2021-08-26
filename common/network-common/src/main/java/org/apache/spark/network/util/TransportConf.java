@@ -383,7 +383,7 @@ public class TransportConf {
    * 'org.apache.spark.network.shuffle.RemoteBlockPushResolver'.
    */
   public String mergedShuffleFileManagerImpl() {
-    return conf.get("spark.shuffle.server.mergedShuffleFileManagerImpl",
+    return conf.get("spark.shuffle.push.server.mergedShuffleFileManagerImpl",
       "org.apache.spark.network.shuffle.NoOpMergedShuffleFileManager");
   }
 
