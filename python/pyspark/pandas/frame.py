@@ -7940,47 +7940,43 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if not isinstance(other, DataFrame):
             raise TypeError("`combine_first` only allows `DataFrame` for parameter `other`")
         if same_anchor(self, other):
-            self = DataFrame(self._internal.resolved_copy)
-            other = DataFrame(other._internal.resolved_copy)
-
-        combined_df = combine_frames(self, other)
-        combined_sdf = combined_df._internal.spark_frame
-        combined_column_labels = combined_df._internal.column_labels
+            combined = self
+            this = self
+            that = other
+        else:
+            combined = combine_frames(self, other)
+            this = combined["this"]
+            that = combined["that"]
 
         intersect_column_labels = set(self._internal.column_labels).intersection(
             set(other._internal.column_labels)
         )
-        final_column_names, final_column_labels = [], []
 
-        for column_label in combined_column_labels:
-            if column_label[1:] in intersect_column_labels:
-                if column_label[0] == "this":
-                    column_name = self._internal.spark_column_name_for(column_label[1:])
-                    old_col = scol_for(combined_sdf, "__this_" + column_name)
-                    other_column_name = other._internal.spark_column_name_for(column_label[1:])
-                    new_col = scol_for(combined_sdf, ("__that_" + other_column_name))
-                    cond = F.when(old_col.isNull(), new_col).otherwise(old_col).alias(column_name)
-                    combined_sdf = combined_sdf.select(*(combined_sdf.columns), cond)
-                    final_column_names.append(column_name)
-                    final_column_labels.append(column_label[1:])
+        column_labels, data_spark_columns = [], []
+        for column_label in this._internal.column_labels:
+            this_scol = this._internal.spark_column_for(column_label)
+            if column_label in intersect_column_labels:
+                that_scol = that._internal.spark_column_for(column_label)
+                this_scol_name = this._internal.spark_column_name_for(column_label)
+                combined_scol = (
+                    F.when(this_scol.isNull(), that_scol).otherwise(this_scol).alias(this_scol_name)
+                )
+                data_spark_columns.append(combined_scol)
             else:
-                if column_label[0] == "this":
-                    column_name = self._internal.spark_column_name_for(column_label[1:])
-                    col = scol_for(combined_sdf, "__this_" + column_name)
-                else:
-                    column_name = other._internal.spark_column_name_for(column_label[1:])
-                    col = scol_for(combined_sdf, "__that_" + column_name)
-                combined_sdf = combined_sdf.select(*(combined_sdf.columns), col.alias(column_name))
-                final_column_names.append(column_name)
-                final_column_labels.append(column_label[1:])
-        index_scols = combined_df._internal.index_spark_columns
-        combined_sdf = combined_sdf.select(*index_scols, *final_column_names)
+                data_spark_columns.append(this_scol)
+            column_labels.append(column_label)
 
-        internal = InternalFrame(
-            spark_frame=combined_sdf,
-            index_spark_columns=index_scols,
-            column_labels=final_column_labels,
-            data_spark_columns=[scol_for(combined_sdf, col) for col in final_column_names],
+        for column_label in that._internal.column_labels:
+            if column_label not in intersect_column_labels:
+                that_scol = that._internal.spark_column_for(column_label)
+                data_spark_columns.append(that_scol)
+                column_labels.append(column_label)
+
+        internal = combined._internal.copy(
+            column_labels=column_labels,
+            data_spark_columns=data_spark_columns,
+            data_fields=None,  # TODO: dtype?
+            column_label_names=self._internal.column_label_names,
         )
         return DataFrame(internal)
 
