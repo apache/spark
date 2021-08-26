@@ -841,12 +841,6 @@ class DataFrame(Frame, Generic[T]):
     def __radd__(self, other: Any) -> "DataFrame":
         return self._map_series_op("radd", other)
 
-    def __div__(self, other: Any) -> "DataFrame":
-        return self._map_series_op("div", other)
-
-    def __rdiv__(self, other: Any) -> "DataFrame":
-        return self._map_series_op("rdiv", other)
-
     def __truediv__(self, other: Any) -> "DataFrame":
         return self._map_series_op("truediv", other)
 
@@ -3185,7 +3179,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
 
     def where(
-        self, cond: DataFrameOrSeries, other: Union[DataFrameOrSeries, Any] = np.nan
+        self,
+        cond: DataFrameOrSeries,
+        other: Union[DataFrameOrSeries, Any] = np.nan,
+        axis: Axis = None,
     ) -> "DataFrame":
         """
         Replace values where the condition is False.
@@ -3197,6 +3194,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             replace with corresponding value from other.
         other : scalar, DataFrame
             Entries where cond is False are replaced with corresponding value from other.
+        axis : int, default None
+            Can only be set to 0 at the moment for compatibility with pandas.
 
         Returns
         -------
@@ -3294,6 +3293,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> reset_option("compute.ops_on_diff_frames")
         """
         from pyspark.pandas.series import Series
+
+        axis = validate_axis(axis)
+        if axis != 0:
+            raise NotImplementedError('axis should be either 0 or "index" currently.')
 
         tmp_cond_col_name = "__tmp_cond_col_{}__".format
         tmp_other_col_name = "__tmp_other_col_{}__".format
@@ -8744,10 +8747,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 index = labels
             elif axis == 1:
                 columns = labels
-            else:
-                raise ValueError(
-                    "No axis named %s for object type %s." % (axis, type(axis).__name__)
-                )
 
         if index is not None and not is_list_like(index):
             raise TypeError(
@@ -9911,8 +9910,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                             col = midx_col
                         else:
                             col = col | midx_col
-                else:
-                    raise ValueError("Single or multi index must be specified.")
                 return DataFrame(self._internal.with_filter(col))
             else:
                 return self[items]
@@ -10098,11 +10095,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 )
             elif axis == 1:
                 columns_mapper_fn, _, _ = gen_mapper_fn(mapper)
-            else:
-                raise ValueError(
-                    "argument axis should be either the axis name "
-                    "(‘index’, ‘columns’) or number (0, 1)"
-                )
         else:
             if index:
                 index_mapper_fn, index_mapper_ret_dtype, index_mapper_ret_stype = gen_mapper_fn(
