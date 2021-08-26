@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFieldName, UnresolvedFieldPosition, UnresolvedFunc, UnresolvedInlineTable, UnresolvedNamespace, UnresolvedObjectName, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView, UnresolvedView}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1697,7 +1697,7 @@ class DDLParserSuite extends AnalysisTest {
 
   test("create namespace -- backward compatibility with DATABASE/DBPROPERTIES") {
     val expected = CreateNamespace(
-      UnresolvedObjectName(Seq("a", "b", "c"), true),
+      UnresolvedDBObjectName(Seq("a", "b", "c"), true),
       ifNotExists = true,
       Map(
         "a" -> "a",
@@ -1770,7 +1770,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan(sql),
       CreateNamespace(
-        UnresolvedObjectName(Seq("a", "b", "c"), true),
+        UnresolvedDBObjectName(Seq("a", "b", "c"), true),
         ifNotExists = false,
         Map(
           "a" -> "1",

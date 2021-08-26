@@ -3036,7 +3036,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
 
     CreateNamespace(
-      UnresolvedObjectName(
+      UnresolvedDBObjectName(
         visitMultipartIdentifier(ctx.multipartIdentifier),
         isNamespace = true),
       ctx.EXISTS != null,

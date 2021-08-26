@@ -31,8 +31,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case UnresolvedObjectName(CatalogAndNamespace(catalog, name), isNamespace) if isNamespace =>
-      ResolvedObjectName(catalog, name)
+    case UnresolvedDBObjectName(CatalogAndNamespace(catalog, name), isNamespace) if isNamespace =>
+      ResolvedDBObjectName(catalog, name)
 
     case c @ CreateTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>

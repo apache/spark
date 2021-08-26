@@ -255,7 +255,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropView(r: ResolvedView, ifExists) =>
       DropTableCommand(r.identifier.asTableIdentifier, ifExists, isView = true, purge = false)
 
-    case c @ CreateNamespace(ResolvedObjectName(catalog, name), _, _)
+    case c @ CreateNamespace(ResolvedDBObjectName(catalog, name), _, _)
         if isSessionCatalog(catalog) =>
       if (name.length != 1) {
         throw QueryCompilationErrors.invalidDatabaseNameError(name.quoted)
