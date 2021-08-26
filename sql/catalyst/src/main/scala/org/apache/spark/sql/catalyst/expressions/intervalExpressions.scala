@@ -227,7 +227,7 @@ case class DivideInterval(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(years, months, weeks, days, hours, mins, secs) - Make interval from years, months, weeks, days, hours, mins and secs.",
+  usage = "_FUNC_(years[, months[, weeks[, days[, hours[, mins[, secs]]]]]]) - Make interval from years, months, weeks, days, hours, mins and secs.",
   arguments = """
     Arguments:
       * years - the number of years, positive or negative
