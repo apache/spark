@@ -20,8 +20,6 @@ package org.apache.spark.sql.types
 import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
-import org.apache.spark.annotation.Unstable
-
 /**
  * The timestamp without time zone type represents a local time in microsecond precision,
  * which is independent of time zone.
