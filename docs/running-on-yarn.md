@@ -445,7 +445,13 @@ To use a custom metrics.properties for the application master and executors, upd
   <td><code>spark.yarn.am.clientModeTreatDisconnectAsFailed</code></td>
   <td>false</td>
   <td>
-  Whether to make application failed when am lose connection with driver in client mode.
+  In managed yarn-client mode, when am disconnect with driver, am will finish application with SUCCESS final status since in 
+  interactive command line application user always directly kill the driver such as spark-sql, spark-shell etc.., but when there is network issue cause am 
+  disconnected with driver, YarnClientSchedulerBackend.MonitorThread will get application report from RM that this application is finished with 
+  SUCCESS final status then call SparkContext.stop() cause application exit with exit code 0. The caller side will get exitcode(0) and then think this application 
+  as succeed and won't rerun. " +
+  When true, am will finish application as FAILED final status 
+  when am lose connection with driver in client mode.
   </td>
   <td>3.3.0</td>
 </tr>
