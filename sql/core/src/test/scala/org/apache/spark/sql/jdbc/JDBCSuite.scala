@@ -315,11 +315,19 @@ class JDBCSuite extends QueryTest
     assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
     val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
     assert(node.child.isInstanceOf[org.apache.spark.sql.execution.FilterExec])
-    val filterExec = node.child.asInstanceOf[org.apache.spark.sql.execution.FilterExec]
-    assert(filterExec.child.isInstanceOf[org.apache.spark.sql.execution.RowDataSourceScanExec])
-    val scanExec =
-      filterExec.child.asInstanceOf[org.apache.spark.sql.execution.RowDataSourceScanExec]
-    assert(scanExec.handledFilters.isEmpty)
+    val relation = df.queryExecution.analyzed.collectFirst {
+      case LogicalRelation(r, _, _, _) => r
+    }.get
+    assert(relation.isInstanceOf[org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation])
+    val jdbcRelation =
+      relation.asInstanceOf[org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation]
+    if (jdbcRelation.jdbcOptions.pushDownPredicate == false) {
+      val filterExec = node.child.asInstanceOf[org.apache.spark.sql.execution.FilterExec]
+      assert(filterExec.child.isInstanceOf[org.apache.spark.sql.execution.RowDataSourceScanExec])
+      val scanExec =
+        filterExec.child.asInstanceOf[org.apache.spark.sql.execution.RowDataSourceScanExec]
+      assert(scanExec.handledFilters.isEmpty)
+    }
     df
   }
 
