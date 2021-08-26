@@ -2134,25 +2134,27 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           specialDate.getOrElse(toLiteral(stringToDate, DateType))
         // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
         case "TIMESTAMP_NTZ" if isTesting =>
-          val specialTs = convertSpecialTimestampNTZ(value).map(Literal(_, TimestampNTZType))
-          specialTs.getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
+          convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
+            .map(Literal(_, TimestampNTZType))
+            .getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
         case "TIMESTAMP_LTZ" if isTesting =>
           constructTimestampLTZLiteral(value)
         case "TIMESTAMP" =>
           SQLConf.get.timestampType match {
             case TimestampNTZType =>
-              val specialTs = convertSpecialTimestampNTZ(value).map(Literal(_, TimestampNTZType))
-              specialTs.getOrElse {
-                val containsTimeZonePart =
-                  DateTimeUtils.parseTimestampString(UTF8String.fromString(value))._2.isDefined
-                // If the input string contains time zone part, return a timestamp with local time
-                // zone literal.
-                if (containsTimeZonePart) {
-                  constructTimestampLTZLiteral(value)
-                } else {
-                  toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType)
+              convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
+                .map(Literal(_, TimestampNTZType))
+                .getOrElse {
+                  val containsTimeZonePart =
+                    DateTimeUtils.parseTimestampString(UTF8String.fromString(value))._2.isDefined
+                  // If the input string contains time zone part, return a timestamp with local time
+                  // zone literal.
+                  if (containsTimeZonePart) {
+                    constructTimestampLTZLiteral(value)
+                  } else {
+                    toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType)
+                  }
                 }
-              }
 
             case TimestampType =>
               constructTimestampLTZLiteral(value)
