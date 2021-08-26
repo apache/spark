@@ -145,10 +145,6 @@
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
     "sqlState" : "22023"
   },
-  "TRANSACTION_UNSUPPORTED_BY_JDBC_SERVER" : {
-    "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],
-    "sqlState" : "0A000"
-  },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
   },
