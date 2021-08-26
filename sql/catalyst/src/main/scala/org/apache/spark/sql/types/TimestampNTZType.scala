@@ -29,9 +29,7 @@ import org.apache.spark.annotation.Unstable
  * To represent an absolute point in time, use `TimestampType` instead.
  *
  * Please use the singleton `DataTypes.TimestampNTZType` to refer the type.
- * @since 3.3.0
  */
-@Unstable
 private[spark] class TimestampNTZType private() extends AtomicType {
   /**
    * Internally, a timestamp is stored as the number of microseconds from
