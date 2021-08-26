@@ -21,6 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -65,9 +66,7 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sparkSession: S
       }
     }
 
-    val unhandledFilters = filters.filter(unhandled)
-    FiltersUnhandled.list = unhandledFilters
-    unhandledFilters
+    filters.filter(unhandled)
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
@@ -121,11 +120,6 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sparkSession: S
     sparkSession.sparkContext.parallelize(from to to).filter(eval).map(i =>
       Row.fromSeq(rowBuilders.map(_(i)).reduceOption(_ ++ _).getOrElse(Seq.empty)))
   }
-}
-
-// Used to check unhandled filters.
-object FiltersUnhandled {
-  var list: Seq[Filter] = Nil
 }
 
 // A hack for better error messages when filter pushdown fails.
@@ -327,7 +321,14 @@ class FilteredScanSuite extends DataSourceTest with SharedSparkSession {
         }
         val rawCount = rawPlan.execute().count()
         assert(ColumnsRequired.set === requiredColumnNames)
-        assert(FiltersUnhandled.list.toSet === expectedUnhandledFilters)
+
+        val table = spark.table("oneToTenFiltered")
+        val relation = table.queryExecution.analyzed.collectFirst {
+          case LogicalRelation(r, _, _, _) => r
+        }.get
+
+        assert(
+          relation.unhandledFilters(FiltersPushed.list.toArray).toSet === expectedUnhandledFilters)
 
         if (rawCount != expectedCount) {
           fail(

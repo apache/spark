@@ -315,19 +315,6 @@ class JDBCSuite extends QueryTest
     assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
     val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
     assert(node.child.isInstanceOf[org.apache.spark.sql.execution.FilterExec])
-    val relation = df.queryExecution.analyzed.collectFirst {
-      case LogicalRelation(r, _, _, _) => r
-    }.get
-    assert(relation.isInstanceOf[org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation])
-    val jdbcRelation =
-      relation.asInstanceOf[org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation]
-    if (jdbcRelation.jdbcOptions.pushDownPredicate == false) {
-      val filterExec = node.child.asInstanceOf[org.apache.spark.sql.execution.FilterExec]
-      assert(filterExec.child.isInstanceOf[org.apache.spark.sql.execution.RowDataSourceScanExec])
-      val scanExec =
-        filterExec.child.asInstanceOf[org.apache.spark.sql.execution.RowDataSourceScanExec]
-      assert(scanExec.handledFilters.isEmpty)
-    }
     df
   }
 
@@ -1734,6 +1721,34 @@ class JDBCSuite extends QueryTest
     checkAnswer(
       checkNotPushdown(sql("SELECT name, theid FROM predicateOption WHERE theid = 1")),
       Row("fred", 1) :: Nil)
+  }
+
+  test(
+    "SPARK-36574: pushDownPredicate=false should prevent push down filters to JDBC data source") {
+    val table = "test.people"
+
+    val df = spark.read.format("jdbc").option("Url", urlWithUserAndPass).option("dbTable", table)
+    val df1 = df
+      .option("pushDownPredicate", false)
+      .load()
+      .filter("theid = 1")
+      .select("name", "theid")
+    val df2 = df
+      .load()
+      .select("name", "theid")
+
+    def getRowCount(df: DataFrame): Long = {
+      val queryExecution = df.queryExecution
+      val rawPlan = queryExecution.executedPlan.collect {
+        case p: DataSourceScanExec => p
+      } match {
+        case Seq(p) => p
+        case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
+      }
+      rawPlan.execute().count()
+    }
+
+    assert(getRowCount(df1) == getRowCount(df2))
   }
 
   test("SPARK-26383 throw IllegalArgumentException if wrong kind of driver to the given url") {
