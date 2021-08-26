@@ -30,23 +30,10 @@ import org.apache.spark.sql.types._
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(time_column, window_duration, slide_duration, start_time) - Bucketize rows into one or more time windows given a timestamp specifying column.
+    _FUNC_(time_column, window_duration[, slide_duration[, start_time]]) - Bucketize rows into one or more time windows given a timestamp specifying column.
       Window starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window [12:05,12:10) but not in [12:00,12:05).
       Windows can support microsecond precision. Windows in the order of months are not supported.
       See <a href="https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html#window-operations-on-event-time">'Window Operations on Event Time'</a> in Structured Streaming guide doc for detailed explanation and examples.
-  """,
-  examples = """
-    Examples:
-      > SELECT a, window.start, window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:06:00'), ('A2', '2021-01-01 00:01:00') AS tab(a, b) GROUP by a, window(b, '5 minutes') ORDER BY a, start;
-        A1  2021-01-01 00:00:00 2021-01-01 00:05:00 2
-        A1  2021-01-01 00:05:00 2021-01-01 00:10:00 1
-        A2  2021-01-01 00:00:00 2021-01-01 00:05:00 1
-      > SELECT a, window.start, window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:06:00'), ('A2', '2021-01-01 00:01:00') AS tab(a, b) GROUP by a, window(b, '10 minutes', '5 minutes') ORDER BY a, start;
-        A1  2020-12-31 23:55:00 2021-01-01 00:05:00 2
-        A1  2021-01-01 00:00:00 2021-01-01 00:10:00 3
-        A1  2021-01-01 00:05:00 2021-01-01 00:15:00 1
-        A2  2020-12-31 23:55:00 2021-01-01 00:05:00 1
-        A2  2021-01-01 00:00:00 2021-01-01 00:10:00 1
   """,
   arguments = """
     Arguments:
@@ -60,6 +47,19 @@ import org.apache.spark.sql.types._
       * start_time - The offset with respect to 1970-01-01 00:00:00 UTC with which to start window intervals.
         For example, in order to have hourly tumbling windows that start 15 minutes past the hour,
         e.g. 12:15-13:15, 13:15-14:15... provide `start_time` as `15 minutes`.
+  """,
+  examples = """
+    Examples:
+      > SELECT a, window.start, window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:06:00'), ('A2', '2021-01-01 00:01:00') AS tab(a, b) GROUP by a, window(b, '5 minutes') ORDER BY a, start;
+        A1  2021-01-01 00:00:00 2021-01-01 00:05:00 2
+        A1  2021-01-01 00:05:00 2021-01-01 00:10:00 1
+        A2  2021-01-01 00:00:00 2021-01-01 00:05:00 1
+      > SELECT a, window.start, window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:06:00'), ('A2', '2021-01-01 00:01:00') AS tab(a, b) GROUP by a, window(b, '10 minutes', '5 minutes') ORDER BY a, start;
+        A1  2020-12-31 23:55:00 2021-01-01 00:05:00 2
+        A1  2021-01-01 00:00:00 2021-01-01 00:10:00 3
+        A1  2021-01-01 00:05:00 2021-01-01 00:15:00 1
+        A2  2020-12-31 23:55:00 2021-01-01 00:05:00 1
+        A2  2021-01-01 00:00:00 2021-01-01 00:10:00 1
   """,
   group = "datetime_funcs",
   since = "2.0.0")
