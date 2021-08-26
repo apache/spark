@@ -2240,6 +2240,25 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     require(stringToFile(tempFile, content).renameTo(finalFile))
     finalFile
   }
+
+  test("SPARK-35320: Reading JSON with key type different to String in a map should fail") {
+    Seq(
+      MapType(IntegerType, StringType),
+      StructType(Seq(StructField("test", MapType(IntegerType, StringType)))),
+      ArrayType(MapType(IntegerType, StringType)),
+      MapType(StringType, MapType(IntegerType, StringType))
+    ).foreach { schema =>
+      withTempDir { dir =>
+        val colName = "col"
+        val msg = "can only contain StringType as a key type for a MapType"
+
+        val thrown1 = intercept[AnalysisException](
+          spark.readStream.schema(StructType(Seq(StructField(colName, schema))))
+            .json(dir.getCanonicalPath).schema)
+        assert(thrown1.getMessage.contains(msg))
+      }
+    }
+  }
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest {

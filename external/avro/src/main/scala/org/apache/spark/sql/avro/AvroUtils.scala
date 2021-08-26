@@ -71,7 +71,7 @@ private[sql] object AvroUtils extends Logging {
   }
 
   def supportsDataType(dataType: DataType): Boolean = dataType match {
-    case _: DayTimeIntervalType | _: YearMonthIntervalType => false
+    case _: AnsiIntervalType => false
 
     case _: AtomicType => true
 

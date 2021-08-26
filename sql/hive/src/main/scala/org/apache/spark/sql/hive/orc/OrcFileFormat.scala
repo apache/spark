@@ -194,7 +194,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
   }
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
-    case _: DayTimeIntervalType | _: YearMonthIntervalType => false
+    case _: AnsiIntervalType => false
 
     case _: AtomicType => true
 

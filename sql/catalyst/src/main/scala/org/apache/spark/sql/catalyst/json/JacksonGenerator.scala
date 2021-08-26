@@ -85,13 +85,19 @@ private[sql] class JacksonGenerator(
   private val lineSeparator: String = options.lineSeparatorInWrite
 
   private val timestampFormatter = TimestampFormatter(
-    options.timestampFormat,
+    options.timestampFormatInWrite,
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
+  private val timestampNTZFormatter = TimestampFormatter(
+    options.timestampFormatInWrite,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = false,
+    forTimestampNTZ = true)
   private val dateFormatter = DateFormatter(
-    options.dateFormat,
+    options.dateFormatInWrite,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
@@ -137,6 +143,12 @@ private[sql] class JacksonGenerator(
       (row: SpecializedGetters, ordinal: Int) =>
         val timestampString = timestampFormatter.format(row.getLong(ordinal))
         gen.writeString(timestampString)
+
+    case TimestampNTZType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+      val timestampString =
+        timestampNTZFormatter.format(DateTimeUtils.microsToLocalDateTime(row.getLong(ordinal)))
+      gen.writeString(timestampString)
 
     case DateType =>
       (row: SpecializedGetters, ordinal: Int) =>

@@ -23,7 +23,7 @@ import scala.collection.JavaConverters
 
 import org.scalatest.time.{Minute, Span}
 
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
@@ -101,6 +101,69 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
           query.stop()
         }
       }
+    }
+  }
+
+  testQuietly("SPARK-36519: store RocksDB format version in the checkpoint") {
+    def getFormatVersion(query: StreamingQuery): Int = {
+      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.sparkSession
+        .sessionState.conf.getConf(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION)
+    }
+
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
+      withTempDir { dir =>
+        val inputData = MemoryStream[Int]
+
+        def startQuery(): StreamingQuery = {
+          inputData.toDS().toDF("value")
+            .select('value)
+            .groupBy($"value")
+            .agg(count("*"))
+            .writeStream
+            .format("console")
+            .option("checkpointLocation", dir.getCanonicalPath)
+            .outputMode("complete")
+            .start()
+        }
+
+        // The format version should be 5 by default
+        var query = startQuery()
+        inputData.addData(1, 2)
+        query.processAllAvailable()
+        assert(getFormatVersion(query) == 5)
+        query.stop()
+
+        // Setting the format version manually should not overwrite the value in the checkpoint
+        withSQLConf(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION.key -> "4") {
+          query = startQuery()
+          inputData.addData(1, 2)
+          query.processAllAvailable()
+          assert(getFormatVersion(query) == 5)
+          query.stop()
+        }
+      }
+    }
+  }
+
+  testQuietly("SPARK-36519: RocksDB format version can be set by the SQL conf") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      // Set an unsupported RocksDB format version and the query should fail if it's passed down
+      // into RocksDB
+      SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION.key -> "100") {
+      val inputData = MemoryStream[Int]
+      val query = inputData.toDS().toDF("value")
+        .select('value)
+        .groupBy($"value")
+        .agg(count("*"))
+        .writeStream
+        .format("console")
+        .outputMode("complete")
+        .start()
+      inputData.addData(1, 2)
+      val e = intercept[StreamingQueryException](query.processAllAvailable())
+      assert(e.getCause.getCause.getMessage.contains("Unsupported BlockBasedTable format_version"))
     }
   }
 }

@@ -331,8 +331,8 @@ select date_add('2011-11-11', '1.2')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-The second argument of 'date_add' function needs to be an integer.
+java.lang.NumberFormatException
+invalid input syntax for type numeric: 1.2
 
 
 -- !query
@@ -441,8 +441,8 @@ select date_sub(date'2011-11-11', '1.2')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-The second argument of 'date_sub' function needs to be an integer.
+java.lang.NumberFormatException
+invalid input syntax for type numeric: 1.2
 
 
 -- !query
