@@ -55,12 +55,7 @@ class ExecutorClassLoader(
     parent: ClassLoader,
     userClassPathFirst: Boolean) extends ClassLoader(null) with Logging {
   val uri = new URI(classUri)
-  val directory = uri.getPath
-
   val parentLoader = new ParentClassLoader(parent)
-
-  // Allows HTTP connect and read timeouts to be controlled for testing / debugging purposes
-  private[repl] var httpUrlConnectionTimeoutMillis: Int = -1
 
   private val fetchFn: (String) => InputStream = uri.getScheme() match {
     case "spark" => getClassFileInputStreamFromSparkRPC
@@ -160,7 +155,7 @@ class ExecutorClassLoader(
 
   private def getClassFileInputStreamFromFileSystem(fileSystem: FileSystem)(
       pathInDirectory: String): InputStream = {
-    val path = new Path(directory, pathInDirectory)
+    val path = new Path(new Path(uri), pathInDirectory)
     try {
       fileSystem.open(path)
     } catch {
