@@ -44,7 +44,7 @@ from typing import (
 )
 
 import pandas as pd
-from pandas.api.types import is_hashable, is_list_like, CategoricalDtype
+from pandas.api.types import is_hashable, is_list_like
 
 if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
     from pandas.core.common import _builtin_table
