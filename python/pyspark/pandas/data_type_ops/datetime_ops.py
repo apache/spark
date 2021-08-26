@@ -30,7 +30,6 @@ from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
-    _as_bool_type,
     _as_categorical_type,
     _as_other_type,
     _as_string_type,
