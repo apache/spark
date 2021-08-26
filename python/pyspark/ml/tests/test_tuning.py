@@ -18,7 +18,6 @@
 import tempfile
 import unittest
 
-import numpy as np
 from pyspark.ml.feature import HashingTF, Tokenizer
 from pyspark.ml import Estimator, Pipeline, Model
 from pyspark.ml.classification import LogisticRegression, LogisticRegressionModel, OneVsRest
