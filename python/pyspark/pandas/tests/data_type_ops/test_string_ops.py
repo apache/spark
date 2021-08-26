@@ -24,7 +24,9 @@ from pandas.api.types import CategoricalDtype
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
-from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
+from pyspark.pandas.typedef.typehints import (
+    extension_object_dtypes_available,
+)
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 if extension_object_dtypes_available:
