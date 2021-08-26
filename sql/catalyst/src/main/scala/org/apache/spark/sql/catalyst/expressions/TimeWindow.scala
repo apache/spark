@@ -42,11 +42,11 @@ import org.apache.spark.sql.types._
         (See <a href="https://spark.apache.org/docs/latest/sql-ref-literals.html#interval-literal">Interval Literal</a> for more details.)
         Note that the duration is a fixed length of time, and does not vary over time according to a calendar.
       * slide_duration - A string specifying the sliding interval of the window represented as "interval value".
-        A new window will be generated every `slideDuration`. Must be less than or equal to the `windowDuration`.
+        A new window will be generated every `slide_duration`. Must be less than or equal to the `window_duration`.
         This duration is likewise absolute, and does not vary according to a calendar.
       * start_time - The offset with respect to 1970-01-01 00:00:00 UTC with which to start window intervals.
         For example, in order to have hourly tumbling windows that start 15 minutes past the hour,
-        e.g. 12:15-13:15, 13:15-14:15... provide `start_ime` as `15 minutes`.
+        e.g. 12:15-13:15, 13:15-14:15... provide `start_time` as `15 minutes`.
   """,
   group = "datetime_funcs",
   since = "2.0.0")
