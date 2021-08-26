@@ -777,7 +777,8 @@ private[spark] class ApplicationMaster(
   private class AMEndpoint(override val rpcEnv: RpcEnv, driver: RpcEndpointRef)
     extends RpcEndpoint with Logging {
     private var shutdown = false
-    private val clientModeTreatDisconnectAsFailed = sparkConf.get(AM_CLIENT_MODE_TREAT_DISCONNECT_AS_FAILED)
+    private val clientModeTreatDisconnectAsFailed =
+      sparkConf.get(AM_CLIENT_MODE_TREAT_DISCONNECT_AS_FAILED)
 
     override def onStart(): Unit = {
       driver.send(RegisterClusterManager(self))
