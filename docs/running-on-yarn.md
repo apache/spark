@@ -442,6 +442,14 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1.6.0</td>
 </tr>
 <tr>
+  <td><code>spark.yarn.am.clientModeTreatDisconnectAsFailed</code></td>
+  <td>false</td>
+  <td>
+  Whether to make application failed when am lose connection with driver in client mode.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
   <td><code>spark.yarn.executor.failuresValidityInterval</code></td>
   <td>(none)</td>
   <td>

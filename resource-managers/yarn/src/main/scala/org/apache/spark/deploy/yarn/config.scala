@@ -52,6 +52,13 @@ package object config extends Logging {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
+  private[spark] val AM_CLIENT_MODE_TREAT_DISCONNECT_AS_FAILED =
+    ConfigBuilder("spark.yarn.am.clientModeTreatDisconnectAsFailed")
+      .doc("Whether to make application failed when am lose connection with driver in client mode.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
     ConfigBuilder("spark.yarn.executor.failuresValidityInterval")
       .doc("Interval after which Executor failures will be considered independent and not " +
