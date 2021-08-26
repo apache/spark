@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
-// scalastyle:off line.size.limit
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = """
     _FUNC_(time_column, window_duration[, slide_duration[, start_time]]) - Bucketize rows into one or more time windows given a timestamp specifying column.
@@ -64,7 +64,7 @@ import org.apache.spark.sql.types._
   """,
   group = "datetime_funcs",
   since = "2.0.0")
-// scalastyle:on line.size.limit
+// scalastyle:on line.size.limit line.contains.tab
 case class TimeWindow(
     timeColumn: Expression,
     windowDuration: Long,

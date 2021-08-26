@@ -35,7 +35,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *                    duration during the query execution. Note that the rows with negative or
  *                    zero gap duration will be filtered out from the aggregation.
  */
-// scalastyle:off line.size.limit
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = """
     _FUNC_(time_column, gap_duration) - Generates session window given a timestamp specifying column and gap duration.
@@ -62,7 +62,7 @@ import org.apache.spark.unsafe.types.UTF8String
   """,
   group = "datetime_funcs",
   since = "3.2.0")
-// scalastyle:on line.size.limit
+// scalastyle:on line.size.limit line.contains.tab
 case class SessionWindow(timeColumn: Expression, gapDuration: Expression) extends Expression
   with ImplicitCastInputTypes
   with Unevaluable
