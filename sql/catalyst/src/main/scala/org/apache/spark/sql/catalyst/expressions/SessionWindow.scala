@@ -35,6 +35,22 @@ import org.apache.spark.unsafe.types.UTF8String
  *                    duration during the query execution. Note that the rows with negative or
  *                    zero gap duration will be filtered out from the aggregation.
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(time_column, gap_duration) - Generates session window given a timestamp specifying column and gap duration.
+      See <a href="https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html#types-of-time-windows">'Types of time windows'</a> in Structured Streaming guide doc for detailed explanation and examples.
+  """,
+  arguments = """
+    Arguments:
+      * time_column - The column or the expression to use as the timestamp for windowing by time. The time column must be of TimestampType.
+      * gap_duration - A string specifying the timeout of the session represented as "interval value"
+        (See <a href="https://spark.apache.org/docs/latest/sql-ref-literals.html#interval-literal">Interval Literal</a> for more details.) for the fixed gap duration, or
+        an expression which is applied for each input and evaluated to the "interval value" for the dynamic gap duration.
+  """,
+  group = "datetime_funcs",
+  since = "3.2.0")
+// scalastyle:on line.size.limit
 case class SessionWindow(timeColumn: Expression, gapDuration: Expression) extends Expression
   with ImplicitCastInputTypes
   with Unevaluable
