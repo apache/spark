@@ -1725,9 +1725,9 @@ class JDBCSuite extends QueryTest
 
   test(
     "SPARK-36574: pushDownPredicate=false should prevent push down filters to JDBC data source") {
-    val table = "test.people"
-
-    val df = spark.read.format("jdbc").option("Url", urlWithUserAndPass).option("dbTable", table)
+    val df = spark.read.format("jdbc")
+      .option("Url", urlWithUserAndPass)
+      .option("dbTable", "test.people")
     val df1 = df
       .option("pushDownPredicate", false)
       .load()
