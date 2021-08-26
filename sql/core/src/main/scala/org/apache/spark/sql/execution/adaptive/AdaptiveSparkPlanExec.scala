@@ -100,8 +100,7 @@ case class AdaptiveSparkPlanExec(
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
-  private def queryStagePreparationRules(
-      optimizeSkewedJoin: Boolean = false): Seq[Rule[SparkPlan]] = {
+  private def queryStagePreparationRules(optimizeSkewedJoin: Boolean): Seq[Rule[SparkPlan]] = {
     val optimizeSkewedJoinRules = if (optimizeSkewedJoin) {
       Seq(OptimizeSkewedJoin,
         // Add the EnsureRequirements rule here since OptimizeSkewedJoin will change
@@ -182,20 +181,13 @@ case class AdaptiveSparkPlanExec(
   def prepareQueryStages(
       plan: SparkPlan,
       optimizeSkewedJoin: Boolean): SparkPlan = {
-    if (optimizeSkewedJoin) {
-      AQEUtils.ensureRequiredDistribution(
-        applyPhysicalRules(
-          plan,
-          preprocessingRules ++ queryStagePreparationRules(true),
-          Some((planChangeLogger, "AQE Replanning"))),
-        requiredDistribution,
-        conf)
-    } else {
+    AQEUtils.ensureRequiredDistribution(
       applyPhysicalRules(
         plan,
-        preprocessingRules ++ queryStagePreparationRules(),
-        Some((planChangeLogger, "AQE Replanning")))
-    }
+        preprocessingRules ++ queryStagePreparationRules(optimizeSkewedJoin),
+        Some((planChangeLogger, "AQE Replanning"))),
+      requiredDistribution,
+      conf)
   }
 
   @transient private val costEvaluator =
@@ -206,7 +198,7 @@ case class AdaptiveSparkPlanExec(
 
   @transient val initialPlan = context.session.withActive {
     applyPhysicalRules(
-      inputPlan, queryStagePreparationRules(), Some((planChangeLogger, "AQE Preparations")))
+      inputPlan, queryStagePreparationRules(false), Some((planChangeLogger, "AQE Preparations")))
   }
 
   @volatile private var currentPhysicalPlan = initialPlan

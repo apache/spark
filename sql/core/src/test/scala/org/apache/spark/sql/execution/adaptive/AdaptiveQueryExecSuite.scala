@@ -96,12 +96,6 @@ class AdaptiveQueryExecSuite
     (dfAdaptive.queryExecution.sparkPlan, adaptivePlan)
   }
 
-  private def findTopLevelShuffle(plan: SparkPlan): Seq[ShuffleExchangeExec] = {
-    collect(plan) {
-      case s: ShuffleExchangeExec => s
-    }
-  }
-
   private def findTopLevelBroadcastHashJoin(plan: SparkPlan): Seq[BroadcastHashJoinExec] = {
     collect(plan) {
       case j: BroadcastHashJoinExec => j
@@ -1947,9 +1941,11 @@ class AdaptiveQueryExecSuite
             val (_, adaptive1) =
               runAdaptiveAndVerifyResult(s"SELECT $repartition key1 FROM skewData1 " +
                 s"JOIN skewData2 ON key1 = key2 GROUP BY key1")
-            val shuffles1 = findTopLevelShuffle(adaptive1)
+            val shuffles1 = collect(adaptive1) {
+              case s: ShuffleExchangeExec => s
+            }
             assert(shuffles1.size == 3)
-            // the head shuffle is from second EnsureRequirements in queryStagePreparationRules
+            // shuffles1.head is the top-level shuffle under the Aggregate operator
             assert(shuffles1.head.shuffleOrigin == ENSURE_REQUIREMENTS)
             val smj1 = findTopLevelSortMergeJoin(adaptive1)
             assert(smj1.size == 1 && smj1.head.isSkewJoin)
@@ -1958,7 +1954,9 @@ class AdaptiveQueryExecSuite
             val (_, adaptive2) =
               runAdaptiveAndVerifyResult(s"SELECT $repartition key1 FROM skewData1 " +
                 s"JOIN skewData2 ON key1 = key2")
-            val shuffles2 = findTopLevelShuffle(adaptive2)
+            val shuffles2 = collect(adaptive2) {
+              case s: ShuffleExchangeExec => s
+            }
             if (hasRequiredDistribution) {
               assert(shuffles2.size == 3)
               val finalShuffle = shuffles2.head
