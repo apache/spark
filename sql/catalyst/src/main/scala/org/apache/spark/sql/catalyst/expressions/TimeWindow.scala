@@ -35,6 +35,19 @@ import org.apache.spark.sql.types._
       Windows can support microsecond precision. Windows in the order of months are not supported.
       See <a href="https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html#window-operations-on-event-time">'Window Operations on Event Time'</a> in Structured Streaming guide doc for detailed explanation and examples.
   """,
+  examples = """
+    Examples:
+      > SELECT a, window.start, window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:06:00'), ('A2', '2021-01-01 00:01:00') AS tab(a, b) GROUP by a, window(b, '5 minutes') ORDER BY a, start;
+        A1  2021-01-01 00:00:00 2021-01-01 00:05:00 2
+        A1  2021-01-01 00:05:00 2021-01-01 00:10:00 1
+        A2  2021-01-01 00:00:00 2021-01-01 00:05:00 1
+      > SELECT a, window.start, window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:06:00'), ('A2', '2021-01-01 00:01:00') AS tab(a, b) GROUP by a, window(b, '10 minutes', '5 minutes') ORDER BY a, start;
+        A1  2020-12-31 23:55:00 2021-01-01 00:05:00 2
+        A1  2021-01-01 00:00:00 2021-01-01 00:10:00 3
+        A1  2021-01-01 00:05:00 2021-01-01 00:15:00 1
+        A2  2020-12-31 23:55:00 2021-01-01 00:05:00 1
+        A2  2021-01-01 00:00:00 2021-01-01 00:10:00 1
+  """,
   arguments = """
     Arguments:
       * time_column - The column or the expression to use as the timestamp for windowing by time. The time column must be of TimestampType.
