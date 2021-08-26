@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{Cross, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 private[sql] case class GroupableData(data: Int) {
@@ -849,5 +850,28 @@ class AnalysisErrorSuite extends AnalysisTest {
       t1.join(t2, condition = Some(Exists(t2.select(1).where(star("t1") === b)))),
       "Invalid usage of '*' in Filter" :: Nil
     )
+  }
+
+  test("SPARK-36488: Regular expression expansion should fail with a meaningful message") {
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
+      assertAnalysisError(testRelation.select(Divide(UnresolvedRegex(".?", None, false), "a")),
+        s"Invalid usage of regular expression '.?' in" :: Nil)
+      assertAnalysisError(testRelation.select(
+        Divide(UnresolvedRegex(".?", None, false), UnresolvedRegex(".*", None, false))),
+        s"Invalid usage of regular expressions '.?', '.*' in" :: Nil)
+      assertAnalysisError(testRelation.select(
+        Divide(UnresolvedRegex(".?", None, false), UnresolvedRegex(".?", None, false))),
+        s"Invalid usage of regular expression '.?' in" :: Nil)
+      assertAnalysisError(testRelation.select(Divide(UnresolvedStar(None), "a")),
+        "Invalid usage of '*' in" :: Nil)
+      assertAnalysisError(testRelation.select(Divide(UnresolvedStar(None), UnresolvedStar(None))),
+        "Invalid usage of '*' in" :: Nil)
+      assertAnalysisError(testRelation.select(Divide(UnresolvedStar(None),
+        UnresolvedRegex(".?", None, false))),
+        "Invalid usage of '*' and regular expression '.?' in" :: Nil)
+      assertAnalysisError(testRelation.select(Least(Seq(UnresolvedStar(None),
+        UnresolvedRegex(".*", None, false), UnresolvedRegex(".?", None, false)))),
+        "Invalid usage of '*' and regular expressions '.*', '.?' in" :: Nil)
+    }
   }
 }
