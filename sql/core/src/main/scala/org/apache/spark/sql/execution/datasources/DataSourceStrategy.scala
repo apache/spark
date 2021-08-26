@@ -409,7 +409,7 @@ object DataSourceStrategy
         pushedFilters.toSet,
         handledFilters,
         None,
-        scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
+        scanBuilder(requestedColumns, candidatePredicates, handledFilters.toSeq),
         relation.relation,
         relation.catalogTable.map(_.identifier))
       filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan)
