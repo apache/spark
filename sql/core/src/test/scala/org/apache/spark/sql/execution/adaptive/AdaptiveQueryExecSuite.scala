@@ -1949,9 +1949,10 @@ class AdaptiveQueryExecSuite
                 s"JOIN skewData2 ON key1 = key2 GROUP BY key1")
             val shuffles1 = findTopLevelShuffle(adaptive1)
             assert(shuffles1.size == 3)
+            // the head shuffle is from second EnsureRequirements in queryStagePreparationRules
             assert(shuffles1.head.shuffleOrigin == ENSURE_REQUIREMENTS)
             val smj1 = findTopLevelSortMergeJoin(adaptive1)
-            assert(smj1.size == 1 && smj1.exists(_.isSkewJoin))
+            assert(smj1.size == 1 && smj1.head.isSkewJoin)
 
             // only check required distribution
             val (_, adaptive2) =
@@ -1970,7 +1971,7 @@ class AdaptiveQueryExecSuite
               assert(shuffles2.size == 2)
             }
             val smj2 = findTopLevelSortMergeJoin(adaptive2)
-            assert(smj2.size == 1 && smj2.exists(_.isSkewJoin))
+            assert(smj2.size == 1 && smj2.head.isSkewJoin)
           }
         }
       }

@@ -179,6 +179,25 @@ case class AdaptiveSparkPlanExec(
     optimized
   }
 
+  def prepareQueryStages(
+      plan: SparkPlan,
+      optimizeSkewedJoin: Boolean): SparkPlan = {
+    if (optimizeSkewedJoin) {
+      AQEUtils.ensureRequiredDistribution(
+        applyPhysicalRules(
+          plan,
+          preprocessingRules ++ queryStagePreparationRules(true),
+          Some((planChangeLogger, "AQE Replanning"))),
+        requiredDistribution,
+        conf)
+    } else {
+      applyPhysicalRules(
+        plan,
+        preprocessingRules ++ queryStagePreparationRules(),
+        Some((planChangeLogger, "AQE Replanning")))
+    }
+  }
+
   @transient private val costEvaluator =
     conf.getConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS) match {
       case Some(className) => CostEvaluator.instantiate(className, session.sparkContext.getConf)
@@ -664,19 +683,8 @@ case class AdaptiveSparkPlanExec(
     logicalPlan.invalidateStatsCache()
     val optimized = optimizer.execute(logicalPlan)
     val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
-
-    val optimizedPhysicalPlan = applyPhysicalRules(
-      sparkPlan,
-      preprocessingRules ++ queryStagePreparationRules(),
-      Some((planChangeLogger, "AQE Replanning")))
-
-    val optimizedWithSkewedJoin =
-      AQEUtils.ensureRequiredDistribution(
-        applyPhysicalRules(
-          sparkPlan,
-          preprocessingRules ++ queryStagePreparationRules(true),
-          Some((planChangeLogger, "AQE Replanning"))),
-        requiredDistribution)
+    val optimizedPhysicalPlan = prepareQueryStages(sparkPlan, false)
+    val optimizedWithSkewedJoin = prepareQueryStages(sparkPlan, true)
 
     // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
     // add the `BroadcastExchangeExec` node manually in the DPP subquery,

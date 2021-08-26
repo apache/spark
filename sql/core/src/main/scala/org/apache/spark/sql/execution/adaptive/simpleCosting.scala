@@ -67,17 +67,17 @@ case class SkewJoinAwareCost(
  */
 case class SimpleCostEvaluator(forceOptimizeSkewedJoin: Boolean) extends CostEvaluator {
   override def evaluateCost(plan: SparkPlan): Cost = {
-    val shuffleNumber = plan.collect {
+    val numShuffles = plan.collect {
       case s: ShuffleExchangeLike => s
     }.size
 
     if (forceOptimizeSkewedJoin) {
-      val skewJoinNumber = plan.collect {
+      val numSkewJoins = plan.collect {
         case j: ShuffledJoin if j.isSkewJoin => j
       }.size
-      SkewJoinAwareCost(shuffleNumber, skewJoinNumber)
+      SkewJoinAwareCost(numShuffles, numSkewJoins)
     } else {
-      SimpleCost(shuffleNumber)
+      SimpleCost(numShuffles)
     }
   }
 }

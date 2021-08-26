@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, HashClusteredDistribution, HashPartitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CollectMetricsExec, FilterExec, ProjectExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
+import org.apache.spark.sql.internal.SQLConf
 
-object AQEUtils extends SQLConfHelper {
+object AQEUtils {
 
   // Analyze the given plan and calculate the required distribution of this plan w.r.t. the
   // user-specified repartition.
@@ -63,7 +63,9 @@ object AQEUtils extends SQLConfHelper {
   // This method is invoked after optimizing skewed join in case we change final stage
   // output partitioning.
   def ensureRequiredDistribution(
-      plan: SparkPlan, distribution: Option[Distribution]): SparkPlan = distribution match {
+      plan: SparkPlan,
+      distribution: Option[Distribution],
+      conf: SQLConf): SparkPlan = distribution match {
     case Some(d) if !plan.outputPartitioning.satisfies(d) =>
       val numPartitions = d.requiredNumPartitions.getOrElse(conf.numShufflePartitions)
       val shuffleOrigin = if (d.requiredNumPartitions.isDefined) {
