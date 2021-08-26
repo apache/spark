@@ -445,13 +445,15 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
             pdf.groupby("a").transform(identity).sort_values("b").reset_index(drop=True),
         )
 
+        dtype = CategoricalDtype(categories=["a", "b", "c", "d"])
+
         # The behavior for CategoricalDtype is changed from pandas 1.3
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            dtype = CategoricalDtype(categories=["a", "b", "c", "d"])
+            ret_dtype = pdf.b.dtype
         else:
-            dtype = pdf.b.dtype
+            ret_dtype = dtype
 
-        def astype(x) -> ps.Series[dtype]:
+        def astype(x) -> ps.Series[ret_dtype]:
             return x.astype(dtype)
 
         if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
