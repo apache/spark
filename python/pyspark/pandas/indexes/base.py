@@ -2060,8 +2060,6 @@ class Index(IndexOpsMixin):
             )
             if is_other_list_of_tuples:
                 other = MultiIndex.from_tuples(other)  # type: ignore
-            elif isinstance(other, Series):
-                other = Index(other)
             else:
                 raise TypeError("other must be a MultiIndex or a list of tuples")
 
@@ -2601,6 +2599,12 @@ class Index(IndexOpsMixin):
         return MissingPandasLikeIndex.__iter__(self)
 
     def __xor__(self, other: "Index") -> "Index":
+        warnings.warn(
+            "Index.__xor__ operating as a set operation is deprecated, "
+            "in the future this will be a logical operation matching Series.__xor__.  "
+            "Use index.symmetric_difference(other) instead",
+            FutureWarning,
+        )
         return self.symmetric_difference(other)
 
     def __bool__(self) -> bool:
