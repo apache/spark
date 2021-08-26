@@ -50,15 +50,15 @@ import org.apache.spark.unsafe.types.UTF8String
   """,
   examples = """
     Examples:
-      > SELECT a, session_window.start, session_window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:10:00'), ('A2', '2021-01-01 00:01:00') AS tab(a, b) GROUP by a, session_window(b, '5 minutes') ORDER BY a, start;
-        A1  2021-01-01 00:00:00 2021-01-01 00:09:30 2
-        A1  2021-01-01 00:10:00 2021-01-01 00:15:00 1
-        A2  2021-01-01 00:01:00 2021-01-01 00:06:00 1
-      > SELECT a, session_window.start, session_window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:10:00'), ('A2', '2021-01-01 00:01:00'), ('A2', '2021-01-01 00:04:30') AS tab(a, b) GROUP by a, session_window(b, CASE WHEN a = 'A1' THEN '5 minutes' WHEN a = 'A2' THEN '1 minute' ELSE '10 minutes' END) ORDER BY a, start;
-        A1  2021-01-01 00:00:00 2021-01-01 00:09:30 2
-        A1  2021-01-01 00:10:00 2021-01-01 00:15:00 1
-        A2  2021-01-01 00:01:00 2021-01-01 00:02:00 1
-        A2  2021-01-01 00:04:30 2021-01-01 00:05:30 1
+      > SELECT a, session_window.start, session_window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:10:00'), ('A2', '2021-01-01 00:01:00') AS tab(a, b) GROUP by a, _FUNC_(b, '5 minutes') ORDER BY a, start;
+        A1	2021-01-01 00:00:00	2021-01-01 00:09:30	2
+        A1	2021-01-01 00:10:00	2021-01-01 00:15:00	1
+        A2	2021-01-01 00:01:00	2021-01-01 00:06:00	1
+      > SELECT a, session_window.start, session_window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:10:00'), ('A2', '2021-01-01 00:01:00'), ('A2', '2021-01-01 00:04:30') AS tab(a, b) GROUP by a, _FUNC_(b, CASE WHEN a = 'A1' THEN '5 minutes' WHEN a = 'A2' THEN '1 minute' ELSE '10 minutes' END) ORDER BY a, start;
+        A1	2021-01-01 00:00:00	2021-01-01 00:09:30	2
+        A1	2021-01-01 00:10:00	2021-01-01 00:15:00	1
+        A2	2021-01-01 00:01:00	2021-01-01 00:02:00	1
+        A2	2021-01-01 00:04:30	2021-01-01 00:05:30	1
   """,
   group = "datetime_funcs",
   since = "3.2.0")
