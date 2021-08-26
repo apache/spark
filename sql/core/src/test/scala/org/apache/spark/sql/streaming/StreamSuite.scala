@@ -45,7 +45,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.streaming.util.{BlockOnStopSourceProvider, StreamManualClock}
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 class StreamSuite extends StreamTest {
@@ -1265,7 +1265,7 @@ class StreamSuite extends StreamTest {
 }
 
 abstract class FakeSource extends StreamSourceProvider {
-  private val fakeSchema = StructType(StructField("a", IntegerType) :: Nil)
+  private val fakeSchema = StructType(StructField("a", LongType) :: Nil)
 
   override def sourceSchema(
       spark: SQLContext,
@@ -1287,7 +1287,7 @@ class FakeDefaultSource extends FakeSource {
     new Source {
       private var offset = -1L
 
-      override def schema: StructType = StructType(StructField("a", IntegerType) :: Nil)
+      override def schema: StructType = StructType(StructField("a", LongType) :: Nil)
 
       override def getOffset: Option[Offset] = {
         if (offset >= 10) {
