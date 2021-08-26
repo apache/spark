@@ -36,7 +36,7 @@ to return the same length of the input and the latter does not require this. See
 
 In this case, each function takes a pandas Series, and pandas API on Spark computes the functions in a distributed manner as below.
 
-.. image:: https://user-images.githubusercontent.com/6477701/80076790-a1cf0680-8587-11ea-8b08-8dc694071ba0.png
+.. image:: ../../../../../docs/img/pyspark-pandas_on_spark-transform_apply1.png
   :alt: transform and apply
   :align: center
   :width: 550
@@ -53,7 +53,7 @@ In case of 'column' axis, the function takes each row as a pandas Series.
 
 The example above calculates the summation of each row as a pandas Series. See below:
 
-.. image:: https://user-images.githubusercontent.com/6477701/80076898-c2975c00-8587-11ea-9b2c-69c9729e9294.png
+.. image:: ../../../../../docs/img/pyspark-pandas_on_spark-transform_apply2.png
   :alt: apply axis
   :align: center
   :width: 600
@@ -95,7 +95,7 @@ you can avoid a shuffle by the operations between different DataFrames. In case 
 treated that it belongs to a new different DataFrame. See also
 `Operations on different DataFrames <options.rst#operations-on-different-dataframes>`_ for more details.
 
-.. image:: https://user-images.githubusercontent.com/6477701/80076779-9f6cac80-8587-11ea-8c92-07d7b992733b.png
+.. image:: ../../../../../docs/img/pyspark-pandas_on_spark-transform_apply3.png
   :alt: pandas_on_spark.transform_batch and pandas_on_spark.apply_batch in Frame
   :align: center
   :width: 650
@@ -113,7 +113,7 @@ a pandas Series as a chunk of pandas-on-Spark Series.
 
 Under the hood, each batch of pandas-on-Spark Series is split to multiple pandas Series, and each function computes on that as below:
 
-.. image:: https://user-images.githubusercontent.com/6477701/80076795-a3003380-8587-11ea-8b73-186e4047f8c0.png
+.. image:: ../../../../../docs/img/pyspark-pandas_on_spark-transform_apply4.png
   :alt: pandas_on_spark.transform_batch in Series
   :width: 350
   :align: center
