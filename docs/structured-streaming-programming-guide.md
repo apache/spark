@@ -2752,8 +2752,9 @@ Here are the different kinds of triggers that are supported.
     <td><b>Available-now micro-batch</b></td>
     <td>
         Similar to queries one-time micro-batch trigger, the query will process all the available data and then
-        stop on its own. The difference is that it will process the data in multiple micro-bathes,
-        which will result in better query scalability.
+        stop on its own. The difference is that, it will process the data in (possibly) multiple micro-batches
+        based on the source options (e.g. <code>maxFilesPerTrigger</code> for file source), which will result
+        in better query scalability.
     </td>
   </tr>
   <tr>
