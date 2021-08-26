@@ -56,8 +56,5 @@ private[spark] class TimestampNTZType private() extends AtomicType {
  * the TimestampNTZType class. Otherwise, the companion object would be of type
  * "TimestampNTZType" in byte code. Defined with a private constructor so the companion
  * object is the only possible instantiation.
- *
- * @since 3.3.0
  */
-@Unstable
 private[spark] case object TimestampNTZType extends TimestampNTZType
