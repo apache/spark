@@ -50,7 +50,6 @@ import org.apache.spark.sql.types._
   """,
   examples = """
     Examples:
-      > CREATE TEMPORARY VIEW
       > SELECT a, window.start, window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:06:00'), ('A2', '2021-01-01 00:01:00') AS tab(a, b) GROUP by a, _FUNC_(b, '5 minutes') ORDER BY a, start;
         A1	2021-01-01 00:00:00	2021-01-01 00:05:00	2
         A1	2021-01-01 00:05:00	2021-01-01 00:10:00	1
