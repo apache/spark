@@ -94,7 +94,7 @@ def generate_sql_configs_table_html(sql_configs, path):
                 default = config.default
 
             if default.startswith("<"):
-                raise Exception(
+                raise RuntimeError(
                     "Unhandled reference in SQL config docs. Config '{name}' "
                     "has default '{default}' that looks like an HTML tag."
                     .format(

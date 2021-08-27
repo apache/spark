@@ -58,7 +58,6 @@ class MissingPandasLikeIndex(object):
     is_ = _unsupported_function("is_")
     is_lexsorted_for_tuple = _unsupported_function("is_lexsorted_for_tuple")
     join = _unsupported_function("join")
-    map = _unsupported_function("map")
     putmask = _unsupported_function("putmask")
     ravel = _unsupported_function("ravel")
     reindex = _unsupported_function("reindex")
@@ -118,22 +117,6 @@ class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
     to_pydatetime = _unsupported_function("to_pydatetime", cls="DatetimeIndex")
     mean = _unsupported_function("mean", cls="DatetimeIndex")
     std = _unsupported_function("std", cls="DatetimeIndex")
-
-
-class MissingPandasLikeCategoricalIndex(MissingPandasLikeIndex):
-
-    # Functions
-    rename_categories = _unsupported_function("rename_categories", cls="CategoricalIndex")
-    reorder_categories = _unsupported_function("reorder_categories", cls="CategoricalIndex")
-    add_categories = _unsupported_function("add_categories", cls="CategoricalIndex")
-    remove_categories = _unsupported_function("remove_categories", cls="CategoricalIndex")
-    remove_unused_categories = _unsupported_function(
-        "remove_unused_categories", cls="CategoricalIndex"
-    )
-    set_categories = _unsupported_function("set_categories", cls="CategoricalIndex")
-    as_ordered = _unsupported_function("as_ordered", cls="CategoricalIndex")
-    as_unordered = _unsupported_function("as_unordered", cls="CategoricalIndex")
-    map = _unsupported_function("map", cls="CategoricalIndex")
 
 
 class MissingPandasLikeMultiIndex(object):

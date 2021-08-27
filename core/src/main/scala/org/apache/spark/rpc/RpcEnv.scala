@@ -187,7 +187,8 @@ private[spark] trait RpcEnvFileServer {
 
   /** Validates and normalizes the base URI for directories. */
   protected def validateDirectoryUri(baseUri: String): String = {
-    val fixedBaseUri = "/" + baseUri.stripPrefix("/").stripSuffix("/")
+    val baseCanonicalUri = new File(baseUri).getCanonicalPath
+    val fixedBaseUri = "/" + baseCanonicalUri.stripPrefix("/").stripSuffix("/")
     require(fixedBaseUri != "/files" && fixedBaseUri != "/jars",
       "Directory URI cannot be /files nor /jars.")
     fixedBaseUri

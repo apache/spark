@@ -557,9 +557,16 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("sentences(str, language, country)"),
       Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
 
+    checkAnswer(
+      df.select(sentences($"str", $"language", $"country")),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
     // Type coercion
     checkAnswer(
       df.selectExpr("sentences(null)", "sentences(10)", "sentences(3.14)"),
+      Row(null, Seq(Seq("10")), Seq(Seq("3.14"))))
+
+    checkAnswer(df.select(sentences(lit(null)), sentences(lit(10)), sentences(lit(3.14))),
       Row(null, Seq(Seq("10")), Seq(Seq("3.14"))))
 
     // Argument number exception
@@ -590,5 +597,12 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
     )
 
+  }
+
+  test("SPARK-36148: check input data types of regexp_replace") {
+    val m = intercept[AnalysisException] {
+      sql("select regexp_replace(collect_list(1), '1', '2')")
+    }.getMessage
+    assert(m.contains("data type mismatch: argument 1 requires string type"))
   }
 }

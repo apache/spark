@@ -29,7 +29,7 @@ import org.apache.commons.lang3.reflect.MethodUtils
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
+import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -44,13 +44,23 @@ import org.apache.spark.util.Utils
 /**
  * Common base class for [[StaticInvoke]], [[Invoke]], and [[NewInstance]].
  */
-trait InvokeLike extends Expression with NonSQLExpression {
+trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInputTypes {
 
   def arguments: Seq[Expression]
 
   def propagateNull: Boolean
 
-  protected lazy val needNullCheck: Boolean = propagateNull && arguments.exists(_.nullable)
+  protected lazy val needNullCheck: Boolean = needNullCheckForIndex.contains(true)
+  protected lazy val needNullCheckForIndex: Array[Boolean] =
+    arguments.map(a => a.nullable && (propagateNull ||
+        ScalaReflection.dataTypeJavaClass(a.dataType).isPrimitive)).toArray
+  protected lazy val evaluatedArgs: Array[Object] = new Array[Object](arguments.length)
+  private lazy val boxingFn: Any => Any =
+    ScalaReflection.typeBoxedJavaMapping
+      .get(dataType)
+      .map(cls => v => cls.cast(v))
+      .getOrElse(identity)
+
 
   /**
    * Prepares codes for arguments.
@@ -82,7 +92,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
       val reset = s"$resultIsNull = false;"
       val argCodes = arguments.zipWithIndex.map { case (e, i) =>
         val expr = e.genCode(ctx)
-        val updateResultIsNull = if (e.nullable) {
+        val updateResultIsNull = if (needNullCheckForIndex(i)) {
           s"$resultIsNull = ${expr.isNull};"
         } else {
           ""
@@ -116,42 +126,38 @@ trait InvokeLike extends Expression with NonSQLExpression {
    *
    * @param obj the object for the method to be called. If null, perform s static method call
    * @param method the method object to be called
-   * @param arguments the arguments used for the method call
    * @param input the row used for evaluating arguments
-   * @param dataType the data type of the return object
    * @return the return object of a method call
    */
-  def invoke(
-      obj: Any,
-      method: Method,
-      arguments: Seq[Expression],
-      input: InternalRow,
-      dataType: DataType): Any = {
-    val args = arguments.map(e => e.eval(input).asInstanceOf[Object])
-    if (needNullCheck && args.exists(_ == null)) {
+  def invoke(obj: Any, method: Method, input: InternalRow): Any = {
+    var i = 0
+    val len = arguments.length
+    var resultNull = false
+    while (i < len) {
+      val result = arguments(i).eval(input).asInstanceOf[Object]
+      evaluatedArgs(i) = result
+      resultNull = resultNull || (result == null && needNullCheckForIndex(i))
+      i += 1
+    }
+    if (needNullCheck && resultNull) {
       // return null if one of arguments is null
       null
     } else {
       val ret = try {
-        method.invoke(obj, args: _*)
+        method.invoke(obj, evaluatedArgs: _*)
       } catch {
         // Re-throw the original exception.
         case e: java.lang.reflect.InvocationTargetException if e.getCause != null =>
           throw e.getCause
       }
-      val boxedClass = ScalaReflection.typeBoxedJavaMapping.get(dataType)
-      if (boxedClass.isDefined) {
-        boxedClass.get.cast(ret)
-      } else {
-        ret
-      }
+      boxingFn(ret)
     }
   }
 
   final def findMethod(cls: Class[_], functionName: String, argClasses: Seq[Class[_]]): Method = {
     val method = MethodUtils.getMatchingAccessibleMethod(cls, functionName, argClasses: _*)
     if (method == null) {
-      sys.error(s"Couldn't find $functionName on $cls")
+      throw QueryExecutionErrors.methodNotDeclaredError(functionName)
     } else {
       method
     }
@@ -223,8 +229,15 @@ object SerializerSupport {
  * @param dataType The expected return type of the function call
  * @param functionName The name of the method to call.
  * @param arguments An optional list of expressions to pass as arguments to the function.
+ * @param inputTypes A list of data types specifying the input types for the method to be invoked.
+ *                   If enabled, it must have the same length as [[arguments]]. In case an input
+ *                   type differs from the actual argument type, Spark will try to perform
+ *                   type coercion and insert cast whenever necessary before invoking the method.
+ *                   The above is disabled if this is empty.
  * @param propagateNull When true, and any of the arguments is null, null will be returned instead
- *                      of calling the function.
+ *                      of calling the function. Also note: when this is false but any of the
+ *                      arguments is of primitive type and is null, null also will be returned
+ *                      without invoking the function.
  * @param returnNullable When false, indicating the invoked method will always return
  *                       non-null value.
  */
@@ -233,6 +246,7 @@ case class StaticInvoke(
     dataType: DataType,
     functionName: String,
     arguments: Seq[Expression] = Nil,
+    inputTypes: Seq[AbstractDataType] = Nil,
     propagateNull: Boolean = true,
     returnNullable: Boolean = true) extends InvokeLike {
 
@@ -250,7 +264,7 @@ case class StaticInvoke(
   @transient lazy val method = findMethod(cls, functionName, argClasses)
 
   override def eval(input: InternalRow): Any = {
-    invoke(null, method, arguments, input, dataType)
+    invoke(null, method, input)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -314,9 +328,16 @@ case class StaticInvoke(
  * @param functionName The name of the method to call.
  * @param dataType The expected return type of the function.
  * @param arguments An optional list of expressions, whose evaluation will be passed to the
-  *                 function.
+ *                 function.
+ * @param methodInputTypes A list of data types specifying the input types for the method to be
+ *                         invoked. If enabled, it must have the same length as [[arguments]]. In
+ *                         case an input type differs from the actual argument type, Spark will
+ *                         try to perform type coercion and insert cast whenever necessary before
+ *                         invoking the method. The type coercion is disabled if this is empty.
  * @param propagateNull When true, and any of the arguments is null, null will be returned instead
- *                      of calling the function.
+ *                      of calling the function. Also note: when this is false but any of the
+ *                      arguments is of primitive type and is null, null also will be returned
+ *                      without invoking the function.
  * @param returnNullable When false, indicating the invoked method will always return
  *                       non-null value.
  */
@@ -325,6 +346,7 @@ case class Invoke(
     functionName: String,
     dataType: DataType,
     arguments: Seq[Expression] = Nil,
+    methodInputTypes: Seq[AbstractDataType] = Nil,
     propagateNull: Boolean = true,
     returnNullable : Boolean = true) extends InvokeLike {
 
@@ -332,6 +354,12 @@ case class Invoke(
 
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
+  override def inputTypes: Seq[AbstractDataType] =
+    if (methodInputTypes.nonEmpty) {
+      Seq(targetObject.dataType) ++ methodInputTypes
+    } else {
+      Nil
+    }
 
   private lazy val encodedFunctionName = ScalaReflection.encodeFieldNameToIdentifier(functionName)
 
@@ -352,7 +380,7 @@ case class Invoke(
       } else {
         obj.getClass.getMethod(functionName, argClasses: _*)
       }
-      invoke(obj, invokeMethod, arguments, input, dataType)
+      invoke(obj, invokeMethod, input)
     }
   }
 
@@ -440,7 +468,7 @@ object NewInstance {
       arguments: Seq[Expression],
       dataType: DataType,
       propagateNull: Boolean = true): NewInstance =
-    new NewInstance(cls, arguments, propagateNull, dataType, None)
+    new NewInstance(cls, arguments, inputTypes = Nil, propagateNull, dataType, None)
 }
 
 /**
@@ -449,8 +477,15 @@ object NewInstance {
  *
  * @param cls The class to construct.
  * @param arguments A list of expression to use as arguments to the constructor.
+ * @param inputTypes A list of data types specifying the input types for the method to be invoked.
+ *                   If enabled, it must have the same length as [[arguments]]. In case an input
+ *                   type differs from the actual argument type, Spark will try to perform
+ *                   type coercion and insert cast whenever necessary before invoking the method.
+ *                   The above is disabled if this is empty.
  * @param propagateNull When true, if any of the arguments is null, then null will be returned
- *                      instead of trying to construct the object.
+ *                      instead of trying to construct the object. Also note: when this is false
+ *                      but any of the arguments is of primitive type and is null, null also will
+ *                      be returned without constructing the object.
  * @param dataType The type of object being constructed, as a Spark SQL datatype.  This allows you
  *                 to manually specify the type when the object in question is a valid internal
  *                 representation (i.e. ArrayData) instead of an object.
@@ -462,6 +497,7 @@ object NewInstance {
 case class NewInstance(
     cls: Class[_],
     arguments: Seq[Expression],
+    inputTypes: Seq[AbstractDataType],
     propagateNull: Boolean,
     dataType: DataType,
     outerPointer: Option[() => AnyRef]) extends InvokeLike {
@@ -470,6 +506,8 @@ case class NewInstance(
   override def nullable: Boolean = needNullCheck
 
   override def children: Seq[Expression] = arguments
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(NEW_INSTANCE)
 
   override lazy val resolved: Boolean = {
     // If the class to construct is an inner class, we need to get its outer pointer, or this
@@ -485,7 +523,7 @@ case class NewInstance(
     val paramTypes = ScalaReflection.expressionJavaClasses(arguments)
     val getConstructor = (paramClazz: Seq[Class[_]]) => {
       ScalaReflection.findConstructor(cls, paramClazz).getOrElse {
-        sys.error(s"Couldn't find a valid constructor on $cls")
+        throw QueryExecutionErrors.constructorNotFoundError(cls.toString)
       }
     }
     outerPointer.map { p =>
@@ -1151,11 +1189,6 @@ case class CatalystToExternalMap private(
 
   private lazy val inputMapType = inputData.dataType.asInstanceOf[MapType]
 
-  private lazy val keyConverter =
-    CatalystTypeConverters.createToScalaConverter(inputMapType.keyType)
-  private lazy val valueConverter =
-    CatalystTypeConverters.createToScalaConverter(inputMapType.valueType)
-
   private lazy val (newMapBuilderMethod, moduleField) = {
     val clazz = Utils.classForName(collClass.getCanonicalName + "$")
     (clazz.getMethod("newBuilder"), clazz.getField("MODULE$").get(null))
@@ -1172,10 +1205,13 @@ case class CatalystToExternalMap private(
       builder.sizeHint(result.numElements())
       val keyArray = result.keyArray()
       val valueArray = result.valueArray()
+      val row = new GenericInternalRow(1)
       var i = 0
       while (i < result.numElements()) {
-        val key = keyConverter(keyArray.get(i, inputMapType.keyType))
-        val value = valueConverter(valueArray.get(i, inputMapType.valueType))
+        row.update(0, keyArray.get(i, inputMapType.keyType))
+        val key = keyLambdaFunction.eval(row)
+        row.update(0, valueArray.get(i, inputMapType.valueType))
+        val value = valueLambdaFunction.eval(row)
         builder += Tuple2(key, value)
         i += 1
       }

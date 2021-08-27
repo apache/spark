@@ -51,7 +51,10 @@ from pyspark.taskcontext import (  # noqa: F401
     BarrierTaskInfo as BarrierTaskInfo,
     TaskContext as TaskContext,
 )
-from pyspark.util import InheritableThread as InheritableThread  # noqa: F401
+from pyspark.util import (
+    InheritableThread as InheritableThread,  # noqa: F401
+    inheritable_thread_target as inheritable_thread_target,  # noqa: F401
+)
 from pyspark.version import __version__ as __version__
 
 # Compatibility imports

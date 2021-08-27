@@ -25,7 +25,7 @@ from typing import Any, Optional
 
 
 def get_logger() -> Any:
-    """ An entry point of the plug-in and return the usage logger. """
+    """An entry point of the plug-in and return the usage logger."""
     return PandasOnSparkUsageLogger()
 
 

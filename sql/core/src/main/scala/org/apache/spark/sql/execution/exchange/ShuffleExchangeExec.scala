@@ -61,9 +61,14 @@ trait ShuffleExchangeLike extends Exchange {
   def shuffleOrigin: ShuffleOrigin
 
   /**
-   * The asynchronous job that materializes the shuffle.
+   * The asynchronous job that materializes the shuffle. It also does the preparations work,
+   * such as waiting for the subqueries.
    */
-  def mapOutputStatisticsFuture: Future[MapOutputStatistics]
+  final def submitShuffleJob: Future[MapOutputStatistics] = executeQuery {
+    mapOutputStatisticsFuture
+  }
+
+  protected def mapOutputStatisticsFuture: Future[MapOutputStatistics]
 
   /**
    * Returns the shuffle RDD with specified partition specs.
@@ -86,11 +91,23 @@ case object ENSURE_REQUIREMENTS extends ShuffleOrigin
 
 // Indicates that the shuffle operator was added by the user-specified repartition operator. Spark
 // can still optimize it via changing shuffle partition number, as data partitioning won't change.
-case object REPARTITION extends ShuffleOrigin
+case object REPARTITION_BY_COL extends ShuffleOrigin
 
 // Indicates that the shuffle operator was added by the user-specified repartition operator with
 // a certain partition number. Spark can't optimize it.
-case object REPARTITION_WITH_NUM extends ShuffleOrigin
+case object REPARTITION_BY_NUM extends ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the user-specified rebalance operator.
+// Spark will try to rebalance partitions that make per-partition size not too small and not
+// too big. Local shuffle read will be used if possible to reduce network traffic.
+case object REBALANCE_PARTITIONS_BY_NONE extends ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the user-specified rebalance operator with
+// columns. Spark will try to rebalance partitions that make per-partition size not too small and
+// not too big.
+// Different from `REBALANCE_PARTITIONS_BY_NONE`, local shuffle read cannot be used for it as
+// the output needs to be partitioned by the given columns.
+case object REBALANCE_PARTITIONS_BY_COL extends ShuffleOrigin
 
 /**
  * Performs a shuffle that will result in the desired partitioning.
@@ -106,18 +123,20 @@ case class ShuffleExchangeExec(
   private[sql] lazy val readMetrics =
     SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
   override lazy val metrics = Map(
-    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size")
+    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
+    "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions")
   ) ++ readMetrics ++ writeMetrics
 
   override def nodeName: String = "Exchange"
 
-  private val serializer: Serializer =
+  private lazy val serializer: Serializer =
     new UnsafeRowSerializer(child.output.size, longMetric("dataSize"))
 
   @transient lazy val inputRDD: RDD[InternalRow] = child.execute()
 
   // 'mapOutputStatisticsFuture' is only needed when enable AQE.
-  @transient override lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
+  @transient
+  override lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
     if (inputRDD.getNumPartitions == 0) {
       Future.successful(null)
     } else {
@@ -146,12 +165,17 @@ case class ShuffleExchangeExec(
    */
   @transient
   lazy val shuffleDependency : ShuffleDependency[Int, InternalRow, InternalRow] = {
-    ShuffleExchangeExec.prepareShuffleDependency(
+    val dep = ShuffleExchangeExec.prepareShuffleDependency(
       inputRDD,
       child.output,
       outputPartitioning,
       serializer,
       writeMetrics)
+    metrics("numPartitions").set(dep.partitioner.numPartitions)
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(
+      sparkContext, executionId, metrics("numPartitions") :: Nil)
+    dep
   }
 
   /**

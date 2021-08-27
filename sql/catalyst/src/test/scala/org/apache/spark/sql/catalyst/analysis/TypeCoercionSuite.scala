@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.sql.Timestamp
+import java.time.{Duration, Period}
 
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -27,9 +29,15 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 class TypeCoercionSuite extends AnalysisTest {
   import TypeCoercionSuite._
+
+  // When Utils.isTesting is true, RuleIdCollection adds individual type coercion rules. Otherwise,
+  // RuleIdCollection doesn't add them because they are called in a train inside
+  // CombinedTypeCoercionRule.
+  assert(Utils.isTesting, s"${IS_TESTING.key} is not set to true")
 
   // scalastyle:off line.size.limit
   // The following table shows all implicit data type conversions that are not visible to the user.
@@ -1596,6 +1604,52 @@ class TypeCoercionSuite extends AnalysisTest {
     // one of the operand is int
     ruleTest(TypeCoercion.IntegralDivision, IntegralDivide(2, 1L),
       IntegralDivide(Cast(2, LongType), 1L))
+  }
+
+  test("SPARK-36431: Support TypeCoercion of ANSI intervals with different fields") {
+    DataTypeTestUtils.yearMonthIntervalTypes.foreach { ym1 =>
+      DataTypeTestUtils.yearMonthIntervalTypes.foreach { ym2 =>
+        val literal1 = Literal.create(Period.ofMonths(12), ym1)
+        val literal2 = Literal.create(Period.ofMonths(12), ym2)
+        val commonType = YearMonthIntervalType(
+          ym1.startField.min(ym2.startField), ym1.endField.max(ym2.endField))
+        if (commonType == ym1 && commonType == ym2) {
+          ruleTest(TypeCoercion.ImplicitTypeCasts, EqualTo(literal1, literal2),
+            EqualTo(literal1, literal2))
+        } else if (commonType == ym1) {
+          ruleTest(TypeCoercion.ImplicitTypeCasts, EqualTo(literal1, literal2),
+            EqualTo(literal1, Cast(literal2, commonType)))
+        } else if (commonType == ym2) {
+          ruleTest(TypeCoercion.ImplicitTypeCasts, EqualTo(literal1, literal2),
+            EqualTo(Cast(literal1, commonType), literal2))
+        } else {
+          ruleTest(TypeCoercion.ImplicitTypeCasts, EqualTo(literal1, literal2),
+            EqualTo(Cast(literal1, commonType), Cast(literal2, commonType)))
+        }
+      }
+    }
+
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt1 =>
+      DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt2 =>
+        val literal1 = Literal.create(Duration.ofSeconds(1111), dt1)
+        val literal2 = Literal.create(Duration.ofSeconds(1111), dt2)
+        val commonType = DayTimeIntervalType(
+          dt1.startField.min(dt2.startField), dt1.endField.max(dt2.endField))
+        if (commonType == dt1 && commonType == dt2) {
+          ruleTest(TypeCoercion.ImplicitTypeCasts, EqualTo(literal1, literal2),
+            EqualTo(literal1, literal2))
+        } else if (commonType == dt1) {
+          ruleTest(TypeCoercion.ImplicitTypeCasts, EqualTo(literal1, literal2),
+            EqualTo(literal1, Cast(literal2, commonType)))
+        } else if (commonType == dt2) {
+          ruleTest(TypeCoercion.ImplicitTypeCasts, EqualTo(literal1, literal2),
+            EqualTo(Cast(literal1, commonType), literal2))
+        } else {
+          ruleTest(TypeCoercion.ImplicitTypeCasts, EqualTo(literal1, literal2),
+            EqualTo(Cast(literal1, commonType), Cast(literal2, commonType)))
+        }
+      }
+    }
   }
 }
 

@@ -1,0 +1,127 @@
+== Physical Plan ==
+* Sort (13)
++- Exchange (12)
+   +- * HashAggregate (11)
+      +- Exchange (10)
+         +- * HashAggregate (9)
+            +- * Project (8)
+               +- * BroadcastHashJoin LeftAnti BuildRight (7)
+                  :- * Filter (3)
+                  :  +- * ColumnarToRow (2)
+                  :     +- Scan parquet default.customer (1)
+                  +- BroadcastExchange (6)
+                     +- * ColumnarToRow (5)
+                        +- Scan parquet default.orders (4)
+
+
+(1) Scan parquet default.customer
+Output [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer]
+PushedFilters: [IsNotNull(c_acctbal)]
+ReadSchema: struct<c_custkey:bigint,c_phone:string,c_acctbal:decimal(10,0)>
+
+(2) ColumnarToRow [codegen id : 2]
+Input [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
+
+(3) Filter [codegen id : 2]
+Input [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
+Condition : ((isnotnull(c_acctbal#3) AND substring(c_phone#2, 1, 2) IN (13,31,23,29,30,18,17)) AND (cast(c_acctbal#3 as decimal(14,4)) > Subquery scalar-subquery#4, [id=#5]))
+
+(4) Scan parquet default.orders
+Output [1]: [o_custkey#6]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/orders]
+ReadSchema: struct<o_custkey:bigint>
+
+(5) ColumnarToRow [codegen id : 1]
+Input [1]: [o_custkey#6]
+
+(6) BroadcastExchange
+Input [1]: [o_custkey#6]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#7]
+
+(7) BroadcastHashJoin [codegen id : 2]
+Left keys [1]: [c_custkey#1]
+Right keys [1]: [o_custkey#6]
+Join condition: None
+
+(8) Project [codegen id : 2]
+Output [2]: [substring(c_phone#2, 1, 2) AS cntrycode#8, c_acctbal#3]
+Input [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
+
+(9) HashAggregate [codegen id : 2]
+Input [2]: [cntrycode#8, c_acctbal#3]
+Keys [1]: [cntrycode#8]
+Functions [2]: [partial_count(1), partial_sum(c_acctbal#3)]
+Aggregate Attributes [3]: [count#9, sum#10, isEmpty#11]
+Results [4]: [cntrycode#8, count#12, sum#13, isEmpty#14]
+
+(10) Exchange
+Input [4]: [cntrycode#8, count#12, sum#13, isEmpty#14]
+Arguments: hashpartitioning(cntrycode#8, 5), ENSURE_REQUIREMENTS, [id=#15]
+
+(11) HashAggregate [codegen id : 3]
+Input [4]: [cntrycode#8, count#12, sum#13, isEmpty#14]
+Keys [1]: [cntrycode#8]
+Functions [2]: [count(1), sum(c_acctbal#3)]
+Aggregate Attributes [2]: [count(1)#16, sum(c_acctbal#3)#17]
+Results [3]: [cntrycode#8, count(1)#16 AS numcust#18, sum(c_acctbal#3)#17 AS totacctbal#19]
+
+(12) Exchange
+Input [3]: [cntrycode#8, numcust#18, totacctbal#19]
+Arguments: rangepartitioning(cntrycode#8 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#20]
+
+(13) Sort [codegen id : 4]
+Input [3]: [cntrycode#8, numcust#18, totacctbal#19]
+Arguments: [cntrycode#8 ASC NULLS FIRST], true, 0
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#4, [id=#5]
+* HashAggregate (20)
++- Exchange (19)
+   +- * HashAggregate (18)
+      +- * Project (17)
+         +- * Filter (16)
+            +- * ColumnarToRow (15)
+               +- Scan parquet default.customer (14)
+
+
+(14) Scan parquet default.customer
+Output [2]: [c_phone#21, c_acctbal#22]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer]
+PushedFilters: [IsNotNull(c_acctbal), GreaterThan(c_acctbal,0)]
+ReadSchema: struct<c_phone:string,c_acctbal:decimal(10,0)>
+
+(15) ColumnarToRow [codegen id : 1]
+Input [2]: [c_phone#21, c_acctbal#22]
+
+(16) Filter [codegen id : 1]
+Input [2]: [c_phone#21, c_acctbal#22]
+Condition : ((isnotnull(c_acctbal#22) AND (c_acctbal#22 > 0)) AND substring(c_phone#21, 1, 2) IN (13,31,23,29,30,18,17))
+
+(17) Project [codegen id : 1]
+Output [1]: [c_acctbal#22]
+Input [2]: [c_phone#21, c_acctbal#22]
+
+(18) HashAggregate [codegen id : 1]
+Input [1]: [c_acctbal#22]
+Keys: []
+Functions [1]: [partial_avg(UnscaledValue(c_acctbal#22))]
+Aggregate Attributes [2]: [sum#23, count#24]
+Results [2]: [sum#25, count#26]
+
+(19) Exchange
+Input [2]: [sum#25, count#26]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#27]
+
+(20) HashAggregate [codegen id : 2]
+Input [2]: [sum#25, count#26]
+Keys: []
+Functions [1]: [avg(UnscaledValue(c_acctbal#22))]
+Aggregate Attributes [1]: [avg(UnscaledValue(c_acctbal#22))#28]
+Results [1]: [cast((avg(UnscaledValue(c_acctbal#22))#28 / 1.0) as decimal(14,4)) AS avg(c_acctbal)#29]
+
+

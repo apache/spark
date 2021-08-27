@@ -32,7 +32,7 @@ trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers 
 
   private def dateFormatter(
       pattern: String, ldf: LegacyDateFormat = FAST_DATE_FORMAT): DateFormatter = {
-    DateFormatter(pattern, UTC, DateFormatter.defaultLocale, ldf, isParsing = true)
+    DateFormatter(pattern, DateFormatter.defaultLocale, ldf, isParsing = true)
   }
 
   private def timestampFormatter(

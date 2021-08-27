@@ -25,7 +25,13 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                                 InputAdapter
                                                   Scan parquet default.catalog_sales [cs_bill_customer_sk,cs_bill_cdemo_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cs_sold_date_sk]
                                                     SubqueryBroadcast [d_date_sk] #1
-                                                      ReusedExchange [d_date_sk] #3
+                                                      BroadcastExchange #3
+                                                        WholeStageCodegen (1)
+                                                          Project [d_date_sk]
+                                                            Filter [d_year,d_date_sk]
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet default.date_dim [d_date_sk,d_year]
                                             InputAdapter
                                               BroadcastExchange #4
                                                 WholeStageCodegen (1)
@@ -35,13 +41,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                                         InputAdapter
                                                           Scan parquet default.customer_demographics [cd_demo_sk,cd_gender,cd_education_status,cd_dep_count]
                                         InputAdapter
-                                          BroadcastExchange #3
-                                            WholeStageCodegen (2)
-                                              Project [d_date_sk]
-                                                Filter [d_year,d_date_sk]
-                                                  ColumnarToRow
-                                                    InputAdapter
-                                                      Scan parquet default.date_dim [d_date_sk,d_year]
+                                          ReusedExchange [d_date_sk] #3
                                     InputAdapter
                                       BroadcastExchange #5
                                         WholeStageCodegen (3)
@@ -99,12 +99,12 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                       WholeStageCodegen (19)
                         Sort [cs_bill_customer_sk]
                           InputAdapter
-                            ReusedExchange [cs_bill_customer_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cd_dep_count,i_item_id] #11
+                            ReusedExchange [cs_bill_customer_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cd_dep_count,i_item_id] #2
                     InputAdapter
                       WholeStageCodegen (26)
                         Sort [c_customer_sk]
                           InputAdapter
-                            Exchange [c_customer_sk] #12
+                            Exchange [c_customer_sk] #11
                               WholeStageCodegen (25)
                                 Project [c_customer_sk,c_birth_year,ca_state,ca_country]
                                   SortMergeJoin [c_current_cdemo_sk,cd_demo_sk]
@@ -112,7 +112,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                       WholeStageCodegen (22)
                                         Sort [c_current_cdemo_sk]
                                           InputAdapter
-                                            Exchange [c_current_cdemo_sk] #13
+                                            Exchange [c_current_cdemo_sk] #12
                                               WholeStageCodegen (21)
                                                 Project [c_customer_sk,c_current_cdemo_sk,c_birth_year,ca_state,ca_country]
                                                   BroadcastHashJoin [c_current_addr_sk,ca_address_sk]
@@ -122,7 +122,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                                           InputAdapter
                                                             Scan parquet default.customer [c_customer_sk,c_current_cdemo_sk,c_current_addr_sk,c_birth_month,c_birth_year]
                                                     InputAdapter
-                                                      BroadcastExchange #14
+                                                      BroadcastExchange #13
                                                         WholeStageCodegen (20)
                                                           Filter [ca_state,ca_address_sk]
                                                             ColumnarToRow
@@ -136,7 +136,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
     WholeStageCodegen (42)
       HashAggregate [i_item_id,ca_country,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(agg2),avg(agg3),avg(agg4),avg(agg5),avg(agg6),avg(agg7),ca_state,county,agg1,agg2,agg3,agg4,agg5,agg6,agg7,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
         InputAdapter
-          Exchange [i_item_id,ca_country] #15
+          Exchange [i_item_id,ca_country] #14
             WholeStageCodegen (41)
               HashAggregate [i_item_id,ca_country,agg1,agg2,agg3,agg4,agg5,agg6,agg7] [sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
                 Project [i_item_id,ca_country,cs_quantity,cs_list_price,cs_coupon_amt,cs_sales_price,cs_net_profit,c_birth_year,cd_dep_count]
@@ -145,12 +145,12 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                       WholeStageCodegen (33)
                         Sort [cs_bill_customer_sk]
                           InputAdapter
-                            ReusedExchange [cs_bill_customer_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cd_dep_count,i_item_id] #11
+                            ReusedExchange [cs_bill_customer_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cd_dep_count,i_item_id] #2
                     InputAdapter
                       WholeStageCodegen (40)
                         Sort [c_customer_sk]
                           InputAdapter
-                            Exchange [c_customer_sk] #16
+                            Exchange [c_customer_sk] #15
                               WholeStageCodegen (39)
                                 Project [c_customer_sk,c_birth_year,ca_country]
                                   SortMergeJoin [c_current_cdemo_sk,cd_demo_sk]
@@ -158,7 +158,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                       WholeStageCodegen (36)
                                         Sort [c_current_cdemo_sk]
                                           InputAdapter
-                                            Exchange [c_current_cdemo_sk] #17
+                                            Exchange [c_current_cdemo_sk] #16
                                               WholeStageCodegen (35)
                                                 Project [c_customer_sk,c_current_cdemo_sk,c_birth_year,ca_country]
                                                   BroadcastHashJoin [c_current_addr_sk,ca_address_sk]
@@ -168,7 +168,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                                           InputAdapter
                                                             Scan parquet default.customer [c_customer_sk,c_current_cdemo_sk,c_current_addr_sk,c_birth_month,c_birth_year]
                                                     InputAdapter
-                                                      BroadcastExchange #18
+                                                      BroadcastExchange #17
                                                         WholeStageCodegen (34)
                                                           Project [ca_address_sk,ca_country]
                                                             Filter [ca_state,ca_address_sk]
@@ -183,7 +183,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
     WholeStageCodegen (50)
       HashAggregate [i_item_id,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(agg2),avg(agg3),avg(agg4),avg(agg5),avg(agg6),avg(agg7),ca_country,ca_state,county,agg1,agg2,agg3,agg4,agg5,agg6,agg7,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
         InputAdapter
-          Exchange [i_item_id] #19
+          Exchange [i_item_id] #18
             WholeStageCodegen (49)
               HashAggregate [i_item_id,agg1,agg2,agg3,agg4,agg5,agg6,agg7] [sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
                 Project [i_item_id,cs_quantity,cs_list_price,cs_coupon_amt,cs_sales_price,cs_net_profit,c_birth_year,cd_dep_count]
@@ -204,12 +204,12 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                             InputAdapter
                               ReusedExchange [d_date_sk] #3
                         InputAdapter
-                          BroadcastExchange #20
+                          BroadcastExchange #19
                             WholeStageCodegen (47)
                               Project [c_customer_sk,c_birth_year]
                                 BroadcastHashJoin [c_current_cdemo_sk,cd_demo_sk]
                                   InputAdapter
-                                    BroadcastExchange #21
+                                    BroadcastExchange #20
                                       WholeStageCodegen (46)
                                         Project [c_customer_sk,c_current_cdemo_sk,c_birth_year]
                                           BroadcastHashJoin [c_current_addr_sk,ca_address_sk]
@@ -219,7 +219,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                                   InputAdapter
                                                     Scan parquet default.customer [c_customer_sk,c_current_cdemo_sk,c_current_addr_sk,c_birth_month,c_birth_year]
                                             InputAdapter
-                                              BroadcastExchange #22
+                                              BroadcastExchange #21
                                                 WholeStageCodegen (45)
                                                   Project [ca_address_sk]
                                                     Filter [ca_state,ca_address_sk]
@@ -235,7 +235,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
     WholeStageCodegen (58)
       HashAggregate [sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(agg2),avg(agg3),avg(agg4),avg(agg5),avg(agg6),avg(agg7),i_item_id,ca_country,ca_state,county,agg1,agg2,agg3,agg4,agg5,agg6,agg7,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
         InputAdapter
-          Exchange #23
+          Exchange #22
             WholeStageCodegen (57)
               HashAggregate [agg1,agg2,agg3,agg4,agg5,agg6,agg7] [sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
                 Project [cs_quantity,cs_list_price,cs_coupon_amt,cs_sales_price,cs_net_profit,c_birth_year,cd_dep_count]
@@ -256,11 +256,11 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                             InputAdapter
                               ReusedExchange [d_date_sk] #3
                         InputAdapter
-                          BroadcastExchange #24
+                          BroadcastExchange #23
                             WholeStageCodegen (53)
                               Filter [i_item_sk]
                                 ColumnarToRow
                                   InputAdapter
                                     Scan parquet default.item [i_item_sk]
                     InputAdapter
-                      ReusedExchange [c_customer_sk,c_birth_year] #20
+                      ReusedExchange [c_customer_sk,c_birth_year] #19

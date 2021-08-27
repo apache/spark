@@ -107,7 +107,8 @@ case class SetCommand(kv: Option[(String, Option[String])])
     // Queries all key-value pairs that are set in the SQLConf of the sparkSession.
     case None =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.conf.getAll.toSeq.sorted.map { case (k, v) => Row(k, v) }
+        val redactedConf = SQLConf.get.redactOptions(sparkSession.conf.getAll)
+        redactedConf.toSeq.sorted.map { case (k, v) => Row(k, v) }
       }
       (keyValueOutput, runFunc)
 
@@ -162,7 +163,8 @@ case class SetCommand(kv: Option[(String, Option[String])])
           // very likely to change them based the default value they see.
           sparkSession.sharedState.hadoopConf.get(key, "<undefined>")
         }
-        Seq(Row(key, value))
+        val (_, redactedValue) = SQLConf.get.redactOptions(Seq((key, value))).head
+        Seq(Row(key, redactedValue))
       }
       (keyValueOutput, runFunc)
   }

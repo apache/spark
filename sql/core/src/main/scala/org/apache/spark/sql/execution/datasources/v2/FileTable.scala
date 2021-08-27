@@ -22,10 +22,11 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming.{FileStreamSink, MetadataLogFileIndex}
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -68,8 +69,7 @@ abstract class FileTable(
     }.orElse {
       inferSchema(fileIndex.allFiles())
     }.getOrElse {
-      throw new AnalysisException(
-        s"Unable to infer schema for $formatName. It must be specified manually.")
+      throw QueryCompilationErrors.dataSchemaNotSpecifiedError(formatName)
     }
     fileIndex match {
       case _: MetadataLogFileIndex => schema
@@ -83,8 +83,7 @@ abstract class FileTable(
       "in the data schema", caseSensitive)
     dataSchema.foreach { field =>
       if (!supportsDataType(field.dataType)) {
-        throw new AnalysisException(
-          s"$formatName data source does not support ${field.dataType.catalogString} data type.")
+        throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(formatName, field)
       }
     }
     val partitionSchema = fileIndex.partitionSchema

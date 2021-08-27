@@ -46,7 +46,7 @@ Options are:
   -t [tag]    : tag for the spark-rm docker image to use for building (default: "latest").
   -j [path]   : path to local JDK installation to use for building. By default the script will
                 use openjdk8 installed in the docker image.
-  -s [step]   : runs a single step of the process; valid steps are: tag, build, docs, publish
+  -s [step]   : runs a single step of the process; valid steps are: tag, build, docs, publish, finalize
 EOF
 }
 
@@ -74,6 +74,18 @@ if [ -d "$WORKDIR/output" ]; then
   read -p "Output directory already exists. Overwrite and continue? [y/n] " ANSWER
   if [ "$ANSWER" != "y" ]; then
     error "Exiting."
+  fi
+fi
+
+if [ ! -z "$RELEASE_STEP" ] && [ "$RELEASE_STEP" = "finalize" ]; then
+  echo "THIS STEP IS IRREVERSIBLE! Make sure the vote has passed and you pick the right RC to finalize."
+  read -p "You must be a PMC member to run this step. Continue? [y/n] " ANSWER
+  if [ "$ANSWER" != "y" ]; then
+    error "Exiting."
+  fi
+
+  if [ -z "$PYPI_PASSWORD" ]; then
+    stty -echo && printf "PyPi password: " && read PYPI_PASSWORD && printf '\n' && stty echo
   fi
 fi
 
@@ -130,6 +142,7 @@ GIT_NAME=$GIT_NAME
 GIT_EMAIL=$GIT_EMAIL
 GPG_KEY=$GPG_KEY
 ASF_PASSWORD=$ASF_PASSWORD
+PYPI_PASSWORD=$PYPI_PASSWORD
 GPG_PASSPHRASE=$GPG_PASSPHRASE
 RELEASE_STEP=$RELEASE_STEP
 USER=$USER

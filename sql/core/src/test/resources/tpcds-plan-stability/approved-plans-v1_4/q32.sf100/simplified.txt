@@ -30,15 +30,15 @@ CollectLimit
                                           InputAdapter
                                             Scan parquet default.catalog_sales [cs_item_sk,cs_ext_discount_amt,cs_sold_date_sk]
                                               SubqueryBroadcast [d_date_sk] #1
-                                                ReusedExchange [d_date_sk] #4
+                                                BroadcastExchange #4
+                                                  WholeStageCodegen (1)
+                                                    Project [d_date_sk]
+                                                      Filter [d_date,d_date_sk]
+                                                        ColumnarToRow
+                                                          InputAdapter
+                                                            Scan parquet default.date_dim [d_date_sk,d_date]
                                       InputAdapter
-                                        BroadcastExchange #4
-                                          WholeStageCodegen (2)
-                                            Project [d_date_sk]
-                                              Filter [d_date,d_date_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.date_dim [d_date_sk,d_date]
+                                        ReusedExchange [d_date_sk] #4
             Filter [cs_item_sk,cs_ext_discount_amt]
               ColumnarToRow
                 InputAdapter

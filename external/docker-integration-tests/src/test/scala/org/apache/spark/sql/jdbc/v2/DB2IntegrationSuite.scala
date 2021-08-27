@@ -31,7 +31,7 @@ import org.apache.spark.tags.DockerTest
 /**
  * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.4.0):
  * {{{
- *   DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.4.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.4.0
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.DB2IntegrationSuite"
  * }}}
  */
@@ -75,7 +75,8 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     val msg1 = intercept[AnalysisException] {
       sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE VARCHAR(10)")
     }.getMessage
-    assert(msg1.contains("Cannot update alt_table field ID: double cannot be cast to varchar"))
+    assert(msg1.contains(
+      s"Cannot update $catalogName.alt_table field ID: double cannot be cast to varchar"))
   }
 
   override def testCreateTableWithProperty(tbl: String): Unit = {

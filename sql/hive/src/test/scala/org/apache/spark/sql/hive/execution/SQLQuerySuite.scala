@@ -598,6 +598,39 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
+  test("SPARK-28551: CTAS Hive Table should be with non-existent or empty location") {
+    def executeCTASWithNonEmptyLocation(tempLocation: String): Unit = {
+      sql(s"CREATE TABLE ctas1(id string) stored as rcfile LOCATION '$tempLocation/ctas1'")
+      sql("INSERT INTO TABLE ctas1 SELECT 'A' ")
+      sql(s"""CREATE TABLE ctas_with_existing_location stored as rcfile LOCATION
+           |'$tempLocation' AS SELECT key k, value FROM src ORDER BY k, value""".stripMargin)
+    }
+
+    Seq(false, true).foreach { convertCTASFlag =>
+      Seq(false, true).foreach { allowNonEmptyDirFlag =>
+        withSQLConf(
+          SQLConf.CONVERT_CTAS.key -> convertCTASFlag.toString,
+          SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key -> allowNonEmptyDirFlag.toString) {
+          withTempDir { dir =>
+            val tempLocation = dir.toURI.toString
+            withTable("ctas1", "ctas_with_existing_location") {
+              if (allowNonEmptyDirFlag == false) {
+                val m = intercept[AnalysisException] {
+                  // should not overwrite table location of table ctas1
+                  executeCTASWithNonEmptyLocation(tempLocation)
+                }.getMessage
+                assert(m.contains("CREATE-TABLE-AS-SELECT cannot create " +
+                  "table with location to a non-empty directory"))
+              } else {
+                executeCTASWithNonEmptyLocation(tempLocation)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("CTAS with serde") {
     withTable("ctas1", "ctas2", "ctas3", "ctas4", "ctas5") {
       sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
@@ -2581,10 +2614,33 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
   }
+
+  test("SPARK-36197: Use PartitionDesc instead of TableDesc for reading hive partitioned tables") {
+    withTempDir { dir =>
+      val t1Loc = s"file:///$dir/t1"
+      val t2Loc = s"file:///$dir/t2"
+      withTable("t1", "t2") {
+        hiveClient.runSqlHive(
+          s"create table t1(id int) partitioned by(pid int) stored as avro location '$t1Loc'")
+        hiveClient.runSqlHive("insert into t1 partition(pid=1) select 2")
+        hiveClient.runSqlHive(
+          s"create table t2(id int) partitioned by(pid int) stored as textfile location '$t2Loc'")
+        hiveClient.runSqlHive("insert into t2 partition(pid=2) select 2")
+        hiveClient.runSqlHive(s"alter table t1 add partition (pid=2) location '$t2Loc/pid=2'")
+        hiveClient.runSqlHive("alter table t1 partition(pid=2) SET FILEFORMAT textfile")
+        checkAnswer(sql("select pid, id from t1 order by pid"), Seq(Row(1, 2), Row(2, 2)))
+      }
+    }
+  }
 }
 
 @SlowHiveTest
-class SQLQuerySuite extends SQLQuerySuiteBase with DisableAdaptiveExecutionSuite
+class SQLQuerySuite extends SQLQuerySuiteBase with DisableAdaptiveExecutionSuite {
+  test("SPARK-36421: Validate all SQL configs to prevent from wrong use for ConfigEntry") {
+    val df = spark.sql("set -v").select("Meaning")
+    assert(df.collect().forall(!_.getString(0).contains("ConfigEntry")))
+  }
+}
 @SlowHiveTest
 class SQLQuerySuiteAE extends SQLQuerySuiteBase with EnableAdaptiveExecutionSuite
 

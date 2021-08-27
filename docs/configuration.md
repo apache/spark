@@ -943,8 +943,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Enables the external shuffle service. This service preserves the shuffle files written by
-    executors so the executors can be safely removed. The external shuffle service
-    must be set up in order to enable it. See
+    executors e.g. so that executors can be safely removed, or so that shuffle fetches can continue in 
+    the event of executor failure. The external shuffle service must be set up in order to enable it. See
     <a href="job-scheduling.html#configuration-and-setup">dynamic allocation
     configuration and setup documentation</a> for more information.
   </td>
@@ -1031,6 +1031,35 @@ Apart from these, the following properties are also available, and may be useful
     for at least `connectionTimeout`.
   </td>
   <td>1.6.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.checksum.enabled</code></td>
+  <td>true</td>
+  <td>
+    Whether to calculate the checksum of shuffle data. If enabled, Spark will calculate the checksum values for each partition
+    data within the map output file and store the values in a checksum file on the disk. When there's shuffle data corruption
+    detected, Spark will try to diagnose the cause (e.g., network issue, disk issue, etc.) of the corruption by using the checksum file.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.checksum.algorithm</code></td>
+  <td>ADLER32</td>
+  <td>
+    The algorithm is used to calculate the shuffle checksum. Currently, it only supports built-in algorithms of JDK, e.g., ADLER32, CRC32.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.service.fetch.rdd.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to use the ExternalShuffleService for fetching disk persisted RDD blocks.
+    In case of dynamic allocation if this feature is enabled executors having only disk
+    persisted blocks are considered idle after 
+    <code>spark.dynamicAllocation.executorIdleTimeout</code> and will be released accordingly.
+  </td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
@@ -1364,6 +1393,38 @@ Apart from these, the following properties are also available, and may be useful
     This setting applies for the Spark History Server too.
   </td>
   <td>2.2.3</td>
+</tr>
+<tr>
+  <td><code>spark.ui.timeline.executors.maximum</code></td>
+  <td>250</td>
+  <td>
+    The maximum number of executors shown in the event timeline.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.timeline.jobs.maximum</code></td>
+  <td>500</td>
+  <td>
+    The maximum number of jobs shown in the event timeline.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.timeline.stages.maximum</code></td>
+  <td>500</td>
+  <td>
+    The maximum number of stages shown in the event timeline.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.timeline.tasks.maximum</code></td>
+  <td>1000</td>
+  <td>
+    The maximum number of tasks shown in the event timeline.
+  </td>
+  <td>1.4.0</td>
 </tr>
 </table>
 
@@ -2349,7 +2410,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.6.0</td>
 </tr>
 <tr>
-  <td><code>spark.speculation.min.threshold</code></td>
+  <td><code>spark.speculation.minTaskRuntime</code></td>
   <td>100ms</td>
   <td>
     Minimum amount of time a task runs before being considered for speculation.
@@ -3102,3 +3163,109 @@ The stage level scheduling feature allows users to specify task and executor res
 This is only available for the RDD API in Scala, Java, and Python.  It is available on YARN and Kubernetes when dynamic allocation is enabled. See the [YARN](running-on-yarn.html#stage-level-scheduling-overview) page or [Kubernetes](running-on-kubernetes.html#stage-level-scheduling-overview) page for more implementation details.
 
 See the `RDD.withResources` and `ResourceProfileBuilder` API's for using this feature. The current implementation acquires new executors for each `ResourceProfile`  created and currently has to be an exact match. Spark does not try to fit tasks into an executor that require a different ResourceProfile than the executor was created with. Executors that are not in use will idle timeout with the dynamic allocation logic. The default configuration for this feature is to only allow one ResourceProfile per stage. If the user associates more then 1 ResourceProfile to an RDD, Spark will throw an exception by default. See config `spark.scheduler.resource.profileMergeConflicts` to control that behavior. The current merge strategy Spark implements when `spark.scheduler.resource.profileMergeConflicts` is enabled is a simple max of each resource within the conflicting ResourceProfiles. Spark will create a new ResourceProfile with the max of each of the resources.
+
+# Push-based shuffle overview
+
+Push-based shuffle helps improve the reliability and performance of spark shuffle. It takes a best-effort approach to push the shuffle blocks generated by the map tasks to remote external shuffle services to be merged per shuffle partition. Reduce tasks fetch a combination of merged shuffle partitions and original shuffle blocks as their input data, resulting in converting small random disk reads by external shuffle services into large sequential reads. Possibility of better data locality for reduce tasks additionally helps minimize network IO.
+
+<p> Push-based shuffle improves performance for long running jobs/queries which involves large disk I/O during shuffle. Currently it is not well suited for jobs/queries which runs quickly dealing with lesser amount of shuffle data. This will be further improved in the future releases.</p>
+
+<p> <b> Currently push-based shuffle is only supported for Spark on YARN with external shuffle service. </b></p>
+
+### External Shuffle service(server) side configuration options
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+<tr>
+  <td><code>spark.shuffle.push.server.mergedShuffleFileManagerImpl</code></td>
+  <td>
+    <code>org.apache.spark.network.shuffle.<br />NoOpMergedShuffleFileManager</code>
+  </td>
+  <td>
+    Class name of the implementation of <code>MergedShuffleFileManager</code> that manages push-based shuffle. This acts as a server side config to disable or enable push-based shuffle. By default, push-based shuffle is disabled at the server side. <p> To enable push-based shuffle on the server side, set this config to <code>org.apache.spark.network.shuffle.RemoteBlockPushResolver</code></p>
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.push.server.minChunkSizeInMergedShuffleFile</code></td>
+  <td><code>2m</code></td>
+  <td>
+    <p> The minimum size of a chunk when dividing a merged shuffle file into multiple chunks during push-based shuffle. A merged shuffle file consists of multiple small shuffle blocks. Fetching the complete merged shuffle file in a single disk I/O increases the memory requirements for both the clients and the external shuffle services. Instead, the external shuffle service serves the merged file in <code>MB-sized chunks</code>.<br /> This configuration controls how big a chunk can get. A corresponding index file for each merged shuffle file will be generated indicating chunk boundaries. </p>
+    <p> Setting this too high would increase the memory requirements on both the clients and the external shuffle service. </p>
+    <p> Setting this too low would increase the overall number of RPC requests to external shuffle service unnecessarily.</p>
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.push.server.mergedIndexCacheSize</code></td>
+  <td><code>100m</code></td>
+  <td>
+    The maximum size of cache in memory which could be used in push-based shuffle for storing merged index files. This cache is in addition to the one configured via <code>spark.shuffle.service.index.cache.size</code>.
+  </td>
+  <td>3.2.0</td>
+</tr>
+</table>
+
+### Client side configuration options
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+<tr>
+  <td><code>spark.shuffle.push.enabled</code></td>
+  <td><code>false</code></td>
+  <td>
+    Set to true to enable push-based shuffle on the client side and works in conjunction with the server side flag <code>spark.shuffle.push.server.mergedShuffleFileManagerImpl</code>.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.push.finalize.timeout</code></td>
+  <td><code>10s</code></td>
+  <td>
+    The amount of time driver waits in seconds, after all mappers have finished for a given shuffle map stage, before it sends merge finalize requests to remote external shuffle services. This gives the external shuffle services extra time to merge blocks. Setting this too long could potentially lead to performance regression.
+  </td>
+ <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.push.maxRetainedMergerLocations</code></td>
+  <td><code>500</code></td>
+  <td>
+    Maximum number of merger locations cached for push-based shuffle. Currently, merger locations are hosts of external shuffle services responsible for handling pushed blocks, merging them and serving merged blocks for later shuffle fetch.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.push.mergersMinThresholdRatio</code></td>
+  <td><code>0.05</code></td>
+  <td>
+    Ratio used to compute the minimum number of shuffle merger locations required for a stage based on the number of partitions for the reducer stage. For example, a reduce stage which has 100 partitions and uses the default value 0.05 requires at least 5 unique merger locations to enable push-based shuffle.
+  </td>
+ <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.push.mergersMinStaticThreshold</code></td>
+  <td><code>5</code></td>
+  <td>
+    The static threshold for number of shuffle push merger locations should be available in order to enable push-based shuffle for a stage. Note this config works in conjunction with <code>spark.shuffle.push.mergersMinThresholdRatio</code>. Maximum of <code>spark.shuffle.push.mergersMinStaticThreshold</code> and <code>spark.shuffle.push.mergersMinThresholdRatio</code> ratio number of mergers needed to enable push-based shuffle for a stage. For example: with 1000 partitions for the child stage with spark.shuffle.push.mergersMinStaticThreshold as 5 and spark.shuffle.push.mergersMinThresholdRatio set to 0.05, we would need at least 50 mergers to enable push-based shuffle for that stage.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.push.maxBlockSizeToPush</code></td>
+  <td><code>1m</code></td>
+  <td>
+    <p> The max size of an individual block to push to the remote external shuffle services. Blocks larger than this threshold are not pushed to be merged remotely. These shuffle blocks will be fetched in the original manner. </p>
+    <p> Setting this too high would result in more blocks to be pushed to remote external shuffle services but those are already efficiently fetched with the existing mechanisms resulting in additional overhead of pushing the large blocks to remote external shuffle services. It is recommended to set <code>spark.shuffle.push.maxBlockSizeToPush</code> lesser than <code>spark.shuffle.push.maxBlockBatchSize</code> config's value. </p>
+    <p> Setting this too low would result in lesser number of blocks getting merged and directly fetched from mapper external shuffle service results in higher small random reads affecting overall disk I/O performance. </p>
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.push.maxBlockBatchSize</code></td>
+  <td><code>3m</code></td>
+  <td>
+    The max size of a batch of shuffle blocks to be grouped into a single push request. Default is set to <code>3m</code> in order to keep it slightly higher than <code>spark.storage.memoryMapThreshold</code> default which is <code>2m</code> as it is very likely that each batch of block gets memory mapped which incurs higher overhead.
+  </td>
+  <td>3.2.0</td>
+</tr>
+</table>

@@ -44,7 +44,10 @@ private[spark] class BasicExecutorFeatureStep(
     .getOrElse(throw new SparkException("Must specify the executor container image"))
   private val blockManagerPort = kubernetesConf
     .sparkConf
-    .getInt("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT)
+    .getInt(BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
+
+  require(blockManagerPort == 0 || (1024 <= blockManagerPort && blockManagerPort < 65536),
+    "port number must be 0 or in [1024, 65535]")
 
   private val executorPodNamePrefix = kubernetesConf.resourceNamePrefix
 
@@ -96,10 +99,12 @@ private[spark] class BasicExecutorFeatureStep(
     val confFilesMap = KubernetesClientUtils
       .buildSparkConfDirFilesMap(configMapName, kubernetesConf.sparkConf, Map.empty)
     val keyToPaths = KubernetesClientUtils.buildKeyToPathObjects(confFilesMap)
-    // hostname must be no longer than 63 characters, so take the last 63 characters of the pod
-    // name as the hostname.  This preserves uniqueness since the end of name contains
-    // executorId
-    val hostname = name.substring(Math.max(0, name.length - 63))
+    // According to
+    // https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names,
+    // hostname must be no longer than `KUBERNETES_DNSNAME_MAX_LENGTH`(63) characters,
+    // so take the last 63 characters of the pod name as the hostname.
+    // This preserves uniqueness since the end of name contains executorId
+    val hostname = name.substring(Math.max(0, name.length - KUBERNETES_DNSNAME_MAX_LENGTH))
       // Remove non-word characters from the start of the hostname
       .replaceAll("^[^\\w]+", "")
       // Replace dangerous characters in the remaining string with a safe alternative.
@@ -131,6 +136,13 @@ private[spark] class BasicExecutorFeatureStep(
           .withName(ENV_EXECUTOR_POD_IP)
           .withValueFrom(new EnvVarSourceBuilder()
             .withNewFieldRef("v1", "status.podIP")
+            .build())
+          .build())
+      } ++ {
+        Seq(new EnvVarBuilder()
+          .withName(ENV_EXECUTOR_POD_NAME)
+          .withValueFrom(new EnvVarSourceBuilder()
+            .withNewFieldRef("v1", "metadata.name")
             .build())
           .build())
       } ++ {
@@ -172,14 +184,17 @@ private[spark] class BasicExecutorFeatureStep(
         .replaceAll(ENV_EXECUTOR_ID, kubernetesConf.executorId))
     }
 
-    val requiredPorts = Seq(
-      (BLOCK_MANAGER_PORT_NAME, blockManagerPort))
-      .map { case (name, port) =>
-        new ContainerPortBuilder()
-          .withName(name)
-          .withContainerPort(port)
-          .build()
-      }
+    // 0 is invalid as kubernetes containerPort request, we shall leave it unmounted
+    val requiredPorts = if (blockManagerPort != 0) {
+      Seq(
+        (BLOCK_MANAGER_PORT_NAME, blockManagerPort))
+        .map { case (name, port) =>
+          new ContainerPortBuilder()
+            .withName(name)
+            .withContainerPort(port)
+            .build()
+        }
+    } else Nil
 
     if (!isDefaultProfile) {
       if (pod.container != null && pod.container.getResources() != null) {
@@ -252,17 +267,24 @@ private[spark] class BasicExecutorFeatureStep(
         .withUid(pod.getMetadata.getUid)
         .build()
     }
+
+    val policy = kubernetesConf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR) match {
+      case "statefulset" => "Always"
+      case _ => "Never"
+    }
     val executorPodBuilder = new PodBuilder(pod.pod)
       .editOrNewMetadata()
         .withName(name)
         .addToLabels(kubernetesConf.labels.asJava)
+        .addToLabels(SPARK_RESOURCE_PROFILE_ID_LABEL, resourceProfile.id.toString)
         .addToAnnotations(kubernetesConf.annotations.asJava)
         .addToOwnerReferences(ownerReference.toSeq: _*)
         .endMetadata()
       .editOrNewSpec()
         .withHostname(hostname)
-        .withRestartPolicy("Never")
+        .withRestartPolicy(policy)
         .addToNodeSelector(kubernetesConf.nodeSelector.asJava)
+        .addToNodeSelector(kubernetesConf.executorNodeSelector.asJava)
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets: _*)
     val executorPod = if (disableConfigMap) {
       executorPodBuilder.endSpec().build()

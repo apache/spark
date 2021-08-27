@@ -178,7 +178,7 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
             inputData.write.format(format).save(path.getCanonicalPath)
             sparkContext.listenerBus.waitUntilEmpty()
             assert(commands.length == 1)
-            assert(commands.head._1 == "save")
+            assert(commands.head._1 == "command")
             assert(commands.head._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
             assert(commands.head._2.asInstanceOf[InsertIntoHadoopFsRelationCommand]
               .fileFormat.isInstanceOf[ParquetFileFormat])

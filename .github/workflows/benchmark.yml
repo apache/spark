@@ -48,6 +48,8 @@ jobs:
       SPARK_BENCHMARK_CUR_SPLIT: ${{ matrix.split }}
       SPARK_GENERATE_BENCHMARK_FILES: 1
       SPARK_LOCAL_IP: localhost
+      # To prevent spark.test.home not being set. See more detail in SPARK-36007.
+      SPARK_HOME: ${{ github.workspace }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2

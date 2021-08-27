@@ -102,7 +102,12 @@ object StatFunctions extends Logging {
     }
     val summaries = df.select(columns: _*).rdd.treeAggregate(emptySummaries)(apply, merge)
 
-    summaries.map { summary => probabilities.flatMap(summary.query) }
+    summaries.map {
+      summary => summary.query(probabilities) match {
+        case Some(q) => q
+        case None => Seq()
+      }
+    }
   }
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */

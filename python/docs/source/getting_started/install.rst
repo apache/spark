@@ -46,7 +46,10 @@ If you want to install extra dependencies for a specific component, you can inst
 
 .. code-block:: bash
 
+    # Spark SQL
     pip install pyspark[sql]
+    # pandas API on Spark
+    pip install pyspark[pandas_on_spark] plotly  # to plot your data, you can install plotly together.
 
 For PySpark with/without a specific Hadoop version, you can install it by using ``PYSPARK_HADOOP_VERSION`` environment variables as below:
 
@@ -159,9 +162,9 @@ Package       Minimum supported version Note
 `NumPy`       1.7                       Required for MLlib DataFrame-based API
 `pyarrow`     1.0.0                     Optional for Spark SQL
 `Py4J`        0.10.9.2                  Required
-`pandas`      0.23.2                    Required for pandas APIs on Spark
-`pyarrow`     1.0.0                     Required for pandas APIs on Spark
-`Numpy`       1.14(<1.20.0)             Required for pandas APIs on Spark
+`pandas`      0.23.2                    Required for pandas API on Spark
+`pyarrow`     1.0.0                     Required for pandas API on Spark
+`Numpy`       1.14                      Required for pandas API on Spark
 ============= ========================= ======================================
 
 Note that PySpark requires Java 8 or later with ``JAVA_HOME`` properly set.  

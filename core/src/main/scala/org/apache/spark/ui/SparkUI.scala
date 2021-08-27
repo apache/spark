@@ -18,6 +18,9 @@
 package org.apache.spark.ui
 
 import java.util.Date
+import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
+
+import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
@@ -54,6 +57,25 @@ private[spark] class SparkUI private (
 
   private var streamingJobProgressListener: Option[SparkListener] = None
 
+  private val initHandler: ServletContextHandler = {
+    val servlet = new HttpServlet() {
+      override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+        res.setContentType("text/html;charset=utf-8")
+        res.getWriter.write("Spark is starting up. Please wait a while until it's ready.")
+      }
+    }
+    createServletHandler("/", servlet, basePath)
+  }
+
+  /**
+   * Attach all existing handlers to ServerInfo.
+   */
+  def attachAllHandler(): Unit = {
+    serverInfo.foreach { server =>
+      server.removeHandler(initHandler)
+      handlers.foreach(server.addHandler(_, securityManager))
+    }
+  }
   /** Initialize all components of the server. */
   def initialize(): Unit = {
     val jobsTab = new JobsTab(this, store)
@@ -94,6 +116,24 @@ private[spark] class SparkUI private (
 
   def setAppId(id: String): Unit = {
     appId = id
+  }
+
+  /**
+   * To start SparUI, Spark starts Jetty Server first to bind address.
+   * After the Spark application is fully started, call [attachAllHandlers]
+   * to start all existing handlers.
+   */
+  override def bind(): Unit = {
+    assert(serverInfo.isEmpty, s"Attempted to bind $className more than once!")
+    try {
+      val server = initServer()
+      server.addHandler(initHandler, securityManager)
+      serverInfo = Some(server)
+    } catch {
+      case e: Exception =>
+        logError(s"Failed to bind $className", e)
+        System.exit(1)
+    }
   }
 
   /** Stop the server behind this web interface. Only valid after bind(). */

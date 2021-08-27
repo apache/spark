@@ -571,7 +571,7 @@ select bigint('9223372036854775800') / bigint('0')
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 divide by zero
 
 
@@ -580,7 +580,7 @@ select bigint('-9223372036854775808') / smallint('0')
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 divide by zero
 
 
@@ -589,7 +589,7 @@ select smallint('100') / bigint('0')
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 divide by zero
 
 

@@ -54,7 +54,7 @@ case class RenameTableExec(
       val tbl = catalog.loadTable(qualifiedNewIdent)
       val newRelation = DataSourceV2Relation.create(tbl, Some(catalog), Some(qualifiedNewIdent))
       cacheTable(
-        sqlContext.sparkSession,
+        session,
         newRelation,
         Some(qualifiedNewIdent.quoted), oldStorageLevel)
     }

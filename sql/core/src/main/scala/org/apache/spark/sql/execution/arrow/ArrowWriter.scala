@@ -75,10 +75,10 @@ object ArrowWriter {
         }
         new StructWriter(vector, children.toArray)
       case (NullType, vector: NullVector) => new NullWriter(vector)
-      case (YearMonthIntervalType, vector: IntervalYearVector) => new IntervalYearWriter(vector)
-      case (DayTimeIntervalType, vector: IntervalDayVector) => new IntervalDayWriter(vector)
+      case (_: YearMonthIntervalType, vector: IntervalYearVector) => new IntervalYearWriter(vector)
+      case (_: DayTimeIntervalType, vector: IntervalDayVector) => new IntervalDayWriter(vector)
       case (dt, _) =>
-        throw QueryExecutionErrors.unsupportedDataTypeError(dt)
+        throw QueryExecutionErrors.unsupportedDataTypeError(dt.catalogString)
     }
   }
 }

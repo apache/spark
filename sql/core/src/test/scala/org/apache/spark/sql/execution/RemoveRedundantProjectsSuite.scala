@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -28,6 +29,7 @@ abstract class RemoveRedundantProjectsSuiteBase
   extends QueryTest
     with SharedSparkSession
     with AdaptiveSparkPlanHelper {
+  import testImplicits._
 
   private def assertProjectExecCount(df: DataFrame, expected: Int): Unit = {
     withClue(df.queryExecution) {
@@ -214,7 +216,40 @@ abstract class RemoveRedundantProjectsSuiteBase
         |ORDER BY t1.key, t2.key, s1, s2
         |LIMIT 10
         |""".stripMargin
-    assertProjectExec(query, 0, 3)
+    // The Project above the Expand is not removed due to SPARK-36020.
+    assertProjectExec(query, 1, 3)
+  }
+
+  test("SPARK-36020: Project should not be removed when child's logical link is different") {
+    val query =
+      """
+        |WITH t AS (
+        | SELECT key, a, b, c, explode(d) AS d FROM testView
+        |)
+        |SELECT t1.key, t1.d, t2.key
+        |FROM (SELECT d, key FROM t) t1
+        |JOIN testView t2 ON t1.key = t2.key
+        |""".stripMargin
+    // The ProjectExec above the GenerateExec should not be removed because
+    // they have different logical links.
+    assertProjectExec(query, enabled = 2, disabled = 3)
+  }
+
+  Seq("true", "false").foreach { codegenEnabled =>
+    test("SPARK-35287: project generating unsafe row for DataSourceV2ScanRelation " +
+      s"should not be removed (codegen=$codegenEnabled)") {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled) {
+        withTempPath { path =>
+          val format = classOf[SimpleWritableDataSource].getName
+          spark.range(3).select($"id" as "i", $"id" as "j")
+            .write.format(format).mode("overwrite").save(path.getCanonicalPath)
+
+          val df =
+            spark.read.format(format).load(path.getCanonicalPath).filter($"i" > 0).orderBy($"i")
+          assert(df.collect === Array(Row(1, 1), Row(2, 2)))
+        }
+      }
+    }
   }
 }
 

@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -135,10 +136,13 @@ abstract class Expression extends TreeNode[Expression] {
    * @return [[ExprCode]]
    */
   def genCode(ctx: CodegenContext): ExprCode = {
-    ctx.subExprEliminationExprs.get(this).map { subExprState =>
+    ctx.subExprEliminationExprs.get(ExpressionEquals(this)).map { subExprState =>
       // This expression is repeated which means that the code to evaluate it has already been added
       // as a function before. In that case, we just re-use it.
-      ExprCode(ctx.registerComment(this.toString), subExprState.isNull, subExprState.value)
+      ExprCode(
+        ctx.registerComment(this.toString),
+        subExprState.eval.isNull,
+        subExprState.eval.value)
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
@@ -237,7 +241,7 @@ abstract class Expression extends TreeNode[Expression] {
    *
    * See [[Canonicalize]] for more details.
    */
-  def semanticEquals(other: Expression): Boolean =
+  final def semanticEquals(other: Expression): Boolean =
     deterministic && other.deterministic && canonicalized == other.canonicalized
 
   /**
@@ -335,6 +339,8 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
   def exprsReplaced: Seq[Expression]
 
   override def sql: String = mkString(exprsReplaced.map(_.sql))
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
 
   def mkString(childrenString: Seq[String]): String = {
     prettyName + childrenString.mkString("(", ", ", ")")
@@ -482,7 +488,8 @@ abstract class UnaryExpression extends Expression with UnaryLike[Expression] {
    * of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input: Any): Any =
-    sys.error(s"UnaryExpressions must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("UnaryExpressions",
+      "eval", "nullSafeEval")
 
   /**
    * Called by unary expressions to generate a code block that returns null if its parent returns
@@ -575,7 +582,8 @@ abstract class BinaryExpression extends Expression with BinaryLike[Expression] {
    * of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input1: Any, input2: Any): Any =
-    sys.error(s"BinaryExpressions must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("BinaryExpressions",
+      "eval", "nullSafeEval")
 
   /**
    * Short hand for generating binary evaluation code.
@@ -719,7 +727,8 @@ abstract class TernaryExpression extends Expression with TernaryLike[Expression]
    * of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input1: Any, input2: Any, input3: Any): Any =
-    sys.error(s"TernaryExpressions must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("TernaryExpressions",
+      "eval", "nullSafeEval")
 
   /**
    * Short hand for generating ternary evaluation code.
@@ -819,7 +828,8 @@ abstract class QuaternaryExpression extends Expression with QuaternaryLike[Expre
    *  full control of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input1: Any, input2: Any, input3: Any, input4: Any): Any =
-    sys.error(s"QuaternaryExpressions must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("QuaternaryExpressions",
+      "eval", "nullSafeEval")
 
   /**
    * Short hand for generating quaternary evaluation code.
@@ -944,7 +954,8 @@ abstract class SeptenaryExpression extends Expression {
       input5: Any,
       input6: Any,
       input7: Option[Any]): Any = {
-    sys.error("SeptenaryExpression must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("SeptenaryExpression",
+      "eval", "nullSafeEval")
   }
 
   /**

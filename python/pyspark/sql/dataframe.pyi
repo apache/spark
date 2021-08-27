@@ -41,6 +41,7 @@ from pyspark.sql.types import (  # noqa: F401
 )  # noqa: F401
 from pyspark.sql.context import SQLContext
 from pyspark.sql.group import GroupedData
+from pyspark.sql.observation import Observation
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.column import Column
@@ -49,6 +50,7 @@ from pyspark.storagelevel import StorageLevel
 
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
+from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
 
 class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     sql_ctx: SQLContext
@@ -187,6 +189,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     @overload
     def cube(self, __cols: Union[List[Column], List[str]]) -> GroupedData: ...
     def agg(self, *exprs: Union[Column, Dict[str, str]]) -> DataFrame: ...
+    def observe(self, observation: Observation, *exprs: Column) -> DataFrame: ...
     def union(self, other: DataFrame) -> DataFrame: ...
     def unionAll(self, other: DataFrame) -> DataFrame: ...
     def unionByName(
@@ -267,6 +270,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def semanticHash(self) -> int: ...
     def inputFiles(self) -> List[str]: ...
     def writeTo(self, table: str) -> DataFrameWriterV2: ...
+    def to_pandas_on_spark(self, index_col: Optional[Union[str, List[str]]] = None) -> PandasOnSparkDataFrame: ...
 
 class DataFrameNaFunctions:
     df: DataFrame

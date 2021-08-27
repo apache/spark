@@ -28,15 +28,17 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
+import org.apache.spark.sql.types.DayTimeIntervalType._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.util.Utils
 
 /**
@@ -159,9 +161,7 @@ object DataType {
           fallbackParser(schema)
         } catch {
           case NonFatal(e2) =>
-            throw new AnalysisException(
-              message = s"$errorMsg${e1.getMessage}\nFailed fallback parsing: ${e2.getMessage}",
-              cause = Some(e1.getCause))
+            throw QueryCompilationErrors.failedFallbackParsingError(errorMsg, e1, e2)
         }
     }
   }
@@ -171,7 +171,20 @@ object DataType {
   private val otherTypes = {
     Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
       DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType,
-      DayTimeIntervalType, YearMonthIntervalType)
+      DayTimeIntervalType(DAY),
+      DayTimeIntervalType(DAY, HOUR),
+      DayTimeIntervalType(DAY, MINUTE),
+      DayTimeIntervalType(DAY, SECOND),
+      DayTimeIntervalType(HOUR),
+      DayTimeIntervalType(HOUR, MINUTE),
+      DayTimeIntervalType(HOUR, SECOND),
+      DayTimeIntervalType(MINUTE),
+      DayTimeIntervalType(MINUTE, SECOND),
+      DayTimeIntervalType(SECOND),
+      YearMonthIntervalType(YEAR),
+      YearMonthIntervalType(MONTH),
+      YearMonthIntervalType(YEAR, MONTH),
+      TimestampNTZType)
       .map(t => t.typeName -> t).toMap
   }
 
@@ -182,6 +195,8 @@ object DataType {
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
       case CHAR_TYPE(length) => CharType(length.toInt)
       case VARCHAR_TYPE(length) => VarcharType(length.toInt)
+      // For backwards compatibility, previously the type name of NullType is "null"
+      case "null" => NullType
       case other => otherTypes.getOrElse(
         other,
         throw new IllegalArgumentException(
@@ -277,7 +292,7 @@ object DataType {
   /**
    * Compares two types, ignoring nullability of ArrayType, MapType, StructType.
    */
-  private[types] def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
+  private[sql] def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
     (left, right) match {
       case (ArrayType(leftElementType, _), ArrayType(rightElementType, _)) =>
         equalsIgnoreNullability(leftElementType, rightElementType)

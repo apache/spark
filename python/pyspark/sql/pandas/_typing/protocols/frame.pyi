@@ -22,7 +22,7 @@
 # - Add Protocol as a base class
 # - Replace imports with Any
 
-import numpy.ma as np  # type: ignore[import]
+import numpy as np  # type: ignore[import]
 from typing import Any, Hashable, IO, Iterable, List, Optional, Sequence, Tuple, Union
 from typing_extensions import Protocol
 from .series import SeriesLike

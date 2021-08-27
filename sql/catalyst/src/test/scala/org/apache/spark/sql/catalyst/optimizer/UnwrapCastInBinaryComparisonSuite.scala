@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.immutable.HashSet
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions._
@@ -231,6 +233,73 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     assert(doubleMax.asInstanceOf[Double].isNaN)
 
     assert(getRange(DecimalType(5, 2)).isEmpty)
+  }
+
+  test("SPARK-35316: unwrap should support In/InSet predicate.") {
+    val longLit = Literal.create(null, LongType)
+    val intLit = Literal.create(null, IntegerType)
+    val shortLit = Literal.create(null, ShortType)
+
+    def checkInAndInSet(in: In, expected: Expression): Unit = {
+      assertEquivalent(in, expected)
+      val toInSet = (in: In) => InSet(in.value, HashSet() ++ in.list.map(_.eval()))
+      val expectedInSet = expected match {
+        case expectedIn: In =>
+          toInSet(expectedIn)
+        case Or(falseIfNotNull: And, expectedIn: In) =>
+          Or(falseIfNotNull, toInSet(expectedIn))
+      }
+      assertEquivalent(toInSet(in), expectedInSet)
+    }
+
+    checkInAndInSet(
+      In(Cast(f, LongType), Seq(1.toLong, 2.toLong, 3.toLong)),
+      f.in(1.toShort, 2.toShort, 3.toShort))
+
+    // in.list contains the value which out of `fromType` range
+    checkInAndInSet(
+      In(Cast(f, LongType), Seq(1.toLong, Int.MaxValue.toLong, Long.MaxValue)),
+      Or(falseIfNotNull(f), f.in(1.toShort)))
+
+    // in.list only contains the value which out of `fromType` range
+    checkInAndInSet(
+      In(Cast(f, LongType), Seq(Int.MaxValue.toLong, Long.MaxValue)),
+      Or(falseIfNotNull(f), f.in()))
+
+    // in.list is empty
+    checkInAndInSet(
+      In(Cast(f, IntegerType), Seq.empty), Cast(f, IntegerType).in())
+
+    // in.list contains null value
+    checkInAndInSet(
+      In(Cast(f, IntegerType), Seq(intLit)), In(Cast(f, IntegerType), Seq(intLit)))
+    checkInAndInSet(
+      In(Cast(f, IntegerType), Seq(intLit, intLit)), In(Cast(f, IntegerType), Seq(intLit, intLit)))
+    checkInAndInSet(
+      In(Cast(f, IntegerType), Seq(intLit, 1)), f.in(shortLit, 1.toShort))
+    checkInAndInSet(
+      In(Cast(f, LongType), Seq(longLit, 1.toLong, Long.MaxValue)),
+      Or(falseIfNotNull(f), f.in(shortLit, 1.toShort))
+    )
+  }
+
+  test("SPARK-36130: unwrap In should skip when in.list contains an expression that " +
+    "is not literal") {
+    val add = Cast(f2, DoubleType) + 1.0d
+    val doubleLit = Literal.create(null, DoubleType)
+    assertEquivalent(In(Cast(f2, DoubleType), Seq(add)), In(Cast(f2, DoubleType), Seq(add)))
+    assertEquivalent(
+      In(Cast(f2, DoubleType), Seq(doubleLit, add)),
+      In(Cast(f2, DoubleType), Seq(doubleLit, add)))
+    assertEquivalent(
+      In(Cast(f2, DoubleType), Seq(doubleLit, 1.0d, add)),
+      In(Cast(f2, DoubleType), Seq(doubleLit, 1.0d, add)))
+    assertEquivalent(
+      In(Cast(f2, DoubleType), Seq(1.0d, add)),
+      In(Cast(f2, DoubleType), Seq(1.0d, add)))
+    assertEquivalent(
+      In(Cast(f2, DoubleType), Seq(0.0d, 1.0d, add)),
+      In(Cast(f2, DoubleType), Seq(0.0d, 1.0d, add)))
   }
 
   private def castInt(e: Expression): Expression = Cast(e, IntegerType)
