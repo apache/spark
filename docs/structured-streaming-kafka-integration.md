@@ -547,10 +547,10 @@ The following configurations are optional:
   <td>"error" or "latest"</td>
   <td>"error"</td>
   <td>streaming and batch</td>
-  <td>Defines the behavior when the starting offset by timestamp is specified (either global or per partition), and Kafka doesn't return the matched offset.<p/>
+  <td>The strategy will be used when the specified starting offset by timestamp (either global or per partition) doesn't match with the offset Kafka returned. Here's the strategy name and corresponding descriptions:<p/>
   <p/>
-  "error": fail the query.<p/>
-  "latest": set the offset to the latest, so that further new records in the partition are being read.<p/></td>
+  "error": fail the query and end users have to deal with workarounds requiring manual steps.<p/>
+  "latest": assigns the latest offset for these partitions, so that Spark can read newer records from these partitions in further micro-batches.<p/></td>
 </tr>
 </table>
 
