@@ -1961,46 +1961,24 @@ class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
             psser.rpow(psser_other)
 
     def test_combine_first(self):
-        pdf = pd.DataFrame(
-            {
-                "A": {"falcon": 330.0, "eagle": 160.0},
-                "B": {"falcon": 345.0, "eagle": 200.0, "duck": 30.0},
-            }
-        )
-        pser1, pser2 = pdf.A, pdf.B
-        psdf = ps.from_pandas(pdf)
-        psser1, psser2 = psdf.A, psdf.B
-
-        self.assert_eq(
-            psser1.combine_first(psser2).sort_index(), pser1.combine_first(pser2).sort_index()
-        )
-
-        psser1.name = pser1.name = ("X", "A")
-        psser2.name = pser2.name = ("Y", "B")
-
-        self.assert_eq(
-            psser1.combine_first(psser2).sort_index(), pser1.combine_first(pser2).sort_index()
-        )
-
-        pdf = pd.DataFrame(
-            {("X", "A"): [None, 0], ("X", "B"): [4, None], ("Y", "C"): [3, 3], ("Y", "B"): [1, 1]}
-        )
-        pdf1, pdf2 = pdf["X"], pdf["Y"]
-        psdf = ps.from_pandas(pdf)
-        psdf1, psdf2 = psdf["X"], psdf["Y"]
-
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
-            self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2))
-        else:
-            # pandas < 1.2.0 returns unexpected dtypes,
-            # please refer to https://github.com/pandas-dev/pandas/issues/28481 for details
-            expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
-            self.assert_eq(expected_pdf, psdf1.combine_first(psdf2))
-
         pdf1 = pd.DataFrame({"A": [None, 0], "B": [4, None]})
         psdf1 = ps.from_pandas(pdf1)
 
         self.assertRaises(TypeError, lambda: psdf1.combine_first(ps.Series([1, 2])))
+
+        pser1 = pd.Series({"falcon": 330.0, "eagle": 160.0})
+        pser2 = pd.Series({"falcon": 345.0, "eagle": 200.0, "duck": 30.0})
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
+        with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
+            psser1.combine_first(psser2)
+
+        pdf1 = pd.DataFrame({"A": [None, 0], "B": [4, None]})
+        psdf1 = ps.from_pandas(pdf1)
+        pdf2 = pd.DataFrame({"C": [3, 3], "B": [1, 1]})
+        psdf2 = ps.from_pandas(pdf2)
+        with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
+            psdf1.combine_first(psdf2)
 
 
 if __name__ == "__main__":
