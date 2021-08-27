@@ -32,7 +32,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
-import org.apache.spark.{Partition, SparkArithmeticException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIndexOutOfBoundsException, SparkNoSuchMethodException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUpgradeException}
+import org.apache.spark.{Partition, SparkArithmeticException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIndexOutOfBoundsException, SparkNoSuchMethodException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkThrowableHelper, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -240,25 +240,28 @@ object QueryExecutionErrors {
   }
 
   def cannotGenerateCodeForUnsupportedTypeError(dataType: DataType): Throwable = {
-    new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
+    new SparkIllegalArgumentException(errorClass = "CANNOT_GENERATE_CODE_FOR_UNSUPPORTED_TYPE",
+      messageParameters = Array(dataType.typeName))
   }
 
   def cannotInterpolateClassIntoCodeBlockError(arg: Any): Throwable = {
-    new IllegalArgumentException(
-      s"Can not interpolate ${arg.getClass.getName} into code block.")
+    new SparkIllegalArgumentException(errorClass = "CANNOT_INTERPOLATE_CLASS_INTO_CODE_BLOCK",
+      messageParameters = Array(arg.getClass.getName))
   }
 
   def customCollectionClsNotResolvedError(): Throwable = {
-    new UnsupportedOperationException("not resolved")
+    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_OPERATION_NOT_RESOLVED",
+      messageParameters = Array.empty)
   }
 
   def classUnsupportedByMapObjectsError(cls: Class[_]): RuntimeException = {
-    new RuntimeException(s"class `${cls.getName}` is not supported by `MapObjects` as " +
-      "resulting collection.")
+    new SparkRuntimeException(errorClass = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
+      messageParameters = Array(cls.getName))
   }
 
   def nullAsMapKeyNotAllowedError(): RuntimeException = {
-    new RuntimeException("Cannot use null as map key!")
+    new SparkRuntimeException(errorClass = "NULL_AS_MAP_KEY_NOT_ALLOWED",
+      messageParameters = Array.empty)
   }
 
   def methodNotDeclaredError(name: String): Throwable = {
@@ -266,60 +269,73 @@ object QueryExecutionErrors {
   }
 
   def constructorNotFoundError(cls: String): Throwable = {
-    new RuntimeException(s"Couldn't find a valid constructor on $cls")
+    new SparkRuntimeException(errorClass = "CONSTRUCTOR_NOT_FOUND",
+      messageParameters = Array(cls))
   }
 
   def primaryConstructorNotFoundError(cls: Class[_]): Throwable = {
-    new RuntimeException(s"Couldn't find a primary constructor on $cls")
+    new SparkRuntimeException(errorClass = "PRIMARY_CONSTRUCTOR_NOT_FOUND",
+      messageParameters = Array(cls.getName))
   }
 
   def unsupportedNaturalJoinTypeError(joinType: JoinType): Throwable = {
-    new RuntimeException("Unsupported natural join type " + joinType)
+    new SparkRuntimeException(errorClass = "UNSUPPORTED_NATURAL_JOIN_TYPE",
+      messageParameters = Array(joinType.toString))
   }
 
   def notExpectedUnresolvedEncoderError(attr: AttributeReference): Throwable = {
-    new RuntimeException(s"Unresolved encoder expected, but $attr was found.")
+    new SparkRuntimeException(errorClass = "NOT_EXPECTED_UNRESOLVED_ENCODER",
+      messageParameters = Array(attr.toString))
   }
 
   def unsupportedEncoderError(): Throwable = {
-    new RuntimeException("Only expression encoders are supported for now.")
+    new SparkRuntimeException(errorClass = "UNSUPPORTED_ENCODER",
+      messageParameters = Array.empty)
   }
 
   def notOverrideExpectedMethodsError(className: String, m1: String, m2: String): Throwable = {
-    new RuntimeException(s"$className must override either $m1 or $m2")
+    new SparkRuntimeException(errorClass = "NOT_OVERRIDE_EXPECTED_METHODS",
+      messageParameters = Array(className, m1, m2))
   }
 
   def failToConvertValueToJsonError(value: AnyRef, cls: Class[_], dataType: DataType): Throwable = {
-    new RuntimeException(s"Failed to convert value $value (class of $cls) " +
-      s"with the type of $dataType to JSON.")
+    new SparkRuntimeException(errorClass = "FAIL_TO_CONVERT_VALUE_TO_JSON",
+      messageParameters = Array(value.toString, cls.getName, dataType.typeName))
   }
 
   def unexpectedOperatorInCorrelatedSubquery(op: LogicalPlan, pos: String = ""): Throwable = {
-    new RuntimeException(s"Unexpected operator $op in correlated subquery" + pos)
+    new SparkRuntimeException(errorClass = "UNEXPECTED_OPERATOR_IN_CORRELATED_SUBQUERY",
+      messageParameters = Array(op.toString, pos))
   }
 
   def unreachableError(err: String = ""): Throwable = {
-    new RuntimeException("This line should be unreachable" + err)
+    new SparkRuntimeException(errorClass = "UNREACHABLE",
+      messageParameters = Array(err))
   }
 
   def unsupportedRoundingMode(roundMode: BigDecimal.RoundingMode.Value): Throwable = {
-    new RuntimeException(s"Not supported rounding mode: $roundMode")
+    new SparkRuntimeException(errorClass = "UNSUPPORTED_ROUNDING",
+      messageParameters = Array(roundMode.toString))
   }
 
   def resolveCannotHandleNestedSchema(plan: LogicalPlan): Throwable = {
-    new RuntimeException(s"Can not handle nested schema yet...  plan $plan")
+    new SparkRuntimeException(errorClass = "RESOLVE_CANNOT_HANDLE_NESTED_SCHEMA",
+      messageParameters = Array(plan.toString))
   }
 
   def inputExternalRowCannotBeNullError(): RuntimeException = {
-    new RuntimeException("The input external row cannot be null.")
+    new SparkRuntimeException(errorClass = "INPUT_EXTERNAL_ROW_CANNOT_BE_NULL",
+      messageParameters = Array.empty)
   }
 
   def fieldCannotBeNullMsg(index: Int, fieldName: String): String = {
-    s"The ${index}th field '$fieldName' of input row cannot be null."
+    SparkThrowableHelper.getMessage(errorClass = "FIELD_CANNOT_BE_NULL",
+      messageParameters = Array(index.toString, fieldName))
   }
 
   def fieldCannotBeNullError(index: Int, fieldName: String): RuntimeException = {
-    new RuntimeException(fieldCannotBeNullMsg(index, fieldName))
+    new SparkRuntimeException(errorClass = "FIELD_CANNOT_BE_NULL",
+      messageParameters = Array(index.toString, fieldName))
   }
 
   def unableToCreateDatabaseAsFailedToCreateDirectoryError(
@@ -698,8 +714,8 @@ object QueryExecutionErrors {
   }
 
   def transactionUnsupportedByJdbcServerError(): Throwable = {
-    new SparkSQLFeatureNotSupportedException(errorClass = "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER",
-      Array.empty)
+    new SparkSQLFeatureNotSupportedException(
+      errorClass = "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER", Array.empty)
   }
 
   def dataTypeUnsupportedYetError(dataType: DataType): Throwable = {
