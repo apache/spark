@@ -99,8 +99,7 @@
     "sqlState" : "42000"
   },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
-    "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ],
-    "sqlState" : "42000"
+    "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
   },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
@@ -150,7 +149,7 @@
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [ "Unrecognized SQL type %s" ],
-    "sqlState" : "07006"
+    "sqlState" : "42000"
   },
   "UNSUPPORTED_ARRAY_ELEMENT_TYPE_BASED_ON_BINARY" : {
     "message" : [ "Unsupported array element type %s based on binary" ],
