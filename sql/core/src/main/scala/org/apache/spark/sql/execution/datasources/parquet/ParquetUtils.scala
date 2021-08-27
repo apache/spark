@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.math.{BigDecimal, BigInteger}
 import java.util
 
 import scala.collection.mutable.ArrayBuilder
@@ -26,20 +25,19 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.parquet.hadoop.ParquetFileWriter
 import org.apache.parquet.hadoop.metadata.{ColumnChunkMetaData, ParquetMetadata}
 import org.apache.parquet.io.api.Binary
-import org.apache.parquet.schema.PrimitiveType
+import org.apache.parquet.schema.{PrimitiveType, Types}
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.connector.expressions.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.execution.RowToColumnConverter
-import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitioningUtils}
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
-import org.apache.spark.sql.internal.SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED
-import org.apache.spark.sql.types.{BinaryType, ByteType, DateType, Decimal, DecimalType, IntegerType, LongType, ShortType, StringType, StructType}
+import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, PARQUET_AGGREGATE_PUSHDOWN_ENABLED}
+import org.apache.spark.sql.types.{DecimalType, StructType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
-import org.apache.spark.unsafe.types.UTF8String
 
 object ParquetUtils {
   def inferSchema(
@@ -163,76 +161,42 @@ object ParquetUtils {
       aggSchema: StructType,
       datetimeRebaseModeInRead: String,
       isCaseSensitive: Boolean): InternalRow = {
-    val (parquetTypes, values) =
+    val (primitiveTypeName, primitiveType, values) =
       getPushedDownAggResult(footer, dataSchema, partitionSchema, aggregation, isCaseSensitive)
-    val mutableRow = new SpecificInternalRow(aggSchema.fields.map(x => x.dataType))
-    val footerFileMetaData = footer.getFileMetaData
-    val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
-      footerFileMetaData.getKeyValueMetaData.get, datetimeRebaseModeInRead)
 
-    parquetTypes.zipWithIndex.foreach {
-      case (PrimitiveType.PrimitiveTypeName.INT32, i) =>
-        aggSchema.fields(i).dataType match {
-          case ByteType =>
-            mutableRow.setByte(i, values(i).asInstanceOf[Integer].toByte)
-          case ShortType =>
-            mutableRow.setShort(i, values(i).asInstanceOf[Integer].toShort)
-          case IntegerType =>
-            mutableRow.setInt(i, values(i).asInstanceOf[Integer])
-          case DateType =>
-            val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
-              datetimeRebaseMode, "Parquet")
-            mutableRow.update(i, dateRebaseFunc(values(i).asInstanceOf[Integer]))
-          case d: DecimalType =>
-            val decimal = Decimal(values(i).asInstanceOf[Integer].toLong, d.precision, d.scale)
-            mutableRow.setDecimal(i, decimal, d.precision)
-          case _ => throw new SparkException(s"Unexpected type ${aggSchema.fields(i).dataType}" +
-            " for INT32")
-        }
-      case (PrimitiveType.PrimitiveTypeName.INT64, i) =>
-        aggSchema.fields(i).dataType match {
-          case LongType =>
-            mutableRow.setLong(i, values(i).asInstanceOf[Long])
-          case d: DecimalType =>
-            val decimal = Decimal(values(i).asInstanceOf[Long], d.precision, d.scale)
-            mutableRow.setDecimal(i, decimal, d.precision)
-          case _ => throw new SparkException(s"Unexpected type ${aggSchema.fields(i).dataType}" +
-            " for INT64")
-        }
-      case (PrimitiveType.PrimitiveTypeName.FLOAT, i) =>
-        mutableRow.setFloat(i, values(i).asInstanceOf[Float])
-      case (PrimitiveType.PrimitiveTypeName.DOUBLE, i) =>
-        mutableRow.setDouble(i, values(i).asInstanceOf[Double])
+    val builder = Types.buildMessage()
+    primitiveType.foreach(t => builder.addField(t))
+    val parquetSchema = builder.named("root")
+
+    val schemaConverter = new ParquetToSparkSchemaConverter
+    val converter = new ParquetRowConverter(schemaConverter, parquetSchema, aggSchema,
+      None, LegacyBehaviorPolicy.CORRECTED, LegacyBehaviorPolicy.CORRECTED, NoopUpdater)
+    primitiveTypeName.zipWithIndex.foreach {
       case (PrimitiveType.PrimitiveTypeName.BOOLEAN, i) =>
-        mutableRow.setBoolean(i, values(i).asInstanceOf[Boolean])
+        val v = values(i).asInstanceOf[Boolean]
+        converter.getConverter(i).asPrimitiveConverter().addBoolean(v)
+      case (PrimitiveType.PrimitiveTypeName.INT32, i) =>
+        val v = values(i).asInstanceOf[Integer]
+        converter.getConverter(i).asPrimitiveConverter().addInt(v)
+      case (PrimitiveType.PrimitiveTypeName.INT64, i) =>
+        val v = values(i).asInstanceOf[Long]
+        converter.getConverter(i).asPrimitiveConverter().addLong(v)
+      case (PrimitiveType.PrimitiveTypeName.FLOAT, i) =>
+        val v = values(i).asInstanceOf[Float]
+        converter.getConverter(i).asPrimitiveConverter().addFloat(v)
+      case (PrimitiveType.PrimitiveTypeName.DOUBLE, i) =>
+        val v = values(i).asInstanceOf[Double]
+        converter.getConverter(i).asPrimitiveConverter().addDouble(v)
       case (PrimitiveType.PrimitiveTypeName.BINARY, i) =>
-        val bytes = values(i).asInstanceOf[Binary].getBytes
-        aggSchema.fields(i).dataType match {
-          case StringType =>
-            mutableRow.update(i, UTF8String.fromBytes(bytes))
-          case BinaryType =>
-            mutableRow.update(i, bytes)
-          case d: DecimalType =>
-            val decimal =
-              Decimal(new BigDecimal(new BigInteger(bytes), d.scale), d.precision, d.scale)
-            mutableRow.setDecimal(i, decimal, d.precision)
-          case _ => throw new SparkException(s"Unexpected type ${aggSchema.fields(i).dataType}" +
-            " for Binary")
-        }
+        val v = values(i).asInstanceOf[Binary]
+        converter.getConverter(i).asPrimitiveConverter().addBinary(v)
       case (PrimitiveType.PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY, i) =>
-        val bytes = values(i).asInstanceOf[Binary].getBytes
-        aggSchema.fields(i).dataType match {
-          case d: DecimalType =>
-            val decimal =
-              Decimal(new BigDecimal(new BigInteger(bytes), d.scale), d.precision, d.scale)
-            mutableRow.setDecimal(i, decimal, d.precision)
-          case _ => throw new SparkException(s"Unexpected type ${aggSchema.fields(i).dataType}" +
-            " for FIXED_LEN_BYTE_ARRAY")
-        }
+        val v = values(i).asInstanceOf[Binary]
+        converter.getConverter(i).asPrimitiveConverter().addBinary(v)
       case _ =>
         throw new SparkException("Unexpected parquet type name")
     }
-    mutableRow
+    converter.currentRecord
   }
 
   /**
@@ -285,11 +249,12 @@ object ParquetUtils {
       partitionSchema: StructType,
       aggregation: Aggregation,
       isCaseSensitive: Boolean)
-  : (Array[PrimitiveType.PrimitiveTypeName], Array[Any]) = {
+  : (Array[PrimitiveType.PrimitiveTypeName], Array[PrimitiveType], Array[Any]) = {
     val footerFileMetaData = footer.getFileMetaData
     val fields = footerFileMetaData.getSchema.getFields
     val blocks = footer.getBlocks()
-    val typesBuilder = ArrayBuilder.make[PrimitiveType.PrimitiveTypeName]
+    val primitiveTypeBuilder = ArrayBuilder.make[PrimitiveType]
+    val primitiveTypeNameBuilder = ArrayBuilder.make[PrimitiveType.PrimitiveTypeName]
     val valuesBuilder = ArrayBuilder.make[Any]
 
     aggregation.aggregateExpressions().foreach { agg =>
@@ -297,22 +262,26 @@ object ParquetUtils {
       var rowCount = 0L
       var isCount = false
       var index = 0
+      var schemaName = ""
       blocks.forEach { block =>
         val blockMetaData = block.getColumns()
         agg match {
           case max: Max =>
             index = dataSchema.fieldNames.toList.indexOf(max.column.fieldNames.head)
+            schemaName = "max(" + max.column.fieldNames.head + ")"
             val currentMax = getCurrentBlockMaxOrMin(blockMetaData, index, true)
             if (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0) {
               value = currentMax
             }
           case min: Min =>
             index = dataSchema.fieldNames.toList.indexOf(min.column.fieldNames.head)
+            schemaName = "min(" + min.column.fieldNames.head + ")"
             val currentMin = getCurrentBlockMaxOrMin(blockMetaData, index, false)
             if (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0) {
               value = currentMin
             }
           case count: Count =>
+            schemaName = "count(" + count.column.fieldNames.head + ")"
             rowCount += block.getRowCount
             var isPartitionCol = false
             if (partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive))
@@ -326,6 +295,7 @@ object ParquetUtils {
               rowCount -= getNumNulls(blockMetaData, index)
             }
           case _: CountStar =>
+            schemaName = "count(*)"
             rowCount += block.getRowCount
             isCount = true
           case _ =>
@@ -333,13 +303,27 @@ object ParquetUtils {
       }
       if (isCount) {
         valuesBuilder += rowCount
-        typesBuilder += PrimitiveType.PrimitiveTypeName.INT64
+        primitiveTypeBuilder += Types.required(PrimitiveTypeName.INT64).named(schemaName);
+        primitiveTypeNameBuilder += PrimitiveType.PrimitiveTypeName.INT64
       } else {
         valuesBuilder += value
-        typesBuilder += fields.get(index).asPrimitiveType.getPrimitiveTypeName
+        if (fields.get(index).asPrimitiveType().getPrimitiveTypeName
+          .equals(PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY)) {  // for decimal type
+          val decimal = dataSchema.fields(index).dataType.asInstanceOf[DecimalType]
+          val precision = decimal.precision
+          val scale = decimal.scale
+          val length = precision + scale
+          primitiveTypeBuilder += Types.required(PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY)
+            // note: .precision and .scale are deprecated
+            .length(length).precision(precision).scale(scale).named(schemaName)
+        } else {
+          primitiveTypeBuilder +=
+            Types.required(fields.get(index).asPrimitiveType.getPrimitiveTypeName).named(schemaName)
+        }
+        primitiveTypeNameBuilder += fields.get(index).asPrimitiveType.getPrimitiveTypeName
       }
     }
-    (typesBuilder.result(), valuesBuilder.result())
+    (primitiveTypeNameBuilder.result(), primitiveTypeBuilder.result(), valuesBuilder.result())
   }
 
   /**

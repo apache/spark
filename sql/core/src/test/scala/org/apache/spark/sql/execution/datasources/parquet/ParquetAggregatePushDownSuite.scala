@@ -307,7 +307,7 @@ abstract class ParquetAggregatePushDownSuite
           Long.MaxValue,
           0.15.toFloat,
           0.75D,
-          Decimal("12.345678"),
+          // Decimal("12.345678"),
           ("2021-01-01").date,
           ("2015-01-01 23:50:59.123").ts),
         Row(
@@ -320,7 +320,7 @@ abstract class ParquetAggregatePushDownSuite
           Long.MinValue,
           0.25.toFloat,
           0.85D,
-          Decimal("1.2345678"),
+          // Decimal("1.2345678"),
           ("2015-01-01").date,
           ("2021-01-01 23:50:59.123").ts),
         Row(
@@ -333,7 +333,7 @@ abstract class ParquetAggregatePushDownSuite
           11111111L,
           0.25.toFloat,
           0.75D,
-          Decimal("12345.678"),
+          // Decimal("12345.678"),
           ("2004-06-19").date,
           ("1999-08-26 10:43:59.123").ts)
       )
@@ -347,7 +347,7 @@ abstract class ParquetAggregatePushDownSuite
       StructField("LongCol", LongType, false),
       StructField("FloatCol", FloatType, false),
       StructField("DoubleCol", DoubleType, false),
-      StructField("DecimalCol", DecimalType(25, 5), true),
+      // StructField("DecimalCol", DecimalType(25, 5), true),
       StructField("DateCol", DateType, false),
       StructField("TimestampCol", TimestampType, false)).toArray)
 
@@ -363,7 +363,7 @@ abstract class ParquetAggregatePushDownSuite
 
             val testMinWithTS = sql("SELECT min(StringCol), min(BooleanCol), min(ByteCol), " +
               "min(BinaryCol), min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +
-              "min(DoubleCol), min(DecimalCol), min(DateCol), min(TimestampCol) FROM test")
+              "min(DoubleCol), min(DateCol), min(TimestampCol) FROM test")
 
             // INT96 (Timestamp) sort order is undefined, parquet doesn't return stats for this type
             // so aggregates are not pushed down
@@ -375,12 +375,12 @@ abstract class ParquetAggregatePushDownSuite
             }
 
             checkAnswer(testMinWithTS, Seq(Row("a string", false, 1.toByte, "Parquet".getBytes,
-              2.toShort, 3, -9223372036854775808L, 0.15.toFloat, 0.75D, 1.23457,
+              2.toShort, 3, -9223372036854775808L, 0.15.toFloat, 0.75D,
               ("2004-06-19").date, ("1999-08-26 10:43:59.123").ts)))
 
             val testMinWithOutTS = sql("SELECT min(StringCol), min(BooleanCol), min(ByteCol), " +
               "min(BinaryCol), min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +
-              "min(DoubleCol), min(DecimalCol), min(DateCol) FROM test")
+              "min(DoubleCol), min(DateCol) FROM test")
 
             testMinWithOutTS.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>
@@ -394,18 +394,18 @@ abstract class ParquetAggregatePushDownSuite
                     "MIN(LongCol), " +
                     "MIN(FloatCol), " +
                     "MIN(DoubleCol), " +
-                    "MIN(DecimalCol), " +
+                    // "MIN(DecimalCol), " +
                     "MIN(DateCol)]"
                 checkKeywordsExistsInExplain(testMinWithOutTS, expected_plan_fragment)
             }
 
             checkAnswer(testMinWithOutTS, Seq(Row("a string", false, 1.toByte, "Parquet".getBytes,
-              2.toShort, 3, -9223372036854775808L, 0.15.toFloat, 0.75D, 1.23457,
+              2.toShort, 3, -9223372036854775808L, 0.15.toFloat, 0.75D,
               ("2004-06-19").date)))
 
             val testMaxWithTS = sql("SELECT max(StringCol), max(BooleanCol), max(ByteCol), " +
               "max(BinaryCol), max(ShortCol), max(IntegerCol), max(LongCol), max(FloatCol), " +
-              "max(DoubleCol), max(DecimalCol), max(DateCol), max(TimestampCol) FROM test")
+              "max(DoubleCol), max(DateCol), max(TimestampCol) FROM test")
 
             // INT96 (Timestamp) sort order is undefined, parquet doesn't return stats for this type
             // so aggregates are not pushed down
@@ -418,11 +418,11 @@ abstract class ParquetAggregatePushDownSuite
 
             checkAnswer(testMaxWithTS, Seq(Row("test string", true, 16.toByte,
               "Spark SQL".getBytes, 222.toShort, 113, 9223372036854775807L, 0.25.toFloat, 0.85D,
-              12345.678, ("2021-01-01").date, ("2021-01-01 23:50:59.123").ts)))
+              ("2021-01-01").date, ("2021-01-01 23:50:59.123").ts)))
 
             val testMaxWithoutTS = sql("SELECT max(StringCol), max(BooleanCol), max(ByteCol), " +
               "max(BinaryCol), max(ShortCol), max(IntegerCol), max(LongCol), max(FloatCol), " +
-              "max(DoubleCol), max(DecimalCol), max(DateCol) FROM test")
+              "max(DoubleCol), max(DateCol) FROM test")
 
             testMaxWithoutTS.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>
@@ -436,24 +436,26 @@ abstract class ParquetAggregatePushDownSuite
                     "MAX(LongCol), " +
                     "MAX(FloatCol), " +
                     "MAX(DoubleCol), " +
-                    "MAX(DecimalCol), " +
+                    // "MAX(DecimalCol), " +
                     "MAX(DateCol)]"
                 checkKeywordsExistsInExplain(testMaxWithoutTS, expected_plan_fragment)
             }
 
             checkAnswer(testMaxWithoutTS, Seq(Row("test string", true, 16.toByte,
               "Spark SQL".getBytes, 222.toShort, 113, 9223372036854775807L, 0.25.toFloat, 0.85D,
-              12345.678, ("2021-01-01").date)))
+              ("2021-01-01").date)))
 
-            val testCount = sql("SELECT count(*), count(StringCol), count(BooleanCol)," +
+            val testCountStar = sql("SELECT count(*) FROM test")
+
+            val testCount = sql("SELECT count(StringCol), count(BooleanCol)," +
               " count(ByteCol), count(BinaryCol), count(ShortCol), count(IntegerCol)," +
               " count(LongCol), count(FloatCol), count(DoubleCol)," +
-              " count(DecimalCol), count(DateCol), count(TimestampCol) FROM test")
+              " count(DateCol), count(TimestampCol) FROM test")
 
             testCount.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>
                 val expected_plan_fragment =
-                  "PushedAggregation: [COUNT(*), " +
+                  "PushedAggregation: [" +
                     "COUNT(StringCol), " +
                     "COUNT(BooleanCol), " +
                     "COUNT(ByteCol), " +
@@ -463,13 +465,36 @@ abstract class ParquetAggregatePushDownSuite
                     "COUNT(LongCol), " +
                     "COUNT(FloatCol), " +
                     "COUNT(DoubleCol), " +
-                    "COUNT(DecimalCol), " +
                     "COUNT(DateCol), " +
                     "COUNT(TimestampCol)]"
                 checkKeywordsExistsInExplain(testCount, expected_plan_fragment)
             }
 
-            checkAnswer(testCount, Seq(Row(3, 2, 3, 3, 3, 3, 2, 3, 3, 3, 3, 3, 3)))
+            checkAnswer(testCount, Seq(Row(2, 3, 3, 3, 3, 2, 3, 3, 3, 3, 3)))
+          }
+        }
+      }
+    }
+  }
+
+  ignore("decimal test") {
+    val rows =
+      Seq(Row(Decimal("12.345678")), Row(Decimal("1.2345678")), Row(Decimal("12345.678")))
+
+    val schema = StructType(List(StructField("DecimalCol", DecimalType(25, 5), true)).toArray)
+
+    val rdd = sparkContext.parallelize(rows)
+    withTempPath { file =>
+      spark.createDataFrame(rdd, schema).write.parquet(file.getCanonicalPath)
+      withTempView("test") {
+        spark.read.parquet(file.getCanonicalPath).createOrReplaceTempView("test")
+        val enableVectorizedReader = Seq("false", "true")
+        for (testVectorizedReader <- enableVectorizedReader) {
+          withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
+            vectorizedReaderEnabledKey -> testVectorizedReader) {
+            val test = sql("SELECT min(DecimalCol) FROM test")
+            test.show(false)
+            test.explain(true)
           }
         }
       }
