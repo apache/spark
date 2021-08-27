@@ -90,7 +90,7 @@ private[spark] class SparkArithmeticException(errorClass: String, messageParamet
 /**
  * Class not found exception thrown from Spark with an error class.
  */
-class SparkClassNotFoundException(
+private[spark] class SparkClassNotFoundException(
     errorClass: String,
     messageParameters: Array[String],
     cause: Throwable = null)
@@ -104,7 +104,7 @@ class SparkClassNotFoundException(
 /**
  * Concurrent modification exception thrown from Spark with an error class.
  */
-class SparkConcurrentModificationException(
+private[spark] class SparkConcurrentModificationException(
     errorClass: String,
     messageParameters: Array[String],
     cause: Throwable = null)
@@ -118,7 +118,7 @@ class SparkConcurrentModificationException(
 /**
  * Datetime exception thrown from Spark with an error class.
  */
-class SparkDateTimeException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkDateTimeException(errorClass: String, messageParameters: Array[String])
   extends DateTimeException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
@@ -129,7 +129,9 @@ class SparkDateTimeException(errorClass: String, messageParameters: Array[String
 /**
  * Hadoop file already exists exception thrown from Spark with an error class.
  */
-class SparkFileAlreadyExistsException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkFileAlreadyExistsException(
+    errorClass: String,
+    messageParameters: Array[String])
   extends FileAlreadyExistsException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
@@ -140,7 +142,9 @@ class SparkFileAlreadyExistsException(errorClass: String, messageParameters: Arr
 /**
  * File not found exception thrown from Spark with an error class.
  */
-class SparkFileNotFoundException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkFileNotFoundException(
+    errorClass: String,
+    messageParameters: Array[String])
   extends FileNotFoundException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
@@ -151,7 +155,9 @@ class SparkFileNotFoundException(errorClass: String, messageParameters: Array[St
 /**
  * No such method exception thrown from Spark with an error class.
  */
-class SparkNoSuchMethodException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkNoSuchMethodException(
+    errorClass: String,
+    messageParameters: Array[String])
   extends NoSuchMethodException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
@@ -162,7 +168,9 @@ class SparkNoSuchMethodException(errorClass: String, messageParameters: Array[St
 /**
  * Index out of bounds exception thrown from Spark with an error class.
  */
-class SparkIndexOutOfBoundsException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkIndexOutOfBoundsException(
+    errorClass: String,
+    messageParameters: Array[String])
   extends IndexOutOfBoundsException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
@@ -173,7 +181,9 @@ class SparkIndexOutOfBoundsException(errorClass: String, messageParameters: Arra
 /**
  * IO exception thrown from Spark with an error class.
  */
-class SparkIOException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkIOException(
+    errorClass: String,
+    messageParameters: Array[String])
   extends IOException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
@@ -181,7 +191,7 @@ class SparkIOException(errorClass: String, messageParameters: Array[String])
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
-class SparkRuntimeException(
+private[spark] class SparkRuntimeException(
     errorClass: String,
     messageParameters: Array[String],
     cause: Throwable = null)
@@ -195,7 +205,9 @@ class SparkRuntimeException(
 /**
  * Security exception thrown from Spark with an error class.
  */
-class SparkSecurityException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkSecurityException(
+    errorClass: String,
+    messageParameters: Array[String])
   extends SecurityException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
@@ -206,7 +218,9 @@ class SparkSecurityException(errorClass: String, messageParameters: Array[String
 /**
  * SQL exception thrown from Spark with an error class.
  */
-class SparkSQLException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkSQLException(
+    errorClass: String,
+    messageParameters: Array[String])
   extends SQLException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
@@ -217,7 +231,9 @@ class SparkSQLException(errorClass: String, messageParameters: Array[String])
 /**
  * SQL feature not supported exception thrown from Spark with an error class.
  */
-class SparkSQLFeatureNotSupportedException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkSQLFeatureNotSupportedException(
+    errorClass: String,
+    messageParameters: Array[String])
   extends SQLFeatureNotSupportedException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
