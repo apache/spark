@@ -1121,25 +1121,6 @@ object TypeCoercion extends TypeCoercionBase {
       // Hive treats (true = 1) as true and (false = 0) as true,
       // all other cases are considered as false.
 
-      // We may simplify the expression if one side is literal numeric values
-      // TODO: Maybe these rules should go into the optimizer.
-      case EqualTo(bool @ BooleanType(), Literal(value, _: NumericType))
-        if trueValues.contains(value) => bool
-      case EqualTo(bool @ BooleanType(), Literal(value, _: NumericType))
-        if falseValues.contains(value) => Not(bool)
-      case EqualTo(Literal(value, _: NumericType), bool @ BooleanType())
-        if trueValues.contains(value) => bool
-      case EqualTo(Literal(value, _: NumericType), bool @ BooleanType())
-        if falseValues.contains(value) => Not(bool)
-      case EqualNullSafe(bool @ BooleanType(), Literal(value, _: NumericType))
-        if trueValues.contains(value) => And(IsNotNull(bool), bool)
-      case EqualNullSafe(bool @ BooleanType(), Literal(value, _: NumericType))
-        if falseValues.contains(value) => And(IsNotNull(bool), Not(bool))
-      case EqualNullSafe(Literal(value, _: NumericType), bool @ BooleanType())
-        if trueValues.contains(value) => And(IsNotNull(bool), bool)
-      case EqualNullSafe(Literal(value, _: NumericType), bool @ BooleanType())
-        if falseValues.contains(value) => And(IsNotNull(bool), Not(bool))
-
       case EqualTo(left @ BooleanType(), right @ NumericType()) =>
         EqualTo(Cast(left, right.dataType), right)
       case EqualTo(left @ NumericType(), right @ BooleanType()) =>

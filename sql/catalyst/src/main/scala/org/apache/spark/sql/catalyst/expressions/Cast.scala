@@ -179,6 +179,8 @@ object Cast {
 
     case (from: UserDefinedType[_], to: UserDefinedType[_]) if to.acceptsType(from) => true
 
+    case (BooleanType, _: NumericType) => true
+
     case _ => false
   }
 

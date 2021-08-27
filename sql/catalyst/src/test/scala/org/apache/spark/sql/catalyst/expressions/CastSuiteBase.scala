@@ -692,6 +692,13 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-36607: Support BooleanType in UnwrapCastInBinaryComparison") {
+    import DataTypeTestUtils._
+    numericTypes.foreach { to =>
+      assert(Cast.canUpCast(BooleanType, to))
+    }
+  }
+
   test("SPARK-27671: cast from nested null type in struct") {
     import DataTypeTestUtils._
 
