@@ -1734,6 +1734,11 @@ class JDBCSuite extends QueryTest
       .filter("theid = 1")
       .select("name", "theid")
     val df2 = df
+      .option("pushDownPredicate", true)
+      .load()
+      .filter("theid = 1")
+      .select("name", "theid")
+    val df3 = df
       .load()
       .select("name", "theid")
 
@@ -1748,7 +1753,8 @@ class JDBCSuite extends QueryTest
       rawPlan.execute().count()
     }
 
-    assert(getRowCount(df1) == getRowCount(df2))
+    assert(getRowCount(df1) == df3.count)
+    assert(getRowCount(df2) < df3.count)
   }
 
   test("SPARK-26383 throw IllegalArgumentException if wrong kind of driver to the given url") {
