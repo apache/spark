@@ -30,6 +30,7 @@ from typing import (  # noqa: F401 (SPARK-34943)
     Union,
     cast,
     no_type_check,
+    overload,
 )
 from collections import OrderedDict
 from collections.abc import Iterable
@@ -38,6 +39,7 @@ from distutils.version import LooseVersion
 from functools import reduce
 from io import BytesIO
 import json
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -45,8 +47,7 @@ from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype, is_list
 from pandas.tseries.offsets import DateOffset
 import pyarrow as pa
 import pyarrow.parquet as pq
-from pyspark import sql as spark
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     ByteType,
@@ -65,6 +66,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps  # noqa: F401
+from pyspark.pandas._typing import Axis, Dtype, Label, Name
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.utils import (
     align_diff_frames,
@@ -82,8 +84,8 @@ from pyspark.pandas.internal import (
     HIDDEN_COLUMNS,
 )
 from pyspark.pandas.series import Series, first_series
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
-from pyspark.pandas.typedef.typehints import Dtype
 from pyspark.pandas.indexes import Index, DatetimeIndex
 
 
@@ -397,7 +399,7 @@ def read_csv(
             if col not in column_labels:
                 raise KeyError(col)
         index_spark_column_names = [column_labels[col] for col in index_col]
-        index_names = [(col,) for col in index_col]  # type: List[Tuple]
+        index_names = [(col,) for col in index_col]  # type: List[Label]
         column_labels = OrderedDict(
             (label, col) for label, col in column_labels.items() if label not in index_col
         )
@@ -507,11 +509,14 @@ def read_delta(
         Path to the Delta Lake table.
     version : string, optional
         Specifies the table version (based on Delta's internal transaction version) to read from,
-        using Delta's time travel feature. This sets Delta's 'versionAsOf' option.
+        using Delta's time travel feature. This sets Delta's 'versionAsOf' option. Note that
+        this paramter and `timestamp` paramter cannot be used together, otherwise it will raise a
+        `ValueError`.
     timestamp : string, optional
         Specifies the table version (based on timestamp) to read from,
         using Delta's time travel feature. This must be a valid date or timestamp string in Spark,
-        and sets Delta's 'timestampAsOf' option.
+        and sets Delta's 'timestampAsOf' option. Note that this paramter and `version` paramter
+        cannot be used together, otherwise it will raise a `ValueError`.
     index_col : str or list of str, optional, default: None
         Index column of table in Spark.
     options
@@ -562,6 +567,8 @@ def read_delta(
     3      13
     4      14
     """
+    if version is not None and timestamp is not None:
+        raise ValueError("version and timestamp cannot be used together.")
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")  # type: ignore
 
@@ -1125,7 +1132,7 @@ def read_excel(
             else:
                 pdf = pdf_or_pser
 
-            psdf = from_pandas(pdf)
+            psdf = cast(DataFrame, from_pandas(pdf))
             return_schema = force_decimal_precision_scale(
                 as_nullable_spark_type(psdf._internal.spark_frame.drop(*HIDDEN_COLUMNS).schema)
             )
@@ -1812,7 +1819,7 @@ def get_dummies(
     prefix: Optional[Union[str, List[str], Dict[str, str]]] = None,
     prefix_sep: str = "_",
     dummy_na: bool = False,
-    columns: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
+    columns: Optional[Union[Name, List[Name]]] = None,
     sparse: bool = False,
     drop_first: bool = False,
     dtype: Optional[Union[str, Dtype]] = None,
@@ -2014,11 +2021,11 @@ def get_dummies(
         if drop_first:
             values = values[1:]
 
-        def column_name(value: str) -> str:
+        def column_name(v: Any) -> Name:
             if prefix is None or cast(List[str], prefix)[i] == "":
-                return value
+                return v
             else:
-                return "{}{}{}".format(cast(List[str], prefix)[i], prefix_sep, value)
+                return "{}{}{}".format(cast(List[str], prefix)[i], prefix_sep, v)
 
         for value in values:
             remaining_columns.append(
@@ -2035,7 +2042,7 @@ def get_dummies(
 # TODO: there are many parameters to implement and support. See pandas's pd.concat.
 def concat(
     objs: List[Union[DataFrame, Series]],
-    axis: Union[int, str] = 0,
+    axis: Axis = 0,
     join: str = "outer",
     ignore_index: bool = False,
     sort: bool = False,
@@ -2370,7 +2377,7 @@ def concat(
                 # TODO: NaN and None difference for missing values. pandas seems filling NaN.
                 sdf = psdf._internal.resolved_copy.spark_frame
                 for label in columns_to_add:
-                    sdf = sdf.withColumn(name_like_string(label), F.lit(None))
+                    sdf = sdf.withColumn(name_like_string(label), SF.lit(None))
 
                 data_columns = psdf._internal.data_spark_column_names + [
                     name_like_string(label) for label in columns_to_add
@@ -2437,8 +2444,8 @@ def concat(
 
 def melt(
     frame: DataFrame,
-    id_vars: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
-    value_vars: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
+    id_vars: Optional[Union[Name, List[Name]]] = None,
+    value_vars: Optional[Union[Name, List[Name]]] = None,
     var_name: Optional[Union[str, List[str]]] = None,
     value_name: str = "value",
 ) -> DataFrame:
@@ -2610,9 +2617,9 @@ def merge(
     obj: DataFrame,
     right: DataFrame,
     how: str = "inner",
-    on: Union[Any, List[Any], Tuple, List[Tuple]] = None,
-    left_on: Union[Any, List[Any], Tuple, List[Tuple]] = None,
-    right_on: Union[Any, List[Any], Tuple, List[Tuple]] = None,
+    on: Optional[Union[Name, List[Name]]] = None,
+    left_on: Optional[Union[Name, List[Name]]] = None,
+    right_on: Optional[Union[Name, List[Name]]] = None,
     left_index: bool = False,
     right_index: bool = False,
     suffixes: Tuple[str, str] = ("_x", "_y"),
@@ -2816,6 +2823,9 @@ def broadcast(obj: DataFrame) -> DataFrame:
     """
     Marks a DataFrame as small enough for use in broadcast joins.
 
+    .. deprecated:: 3.2.0
+        Use :func:`DataFrame.spark.hint` instead.
+
     Parameters
     ----------
     obj : DataFrame
@@ -2846,6 +2856,11 @@ def broadcast(obj: DataFrame) -> DataFrame:
     ...BroadcastHashJoin...
     ...
     """
+    warnings.warn(
+        "`broadcast` has been deprecated and might be removed in a future version. "
+        "Use `DataFrame.spark.hint` with 'broadcast' for `name` parameter instead.",
+        FutureWarning,
+    )
     if not isinstance(obj, DataFrame):
         raise TypeError("Invalid type : expected DataFrame got {}".format(type(obj).__name__))
     return DataFrame(
@@ -2912,8 +2927,8 @@ def read_orc(
 
 
 def _get_index_map(
-    sdf: spark.DataFrame, index_col: Optional[Union[str, List[str]]] = None
-) -> Tuple[Optional[List[spark.Column]], Optional[List[Tuple]]]:
+    sdf: SparkDataFrame, index_col: Optional[Union[str, List[str]]] = None
+) -> Tuple[Optional[List[Column]], Optional[List[Label]]]:
     if index_col is not None:
         if isinstance(index_col, str):
             index_col = [index_col]
@@ -2923,8 +2938,8 @@ def _get_index_map(
                 raise KeyError(col)
         index_spark_columns = [
             scol_for(sdf, col) for col in index_col
-        ]  # type: Optional[List[spark.Column]]
-        index_names = [(col,) for col in index_col]  # type: Optional[List[Tuple]]
+        ]  # type: Optional[List[Column]]
+        index_names = [(col,) for col in index_col]  # type: Optional[List[Label]]
     else:
         index_spark_columns = None
         index_names = None

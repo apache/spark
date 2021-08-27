@@ -23,14 +23,13 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
 import org.apache.spark.sql.connector.catalog.SupportsWrite
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -83,10 +82,7 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
           s" true. Important to know deleting temp checkpoint folder is best effort.")
         tempDir
       } else {
-        throw new AnalysisException(
-          "checkpointLocation must be specified either " +
-            """through option("checkpointLocation", ...) or """ +
-            s"""SparkSession.conf.set("${SQLConf.CHECKPOINT_LOCATION.key}", ...)""")
+        throw QueryCompilationErrors.checkpointLocationNotSpecifiedError()
       }
     }
     val fileManager = CheckpointFileManager.create(new Path(checkpointLocation), s.hadoopConf)
@@ -95,9 +91,7 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
     if (!s.recoverFromCheckpointLocation) {
       val checkpointPath = new Path(checkpointLocation, "offsets")
       if (fileManager.exists(checkpointPath)) {
-        throw new AnalysisException(
-          s"This query does not support recovering from checkpoint location. " +
-            s"Delete $checkpointPath to start over.")
+        throw QueryCompilationErrors.recoverQueryFromCheckpointUnsupportedError(checkpointPath)
       }
     }
 
@@ -120,23 +114,8 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
               false
           }
         if (legacyCheckpointDirExists) {
-          throw new SparkException(
-            s"""Error: we detected a possible problem with the location of your checkpoint and you
-               |likely need to move it before restarting this query.
-               |
-               |Earlier version of Spark incorrectly escaped paths when writing out checkpoints for
-               |structured streaming. While this was corrected in Spark 3.0, it appears that your
-               |query was started using an earlier version that incorrectly handled the checkpoint
-               |path.
-               |
-               |Correct Checkpoint Directory: $checkpointPath
-               |Incorrect Checkpoint Directory: $legacyCheckpointDir
-               |
-               |Please move the data from the incorrect directory to the correct one, delete the
-               |incorrect directory, and then restart this query. If you believe you are receiving
-               |this message in error, you can disable it with the SQL conf
-               |${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}."""
-              .stripMargin)
+          throw QueryExecutionErrors.legacyCheckpointDirectoryExistsError(
+            checkpointPath, legacyCheckpointDir)
         }
       }
       val checkpointDir = fileManager.createCheckpointDirectory()

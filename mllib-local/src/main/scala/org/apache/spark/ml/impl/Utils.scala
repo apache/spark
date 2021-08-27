@@ -99,30 +99,42 @@ private[spark] object Utils {
   /**
    * Perform in-place softmax conversion.
    */
-  def softmax(values: Array[Double]): Unit = {
+  def softmax(array: Array[Double]): Unit =
+    softmax(array, array.length, 0, 1, array)
+
+  /**
+   * Perform softmax conversion.
+   */
+  def softmax(
+      input: Array[Double],
+      n: Int,
+      offset: Int,
+      step: Int,
+      output: Array[Double]): Unit = {
     var maxValue = Double.MinValue
-    var i = 0
-    while (i < values.length) {
-      val value = values(i)
-      if (value.isPosInfinity) {
-        java.util.Arrays.fill(values, 0)
-        values(i) = 1.0
+    var i = offset
+    val end = offset + step * n
+    while (i < end) {
+      val v = input(i)
+      if (v.isPosInfinity) {
+        BLAS.javaBLAS.dscal(n, 0.0, output, offset, step)
+        output(i) = 1.0
         return
-      } else if (value > maxValue) {
-        maxValue = value
+      } else if (v > maxValue) {
+        maxValue = v
       }
-      i += 1
+      i += step
     }
 
     var sum = 0.0
-    i = 0
-    while (i < values.length) {
-      val exp = math.exp(values(i) - maxValue)
-      values(i) = exp
+    i = offset
+    while (i < end) {
+      val exp = math.exp(input(i) - maxValue)
+      output(i) = exp
       sum += exp
-      i += 1
+      i += step
     }
 
-    BLAS.javaBLAS.dscal(values.length, 1.0 / sum, values, 1)
+    BLAS.javaBLAS.dscal(n, 1.0 / sum, output, offset, step)
   }
 }

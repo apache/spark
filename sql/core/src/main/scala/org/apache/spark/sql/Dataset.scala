@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 
+import scala.annotation.varargs
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.reflect.runtime.universe.TypeTag
@@ -26,7 +27,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
@@ -48,6 +49,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.IntervalUtils
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConverters}
@@ -62,7 +64,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 private[sql] object Dataset {
@@ -194,12 +195,7 @@ class Dataset[T] private[sql](
 
   @transient lazy val sparkSession: SparkSession = {
     if (queryExecution == null || queryExecution.sparkSession == null) {
-      throw new SparkException(
-      "Dataset transformations and actions can only be invoked by the driver, not inside of" +
-        " other Dataset transformations; for example, dataset1.map(x => dataset2.values.count()" +
-        " * x) is invalid because the values transformation and count action cannot be " +
-        "performed inside of the dataset1.map transformation. For more information," +
-        " see SPARK-28702.")
+      throw QueryExecutionErrors.transformationsAndActionsNotInvokedByDriverError()
     }
     queryExecution.sparkSession
   }
@@ -260,8 +256,7 @@ class Dataset[T] private[sql](
       s"; did you mean to quote the `$colName` column?"
     } else ""
     val fieldsStr = fields.mkString(", ")
-    val errorMsg = s"""Cannot resolve column name "$colName" among (${fieldsStr})${extraMsg}"""
-    new AnalysisException(errorMsg)
+    QueryCompilationErrors.cannotResolveColumnNameAmongFieldsError(colName, fieldsStr, extraMsg)
   }
 
   private[sql] def numericColumns: Seq[Expression] = {
@@ -597,7 +592,8 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation]
+  def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation] ||
+    logicalPlan.isInstanceOf[CommandResult]
 
   /**
    * Returns true if the `Dataset` is empty.
@@ -743,15 +739,7 @@ class Dataset[T] private[sql](
   // We only accept an existing column name, not a derived column here as a watermark that is
   // defined on a derived column cannot referenced elsewhere in the plan.
   def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = withTypedPlan {
-    val parsedDelay =
-      try {
-        IntervalUtils.stringToInterval(UTF8String.fromString(delayThreshold))
-      } catch {
-        case e: IllegalArgumentException =>
-          throw new AnalysisException(
-            s"Unable to parse time delay '$delayThreshold'",
-            cause = Some(e))
-      }
+    val parsedDelay = IntervalUtils.fromIntervalString(delayThreshold)
     require(!IntervalUtils.isNegative(parsedDelay),
       s"delay threshold ($delayThreshold) should not be negative.")
     EliminateEventTimeWatermark(
@@ -1165,7 +1153,7 @@ class Dataset[T] private[sql](
         JoinHint.NONE)).analyzed.asInstanceOf[Join]
 
     if (joined.joinType == LeftSemi || joined.joinType == LeftAnti) {
-      throw new AnalysisException("Invalid join type in joinWith: " + joined.joinType.sql)
+      throw QueryCompilationErrors.invalidJoinTypeInJoinWithError(joined.joinType)
     }
 
     // If auto self join alias is enable
@@ -1459,8 +1447,7 @@ class Dataset[T] private[sql](
         if (!needInputType) {
           typedCol
         } else {
-          throw new AnalysisException(s"Typed column $typedCol that needs input type and schema " +
-            "cannot be passed in untyped `select` API. Use the typed `Dataset.select` API instead.")
+          throw QueryCompilationErrors.cannotPassTypedColumnInUntypedSelectError(typedCol.toString)
         }
 
       case other => other
@@ -1955,6 +1942,32 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Observe (named) metrics through an `org.apache.spark.sql.Observation` instance.
+   * This is equivalent to calling `observe(String, Column, Column*)` but does not require
+   * adding `org.apache.spark.sql.util.QueryExecutionListener` to the spark session.
+   * This method does not support streaming datasets.
+   *
+   * A user can retrieve the metrics by accessing `org.apache.spark.sql.Observation.get`.
+   *
+   * {{{
+   *   // Observe row count (rows) and highest id (maxid) in the Dataset while writing it
+   *   val observation = Observation("my_metrics")
+   *   val observed_ds = ds.observe(observation, count(lit(1)).as("rows"), max($"id").as("maxid"))
+   *   observed_ds.write.parquet("ds.parquet")
+   *   val metrics = observation.get
+   * }}}
+   *
+   * @throws IllegalArgumentException If this is a streaming Dataset (this.isStreaming == true)
+   *
+   * @group typedrel
+   * @since 3.3.0
+   */
+  @varargs
+  def observe(observation: Observation, expr: Column, exprs: Column*): Dataset[T] = {
+    observation.on(this, expr, exprs: _*)
+  }
+
+  /**
    * Returns a new Dataset by taking the first `n` rows. The difference between this function
    * and `head` is that `head` is an action and returns an array (by triggering query execution)
    * while `limit` returns a new Dataset.
@@ -2080,10 +2093,8 @@ class Dataset[T] private[sql](
    * }}}
    *
    * Note that `allowMissingColumns` supports nested column in struct types. Missing nested columns
-   * of struct columns with same name will also be filled with null values. This currently does not
-   * support nested columns in array and map types. Note that if there is any missing nested columns
-   * to be filled, in order to make consistent schema between two sides of union, the nested fields
-   * of structs will be sorted after merging schema.
+   * of struct columns with the same name will also be filled with null values and added to the end
+   * of struct. This currently does not support nested columns in array and map types.
    *
    * @group typedrel
    * @since 3.1.0
@@ -2415,10 +2426,10 @@ class Dataset[T] private[sql](
     val resolver = sparkSession.sessionState.analyzer.resolver
     val output = queryExecution.analyzed.output
 
-    val columnMap = colNames.zip(cols).toMap
+    val columnSeq = colNames.zip(cols)
 
     val replacedAndExistingColumns = output.map { field =>
-      columnMap.find { case (colName, _) =>
+      columnSeq.find { case (colName, _) =>
         resolver(field.name, colName)
       } match {
         case Some((colName: String, col: Column)) => col.as(colName)
@@ -2426,7 +2437,7 @@ class Dataset[T] private[sql](
       }
     }
 
-    val newColumns = columnMap.filter { case (colName, col) =>
+    val newColumns = columnSeq.filter { case (colName, col) =>
       !output.exists(f => resolver(f.name, colName))
     }.map { case (colName, col) => col.as(colName) }
 
@@ -2579,8 +2590,8 @@ class Dataset[T] private[sql](
       // so we call filter instead of find.
       val cols = allColumns.filter(col => resolver(col.name, colName))
       if (cols.isEmpty) {
-        throw new AnalysisException(
-          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
+        throw QueryCompilationErrors.cannotResolveColumnNameAmongAttributesError(
+          colName, schema.fieldNames.mkString(", "))
       }
       cols
     }
@@ -3366,7 +3377,7 @@ class Dataset[T] private[sql](
     val tableIdentifier = try {
       sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName)
     } catch {
-      case _: ParseException => throw new AnalysisException(s"Invalid view name: $viewName")
+      case _: ParseException => throw QueryCompilationErrors.invalidViewNameError(viewName)
     }
     CreateViewCommand(
       name = tableIdentifier,
@@ -3524,6 +3535,18 @@ class Dataset[T] private[sql](
   ////////////////////////////////////////////////////////////////////////////
   // For Python API
   ////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * It adds a new long column with the name `name` that increases one by one.
+   * This is for 'distributed-sequence' default index in pandas API on Spark.
+   */
+  private[sql] def withSequenceColumn(name: String) = {
+    Dataset.ofRows(
+      sparkSession,
+      AttachDistributedSequence(
+        AttributeReference(name, LongType, nullable = false)(),
+        logicalPlan))
+  }
 
   /**
    * Converts a JavaRDD to a PythonRDD.

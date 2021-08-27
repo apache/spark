@@ -33,7 +33,6 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
-import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -553,7 +552,6 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll with CommonFileDa
 }
 
 class OrcSourceSuite extends OrcSuite with SharedSparkSession {
-  import testImplicits._
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -614,33 +612,6 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
       checkAnswer(spark.read.orc(path), Seq(Row(0), Row(1), Row(2)))
       val files = OrcUtils.listOrcFiles(path, spark.sessionState.newHadoopConf())
       assert(files.nonEmpty && files.forall(_.getName.contains("zstd")))
-    }
-  }
-
-  test("SPARK-34862: Support ORC vectorized reader for nested column") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      val df = spark.range(10).map { x =>
-        val stringColumn = s"$x" * 10
-        val structColumn = (x, s"$x" * 100)
-        val arrayColumn = (0 until 5).map(i => (x + i, s"$x" * 5))
-        val mapColumn = Map(
-          s"$x" -> (x * 0.1, (x, s"$x" * 100)),
-          (s"$x" * 2) -> (x * 0.2, (x, s"$x" * 200)),
-          (s"$x" * 3) -> (x * 0.3, (x, s"$x" * 300)))
-        (x, stringColumn, structColumn, arrayColumn, mapColumn)
-      }.toDF("int_col", "string_col", "struct_col", "array_col", "map_col")
-      df.write.format("orc").save(path)
-
-      withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
-        val readDf = spark.read.orc(path)
-        val vectorizationEnabled = readDf.queryExecution.executedPlan.find {
-          case scan: FileSourceScanExec => scan.supportsColumnar
-          case _ => false
-        }.isDefined
-        assert(vectorizationEnabled)
-        checkAnswer(readDf, df)
-      }
     }
   }
 

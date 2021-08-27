@@ -334,6 +334,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         columns.get(i),
         types.get(i).getLogicalTypeAnnotation(),
         pages.getPageReader(columns.get(i)),
+        pages.getRowIndexes().orElse(null),
         convertTz,
         datetimeRebaseMode,
         int96RebaseMode);

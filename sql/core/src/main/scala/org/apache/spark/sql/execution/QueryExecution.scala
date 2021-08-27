@@ -21,6 +21,8 @@ import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.mutable
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
@@ -30,16 +32,16 @@ import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, ReturnAnswer}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, CTERelationDef, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
+import org.apache.spark.sql.execution.exchange.EnsureRequirements
+import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
-import org.apache.spark.sql.expressions.CommandResult
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.Utils
@@ -62,6 +64,17 @@ class QueryExecution(
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
 
+  // The CTE map for the planner shared by the main query and all subqueries.
+  private val cteMap = mutable.HashMap.empty[Long, CTERelationDef]
+
+  def withCteMap[T](f: => T): T = {
+    val old = QueryExecution.currentCteMap.get()
+    QueryExecution.currentCteMap.set(cteMap)
+    try f finally {
+      QueryExecution.currentCteMap.set(old)
+    }
+  }
+
   def assertAnalyzed(): Unit = analyzed
 
   def assertSupported(): Unit = {
@@ -81,11 +94,21 @@ class QueryExecution(
     case CommandExecutionMode.SKIP => analyzed
   }
 
+  private def commandExecutionName(command: Command): String = command match {
+    case _: CreateTableAsSelect => "create"
+    case _: ReplaceTableAsSelect => "replace"
+    case _: AppendData => "append"
+    case _: OverwriteByExpression => "overwrite"
+    case _: OverwritePartitionsDynamic => "overwritePartitions"
+    case _ => "command"
+  }
+
   private def eagerlyExecuteCommands(p: LogicalPlan) = p transformDown {
     case c: Command =>
       val qe = sparkSession.sessionState.executePlan(c, CommandExecutionMode.NON_ROOT)
-      val result =
-        SQLExecution.withNewExecutionId(qe, Some("command"))(qe.executedPlan.executeCollect())
+      val result = SQLExecution.withNewExecutionId(qe, Some(commandExecutionName(c))) {
+        qe.executedPlan.executeCollect()
+      }
       CommandResult(
         qe.analyzed.output,
         qe.commandExecuted,
@@ -102,7 +125,7 @@ class QueryExecution(
     sparkSession.sharedState.cacheManager.useCachedData(commandExecuted.clone())
   }
 
-  private def assertCommandExecuted(): Unit = commandExecuted
+  def assertCommandExecuted(): Unit = commandExecuted
 
   lazy val optimizedPlan: LogicalPlan = {
     // We need to materialize the commandExecuted here because optimizedPlan is also tracked under
@@ -124,7 +147,7 @@ class QueryExecution(
 
   private def assertOptimized(): Unit = optimizedPlan
 
-  lazy val sparkPlan: SparkPlan = {
+  lazy val sparkPlan: SparkPlan = withCteMap {
     // We need to materialize the optimizedPlan here because sparkPlan is also tracked under
     // the planning phase
     assertOptimized()
@@ -137,7 +160,7 @@ class QueryExecution(
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  lazy val executedPlan: SparkPlan = {
+  lazy val executedPlan: SparkPlan = withCteMap {
     // We need to materialize the optimizedPlan here, before tracking the planning phase, to ensure
     // that the optimization time is not counted as part of the planning phase.
     assertOptimized()
@@ -166,7 +189,7 @@ class QueryExecution(
 
   protected def preparations: Seq[Rule[SparkPlan]] = {
     QueryExecution.preparations(sparkSession,
-      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))))
+      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))), false)
   }
 
   protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
@@ -389,7 +412,8 @@ object QueryExecution {
    */
   private[execution] def preparations(
       sparkSession: SparkSession,
-      adaptiveExecutionRule: Option[InsertAdaptiveSparkPlan] = None): Seq[Rule[SparkPlan]] = {
+      adaptiveExecutionRule: Option[InsertAdaptiveSparkPlan] = None,
+      subquery: Boolean): Seq[Rule[SparkPlan]] = {
     // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     adaptiveExecutionRule.toSeq ++
@@ -398,16 +422,19 @@ object QueryExecution {
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
-      EnsureRequirements,
+      EnsureRequirements(),
       // `RemoveRedundantSorts` needs to be added after `EnsureRequirements` to guarantee the same
       // number of partitions when instantiating PartitioningCollection.
       RemoveRedundantSorts,
       DisableUnnecessaryBucketedScan,
-      ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.columnarRules),
-      CollapseCodegenStages(),
-      ReuseExchange,
-      ReuseSubquery
-    )
+      ApplyColumnarRulesAndInsertTransitions(
+        sparkSession.sessionState.columnarRules, outputsColumnar = false),
+      CollapseCodegenStages()) ++
+      (if (subquery) {
+        Nil
+      } else {
+        Seq(ReuseExchangeAndSubquery)
+      })
   }
 
   /**
@@ -445,7 +472,7 @@ object QueryExecution {
    * Prepare the [[SparkPlan]] for execution.
    */
   def prepareExecutedPlan(spark: SparkSession, plan: SparkPlan): SparkPlan = {
-    prepareForExecution(preparations(spark), plan)
+    prepareForExecution(preparations(spark, subquery = true), plan)
   }
 
   /**
@@ -456,4 +483,8 @@ object QueryExecution {
     val sparkPlan = createSparkPlan(spark, spark.sessionState.planner, plan.clone())
     prepareExecutedPlan(spark, sparkPlan)
   }
+
+  private val currentCteMap = new ThreadLocal[mutable.HashMap[Long, CTERelationDef]]()
+
+  def cteMap: mutable.HashMap[Long, CTERelationDef] = currentCteMap.get()
 }

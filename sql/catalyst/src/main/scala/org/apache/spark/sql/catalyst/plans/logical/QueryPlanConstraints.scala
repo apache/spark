@@ -67,9 +67,9 @@ trait ConstraintHelper {
         val candidateConstraints = predicates - eq
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
-      case eq @ EqualTo(l @ Cast(_: Attribute, _, _), r: Attribute) =>
+      case eq @ EqualTo(l @ Cast(_: Attribute, _, _, _), r: Attribute) =>
         inferredConstraints ++= replaceConstraints(predicates - eq, r, l)
-      case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _)) =>
+      case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _, _)) =>
         inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
       case _ => // No inference
     }

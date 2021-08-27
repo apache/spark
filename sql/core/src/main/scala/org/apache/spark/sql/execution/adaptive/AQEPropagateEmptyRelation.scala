@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelationBase
 import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJoin
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, LOGICAL_QUERY_STAGE, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
 
 /**
@@ -53,8 +54,13 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
       empty(j)
   }
 
-  // TODO we need use transformUpWithPruning instead of transformUp
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
+    // LOCAL_RELATION and TRUE_OR_FALSE_LITERAL pattern are matched at
+    // `PropagateEmptyRelationBase.commonApplyFunc`
+    // LOGICAL_QUERY_STAGE pattern is matched at `PropagateEmptyRelationBase.commonApplyFunc`
+    // and `AQEPropagateEmptyRelation.eliminateSingleColumnNullAwareAntiJoin`
+    // Note that, We can not specify ruleId here since the LogicalQueryStage is not immutable.
+    _.containsAnyPattern(LOGICAL_QUERY_STAGE, LOCAL_RELATION, TRUE_OR_FALSE_LITERAL)) {
     eliminateSingleColumnNullAwareAntiJoin.orElse(commonApplyFunc)
   }
 }

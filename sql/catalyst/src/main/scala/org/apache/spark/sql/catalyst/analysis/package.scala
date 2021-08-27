@@ -46,6 +46,13 @@ package object analysis {
     def failAnalysis(msg: String, cause: Throwable): Nothing = {
       throw new AnalysisException(msg, t.origin.line, t.origin.startPosition, cause = Some(cause))
     }
+
+    def failAnalysis(errorClass: String, messageParameters: Array[String]): Nothing = {
+      throw new AnalysisException(
+        errorClass = errorClass,
+        messageParameters = messageParameters,
+        origin = t.origin)
+    }
   }
 
   /** Catches any AnalysisExceptions thrown by `f` and attaches `t`'s position if any. */

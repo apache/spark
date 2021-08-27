@@ -23,10 +23,10 @@ as below:
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>>
-   >>> kdf = ks.range(10)
-   >>> pdf = kdf.to_pandas()
+   >>> psdf = ps.range(10)
+   >>> pdf = psdf.to_pandas()
    >>> pdf.values
    array([[0],
           [1],
@@ -43,7 +43,7 @@ pandas DataFrame can be a pandas-on-Spark DataFrame easily as below:
 
 .. code-block:: python
 
-   >>> ks.from_pandas(pdf)
+   >>> ps.from_pandas(pdf)
       id
    0   0
    1   1
@@ -71,10 +71,10 @@ as below:
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>>
-   >>> kdf = ks.range(10)
-   >>> sdf = kdf.to_spark().filter("id > 5")
+   >>> psdf = ps.range(10)
+   >>> sdf = psdf.to_spark().filter("id > 5")
    >>> sdf.show()
    +---+
    | id|
@@ -89,7 +89,7 @@ Spark DataFrame can be a pandas-on-Spark DataFrame easily as below:
 
 .. code-block:: python
 
-   >>> sdf.to_koalas()
+   >>> sdf.to_pandas_on_spark()
       id
    0   6
    1   7
@@ -103,13 +103,13 @@ to use as an index when possible.
 .. code-block:: python
 
    >>> # Create a pandas-on-Spark DataFrame with an explicit index.
-   ... kdf = ks.DataFrame({'id': range(10)}, index=range(10))
+   ... psdf = ps.DataFrame({'id': range(10)}, index=range(10))
    >>> # Keep the explicit index.
-   ... sdf = kdf.to_spark(index_col='index')
+   ... sdf = psdf.to_spark(index_col='index')
    >>> # Call Spark APIs
    ... sdf = sdf.filter("id > 5")
    >>> # Uses the explicit index to avoid to create default index.
-   ... sdf.to_koalas(index_col='index')
+   ... sdf.to_pandas_on_spark(index_col='index')
           id
    index
    6       6

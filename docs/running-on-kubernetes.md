@@ -8,9 +8,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -53,6 +53,7 @@ you may set up a test cluster on your local machine using
   * Be aware that the default minikube configuration is not enough for running Spark applications.
   We recommend 3 CPUs and 4g of memory to be able to start a simple Spark application with a single
   executor.
+  * Check [kubernetes-client library](https://github.com/fabric8io/kubernetes-client)'s version of your Spark environment, and its compatibility with your Kubernetes cluster's version.
 * You must have appropriate permissions to list, create, edit and delete
 [pods](https://kubernetes.io/docs/user-guide/pods/) in your cluster. You can verify that you can list these resources
 by running `kubectl auth can-i <list|create|edit|delete> pods`.
@@ -421,7 +422,7 @@ Your Kubernetes config file typically lives under `.kube/config` in your home di
 
 ### Contexts
 
-Kubernetes configuration files can contain multiple contexts that allow for switching between different clusters and/or user identities.  By default Spark on Kubernetes will use your current context (which can be checked by running `kubectl config current-context`) when doing the initial auto-configuration of the Kubernetes client.  
+Kubernetes configuration files can contain multiple contexts that allow for switching between different clusters and/or user identities.  By default Spark on Kubernetes will use your current context (which can be checked by running `kubectl config current-context`) when doing the initial auto-configuration of the Kubernetes client.
 
 In order to use an alternative context users can specify the desired context via the Spark configuration property `spark.kubernetes.context` e.g. `spark.kubernetes.context=minikube`.
 
@@ -889,7 +890,10 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.executor.podNamePrefix</code></td>
   <td>(none)</td>
   <td>
-    Prefix to use in front of the executor pod names.
+    Prefix to use in front of the executor pod names. It must conform the rules defined by the Kubernetes
+    <a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names">DNS Label Names</a>.
+    The prefix will be used to generate executor pod names in the form of <code>$podNamePrefix-exec-$id</code>, where the `id` is
+    a positive int value, so the length of the `podNamePrefix` needs to be less than or equal to 47(= 63 - 10 - 6).
   </td>
   <td>2.3.0</td>
 </tr>
@@ -969,6 +973,28 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.node.selector.[labelKey]</code></td>
+  <td>(none)</td>
+  <td>
+    Adds to the driver node selector of the driver pod, with key <code>labelKey</code> and the value as the
+    configuration's value. For example, setting <code>spark.kubernetes.driver.node.selector.identifier</code> to <code>myIdentifier</code>
+    will result in the driver pod having a node selector with key <code>identifier</code> and value
+     <code>myIdentifier</code>. Multiple driver node selector keys can be added by setting multiple configurations with this prefix.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.node.selector.[labelKey]</code></td>
+  <td>(none)</td>
+  <td>
+    Adds to the executor node selector of the executor pods, with key <code>labelKey</code> and the value as the
+    configuration's value. For example, setting <code>spark.kubernetes.executor.node.selector.identifier</code> to <code>myIdentifier</code>
+    will result in the executors having a node selector with key <code>identifier</code> and value
+     <code>myIdentifier</code>. Multiple executor node selector keys can be added by setting multiple configurations with this prefix.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.driverEnv.[EnvironmentVariableName]</code></td>
   <td>(none)</td>
   <td>
@@ -1012,7 +1038,7 @@ See the [configuration page](configuration.html) for information on Spark config
    <code>spark.kubernetes.executor.secrets.ENV_VAR=spark-secret:key</code>.
   </td>
   <td>2.4.0</td>
-</tr>   
+</tr>
 <tr>
   <td><code>spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.path</code></td>
   <td>(none)</td>
@@ -1244,7 +1270,7 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
   <td>3.0.0</td>
 </tr>
-<tr>  
+<tr>
   <td><code>spark.kubernetes.appKillPodDeletionGracePeriod</code></td>
   <td>(none)</td>
   <td>
@@ -1261,6 +1287,24 @@ See the [configuration page](configuration.html) for information on Spark config
     File should specified as <code>file://path/to/file </code> or absolute path.
   </td>
   <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.decommmissionLabel<code></td>
+  <td>(none)</td>
+  <td>
+    Label to be applied to pods which are exiting or being decommissioned. Intended for use
+    with pod disruption budgets, deletion costs, and similar.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.decommmissionLabelValue<code></td>
+  <td>(none)</td>
+  <td>
+    Value to be applied with the label when
+    <code>spark.kubernetes.executor.decommmissionLabel</code> is enabled.
+  </td>
+  <td>3.3.0</td>
 </tr>
 </table>
 

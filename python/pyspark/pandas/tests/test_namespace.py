@@ -20,7 +20,7 @@ import itertools
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.namespace import _get_index_map
+from pyspark.pandas.namespace import _get_index_map, read_delta
 from pyspark.pandas.utils import spark_column_equals
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -328,6 +328,13 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
         check(_get_index_map(sdf, ["year", "month"]), (["year", "month"], [("year",), ("month",)]))
 
         self.assertRaises(KeyError, lambda: _get_index_map(sdf, ["year", "hour"]))
+
+    def test_read_delta_with_wrong_input(self):
+        self.assertRaisesRegex(
+            ValueError,
+            "version and timestamp cannot be used together",
+            lambda: read_delta("fake_path", version="0", timestamp="2021-06-22"),
+        )
 
 
 if __name__ == "__main__":

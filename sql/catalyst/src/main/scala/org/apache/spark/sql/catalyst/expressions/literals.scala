@@ -28,15 +28,15 @@ import java.lang.{Short => JavaShort}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffset}
 import java.util
 import java.util.Objects
-import javax.xml.bind.DatatypeConverter
 
 import scala.math.{BigDecimal, BigInt}
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
+import org.apache.commons.codec.binary.{Hex => ApacheHex}
 import org.json4s.JsonAST._
 
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
@@ -80,7 +80,7 @@ object Literal {
     case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
     case i: Instant => Literal(instantToMicros(i), TimestampType)
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
-    case l: LocalDateTime => Literal(DateTimeUtils.localDateTimeToMicros(l), TimestampWithoutTZType)
+    case l: LocalDateTime => Literal(DateTimeUtils.localDateTimeToMicros(l), TimestampNTZType)
     case ld: LocalDate => Literal(ld.toEpochDay.toInt, DateType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
     case d: Duration => Literal(durationToMicros(d), DayTimeIntervalType())
@@ -120,7 +120,7 @@ object Literal {
     case _ if clz == classOf[Date] => DateType
     case _ if clz == classOf[Instant] => TimestampType
     case _ if clz == classOf[Timestamp] => TimestampType
-    case _ if clz == classOf[LocalDateTime] => TimestampWithoutTZType
+    case _ if clz == classOf[LocalDateTime] => TimestampNTZType
     case _ if clz == classOf[Duration] => DayTimeIntervalType()
     case _ if clz == classOf[Period] => YearMonthIntervalType()
     case _ if clz == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
@@ -153,7 +153,13 @@ object Literal {
   def fromObject(obj: Any): Literal = new Literal(obj, ObjectType(obj.getClass))
 
   def create(v: Any, dataType: DataType): Literal = {
-    Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
+    dataType match {
+      case _: YearMonthIntervalType if v.isInstanceOf[Period] =>
+        Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
+      case _: DayTimeIntervalType if v.isInstanceOf[Duration] =>
+        Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
+      case _ => Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
+    }
   }
 
   def create[T : TypeTag](v: T): Literal = Try {
@@ -179,7 +185,7 @@ object Literal {
     case dt: DecimalType => Literal(Decimal(0, dt.precision, dt.scale))
     case DateType => create(0, DateType)
     case TimestampType => create(0L, TimestampType)
-    case TimestampWithoutTZType => create(0L, TimestampWithoutTZType)
+    case TimestampNTZType => create(0L, TimestampNTZType)
     case it: DayTimeIntervalType => create(0L, it)
     case it: YearMonthIntervalType => create(0, it)
     case StringType => Literal("")
@@ -201,7 +207,7 @@ object Literal {
       case ByteType => v.isInstanceOf[Byte]
       case ShortType => v.isInstanceOf[Short]
       case IntegerType | DateType | _: YearMonthIntervalType => v.isInstanceOf[Int]
-      case LongType | TimestampType | TimestampWithoutTZType | _: DayTimeIntervalType =>
+      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
         v.isInstanceOf[Long]
       case FloatType => v.isInstanceOf[Float]
       case DoubleType => v.isInstanceOf[Double]
@@ -338,7 +344,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
 
   override def toString: String = value match {
     case null => "null"
-    case binary: Array[Byte] => s"0x" + DatatypeConverter.printHexBinary(binary)
+    case binary: Array[Byte] => s"0x" + ApacheHex.encodeHexString(binary, false)
     case d: ArrayBasedMapData => s"map(${d.toString})"
     case other =>
       dataType match {
@@ -346,6 +352,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           DateFormatter().format(value.asInstanceOf[Int])
         case TimestampType =>
           TimestampFormatter.getFractionFormatter(timeZoneId).format(value.asInstanceOf[Long])
+        case TimestampNTZType =>
+          TimestampFormatter.getFractionFormatter(ZoneOffset.UTC).format(value.asInstanceOf[Long])
         case DayTimeIntervalType(startField, endField) =>
           toDayTimeIntervalString(value.asInstanceOf[Long], ANSI_STYLE, startField, endField)
         case YearMonthIntervalType(startField, endField) =>
@@ -428,7 +436,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           }
         case ByteType | ShortType =>
           ExprCode.forNonNullValue(JavaCode.expression(s"($javaType)$value", dataType))
-        case TimestampType | TimestampWithoutTZType | LongType | _: DayTimeIntervalType =>
+        case TimestampType | TimestampNTZType | LongType | _: DayTimeIntervalType =>
           toExprCode(s"${value}L")
         case _ =>
           val constRef = ctx.addReferenceObj("literal", value, javaType)
@@ -467,9 +475,11 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       s"DATE '$toString'"
     case (v: Long, TimestampType) =>
       s"TIMESTAMP '$toString'"
+    case (v: Long, TimestampNTZType) =>
+      s"TIMESTAMP_NTZ '$toString'"
     case (i: CalendarInterval, CalendarIntervalType) =>
       s"INTERVAL '${i.toString}'"
-    case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
+    case (v: Array[Byte], BinaryType) => s"X'${ApacheHex.encodeHexString(v, false)}'"
     case (i: Long, DayTimeIntervalType(startField, endField)) =>
       toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)
     case (i: Int, YearMonthIntervalType(startField, endField)) =>

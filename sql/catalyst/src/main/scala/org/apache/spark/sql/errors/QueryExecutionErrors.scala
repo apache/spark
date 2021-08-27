@@ -24,13 +24,17 @@ import java.sql.{SQLException, SQLFeatureNotSupportedException}
 import java.time.{DateTimeException, LocalDate}
 import java.time.temporal.ChronoField
 import java.util.ConcurrentModificationException
+import java.util.concurrent.TimeoutException
 
-import com.fasterxml.jackson.core.JsonToken
+import com.fasterxml.jackson.core.{JsonParser, JsonToken}
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FileStatus, Path}
-import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
+import org.apache.hadoop.fs.permission.FsPermission
+import org.codehaus.commons.compiler.CompileException
+import org.codehaus.janino.InternalCompilerException
 
-import org.apache.spark.{Partition, SparkException, SparkUpgradeException}
+import org.apache.spark.{Partition, SparkArithmeticException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIndexOutOfBoundsException, SparkNoSuchMethodException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.sql.catalyst.ScalaReflection.Schema
 import org.apache.spark.sql.catalyst.WalkedTypePath
@@ -43,15 +47,17 @@ import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, FailFastMode}
+import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Identifier, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.CircularBuffer
 
 /**
  * Object for grouping error messages from (most) exceptions thrown during query execution.
@@ -131,7 +137,7 @@ object QueryExecutionErrors {
   }
 
   def divideByZeroError(): ArithmeticException = {
-    new ArithmeticException("divide by zero")
+    new SparkArithmeticException(errorClass = "DIVIDE_BY_ZERO", messageParameters = Array.empty)
   }
 
   def invalidArrayIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
@@ -151,7 +157,7 @@ object QueryExecutionErrors {
   }
 
   def invalidFractionOfSecondError(): DateTimeException = {
-    new DateTimeException("The fraction of sec must be zero. Valid range is [0, 60].")
+    new SparkDateTimeException(errorClass = "INVALID_FRACTION_OF_SECOND", Array.empty)
   }
 
   def overflowInSumOfDecimalError(): ArithmeticException = {
@@ -173,7 +179,8 @@ object QueryExecutionErrors {
   }
 
   def literalTypeUnsupportedError(v: Any): RuntimeException = {
-    new RuntimeException(s"Unsupported literal type ${v.getClass} $v")
+    new SparkRuntimeException("UNSUPPORTED_LITERAL_TYPE",
+      Array(v.getClass.toString, v.toString))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
@@ -255,8 +262,7 @@ object QueryExecutionErrors {
   }
 
   def methodNotDeclaredError(name: String): Throwable = {
-    new NoSuchMethodException(s"""A method named "$name" is not declared """ +
-      "in any enclosing class nor any supertype")
+    new SparkNoSuchMethodException(errorClass = "MISSING_METHOD", Array(name))
   }
 
   def constructorNotFoundError(cls: String): Throwable = {
@@ -443,11 +449,7 @@ object QueryExecutionErrors {
   }
 
   def incompatibleDataSourceRegisterError(e: Throwable): Throwable = {
-    new ClassNotFoundException(
-      s"""
-         |Detected an incompatible DataSourceRegister. Please remove the incompatible
-         |library from classpath or upgrade it. Error: ${e.getMessage}
-       """.stripMargin, e)
+    new SparkClassNotFoundException("INCOMPATIBLE_DATASOURCE_REGISTER", Array(e.getMessage), e)
   }
 
   def unrecognizedFileFormatError(format: String): Throwable = {
@@ -601,7 +603,10 @@ object QueryExecutionErrors {
   }
 
   def writingJobAbortedError(e: Throwable): Throwable = {
-    new SparkException("Writing job aborted.", e)
+    new SparkException(
+      errorClass = "WRITING_JOB_ABORTED",
+      messageParameters = Array.empty,
+      cause = e)
   }
 
   def commitDeniedError(
@@ -666,7 +671,7 @@ object QueryExecutionErrors {
   }
 
   def unrecognizedSqlTypeError(sqlType: Int): Throwable = {
-    new SQLException(s"Unrecognized SQL type $sqlType")
+    new SparkSQLException(errorClass = "UNRECOGNIZED_SQL_TYPE", Array(sqlType.toString))
   }
 
   def unsupportedJdbcTypeError(content: String): Throwable = {
@@ -693,8 +698,8 @@ object QueryExecutionErrors {
   }
 
   def transactionUnsupportedByJdbcServerError(): Throwable = {
-    new SQLFeatureNotSupportedException("The target JDBC server does not support " +
-      "transaction and can only support ALTER TABLE with a single action.")
+    new SparkSQLFeatureNotSupportedException(errorClass = "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER",
+      Array.empty)
   }
 
   def dataTypeUnsupportedYetError(dataType: DataType): Throwable = {
@@ -739,21 +744,21 @@ object QueryExecutionErrors {
     new IllegalStateException("operating on canonicalization plan")
   }
 
-  def executeBroadcastTimeoutError(timeout: Long): Throwable = {
+  def executeBroadcastTimeoutError(timeout: Long, ex: Option[TimeoutException]): Throwable = {
     new SparkException(
       s"""
          |Could not execute broadcast in $timeout secs. You can increase the timeout
          |for broadcasts via ${SQLConf.BROADCAST_TIMEOUT.key} or disable broadcast join
          |by setting ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1
-       """.stripMargin.replaceAll("\n", " "))
+       """.stripMargin.replaceAll("\n", " "), ex.getOrElse(null))
   }
 
   def cannotCompareCostWithTargetCostError(cost: String): Throwable = {
     new IllegalArgumentException(s"Could not compare cost with $cost")
   }
 
-  def unsupportedDataTypeError(dt: DataType): Throwable = {
-    new UnsupportedOperationException(s"Unsupported data type: ${dt.catalogString}")
+  def unsupportedDataTypeError(dt: String): Throwable = {
+    new UnsupportedOperationException(s"Unsupported data type: ${dt}")
   }
 
   def notSupportTypeError(dataType: DataType): Throwable = {
@@ -919,12 +924,18 @@ object QueryExecutionErrors {
        """.stripMargin.replaceAll("\n", " "), e)
   }
 
-  def failToRecognizePatternInDateTimeFormatterError(
-      pattern: String, e: Throwable): Throwable = {
+  def failToRecognizePatternAfterUpgradeError(pattern: String, e: Throwable): Throwable = {
     new SparkUpgradeException("3.0", s"Fail to recognize '$pattern' pattern in the" +
       s" DateTimeFormatter. 1) You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY" +
       s" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern" +
       s" with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html",
+      e)
+  }
+
+  def failToRecognizePatternError(pattern: String, e: Throwable): Throwable = {
+    new RuntimeException(s"Fail to recognize '$pattern' pattern in the" +
+      " DateTimeFormatter. You can form a valid datetime pattern" +
+      " with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html",
       e)
   }
 
@@ -937,16 +948,19 @@ object QueryExecutionErrors {
   }
 
   def concurrentQueryInstanceError(): Throwable = {
-    new ConcurrentModificationException(
-      "Another instance of this query was just started by a concurrent session.")
+    new SparkConcurrentModificationException("CONCURRENT_QUERY_ERROR", Array.empty)
   }
 
   def cannotParseJsonArraysAsStructsError(): Throwable = {
     new RuntimeException("Parsing JSON arrays as structs is forbidden.")
   }
 
-  def cannotParseStringAsDataTypeError(str: String, dataType: DataType): Throwable = {
-    new RuntimeException(s"Cannot parse $str as ${dataType.catalogString}.")
+  def cannotParseStringAsDataTypeError(parser: JsonParser, token: JsonToken, dataType: DataType)
+  : Throwable = {
+    new RuntimeException(
+      s"Cannot parse field name ${parser.getCurrentName}, " +
+        s"field value ${parser.getText}, " +
+        s"[$token] as target spark data type [$dataType].")
   }
 
   def failToParseEmptyStringForDataTypeError(dataType: DataType): Throwable = {
@@ -954,9 +968,12 @@ object QueryExecutionErrors {
       s"Failed to parse an empty string for data type ${dataType.catalogString}")
   }
 
-  def failToParseValueForDataTypeError(dataType: DataType, token: JsonToken): Throwable = {
+  def failToParseValueForDataTypeError(parser: JsonParser, token: JsonToken, dataType: DataType)
+  : Throwable = {
     new RuntimeException(
-      s"Failed to parse a value for data type ${dataType.catalogString} (current token: $token).")
+      s"Failed to parse field name ${parser.getCurrentName}, " +
+        s"field value ${parser.getText}, " +
+        s"[$token] to target spark data type [$dataType].")
   }
 
   def rootConverterReturnNullError(): Throwable = {
@@ -1211,8 +1228,7 @@ object QueryExecutionErrors {
   }
 
   def indexOutOfBoundsOfArrayDataError(idx: Int): Throwable = {
-    new IndexOutOfBoundsException(
-      s"Index $idx must be between 0 and the length of the ArrayData.")
+    new SparkIndexOutOfBoundsException(errorClass = "INDEX_OUT_OF_BOUNDS", Array(idx.toString))
   }
 
   def malformedRecordsDetectedInRecordParsingError(e: BadRecordException): Throwable = {
@@ -1299,7 +1315,7 @@ object QueryExecutionErrors {
       s"""
          |Caught Hive MetaException attempting to get partition metadata by filter
          |from Hive. You can set the Spark configuration setting
-         |${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key} to false to work around
+         |${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION} to true to work around
          |this problem, however this will result in degraded performance. Please
          |report a bug: https://issues.apache.org/jira/browse/SPARK
        """.stripMargin.replaceAll("\n", " "), e)
@@ -1332,8 +1348,8 @@ object QueryExecutionErrors {
   }
 
   def renamePathAsExistsPathError(srcPath: Path, dstPath: Path): Throwable = {
-    new FileAlreadyExistsException(
-      s"Failed to rename $srcPath to $dstPath as destination already exists")
+    new SparkFileAlreadyExistsException(errorClass = "FAILED_RENAME_PATH",
+      Array(srcPath.toString, dstPath.toString))
   }
 
   def renameAsExistsPathError(dstPath: Path): Throwable = {
@@ -1341,7 +1357,8 @@ object QueryExecutionErrors {
   }
 
   def renameSrcPathNotFoundError(srcPath: Path): Throwable = {
-    new FileNotFoundException(s"Failed to rename as $srcPath was not found")
+    new SparkFileNotFoundException(errorClass = "RENAME_SRC_PATH_NOT_FOUND",
+      Array(srcPath.toString))
   }
 
   def failedRenameTempFileError(srcPath: Path, dstPath: Path): Throwable = {
@@ -1421,5 +1438,372 @@ object QueryExecutionErrors {
 
   def invalidStreamingOutputModeError(outputMode: Option[OutputMode]): Throwable = {
     new UnsupportedOperationException(s"Invalid output mode: $outputMode")
+  }
+
+  def catalogPluginClassNotFoundError(name: String): Throwable = {
+    new CatalogNotFoundException(
+      s"Catalog '$name' plugin class not found: spark.sql.catalog.$name is not defined")
+  }
+
+  def catalogPluginClassNotImplementedError(name: String, pluginClassName: String): Throwable = {
+    new SparkException(
+      s"Plugin class for catalog '$name' does not implement CatalogPlugin: $pluginClassName")
+  }
+
+  def catalogPluginClassNotFoundForCatalogError(
+      name: String,
+      pluginClassName: String): Throwable = {
+    new SparkException(s"Cannot find catalog plugin class for catalog '$name': $pluginClassName")
+  }
+
+  def catalogFailToFindPublicNoArgConstructorError(
+      name: String,
+      pluginClassName: String,
+      e: Exception): Throwable = {
+    new SparkException(
+      s"Failed to find public no-arg constructor for catalog '$name': $pluginClassName)", e)
+  }
+
+  def catalogFailToCallPublicNoArgConstructorError(
+      name: String,
+      pluginClassName: String,
+      e: Exception): Throwable = {
+    new SparkException(
+      s"Failed to call public no-arg constructor for catalog '$name': $pluginClassName)", e)
+  }
+
+  def cannotInstantiateAbstractCatalogPluginClassError(
+      name: String,
+      pluginClassName: String,
+      e: Exception): Throwable = {
+    new SparkException("Cannot instantiate abstract catalog plugin class for " +
+      s"catalog '$name': $pluginClassName", e.getCause)
+  }
+
+  def failedToInstantiateConstructorForCatalogError(
+      name: String,
+      pluginClassName: String,
+      e: Exception): Throwable = {
+    new SparkException("Failed during instantiating constructor for catalog " +
+      s"'$name': $pluginClassName", e.getCause)
+  }
+
+  def noSuchElementExceptionError(): Throwable = {
+    new NoSuchElementException
+  }
+
+  def noSuchElementExceptionError(key: String): Throwable = {
+    new NoSuchElementException(key)
+  }
+
+  def cannotMutateReadOnlySQLConfError(): Throwable = {
+    new UnsupportedOperationException("Cannot mutate ReadOnlySQLConf.")
+  }
+
+  def cannotCloneOrCopyReadOnlySQLConfError(): Throwable = {
+    new UnsupportedOperationException("Cannot clone/copy ReadOnlySQLConf.")
+  }
+
+  def cannotGetSQLConfInSchedulerEventLoopThreadError(): Throwable = {
+    new RuntimeException("Cannot get SQLConf inside scheduler event loop thread.")
+  }
+
+  def unsupportedOperationExceptionError(): Throwable = {
+    new UnsupportedOperationException
+  }
+
+  def nullLiteralsCannotBeCastedError(name: String): Throwable = {
+    new UnsupportedOperationException(s"null literals can't be casted to $name")
+  }
+
+  def notUserDefinedTypeError(name: String, userClass: String): Throwable = {
+    new SparkException(s"$name is not an UserDefinedType. Please make sure registering " +
+        s"an UserDefinedType for ${userClass}")
+  }
+
+  def cannotLoadUserDefinedTypeError(name: String, userClass: String): Throwable = {
+    new SparkException(s"Can not load in UserDefinedType ${name} for user class ${userClass}.")
+  }
+
+  def timeZoneIdNotSpecifiedForTimestampTypeError(): Throwable = {
+    new UnsupportedOperationException(
+      s"${TimestampType.catalogString} must supply timeZoneId parameter")
+  }
+
+  def notPublicClassError(name: String): Throwable = {
+    new UnsupportedOperationException(
+      s"$name is not a public class. Only public classes are supported.")
+  }
+
+  def primitiveTypesNotSupportedError(): Throwable = {
+    new UnsupportedOperationException("Primitive types are not supported.")
+  }
+
+  def fieldIndexOnRowWithoutSchemaError(): Throwable = {
+    new UnsupportedOperationException("fieldIndex on a Row without schema is undefined.")
+  }
+
+  def valueIsNullError(index: Int): Throwable = {
+    new NullPointerException(s"Value at index $index is null")
+  }
+
+  def onlySupportDataSourcesProvidingFileFormatError(providingClass: String): Throwable = {
+    new SparkException(s"Only Data Sources providing FileFormat are supported: $providingClass")
+  }
+
+  def failToSetOriginalPermissionBackError(
+      permission: FsPermission,
+      path: Path,
+      e: Throwable): Throwable = {
+    new SparkSecurityException(errorClass = "FAILED_SET_ORIGINAL_PERMISSION_BACK",
+      Array(permission.toString, path.toString, e.getMessage))
+  }
+
+  def failToSetOriginalACLBackError(aclEntries: String, path: Path, e: Throwable): Throwable = {
+    new SecurityException(s"Failed to set original ACL $aclEntries back to " +
+      s"the created path: $path. Exception: ${e.getMessage}")
+  }
+
+  def multiFailuresInStageMaterializationError(error: Throwable): Throwable = {
+    new SparkException("Multiple failures in stage materialization.", error)
+  }
+
+  def unrecognizedCompressionSchemaTypeIDError(typeId: Int): Throwable = {
+    new UnsupportedOperationException(s"Unrecognized compression scheme type ID: $typeId")
+  }
+
+  def getParentLoggerNotImplementedError(className: String): Throwable = {
+    new SQLFeatureNotSupportedException(s"$className.getParentLogger is not yet implemented.")
+  }
+
+  def cannotCreateParquetConverterForTypeError(t: DecimalType, parquetType: String): Throwable = {
+    new RuntimeException(
+      s"""
+         |Unable to create Parquet converter for ${t.typeName}
+         |whose Parquet type is $parquetType without decimal metadata. Please read this
+         |column/field as Spark BINARY type.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def cannotCreateParquetConverterForDecimalTypeError(
+      t: DecimalType, parquetType: String): Throwable = {
+    new RuntimeException(
+      s"""
+         |Unable to create Parquet converter for decimal type ${t.json} whose Parquet type is
+         |$parquetType.  Parquet DECIMAL type can only be backed by INT32, INT64,
+         |FIXED_LEN_BYTE_ARRAY, or BINARY.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def cannotCreateParquetConverterForDataTypeError(
+      t: DataType, parquetType: String): Throwable = {
+    new RuntimeException(s"Unable to create Parquet converter for data type ${t.json} " +
+      s"whose Parquet type is $parquetType")
+  }
+
+  def cannotAddMultiPartitionsOnNonatomicPartitionTableError(tableName: String): Throwable = {
+    new UnsupportedOperationException(
+      s"Nonatomic partition table $tableName can not add multiple partitions.")
+  }
+
+  def userSpecifiedSchemaUnsupportedByDataSourceError(provider: TableProvider): Throwable = {
+    new UnsupportedOperationException(
+      s"${provider.getClass.getSimpleName} source does not support user-specified schema.")
+  }
+
+  def cannotDropMultiPartitionsOnNonatomicPartitionTableError(tableName: String): Throwable = {
+    new UnsupportedOperationException(
+      s"Nonatomic partition table $tableName can not drop multiple partitions.")
+  }
+
+  def truncateMultiPartitionUnsupportedError(tableName: String): Throwable = {
+    new UnsupportedOperationException(
+      s"The table $tableName does not support truncation of multiple partition.")
+  }
+
+  def overwriteTableByUnsupportedExpressionError(table: Table): Throwable = {
+    new SparkException(s"Table does not support overwrite by expression: $table")
+  }
+
+  def dynamicPartitionOverwriteUnsupportedByTableError(table: Table): Throwable = {
+    new SparkException(s"Table does not support dynamic partition overwrite: $table")
+  }
+
+  def failedMergingSchemaError(schema: StructType, e: SparkException): Throwable = {
+    new SparkException(s"Failed merging schema:\n${schema.treeString}", e)
+  }
+
+  def cannotBroadcastTableOverMaxTableRowsError(
+      maxBroadcastTableRows: Long, numRows: Long): Throwable = {
+    new SparkException(
+      s"Cannot broadcast the table over $maxBroadcastTableRows rows: $numRows rows")
+  }
+
+  def cannotBroadcastTableOverMaxTableBytesError(
+      maxBroadcastTableBytes: Long, dataSize: Long): Throwable = {
+    new SparkException("Cannot broadcast the table that is larger than" +
+      s" ${maxBroadcastTableBytes >> 30}GB: ${dataSize >> 30} GB")
+  }
+
+  def notEnoughMemoryToBuildAndBroadcastTableError(oe: OutOfMemoryError): Throwable = {
+    new OutOfMemoryError("Not enough memory to build and broadcast the table to all " +
+      "worker nodes. As a workaround, you can either disable broadcast by setting " +
+      s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the spark " +
+      s"driver memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value.")
+      .initCause(oe.getCause)
+  }
+
+  def executeCodePathUnsupportedError(execName: String): Throwable = {
+    new UnsupportedOperationException(s"$execName does not support the execute() code path.")
+  }
+
+  def cannotMergeClassWithOtherClassError(className: String, otherClass: String): Throwable = {
+    new UnsupportedOperationException(
+      s"Cannot merge $className with $otherClass")
+  }
+
+  def continuousProcessingUnsupportedByDataSourceError(sourceName: String): Throwable = {
+    new UnsupportedOperationException(
+      s"Data source $sourceName does not support continuous processing.")
+  }
+
+  def failedToReadDataError(failureReason: Throwable): Throwable = {
+    new SparkException("Data read failed", failureReason)
+  }
+
+  def failedToGenerateEpochMarkerError(failureReason: Throwable): Throwable = {
+    new SparkException("Epoch marker generation failed", failureReason)
+  }
+
+  def foreachWriterAbortedDueToTaskFailureError(): Throwable = {
+    new SparkException("Foreach writer has been aborted due to a task failure")
+  }
+
+  def integerOverflowError(message: String): Throwable = {
+    new ArithmeticException(s"Integer overflow. $message")
+  }
+
+  def failedToReadDeltaFileError(fileToRead: Path, clazz: String, keySize: Int): Throwable = {
+    new IOException(
+      s"Error reading delta file $fileToRead of $clazz: key size cannot be $keySize")
+  }
+
+  def failedToReadSnapshotFileError(fileToRead: Path, clazz: String, message: String): Throwable = {
+    new IOException(s"Error reading snapshot file $fileToRead of $clazz: $message")
+  }
+
+  def cannotPurgeAsBreakInternalStateError(): Throwable = {
+    new UnsupportedOperationException("Cannot purge as it might break internal state.")
+  }
+
+  def cleanUpSourceFilesUnsupportedError(): Throwable = {
+    new UnsupportedOperationException("Clean up source files is not supported when" +
+      " reading from the output directory of FileStreamSink.")
+  }
+
+  def latestOffsetNotCalledError(): Throwable = {
+    new UnsupportedOperationException(
+      "latestOffset(Offset, ReadLimit) should be called instead of this method")
+  }
+
+  def legacyCheckpointDirectoryExistsError(
+      checkpointPath: Path, legacyCheckpointDir: String): Throwable = {
+    new SparkException(
+      s"""
+         |Error: we detected a possible problem with the location of your checkpoint and you
+         |likely need to move it before restarting this query.
+         |
+         |Earlier version of Spark incorrectly escaped paths when writing out checkpoints for
+         |structured streaming. While this was corrected in Spark 3.0, it appears that your
+         |query was started using an earlier version that incorrectly handled the checkpoint
+         |path.
+         |
+         |Correct Checkpoint Directory: $checkpointPath
+         |Incorrect Checkpoint Directory: $legacyCheckpointDir
+         |
+         |Please move the data from the incorrect directory to the correct one, delete the
+         |incorrect directory, and then restart this query. If you believe you are receiving
+         |this message in error, you can disable it with the SQL conf
+         |${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}.
+       """.stripMargin)
+  }
+
+  def subprocessExitedError(
+      exitCode: Int, stderrBuffer: CircularBuffer, cause: Throwable): Throwable = {
+    new SparkException(s"Subprocess exited with status $exitCode. " +
+      s"Error: ${stderrBuffer.toString}", cause)
+  }
+
+  def outputDataTypeUnsupportedByNodeWithoutSerdeError(
+      nodeName: String, dt: DataType): Throwable = {
+    new SparkException(s"$nodeName without serde does not support " +
+      s"${dt.getClass.getSimpleName} as output data type")
+  }
+
+  def invalidStartIndexError(numRows: Int, startIndex: Int): Throwable = {
+    new ArrayIndexOutOfBoundsException(
+      "Invalid `startIndex` provided for generating iterator over the array. " +
+        s"Total elements: $numRows, requested `startIndex`: $startIndex")
+  }
+
+  def concurrentModificationOnExternalAppendOnlyUnsafeRowArrayError(
+      className: String): Throwable = {
+    new ConcurrentModificationException(
+      s"The backing $className has been modified since the creation of this Iterator")
+  }
+
+  def doExecuteBroadcastNotImplementedError(nodeName: String): Throwable = {
+    new UnsupportedOperationException(s"$nodeName does not implement doExecuteBroadcast")
+  }
+
+  def databaseNameConflictWithSystemPreservedDatabaseError(globalTempDB: String): Throwable = {
+    new SparkException(
+      s"""
+         |$globalTempDB is a system preserved database, please rename your existing database
+         |to resolve the name conflict, or set a different value for
+         |${GLOBAL_TEMP_DATABASE.key}, and launch your Spark application again.
+       """.stripMargin.split("\n").mkString(" "))
+  }
+
+  def commentOnTableUnsupportedError(): Throwable = {
+    new SQLFeatureNotSupportedException("comment on table is not supported")
+  }
+
+  def unsupportedUpdateColumnNullabilityError(): Throwable = {
+    new SQLFeatureNotSupportedException("UpdateColumnNullability is not supported")
+  }
+
+  def renameColumnUnsupportedForOlderMySQLError(): Throwable = {
+    new SQLFeatureNotSupportedException(
+      "Rename column is only supported for MySQL version 8.0 and above.")
+  }
+
+  def failedToExecuteQueryError(e: Throwable): QueryExecutionException = {
+    val message = "Hit an error when executing a query" +
+      (if (e.getMessage == null) "" else s": ${e.getMessage}")
+    new QueryExecutionException(message, e)
+  }
+
+  def nestedFieldUnsupportedError(colName: String): Throwable = {
+    new UnsupportedOperationException(s"Nested field $colName is not supported.")
+  }
+
+  def transformationsAndActionsNotInvokedByDriverError(): Throwable = {
+    new SparkException(
+      """
+        |Dataset transformations and actions can only be invoked by the driver, not inside of
+        |other Dataset transformations; for example, dataset1.map(x => dataset2.values.count()
+        |* x) is invalid because the values transformation and count action cannot be
+        |performed inside of the dataset1.map transformation. For more information,
+        |see SPARK-28702.
+      """.stripMargin.split("\n").mkString(" "))
+  }
+
+  def repeatedPivotsUnsupportedError(): Throwable = {
+    new UnsupportedOperationException("repeated pivots are not supported")
+  }
+
+  def pivotNotAfterGroupByUnsupportedError(): Throwable = {
+    new UnsupportedOperationException("pivot is only supported after a groupBy")
   }
 }

@@ -17,7 +17,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
-import java.time.LocalDateTime
+import java.time.{Duration, LocalDateTime, Period}
 import java.util.concurrent.TimeUnit
 
 import scala.language.implicitConversions
@@ -27,9 +27,11 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
-import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{DayTimeIntervalType => DT, YearMonthIntervalType => YM}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
@@ -454,6 +456,17 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("type constructors") {
+    def checkTimestampNTZAndLTZ(): Unit = {
+      // Timestamp with local time zone
+      assertEqual("tImEstAmp_LTZ '2016-03-11 20:54:00.000'",
+        Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
+      intercept("timestamP_LTZ '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP_LTZ value")
+      // Timestamp without time zone
+      assertEqual("tImEstAmp_Ntz '2016-03-11 20:54:00.000'",
+        Literal(LocalDateTime.parse("2016-03-11T20:54:00.000")))
+      intercept("tImEstAmp_Ntz '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP_NTZ value")
+    }
+
     // Dates.
     assertEqual("dAte '2016-03-11'", Literal(Date.valueOf("2016-03-11")))
     intercept("DAtE 'mar 11 2016'", "Cannot parse the DATE value")
@@ -463,19 +476,51 @@ class ExpressionParserSuite extends AnalysisTest {
       Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
     intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
 
+    checkTimestampNTZAndLTZ()
+    withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_NTZ.toString) {
+      assertEqual("tImEstAmp '2016-03-11 20:54:00.000'",
+        Literal(LocalDateTime.parse("2016-03-11T20:54:00.000")))
+
+      intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
+
+      // If the timestamp string contains time zone, return a timestamp with local time zone literal
+      assertEqual("tImEstAmp '1970-01-01 00:00:00.000 +01:00'",
+        Literal(-3600000000L, TimestampType))
+
+      // The behavior of TIMESTAMP_NTZ and TIMESTAMP_LTZ is independent of SQLConf.TIMESTAMP_TYPE
+      checkTimestampNTZAndLTZ()
+    }
     // Interval.
-    val intervalLiteral = Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))
-    assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
-    assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
-    intercept("Interval 'interval 3 monthsss 1 hoursss'", "Cannot parse the INTERVAL value")
-    assertEqual(
-      "-interval '3 month 1 hour'",
-      UnaryMinus(Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))))
-    val intervalStrWithAllUnits = "1 year 3 months 2 weeks 2 days 1 hour 3 minutes 2 seconds " +
-      "100 millisecond 200 microseconds"
-    assertEqual(
-      s"interval '$intervalStrWithAllUnits'",
-      Literal(IntervalUtils.stringToInterval(intervalStrWithAllUnits)))
+    val ymIntervalLiteral = Literal.create(Period.of(1, 2, 0), YearMonthIntervalType())
+    assertEqual("InterVal 'interval 1 year 2 month'", ymIntervalLiteral)
+    assertEqual("INTERVAL '1 year 2 month'", ymIntervalLiteral)
+    intercept("Interval 'interval 1 yearsss 2 monthsss'",
+      "Cannot parse the INTERVAL value: interval 1 yearsss 2 monthsss")
+    assertEqual("-interval '1 year 2 month'", UnaryMinus(ymIntervalLiteral))
+    val dtIntervalLiteral = Literal.create(
+      Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4).plusMillis(5).plusNanos(6000))
+    assertEqual("InterVal 'interval 1 day 2 hour 3 minute 4.005006 second'", dtIntervalLiteral)
+    assertEqual("INTERVAL '1 day 2 hour 3 minute 4.005006 second'", dtIntervalLiteral)
+    intercept("Interval 'interval 1 daysss 2 hoursss'",
+      "Cannot parse the INTERVAL value: interval 1 daysss 2 hoursss")
+    assertEqual("-interval '1 day 2 hour 3 minute 4.005006 second'", UnaryMinus(dtIntervalLiteral))
+    intercept("INTERVAL '1 year 2 second'",
+      "Cannot mix year-month and day-time fields: INTERVAL '1 year 2 second'")
+
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      val intervalLiteral = Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))
+      assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
+      assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
+      intercept("Interval 'interval 3 monthsss 1 hoursss'", "Cannot parse the INTERVAL value")
+      assertEqual(
+        "-interval '3 month 1 hour'",
+        UnaryMinus(Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))))
+      val intervalStrWithAllUnits = "1 year 3 months 2 weeks 2 days 1 hour 3 minutes 2 seconds " +
+        "100 millisecond 200 microseconds"
+      assertEqual(
+        s"interval '$intervalStrWithAllUnits'",
+        Literal(IntervalUtils.stringToInterval(intervalStrWithAllUnits)))
+    }
 
     // Binary.
     assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
@@ -653,18 +698,36 @@ class ExpressionParserSuite extends AnalysisTest {
     }
   }
 
-  val intervalUnits = Seq(
-    YEAR,
-    MONTH,
-    WEEK,
-    DAY,
-    HOUR,
-    MINUTE,
-    SECOND,
-    MILLISECOND,
-    MICROSECOND)
+  val ymIntervalUnits = Seq("year", "month")
+  val dtIntervalUnits = Seq("week", "day", "hour", "minute", "second", "millisecond", "microsecond")
 
-  def intervalLiteral(u: IntervalUnit, s: String): Literal = {
+  def ymIntervalLiteral(u: String, s: String): Literal = {
+    val period = u match {
+      case "year" => Period.ofYears(Integer.parseInt(s))
+      case "month" => Period.ofMonths(Integer.parseInt(s))
+    }
+    Literal.create(period, YearMonthIntervalType(YM.stringToField(u)))
+  }
+
+  def dtIntervalLiteral(u: String, s: String): Literal = {
+    val value = if (u == "second") {
+      (BigDecimal(s) * NANOS_PER_SECOND).toLong
+    } else {
+      java.lang.Long.parseLong(s)
+    }
+    val (duration, field) = u match {
+      case "week" => (Duration.ofDays(value * 7), DT.DAY)
+      case "day" => (Duration.ofDays(value), DT.DAY)
+      case "hour" => (Duration.ofHours(value), DT.HOUR)
+      case "minute" => (Duration.ofMinutes(value), DT.MINUTE)
+      case "second" => (Duration.ofNanos(value), DT.SECOND)
+      case "millisecond" => (Duration.ofMillis(value), DT.SECOND)
+      case "microsecond" => (Duration.ofNanos(value * NANOS_PER_MICROS), DT.SECOND)
+    }
+    Literal.create(duration, DayTimeIntervalType(field))
+  }
+
+  def legacyIntervalLiteral(u: String, s: String): Literal = {
     Literal(IntervalUtils.stringToInterval(s + " " + u.toString))
   }
 
@@ -684,32 +747,55 @@ class ExpressionParserSuite extends AnalysisTest {
     // Single Intervals.
     val forms = Seq("", "s")
     val values = Seq("0", "10", "-7", "21")
-    intervalUnits.foreach { unit =>
+
+    ymIntervalUnits.foreach { unit =>
       forms.foreach { form =>
-         values.foreach { value =>
-           val expected = intervalLiteral(unit, value)
-           checkIntervals(s"$value $unit$form", expected)
-           checkIntervals(s"'$value' $unit$form", expected)
-         }
+        values.foreach { value =>
+          val expected = ymIntervalLiteral(unit, value)
+          checkIntervals(s"$value $unit$form", expected)
+          checkIntervals(s"'$value' $unit$form", expected)
+        }
+      }
+    }
+
+    dtIntervalUnits.foreach { unit =>
+      forms.foreach { form =>
+        values.foreach { value =>
+          val expected = dtIntervalLiteral(unit, value)
+          checkIntervals(s"$value $unit$form", expected)
+          checkIntervals(s"'$value' $unit$form", expected)
+        }
       }
     }
 
     // Hive nanosecond notation.
-    checkIntervals("13.123456789 seconds", intervalLiteral(SECOND, "13.123456789"))
-    checkIntervals(
-      "-13.123456789 second",
-      Literal(new CalendarInterval(
-        0,
-        0,
-        DateTimeTestUtils.secFrac(-13, -123, -456))))
-    checkIntervals(
-      "13.123456 second",
-      Literal(new CalendarInterval(
-        0,
-        0,
-        DateTimeTestUtils.secFrac(13, 123, 456))))
-    checkIntervals("1.001 second",
-      Literal(IntervalUtils.stringToInterval("1 second 1 millisecond")))
+    checkIntervals("13.123456789 seconds", dtIntervalLiteral("second", "13.123456789"))
+
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      (ymIntervalUnits ++ dtIntervalUnits).foreach { unit =>
+        forms.foreach { form =>
+          values.foreach { value =>
+            val expected = legacyIntervalLiteral(unit, value)
+            checkIntervals(s"$value $unit$form", expected)
+            checkIntervals(s"'$value' $unit$form", expected)
+          }
+        }
+      }
+      checkIntervals(
+        "-13.123456789 second",
+        Literal(new CalendarInterval(
+          0,
+          0,
+          DateTimeTestUtils.secFrac(-13, -123, -456))))
+      checkIntervals(
+        "13.123456 second",
+        Literal(new CalendarInterval(
+          0,
+          0,
+          DateTimeTestUtils.secFrac(13, 123, 456))))
+      checkIntervals("1.001 second",
+        Literal(IntervalUtils.stringToInterval("1 second 1 millisecond")))
+    }
 
     // Non Existing unit
     intercept("interval 10 nanoseconds", "invalid unit 'nanoseconds'")
@@ -744,7 +830,8 @@ class ExpressionParserSuite extends AnalysisTest {
         "0:0:0",
         "0:0:1")
       hourTimeValues.foreach { value =>
-        val result = Literal(IntervalUtils.fromDayTimeString(value, HOUR, SECOND))
+        val result = Literal(IntervalUtils.fromDayTimeString(
+          value, DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND))
         checkIntervals(s"'$value' hour to second", result)
       }
     }
@@ -755,8 +842,22 @@ class ExpressionParserSuite extends AnalysisTest {
 
     // Composed intervals.
     checkIntervals(
-      "3 months 4 days 22 seconds 1 millisecond",
-      Literal(new CalendarInterval(3, 4, 22001000L)))
+      "10 years 3 months", Literal.create(Period.of(10, 3, 0), YearMonthIntervalType()))
+    checkIntervals(
+      "8 days 2 hours 3 minutes 21 seconds",
+      Literal.create(Duration.ofDays(8).plusHours(2).plusMinutes(3).plusSeconds(21)))
+
+    Seq(true, false).foreach { legacyEnabled =>
+      withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> legacyEnabled.toString) {
+        val intervalStr = "3 monThs 4 dayS 22 sEcond 1 millisecond"
+        if (legacyEnabled) {
+          checkIntervals(intervalStr, Literal(new CalendarInterval(3, 4, 22001000L)))
+        } else {
+          intercept(s"interval $intervalStr",
+            s"Cannot mix year-month and day-time fields: interval $intervalStr")
+        }
+      }
+    }
   }
 
   test("composed expressions") {

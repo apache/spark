@@ -50,6 +50,29 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
       assert(rest.contains("CHAR(5)"))
     }
   }
+
+  test("SPARK-35700: Read char/varchar orc table with created and written by external systems") {
+    withTable("t") {
+      hiveClient.runSqlHive("CREATE TABLE t(c CHAR(5), v VARCHAR(7)) STORED AS ORC")
+      hiveClient.runSqlHive("INSERT INTO t VALUES('Spark', 'kyuubi')")
+      checkAnswer(sql("SELECT c, v from t"), Row("Spark", "kyuubi"))
+      checkAnswer(sql("SELECT v from t where c = 'Spark' and v = 'kyuubi'"), Row("kyuubi"))
+    }
+  }
+
+  test("SPARK-36552: Fix different behavior of writing char/varchar to hive and datasource table") {
+    Seq("true", "false").foreach { v =>
+      withSQLConf(
+        "spark.sql.hive.convertMetastoreParquet" -> v,
+        "spark.sql.legacy.charVarcharAsString" -> "true") {
+        withTable("t") {
+          sql(s"CREATE TABLE t (c varchar(2)) USING $format")
+          sql("INSERT INTO t SELECT 'kyuubi'")
+          checkAnswer(sql("SELECT c from t"), Row("kyuubi"))
+        }
+      }
+    }
+  }
 }
 
 class HiveCharVarcharDDLTestSuite extends CharVarcharDDLTestBase with TestHiveSingleton {

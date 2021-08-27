@@ -22,6 +22,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSeq, BindReferences, Expression, InterpretedMutableProjection, InterpretedUnsafeProjection, JoinedRow, MutableProjection, NamedExpression, Projection, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate, ImperativeAggregate, NoOp, TypedImperativeAggregate}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.AccumulatorV2
@@ -167,8 +168,8 @@ class AggregatingAccumulator private(
             i += 1
           }
         case _ =>
-          throw new UnsupportedOperationException(
-            s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+          throw QueryExecutionErrors.cannotMergeClassWithOtherClassError(
+            this.getClass.getName, other.getClass.getName)
       }
     }
   }

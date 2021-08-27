@@ -32,6 +32,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, DataFrame}
+import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, FileScan, FileTable}
@@ -597,6 +598,51 @@ abstract class FileStreamSinkSuite extends StreamTest {
         val path = new File(tempDir, "text").getCanonicalPath
         Seq("foo").toDF.write.format("text").save(path)
         spark.read.format("text").load(path + "/*")
+      }
+    }
+  }
+
+  test("SPARK-35565: Ignore metadata directory when reading sink output") {
+    Seq(true, false).foreach { ignoreMetadata =>
+      withSQLConf(SQLConf.FILESTREAM_SINK_METADATA_IGNORED.key -> ignoreMetadata.toString) {
+        val inputData = MemoryStream[String]
+        val df = inputData.toDF()
+
+        withTempDir { outputDir =>
+          withTempDir { checkpointDir =>
+            var query: StreamingQuery = null
+            try {
+              query =
+                df.writeStream
+                  .option("checkpointLocation", checkpointDir.getCanonicalPath)
+                  .format("text")
+                  .start(outputDir.getCanonicalPath)
+
+              inputData.addData("1", "2", "3")
+              inputData.addData("4", "5")
+
+              failAfter(streamingTimeout) {
+                query.processAllAvailable()
+              }
+            } finally {
+              if (query != null) {
+                query.stop()
+              }
+            }
+
+            val additionalFile = new File(outputDir, "additional.txt")
+            stringToFile(additionalFile, "6")
+            additionalFile.exists()
+
+            val outputDf = spark.read.format("text").load(outputDir.getCanonicalPath)
+              .selectExpr("CAST(value AS INT)").as[Int]
+            if (ignoreMetadata) {
+              checkDatasetUnorderly(outputDf, 1, 2, 3, 4, 5, 6)
+            } else {
+              checkDatasetUnorderly(outputDf, 1, 2, 3, 4, 5)
+            }
+          }
+        }
       }
     }
   }

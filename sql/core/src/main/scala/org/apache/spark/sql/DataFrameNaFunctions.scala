@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -357,8 +358,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       // Check column name exists
       val attr = df.resolve(colName) match {
         case a: Attribute => a
-        case _ => throw new UnsupportedOperationException(
-          s"Nested field ${colName} is not supported.")
+        case _ => throw QueryExecutionErrors.nestedFieldUnsupportedError(colName)
       }
       attr
     }
@@ -408,8 +408,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       // Check column name exists
       val attr = df.resolve(colName) match {
         case a: Attribute => a
-        case _ => throw new UnsupportedOperationException(
-          s"Nested field ${colName} is not supported.")
+        case _ => throw QueryExecutionErrors.nestedFieldUnsupportedError(colName)
       }
       // Check data type
       replaceValue match {

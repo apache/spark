@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils._
 import org.apache.spark.util.Utils
 
 /**
@@ -46,10 +47,14 @@ abstract class Optimizer(catalogManager: CatalogManager)
   // - is still resolved
   // - only host special expressions in supported operators
   // - has globally-unique attribute IDs
-  override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
-    !Utils.isTesting || (plan.resolved &&
-      plan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
-      LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(plan))
+  // - optimized plan have same schema with previous plan.
+  override protected def isPlanIntegral(
+      previousPlan: LogicalPlan,
+      currentPlan: LogicalPlan): Boolean = {
+    !Utils.isTesting || (currentPlan.resolved &&
+      currentPlan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
+      LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan) &&
+      DataType.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema))
   }
 
   override protected val excludedOnceBatches: Set[String] =
@@ -148,11 +153,13 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateResolvedHint,
       EliminateSubqueryAliases,
       EliminateView,
+      InlineCTE,
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
       ComputeCurrentTime,
-      ReplaceCurrentLike(catalogManager)) ::
+      ReplaceCurrentLike(catalogManager),
+      SpecialDatetimeValues) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -179,6 +186,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // non-nullable when an empty relation child of a Union is removed
       UpdateAttributeNullability) ::
     Batch("Pullup Correlated Expressions", Once,
+      OptimizeOneRowRelationSubquery,
       PullupCorrelatedPredicates) ::
     // Subquery batch applies the optimizer rules recursively. Therefore, it makes no sense
     // to enforce idempotence on it and we change this batch from Once to FixedPoint(1).
@@ -203,6 +211,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // plan may contain nodes that do not report stats. Anything that uses stats must run after
     // this batch.
     Batch("Early Filter and Projection Push-Down", Once, earlyScanPushDownRules: _*) :+
+    Batch("Update CTE Relation Stats", Once, UpdateCTERelationStats) :+
     // Since join costs in AQP can change between multiple runs, there is no reason that we have an
     // idempotence enforcement on this batch. We thus make it FixedPoint(1) instead of Once.
     Batch("Join Reorder", FixedPoint(1),
@@ -233,6 +242,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewritePredicateSubquery,
       ColumnPruning,
       CollapseProject,
+      RemoveRedundantAliases,
       RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
@@ -257,6 +267,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView.ruleName ::
       ReplaceExpressions.ruleName ::
       ComputeCurrentTime.ruleName ::
+      SpecialDatetimeValues.ruleName ::
       ReplaceCurrentLike(catalogManager).ruleName ::
       RewriteDistinctAggregates.ruleName ::
       ReplaceDeduplicateWithAggregate.ruleName ::
@@ -295,6 +306,42 @@ abstract class Optimizer(catalogManager: CatalogManager)
         // to this subquery expression. Here we can safely remove any top level sort
         // in the plan as tuples produced by a subquery are un-ordered.
         s.withNewPlan(removeTopLevelSort(newPlan))
+    }
+  }
+
+  /**
+   * Update CTE reference stats.
+   */
+  object UpdateCTERelationStats extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      if (!plan.isInstanceOf[Subquery] && plan.containsPattern(CTE)) {
+        val statsMap = mutable.HashMap.empty[Long, Statistics]
+        updateCTEStats(plan, statsMap)
+      } else {
+        plan
+      }
+    }
+
+    private def updateCTEStats(
+        plan: LogicalPlan,
+        statsMap: mutable.HashMap[Long, Statistics]): LogicalPlan = plan match {
+      case WithCTE(child, cteDefs) =>
+        val newDefs = cteDefs.map { cteDef =>
+          val newDef = updateCTEStats(cteDef, statsMap)
+          statsMap.put(cteDef.id, newDef.stats)
+          newDef.asInstanceOf[CTERelationDef]
+        }
+        WithCTE(updateCTEStats(child, statsMap), newDefs)
+      case c: CTERelationRef =>
+        statsMap.get(c.cteId).map(s => c.withNewStats(Some(s))).getOrElse(c)
+      case _ if plan.containsPattern(CTE) =>
+        plan
+          .withNewChildren(plan.children.map(child => updateCTEStats(child, statsMap)))
+          .transformExpressionsWithPruning(_.containsAllPatterns(PLAN_EXPRESSION, CTE)) {
+            case e: SubqueryExpression =>
+              e.withNewPlan(updateCTEStats(e.plan, statsMap))
+          }
+      case _ => plan
     }
   }
 
@@ -501,7 +548,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         // Transform the expressions.
         newNode.mapExpressions { expr =>
           clean(expr.transform {
-            case a: Attribute => mapping.getOrElse(a, a)
+            case a: Attribute => mapping.get(a).map(_.withName(a.name)).getOrElse(a)
           })
         }
     }
@@ -514,10 +561,25 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
  * Remove no-op operators from the query plan that do not make any modifications.
  */
 object RemoveNoopOperators extends Rule[LogicalPlan] {
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsAnyPattern(PROJECT, WINDOW), ruleId) {
     // Eliminate no-op Projects
-    case p @ Project(_, child) if child.sameOutput(p) => child
+    case p @ Project(projectList, child) if child.sameOutput(p) =>
+      val newChild = child match {
+        case p: Project =>
+          p.copy(projectList = restoreOriginalOutputNames(p.projectList, projectList.map(_.name)))
+        case agg: Aggregate =>
+          agg.copy(aggregateExpressions =
+            restoreOriginalOutputNames(agg.aggregateExpressions, projectList.map(_.name)))
+        case _ =>
+          child
+      }
+      if (newChild.output.zip(projectList).forall { case (a1, a2) => a1.name == a2.name }) {
+        newChild
+      } else {
+        p
+      }
 
     // Eliminate no-op Window
     case w: Window if w.windowExpressions.isEmpty => w.child
@@ -647,6 +709,11 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // There is a Project between LocalLimit and Join if they do not have the same output.
     case LocalLimit(exp, project @ Project(_, join: Join)) =>
       LocalLimit(exp, project.copy(child = pushLocalLimitThroughJoin(exp, join)))
+    // Push down limit 1 through Aggregate and turn Aggregate into Project if it is group only.
+    case Limit(le @ IntegerLiteral(1), a: Aggregate) if a.groupOnly =>
+      Limit(le, Project(a.output, LocalLimit(le, a.child)))
+    case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
+      Limit(le, p.copy(child = Project(a.output, LocalLimit(le, a.child))))
   }
 }
 
@@ -735,6 +802,11 @@ object ColumnPruning extends Rule[LogicalPlan] {
       }
       a.copy(child = Expand(newProjects, newOutput, grandChild))
 
+    // Prune and drop AttachDistributedSequence if the produced attribute is not referred.
+    case p @ Project(_, a @ AttachDistributedSequence(_, grandChild))
+        if !p.references.contains(a.sequenceAttr) =>
+      p.copy(child = prunedChild(grandChild, p.references))
+
     // Prunes the unused columns from child of `DeserializeToObject`
     case d @ DeserializeToObject(_, _, child) if !child.outputSet.subsetOf(d.references) =>
       d.copy(child = prunedChild(child, d.references))
@@ -787,6 +859,14 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, w: Window) if !w.windowOutputSet.subsetOf(p.references) =>
       p.copy(child = w.copy(
         windowExpressions = w.windowExpressions.filter(p.references.contains)))
+
+    // Prune WithCTE
+    case p @ Project(_, w: WithCTE) =>
+      if (!w.outputSet.subsetOf(p.references)) {
+        p.copy(child = w.withNewPlan(prunedChild(w.plan, p.references)))
+      } else {
+        p
+      }
 
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
@@ -950,15 +1030,28 @@ object OptimizeWindowFunctions extends Rule[LogicalPlan] {
  *   independent and are of the same window function type, collapse into the parent.
  */
 object CollapseWindow extends Rule[LogicalPlan] {
+  private def windowsCompatible(w1: Window, w2: Window): Boolean = {
+    w1.partitionSpec == w2.partitionSpec &&
+      w1.orderSpec == w2.orderSpec &&
+      w1.references.intersect(w2.windowOutputSet).isEmpty &&
+      w1.windowExpressions.nonEmpty && w2.windowExpressions.nonEmpty &&
+      // This assumes Window contains the same type of window expressions. This is ensured
+      // by ExtractWindowFunctions.
+      WindowFunctionType.functionType(w1.windowExpressions.head) ==
+        WindowFunctionType.functionType(w2.windowExpressions.head)
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(WINDOW), ruleId) {
-    case w1 @ Window(we1, ps1, os1, w2 @ Window(we2, ps2, os2, grandChild))
-        if ps1 == ps2 && os1 == os2 && w1.references.intersect(w2.windowOutputSet).isEmpty &&
-          we1.nonEmpty && we2.nonEmpty &&
-          // This assumes Window contains the same type of window expressions. This is ensured
-          // by ExtractWindowFunctions.
-          WindowFunctionType.functionType(we1.head) == WindowFunctionType.functionType(we2.head) =>
+    case w1 @ Window(we1, _, _, w2 @ Window(we2, _, _, grandChild))
+        if windowsCompatible(w1, w2) =>
       w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
+
+    case w1 @ Window(we1, _, _, Project(pl, w2 @ Window(we2, _, _, grandChild)))
+        if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
+      Project(
+        pl ++ w1.windowOutputSet,
+        w1.copy(windowExpressions = we2 ++ we1, child = grandChild))
   }
 }
 
@@ -974,14 +1067,24 @@ object TransposeWindow extends Rule[LogicalPlan] {
     })
   }
 
+  private def windowsCompatible(w1: Window, w2: Window): Boolean = {
+    w1.references.intersect(w2.windowOutputSet).isEmpty &&
+      w1.expressions.forall(_.deterministic) &&
+      w2.expressions.forall(_.deterministic) &&
+      compatiblePartitions(w1.partitionSpec, w2.partitionSpec)
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(WINDOW), ruleId) {
-    case w1 @ Window(we1, ps1, os1, w2 @ Window(we2, ps2, os2, grandChild))
-        if w1.references.intersect(w2.windowOutputSet).isEmpty &&
-           w1.expressions.forall(_.deterministic) &&
-           w2.expressions.forall(_.deterministic) &&
-           compatiblePartitions(ps1, ps2) =>
-      Project(w1.output, Window(we2, ps2, os2, Window(we1, ps1, os1, grandChild)))
+    case w1 @ Window(_, _, _, w2 @ Window(_, _, _, grandChild))
+      if windowsCompatible(w1, w2) =>
+      Project(w1.output, w2.copy(child = w1.copy(child = grandChild)))
+
+    case w1 @ Window(_, _, _, Project(pl, w2 @ Window(_, _, _, grandChild)))
+      if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
+      Project(
+        pl ++ w1.windowOutputSet,
+        w2.copy(child = w1.copy(child = grandChild)))
   }
 }
 
@@ -1174,14 +1277,15 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
  * Removes Sort operations if they don't affect the final output ordering.
  * Note that changes in the final output ordering may affect the file size (SPARK-32318).
  * This rule handles the following cases:
- * 1) if the sort order is empty or the sort order does not have any reference
- * 2) if the Sort operator is a local sort and the child is already sorted
- * 3) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
+ * 1) if the child maximum number of rows less than or equal to 1
+ * 2) if the sort order is empty or the sort order does not have any reference
+ * 3) if the Sort operator is a local sort and the child is already sorted
+ * 4) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression (with deterministic expressions) operators
- * 4) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
+ * 5) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression (with deterministic expressions) operators only and the Join condition
  *    is deterministic
- * 5) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
+ * 6) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression (with deterministic expressions) operators only and the aggregate
  *    function is order irrelevant
  */
@@ -1190,6 +1294,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
     _.containsPattern(SORT))(applyLocally)
 
   private val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
+    case Sort(_, _, child) if child.maxRows.exists(_ <= 1L) => recursiveRemoveSort(child)
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
       val newOrders = orders.filterNot(_.child.foldable)
       if (newOrders.isEmpty) {
@@ -1602,7 +1707,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * This rule optimizes Limit operators by:
+ * This rule is applied by both normal and AQE Optimizer, and optimizes Limit operators by:
  * 1. Eliminate [[Limit]]/[[GlobalLimit]] operators if it's child max row <= limit.
  * 2. Combines two adjacent [[Limit]] operators into one, merging the
  *    expressions into one single expression.
@@ -1620,11 +1725,11 @@ object EliminateLimits extends Rule[LogicalPlan] {
       child
 
     case GlobalLimit(le, GlobalLimit(ne, grandChild)) =>
-      GlobalLimit(Least(Seq(ne, le)), grandChild)
+      GlobalLimit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
     case LocalLimit(le, LocalLimit(ne, grandChild)) =>
-      LocalLimit(Least(Seq(ne, le)), grandChild)
+      LocalLimit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
     case Limit(le, Limit(ne, grandChild)) =>
-      Limit(Least(Seq(ne, le)), grandChild)
+      Limit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
   }
 }
 
@@ -1684,11 +1789,11 @@ object DecimalAggregates extends Rule[LogicalPlan] {
     case q: LogicalPlan => q.transformExpressionsDownWithPruning(
       _.containsAnyPattern(SUM, AVERAGE), ruleId) {
       case we @ WindowExpression(ae @ AggregateExpression(af, _, _, _, _), _) => af match {
-        case Sum(e @ DecimalType.Expression(prec, scale)) if prec + 10 <= MAX_LONG_DIGITS =>
+        case Sum(e @ DecimalType.Expression(prec, scale), _) if prec + 10 <= MAX_LONG_DIGITS =>
           MakeDecimal(we.copy(windowFunction = ae.copy(aggregateFunction = Sum(UnscaledValue(e)))),
             prec + 10, scale)
 
-        case Average(e @ DecimalType.Expression(prec, scale)) if prec + 4 <= MAX_DOUBLE_DIGITS =>
+        case Average(e @ DecimalType.Expression(prec, scale), _) if prec + 4 <= MAX_DOUBLE_DIGITS =>
           val newAggExpr =
             we.copy(windowFunction = ae.copy(aggregateFunction = Average(UnscaledValue(e))))
           Cast(
@@ -1698,10 +1803,10 @@ object DecimalAggregates extends Rule[LogicalPlan] {
         case _ => we
       }
       case ae @ AggregateExpression(af, _, _, _, _) => af match {
-        case Sum(e @ DecimalType.Expression(prec, scale)) if prec + 10 <= MAX_LONG_DIGITS =>
+        case Sum(e @ DecimalType.Expression(prec, scale), _) if prec + 10 <= MAX_LONG_DIGITS =>
           MakeDecimal(ae.copy(aggregateFunction = Sum(UnscaledValue(e))), prec + 10, scale)
 
-        case Average(e @ DecimalType.Expression(prec, scale)) if prec + 4 <= MAX_DOUBLE_DIGITS =>
+        case Average(e @ DecimalType.Expression(prec, scale), _) if prec + 4 <= MAX_DOUBLE_DIGITS =>
           val newAggExpr = ae.copy(aggregateFunction = Average(UnscaledValue(e)))
           Cast(
             Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),

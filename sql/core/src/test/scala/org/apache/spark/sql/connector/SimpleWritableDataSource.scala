@@ -65,8 +65,8 @@ class SimpleWritableDataSource extends TestingV2Source {
 
   class MyWriteBuilder(path: String, info: LogicalWriteInfo)
       extends WriteBuilder with SupportsTruncate {
-    private val queryId: String = info.queryId()
-    private var needTruncate = false
+    protected val queryId: String = info.queryId()
+    protected var needTruncate = false
 
     override def truncate(): WriteBuilder = {
       this.needTruncate = true
@@ -127,8 +127,8 @@ class SimpleWritableDataSource extends TestingV2Source {
   class MyTable(options: CaseInsensitiveStringMap)
     extends SimpleBatchTable with SupportsWrite {
 
-    private val path = options.get("path")
-    private val conf = SparkContext.getActive.get.hadoopConfiguration
+    protected val path = options.get("path")
+    protected val conf = SparkContext.getActive.get.hadoopConfiguration
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
       new MyScanBuilder(new Path(path).toUri.toString, conf)

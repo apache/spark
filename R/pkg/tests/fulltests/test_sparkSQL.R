@@ -3542,6 +3542,8 @@ test_that("repartition by columns on DataFrame", {
   conf <- callJMethod(sparkSession, "conf")
   shufflepartitionsvalue <- callJMethod(conf, "get", "spark.sql.shuffle.partitions")
   callJMethod(conf, "set", "spark.sql.shuffle.partitions", "5")
+  coalesceEnabled <- callJMethod(conf, "get", "spark.sql.adaptive.coalescePartitions.enabled")
+  callJMethod(conf, "set", "spark.sql.adaptive.coalescePartitions.enabled", "false")
   tryCatch({
     df <- createDataFrame(
       list(list(1L, 1, "1", 0.1), list(1L, 2, "2", 0.2), list(3L, 3, "3", 0.3)),
@@ -3583,6 +3585,7 @@ test_that("repartition by columns on DataFrame", {
   finally = {
     # Resetting the conf back to default value
     callJMethod(conf, "set", "spark.sql.shuffle.partitions", shufflepartitionsvalue)
+    callJMethod(conf, "set", "spark.sql.adaptive.coalescePartitions.enabled", coalesceEnabled)
   })
 })
 

@@ -26,10 +26,10 @@ The example below shows how data types are casted from PySpark DataFrame to pand
     DataFrame[tinyint: tinyint, decimal: decimal(10,0), float: float, double: double, integer: int, long: bigint, short: smallint, timestamp: timestamp, string: string, boolean: boolean, date: date]
 
     # 3. Convert PySpark DataFrame to pandas-on-Spark DataFrame
-    >>> kdf = sdf.to_koalas()
+    >>> psdf = sdf.to_pandas_on_spark()
 
     # 4. Check the pandas-on-Spark data types
-    >>> kdf.dtypes
+    >>> psdf.dtypes
     tinyint                int8
     decimal              object
     float               float32
@@ -49,16 +49,16 @@ The example below shows how data types are casted from pandas-on-Spark DataFrame
 .. code-block:: python
 
     # 1. Create a pandas-on-Spark DataFrame
-    >>> kdf = ks.DataFrame({"int8": [1], "bool": [True], "float32": [1.0], "float64": [1.0], "int32": [1], "int64": [1], "int16": [1], "datetime": [datetime.datetime(2020, 10, 27)], "object_string": ["1"], "object_decimal": [decimal.Decimal("1.1")], "object_date": [datetime.date(2020, 10, 27)]})
+    >>> psdf = ps.DataFrame({"int8": [1], "bool": [True], "float32": [1.0], "float64": [1.0], "int32": [1], "int64": [1], "int16": [1], "datetime": [datetime.datetime(2020, 10, 27)], "object_string": ["1"], "object_decimal": [decimal.Decimal("1.1")], "object_date": [datetime.date(2020, 10, 27)]})
 
     # 2. Type casting by using `astype`
-    >>> kdf['int8'] = kdf['int8'].astype('int8')
-    >>> kdf['int16'] = kdf['int16'].astype('int16')
-    >>> kdf['int32'] = kdf['int32'].astype('int32')
-    >>> kdf['float32'] = kdf['float32'].astype('float32')
+    >>> psdf['int8'] = psdf['int8'].astype('int8')
+    >>> psdf['int16'] = psdf['int16'].astype('int16')
+    >>> psdf['int32'] = psdf['int32'].astype('int32')
+    >>> psdf['float32'] = psdf['float32'].astype('float32')
 
     # 3. Check the pandas-on-Spark data types
-    >>> kdf.dtypes
+    >>> psdf.dtypes
     int8                        int8
     bool                        bool
     float32                  float32
@@ -73,7 +73,7 @@ The example below shows how data types are casted from pandas-on-Spark DataFrame
     dtype: object
 
     # 4. Convert pandas-on-Spark DataFrame to PySpark DataFrame
-    >>> sdf = kdf.to_spark()
+    >>> sdf = psdf.to_spark()
 
     # 5. Check the PySpark data types
     >>> sdf
@@ -88,7 +88,7 @@ When converting pandas-on-Spark DataFrame to pandas DataFrame, and the data type
 .. code-block:: python
 
     # Convert pandas-on-Spark DataFrame to pandas DataFrame
-    >>> pdf = kdf.to_pandas()
+    >>> pdf = psdf.to_pandas()
 
     # Check the pandas data types
     >>> pdf.dtypes
@@ -111,7 +111,7 @@ However, there are several data types only provided by pandas.
 .. code-block:: python
 
     # pd.Catrgorical type is not supported in pandas API on Spark yet.
-    >>> ks.Series([pd.Categorical([1, 2, 3])])
+    >>> ps.Series([pd.Categorical([1, 2, 3])])
     Traceback (most recent call last):
     ...
     pyarrow.lib.ArrowInvalid: Could not convert [1, 2, 3]
@@ -201,16 +201,16 @@ You can also check the underlying PySpark data type of `Series` or schema of `Da
 
 .. code-block:: python
 
-    >>> ks.Series([0.3, 0.1, 0.8]).spark.data_type
+    >>> ps.Series([0.3, 0.1, 0.8]).spark.data_type
     DoubleType
 
-    >>> ks.Series(["welcome", "to", "pandas-on-Spark"]).spark.data_type
+    >>> ps.Series(["welcome", "to", "pandas-on-Spark"]).spark.data_type
     StringType
 
-    >>> ks.Series([[False, True, False]]).spark.data_type
+    >>> ps.Series([[False, True, False]]).spark.data_type
     ArrayType(BooleanType,true)
 
-    >>> ks.DataFrame({"d": [0.3, 0.1, 0.8], "s": ["welcome", "to", "pandas-on-Spark"], "b": [False, True, False]}).spark.print_schema()
+    >>> ps.DataFrame({"d": [0.3, 0.1, 0.8], "s": ["welcome", "to", "pandas-on-Spark"], "b": [False, True, False]}).spark.print_schema()
     root
      |-- d: double (nullable = false)
      |-- s: string (nullable = false)
@@ -222,7 +222,7 @@ You can also check the underlying PySpark data type of `Series` or schema of `Da
 
     .. code-block:: python
     
-        >>> ks.Series([1, "A"])
+        >>> ps.Series([1, "A"])
         Traceback (most recent call last):
         ...
         TypeError: an integer is required (got type str)

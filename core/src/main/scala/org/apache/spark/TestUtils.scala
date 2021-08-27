@@ -34,6 +34,7 @@ import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.io.Source
 import scala.reflect.{classTag, ClassTag}
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.Try
@@ -316,6 +317,18 @@ private[spark] object TestUtils {
       headers: Seq[(String, String)] = Nil): Int = {
     withHttpConnection(url, method, headers = headers) { connection =>
       connection.getResponseCode()
+    }
+  }
+
+  /**
+   * Returns the response message from an HTTP(S) URL.
+   */
+  def httpResponseMessage(
+    url: URL,
+    method: String = "GET",
+    headers: Seq[(String, String)] = Nil): String = {
+    withHttpConnection(url, method, headers = headers) { connection =>
+      Source.fromInputStream(connection.getInputStream, "utf-8").getLines().mkString("\n")
     }
   }
 

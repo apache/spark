@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import java.sql.{Date, Timestamp}
+import java.time.LocalDateTime
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
@@ -38,7 +39,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       assert(
         wrongColumn.checkInputDataTypes() match {
           case TypeCheckFailure(msg)
-            if msg.contains("requires (numeric or timestamp or date) type") => true
+            if msg.contains("requires (numeric or timestamp or date or timestamp_ntz) type") => true
           case _ => false
         })
     }
@@ -199,7 +200,9 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       (intRecords.map(DateTimeUtils.toJavaDate),
           intEndpoints.map(DateTimeUtils.toJavaDate), DateType),
       (intRecords.map(DateTimeUtils.toJavaTimestamp(_)),
-          intEndpoints.map(DateTimeUtils.toJavaTimestamp(_)), TimestampType)
+          intEndpoints.map(DateTimeUtils.toJavaTimestamp(_)), TimestampType),
+      (intRecords.map(DateTimeUtils.microsToLocalDateTime(_)),
+        intEndpoints.map(DateTimeUtils.microsToLocalDateTime(_)), TimestampNTZType)
     )
 
     inputs.foreach { case (records, endpoints, dataType) =>
@@ -209,6 +212,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
         val value = r match {
           case d: Date => DateTimeUtils.fromJavaDate(d)
           case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
+          case ldt: LocalDateTime => DateTimeUtils.localDateTimeToMicros(ldt)
           case _ => r
         }
         input.update(0, value)

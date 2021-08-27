@@ -23,7 +23,7 @@ import warnings
 from abc import ABCMeta, abstractmethod, abstractproperty
 from multiprocessing.pool import ThreadPool
 
-from pyspark import keyword_only, since, SparkContext
+from pyspark import keyword_only, since, SparkContext, inheritable_thread_target
 from pyspark.ml import Estimator, Predictor, PredictionModel, Model
 from pyspark.ml.param.shared import HasRawPredictionCol, HasProbabilityCol, HasThresholds, \
     HasRegParam, HasMaxIter, HasFitIntercept, HasTol, HasStandardization, HasWeightCol, \
@@ -2921,7 +2921,7 @@ class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, MLReadable, MLWrita
 
         pool = ThreadPool(processes=min(self.getParallelism(), numClasses))
 
-        models = pool.map(trainSingleClass, range(numClasses))
+        models = pool.map(inheritable_thread_target(trainSingleClass), range(numClasses))
 
         if handlePersistence:
             multiclassLabeled.unpersist()

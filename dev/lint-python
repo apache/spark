@@ -19,11 +19,12 @@
 FLAKE8_BUILD="flake8"
 # TODO(SPARK-34943): minimum version should be 3.8+
 MINIMUM_FLAKE8="3.5.0"
+MINIMUM_MYPY="0.910"
 MYPY_BUILD="mypy"
 PYCODESTYLE_BUILD="pycodestyle"
 MINIMUM_PYCODESTYLE="2.7.0"
 
-PYTHON_EXECUTABLE="python3"
+PYTHON_EXECUTABLE="${PYTHON_EXECUTABLE:-python3}"
 
 BLACK_BUILD="$PYTHON_EXECUTABLE -m black"
 
@@ -127,13 +128,21 @@ function mypy_test {
     local MYPY_REPORT=
     local MYPY_STATUS=
 
-    # TODO(SPARK-32797): Install mypy on the Jenkins CI workers
     if ! hash "$MYPY_BUILD" 2> /dev/null; then
         echo "The $MYPY_BUILD command was not found. Skipping for now."
         return
     fi
 
-    echo "starting $MYPY_BUILD test..."
+    _MYPY_VERSION=($($MYPY_BUILD --version))
+    MYPY_VERSION="${_MYPY_VERSION[1]}"
+    EXPECTED_MYPY="$(satisfies_min_version $MYPY_VERSION $MINIMUM_MYPY)"
+
+    if [[ "$EXPECTED_MYPY" == "False" ]]; then
+        echo "The minimum mypy version needs to be $MINIMUM_MYPY. Your current version is $MYPY_VERSION. Skipping for now."
+        return
+    fi
+
+    echo "starting mypy test..."
     MYPY_REPORT=$( ($MYPY_BUILD --config-file python/mypy.ini python/pyspark) 2>&1)
     MYPY_STATUS=$?
 

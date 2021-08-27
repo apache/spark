@@ -17,10 +17,19 @@
 """
 Additional Spark functions used in pandas-on-Spark.
 """
-from typing import Union, no_type_check
+from typing import Any, Union, no_type_check
+
+import numpy as np
 
 from pyspark import SparkContext
+from pyspark.sql import functions as F
 from pyspark.sql.column import Column, _to_java_column, _create_column_from_literal  # type: ignore
+from pyspark.sql.types import (
+    ByteType,
+    FloatType,
+    IntegerType,
+    LongType,
+)
 
 
 def repeat(col: Column, n: Union[int, Column]) -> Column:
@@ -30,6 +39,26 @@ def repeat(col: Column, n: Union[int, Column]) -> Column:
     sc = SparkContext._active_spark_context  # type: ignore
     n = _to_java_column(n) if isinstance(n, Column) else _create_column_from_literal(n)
     return _call_udf(sc, "repeat", _to_java_column(col), n)
+
+
+def lit(literal: Any) -> Column:
+    """
+    Creates a Column of literal value.
+    """
+    if isinstance(literal, np.generic):
+        scol = F.lit(literal.item())
+        if isinstance(literal, np.int64):
+            return scol.astype(LongType())
+        elif isinstance(literal, np.int32):
+            return scol.astype(IntegerType())
+        elif isinstance(literal, np.int8) or isinstance(literal, np.byte):
+            return scol.astype(ByteType())
+        elif isinstance(literal, np.float32):
+            return scol.astype(FloatType())
+        else:  # TODO: Complete mappings between numpy literals and Spark data types
+            return scol
+    else:
+        return F.lit(literal)
 
 
 @no_type_check

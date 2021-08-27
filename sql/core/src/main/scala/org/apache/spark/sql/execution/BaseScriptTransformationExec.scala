@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{SparkException, SparkFiles, TaskContext}
+import org.apache.spark.{SparkFiles, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast,
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -62,7 +63,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
 
   override def doExecute(): RDD[InternalRow] = {
     val broadcastedHadoopConf =
-      new SerializableConfiguration(sqlContext.sessionState.newHadoopConf())
+      new SerializableConfiguration(session.sessionState.newHadoopConf())
 
     child.execute().mapPartitions { iter =>
       if (iter.hasNext) {
@@ -117,7 +118,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       val processRowWithoutSerde = if (!ioschema.schemaLess) {
         prevLine: String =>
           new GenericInternalRow(
-            prevLine.split(outputRowFormat).padTo(outputFieldWriters.size, null)
+            prevLine.split(outputRowFormat, -1).padTo(outputFieldWriters.size, null)
               .zip(outputFieldWriters)
               .map { case (data, writer) => writer(data) })
       } else {
@@ -128,7 +129,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         val kvWriter = CatalystTypeConverters.createToCatalystConverter(StringType)
         prevLine: String =>
           new GenericInternalRow(
-            prevLine.split(outputRowFormat).slice(0, 2).padTo(2, null)
+            prevLine.split(outputRowFormat, -1).slice(0, 2).padTo(2, null)
               .map(kvWriter))
       }
 
@@ -185,8 +186,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       val exitCode = proc.exitValue()
       if (exitCode != 0) {
         logError(stderrBuffer.toString) // log the stderr circular buffer
-        throw new SparkException(s"Subprocess exited with status $exitCode. " +
-          s"Error: ${stderrBuffer.toString}", cause)
+        throw QueryExecutionErrors.subprocessExitedError(exitCode, stderrBuffer, cause)
       }
     }
   }
@@ -223,6 +223,14 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case CalendarIntervalType => wrapperConvertException(
         data => IntervalUtils.stringToInterval(UTF8String.fromString(data)),
         converter)
+      case YearMonthIntervalType(start, end) => wrapperConvertException(
+        data => IntervalUtils.monthsToPeriod(
+          IntervalUtils.castStringToYMInterval(UTF8String.fromString(data), start, end)),
+        converter)
+      case DayTimeIntervalType(start, end) => wrapperConvertException(
+        data => IntervalUtils.microsToDuration(
+          IntervalUtils.castStringToDTInterval(UTF8String.fromString(data), start, end)),
+        converter)
       case _: ArrayType | _: MapType | _: StructType =>
         val complexTypeFactory = JsonToStructs(attr.dataType,
           ioschema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))
@@ -231,8 +239,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
       case dt =>
-        throw new SparkException(s"${nodeName} without serde does not support " +
-          s"${dt.getClass.getSimpleName} as output data type")
+        throw QueryExecutionErrors.outputDataTypeUnsupportedByNodeWithoutSerdeError(nodeName, dt)
     }
   }
 
@@ -240,10 +247,14 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   private val wrapperConvertException: (String => Any, Any => Any) => String => Any =
     (f: String => Any, converter: Any => Any) =>
       (data: String) => converter {
-        try {
-          f(data)
-        } catch {
-          case NonFatal(_) => null
+        if (data == ioschema.outputRowFormatMap("TOK_TABLEROWFORMATNULL")) {
+          null
+        } else {
+          try {
+            f(data)
+          } catch {
+            case NonFatal(_) => null
+          }
         }
       }
 }
@@ -275,11 +286,18 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
         ioSchema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")
       } else {
         val sb = new StringBuilder
-        sb.append(row.get(0, inputSchema(0)))
+        def appendToBuffer(s: AnyRef): Unit = {
+          if (s == null) {
+            sb.append(ioSchema.inputRowFormatMap("TOK_TABLEROWFORMATNULL"))
+          } else {
+            sb.append(s)
+          }
+        }
+        appendToBuffer(row.get(0, inputSchema(0)))
         var i = 1
         while (i < len) {
           sb.append(ioSchema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
-          sb.append(row.get(i, inputSchema(i)))
+          appendToBuffer(row.get(i, inputSchema(i)))
           i += 1
         }
         sb.append(ioSchema.inputRowFormatMap("TOK_TABLEROWFORMATLINES"))
@@ -348,7 +366,8 @@ case class ScriptTransformationIOSchema(
 object ScriptTransformationIOSchema {
   val defaultFormat = Map(
     ("TOK_TABLEROWFORMATFIELD", "\u0001"),
-    ("TOK_TABLEROWFORMATLINES", "\n")
+    ("TOK_TABLEROWFORMATLINES", "\n"),
+    ("TOK_TABLEROWFORMATNULL" -> "\\N")
   )
 
   val defaultIOSchema = ScriptTransformationIOSchema(

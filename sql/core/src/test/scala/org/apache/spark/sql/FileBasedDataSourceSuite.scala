@@ -421,7 +421,7 @@ class FileBasedDataSourceSuite extends QueryTest
         ""
       }
       def errorMessage(format: String): String = {
-        s"$format data source does not support null data type."
+        s"$format data source does not support void data type."
       }
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
         withTempDir { dir =>
@@ -731,6 +731,28 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
+  test("SPARK-36568: FileScan statistics estimation takes read schema into account") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withTempDir { dir =>
+        spark.range(1000).map(x => (x / 100, x, x)).toDF("k", "v1", "v2").
+          write.partitionBy("k").mode(SaveMode.Overwrite).orc(dir.toString)
+        val dfAll = spark.read.orc(dir.toString)
+        val dfK = dfAll.select("k")
+        val dfV1 = dfAll.select("v1")
+        val dfV2 = dfAll.select("v2")
+        val dfV1V2 = dfAll.select("v1", "v2")
+
+        def sizeInBytes(df: DataFrame): BigInt = df.queryExecution.optimizedPlan.stats.sizeInBytes
+
+        assert(sizeInBytes(dfAll) === BigInt(getLocalDirSize(dir)))
+        assert(sizeInBytes(dfK) < sizeInBytes(dfAll))
+        assert(sizeInBytes(dfV1) < sizeInBytes(dfAll))
+        assert(sizeInBytes(dfV2) === sizeInBytes(dfV1))
+        assert(sizeInBytes(dfV1V2) < sizeInBytes(dfAll))
+      }
+    }
+  }
+
   test("File source v2: support partition pruning") {
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       allFileBasedDataSources.foreach { format =>
@@ -759,7 +781,7 @@ class FileBasedDataSourceSuite extends QueryTest
           }.isEmpty)
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: FileScan) => f
+            case BatchScanExec(_, f: FileScan, _) => f
           }
           assert(fileScan.nonEmpty)
           assert(fileScan.get.partitionFilters.nonEmpty)
@@ -799,7 +821,7 @@ class FileBasedDataSourceSuite extends QueryTest
           assert(filterCondition.isDefined)
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: FileScan) => f
+            case BatchScanExec(_, f: FileScan, _) => f
           }
           assert(fileScan.nonEmpty)
           assert(fileScan.get.partitionFilters.isEmpty)
@@ -965,6 +987,28 @@ class FileBasedDataSourceSuite extends QueryTest
       val df = spark.read.option("header", true).csv(pathStr)
         .where($"a / b".isNotNull and $"`a``b`".isNotNull)
       checkAnswer(df, Row("v1", "v2"))
+    }
+  }
+
+  test("SPARK-36271: V1 insert should check schema field name too") {
+    withView("v") {
+      spark.range(1).createTempView("v")
+      withTempDir { dir =>
+        val e = intercept[AnalysisException] {
+          sql("SELECT ID, IF(ID=1,1,0) FROM v").write.mode(SaveMode.Overwrite)
+            .format("parquet").save(dir.getCanonicalPath)
+        }.getMessage
+        assert(e.contains("Column name \"(IF((ID = 1), 1, 0))\" contains invalid character(s)."))
+      }
+
+      withTempDir { dir =>
+        val e = intercept[AnalysisException] {
+          sql("SELECT NAMED_STRUCT('(IF((ID = 1), 1, 0))', IF(ID=1,ID,0)) AS col1 FROM v")
+            .write.mode(SaveMode.Overwrite)
+            .format("parquet").save(dir.getCanonicalPath)
+        }.getMessage
+        assert(e.contains("Column name \"(IF((ID = 1), 1, 0))\" contains invalid character(s)."))
+      }
     }
   }
 }

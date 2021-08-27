@@ -132,13 +132,13 @@ case class InMemoryTableScanExec(
   override def outputOrdering: Seq[SortOrder] =
     relation.cachedPlan.outputOrdering.map(updateAttribute(_).asInstanceOf[SortOrder])
 
-  lazy val enableAccumulatorsForTest: Boolean = sqlContext.conf.inMemoryTableScanStatisticsEnabled
+  lazy val enableAccumulatorsForTest: Boolean = conf.inMemoryTableScanStatisticsEnabled
 
   // Accumulators used for testing purposes
   lazy val readPartitions = sparkContext.longAccumulator
   lazy val readBatches = sparkContext.longAccumulator
 
-  private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
+  private val inMemoryPartitionPruningEnabled = conf.inMemoryPartitionPruning
 
   private def filteredCachedBatches(): RDD[CachedBatch] = {
     val buffers = relation.cacheBuilder.cachedColumnBuffers

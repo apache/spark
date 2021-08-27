@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AVERAGE, TreePattern}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
@@ -36,8 +37,14 @@ import org.apache.spark.sql.types._
   """,
   group = "agg_funcs",
   since = "1.0.0")
-case class Average(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes
+case class Average(
+    child: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
+  extends DeclarativeAggregate
+  with ImplicitCastInputTypes
   with UnaryLike[Expression] {
+
+  def this(child: Expression) = this(child, failOnError = SQLConf.get.ansiEnabled)
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("avg")
 
@@ -87,9 +94,11 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   // If all input are nulls, count will be 0 and we will get null after the division.
   // We can't directly use `/` as it throws an exception under ansi mode.
   override lazy val evaluateExpression = child.dataType match {
-    case _: DecimalType =>
+    case d: DecimalType =>
       DecimalPrecision.decimalAndDecimal()(
-        Divide(sum, count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
+        Divide(
+          CheckOverflowInSum(sum, d, !failOnError),
+          count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
     case _: YearMonthIntervalType =>
       If(EqualTo(count, Literal(0L)),
         Literal(null, YearMonthIntervalType()), DivideYMInterval(sum, count))
@@ -110,4 +119,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
 
   override protected def withNewChildInternal(newChild: Expression): Average =
     copy(child = newChild)
+
+  // The flag `failOnError` won't be shown in the `toString` or `toAggString` methods
+  override def flatArguments: Iterator[Any] = Iterator(child)
 }

@@ -23,6 +23,7 @@ import time
 import unittest
 
 from pyspark.sql import SparkSession, Row
+from pyspark.sql.functions import col, lit, count, sum, mean
 from pyspark.sql.types import StringType, IntegerType, DoubleType, StructType, StructField, \
     BooleanType, DateType, TimestampType, FloatType
 from pyspark.sql.utils import AnalysisException, IllegalArgumentException
@@ -66,6 +67,24 @@ class DataFrameTests(ReusedSQLTestCase):
         pydoc.render_doc(df)
         pydoc.render_doc(df.foo)
         pydoc.render_doc(df.take(1))
+
+    def test_drop_duplicates(self):
+        # SPARK-36034 test that drop duplicates throws a type error when in correct type provided
+        df = self.spark.createDataFrame(
+            [("Alice", 50), ("Alice", 60)],
+            ["name", "age"]
+        )
+
+        # shouldn't drop a non-null row
+        self.assertEqual(df.dropDuplicates().count(), 2)
+
+        self.assertEqual(df.dropDuplicates(["name"]).count(), 1)
+
+        self.assertEqual(df.dropDuplicates(["name", "age"]).count(), 2)
+
+        type_error_msg = "Parameter 'subset' must be a list of columns"
+        with self.assertRaisesRegex(TypeError, type_error_msg):
+            df.dropDuplicates("name")
 
     def test_dropna(self):
         schema = StructType([
@@ -209,7 +228,7 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(df4.rdd.take(3), df2.rdd.take(3))
 
         # test repartitionByRange(*cols)
-        df5 = df1.repartitionByRange("name", "age")
+        df5 = df1.repartitionByRange(5, "name", "age")
         self.assertEqual(df5.rdd.first(), df2.rdd.first())
         self.assertEqual(df5.rdd.take(3), df2.rdd.take(3))
 
@@ -388,6 +407,54 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(1, logical_plan.toString().count("1.2345"))
         self.assertEqual(1, logical_plan.toString().count("what"))
         self.assertEqual(3, logical_plan.toString().count("itworks"))
+
+    def test_observe(self):
+        # SPARK-36263: tests the DataFrame.observe(Observation, *Column) method
+        from pyspark.sql import Observation
+
+        df = SparkSession(self.sc).createDataFrame([
+            (1, 1.0, 'one'),
+            (2, 2.0, 'two'),
+            (3, 3.0, 'three'),
+        ], ['id', 'val', 'label'])
+
+        unnamed_observation = Observation()
+        named_observation = Observation("metric")
+        observed = df.orderBy('id').observe(
+            named_observation,
+            count(lit(1)).alias('cnt'),
+            sum(col("id")).alias('sum'),
+            mean(col("val")).alias('mean')
+        ).observe(unnamed_observation, count(lit(1)).alias('rows'))
+
+        # test that observe works transparently
+        actual = observed.collect()
+        self.assertEqual([
+            {'id': 1, 'val': 1.0, 'label': 'one'},
+            {'id': 2, 'val': 2.0, 'label': 'two'},
+            {'id': 3, 'val': 3.0, 'label': 'three'},
+        ], [row.asDict() for row in actual])
+
+        # test that we retrieve the metrics
+        self.assertEqual(named_observation.get, dict(cnt=3, sum=6, mean=2.0))
+        self.assertEqual(unnamed_observation.get, dict(rows=3))
+
+        # observation requires name (if given) to be non empty string
+        with self.assertRaisesRegex(TypeError, 'name should be a string'):
+            Observation(123)
+        with self.assertRaisesRegex(ValueError, 'name should not be empty'):
+            Observation('')
+
+        # dataframe.observe requires at least one expr
+        with self.assertRaisesRegex(AssertionError, 'exprs should not be empty'):
+            df.observe(Observation())
+
+        # dataframe.observe requires non-None Columns
+        for args in [(None,), ('id',),
+                     (lit(1), None), (lit(1), 'id')]:
+            with self.subTest(args=args):
+                with self.assertRaisesRegex(AssertionError, 'all exprs should be Column'):
+                    df.observe(Observation(), *args)
 
     def test_sample(self):
         self.assertRaisesRegex(
@@ -854,6 +921,22 @@ class DataFrameTests(ReusedSQLTestCase):
             df.show(vertical='foo')
         with self.assertRaisesRegex(TypeError, "Parameter 'truncate=foo'"):
             df.show(truncate='foo')
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message)  # type: ignore
+    def test_to_pandas_on_spark(self):
+        import pandas as pd
+        from pandas.testing import assert_frame_equal
+
+        sdf = self.spark.createDataFrame([("a", 1), ("b", 2), ("c",  3)], ["Col1", "Col2"])
+        psdf_from_sdf = sdf.to_pandas_on_spark()
+        psdf_from_sdf_with_index = sdf.to_pandas_on_spark(index_col="Col1")
+        pdf = pd.DataFrame({"Col1": ["a", "b", "c"], "Col2": [1, 2, 3]})
+        pdf_with_index = pdf.set_index("Col1")
+
+        assert_frame_equal(pdf, psdf_from_sdf.to_pandas())
+        assert_frame_equal(pdf_with_index, psdf_from_sdf_with_index.to_pandas())
 
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):

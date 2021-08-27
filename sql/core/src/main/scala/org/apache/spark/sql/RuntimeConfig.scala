@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -149,11 +150,11 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
 
   private def requireNonStaticConf(key: String): Unit = {
     if (SQLConf.isStaticConfigKey(key)) {
-      throw new AnalysisException(s"Cannot modify the value of a static config: $key")
+      throw QueryCompilationErrors.cannotModifyValueOfStaticConfigError(key)
     }
     if (sqlConf.setCommandRejectsSparkCoreConfs &&
         ConfigEntry.findEntry(key) != null && !SQLConf.containsConfigKey(key)) {
-      throw new AnalysisException(s"Cannot modify the value of a Spark config: $key")
+      throw QueryCompilationErrors.cannotModifyValueOfSparkConfigError(key)
     }
   }
 }

@@ -20,30 +20,50 @@ A base class of DataFrame/Column to behave similar to pandas DataFrame/Series.
 """
 from abc import ABCMeta, abstractmethod
 from collections import Counter
-from collections.abc import Iterable
 from distutils.version import LooseVersion
 from functools import reduce
-from typing import Any, List, Optional, Tuple, Union, TYPE_CHECKING, cast
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    IO,
+    List,
+    Optional,
+    NoReturn,
+    Tuple,
+    Union,
+    TYPE_CHECKING,
+    cast,
+)
 import warnings
 
 import numpy as np  # noqa: F401
 import pandas as pd
 from pandas.api.types import is_list_like
 
-from pyspark.sql import functions as F
+from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
     BooleanType,
     DoubleType,
-    FloatType,
     IntegralType,
     LongType,
     NumericType,
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark.pandas._typing import (
+    Axis,
+    DataFrameOrSeries,
+    Dtype,
+    FrameLike,
+    Label,
+    Name,
+    Scalar,
+)
 from pyspark.pandas.indexing import AtIndexer, iAtIndexer, iLocIndexer, LocIndexer
 from pyspark.pandas.internal import InternalFrame
-from pyspark.pandas.typedef import Scalar, spark_type_to_pandas_dtype
+from pyspark.pandas.spark import functions as SF
+from pyspark.pandas.typedef import spark_type_to_pandas_dtype
 from pyspark.pandas.utils import (
     is_name_like_tuple,
     is_name_like_value,
@@ -52,14 +72,19 @@ from pyspark.pandas.utils import (
     sql_conf,
     validate_arguments_and_invoke_function,
     validate_axis,
+    validate_mode,
     SPARK_CONF_ARROW_ENABLED,
 )
-from pyspark.pandas.window import Rolling, Expanding
 
 if TYPE_CHECKING:
     from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.groupby import DataFrameGroupBy, SeriesGroupBy  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.indexes.base import Index  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.groupby import GroupBy  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.window import Rolling, Expanding  # noqa: F401 (SPARK-34943)
+
+
+bool_type = bool
 
 
 class Frame(object, metaclass=ABCMeta):
@@ -68,7 +93,7 @@ class Frame(object, metaclass=ABCMeta):
     """
 
     @abstractmethod
-    def __getitem__(self, key):
+    def __getitem__(self, key: Any) -> Any:
         pass
 
     @property
@@ -77,41 +102,52 @@ class Frame(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def _apply_series_op(self, op, should_resolve: bool = False):
+    def _apply_series_op(
+        self: FrameLike,
+        op: Callable[["Series"], Union["Series", Column]],
+        should_resolve: bool = False,
+    ) -> FrameLike:
         pass
 
     @abstractmethod
-    def _reduce_for_stat_function(self, sfun, name, axis=None, numeric_only=True, **kwargs):
+    def _reduce_for_stat_function(
+        self,
+        sfun: Callable[["Series"], Column],
+        name: str,
+        axis: Optional[Axis] = None,
+        numeric_only: bool = True,
+        **kwargs: Any
+    ) -> Union["Series", Scalar]:
         pass
 
     @property
     @abstractmethod
-    def dtypes(self):
+    def dtypes(self) -> Union[pd.Series, Dtype]:
         pass
 
     @abstractmethod
-    def to_pandas(self):
+    def to_pandas(self) -> Union[pd.DataFrame, pd.Series]:
         pass
 
     @property
     @abstractmethod
-    def index(self):
+    def index(self) -> "Index":
         pass
 
     @abstractmethod
-    def copy(self):
+    def copy(self: FrameLike) -> FrameLike:
         pass
 
     @abstractmethod
-    def _to_internal_pandas(self):
+    def _to_internal_pandas(self) -> Union[pd.DataFrame, pd.Series]:
         pass
 
     @abstractmethod
-    def head(self, n: int = 5):
+    def head(self: FrameLike, n: int = 5) -> FrameLike:
         pass
 
     # TODO: add 'axis' parameter
-    def cummin(self, skipna: bool = True) -> Union["Series", "DataFrame"]:
+    def cummin(self: FrameLike, skipna: bool = True) -> FrameLike:
         """
         Return cumulative minimum over a DataFrame or Series axis.
 
@@ -171,7 +207,7 @@ class Frame(object, metaclass=ABCMeta):
         return self._apply_series_op(lambda psser: psser._cum(F.min, skipna), should_resolve=True)
 
     # TODO: add 'axis' parameter
-    def cummax(self, skipna: bool = True) -> Union["Series", "DataFrame"]:
+    def cummax(self: FrameLike, skipna: bool = True) -> FrameLike:
         """
         Return cumulative maximum over a DataFrame or Series axis.
 
@@ -232,7 +268,7 @@ class Frame(object, metaclass=ABCMeta):
         return self._apply_series_op(lambda psser: psser._cum(F.max, skipna), should_resolve=True)
 
     # TODO: add 'axis' parameter
-    def cumsum(self, skipna: bool = True) -> Union["Series", "DataFrame"]:
+    def cumsum(self: FrameLike, skipna: bool = True) -> FrameLike:
         """
         Return cumulative sum over a DataFrame or Series axis.
 
@@ -295,7 +331,7 @@ class Frame(object, metaclass=ABCMeta):
     # TODO: add 'axis' parameter
     # TODO: use pandas_udf to support negative values and other options later
     #  other window except unbounded ones is supported as of Spark 3.0.
-    def cumprod(self, skipna: bool = True) -> Union["Series", "DataFrame"]:
+    def cumprod(self: FrameLike, skipna: bool = True) -> FrameLike:
         """
         Return cumulative product over a DataFrame or Series axis.
 
@@ -409,7 +445,7 @@ class Frame(object, metaclass=ABCMeta):
             dtypes = list(self.dtypes)
         return pd.Series(dict(Counter([d.name for d in dtypes])))
 
-    def pipe(self, func, *args, **kwargs) -> Any:
+    def pipe(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         r"""
         Apply func(self, \*args, \*\*kwargs).
 
@@ -604,19 +640,19 @@ class Frame(object, metaclass=ABCMeta):
 
     def to_csv(
         self,
-        path=None,
-        sep=",",
-        na_rep="",
-        columns=None,
-        header=True,
-        quotechar='"',
-        date_format=None,
-        escapechar=None,
-        num_files=None,
-        mode: str = "overwrite",
+        path: Optional[str] = None,
+        sep: str = ",",
+        na_rep: str = "",
+        columns: Optional[List[Name]] = None,
+        header: bool = True,
+        quotechar: str = '"',
+        date_format: Optional[str] = None,
+        escapechar: Optional[str] = None,
+        num_files: Optional[int] = None,
+        mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options
+        **options: Any
     ) -> Optional[str]:
         r"""
         Write object to a comma-separated values (csv) file.
@@ -651,14 +687,16 @@ class Frame(object, metaclass=ABCMeta):
             when appropriate.
         num_files : the number of files to be written in `path` directory when
             this is a path.
-        mode : str {'append', 'overwrite', 'ignore', 'error', 'errorifexists'},
-            default 'overwrite'. Specifies the behavior of the save operation when the
-            destination exists already.
+        mode : str
+            Python write mode, default 'w'.
 
-            - 'append': Append the new data to existing data.
-            - 'overwrite': Overwrite existing data.
-            - 'ignore': Silently ignore this operation if data already exists.
-            - 'error' or 'errorifexists': Throw an exception if data already exists.
+            .. note:: mode can accept the strings for Spark writing mode.
+                Such as 'append', 'overwrite', 'ignore', 'error', 'errorifexists'.
+
+                - 'append' (equivalent to 'a'): Append the new data to existing data.
+                - 'overwrite' (equivalent to 'w'): Overwrite existing data.
+                - 'ignore': Silently ignore this operation if data already exists.
+                - 'error' or 'errorifexists': Throw an exception if data already exists.
 
         partition_cols : str or list of str, optional, default None
             Names of partitioning columns
@@ -782,9 +820,11 @@ class Frame(object, metaclass=ABCMeta):
             column_labels = psdf._internal.column_labels
         else:
             column_labels = []
-            for label in columns:
-                if not is_name_like_tuple(label):
-                    label = (label,)
+            for col in columns:
+                if is_name_like_tuple(col):
+                    label = cast(Label, col)
+                else:
+                    label = cast(Label, (col,))
                 if label not in psdf._internal.column_labels:
                     raise KeyError(name_like_string(label))
                 column_labels.append(label)
@@ -821,8 +861,14 @@ class Frame(object, metaclass=ABCMeta):
             )
 
         if num_files is not None:
+            warnings.warn(
+                "`num_files` has been deprecated and might be removed in a future version. "
+                "Use `DataFrame.spark.repartition` instead.",
+                FutureWarning,
+            )
             sdf = sdf.repartition(num_files)
 
+        mode = validate_mode(mode)
         builder = sdf.write.mode(mode)
         if partition_cols is not None:
             builder.partitionBy(partition_cols)
@@ -839,15 +885,15 @@ class Frame(object, metaclass=ABCMeta):
 
     def to_json(
         self,
-        path=None,
-        compression="uncompressed",
-        num_files=None,
-        mode: str = "overwrite",
-        orient="records",
-        lines=True,
+        path: Optional[str] = None,
+        compression: str = "uncompressed",
+        num_files: Optional[int] = None,
+        mode: str = "w",
+        orient: str = "records",
+        lines: bool = True,
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options
+        **options: Any
     ) -> Optional[str]:
         """
         Convert the object to a JSON string.
@@ -883,14 +929,16 @@ class Frame(object, metaclass=ABCMeta):
             compression is inferred from the filename.
         num_files : the number of files to be written in `path` directory when
             this is a path.
-        mode : str {'append', 'overwrite', 'ignore', 'error', 'errorifexists'},
-            default 'overwrite'. Specifies the behavior of the save operation when the
-            destination exists already.
+        mode : str
+            Python write mode, default 'w'.
 
-            - 'append': Append the new data to existing data.
-            - 'overwrite': Overwrite existing data.
-            - 'ignore': Silently ignore this operation if data already exists.
-            - 'error' or 'errorifexists': Throw an exception if data already exists.
+            .. note:: mode can accept the strings for Spark writing mode.
+                Such as 'append', 'overwrite', 'ignore', 'error', 'errorifexists'.
+
+                - 'append' (equivalent to 'a'): Append the new data to existing data.
+                - 'overwrite' (equivalent to 'w'): Overwrite existing data.
+                - 'ignore': Silently ignore this operation if data already exists.
+                - 'error' or 'errorifexists': Throw an exception if data already exists.
 
         partition_cols : str or list of str, optional, default None
             Names of partitioning columns
@@ -959,8 +1007,14 @@ class Frame(object, metaclass=ABCMeta):
         sdf = psdf.to_spark(index_col=index_col)  # type: ignore
 
         if num_files is not None:
+            warnings.warn(
+                "`num_files` has been deprecated and might be removed in a future version. "
+                "Use `DataFrame.spark.repartition` instead.",
+                FutureWarning,
+            )
             sdf = sdf.repartition(num_files)
 
+        mode = validate_mode(mode)
         builder = sdf.write.mode(mode)
         if partition_cols is not None:
             builder.partitionBy(partition_cols)
@@ -970,22 +1024,22 @@ class Frame(object, metaclass=ABCMeta):
 
     def to_excel(
         self,
-        excel_writer,
-        sheet_name="Sheet1",
-        na_rep="",
-        float_format=None,
-        columns=None,
-        header=True,
-        index=True,
-        index_label=None,
-        startrow=0,
-        startcol=0,
-        engine=None,
-        merge_cells=True,
-        encoding=None,
-        inf_rep="inf",
-        verbose=True,
-        freeze_panes=None,
+        excel_writer: Union[str, pd.ExcelWriter],
+        sheet_name: str = "Sheet1",
+        na_rep: str = "",
+        float_format: Optional[str] = None,
+        columns: Optional[Union[str, List[str]]] = None,
+        header: bool = True,
+        index: bool = True,
+        index_label: Optional[Union[str, List[str]]] = None,
+        startrow: int = 0,
+        startcol: int = 0,
+        engine: Optional[str] = None,
+        merge_cells: bool = True,
+        encoding: Optional[str] = None,
+        inf_rep: str = "inf",
+        verbose: bool = True,
+        freeze_panes: Optional[Tuple[int, int]] = None,
     ) -> None:
         """
         Write object to an Excel sheet.
@@ -1101,7 +1155,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def mean(
-        self, axis: Union[int, str] = None, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return the mean of the values.
@@ -1148,7 +1202,9 @@ class Frame(object, metaclass=ABCMeta):
         if numeric_only is None and axis == 0:
             numeric_only = True
 
-        def mean(spark_column, spark_type):
+        def mean(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, BooleanType):
                 spark_column = spark_column.cast(LongType())
             elif not isinstance(spark_type, NumericType):
@@ -1164,7 +1220,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def sum(
-        self, axis: Union[int, str] = None, numeric_only: bool = None, min_count: int = 0
+        self, axis: Optional[Axis] = None, numeric_only: bool = None, min_count: int = 0
     ) -> Union[Scalar, "Series"]:
         """
         Return the sum of the values.
@@ -1233,7 +1289,9 @@ class Frame(object, metaclass=ABCMeta):
         elif numeric_only is True and axis == 1:
             numeric_only = None
 
-        def sum(spark_column, spark_type):
+        def sum(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, BooleanType):
                 spark_column = spark_column.cast(LongType())
             elif not isinstance(spark_type, NumericType):
@@ -1242,14 +1300,14 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            return F.coalesce(F.sum(spark_column), F.lit(0))
+            return F.coalesce(F.sum(spark_column), SF.lit(0))
 
         return self._reduce_for_stat_function(
             sum, name="sum", axis=axis, numeric_only=numeric_only, min_count=min_count
         )
 
     def product(
-        self, axis: Union[int, str] = None, numeric_only: bool = None, min_count: int = 0
+        self, axis: Optional[Axis] = None, numeric_only: bool = None, min_count: int = 0
     ) -> Union[Scalar, "Series"]:
         """
         Return the product of the values.
@@ -1317,9 +1375,11 @@ class Frame(object, metaclass=ABCMeta):
         elif numeric_only is True and axis == 1:
             numeric_only = None
 
-        def prod(spark_column, spark_type):
+        def prod(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, BooleanType):
-                scol = F.min(F.coalesce(spark_column, F.lit(True))).cast(LongType())
+                scol = F.min(F.coalesce(spark_column, SF.lit(True))).cast(LongType())
             elif isinstance(spark_type, NumericType):
                 num_zeros = F.sum(F.when(spark_column == 0, 1).otherwise(0))
                 sign = F.when(
@@ -1339,7 +1399,7 @@ class Frame(object, metaclass=ABCMeta):
                     )
                 )
 
-            return F.coalesce(scol, F.lit(1))
+            return F.coalesce(scol, SF.lit(1))
 
         return self._reduce_for_stat_function(
             prod, name="prod", axis=axis, numeric_only=numeric_only, min_count=min_count
@@ -1348,7 +1408,7 @@ class Frame(object, metaclass=ABCMeta):
     prod = product
 
     def skew(
-        self, axis: Union[int, str] = None, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return unbiased skew normalized by N-1.
@@ -1388,7 +1448,9 @@ class Frame(object, metaclass=ABCMeta):
         if numeric_only is None and axis == 0:
             numeric_only = True
 
-        def skew(spark_column, spark_type):
+        def skew(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, BooleanType):
                 spark_column = spark_column.cast(LongType())
             elif not isinstance(spark_type, NumericType):
@@ -1404,7 +1466,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def kurtosis(
-        self, axis: Union[int, str] = None, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return unbiased kurtosis using Fisher’s definition of kurtosis (kurtosis of normal == 0.0).
@@ -1445,7 +1507,9 @@ class Frame(object, metaclass=ABCMeta):
         if numeric_only is None and axis == 0:
             numeric_only = True
 
-        def kurtosis(spark_column, spark_type):
+        def kurtosis(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, BooleanType):
                 spark_column = spark_column.cast(LongType())
             elif not isinstance(spark_type, NumericType):
@@ -1463,7 +1527,7 @@ class Frame(object, metaclass=ABCMeta):
     kurt = kurtosis
 
     def min(
-        self, axis: Union[int, str] = None, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return the minimum of the values.
@@ -1514,11 +1578,14 @@ class Frame(object, metaclass=ABCMeta):
             numeric_only = None
 
         return self._reduce_for_stat_function(
-            F.min, name="min", axis=axis, numeric_only=numeric_only
+            lambda psser: F.min(psser.spark.column),
+            name="min",
+            axis=axis,
+            numeric_only=numeric_only,
         )
 
     def max(
-        self, axis: Union[int, str] = None, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return the maximum of the values.
@@ -1569,11 +1636,14 @@ class Frame(object, metaclass=ABCMeta):
             numeric_only = None
 
         return self._reduce_for_stat_function(
-            F.max, name="max", axis=axis, numeric_only=numeric_only
+            lambda psser: F.max(psser.spark.column),
+            name="max",
+            axis=axis,
+            numeric_only=numeric_only,
         )
 
     def count(
-        self, axis: Union[int, str] = None, numeric_only: bool = False
+        self, axis: Optional[Axis] = None, numeric_only: bool = False
     ) -> Union[Scalar, "Series"]:
         """
         Count non-NA cells for each column.
@@ -1647,7 +1717,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def std(
-        self, axis: Union[int, str] = None, ddof: int = 1, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, ddof: int = 1, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return sample standard deviation.
@@ -1707,7 +1777,9 @@ class Frame(object, metaclass=ABCMeta):
         if numeric_only is None and axis == 0:
             numeric_only = True
 
-        def std(spark_column, spark_type):
+        def std(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, BooleanType):
                 spark_column = spark_column.cast(LongType())
             elif not isinstance(spark_type, NumericType):
@@ -1726,7 +1798,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def var(
-        self, axis: Union[int, str] = None, ddof: int = 1, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, ddof: int = 1, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return unbiased variance.
@@ -1786,7 +1858,9 @@ class Frame(object, metaclass=ABCMeta):
         if numeric_only is None and axis == 0:
             numeric_only = True
 
-        def var(spark_column, spark_type):
+        def var(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, BooleanType):
                 spark_column = spark_column.cast(LongType())
             elif not isinstance(spark_type, NumericType):
@@ -1805,7 +1879,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def median(
-        self, axis: Union[int, str] = None, numeric_only: bool = None, accuracy: int = 10000
+        self, axis: Optional[Axis] = None, numeric_only: bool = None, accuracy: int = 10000
     ) -> Union[Scalar, "Series"]:
         """
         Return the median of the values for the requested axis.
@@ -1899,7 +1973,9 @@ class Frame(object, metaclass=ABCMeta):
                 "accuracy must be an integer; however, got [%s]" % type(accuracy).__name__
             )
 
-        def median(spark_column, spark_type):
+        def median(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, (BooleanType, NumericType)):
                 return F.percentile_approx(spark_column.cast(DoubleType()), 0.5, accuracy)
             else:
@@ -1914,7 +1990,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def sem(
-        self, axis: Union[int, str] = None, ddof: int = 1, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, ddof: int = 1, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return unbiased standard error of the mean over requested axis.
@@ -1981,7 +2057,9 @@ class Frame(object, metaclass=ABCMeta):
         if numeric_only is None and axis == 0:
             numeric_only = True
 
-        def std(spark_column, spark_type):
+        def std(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, BooleanType):
                 spark_column = spark_column.cast(LongType())
             elif not isinstance(spark_type, NumericType):
@@ -1995,10 +2073,8 @@ class Frame(object, metaclass=ABCMeta):
             else:
                 return F.stddev_samp(spark_column)
 
-        def sem(spark_column, spark_type):
-            return std(spark_column, spark_type) / pow(
-                Frame._count_expr(spark_column, spark_type), 0.5
-            )
+        def sem(psser: "Series") -> Column:
+            return std(psser) / pow(Frame._count_expr(psser), 0.5)
 
         return self._reduce_for_stat_function(
             sem, name="sem", numeric_only=numeric_only, axis=axis, ddof=ddof
@@ -2032,7 +2108,7 @@ class Frame(object, metaclass=ABCMeta):
         else:
             return len(self) * num_columns  # type: ignore
 
-    def abs(self) -> Union["DataFrame", "Series"]:
+    def abs(self: FrameLike) -> FrameLike:
         """
         Return a Series/DataFrame with absolute numeric value of each element.
 
@@ -2069,11 +2145,13 @@ class Frame(object, metaclass=ABCMeta):
         3  7  40   50
         """
 
-        def abs(psser):
+        def abs(psser: "Series") -> Union["Series", Column]:
             if isinstance(psser.spark.data_type, BooleanType):
                 return psser
             elif isinstance(psser.spark.data_type, NumericType):
-                return psser.spark.transform(F.abs)
+                return psser._with_new_scol(
+                    F.abs(psser.spark.column), field=psser._internal.data_fields[0]
+                )
             else:
                 raise TypeError(
                     "bad operand type for abs(): {} ({})".format(
@@ -2087,8 +2165,12 @@ class Frame(object, metaclass=ABCMeta):
     # TODO: by argument only support the grouping name and as_index only for now. Documentation
     # should be updated when it's supported.
     def groupby(
-        self, by, axis=0, as_index: bool = True, dropna: bool = True
-    ) -> Union["DataFrameGroupBy", "SeriesGroupBy"]:
+        self: FrameLike,
+        by: Union[Name, "Series", List[Union[Name, "Series"]]],
+        axis: Axis = 0,
+        as_index: bool = True,
+        dropna: bool = True,
+    ) -> "GroupBy[FrameLike]":
         """
         Group DataFrame or Series using a Series of columns.
 
@@ -2168,22 +2250,20 @@ class Frame(object, metaclass=ABCMeta):
         2.0  2  5
         NaN  1  4
         """
-        from pyspark.pandas.groupby import DataFrameGroupBy, SeriesGroupBy
-
         if isinstance(by, ps.DataFrame):
             raise ValueError("Grouper for '{}' not 1-dimensional".format(type(by).__name__))
         elif isinstance(by, ps.Series):
-            by = [by]
+            new_by = [by]  # type: List[Union[Label, ps.Series]]
         elif is_name_like_tuple(by):
             if isinstance(self, ps.Series):
                 raise KeyError(by)
-            by = [by]
+            new_by = [cast(Label, by)]
         elif is_name_like_value(by):
             if isinstance(self, ps.Series):
                 raise KeyError(by)
-            by = [(by,)]
+            new_by = [cast(Label, (by,))]
         elif is_list_like(by):
-            new_by = []  # type: List[Union[Tuple, ps.Series]]
+            new_by = []
             for key in by:
                 if isinstance(key, ps.DataFrame):
                     raise ValueError(
@@ -2194,32 +2274,30 @@ class Frame(object, metaclass=ABCMeta):
                 elif is_name_like_tuple(key):
                     if isinstance(self, ps.Series):
                         raise KeyError(key)
-                    new_by.append(key)
+                    new_by.append(cast(Label, key))
                 elif is_name_like_value(key):
                     if isinstance(self, ps.Series):
                         raise KeyError(key)
-                    new_by.append((key,))
+                    new_by.append(cast(Label, (key,)))
                 else:
                     raise ValueError(
                         "Grouper for '{}' not 1-dimensional".format(type(key).__name__)
                     )
-            by = new_by
         else:
             raise ValueError("Grouper for '{}' not 1-dimensional".format(type(by).__name__))
-        if not len(by):
+        if not len(new_by):
             raise ValueError("No group keys passed!")
         axis = validate_axis(axis)
         if axis != 0:
             raise NotImplementedError('axis should be either 0 or "index" currently.')
 
-        if isinstance(self, ps.DataFrame):
-            return DataFrameGroupBy._build(self, by, as_index=as_index, dropna=dropna)
-        elif isinstance(self, ps.Series):
-            return SeriesGroupBy._build(self, by, as_index=as_index, dropna=dropna)
-        else:
-            raise TypeError(
-                "Constructor expects DataFrame or Series; however, " "got [%s]" % (self,)
-            )
+        return self._build_groupby(by=new_by, as_index=as_index, dropna=dropna)
+
+    @abstractmethod
+    def _build_groupby(
+        self: FrameLike, by: List[Union["Series", Label]], as_index: bool, dropna: bool
+    ) -> "GroupBy[FrameLike]":
+        pass
 
     def bool(self) -> bool:
         """
@@ -2477,7 +2555,9 @@ class Frame(object, metaclass=ABCMeta):
             return tuple(last_valid_row)
 
     # TODO: 'center', 'win_type', 'on', 'axis' parameter should be implemented.
-    def rolling(self, window, min_periods=None) -> Rolling:
+    def rolling(
+        self: FrameLike, window: int, min_periods: Optional[int] = None
+    ) -> "Rolling[FrameLike]":
         """
         Provide rolling transformations.
 
@@ -2502,11 +2582,13 @@ class Frame(object, metaclass=ABCMeta):
         -------
         a Window sub-classed for the particular operation
         """
+        from pyspark.pandas.window import Rolling
+
         return Rolling(self, window=window, min_periods=min_periods)
 
     # TODO: 'center' and 'axis' parameter should be implemented.
     #   'axis' implementation, refer https://github.com/pyspark.pandas/pull/607
-    def expanding(self, min_periods=1) -> Expanding:
+    def expanding(self: FrameLike, min_periods: int = 1) -> "Expanding[FrameLike]":
         """
         Provide expanding transformations.
 
@@ -2524,9 +2606,11 @@ class Frame(object, metaclass=ABCMeta):
         -------
         a Window sub-classed for the particular operation
         """
+        from pyspark.pandas.window import Expanding
+
         return Expanding(self, min_periods=min_periods)
 
-    def get(self, key, default=None) -> Any:
+    def get(self, key: Any, default: Optional[Any] = None) -> Any:
         """
         Get item from object for given key (DataFrame column, Panel slice,
         etc.). Returns default value if not found.
@@ -2577,7 +2661,7 @@ class Frame(object, metaclass=ABCMeta):
         except (KeyError, ValueError, IndexError):
             return default
 
-    def squeeze(self, axis=None) -> Union[Scalar, "DataFrame", "Series"]:
+    def squeeze(self, axis: Optional[Axis] = None) -> Union[Scalar, "DataFrame", "Series"]:
         """
         Squeeze 1 dimensional axis objects into scalars.
 
@@ -2705,13 +2789,17 @@ class Frame(object, metaclass=ABCMeta):
             # The case of Series is simple.
             # If Series has only a single value, just return it as a scalar.
             # Otherwise, there is no change.
-            self_top_two = self.head(2)
+            self_top_two = cast("Series", self).head(2)
             has_single_value = len(self_top_two) == 1
             return cast(Union[Scalar, ps.Series], self_top_two[0] if has_single_value else self)
 
     def truncate(
-        self, before=None, after=None, axis=None, copy=True
-    ) -> Union["DataFrame", "Series"]:
+        self,
+        before: Optional[Any] = None,
+        after: Optional[Any] = None,
+        axis: Optional[Axis] = None,
+        copy: bool_type = True,
+    ) -> DataFrameOrSeries:
         """
         Truncate a Series or DataFrame before and after some index value.
 
@@ -2848,9 +2936,11 @@ class Frame(object, metaclass=ABCMeta):
             elif axis == 1:
                 result = self.loc[:, before:after]
 
-        return cast(Union[ps.DataFrame, ps.Series], result.copy() if copy else result)
+        return cast(DataFrameOrSeries, result.copy() if copy else result)
 
-    def to_markdown(self, buf=None, mode=None) -> str:
+    def to_markdown(
+        self, buf: Optional[Union[IO[str], str]] = None, mode: Optional[str] = None
+    ) -> str:
         """
         Print Series or DataFrame in Markdown-friendly format.
 
@@ -2911,11 +3001,23 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     @abstractmethod
-    def fillna(self, value=None, method=None, axis=None, inplace=False, limit=None):
+    def fillna(
+        self: FrameLike,
+        value: Optional[Any] = None,
+        method: Optional[str] = None,
+        axis: Optional[Axis] = None,
+        inplace: bool_type = False,
+        limit: Optional[int] = None,
+    ) -> FrameLike:
         pass
 
     # TODO: add 'downcast' when value parameter exists
-    def bfill(self, axis=None, inplace=False, limit=None) -> Union["DataFrame", "Series"]:
+    def bfill(
+        self: FrameLike,
+        axis: Optional[Axis] = None,
+        inplace: bool_type = False,
+        limit: Optional[int] = None,
+    ) -> FrameLike:
         """
         Synonym for `DataFrame.fillna()` or `Series.fillna()` with ``method=`bfill```.
 
@@ -2989,7 +3091,12 @@ class Frame(object, metaclass=ABCMeta):
     backfill = bfill
 
     # TODO: add 'downcast' when value parameter exists
-    def ffill(self, axis=None, inplace=False, limit=None) -> Union["DataFrame", "Series"]:
+    def ffill(
+        self: FrameLike,
+        axis: Optional[Axis] = None,
+        inplace: bool_type = False,
+        limit: Optional[int] = None,
+    ) -> FrameLike:
         """
         Synonym for `DataFrame.fillna()` or `Series.fillna()` with ``method=`ffill```.
 
@@ -3086,23 +3193,18 @@ class Frame(object, metaclass=ABCMeta):
 
     loc.__doc__ = LocIndexer.__doc__
 
-    def __bool__(self):
+    def __bool__(self) -> NoReturn:
         raise ValueError(
             "The truth value of a {0} is ambiguous. "
             "Use a.empty, a.bool(), a.item(), a.any() or a.all().".format(self.__class__.__name__)
         )
 
     @staticmethod
-    def _count_expr(spark_column, spark_type):
-        # Special handle floating point types because Spark's count treats nan as a valid value,
-        # whereas pandas count doesn't include nan.
-        if isinstance(spark_type, (FloatType, DoubleType)):
-            return F.count(F.nanvl(spark_column, F.lit(None)))
-        else:
-            return F.count(spark_column)
+    def _count_expr(psser: "Series") -> Column:
+        return F.count(psser._dtype_op.nan_to_null(psser).spark.column)
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     import shutil

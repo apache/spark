@@ -46,7 +46,10 @@ If you want to install extra dependencies for a specific component, you can inst
 
 .. code-block:: bash
 
+    # Spark SQL
     pip install pyspark[sql]
+    # pandas API on Spark
+    pip install pyspark[pandas_on_spark] plotly  # to plot your data, you can install plotly together.
 
 For PySpark with/without a specific Hadoop version, you can install it by using ``PYSPARK_HADOOP_VERSION`` environment variables as below:
 

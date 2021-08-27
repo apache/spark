@@ -22,6 +22,7 @@ import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, StandardOpenOption}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
+import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util.Locale
 import java.util.zip.GZIPOutputStream
 
@@ -34,8 +35,8 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.{SparkConf, SparkException, TestUtils}
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, QueryTest, Row}
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -2461,6 +2462,60 @@ abstract class CSVSuite
       assert(spark.read.format("csv")
         .option("delimiter", "|")
         .option("ignoreTrailingWhiteSpace", "true").load(path.getAbsolutePath).count() == 1)
+    }
+  }
+
+  test("SPARK-35912: turn non-nullable schema into a nullable schema") {
+    val inputCSVString = """1,"""
+
+    val schema = StructType(Seq(
+      StructField("c1", IntegerType, nullable = false),
+      StructField("c2", IntegerType, nullable = false)))
+    val expected = schema.asNullable
+
+    Seq("DROPMALFORMED", "FAILFAST", "PERMISSIVE").foreach { mode =>
+      val csv = spark.createDataset(
+        spark.sparkContext.parallelize(inputCSVString:: Nil))(Encoders.STRING)
+      val df = spark.read
+        .option("mode", mode)
+        .schema(schema)
+        .csv(csv)
+      assert(df.schema == expected)
+      checkAnswer(df, Row(1, null) :: Nil)
+    }
+  }
+
+  test("SPARK-36536: use casting when datetime pattern is not set") {
+    def isLegacy: Boolean = {
+      spark.conf.get(SQLConf.LEGACY_TIME_PARSER_POLICY).toUpperCase(Locale.ROOT) ==
+        SQLConf.LegacyBehaviorPolicy.LEGACY.toString
+    }
+    withSQLConf(
+      SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> DateTimeTestUtils.UTC.getId) {
+      withTempPath { path =>
+        Seq(
+          """d,ts_ltz,ts_ntz""",
+          """2021,2021,2021""",
+          """2021-01,2021-01 ,2021-01""",
+          """ 2021-2-1,2021-3-02,2021-10-1""",
+          """2021-8-18 00:00:00,2021-8-18 21:44:30Z,2021-8-18T21:44:30.123"""
+        ).toDF().repartition(1).write.text(path.getCanonicalPath)
+        val readback = spark.read.schema("d date, ts_ltz timestamp_ltz, ts_ntz timestamp_ntz")
+          .option("header", true)
+          .csv(path.getCanonicalPath)
+        checkAnswer(
+          readback,
+          Seq(
+            Row(LocalDate.of(2021, 1, 1), Instant.parse("2021-01-01T00:00:00Z"),
+              if (isLegacy) null else LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
+            Row(LocalDate.of(2021, 1, 1), Instant.parse("2021-01-01T00:00:00Z"),
+              if (isLegacy) null else LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
+            Row(LocalDate.of(2021, 2, 1), Instant.parse("2021-03-02T00:00:00Z"),
+              if (isLegacy) null else LocalDateTime.of(2021, 10, 1, 0, 0, 0)),
+            Row(LocalDate.of(2021, 8, 18), Instant.parse("2021-08-18T21:44:30Z"),
+              if (isLegacy) null else LocalDateTime.of(2021, 8, 18, 21, 44, 30, 123000000))))
+      }
     }
   }
 }

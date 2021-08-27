@@ -25,6 +25,14 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
+/**
+ * Test suite base for
+ *   1. [[Cast]] with ANSI mode enabled
+ *   2. [[AnsiCast]]
+ *   3. [[TryCast]]
+ * Note: for new test cases that work for [[Cast]], [[AnsiCast]] and [[TryCast]], please add them
+ *       in `CastSuiteBase` instead of this file to ensure the test coverage.
+ */
 abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
   private def testIntMaxAndMin(dt: DataType): Unit = {
@@ -384,8 +392,6 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
           s"Cannot cast $str to DateType.")
       }
 
-      checkCastWithParseError("12345")
-      checkCastWithParseError("12345-12-18")
       checkCastWithParseError("2015-13-18")
       checkCastWithParseError("2015-03-128")
       checkCastWithParseError("2015/03/18")
@@ -400,6 +406,19 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
   test("SPARK-26218: Fix the corner case of codegen when casting float to Integer") {
     checkExceptionInExpression[ArithmeticException](
       cast(cast(Literal("2147483648"), FloatType), IntegerType), "overflow")
+  }
+
+  test("SPARK-35720: cast invalid string input to timestamp without time zone") {
+    Seq("00:00:00",
+      "a",
+      "123",
+      "a2021-06-17",
+      "2021-06-17abc",
+      "2021-06-17 00:00:00ABC").foreach { invalidInput =>
+      checkExceptionInExpression[DateTimeException](
+        cast(invalidInput, TimestampNTZType),
+        s"Cannot cast $invalidInput to TimestampNTZType")
+    }
   }
 }
 
