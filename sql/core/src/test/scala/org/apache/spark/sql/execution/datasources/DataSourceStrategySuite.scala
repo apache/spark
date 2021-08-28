@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -309,6 +310,21 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
 
     // `Abs(col)` can not be pushed down, so it returns `None`
     assert(PushableColumnAndNestedColumn.unapply(Abs('col.int)) === None)
+  }
+
+  test("SPARK-36644: Push down boolean column filter") {
+    testTranslateFilter('col.boolean, Some(sources.EqualTo("col", true)))
+
+    val t = "test_table"
+    withTable(t) {
+      import testImplicits._
+      Seq(Some(true), Some(false), None).toDF().write.saveAsTable(t)
+      val df = spark.table(t)
+      df.where("value").queryExecution.executedPlan.collectFirst {
+        case f: FileSourceScanExec =>
+          assert(f.metadata("PushedFilters") == "[IsNotNull(value), EqualTo(value,true)]")
+      }
+    }
   }
 
   /**
