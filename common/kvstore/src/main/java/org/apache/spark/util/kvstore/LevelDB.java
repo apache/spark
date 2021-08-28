@@ -70,7 +70,7 @@ public class LevelDB implements KVStore {
 
   /**
    * Trying to close a JNI LevelDB handle with a closed DB causes JVM crashes. This is used to
-   * ensure that all iterators are correctly closed before LevelDB is closed. Use soft reference
+   * ensure that all iterators are correctly closed before LevelDB is closed. Use weak references
    * to ensure that the iterator can be GCed, when it is only referenced here.
    */
   private final ConcurrentLinkedQueue<Reference<LevelDBIterator<?>>> iteratorTracker;
