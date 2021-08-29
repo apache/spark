@@ -357,9 +357,9 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       literalType: DataType): Boolean = {
     toType.sameType(literalType) &&
       !fromExp.foldable &&
-      (fromExp.dataType.isInstanceOf[NumericType] || fromExp.dataType.isInstanceOf[BooleanType]) &&
       toType.isInstanceOf[NumericType] &&
-      Cast.canUpCast(fromExp.dataType, toType)
+      ((fromExp.dataType.isInstanceOf[NumericType] && Cast.canUpCast(fromExp.dataType, toType)) ||
+        fromExp.dataType.isInstanceOf[BooleanType])
   }
 
   private[optimizer] def getRange(dt: DataType): Option[(Any, Any)] = dt match {
