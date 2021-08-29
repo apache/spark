@@ -387,9 +387,6 @@ class HadoopTableReader(
   private def createNewHadoopRDD(partDesc: PartitionDesc, path: String): RDD[Writable] = {
     val newJobConf = new JobConf(hadoopConf)
     HadoopTableReader.initializeLocalJobConfFunc(path, partDesc.getTableDesc)(newJobConf)
-    // SPARK-36328: Reuse the FileSystem delegation token while querying partitioned hive table.
-    SparkHadoopUtil.get.addCurrentCredentials(newJobConf,
-      _broadcastedCredentials.value.value)
     val inputFormatClass = partDesc.getInputFileFormatClass
       .asInstanceOf[Class[newInputClass[Writable, Writable]]]
     createNewHadoopRDD(inputFormatClass, newJobConf)
