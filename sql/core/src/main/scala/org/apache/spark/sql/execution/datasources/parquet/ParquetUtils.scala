@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.parquet.hadoop.ParquetFileWriter
 import org.apache.parquet.hadoop.metadata.{ColumnChunkMetaData, ParquetMetadata}
 import org.apache.parquet.io.api.Binary
-import org.apache.parquet.schema.{PrimitiveType, Types}
+import org.apache.parquet.schema.{LogicalTypeAnnotation, PrimitiveType, Types}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
 import org.apache.spark.SparkException
@@ -159,9 +159,8 @@ object ParquetUtils {
       partitionSchema: StructType,
       aggregation: Aggregation,
       aggSchema: StructType,
-      datetimeRebaseModeInRead: String,
       isCaseSensitive: Boolean): InternalRow = {
-    val (primitiveTypeName, primitiveType, values) =
+    val (primitiveType, values) =
       getPushedDownAggResult(footer, dataSchema, partitionSchema, aggregation, isCaseSensitive)
 
     val builder = Types.buildMessage()
@@ -171,6 +170,7 @@ object ParquetUtils {
     val schemaConverter = new ParquetToSparkSchemaConverter
     val converter = new ParquetRowConverter(schemaConverter, parquetSchema, aggSchema,
       None, LegacyBehaviorPolicy.CORRECTED, LegacyBehaviorPolicy.CORRECTED, NoopUpdater)
+    val primitiveTypeName = primitiveType.map(_.getPrimitiveTypeName)
     primitiveTypeName.zipWithIndex.foreach {
       case (PrimitiveType.PrimitiveTypeName.BOOLEAN, i) =>
         val v = values(i).asInstanceOf[Boolean]
@@ -194,7 +194,7 @@ object ParquetUtils {
         val v = values(i).asInstanceOf[Binary]
         converter.getConverter(i).asPrimitiveConverter().addBinary(v)
       case _ =>
-        throw new SparkException("Unexpected parquet type name")
+        throw new SparkException("Unexpected parquet type name: " + primitiveTypeName)
     }
     converter.currentRecord
   }
@@ -223,7 +223,6 @@ object ParquetUtils {
       partitionSchema,
       aggregation,
       aggSchema,
-      datetimeRebaseModeInRead,
       isCaseSensitive)
     val converter = new RowToColumnConverter(aggSchema)
     val columnVectors = if (offHeap) {
@@ -249,12 +248,11 @@ object ParquetUtils {
       partitionSchema: StructType,
       aggregation: Aggregation,
       isCaseSensitive: Boolean)
-  : (Array[PrimitiveType.PrimitiveTypeName], Array[PrimitiveType], Array[Any]) = {
+  : (Array[PrimitiveType], Array[Any]) = {
     val footerFileMetaData = footer.getFileMetaData
     val fields = footerFileMetaData.getSchema.getFields
     val blocks = footer.getBlocks()
     val primitiveTypeBuilder = ArrayBuilder.make[PrimitiveType]
-    val primitiveTypeNameBuilder = ArrayBuilder.make[PrimitiveType.PrimitiveTypeName]
     val valuesBuilder = ArrayBuilder.make[Any]
 
     aggregation.aggregateExpressions().foreach { agg =>
@@ -267,15 +265,17 @@ object ParquetUtils {
         val blockMetaData = block.getColumns()
         agg match {
           case max: Max =>
-            index = dataSchema.fieldNames.toList.indexOf(max.column.fieldNames.head)
-            schemaName = "max(" + max.column.fieldNames.head + ")"
+            val colName = max.column.fieldNames.head
+            index = dataSchema.fieldNames.toList.indexOf(colName)
+            schemaName = "max(" + colName + ")"
             val currentMax = getCurrentBlockMaxOrMin(blockMetaData, index, true)
             if (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0) {
               value = currentMax
             }
           case min: Min =>
-            index = dataSchema.fieldNames.toList.indexOf(min.column.fieldNames.head)
-            schemaName = "min(" + min.column.fieldNames.head + ")"
+            val colName = min.column.fieldNames.head
+            index = dataSchema.fieldNames.toList.indexOf(colName)
+            schemaName = "min(" + colName + ")"
             val currentMin = getCurrentBlockMaxOrMin(blockMetaData, index, false)
             if (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0) {
               value = currentMin
@@ -304,26 +304,21 @@ object ParquetUtils {
       if (isCount) {
         valuesBuilder += rowCount
         primitiveTypeBuilder += Types.required(PrimitiveTypeName.INT64).named(schemaName);
-        primitiveTypeNameBuilder += PrimitiveType.PrimitiveTypeName.INT64
       } else {
         valuesBuilder += value
         if (fields.get(index).asPrimitiveType().getPrimitiveTypeName
           .equals(PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY)) {  // for decimal type
           val decimal = dataSchema.fields(index).dataType.asInstanceOf[DecimalType]
-          val precision = decimal.precision
-          val scale = decimal.scale
-          val length = precision + scale
-          primitiveTypeBuilder += Types.required(PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY)
-            // note: .precision and .scale are deprecated
-            .length(length).precision(precision).scale(scale).named(schemaName)
+          primitiveTypeBuilder += Types.required(PrimitiveTypeName.BINARY)
+            .as(LogicalTypeAnnotation.decimalType(decimal.scale, decimal.precision))
+            .named(schemaName)
         } else {
           primitiveTypeBuilder +=
             Types.required(fields.get(index).asPrimitiveType.getPrimitiveTypeName).named(schemaName)
         }
-        primitiveTypeNameBuilder += fields.get(index).asPrimitiveType.getPrimitiveTypeName
       }
     }
-    (primitiveTypeNameBuilder.result(), primitiveTypeBuilder.result(), valuesBuilder.result())
+    (primitiveTypeBuilder.result(), valuesBuilder.result())
   }
 
   /**

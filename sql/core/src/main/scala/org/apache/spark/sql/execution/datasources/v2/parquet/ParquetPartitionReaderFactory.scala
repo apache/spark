@@ -126,7 +126,7 @@ case class ParquetPartitionReaderFactory(
           hasNext = false
           val footer = getFooter(file)
           ParquetUtils.createAggInternalRowFromFooter(footer, dataSchema, partitionSchema,
-            aggregation.get, readDataSchema, datetimeRebaseModeInRead, isCaseSensitive)
+            aggregation.get, readDataSchema, isCaseSensitive)
         }
 
         override def close(): Unit = {}
