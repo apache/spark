@@ -20,7 +20,10 @@ package test.org.apache.spark.sql.connector;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.*;
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.Iterator;
+import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
