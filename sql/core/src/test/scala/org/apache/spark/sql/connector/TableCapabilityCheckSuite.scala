@@ -217,7 +217,8 @@ private case object TestRelation extends LeafNode with NamedRelation {
 private case class CapabilityTable(_capabilities: TableCapability*) extends Table {
   override def name(): String = "capability_test_table"
   override def schema(): StructType = TableCapabilityCheckSuite.schema
-  override def capabilities(): util.Set[TableCapability] = _capabilities.toSet.asJava
+  override def capabilities(): util.Set[TableCapability] =
+    util.EnumSet.copyOf(_capabilities.asJava)
 }
 
 private class TestStreamSourceProvider extends StreamSourceProvider {
