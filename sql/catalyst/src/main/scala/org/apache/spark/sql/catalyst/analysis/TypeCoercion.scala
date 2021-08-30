@@ -1115,9 +1115,6 @@ object TypeCoercion extends TypeCoercionBase {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      // Hive treats (true = 1) as true and (false = 0) as true,
-      // all other cases are considered as false.
-
       case EqualTo(left @ BooleanType(), right @ NumericType()) =>
         EqualTo(Cast(left, right.dataType), right)
       case EqualTo(left @ NumericType(), right @ BooleanType()) =>
