@@ -386,6 +386,21 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   try {
+    // Make sure the context is stopped if the user forgets about it. This avoids leaving
+    // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
+    // is killed, though.
+    logDebug("Adding shutdown hook") // force eager creation of logger
+    _shutdownHookRef = ShutdownHookManager.addShutdownHook(
+      ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY) { () =>
+      logInfo("Invoking stop() from shutdown hook")
+      try {
+        stop()
+      } catch {
+        case e: Throwable =>
+          logWarning("Ignoring Exception while stopping SparkContext from shutdown hook", e)
+      }
+    }
+
     _conf = config.clone()
     _conf.validateSettings()
     _conf.set("spark.app.startTime", startTime.toString)
@@ -656,20 +671,6 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     appStatusSource.foreach(_env.metricsSystem.registerSource(_))
     _plugins.foreach(_.registerMetrics(applicationId))
-    // Make sure the context is stopped if the user forgets about it. This avoids leaving
-    // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
-    // is killed, though.
-    logDebug("Adding shutdown hook") // force eager creation of logger
-    _shutdownHookRef = ShutdownHookManager.addShutdownHook(
-      ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY) { () =>
-      logInfo("Invoking stop() from shutdown hook")
-      try {
-        stop()
-      } catch {
-        case e: Throwable =>
-          logWarning("Ignoring Exception while stopping SparkContext from shutdown hook", e)
-      }
-    }
   } catch {
     case NonFatal(e) =>
       logError("Error initializing SparkContext.", e)
