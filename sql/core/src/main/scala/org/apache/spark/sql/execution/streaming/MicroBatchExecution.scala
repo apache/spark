@@ -263,7 +263,8 @@ class MicroBatchExecution(
           currentBatchId += 1
           isCurrentBatchConstructed = false
         } else if (triggerExecutor.isInstanceOf[MultiBatchExecutor]) {
-          logInfo("Finished processing all data, terminating this Trigger.AvailableNow query")
+          logInfo("Finished processing all available data for the trigger, terminating this " +
+            "Trigger.AvailableNow query")
           state.set(TERMINATED)
         } else Thread.sleep(pollingDelayMs)
       }
@@ -386,6 +387,21 @@ class MicroBatchExecution(
   }
 
   /**
+   * Get the startOffset from availableOffsets. This is to be used in
+   * latestOffset(startOffset, readLimit)
+   */
+  private def getStartOffset(dataStream: SparkDataStream): OffsetV2 = {
+    val startOffsetOpt = availableOffsets.get(dataStream)
+    dataStream match {
+      case _: Source =>
+        startOffsetOpt.orNull
+      case v2: MicroBatchStream =>
+        startOffsetOpt.map(offset => v2.deserializeOffset(offset.json))
+          .getOrElse(v2.initialOffset())
+    }
+  }
+
+  /**
    * Attempts to construct a batch according to:
    *  - Availability of new data
    *  - Need for timeouts and state cleanups in stateful operators
@@ -405,33 +421,17 @@ class MicroBatchExecution(
     // Generate a map from each unique source to the next available offset.
     val (nextOffsets, recentOffsets) = uniqueSources.toSeq.map {
       case (s: AvailableNowDataStreamWrapper, limit) =>
-        val originalSource = s.delegate
         updateStatusMessage(s"Getting offsets from $s")
+        val originalSource = s.delegate
         reportTimeTaken("latestOffset") {
-          val startOffsetOpt = availableOffsets.get(originalSource)
-          val startOffset = s match {
-            case _: Source =>
-              startOffsetOpt.orNull
-            case v2: MicroBatchStream =>
-              startOffsetOpt.map(offset => v2.deserializeOffset(offset.json))
-                .getOrElse(v2.initialOffset())
-          }
-          val next = s.latestOffset(startOffset, limit)
+          val next = s.latestOffset(getStartOffset(originalSource), limit)
           val latest = s.reportLatestOffset()
           ((originalSource, Option(next)), (originalSource, Option(latest)))
         }
       case (s: SupportsAdmissionControl, limit) =>
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("latestOffset") {
-          val startOffsetOpt = availableOffsets.get(s)
-          val startOffset = s match {
-            case _: Source =>
-              startOffsetOpt.orNull
-            case v2: MicroBatchStream =>
-              startOffsetOpt.map(offset => v2.deserializeOffset(offset.json))
-                .getOrElse(v2.initialOffset())
-          }
-          val next = s.latestOffset(startOffset, limit)
+          val next = s.latestOffset(getStartOffset(s), limit)
           val latest = s.reportLatestOffset()
           ((s, Option(next)), (s, Option(latest)))
         }

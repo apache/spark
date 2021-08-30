@@ -109,7 +109,7 @@ class FileStreamSource(
   // Visible for testing and debugging in production.
   val seenFiles = new SeenFilesMap(maxFileAgeMs, fileNameOnly)
 
-  var allFilesForTriggerAvailableNow: Seq[(String, Long)] = null
+  private var allFilesForTriggerAvailableNow: Seq[(String, Long)] = _
 
   metadataLog.restore().foreach { entry =>
     seenFiles.add(entry.path, entry.timestamp)
@@ -132,6 +132,7 @@ class FileStreamSource(
       unreadFiles
     } else {
       // All the new files found - ignore aged files and files that we have seen.
+      // Use the pre-fetched list of files when Trigger.AvailableNow is enabled.
       val allFiles = if (allFilesForTriggerAvailableNow != null) {
         allFilesForTriggerAvailableNow
       } else {

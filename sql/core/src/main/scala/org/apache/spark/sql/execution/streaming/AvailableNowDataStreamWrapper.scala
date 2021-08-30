@@ -22,15 +22,13 @@ import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReadLimi
 import org.apache.spark.sql.connector.read.streaming
 
 /**
- * This class wraps a [[SparkDataStream]] and makes it support Trigger.AvailableNow, by
- * overriding its [[latestOffset]] method to always return the latest offset when the method is
- * first called. It is as if there is no new data coming in from the source after the first
- * [[latestOffset]] call.
+ * This class wraps a [[SparkDataStream]] and makes it support Trigger.AvailableNow, by overriding
+ * its [[latestOffset]] method to always return the latest offset at the beginning of the query.
  */
 class AvailableNowDataStreamWrapper(val delegate: SparkDataStream)
   extends SparkDataStream with SupportsTriggerAvailableNow with Logging {
 
-  private var fetchedOffset: Option[streaming.Offset] = _
+  private var fetchedOffset: streaming.Offset = _
 
   override def initialOffset(): streaming.Offset = delegate.initialOffset()
 
@@ -40,7 +38,25 @@ class AvailableNowDataStreamWrapper(val delegate: SparkDataStream)
 
   override def stop(): Unit = delegate.stop()
 
-  override def prepareForTriggerAvailableNow(): Unit = {}
+  private def getInitialOffset: streaming.Offset = {
+    delegate match {
+      case _: Source => null
+      case m: MicroBatchStream => m.initialOffset
+    }
+  }
+
+  /**
+   * Fetch and store the latest offset for all available data at the beginning of the query.
+   */
+  override def prepareForTriggerAvailableNow(): Unit = {
+    fetchedOffset = delegate match {
+      case s: SupportsAdmissionControl =>
+        s.latestOffset(getInitialOffset, ReadLimit.allAvailable())
+      case s: Source => s.getOffset.orNull
+      case m: MicroBatchStream => m.latestOffset()
+      case s => throw new IllegalStateException(s"Unexpected source: $s")
+    }
+  }
 
   /**
    * Always return [[ReadLimit.allAvailable]]
@@ -58,23 +74,10 @@ class AvailableNowDataStreamWrapper(val delegate: SparkDataStream)
   }
 
   /**
-   * Get and return the latest offset for all available data when called for the first time, then
-   * return the same result when called later.
-   *
-   * It is as if there is no new data coming in from the source after the first method call.
+   * Return the latest offset pre-fetched in [[prepareForTriggerAvailableNow]].
    */
-  override def latestOffset(startOffset: streaming.Offset, limit: ReadLimit): streaming.Offset = {
-    if (fetchedOffset == null) {
-      fetchedOffset = delegate match {
-        case s: SupportsAdmissionControl =>
-          Option(s.latestOffset(startOffset, ReadLimit.allAvailable()))
-        case s: Source => s.getOffset
-        case m: MicroBatchStream => Option(m.latestOffset())
-        case s => throw new IllegalStateException(s"Unexpected source: $s")
-      }
-    }
-    fetchedOffset.orNull
-  }
+  override def latestOffset(startOffset: streaming.Offset, limit: ReadLimit): streaming.Offset =
+    fetchedOffset
 
   override def reportLatestOffset: streaming.Offset = delegate match {
     // Return the real latest offset here since this is only used for metrics
