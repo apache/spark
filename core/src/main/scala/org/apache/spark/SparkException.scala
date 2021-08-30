@@ -224,3 +224,29 @@ class SparkSQLFeatureNotSupportedException(errorClass: String, messageParameters
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
+
+/**
+ * Unsupported Operation exception thrown from Spark with an error class.
+ */
+class SparkUnsupportedOperationException(errorClass: String, messageParameters: Array[String])
+  extends UnsupportedOperationException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * No such element exception thrown from Spark with an error class.
+ */
+class SparkNoSuchElementException(errorClass: String, messageParameters: Array[String])
+  extends NoSuchElementException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.annotation.Experimental
 
 @Experimental
@@ -26,3 +26,13 @@ class CatalogNotFoundException(message: String, cause: Throwable)
 
   def this(message: String) = this(message, null)
 }
+
+class SparkCatalogNotFoundException(errorClass: String, messageParameters: Array[String])
+  extends CatalogNotFoundException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+

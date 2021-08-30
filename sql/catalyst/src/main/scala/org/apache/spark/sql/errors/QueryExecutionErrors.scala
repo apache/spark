@@ -32,7 +32,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
-import org.apache.spark.{Partition, SparkArithmeticException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIndexOutOfBoundsException, SparkNoSuchMethodException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUpgradeException}
+import org.apache.spark.{Partition, SparkArithmeticException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIndexOutOfBoundsException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, FailFastMode}
-import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Identifier, Table, TableProvider}
+import org.apache.spark.sql.connector.catalog.{Identifier, SparkCatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.QueryExecutionException
@@ -1407,53 +1407,70 @@ object QueryExecutionErrors {
   }
 
   def cannotSetTimeoutTimestampError(): Throwable = {
-    new UnsupportedOperationException(
-      "Cannot set timeout timestamp without enabling event time timeout in " +
-        "[map|flatMapGroupsWithState")
+    new SparkUnsupportedOperationException(
+      errorClass = "CANNOT_GET_EVENT_TIME_WATERMARK_ERROR",
+      messageParameters = Array.empty
+    )
   }
 
   def batchMetadataFileNotFoundError(batchMetadataFile: Path): Throwable = {
-    new FileNotFoundException(s"Unable to find batch $batchMetadataFile")
+    new SparkFileNotFoundException(
+      errorClass = "BATCH_METADATA_FILE_NOT_FOUND_ERROR",
+      messageParameters = Array(batchMetadataFile.toString)
+    )
   }
 
   def multiStreamingQueriesUsingPathConcurrentlyError(
       path: String, e: FileAlreadyExistsException): Throwable = {
-    new ConcurrentModificationException(
-      s"Multiple streaming queries are concurrently using $path", e)
+    new SparkConcurrentModificationException(
+      errorClass = "MULTI_STREAMING_QUERIES_USING_PATH_CONCURRENTLY_ERROR",
+      messageParameters = Array(path), e)
   }
 
   def addFilesWithAbsolutePathUnsupportedError(commitProtocol: String): Throwable = {
-    new UnsupportedOperationException(
-      s"$commitProtocol does not support adding files with an absolute path")
+    new SparkUnsupportedOperationException(
+      errorClass = "ADD_FILES_WITH_ABSOLUTE_PATH_UNSUPPORTED",
+      messageParameters = Array(commitProtocol))
   }
 
   def microBatchUnsupportedByDataSourceError(srcName: String): Throwable = {
-    new UnsupportedOperationException(
-      s"Data source $srcName does not support microbatch processing.")
+    new SparkUnsupportedOperationException(
+      errorClass = "MICRO_BATCH_UNSUPPORTED_BY_DATA_SOURCE_ERROR",
+      messageParameters = Array(srcName))
   }
 
   def cannotExecuteStreamingRelationExecError(): Throwable = {
-    new UnsupportedOperationException("StreamingRelationExec cannot be executed")
+    new SparkUnsupportedOperationException(
+      errorClass = "CANNOT_EXECUTE_STREAMING_RELATION_EXEC_ERROR",
+      messageParameters = Array.empty
+    )
   }
 
   def invalidStreamingOutputModeError(outputMode: Option[OutputMode]): Throwable = {
-    new UnsupportedOperationException(s"Invalid output mode: $outputMode")
+    new SparkUnsupportedOperationException(
+      errorClass = "INVALID_STREAMING_OUTPUT_MODE_ERROR",
+      messageParameters = Array(outputMode.toString)
+    )
   }
 
   def catalogPluginClassNotFoundError(name: String): Throwable = {
-    new CatalogNotFoundException(
-      s"Catalog '$name' plugin class not found: spark.sql.catalog.$name is not defined")
+    new SparkCatalogNotFoundException(
+      errorClass = "CATALOG_PLUGIN_CLASS_NOT_FOUND_ERROR",
+      messageParameters = Array(name, name))
   }
 
   def catalogPluginClassNotImplementedError(name: String, pluginClassName: String): Throwable = {
     new SparkException(
-      s"Plugin class for catalog '$name' does not implement CatalogPlugin: $pluginClassName")
+      errorClass = "CATALOG_PLUGIN_CLASS_NOT_IMPLEMENTED_ERROR",
+      messageParameters = Array(name, pluginClassName), null)
   }
 
   def catalogPluginClassNotFoundForCatalogError(
       name: String,
       pluginClassName: String): Throwable = {
-    new SparkException(s"Cannot find catalog plugin class for catalog '$name': $pluginClassName")
+    new SparkException(
+      errorClass = "CATALOG_PLUGIN_CLASS_NOT_FOUND_FOR_CATALOG_ERROR",
+      messageParameters = Array(name, pluginClassName), null)
   }
 
   def catalogFailToFindPublicNoArgConstructorError(
@@ -1461,7 +1478,8 @@ object QueryExecutionErrors {
       pluginClassName: String,
       e: Exception): Throwable = {
     new SparkException(
-      s"Failed to find public no-arg constructor for catalog '$name': $pluginClassName)", e)
+      errorClass = "CATALOG_FAIL_TO_FIND_PUBLIC_NO_ARG_CONSTRUCTOR_ERROR",
+      messageParameters = Array(name, pluginClassName), e)
   }
 
   def catalogFailToCallPublicNoArgConstructorError(
@@ -1469,43 +1487,61 @@ object QueryExecutionErrors {
       pluginClassName: String,
       e: Exception): Throwable = {
     new SparkException(
-      s"Failed to call public no-arg constructor for catalog '$name': $pluginClassName)", e)
+      errorClass = "CATALOG_FAIL_TO_CALL_PUBLIC_NO_ARG_CONSTRUCTOR_ERROR",
+      messageParameters = Array(name, pluginClassName), e)
   }
 
   def cannotInstantiateAbstractCatalogPluginClassError(
       name: String,
       pluginClassName: String,
       e: Exception): Throwable = {
-    new SparkException("Cannot instantiate abstract catalog plugin class for " +
-      s"catalog '$name': $pluginClassName", e.getCause)
+      new SparkException(
+        errorClass = "CANNOT_INSTANTIATE_ABSTRACT_CATALOG_PLUGIN_CLASS_ERROR",
+        messageParameters = Array(name, pluginClassName), e.getCause)
   }
 
   def failedToInstantiateConstructorForCatalogError(
       name: String,
       pluginClassName: String,
       e: Exception): Throwable = {
-    new SparkException("Failed during instantiating constructor for catalog " +
-      s"'$name': $pluginClassName", e.getCause)
+    new SparkException(
+      errorClass = "FAILED_TO_INSTANTIATE_CONSTRUCTOR_FOR_CATALOG_ERROR",
+      messageParameters = Array(name, pluginClassName), e.getCause)
   }
 
   def noSuchElementExceptionError(): Throwable = {
-    new NoSuchElementException
+    new SparkNoSuchElementException(
+      errorClass = "NO_SUCH_ELEMENT_EXCEPTION",
+      messageParameters = Array.empty
+    )
   }
 
   def noSuchElementExceptionError(key: String): Throwable = {
-    new NoSuchElementException(key)
+    new SparkNoSuchElementException(
+      errorClass = "NO_SUCH_ELEMENT_EXCEPTION",
+      messageParameters = Array(key)
+    )
   }
 
   def cannotMutateReadOnlySQLConfError(): Throwable = {
-    new UnsupportedOperationException("Cannot mutate ReadOnlySQLConf.")
+    new SparkUnsupportedOperationException(
+      errorClass = "CANNOT_MUTATE_READ_ONLY_SQL_CONF_ERROR",
+      messageParameters = Array.empty
+    )
   }
 
   def cannotCloneOrCopyReadOnlySQLConfError(): Throwable = {
-    new UnsupportedOperationException("Cannot clone/copy ReadOnlySQLConf.")
+    new SparkUnsupportedOperationException(
+      errorClass = "CANNOT_CLONE_OR_COPY_READ_ONLY_SQL_CONF_ERROR",
+      messageParameters = Array.empty
+    )
   }
 
   def cannotGetSQLConfInSchedulerEventLoopThreadError(): Throwable = {
-    new RuntimeException("Cannot get SQLConf inside scheduler event loop thread.")
+    new SparkRuntimeException(
+      errorClass = "CANNOT_GET_SQL_CONF_IN_SCHEDULER_EVENT_LOOP_THREAD_ERROR",
+      messageParameters = Array.empty
+    )
   }
 
   def unsupportedOperationExceptionError(): Throwable = {

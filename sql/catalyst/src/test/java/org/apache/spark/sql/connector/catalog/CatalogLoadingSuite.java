@@ -66,7 +66,7 @@ public class CatalogLoadingSuite {
   public void testLoadWithoutConfig() {
     SQLConf conf = new SQLConf();
 
-    SparkException exc = intercept(CatalogNotFoundException.class,
+    SparkException exc = intercept(SparkCatalogNotFoundException.class,
         () -> Catalogs.load("missing", conf));
 
     Assert.assertTrue("Should complain that implementation is not configured",

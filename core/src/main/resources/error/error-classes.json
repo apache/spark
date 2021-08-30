@@ -1,6 +1,59 @@
 {
+  "ADD_FILES_WITH_ABSOLUTE_PATH_UNSUPPORTED" : {
+    "message" : [ "%s does not support adding files with an absolute path" ],
+    "sqlState" : "0A000"
+  },
   "AMBIGUOUS_FIELD_NAME" : {
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
+    "sqlState" : "42000"
+  },
+  "BATCH_METADATA_FILE_NOT_FOUND_ERROR" : {
+    "message" : [ "Unable to find batch %s" ]
+  },
+  "CANNOT_CLONE_OR_COPY_READ_ONLY_SQL_CONF_ERROR" : {
+    "message" : [ "Cannot clone/copy ReadOnlySQLConf." ],
+    "sqlState" : "42000"
+  },
+  "CANNOT_EXECUTE_STREAMING_RELATION_EXEC_ERROR" : {
+    "message" : [ "StreamingRelationExec cannot be executed" ],
+    "sqlState" : "42000"
+  },
+  "CANNOT_GET_EVENT_TIME_WATERMARK_ERROR" : {
+    "message" : [ "Cannot get event time watermark timestamp without setting watermark before [map|flatMap]GroupsWithState" ],
+    "sqlState" : "42000"
+  },
+  "CANNOT_GET_SQL_CONF_IN_SCHEDULER_EVENT_LOOP_THREAD_ERROR" : {
+    "message" : [ "Cannot get SQLConf inside scheduler event loop thread." ],
+    "sqlState" : "42000"
+  },
+  "CANNOT_INSTANTIATE_ABSTRACT_CATALOG_PLUGIN_CLASS_ERROR" : {
+    "message" : [ "Cannot instantiate abstract catalog plugin class for catalog '%s': %s" ],
+    "sqlState" : "42000"
+  },
+  "CANNOT_MUTATE_READ_ONLY_SQL_CONF_ERROR" : {
+    "message" : [ "Cannot mutate ReadOnlySQLConf." ],
+    "sqlState" : "23000"
+  },
+  "CANNOT_SET_TIMEOUT_TIMESTAMP_ERROR" : {
+    "message" : [ "Cannot set timeout timestamp without enabling event time timeout in [map|flatMapGroupsWithState" ],
+    "sqlState" : "42000"
+  },
+  "CATALOG_FAIL_TO_CALL_PUBLIC_NO_ARG_CONSTRUCTOR_ERROR" : {
+    "message" : [ "Failed to call public no-arg constructor for catalog '%s': %s" ]
+  },
+  "CATALOG_FAIL_TO_FIND_PUBLIC_NO_ARG_CONSTRUCTOR_ERROR" : {
+    "message" : [ "Failed to find public no-arg constructor for catalog '%s': %s" ]
+  },
+  "CATALOG_PLUGIN_CLASS_NOT_FOUND_ERROR" : {
+    "message" : [ "Catalog '%s' plugin class not found: spark.sql.catalog.%s is not defined" ],
+    "sqlState" : "42000"
+  },
+  "CATALOG_PLUGIN_CLASS_NOT_FOUND_FOR_CATALOG_ERROR" : {
+    "message" : [ "Cannot find catalog plugin class for catalog '%s': %s" ],
+    "sqlState" : "42000"
+  },
+  "CATALOG_PLUGIN_CLASS_NOT_IMPLEMENTED_ERROR" : {
+    "message" : [ "Plugin class for catalog '%s' does not implement CatalogPlugin: %s" ],
     "sqlState" : "42000"
   },
   "CONCURRENT_QUERY_ERROR" : {
@@ -20,6 +73,9 @@
   },
   "FAILED_SET_ORIGINAL_PERMISSION_BACK" : {
     "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ]
+  },
+  "FAILED_TO_INSTANTIATE_CONSTRUCTOR_FOR_CATALOG_ERROR" : {
+    "message" : [ "Failed during instantiating constructor for catalog '%s': %s" ]
   },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [ "Column of grouping (%s) can't be found in grouping columns %s" ],
@@ -57,6 +113,14 @@
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
   },
+  "INVALID_STREAMING_OUTPUT_MODE_ERROR" : {
+    "message" : [ "Invalid output mode: %s" ],
+    "sqlState" : "42000"
+  },
+  "MICRO_BATCH_UNSUPPORTED_BY_DATA_SOURCE_ERROR" : {
+    "message" : [ "Data source %s does not support microbatch processing." ],
+    "sqlState" : "0A000"
+  },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
     "sqlState" : "42000"
@@ -69,6 +133,10 @@
     "message" : [ "Unknown static partition column: %s" ],
     "sqlState" : "42000"
   },
+  "MULTI_STREAMING_QUERIES_USING_PATH_CONCURRENTLY_ERROR" : {
+    "message" : [ "Multiple streaming queries are concurrently using %s" ],
+    "sqlState" : "23000"
+  },
   "NON_LITERAL_PIVOT_VALUES" : {
     "message" : [ "Literal expressions required for pivot values, found '%s'" ],
     "sqlState" : "42000"
@@ -76,6 +144,9 @@
   "NON_PARTITION_COLUMN" : {
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
     "sqlState" : "42000"
+  },
+  "NO_SUCH_ELEMENT_EXCEPTION" : {
+    "message" : [ "%s" ]
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
