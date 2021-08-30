@@ -1115,6 +1115,9 @@ object TypeCoercion extends TypeCoercionBase {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
+      // [SPARK-36607] The simplifications for the case that one side is a literal numeric value
+      // are handled in UnwrapCastInBinaryComparison
+
       case EqualTo(left @ BooleanType(), right @ NumericType()) =>
         EqualTo(Cast(left, right.dataType), right)
       case EqualTo(left @ NumericType(), right @ BooleanType()) =>
