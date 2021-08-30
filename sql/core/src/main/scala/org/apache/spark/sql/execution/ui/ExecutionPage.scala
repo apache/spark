@@ -81,7 +81,8 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
       summary ++
         planVisualization(request, metrics, graph) ++
-        physicalPlanDescription(executionUIData.physicalPlanDescription)
+        physicalPlanDescription(executionUIData.physicalPlanDescription) ++
+        modifiedConfigs(executionUIData.modifiedConfigs)
     }.getOrElse {
       <div>No information to display for query {executionId}</div>
     }
@@ -145,4 +146,28 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     </script>
     <br/>
   }
+
+  private def modifiedConfigs(modifiedConfigs: Map[String, String]): Seq[Node] = {
+    val configs = UIUtils.listingTable(
+      propertyHeader,
+      propertyRow,
+      modifiedConfigs.toSeq.sorted,
+      fixedWidth = true
+    )
+
+    <div>
+      <span class="collapse-sql-properties collapse-table"
+            onClick="collapseTable('collapse-sql-properties', 'sql-properties')">
+        <span class="collapse-table-arrow arrow-closed"></span>
+        <a>SQL Properties</a>
+      </span>
+      <div class="sql-properties collapsible-table collapsed">
+        {configs}
+      </div>
+    </div>
+    <br/>
+  }
+
+  private def propertyHeader = Seq("Name", "Value")
+  private def propertyRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
 }

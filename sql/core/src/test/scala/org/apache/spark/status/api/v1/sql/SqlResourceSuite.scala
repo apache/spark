@@ -85,6 +85,7 @@ object SqlResourceSuite {
       description = DESCRIPTION,
       details = "",
       physicalPlanDescription = PLAN_DESCRIPTION,
+      Map.empty,
       metrics = metrics,
       submissionTime = 1586768888233L,
       completionTime = Some(new Date(1586768888999L)),
