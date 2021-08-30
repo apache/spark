@@ -278,12 +278,18 @@ private[sql] case class JDBCRelation(
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
+    // When pushDownPredicate is false, all Filters that need to be pushed down should be ignored
+    val pushedFilters = if (jdbcOptions.pushDownPredicate) {
+      filters
+    } else {
+      Array.empty[Filter]
+    }
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sparkSession.sparkContext,
       schema,
       requiredColumns,
-      filters,
+      pushedFilters,
       parts,
       jdbcOptions).asInstanceOf[RDD[Row]]
   }
