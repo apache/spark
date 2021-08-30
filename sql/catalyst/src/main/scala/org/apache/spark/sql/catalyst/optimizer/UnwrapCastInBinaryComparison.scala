@@ -41,7 +41,7 @@ import org.apache.spark.sql.types._
  *
  * Currently this only handles cases where:
  *   1). `fromType` (of `fromExp`) and `toType` are of numeric types (i.e., short, int, float,
- *     decimal, etc)
+ *     decimal, etc) or boolean type
  *   2). `fromType` can be safely coerced to `toType` without precision loss (e.g., short to int,
  *     int to long, but not long to int)
  *

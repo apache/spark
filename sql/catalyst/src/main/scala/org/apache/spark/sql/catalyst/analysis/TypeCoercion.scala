@@ -1111,9 +1111,6 @@ object TypeCoercion extends TypeCoercionBase {
    * Changes numeric values to booleans so that expressions like true = 1 can be evaluated.
    */
   object BooleanEquality extends TypeCoercionRule {
-    private val trueValues = Seq(1.toByte, 1.toShort, 1, 1L, Decimal.ONE)
-    private val falseValues = Seq(0.toByte, 0.toShort, 0, 0L, Decimal.ZERO)
-
     override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
