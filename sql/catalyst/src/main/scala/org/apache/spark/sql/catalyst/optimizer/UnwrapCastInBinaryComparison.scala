@@ -43,7 +43,7 @@ import org.apache.spark.sql.types._
  *   1). `fromType` (of `fromExp`) and `toType` are of numeric types (i.e., short, int, float,
  *     decimal, etc) or boolean type
  *   2). `fromType` can be safely coerced to `toType` without precision loss (e.g., short to int,
- *     int to long, but not long to int)
+ *     int to long, but not long to int, nor int to boolean)
  *
  * If the above conditions are satisfied, the rule checks to see if the literal `value` is within
  * range `(min, max)`, where `min` and `max` are the minimum and maximum value of `fromType`,
