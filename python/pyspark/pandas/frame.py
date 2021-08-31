@@ -7920,7 +7920,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> df1 = ps.DataFrame({'A': [None, 0], 'B': [None, 4]})
         >>> df2 = ps.DataFrame({'A': [1, 1], 'B': [3, 3]})
 
-        >>> df1.combine_first(df2)
+        >>> df1.combine_first(df2).sort_index()
              A    B
         0  1.0  3.0
         1  0.0  4.0
@@ -7930,7 +7930,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> df1 = ps.DataFrame({'A': [None, 0], 'B': [4, None]})
         >>> df2 = ps.DataFrame({'B': [3, 3], 'C': [1, 1]}, index=[1, 2])
 
-        >>> df1.combine_first(df2)
+        >>> df1.combine_first(df2).sort_index()
              A    B    C
         0  NaN  4.0  NaN
         1  0.0  3.0  1.0

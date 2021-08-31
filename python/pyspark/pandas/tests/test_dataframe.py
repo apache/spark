@@ -5727,40 +5727,6 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assert_eq(value_psdf, value_pdf)
 
     def test_combine_first(self):
-        pdf1 = pd.DataFrame({"A": [None, 0], "B": [4, None]})
-        psdf1 = ps.from_pandas(pdf1)
-        pdf2 = pd.DataFrame({"C": [3, 3], "B": [1, 1]})
-        psdf2 = ps.from_pandas(pdf2)
-
-        with option_context("compute.ops_on_diff_frames", True):
-            if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
-                self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2))
-            else:
-                # pandas < 1.2.0 returns unexpected dtypes,
-                # please refer to https://github.com/pandas-dev/pandas/issues/28481 for details
-                expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
-                self.assert_eq(expected_pdf, psdf1.combine_first(psdf2))
-
-        pdf1.columns = pd.MultiIndex.from_tuples([("A", "willow"), ("B", "pine")])
-        psdf1 = ps.from_pandas(pdf1)
-        pdf2.columns = pd.MultiIndex.from_tuples([("C", "oak"), ("B", "pine")])
-        psdf2 = ps.from_pandas(pdf2)
-
-        with option_context("compute.ops_on_diff_frames", True):
-            if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
-                self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2))
-            else:
-                # pandas < 1.2.0 returns unexpected dtypes,
-                # please refer to https://github.com/pandas-dev/pandas/issues/28481 for details
-                expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
-                expected_pdf.columns = pd.MultiIndex.from_tuples(
-                    [("A", "willow"), ("B", "pine"), ("C", "oak")]
-                )
-                self.assert_eq(expected_pdf, psdf1.combine_first(psdf2))
-
-        self.assertRaises(TypeError, lambda: psdf1.combine_first(ps.Series([1, 2])))
-
-    def test_combine_first(self):
         pdf = pd.DataFrame(
             {("X", "A"): [None, 0], ("X", "B"): [4, None], ("Y", "C"): [3, 3], ("Y", "B"): [1, 1]}
         )

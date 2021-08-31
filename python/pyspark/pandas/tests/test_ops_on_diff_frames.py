@@ -661,12 +661,12 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf2 = ps.from_pandas(pdf2)
 
         if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
-            self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2))
+            self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2).sort_index())
         else:
             # pandas < 1.2.0 returns unexpected dtypes,
             # please refer to https://github.com/pandas-dev/pandas/issues/28481 for details
             expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
-            self.assert_eq(expected_pdf, psdf1.combine_first(psdf2))
+            self.assert_eq(expected_pdf, psdf1.combine_first(psdf2).sort_index())
 
         pdf1.columns = pd.MultiIndex.from_tuples([("A", "willow"), ("B", "pine")])
         psdf1 = ps.from_pandas(pdf1)
@@ -674,7 +674,7 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf2 = ps.from_pandas(pdf2)
 
         if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
-            self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2))
+            self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2).sort_index())
         else:
             # pandas < 1.2.0 returns unexpected dtypes,
             # please refer to https://github.com/pandas-dev/pandas/issues/28481 for details
@@ -682,7 +682,7 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             expected_pdf.columns = pd.MultiIndex.from_tuples(
                 [("A", "willow"), ("B", "pine"), ("C", "oak")]
             )
-            self.assert_eq(expected_pdf, psdf1.combine_first(psdf2))
+            self.assert_eq(expected_pdf, psdf1.combine_first(psdf2).sort_index())
 
     def test_insert(self):
         #
