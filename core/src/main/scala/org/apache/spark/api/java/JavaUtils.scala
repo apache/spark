@@ -91,7 +91,7 @@ private[spark] object JavaUtils {
                   mm.remove(k)
                   prev = None
                 case _ =>
-                  throw SparkCoreErrors.removeUnsupportedError()
+                  throw new UnsupportedOperationException("remove")
               }
             case _ =>
               throw new IllegalStateException("next must be called at least once before remove")

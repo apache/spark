@@ -33,10 +33,6 @@ import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException
  * Object for grouping error messages from (most) exceptions thrown during query execution.
  */
 object SparkCoreErrors {
-  def removeUnsupportedError(): Throwable = {
-    new UnsupportedOperationException("remove")
-  }
-
   def unexpectedPy4JServerError(other: Object): Throwable = {
     new RuntimeException(s"Unexpected Py4J server ${other.getClass}")
   }
