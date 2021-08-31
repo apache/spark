@@ -129,7 +129,11 @@ class PrefixScannableHDFSBackedStateStoreMap(
     other match {
       case o: PrefixScannableHDFSBackedStateStoreMap =>
         map.putAll(o.map)
-        prefixKeyToKeysMap.putAll(o.prefixKeyToKeysMap)
+        o.prefixKeyToKeysMap.asScala.foreach { case (prefixKey, keySet) =>
+          val newSet = new mutable.HashSet[UnsafeRow]()
+          newSet ++= keySet
+          prefixKeyToKeysMap.put(prefixKey, newSet)
+        }
 
       case _ => other.iterator().foreach { pair => put(pair.key, pair.value) }
     }
