@@ -125,8 +125,8 @@ private[spark] class YarnClientSchedulerBackend(
         state match {
           case FinalApplicationStatus.FAILED | FinalApplicationStatus.KILLED =>
             logWarning(s"ApplicationMaster finished with status ${state}, " +
-              s"SparkContext should exit with code -1.")
-            System.exit(-1)
+              s"SparkContext should exit with code 1.")
+            System.exit(1)
           case _ =>
         }
       } catch {
