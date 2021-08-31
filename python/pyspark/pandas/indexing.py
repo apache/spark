@@ -429,144 +429,6 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         """Select columns by other type key."""
         pass
 
-    def __getitem__(self, key: Any) -> Union["Series", "DataFrame"]:
-        from pyspark.pandas.frame import DataFrame
-        from pyspark.pandas.series import Series, first_series
-
-        if self._is_series:
-            if isinstance(key, Series) and not same_anchor(key, self._psdf_or_psser):
-                psdf = self._psdf_or_psser.to_frame()
-                temp_col = verify_temp_column_name(psdf, "__temp_col__")
-
-                psdf[temp_col] = key
-                return type(self)(psdf[self._psdf_or_psser.name])[psdf[temp_col]]
-
-            cond, limit, remaining_index = self._select_rows(key)
-            if cond is None and limit is None:
-                return self._psdf_or_psser
-
-            column_label = self._psdf_or_psser._column_label
-            column_labels = [column_label]
-            data_spark_columns = [self._internal.spark_column_for(column_label)]
-            data_fields = [self._internal.field_for(column_label)]
-            returns_series = True
-            series_name = self._psdf_or_psser.name
-        else:
-            assert self._is_df
-            if isinstance(key, tuple):
-                if len(key) != 2:
-                    raise SparkPandasIndexingError("Only accepts pairs of candidates")
-                rows_sel, cols_sel = key
-            else:
-                rows_sel = key
-                cols_sel = None
-
-            if isinstance(rows_sel, Series) and not same_anchor(rows_sel, self._psdf_or_psser):
-                psdf = self._psdf_or_psser.copy()
-                temp_col = verify_temp_column_name(cast("DataFrame", psdf), "__temp_col__")
-
-                psdf[temp_col] = rows_sel
-                return type(self)(psdf)[psdf[temp_col], cols_sel][list(self._psdf_or_psser.columns)]
-
-            cond, limit, remaining_index = self._select_rows(rows_sel)
-            (
-                column_labels,
-                data_spark_columns,
-                data_fields,
-                returns_series,
-                series_name,
-            ) = self._select_cols(cols_sel)
-
-            if cond is None and limit is None and returns_series:
-                psser = self._psdf_or_psser._psser_for(column_labels[0])
-                if series_name is not None and series_name != psser.name:
-                    psser = psser.rename(series_name)
-                return psser
-
-        if remaining_index is not None:
-            index_spark_columns = self._internal.index_spark_columns[-remaining_index:]
-            index_names = self._internal.index_names[-remaining_index:]
-            index_fields = self._internal.index_fields[-remaining_index:]
-        else:
-            index_spark_columns = self._internal.index_spark_columns
-            index_names = self._internal.index_names
-            index_fields = self._internal.index_fields
-
-        if len(column_labels) > 0:
-            column_labels = column_labels.copy()
-            column_labels_level = max(
-                len(label) if label is not None else 1 for label in column_labels
-            )
-            none_column = 0
-            for i, label in enumerate(column_labels):
-                if label is None:
-                    label = (none_column,)
-                    none_column += 1
-                if len(label) < column_labels_level:
-                    label = tuple(list(label) + ([""]) * (column_labels_level - len(label)))
-                column_labels[i] = label
-
-            if i == 0 and none_column == 1:
-                column_labels = [None]
-
-            column_label_names = self._internal.column_label_names[-column_labels_level:]
-        else:
-            column_label_names = self._internal.column_label_names
-
-        try:
-            sdf = self._internal.spark_frame
-
-            if cond is not None:
-                index_columns = sdf.select(index_spark_columns).columns
-                data_columns = sdf.select(data_spark_columns).columns
-                sdf = sdf.filter(cond).select(index_spark_columns + data_spark_columns)
-                index_spark_columns = [scol_for(sdf, col) for col in index_columns]
-                data_spark_columns = [scol_for(sdf, col) for col in data_columns]
-
-            if limit is not None:
-                if limit >= 0:
-                    sdf = sdf.limit(limit)
-                else:
-                    sdf = sdf.limit(sdf.count() + limit)
-                sdf = sdf.drop(NATURAL_ORDER_COLUMN_NAME)
-        except AnalysisException:
-            raise KeyError(
-                "[{}] don't exist in columns".format(
-                    [col._jc.toString() for col in data_spark_columns]  # type: ignore
-                )
-            )
-
-        internal = InternalFrame(
-            spark_frame=sdf,
-            index_spark_columns=index_spark_columns,
-            index_names=index_names,
-            index_fields=index_fields,
-            column_labels=column_labels,
-            data_spark_columns=data_spark_columns,
-            data_fields=data_fields,
-            column_label_names=column_label_names,
-        )
-        psdf = DataFrame(internal)
-
-        if returns_series:
-            psdf_or_psser = first_series(psdf)
-            if series_name is not None and series_name != psdf_or_psser.name:
-                psdf_or_psser = psdf_or_psser.rename(series_name)
-        else:
-            psdf_or_psser = psdf
-
-        if remaining_index is not None and remaining_index == 0:
-            pdf_or_pser = psdf_or_psser.head(2).to_pandas()
-            length = len(pdf_or_pser)
-            if length == 0:
-                raise KeyError(name_like_string(key))
-            elif length == 1:
-                return pdf_or_pser.iloc[0]
-            else:
-                return psdf_or_psser
-        else:
-            return psdf_or_psser
-
     def __setitem__(self, key: Any, value: Any) -> None:
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.series import Series, first_series
@@ -984,6 +846,151 @@ class LocIndexer(LocIndexerLike):
             pandas_function=".loc[..., ...]",
             spark_target_function="select, where",
         )
+
+    def __getitem__(self, key: Any) -> Union["Series", "DataFrame"]:
+        from pyspark.pandas.frame import DataFrame
+        from pyspark.pandas.series import Series, first_series
+        from pyspark.pandas.indexes import MultiIndex
+
+        if self._is_series:
+            if isinstance(key, Series) and not same_anchor(key, self._psdf_or_psser):
+                psdf = self._psdf_or_psser.to_frame()
+                temp_col = verify_temp_column_name(psdf, "__temp_col__")
+
+                psdf[temp_col] = key
+                return type(self)(psdf[self._psdf_or_psser.name])[psdf[temp_col]]
+
+            cond, limit, remaining_index = self._select_rows(key)
+            if cond is None and limit is None:
+                return self._psdf_or_psser
+
+            column_label = self._psdf_or_psser._column_label
+            column_labels = [column_label]
+            data_spark_columns = [self._internal.spark_column_for(column_label)]
+            data_fields = [self._internal.field_for(column_label)]
+            returns_series = True
+            series_name = self._psdf_or_psser.name
+        else:
+            assert self._is_df
+            if isinstance(key, tuple):
+                if len(key) != 2:
+                    raise SparkPandasIndexingError("Only accepts pairs of candidates")
+                if isinstance(self._psdf.index, MultiIndex) and not isinstance(key[0], slice):
+                    rows_sel, cols_sel = key, None
+                else:
+                    rows_sel, cols_sel = key
+            else:
+                rows_sel = key
+                cols_sel = None
+
+            if isinstance(rows_sel, Series) and not same_anchor(rows_sel, self._psdf_or_psser):
+                psdf = self._psdf_or_psser.copy()
+                temp_col = verify_temp_column_name(cast("DataFrame", psdf), "__temp_col__")
+
+                psdf[temp_col] = rows_sel
+                return type(self)(psdf)[psdf[temp_col], cols_sel][list(self._psdf_or_psser.columns)]
+
+            cond, limit, remaining_index = self._select_rows(rows_sel)
+            (
+                column_labels,
+                data_spark_columns,
+                data_fields,
+                returns_series,
+                series_name,
+            ) = self._select_cols(cols_sel)
+
+            if cond is None and limit is None and returns_series:
+                psser = self._psdf_or_psser._psser_for(column_labels[0])
+                if series_name is not None and series_name != psser.name:
+                    psser = psser.rename(series_name)
+                return psser
+
+        if remaining_index is not None:
+            index_spark_columns = self._internal.index_spark_columns[-remaining_index:]
+            index_names = self._internal.index_names[-remaining_index:]
+            index_fields = self._internal.index_fields[-remaining_index:]
+        else:
+            index_spark_columns = self._internal.index_spark_columns
+            index_names = self._internal.index_names
+            index_fields = self._internal.index_fields
+
+        if len(column_labels) > 0:
+            column_labels = column_labels.copy()
+            column_labels_level = max(
+                len(label) if label is not None else 1 for label in column_labels
+            )
+            none_column = 0
+            for i, label in enumerate(column_labels):
+                if label is None:
+                    label = (none_column,)
+                    none_column += 1
+                if len(label) < column_labels_level:
+                    label = tuple(list(label) + ([""]) * (column_labels_level - len(label)))
+                column_labels[i] = label
+
+            if i == 0 and none_column == 1:
+                column_labels = [None]
+
+            column_label_names = self._internal.column_label_names[-column_labels_level:]
+        else:
+            column_label_names = self._internal.column_label_names
+
+        try:
+            sdf = self._internal.spark_frame
+
+            if cond is not None:
+                index_columns = sdf.select(index_spark_columns).columns
+                data_columns = sdf.select(data_spark_columns).columns
+                sdf = sdf.filter(cond).select(index_spark_columns + data_spark_columns)
+                index_spark_columns = [scol_for(sdf, col) for col in index_columns]
+                data_spark_columns = [scol_for(sdf, col) for col in data_columns]
+
+            if limit is not None:
+                if limit >= 0:
+                    sdf = sdf.limit(limit)
+                else:
+                    sdf = sdf.limit(sdf.count() + limit)
+                sdf = sdf.drop(NATURAL_ORDER_COLUMN_NAME)
+        except AnalysisException:
+            raise KeyError(
+                "[{}] don't exist in columns".format(
+                    [col._jc.toString() for col in data_spark_columns]  # type: ignore
+                )
+            )
+
+        internal = InternalFrame(
+            spark_frame=sdf,
+            index_spark_columns=index_spark_columns,
+            index_names=index_names,
+            index_fields=index_fields,
+            column_labels=column_labels,
+            data_spark_columns=data_spark_columns,
+            data_fields=data_fields,
+            column_label_names=column_label_names,
+        )
+        psdf = DataFrame(internal)
+
+        if returns_series:
+            psdf_or_psser = first_series(psdf)
+            if series_name is not None and series_name != psdf_or_psser.name:
+                psdf_or_psser = psdf_or_psser.rename(series_name)
+        else:
+            psdf_or_psser = psdf
+
+        if remaining_index is not None and remaining_index == 0:
+            pdf_or_pser = psdf_or_psser.head(2).to_pandas()
+            length = len(pdf_or_pser)
+            if length == 0:
+                raise KeyError(name_like_string(key))
+            elif length == 1:
+                if isinstance(self._psdf.index, MultiIndex):
+                    return pdf_or_pser
+                else:
+                    return pdf_or_pser.iloc[0]
+            else:
+                return psdf_or_psser
+        else:
+            return psdf_or_psser
 
     def _select_rows_by_series(
         self, rows_sel: "Series"
@@ -1546,6 +1553,145 @@ class iLocIndexer(LocIndexerLike):
         # Use resolved_copy to fix the natural order.
         internal = super()._internal.resolved_copy
         return verify_temp_column_name(internal.spark_frame, "__distributed_sequence_column__")
+
+    def __getitem__(self, key: Any) -> Union["Series", "DataFrame"]:
+        from pyspark.pandas.frame import DataFrame
+        from pyspark.pandas.series import Series, first_series
+
+        if self._is_series:
+            if isinstance(key, Series) and not same_anchor(key, self._psdf_or_psser):
+                psdf = self._psdf_or_psser.to_frame()
+                temp_col = verify_temp_column_name(psdf, "__temp_col__")
+
+                psdf[temp_col] = key
+                return type(self)(psdf[self._psdf_or_psser.name])[psdf[temp_col]]
+
+            cond, limit, remaining_index = self._select_rows(key)
+            if cond is None and limit is None:
+                return self._psdf_or_psser
+
+            column_label = self._psdf_or_psser._column_label
+            column_labels = [column_label]
+            data_spark_columns = [self._internal.spark_column_for(column_label)]
+            data_fields = [self._internal.field_for(column_label)]
+            returns_series = True
+            series_name = self._psdf_or_psser.name
+        else:
+            assert self._is_df
+            if isinstance(key, tuple):
+                if len(key) != 2:
+                    raise SparkPandasIndexingError("Only accepts pairs of candidates")
+                else:
+                    rows_sel, cols_sel = key
+            else:
+                rows_sel = key
+                cols_sel = None
+
+            if isinstance(rows_sel, Series) and not same_anchor(rows_sel, self._psdf_or_psser):
+                psdf = self._psdf_or_psser.copy()
+                temp_col = verify_temp_column_name(cast("DataFrame", psdf), "__temp_col__")
+
+                psdf[temp_col] = rows_sel
+                return type(self)(psdf)[psdf[temp_col], cols_sel][list(self._psdf_or_psser.columns)]
+
+            cond, limit, remaining_index = self._select_rows(rows_sel)
+            (
+                column_labels,
+                data_spark_columns,
+                data_fields,
+                returns_series,
+                series_name,
+            ) = self._select_cols(cols_sel)
+
+            if cond is None and limit is None and returns_series:
+                psser = self._psdf_or_psser._psser_for(column_labels[0])
+                if series_name is not None and series_name != psser.name:
+                    psser = psser.rename(series_name)
+                return psser
+
+        if remaining_index is not None:
+            index_spark_columns = self._internal.index_spark_columns[-remaining_index:]
+            index_names = self._internal.index_names[-remaining_index:]
+            index_fields = self._internal.index_fields[-remaining_index:]
+        else:
+            index_spark_columns = self._internal.index_spark_columns
+            index_names = self._internal.index_names
+            index_fields = self._internal.index_fields
+
+        if len(column_labels) > 0:
+            column_labels = column_labels.copy()
+            column_labels_level = max(
+                len(label) if label is not None else 1 for label in column_labels
+            )
+            none_column = 0
+            for i, label in enumerate(column_labels):
+                if label is None:
+                    label = (none_column,)
+                    none_column += 1
+                if len(label) < column_labels_level:
+                    label = tuple(list(label) + ([""]) * (column_labels_level - len(label)))
+                column_labels[i] = label
+
+            if i == 0 and none_column == 1:
+                column_labels = [None]
+
+            column_label_names = self._internal.column_label_names[-column_labels_level:]
+        else:
+            column_label_names = self._internal.column_label_names
+
+        try:
+            sdf = self._internal.spark_frame
+
+            if cond is not None:
+                index_columns = sdf.select(index_spark_columns).columns
+                data_columns = sdf.select(data_spark_columns).columns
+                sdf = sdf.filter(cond).select(index_spark_columns + data_spark_columns)
+                index_spark_columns = [scol_for(sdf, col) for col in index_columns]
+                data_spark_columns = [scol_for(sdf, col) for col in data_columns]
+
+            if limit is not None:
+                if limit >= 0:
+                    sdf = sdf.limit(limit)
+                else:
+                    sdf = sdf.limit(sdf.count() + limit)
+                sdf = sdf.drop(NATURAL_ORDER_COLUMN_NAME)
+        except AnalysisException:
+            raise KeyError(
+                "[{}] don't exist in columns".format(
+                    [col._jc.toString() for col in data_spark_columns]  # type: ignore
+                )
+            )
+
+        internal = InternalFrame(
+            spark_frame=sdf,
+            index_spark_columns=index_spark_columns,
+            index_names=index_names,
+            index_fields=index_fields,
+            column_labels=column_labels,
+            data_spark_columns=data_spark_columns,
+            data_fields=data_fields,
+            column_label_names=column_label_names,
+        )
+        psdf = DataFrame(internal)
+
+        if returns_series:
+            psdf_or_psser = first_series(psdf)
+            if series_name is not None and series_name != psdf_or_psser.name:
+                psdf_or_psser = psdf_or_psser.rename(series_name)
+        else:
+            psdf_or_psser = psdf
+
+        if remaining_index is not None and remaining_index == 0:
+            pdf_or_pser = psdf_or_psser.head(2).to_pandas()
+            length = len(pdf_or_pser)
+            if length == 0:
+                raise KeyError(name_like_string(key))
+            elif length == 1:
+                return pdf_or_pser.iloc[0]
+            else:
+                return psdf_or_psser
+        else:
+            return psdf_or_psser
 
     def _select_rows_by_series(
         self, rows_sel: "Series"
