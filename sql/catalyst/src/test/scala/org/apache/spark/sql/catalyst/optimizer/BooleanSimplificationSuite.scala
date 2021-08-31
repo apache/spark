@@ -330,4 +330,130 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
       checkEvaluation(originalExpr, optimizedVal, inputRow)
     }
   }
+
+  test("SPARK-36665: Add more Not operator simplifications") {
+    // Using Not(null) == null rules
+    checkCondition(IsNull(Not('e)), IsNull('e))
+    checkCondition(IsNotNull(Not('e)), IsNotNull('e))
+
+    // Using (Not(a) === b) == (a === Not(b)), (Not(a) <=> b) == (a <=> Not(b)) rules
+    checkCondition(Not('e) === Literal(true), 'e === Literal(false))
+    checkCondition(Not('e) === Literal(false), 'e === Literal(true))
+    checkCondition(Not('e) === Literal(null, BooleanType), testRelation)
+    checkCondition(Literal(true) === Not('e), Literal(false) === 'e)
+    checkCondition(Literal(false) === Not('e), Literal(true) === 'e)
+    checkCondition(Literal(null, BooleanType) === Not('e), testRelation)
+    checkCondition(Not('e) <=> Literal(true), 'e <=> Literal(false))
+    checkCondition(Not('e) <=> Literal(false), 'e <=> Literal(true))
+    checkCondition(Not('e) <=> Literal(null, BooleanType), IsNull('e))
+    checkCondition(Literal(true) <=> Not('e), Literal(false) <=> 'e)
+    checkCondition(Literal(false) <=> Not('e), Literal(true) <=> 'e)
+    checkCondition(Literal(null, BooleanType) <=> Not('e), IsNull('e))
+
+    checkCondition(Not('e) === Not('f), 'e === 'f)
+    checkCondition(Not('e) <=> Not('f), 'e <=> 'f)
+
+    checkCondition(IsNull('e) === Not('f), IsNotNull('e) === 'f)
+    checkCondition(Not('e) === IsNull('f), 'e === IsNotNull('f))
+    checkCondition(IsNull('e) <=> Not('f), IsNotNull('e) <=> 'f)
+    checkCondition(Not('e) <=> IsNull('f), 'e <=> IsNotNull('f))
+
+    checkCondition(IsNotNull('e) === Not('f), IsNull('e) === 'f)
+    checkCondition(Not('e) === IsNotNull('f), 'e === IsNull('f))
+    checkCondition(IsNotNull('e) <=> Not('f), IsNull('e) <=> 'f)
+    checkCondition(Not('e) <=> IsNotNull('f), 'e <=> IsNull('f))
+
+    checkCondition(Not('e) === Not(And('f, 'g)), 'e === And('f, 'g))
+    checkCondition(Not(And('e, 'f)) === Not('g), And('e, 'f) === 'g)
+    checkCondition(Not('e) <=> Not(And('f, 'g)), 'e <=> And('f, 'g))
+    checkCondition(Not(And('e, 'f)) <=> Not('g), And('e, 'f) <=> 'g)
+
+    checkCondition(Not('e) === Not(Or('f, 'g)), 'e === Or('f, 'g))
+    checkCondition(Not(Or('e, 'f)) === Not('g), Or('e, 'f) === 'g)
+    checkCondition(Not('e) <=> Not(Or('f, 'g)), 'e <=> Or('f, 'g))
+    checkCondition(Not(Or('e, 'f)) <=> Not('g), Or('e, 'f) <=> 'g)
+
+    checkCondition(('a > 'b) === Not('f), ('a <= 'b) === 'f)
+    checkCondition(Not('e) === ('a > 'b), 'e === ('a <= 'b))
+    checkCondition(('a > 'b) <=> Not('f), ('a <= 'b) <=> 'f)
+    checkCondition(Not('e) <=> ('a > 'b), 'e <=> ('a <= 'b))
+
+    checkCondition(('a >= 'b) === Not('f), ('a < 'b) === 'f)
+    checkCondition(Not('e) === ('a >= 'b), 'e === ('a < 'b))
+    checkCondition(('a >= 'b) <=> Not('f), ('a < 'b) <=> 'f)
+    checkCondition(Not('e) <=> ('a >= 'b), 'e <=> ('a < 'b))
+
+    checkCondition(('a < 'b) === Not('f), ('a >= 'b) === 'f)
+    checkCondition(Not('e) === ('a < 'b), 'e === ('a >= 'b))
+    checkCondition(('a < 'b) <=> Not('f), ('a >= 'b) <=> 'f)
+    checkCondition(Not('e) <=> ('a < 'b), 'e <=> ('a >= 'b))
+
+    checkCondition(('a <= 'b) === Not('f), ('a > 'b) === 'f)
+    checkCondition(Not('e) === ('a <= 'b), 'e === ('a > 'b))
+    checkCondition(('a <= 'b) <=> Not('f), ('a > 'b) <=> 'f)
+    checkCondition(Not('e) <=> ('a <= 'b), 'e <=> ('a > 'b))
+
+    // Using (a =!= b) == (a === Not(b)), Not(a <=> b) == (a <=> Not(b)) rules
+    checkCondition('e =!= Literal(true), 'e === Literal(false))
+    checkCondition('e =!= Literal(false), 'e === Literal(true))
+    checkCondition('e =!= Literal(null, BooleanType), testRelation)
+    checkCondition(Literal(true) =!= 'e, Literal(false) === 'e)
+    checkCondition(Literal(false) =!= 'e, Literal(true) === 'e)
+    checkCondition(Literal(null, BooleanType) =!= 'e, testRelation)
+    checkCondition(Not('e <=> Literal(true)), 'e <=> Literal(false))
+    checkCondition(Not('e <=> Literal(false)), 'e <=> Literal(true))
+    checkCondition(Not('e <=> Literal(null, BooleanType)), IsNotNull('e))
+    checkCondition(Not(Literal(true) <=> 'e), Literal(false) <=> 'e)
+    checkCondition(Not(Literal(false) <=> 'e), Literal(true) <=> 'e)
+    checkCondition(Not(Literal(null, BooleanType) <=> 'e), IsNotNull('e))
+
+    checkCondition('e =!= Not('f), 'e === 'f)
+    checkCondition(Not('e) =!= 'f, 'e === 'f)
+    checkCondition(Not('e <=> Not('f)), 'e <=> 'f)
+    checkCondition(Not(Not('e) <=> 'f), 'e <=> 'f)
+
+    checkCondition('e =!= IsNull('f), 'e === IsNotNull('f))
+    checkCondition(IsNull('e) =!= 'f, IsNotNull('e) === 'f)
+    checkCondition(Not('e <=> IsNull('f)), 'e <=> IsNotNull('f))
+    checkCondition(Not(IsNull('e) <=> 'f), IsNotNull('e) <=> 'f)
+
+    checkCondition('e =!= IsNotNull('f), 'e === IsNull('f))
+    checkCondition(IsNotNull('e) =!= 'f, IsNull('e) === 'f)
+    checkCondition(Not('e <=> IsNotNull('f)), 'e <=> IsNull('f))
+    checkCondition(Not(IsNotNull('e) <=> 'f), IsNull('e) <=> 'f)
+
+    checkCondition('e =!= Not(And('f, 'g)), 'e === And('f, 'g))
+    checkCondition(Not(And('e, 'f)) =!= 'g, And('e, 'f) === 'g)
+    checkCondition(Not('e <=> Not(And('f, 'g))), 'e <=> And('f, 'g))
+    checkCondition(Not(Not(And('e, 'f)) <=> 'g), And('e, 'f) <=> 'g)
+
+    checkCondition('e =!= Not(Or('f, 'g)), 'e === Or('f, 'g))
+    checkCondition(Not(Or('e, 'f)) =!= 'g, Or('e, 'f) === 'g)
+    checkCondition(Not('e <=> Not(Or('f, 'g))), 'e <=> Or('f, 'g))
+    checkCondition(Not(Not(Or('e, 'f)) <=> 'g), Or('e, 'f) <=> 'g)
+
+    checkCondition(('a > 'b) =!= 'f, ('a <= 'b) === 'f)
+    checkCondition('e =!= ('a > 'b), 'e === ('a <= 'b))
+    checkCondition(Not(('a > 'b) <=> 'f), ('a <= 'b) <=> 'f)
+    checkCondition(Not('e <=> ('a > 'b)), 'e <=> ('a <= 'b))
+
+    checkCondition(('a >= 'b) =!= 'f, ('a < 'b) === 'f)
+    checkCondition('e =!= ('a >= 'b), 'e === ('a < 'b))
+    checkCondition(Not(('a >= 'b) <=> 'f), ('a < 'b) <=> 'f)
+    checkCondition(Not('e <=> ('a >= 'b)), 'e <=> ('a < 'b))
+
+    checkCondition(('a < 'b) =!= 'f, ('a >= 'b) === 'f)
+    checkCondition('e =!= ('a < 'b), 'e === ('a >= 'b))
+    checkCondition(Not(('a < 'b) <=> 'f), ('a >= 'b) <=> 'f)
+    checkCondition(Not('e <=> ('a < 'b)), 'e <=> ('a >= 'b))
+
+    checkCondition(('a <= 'b) =!= 'f, ('a > 'b) === 'f)
+    checkCondition('e =!= ('a <= 'b), 'e === ('a > 'b))
+    checkCondition(Not(('a <= 'b) <=> 'f), ('a > 'b) <=> 'f)
+    checkCondition(Not('e <=> ('a <= 'b)), 'e <=> ('a > 'b))
+
+    // Properly avoid non optimize-able cases
+    checkCondition(('a === 'b) =!= ('a === 'c), ('a === 'b) =!= ('a === 'c))
+    checkCondition(('a === 'b) =!= ('c in (1, 2, 3)), ('a === 'b) =!= ('c in (1, 2, 3)))
+  }
 }

@@ -290,6 +290,21 @@ object OptimizeIn extends Rule[LogicalPlan] {
  * 4. Removes `Not` operator.
  */
 object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
+  // Given argument x, return true if expression Not(x) can be simplified
+  // E.g. when x == Not(y), Not(x) == Not(Not(y)) == y
+  // For the case of x = EqualTo(a, b), recursively check each child expression
+  // Extra nullable check is required for EqualNullSafe because
+  // Not(EqualNullSafe(x, null)) is different from EqualNullSafe(x, Not(null))
+  private def canSimplifyNot(x: Expression): Boolean = x match {
+    case Literal(_, BooleanType) | Literal(_, NullType) => true
+    case _: Not | _: IsNull | _: IsNotNull | _: And | _: Or => true
+    case _: GreaterThan | _: GreaterThanOrEqual | _: LessThan | _: LessThanOrEqual => true
+    case EqualTo(a, b) if canSimplifyNot(a) || canSimplifyNot(b) => true
+    case EqualNullSafe(a, b)
+      if !a.nullable && !b.nullable && (canSimplifyNot(a) || canSimplifyNot(b)) => true
+    case _ => false
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(AND_OR, NOT), ruleId) {
     case q: LogicalPlan => q.transformExpressionsUpWithPruning(
@@ -441,6 +456,24 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
 
       case Not(IsNull(e)) => IsNotNull(e)
       case Not(IsNotNull(e)) => IsNull(e)
+
+      // Using Not(null) == null rules
+      case IsNull(Not(e)) => IsNull(e)
+      case IsNotNull(Not(e)) => IsNotNull(e)
+
+      // Using (Not(a) === b) == (a === Not(b)), (Not(a) <=> b) == (a <=> Not(b)) rules
+      case EqualTo(Not(a), b) if canSimplifyNot(b) => EqualTo(a, Not(b))
+      case EqualTo(a, Not(b)) if canSimplifyNot(a) => EqualTo(Not(a), b)
+      case EqualNullSafe(Not(a), b) if canSimplifyNot(b) => EqualNullSafe(a, Not(b))
+      case EqualNullSafe(a, Not(b)) if canSimplifyNot(a) => EqualNullSafe(Not(a), b)
+
+      // Using (a =!= b) == (a === Not(b)), Not(a <=> b) == (a <=> Not(b)) rules
+      case Not(EqualTo(a, b)) if canSimplifyNot(b) => EqualTo(a, Not(b))
+      case Not(EqualTo(a, b)) if canSimplifyNot(a) => EqualTo(Not(a), b)
+      case Not(EqualNullSafe(a, b)) if !a.nullable && !b.nullable && canSimplifyNot(b) =>
+        EqualNullSafe(a, Not(b))
+      case Not(EqualNullSafe(a, b)) if !a.nullable && !b.nullable && canSimplifyNot(a) =>
+        EqualNullSafe(Not(a), b)
     }
   }
 }
