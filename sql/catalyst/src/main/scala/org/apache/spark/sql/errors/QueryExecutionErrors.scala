@@ -1517,10 +1517,7 @@ object QueryExecutionErrors {
   }
 
   def noSuchElementExceptionError(key: String): Throwable = {
-    new SparkNoSuchElementException(
-      errorClass = "NO_SUCH_ELEMENT_EXCEPTION",
-      messageParameters = Array(key)
-    )
+    new NoSuchElementException(key)
   }
 
   def cannotMutateReadOnlySQLConfError(): Throwable = {
