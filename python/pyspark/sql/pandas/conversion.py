@@ -212,9 +212,6 @@ class PandasConversionMixin(object):
                 if isinstance(field.dataType, TimestampType):
                     pdf[field.name] = \
                         _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
-                if isinstance(field.dataType, TimestampNTZType):
-                    pdf[field.name] = \
-                        _check_series_convert_timestamps_local_tz(pdf[field.name], None)
             return pdf
 
     @staticmethod
@@ -341,10 +338,12 @@ class SparkConversionMixin(object):
                         "has been set to false.\n  %s" % str(e))
                     warnings.warn(msg)
                     raise
-        data = self._convert_from_pandas(data, schema, timezone)
+
+        should_localize = self._wrapped._conf.timestampType().typeName() == "timestamp"
+        data = self._convert_from_pandas(data, schema, timezone, should_localize)
         return self._create_dataframe(data, schema, samplingRatio, verifySchema)
 
-    def _convert_from_pandas(self, pdf, schema, timezone):
+    def _convert_from_pandas(self, pdf, schema, timezone, should_localize):
         """
          Convert a pandas.DataFrame to list of records that can be used to make a DataFrame
 
@@ -359,6 +358,8 @@ class SparkConversionMixin(object):
 
         if timezone is not None:
             from pyspark.sql.pandas.types import _check_series_convert_timestamps_tz_local
+            from pandas.core.dtypes.common import is_datetime64tz_dtype
+
             copied = False
             if isinstance(schema, StructType):
                 for field in schema:
@@ -374,7 +375,9 @@ class SparkConversionMixin(object):
                             pdf[field.name] = s
             else:
                 for column, series in pdf.iteritems():
-                    s = _check_series_convert_timestamps_tz_local(series, timezone)
+                    s = series
+                    if should_localize and is_datetime64tz_dtype(s.dtype) and s.dt.tz is not None:
+                        s = _check_series_convert_timestamps_tz_local(series, timezone)
                     if s is not series:
                         if not copied:
                             # Copy once if the series is modified to prevent the original
@@ -453,8 +456,13 @@ class SparkConversionMixin(object):
         if isinstance(schema, (list, tuple)):
             arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
             struct = StructType()
+            prefer_timestamp_ntz = (
+                self._wrapped._conf.timestampType().typeName() == "timestamp_ntz")
             for name, field in zip(schema, arrow_schema):
-                struct.add(name, from_arrow_type(field.type), nullable=field.nullable)
+                struct.add(
+                    name,
+                    from_arrow_type(field.type, prefer_timestamp_ntz),
+                    nullable=field.nullable)
             schema = struct
 
         # Determine arrow types to coerce data when creating batches

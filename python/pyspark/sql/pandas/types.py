@@ -56,17 +56,16 @@ def to_arrow_type(dt):
         # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
         arrow_type = pa.timestamp('us', tz='UTC')
     elif type(dt) == TimestampNTZType:
-        # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
-        arrow_type = pa.timestamp('us', tz='UTC')
+        arrow_type = pa.timestamp('us', tz=None)
     elif type(dt) == ArrayType:
-        if type(dt.elementType) in [StructType, TimestampType, TimestampNTZType]:
+        if type(dt.elementType) in [StructType, TimestampType]:
             raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
         arrow_type = pa.list_(to_arrow_type(dt.elementType))
     elif type(dt) == MapType:
         if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
             raise TypeError("MapType is only supported with pyarrow 2.0.0 and above")
-        if type(dt.keyType) in [StructType, TimestampType, TimestampNTZType] or \
-                type(dt.valueType) in [StructType, TimestampType, TimestampNTZType]:
+        if type(dt.keyType) in [StructType, TimestampType] or \
+                type(dt.valueType) in [StructType, TimestampType]:
             raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
         arrow_type = pa.map_(to_arrow_type(dt.keyType), to_arrow_type(dt.valueType))
     elif type(dt) == StructType:
@@ -91,7 +90,7 @@ def to_arrow_schema(schema):
     return pa.schema(fields)
 
 
-def from_arrow_type(at):
+def from_arrow_type(at, prefer_timestamp_ntz=False):
     """ Convert pyarrow type to Spark data type.
     """
     from distutils.version import LooseVersion
@@ -119,6 +118,8 @@ def from_arrow_type(at):
         spark_type = BinaryType()
     elif types.is_date32(at):
         spark_type = DateType()
+    elif types.is_timestamp(at) and prefer_timestamp_ntz and at.tz is None:
+        spark_type = TimestampNTZType()
     elif types.is_timestamp(at):
         spark_type = TimestampType()
     elif types.is_list(at):

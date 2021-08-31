@@ -175,6 +175,18 @@ class TypesTests(ReusedSQLTestCase):
         ]
         self.assertEqual(actual, expected)
 
+        with self.sql_conf({"spark.sql.timestampType": "TIMESTAMP_NTZ"}):
+            with self.sql_conf({"spark.sql.session.timeZone": "America/Sao_Paulo"}):
+                df = self.spark.createDataFrame([(datetime.datetime(1970, 1, 1, 0, 0),)])
+                self.assertEqual(list(df.schema)[0].dataType.simpleString(), "timestamp_ntz")
+                self.assertEqual(df.first()[0], datetime.datetime(1970, 1, 1, 0, 0))
+
+            df = self.spark.createDataFrame([
+                (datetime.datetime(1970, 1, 1, 0, 0),),
+                (datetime.datetime(1970, 1, 1, 0, 0, tzinfo=datetime.timezone.utc),)
+            ])
+            self.assertEqual(list(df.schema)[0].dataType.simpleString(), "timestamp")
+
     def test_infer_schema_not_enough_names(self):
         df = self.spark.createDataFrame([["a", "b"]], ["col1"])
         self.assertEqual(df.columns, ['col1', '_2'])

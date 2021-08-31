@@ -167,17 +167,17 @@ class ArrowTests(ReusedSQLTestCase):
         assert_frame_equal(expected, pdf)
         assert_frame_equal(expected, pdf_arrow)
 
-    def test_toPandas_ntz(self):
-        df_schema = StructType([
-            StructField("1_str_t", StringType(), True),
-            StructField("2_timestampntz_t", TimestampNTZType(), True)])
-        df_data = [
-            (u"a", datetime.datetime(1969, 1, 1, 1, 1, 1)),
-            (u"b", datetime.datetime(2012, 2, 2, 2, 2, 2))
-        ]
-        df = self.spark.createDataFrame(df_data, schema=df_schema)
-        pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
-        assert_frame_equal(pdf, pdf_arrow)
+    def test_create_data_frame_to_pandas_timestamp_ntz(self):
+        # SPARK-36608: Test TimestampNTZ in createDataFrame and toPandas
+        with self.sql_conf({"spark.sql.session.timeZone": "America/Los_Angeles"}):
+            origin = pd.DataFrame({"a": [datetime.datetime(2012, 2, 2, 2, 2, 2)]})
+            df = self.spark.createDataFrame(
+                origin, schema=StructType([StructField("a", TimestampNTZType(), True)]))
+            df.selectExpr("assert_true('2012-02-02 02:02:02' == CAST(a AS STRING))").collect()
+
+            pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
+            assert_frame_equal(origin, pdf)
+            assert_frame_equal(pdf, pdf_arrow)
 
     def test_toPandas_respect_session_timezone(self):
         df = self.spark.createDataFrame(self.data, schema=self.schema)
