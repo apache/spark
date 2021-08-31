@@ -1244,6 +1244,48 @@ class TypeCoercionSuite extends AnalysisTest {
     )
   }
 
+  test("BooleanEquality simplification") {
+    val be = TypeCoercion.BooleanEquality
+
+    ruleTest(be,
+      EqualTo(Literal(true), Literal(1)),
+      Literal(true)
+    )
+    ruleTest(be,
+      EqualTo(Literal(true), Literal(0)),
+      Not(Literal(true))
+    )
+    ruleTest(be,
+      EqualNullSafe(Literal(true), Literal(1)),
+      And(IsNotNull(Literal(true)), Literal(true))
+    )
+    ruleTest(be,
+      EqualNullSafe(Literal(true), Literal(0)),
+      And(IsNotNull(Literal(true)), Not(Literal(true)))
+    )
+
+    ruleTest(be,
+      EqualTo(Literal(true), Literal(1L)),
+      Literal(true)
+    )
+    ruleTest(be,
+      EqualTo(Literal(new java.math.BigDecimal(1)), Literal(true)),
+      Literal(true)
+    )
+    ruleTest(be,
+      EqualTo(Literal(BigDecimal(0)), Literal(true)),
+      Not(Literal(true))
+    )
+    ruleTest(be,
+      EqualTo(Literal(Decimal(1)), Literal(true)),
+      Literal(true)
+    )
+    ruleTest(be,
+      EqualTo(Literal.create(Decimal(1), DecimalType(8, 0)), Literal(true)),
+      Literal(true)
+    )
+  }
+
   private def checkOutput(logical: LogicalPlan, expectTypes: Seq[DataType]): Unit = {
     logical.output.zip(expectTypes).foreach { case (attr, dt) =>
       assert(attr.dataType === dt)
