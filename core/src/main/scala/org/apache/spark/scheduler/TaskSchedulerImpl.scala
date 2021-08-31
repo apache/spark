@@ -870,7 +870,15 @@ private[spark] class TaskSchedulerImpl(
       taskSetManager: TaskSetManager,
       tid: Long,
       taskResult: DirectTaskResult[_]): Unit = synchronized {
-    taskSetManager.handleSuccessfulTask(tid, taskResult)
+    if (taskIdToTaskSetManager.contains(tid)) {
+      taskSetManager.handleSuccessfulTask(tid, taskResult)
+    } else {
+      logError(
+        ("Ignoring update with state finished for TID %s because its task set is gone (this is " +
+          "likely the result of receiving duplicate task finished status updates) or its " +
+          "executor has been marked as failed.")
+          .format(tid))
+    }
   }
 
   def handleFailedTask(

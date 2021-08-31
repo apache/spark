@@ -18,15 +18,14 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
-
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.duration._
-
 import org.mockito.ArgumentMatchers.{any, anyInt, anyString, eq => meq}
 import org.mockito.Mockito.{atLeast, atMost, never, spy, times, verify, when}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 import org.scalatestplus.mockito.MockitoSugar
+
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -34,7 +33,13 @@ import org.apache.spark.internal.config
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
+
 import org.apache.spark.util.{Clock, ManualClock}
+
+import org.apache.spark.util.{ManualClock, ThreadUtils}
+
+import java.util.Properties
+import java.util.concurrent.ExecutorService
 
 class FakeSchedulerBackend extends SchedulerBackend {
   def start(): Unit = {}
@@ -1993,6 +1998,61 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskId = tasks.head.taskId
     assert(barrierTSM.runningTasksSet.contains(taskId))
     assert(!normalTSM.runningTasksSet.contains(taskId))
+  }
+
+  test("SPARK-36575: Executor lost cause task hang") {
+    val taskScheduler = setupScheduler()
+
+    val resultGetter = new TaskResultGetter(sc.env, taskScheduler) {
+      override protected val getTaskResultExecutor: ExecutorService =
+        ThreadUtils.newDaemonFixedThreadPool(1, "task-result-getter")
+      def taskResultExecutor() : ExecutorService = getTaskResultExecutor
+    }
+    taskScheduler.taskResultGetter = resultGetter
+
+    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 1),
+      new WorkerOffer("executor1", "host1", 1))
+    val task1 = new ShuffleMapTask(1, 0, null, new Partition {
+      override def index: Int = 0
+    }, Seq(TaskLocation("host0", "executor0")), new Properties, null)
+
+    val task2 = new ShuffleMapTask(1, 0, null, new Partition {
+      override def index: Int = 0
+    }, Seq(TaskLocation("host1", "executor1")), new Properties, null)
+
+    val taskSet = new TaskSet(Array(task1, task2), 0, 0, 0, null, 0)
+
+    taskScheduler.submitTasks(taskSet)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(2 === taskDescriptions.length)
+
+    val ser = sc.env.serializer.newInstance()
+    val directResult = new DirectTaskResult[Int](ser.serialize(1), Seq(), Array.empty)
+    val resultBytes = ser.serialize(directResult)
+
+    // make getTaskResultExecutor busy
+    import scala.language.reflectiveCalls
+    resultGetter.taskResultExecutor().submit( new Runnable {
+      override def run(): Unit = Thread.sleep(100)
+    })
+
+    // task1 finished
+    taskScheduler.statusUpdate(
+      tid = taskDescriptions(0).taskId,
+      state = TaskState.FINISHED,
+      serializedData = resultBytes
+    )
+
+    // mark executor heartbeat timed out
+    taskScheduler.executorLost(taskDescriptions(0).executorId, ExecutorProcessLost("Executor " +
+      "heartbeat timed out"))
+
+    // Wait a while until all events are processed
+    Thread.sleep(100)
+
+    val taskSetManager = taskScheduler.taskIdToTaskSetManager.get(taskDescriptions(1).taskId)
+    assert(taskSetManager != null)
+    assert(0 == taskSetManager.tasksSuccessful)
   }
 
   /**
