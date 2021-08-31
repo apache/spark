@@ -22,13 +22,17 @@ import org.apache.spark.sql.{sources, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PartitioningAwareFileIndex, PartitioningUtils}
+import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 
 abstract class FileScanBuilder(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
-    dataSchema: StructType) extends ScanBuilder with SupportsPushDownRequiredColumns {
+    dataSchema: StructType)
+  extends ScanBuilder
+    with SupportsPushDownRequiredColumns
+    with SupportsPushDownCatalystFilters {
   private val partitionSchema = fileIndex.partitionSchema
   private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
   protected val supportsNestedSchemaPruning = false
@@ -66,7 +70,9 @@ abstract class FileScanBuilder(
 
   // Note: The partitionFilters and dataFilters need to be pushed to FileIndex in the format of
   // Expression because partition pruning uses the Expression Filters, not sources.Filters.
-  def pushFilters(partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Unit = {
+  override def pushCatalystFilters(
+      partitionFilters: Seq[Expression],
+      dataFilters: Seq[Expression]): Unit = {
     this.partitionFilters = partitionFilters
     this.dataFilters = dataFilters
     val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]

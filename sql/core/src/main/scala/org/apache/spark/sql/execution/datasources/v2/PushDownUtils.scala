@@ -74,7 +74,7 @@ object PushDownUtils extends PredicateHelper {
         val (partitionFilters, dataFilters) =
           DataSourceUtils.getPartitionKeyFiltersAndDataFilters(
             f.getSparkSession, scanBuilderHolder.relation, f.readPartitionSchema(), filters)
-        f.pushFilters(ExpressionSet(partitionFilters).toSeq, dataFilters)
+        f.pushCatalystFilters(ExpressionSet(partitionFilters).toSeq, dataFilters)
         (Nil, dataFilters)
       case _ => (Nil, filters)
     }
