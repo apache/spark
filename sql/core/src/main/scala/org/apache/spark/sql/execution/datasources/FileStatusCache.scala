@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.SizeEstimator
 
 
@@ -107,6 +108,13 @@ private class SharedInMemoryCache(maxSizeInBytes: Long, cacheTTL: Long) extends 
     // than the size of one [[FileStatus]]).
     // so it will support objects up to 64GB in size.
     val weightScale = 32
+    val maximumWeight = maxSizeInBytes / weightScale
+    // DEFAULT_CONCURRENCY_LEVEL is 4, weightScale is 32,
+    // if maxSizeInBytes > 256g bytes(274877906944L),
+    // maxSegmentWeight will more than 2g, the weight eviction will not work due to Guava#1761.
+    assert(maximumWeight <= 274877906944L,
+      s"The value of '${SQLConf.HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE.key}' shouldn't " +
+        "exceed 256g bytes due to Guava#1761")
     val weigher = new Weigher[(ClientId, Path), Array[FileStatus]] {
       override def weigh(key: (ClientId, Path), value: Array[FileStatus]): Int = {
         val estimate = (SizeEstimator.estimate(key) + SizeEstimator.estimate(value)) / weightScale
@@ -136,7 +144,7 @@ private class SharedInMemoryCache(maxSizeInBytes: Long, cacheTTL: Long) extends 
     var builder = CacheBuilder.newBuilder()
       .weigher(weigher)
       .removalListener(removalListener)
-      .maximumWeight(maxSizeInBytes / weightScale)
+      .maximumWeight(maximumWeight)
 
     if (cacheTTL > 0) {
       builder = builder.expireAfterWrite(cacheTTL, TimeUnit.SECONDS)

@@ -26,6 +26,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
+import com.google.common.base.Preconditions;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 import org.apache.commons.lang3.tuple.Pair;
@@ -80,8 +81,7 @@ public class ExternalShuffleBlockResolver {
    *  Caches index file information so that we can avoid open/close the index files
    *  for each block fetch.
    */
-  @VisibleForTesting
-  final LoadingCache<File, ShuffleIndexInformation> shuffleIndexCache;
+  private final LoadingCache<File, ShuffleIndexInformation> shuffleIndexCache;
 
   // Single-threaded Java executor used to perform expensive recursive directory deletion.
   private final Executor directoryCleaner;
@@ -113,6 +113,11 @@ public class ExternalShuffleBlockResolver {
       Boolean.parseBoolean(conf.get(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "false"));
     this.registeredExecutorFile = registeredExecutorFile;
     String indexCacheSize = conf.get("spark.shuffle.service.index.cache.size", "100m");
+    long indexCacheSizeBytes = JavaUtils.byteStringAsBytes(indexCacheSize);
+    // DEFAULT_CONCURRENCY_LEVEL is 4 and if indexCacheSizeBytes > 8g bytes(8589934592L),
+    // maxSegmentWeight will more than 2g, the weight eviction will not work due to Guava#1761.
+    Preconditions.checkArgument(indexCacheSizeBytes <= 8589934592L,
+      "The value of 'spark.shuffle.service.index.cache.size' shouldn't exceed 8g bytes due to Guava#1761");
     CacheLoader<File, ShuffleIndexInformation> indexCacheLoader =
         new CacheLoader<File, ShuffleIndexInformation>() {
           public ShuffleIndexInformation load(File file) throws IOException {
@@ -120,7 +125,7 @@ public class ExternalShuffleBlockResolver {
           }
         };
     shuffleIndexCache = CacheBuilder.newBuilder()
-      .maximumWeight(JavaUtils.byteStringAsBytes(indexCacheSize))
+      .maximumWeight(indexCacheSizeBytes)
       .weigher((Weigher<File, ShuffleIndexInformation>) (file, indexInfo) -> indexInfo.getSize())
       .build(indexCacheLoader);
     db = LevelDBProvider.initLevelDB(this.registeredExecutorFile, CURRENT_VERSION, mapper);

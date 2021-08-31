@@ -17,28 +17,20 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ExecutionException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.cache.LoadingCache;
 import com.google.common.io.CharStreams;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
 import org.junit.AfterClass;
-import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
 
@@ -115,48 +107,6 @@ public class ExternalShuffleBlockResolverSuite {
       String blocks =
         CharStreams.toString(new InputStreamReader(blocksStream, StandardCharsets.UTF_8));
       assertEquals(sortBlock0 + sortBlock1, blocks);
-    }
-  }
-
-  @Test
-  public void testShuffleIndexCacheEvictionBehavior() throws IOException, ExecutionException {
-    Map<String, String> config = new HashMap<>();
-    String indexCacheSize = "8192m";
-    config.put("spark.shuffle.service.index.cache.size", indexCacheSize);
-    TransportConf transportConf = new TransportConf("shuffle", new MapConfigProvider(config));
-    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(transportConf, null);
-    resolver.registerExecutor("app0", "exec0", dataContext.createExecutorInfo(SORT_MANAGER));
-
-    LoadingCache<File, ShuffleIndexInformation> shuffleIndexCache = resolver.shuffleIndexCache;
-
-    // 8g -> 8589934592 bytes
-    long maximumWeight = JavaUtils.byteStringAsBytes(indexCacheSize);
-    int unitSize = 1048575;
-    // CacheBuilder.DEFAULT_CONCURRENCY_LEVEL
-    int concurrencyLevel = 4;
-    int totalGetCount = 16384;
-    // maxCacheCount is 8192
-    long maxCacheCount = maximumWeight / concurrencyLevel / unitSize * concurrencyLevel;
-    for (int i = 0; i < totalGetCount; i++) {
-      File indexFile = new File("shuffle_" + 0 + "_" + i + "_0.index");
-      ShuffleIndexInformation indexInfo = Mockito.mock(ShuffleIndexInformation.class);
-      Mockito.when(indexInfo.getSize()).thenReturn(unitSize);
-      shuffleIndexCache.get(indexFile, () -> indexInfo);
-    }
-
-    long totalWeight =
-      shuffleIndexCache.asMap().values().stream().mapToLong(ShuffleIndexInformation::getSize).sum();
-    long size = shuffleIndexCache.size();
-    try{
-      Assert.assertTrue(size <= maxCacheCount);
-      Assert.assertTrue(totalWeight < maximumWeight);
-      fail("The tests code should not enter this line now.");
-    } catch (AssertionError error) {
-      // The code will enter this branch because LocalCache weight eviction does not work
-      // when maxSegmentWeight is >= Int.MAX_VALUE.
-      // TODO remove cache AssertionError after fix this bug.
-      Assert.assertTrue(size > maxCacheCount && size <= totalGetCount);
-      Assert.assertTrue(totalWeight > maximumWeight);
     }
   }
 

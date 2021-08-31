@@ -122,6 +122,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       NettyUtils.createThreadFactory("spark-shuffle-merged-shuffle-directory-cleaner"));
     this.minChunkSize = conf.minChunkSizeInMergedShuffleFile();
     this.ioExceptionsThresholdDuringMerge = conf.ioExceptionsThresholdDuringMerge();
+    long mergedIndexCacheSize = conf.mergedIndexCacheSize();
+    // DEFAULT_CONCURRENCY_LEVEL is 4 and if mergedIndexCacheSize > 8g bytes(8589934592L),
+    // maxSegmentWeight will more than 2g, the weight eviction will not work due to Guava#1761.
+    Preconditions.checkArgument(mergedIndexCacheSize <= 8589934592L,
+      "The value of 'spark.shuffle.push.server.mergedIndexCacheSize' shouldn't exceed 8g bytes due to Guava#1761");
     CacheLoader<File, ShuffleIndexInformation> indexCacheLoader =
       new CacheLoader<File, ShuffleIndexInformation>() {
         public ShuffleIndexInformation load(File file) throws IOException {
@@ -129,7 +134,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         }
     };
     indexCache = CacheBuilder.newBuilder()
-      .maximumWeight(conf.mergedIndexCacheSize())
+      .maximumWeight(mergedIndexCacheSize)
       .weigher((Weigher<File, ShuffleIndexInformation>)(file, indexInfo) -> indexInfo.getSize())
       .build(indexCacheLoader);
   }
