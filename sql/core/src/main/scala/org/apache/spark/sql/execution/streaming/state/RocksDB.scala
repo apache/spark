@@ -121,8 +121,7 @@ class RocksDB(
         nativeStats.reset
       }
       // reset resources to prevent side-effects from previous loaded version
-      prefixScanReuseIter.entrySet().asScala.foreach(_.getValue.close())
-      prefixScanReuseIter.clear()
+      closePrefixScanIterators()
       writeBatch.clear()
       logInfo(s"Loaded $version")
     } catch {
@@ -293,8 +292,7 @@ class RocksDB(
    * Drop uncommitted changes, and roll back to previous version.
    */
   def rollback(): Unit = {
-    prefixScanReuseIter.entrySet().asScala.foreach(_.getValue.close())
-    prefixScanReuseIter.clear()
+    closePrefixScanIterators()
     writeBatch.clear()
     numKeysOnWritingVersion = numKeysOnLoadedVersion
     release()
@@ -310,8 +308,7 @@ class RocksDB(
 
   /** Release all resources */
   def close(): Unit = {
-    prefixScanReuseIter.entrySet().asScala.foreach(_.getValue.close())
-    prefixScanReuseIter.clear()
+    closePrefixScanIterators()
     try {
       closeDB()
 
@@ -412,6 +409,11 @@ class RocksDB(
   private def release(): Unit = acquireLock.synchronized {
     acquiredThreadInfo = null
     acquireLock.notifyAll()
+  }
+
+  private def closePrefixScanIterators(): Unit = {
+    prefixScanReuseIter.entrySet().asScala.foreach(_.getValue.close())
+    prefixScanReuseIter.clear()
   }
 
   private def getDBProperty(property: String): Long = {
