@@ -22,8 +22,6 @@ import java.util.Map.Entry
 
 import scala.collection.mutable
 
-import org.apache.spark.errors.SparkCoreErrors
-
 private[spark] object JavaUtils {
   def optionToOptional[T](option: Option[T]): Optional[T] =
     if (option.isDefined) {
