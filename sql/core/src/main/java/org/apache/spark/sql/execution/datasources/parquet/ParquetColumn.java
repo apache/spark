@@ -237,11 +237,12 @@ final class ParquetColumn {
     vector.reserve(definitionLevels.getElementsAppended());
     int rowId = 0;
     int nonnullRowId = 0;
+    boolean hasRepetitionLevels = repetitionLevels.getElementsAppended() > 0;
     for (int i = 0; i < definitionLevels.getElementsAppended(); i++) {
       // if repetition level > maxRepetitionLevel, the value is a nested element (e.g., an array
       // element in struct<array<int>>), and we should skip the definition level since it doesn't
       // represent with the struct.
-      if (repetitionLevels.getInt(i) <= maxRepetitionLevel) {
+      if (!hasRepetitionLevels || repetitionLevels.getInt(i) <= maxRepetitionLevel) {
         if (definitionLevels.getInt(i) == maxDefinitionLevel - 1) {
           // the struct is null
           vector.putNull(rowId);
