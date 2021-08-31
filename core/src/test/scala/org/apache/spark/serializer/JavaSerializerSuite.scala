@@ -37,7 +37,7 @@ class JavaSerializerSuite extends SparkFunSuite {
     obj.getClass
   }
 
-  test("Deserialize object containing a proxy Class as attribute") {
+  test("SPARK-36627: Deserialize object containing a proxy Class as attribute") {
     var classesLoaded = Set[String]()
     val outer = Thread.currentThread.getContextClassLoader
     val inner = new ClassLoader() {
