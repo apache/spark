@@ -18,14 +18,14 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.util
 
-import scala.collection.mutable.ArrayBuilder
+import scala.collection.mutable
 import scala.language.existentials
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.parquet.hadoop.ParquetFileWriter
 import org.apache.parquet.hadoop.metadata.{ColumnChunkMetaData, ParquetMetadata}
 import org.apache.parquet.io.api.Binary
-import org.apache.parquet.schema.{LogicalTypeAnnotation, PrimitiveType, Types}
+import org.apache.parquet.schema.{PrimitiveType, Types}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
 import org.apache.spark.SparkException
@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, PARQUET_AGGREGATE_PUSHDOWN_ENABLED}
-import org.apache.spark.sql.types.{DecimalType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
 object ParquetUtils {
@@ -193,8 +193,8 @@ object ParquetUtils {
       case (PrimitiveType.PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY, i) =>
         val v = values(i).asInstanceOf[Binary]
         converter.getConverter(i).asPrimitiveConverter().addBinary(v)
-      case _ =>
-        throw new SparkException("Unexpected parquet type name: " + primitiveTypeName)
+      case (_, i) =>
+        throw new SparkException("Unexpected parquet type name: " + primitiveTypeName(i))
     }
     converter.currentRecord
   }
@@ -214,8 +214,8 @@ object ParquetUtils {
       partitionSchema: StructType,
       aggregation: Aggregation,
       aggSchema: StructType,
+      columnBatchSize: Int,
       offHeap: Boolean,
-      datetimeRebaseModeInRead: String,
       isCaseSensitive: Boolean): ColumnarBatch = {
     val row = createAggInternalRowFromFooter(
       footer,
@@ -226,9 +226,9 @@ object ParquetUtils {
       isCaseSensitive)
     val converter = new RowToColumnConverter(aggSchema)
     val columnVectors = if (offHeap) {
-      OffHeapColumnVector.allocateColumns(4 * 1024, aggSchema)
+      OffHeapColumnVector.allocateColumns(columnBatchSize, aggSchema)
     } else {
-      OnHeapColumnVector.allocateColumns(4 * 1024, aggSchema)
+      OnHeapColumnVector.allocateColumns(columnBatchSize, aggSchema)
     }
     converter.convert(row, columnVectors.toArray)
     new ColumnarBatch(columnVectors.asInstanceOf[Array[ColumnVector]], 1)
@@ -238,8 +238,8 @@ object ParquetUtils {
    * Calculate the pushed down aggregates (Max/Min/Count) result using the statistics
    * information from Parquet footer file.
    *
-   * @return A tuple of `Array[PrimitiveType.PrimitiveTypeName]` and Array[Any].
-   *         The first element is the PrimitiveTypeName of the aggregate column,
+   * @return A tuple of `Array[PrimitiveType]` and Array[Any].
+   *         The first element is the Parquet PrimitiveType of the aggregate column,
    *         and the second element is the aggregated value.
    */
   private[sql] def getPushedDownAggResult(
@@ -251,9 +251,9 @@ object ParquetUtils {
   : (Array[PrimitiveType], Array[Any]) = {
     val footerFileMetaData = footer.getFileMetaData
     val fields = footerFileMetaData.getSchema.getFields
-    val blocks = footer.getBlocks()
-    val primitiveTypeBuilder = ArrayBuilder.make[PrimitiveType]
-    val valuesBuilder = ArrayBuilder.make[Any]
+    val blocks = footer.getBlocks
+    val primitiveTypeBuilder = mutable.ArrayBuilder.make[PrimitiveType]
+    val valuesBuilder = mutable.ArrayBuilder.make[Any]
 
     aggregation.aggregateExpressions().foreach { agg =>
       var value: Any = None
@@ -262,7 +262,7 @@ object ParquetUtils {
       var index = 0
       var schemaName = ""
       blocks.forEach { block =>
-        val blockMetaData = block.getColumns()
+        val blockMetaData = block.getColumns
         agg match {
           case max: Max =>
             val colName = max.column.fieldNames.head
@@ -306,16 +306,11 @@ object ParquetUtils {
         primitiveTypeBuilder += Types.required(PrimitiveTypeName.INT64).named(schemaName);
       } else {
         valuesBuilder += value
-        if (fields.get(index).asPrimitiveType().getPrimitiveTypeName
-          .equals(PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY)) {  // for decimal type
-          val decimal = dataSchema.fields(index).dataType.asInstanceOf[DecimalType]
-          primitiveTypeBuilder += Types.required(PrimitiveTypeName.BINARY)
-            .as(LogicalTypeAnnotation.decimalType(decimal.scale, decimal.precision))
-            .named(schemaName)
-        } else {
-          primitiveTypeBuilder +=
-            Types.required(fields.get(index).asPrimitiveType.getPrimitiveTypeName).named(schemaName)
-        }
+        val field = fields.get(index)
+        primitiveTypeBuilder += Types.required(field.asPrimitiveType().getPrimitiveTypeName)
+          .as(field.getLogicalTypeAnnotation)
+          .length(field.asPrimitiveType().getTypeLength)
+          .named(schemaName)
       }
     }
     (primitiveTypeBuilder.result(), valuesBuilder.result())

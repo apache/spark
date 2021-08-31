@@ -83,6 +83,7 @@ case class ParquetPartitionReaderFactory(
   private val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
   private val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
   private val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
+  private val columnBatchSize = sqlConf.columnBatchSize
 
   private def getFooter(file: PartitionedFile): ParquetMetadata = {
     val conf = broadcastedConf.value.value
@@ -160,7 +161,7 @@ case class ParquetPartitionReaderFactory(
           hasNext = false
           val footer = getFooter(file)
           ParquetUtils.createAggColumnarBatchFromFooter(footer, dataSchema, partitionSchema,
-            aggregation.get, readDataSchema, enableOffHeapColumnVector, datetimeRebaseModeInRead,
+            aggregation.get, readDataSchema, columnBatchSize, enableOffHeapColumnVector,
             isCaseSensitive)
         }
 
