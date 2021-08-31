@@ -71,6 +71,13 @@ private[spark] class JavaDeserializationStream(in: InputStream, loader: ClassLoa
         case e: ClassNotFoundException =>
           JavaDeserializationStream.primitiveMappings.getOrElse(desc.getName, throw e)
       }
+
+    override def resolveProxyClass(ifaces: Array[String]): Class[_] = {
+        // scalastyle:off classforname
+        val resolved = ifaces.map(iface => Class.forName(iface, false, loader))
+        // scalastyle:on classforname
+        java.lang.reflect.Proxy.getProxyClass(loader, resolved: _*)
+      }
   }
 
   def readObject[T: ClassTag](): T = objIn.readObject().asInstanceOf[T]
