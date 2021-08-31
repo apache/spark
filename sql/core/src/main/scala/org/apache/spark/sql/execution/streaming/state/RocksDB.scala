@@ -120,6 +120,9 @@ class RocksDB(
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
+      // reset resources to prevent side-effects from previous loaded version
+      prefixScanReuseIter.entrySet().asScala.foreach(_.getValue.close())
+      prefixScanReuseIter.clear()
       writeBatch.clear()
       logInfo(s"Loaded $version")
     } catch {
