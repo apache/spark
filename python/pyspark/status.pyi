@@ -32,6 +32,8 @@ class SparkStageInfo(NamedTuple):
     numActiveTasks: int
     numCompletedTasks: int
     numFailedTasks: int
+    inputBytes: long
+    inputRecords: long
 
 class StatusTracker:
     def __init__(self, jtracker: JavaObject) -> None: ...

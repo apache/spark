@@ -31,7 +31,9 @@ private class SparkStageInfoImpl(
     val numTasks: Int,
     val numActiveTasks: Int,
     val numCompletedTasks: Int,
-    val numFailedTasks: Int)
+    val numFailedTasks: Int,
+    val inputBytes: Long,
+    val inputRecords: Long)
   extends SparkStageInfo
 
 private class SparkExecutorInfoImpl(

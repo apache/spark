@@ -66,6 +66,8 @@ public final class JavaStatusTrackerDemo {
       SparkStageInfo stageInfo = jsc.statusTracker().getStageInfo(jobInfo.stageIds()[0]);
       System.out.println(stageInfo.numTasks() + " tasks total: " + stageInfo.numActiveTasks() +
           " active, " + stageInfo.numCompletedTasks() + " complete");
+      System.out.println(stageInfo.inputBytes() + " input bytes");
+      System.out.println(stageInfo.inputRecords() + " input records");
     }
 
     System.out.println("Job results are: " + jobFuture.get());

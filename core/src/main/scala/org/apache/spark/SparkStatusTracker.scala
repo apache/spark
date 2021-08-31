@@ -93,7 +93,9 @@ class SparkStatusTracker private[spark] (sc: SparkContext, store: AppStatusStore
         stage.numTasks,
         stage.numActiveTasks,
         stage.numCompleteTasks,
-        stage.numFailedTasks)
+        stage.numFailedTasks,
+        stage.inputBytes,
+        stage.inputRecords)
     }
   }
 

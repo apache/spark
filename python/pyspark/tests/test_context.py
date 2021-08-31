@@ -239,6 +239,8 @@ class ContextTests(unittest.TestCase):
             self.assertEqual(1, len(job.stageIds))
             stage = tracker.getStageInfo(job.stageIds[0])
             self.assertEqual(rdd.getNumPartitions(), stage.numTasks)
+            self.assertGreater(0, stage.inputBytes)
+            self.assertEqual(10, stage.inputRecords)
 
             sc.cancelAllJobs()
             t.join()

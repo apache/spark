@@ -34,4 +34,6 @@ public interface SparkStageInfo extends Serializable {
   int numActiveTasks();
   int numCompletedTasks();
   int numFailedTasks();
+  long inputBytes();
+  long inputRecords();
 }

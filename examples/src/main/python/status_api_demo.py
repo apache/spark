@@ -56,8 +56,10 @@ def main():
             for sid in job.stageIds:
                 info = status.getStageInfo(sid)
                 if info:
-                    print("Stage %d: %d tasks total (%d active, %d complete)" %
-                          (sid, info.numTasks, info.numActiveTasks, info.numCompletedTasks))
+                    print("Stage %d: %d tasks total (%d active, %d complete), "
+                          "%s inputBytes %s inputRecords" %
+                          (sid, info.numTasks, info.numActiveTasks, info.numCompletedTasks,
+                           info.inputBytes, info.inputRecords))
         time.sleep(1)
 
     print("Job results are:", result.get())

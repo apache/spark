@@ -28,7 +28,7 @@ class SparkJobInfo(namedtuple("SparkJobInfo", "jobId stageIds status")):
 
 class SparkStageInfo(namedtuple("SparkStageInfo",
                                 "stageId currentAttemptId name numTasks numActiveTasks "
-                                "numCompletedTasks numFailedTasks")):
+                                "numCompletedTasks numFailedTasks inputBytes inputRecords")):
     """
     Exposes information about Spark Stages.
     """
