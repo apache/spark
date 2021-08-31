@@ -466,8 +466,8 @@ class IndexingTest(PandasOnSparkTestCase):
 
         self.assert_eq(psdf.loc[5], pdf.loc[5])
         self.assert_eq(psdf.loc[9], pdf.loc[9])
-        # TODO: self.assert_eq(psdf.loc[(5, 3)], pdf.loc[(5, 3)])
-        # TODO: self.assert_eq(psdf.loc[(9, 0)], pdf.loc[(9, 0)])
+        self.assert_eq(psdf.loc[(5, 3)], pdf.loc[(5, 3)])
+        self.assert_eq(psdf.loc[(9, 0)], pdf.loc[(9, 0)])
         self.assert_eq(psdf.a.loc[5], pdf.a.loc[5])
         self.assert_eq(psdf.a.loc[9], pdf.a.loc[9])
         self.assertTrue((psdf.a.loc[(5, 3)] == pdf.a.loc[(5, 3)]).all())
