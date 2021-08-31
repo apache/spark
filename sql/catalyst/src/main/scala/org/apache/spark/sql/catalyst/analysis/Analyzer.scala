@@ -1443,7 +1443,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
         }
       case g: Generate if containsStar(g.generator.children) =>
-        throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF")
+        throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF",
+          extractStar(g.generator.children))
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on its descendants
@@ -1657,6 +1658,9 @@ class Analyzer(override val catalogManager: CatalogManager)
     def containsStar(exprs: Seq[Expression]): Boolean =
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
 
+    private def extractStar(exprs: Seq[Expression]): Seq[Star] =
+      exprs.map(_.collect { case s: Star => s }).flatten
+
     /**
      * Expands the matching attribute.*'s in `child`'s output.
      */
@@ -1704,7 +1708,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           })
         // count(*) has been replaced by count(1)
         case o if containsStar(o.children) =>
-          throw QueryCompilationErrors.invalidStarUsageError(s"expression '${o.prettyName}'")
+          throw QueryCompilationErrors.invalidStarUsageError(s"expression '${o.prettyName}'",
+            extractStar(o.children))
       }
     }
   }

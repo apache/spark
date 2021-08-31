@@ -185,11 +185,12 @@ private[hive] class SparkExecuteStatementOperation(
 
   override def runInternal(): Unit = {
     setState(OperationState.PENDING)
-    logInfo(s"Submitting query '$statement' with $statementId")
+    val redactedStatement = SparkUtils.redact(sqlContext.conf.stringRedactionPattern, statement)
+    logInfo(s"Submitting query '$redactedStatement' with $statementId")
     HiveThriftServer2.eventManager.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
-      statement,
+      redactedStatement,
       statementId,
       parentSession.getUsername)
     setHasResultSet(true) // avoid no resultset for async run

@@ -125,6 +125,16 @@ case class UnresolvedFunc(multipartIdentifier: Seq[String]) extends LeafNode {
 }
 
 /**
+ * Holds the name of a database object (table, view, namespace, function, etc.) that is to be
+ * created and we need to determine the catalog to store it. It will be resolved to
+ * [[ResolvedDBObjectName]] during analysis.
+ */
+case class UnresolvedDBObjectName(nameParts: Seq[String], isNamespace: Boolean) extends LeafNode {
+  override lazy val resolved: Boolean = false
+  override def output: Seq[Attribute] = Nil
+}
+
+/**
  * A plan containing resolved namespace.
  */
 case class ResolvedNamespace(catalog: CatalogPlugin, namespace: Seq[String])
@@ -186,5 +196,12 @@ case class ResolvedView(identifier: Identifier, isTemp: Boolean) extends LeafNod
 //       support to v2 catalog. For now we only need the identifier to fallback to v1 command.
 case class ResolvedFunc(identifier: Identifier)
   extends LeafNode {
+  override def output: Seq[Attribute] = Nil
+}
+
+/**
+ * A plan containing resolved database object name with catalog determined.
+ */
+case class ResolvedDBObjectName(catalog: CatalogPlugin, nameParts: Seq[String]) extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }
