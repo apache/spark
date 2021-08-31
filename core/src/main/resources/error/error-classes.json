@@ -32,7 +32,8 @@
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
   "COPY_NULL_FIELD" : {
-    "message" : [ "Do not attempt to copy a null field" ]
+    "message" : [ "Do not attempt to copy a null field" ],
+    "sqlState" : "39004"
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero" ],
@@ -43,7 +44,8 @@
     "sqlState" : "23000"
   },
   "EXCEED_ARRAY_SIZE_WHEN_ZIP_MAP" : {
-    "message" : [ "Unsuccessful try to zip maps with %s unique keys due to exceeding the array size limit %s." ]
+    "message" : [ "Unsuccessful try to zip maps with %s unique keys due to exceeding the array size limit %s." ],
+    "sqlState" : "22026"
   },
   "FAILED_EXECUTE_UDF" : {
     "message" : [ "Failed to execute user defined function (%s: (%s) => %s)" ]
@@ -56,7 +58,8 @@
     "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ]
   },
   "FOUND_NEGATIVE_VALUES" : {
-    "message" : [ "Negative values found in %s" ]
+    "message" : [ "Negative values found in %s" ],
+    "sqlState" : "22003"
   },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [ "Column of grouping (%s) can't be found in grouping columns %s" ],
@@ -70,10 +73,12 @@
     "message" : [ "Grouping sets size cannot be greater than %s" ]
   },
   "GROUP_INDEX_EXCEED_GROUP_COUNT" : {
-    "message" : [ "Regex group count is %s, but the specified group index is %s" ]
+    "message" : [ "Regex group count is %s, but the specified group index is %s" ],
+    "sqlState" : "07009"
   },
   "GROUP_INDEX_LESS_THAN_ZERO" : {
-    "message" : [ "The specified group index cannot be less than zero" ]
+    "message" : [ "The specified group index cannot be less than zero" ],
+    "sqlState" : "07009"
   },
   "IF_PARTITION_NOT_EXISTS_UNSUPPORTED" : {
     "message" : [ "Cannot write, IF NOT EXISTS is not supported for table: %s" ]
@@ -83,7 +88,8 @@
     "sqlState" : "42000"
   },
   "INCOMPARABLE_TYPE" : {
-    "message" : [ "cannot generate %s code for un-comparable type: %s" ]
+    "message" : [ "cannot generate %s code for un-comparable type: %s" ],
+    "sqlState" : "07006"
   },
   "INCOMPATIBLE_DATASOURCE_REGISTER" : {
     "message" : [ "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: %s" ]
@@ -93,7 +99,8 @@
     "sqlState" : "22023"
   },
   "INTEGRAL_DIVIDE_OVERFLOW" : {
-    "message" : [ "Overflow in integral divide." ]
+    "message" : [ "Overflow in integral divide." ],
+    "sqlState" : "22015"
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [ "Invalid index: %s, numElements: %s" ]
@@ -114,7 +121,8 @@
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
   },
   "INVALID_URL" : {
-    "message" : [ "Find an invalid url string %s" ]
+    "message" : [ "Find an invalid url string %s" ],
+    "sqlState" : "22000"
   },
     "LOGICAL_HINT_OPERATOR_NOT_REMOVED_DURING_ANALYSIS" : {
     "message" : [ "Internal error: logical hint operator should have been removed during analysis" ]
@@ -143,13 +151,16 @@
     "sqlState" : "42000"
   },
   "NOT_MATCH_FUNCTION_NAME" : {
-    "message" : [ "%s is not matched at addNewFunction" ]
+    "message" : [ "%s is not matched at addNewFunction" ],
+    "sqlState" : "07000"
   },
   "NOT_SUPPORT_ORDERED_OPERATIONS" : {
-    "message" : [ "Type %s does not support ordered operations" ]
+    "message" : [ "Type %s does not support ordered operations" ],
+    "sqlState" : "07006"
   },
   "NO_DEFAULT_FOR_TYPE" : {
-    "message" : [ "no default for type %s" ]
+    "message" : [ "no default for type %s" ],
+    "sqlState" : "0700C"
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
@@ -168,19 +179,23 @@
     "sqlState" : "22023"
   },
   "SHOULD_NOT_CALL_ALIAS_DO_GEN_CODE" : {
-    "message" : [ "Alias.doGenCode should not be called." ]
+    "message" : [ "Alias.doGenCode should not be called." ],
+    "sqlState" : "42000"
   },
   "SUM_OF_DECIMAL_OVERFLOW" : {
-    "message" : [ "Overflow in sum of decimals." ]
+    "message" : [ "Overflow in sum of decimals." ],
+    "sqlState" : "22015"
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
   },
   "UNEXPECTED_DATATYPE" : {
-    "message" : [ "Unexpected data type %s" ]
+    "message" : [ "Unexpected data type %s" ],
+    "sqlState" : "22000"
   },
   "UNEXPECTED_TYPE" : {
-    "message" : [ "Unexpected type %s" ]
+    "message" : [ "Unexpected type %s" ],
+    "sqlState" : "22000"
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [ "Unrecognized SQL type %s" ],
@@ -199,7 +214,8 @@
     "sqlState": "0A000"
   },
   "UNSUPPORTED_INPUT_TYPE" : {
-    "message" : [ "Unsupported input type %s" ]
+    "message" : [ "Unsupported input type %s" ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_LITERAL_TYPE" : {
     "message" : [ "Unsupported literal type %s %s" ],
@@ -213,7 +229,8 @@
     "sqlState" : "0A000"
   },
   "WINDOW_NOT_SUPPORT_MERGING" : {
-    "message" : [ "Window Functions do not support merging." ]
+    "message" : [ "Window Functions do not support merging." ],
+    "sqlState" : "0A000"
   },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
