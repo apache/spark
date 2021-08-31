@@ -54,6 +54,8 @@ class JavaSerializerSuite extends SparkFunSuite {
       instance.deserialize[ContainsProxyClass](instance.serialize(new ContainsProxyClass()))
     // enforce class cast
     obj.getClass
+
+    // check that serializer's loader is used to resolve proxied interface.
     assert(classesLoaded.exists(klass => klass.contains("MyInterface")))
   }
 }
