@@ -58,6 +58,7 @@ from pyspark.sql.types import (
     DoubleType,
     BooleanType,
     TimestampType,
+    TimestampNTZType,
     DecimalType,
     StringType,
     DateType,
@@ -2977,6 +2978,7 @@ _get_dummies_acceptable_types = _get_dummies_default_accept_types + (
     DoubleType,
     BooleanType,
     TimestampType,
+    TimestampNTZType,
 )
 
 

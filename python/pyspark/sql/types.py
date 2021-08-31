@@ -1665,7 +1665,28 @@ class DatetimeConverter(object):
         t.setNanos(obj.microsecond * 1000)
         return t
 
+
+class DatetimeNTZConverter(object):
+    def can_convert(self, obj):
+        from pyspark.sql.utils import is_timestamp_ntz_preferred
+
+        return (
+            isinstance(obj, datetime.datetime) and
+            obj.tzinfo is None and
+            is_timestamp_ntz_preferred())
+
+    def convert(self, obj, gateway_client):
+        from pyspark import SparkContext
+
+        seconds = calendar.timegm(obj.utctimetuple())
+        jvm = SparkContext._jvm
+        return jvm.org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToLocalDateTime(
+            int(seconds) * 1000000 + obj.microsecond
+        )
+
+
 # datetime is a subclass of date, we should register DatetimeConverter first
+register_input_converter(DatetimeNTZConverter())
 register_input_converter(DatetimeConverter())
 register_input_converter(DateConverter())
 
