@@ -2462,19 +2462,8 @@ class Dataset[T] private[sql](
 
   /**
    * Returns a new Dataset by adding a column with metadata.
-   *
-   * `column`'s expression must only refer to attributes supplied by this Dataset. It is an
-   * error to add a column that refers to some other Dataset.
-   *
-   * @note this method introduces a projection internally. Therefore, calling it multiple times,
-   * for instance, via loops in order to add multiple columns can generate big plans which
-   * can cause performance issues and even `StackOverflowException`. To avoid this,
-   * use `select` with the multiple columns at once.
-   *
-   * @group untypedrel
-   * @since 3.3.0
    */
-  def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame =
+  private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame =
     withColumns(Seq(colName), Seq(col), Seq(metadata))
 
   /**
