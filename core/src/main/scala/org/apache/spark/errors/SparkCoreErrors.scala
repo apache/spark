@@ -133,18 +133,6 @@ object SparkCoreErrors {
     new SparkException("SPARK_HOME not set. Can't locate SparkR package.")
   }
 
-  def keyInMapCannotBeNullError(): Throwable = {
-    new IllegalArgumentException("Key in map can't be null.")
-  }
-
-  def invalidMapKeyTypeError(key: String): Throwable = {
-    new IllegalArgumentException(s"Invalid map key type: $key")
-  }
-
-  def invalidArrayTypeError(arrType: Char): Throwable = {
-    new IllegalArgumentException (s"Invalid array type $arrType")
-  }
-
   def rddBlockNotFoundError(blockId: BlockId, id: Int): Throwable = {
     new Exception(s"Could not compute split, block $blockId of RDD $id not found")
   }
