@@ -434,5 +434,4 @@ ORDER BY id;
 SELECT
 	SUM(salary) OVER w sum_salary
 FROM
-	basic_pays
-ORDER BY department;
+	basic_pays;

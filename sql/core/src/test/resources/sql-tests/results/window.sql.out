@@ -1180,9 +1180,11 @@ SELECT
 	SUM(salary) OVER w sum_salary
 FROM
 	basic_pays
-ORDER BY department
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Window specification w is not defined in the WINDOW clause.
+
+The query operator `Project` contains one or more unsupported
+expression types Aggregate, Window or Generate.
+Invalid expressions: [sum(basic_pays.salary)]

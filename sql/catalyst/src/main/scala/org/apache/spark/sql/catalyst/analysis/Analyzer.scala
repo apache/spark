@@ -2502,11 +2502,6 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       // Find the first Aggregate Expression that is not Windowed.
       exprs.exists(_.collectFirst {
-        case UnresolvedWindowExpression(_: AggregateExpression, windowSpec) =>
-          throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowSpec.name)
-        case UnresolvedWindowExpression(e: PythonUDF, windowSpec)
-          if PythonUDF.isGroupedAggPandasUDF(e) =>
-          throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowSpec.name)
         case ae: AggregateExpression if !windowedAggExprs.contains(ae) => ae
         case e: PythonUDF if PythonUDF.isGroupedAggPandasUDF(e) &&
           !windowedAggExprs.contains(e) => e
