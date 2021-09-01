@@ -2738,6 +2738,14 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     }.getCause
     assert(e.isInstanceOf[ArithmeticException])
     assert(e.getMessage.contains("/ by zero"))
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e = intercept[SparkException] {
+        Seq((Period.ofYears(9999), 0)).toDF("i", "n").select($"i" / $"n").collect()
+      }.getCause
+      assert(e.isInstanceOf[ArithmeticException])
+      assert(e.getMessage.contains("divide by zero"))
+    }
   }
 
   test("SPARK-34875: divide day-time interval by numeric") {

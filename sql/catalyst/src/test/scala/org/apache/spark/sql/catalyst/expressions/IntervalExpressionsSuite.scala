@@ -421,6 +421,12 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         expectedErrMsg)
     }
 
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkExceptionInExpression[ArithmeticException](
+        DivideYMInterval(Literal(Period.ofMonths(1)), Literal(0)),
+        "divide by zero")
+    }
+
     numericTypes.foreach { numType =>
       yearMonthIntervalTypes.foreach { it =>
         checkConsistencyBetweenInterpretedAndCodegenAllowingException(

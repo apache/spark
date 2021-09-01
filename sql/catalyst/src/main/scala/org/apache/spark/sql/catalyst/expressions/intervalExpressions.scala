@@ -603,7 +603,8 @@ trait IntervalDivide {
 // Divide an year-month interval by a numeric
 case class DivideYMInterval(
     interval: Expression,
-    num: Expression)
+    num: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide
     with NullIntolerant with Serializable {
   override def left: Expression = interval
@@ -627,40 +628,64 @@ case class DivideYMInterval(
       DoubleMath.roundToInt(months / num.asInstanceOf[Number].doubleValue(), RoundingMode.HALF_UP)
   }
 
-  override def nullSafeEval(interval: Any, num: Any): Any = {
-    checkDivideOverflow(interval.asInstanceOf[Int], Int.MinValue, right, num)
-    evalFunc(interval.asInstanceOf[Int], num)
+  @transient
+  private lazy val evalExactFunc: (Int, Any) => Any = if (failOnError) {
+    (months: Int, num) =>
+      if (num == 0) throw QueryExecutionErrors.divideByZeroError()
+      evalFunc(months, num)
+  } else {
+    (months: Int, num) => evalFunc(months, num)
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = right.dataType match {
-    case t: IntegralType =>
-      val math = t match {
-        case LongType => classOf[LongMath].getName
-        case _ => classOf[IntMath].getName
-      }
-      val javaType = CodeGenerator.javaType(dataType)
-      val months = left.genCode(ctx)
-      val num = right.genCode(ctx)
-      val checkIntegralDivideOverflow =
-        s"""
-           |if (${months.value} == ${Int.MinValue} && ${num.value} == -1)
-           |  throw QueryExecutionErrors.overflowInIntegralDivideError();
-           |""".stripMargin
-      nullSafeCodeGen(ctx, ev, (m, n) =>
-        // Similarly to non-codegen code. The result of `divide(Int, Long, ...)` must fit to `Int`.
-        // Casting to `Int` is safe here.
-        s"""
-           |$checkIntegralDivideOverflow
-           |${ev.value} = ($javaType)$math.divide($m, $n, java.math.RoundingMode.HALF_UP);
+  override def nullSafeEval(interval: Any, num: Any): Any = {
+    checkDivideOverflow(interval.asInstanceOf[Int], Int.MinValue, right, num)
+    evalExactFunc(interval.asInstanceOf[Int], num)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val num = right.genCode(ctx)
+    val checkDivideByZero = if (failOnError) {
+      s"""
+         |if (${num.value} == 0)
+         |  throw QueryExecutionErrors.divideByZeroError();
+         """.stripMargin
+    } else ""
+    right.dataType match {
+      case t: IntegralType =>
+        val math = t match {
+          case LongType => classOf[LongMath].getName
+          case _ => classOf[IntMath].getName
+        }
+        val javaType = CodeGenerator.javaType(dataType)
+        val months = left.genCode(ctx)
+        val checkIntegralDivideOverflow =
+          s"""
+             |if (${months.value} == ${Int.MinValue} && ${num.value} == -1)
+             |  throw QueryExecutionErrors.overflowInIntegralDivideError();
+             |""".stripMargin
+        nullSafeCodeGen(ctx, ev, (m, n) =>
+          // Similarly to non-codegen code. The result of `divide(Int, Long, ...)` must fit
+          // to `Int`. Casting to `Int` is safe here.
+          s"""
+             |$checkIntegralDivideOverflow
+             |$checkDivideByZero
+             |${ev.value} = ($javaType)$math.divide($m, $n, java.math.RoundingMode.HALF_UP);
         """.stripMargin)
-    case _: DecimalType =>
-      defineCodeGen(ctx, ev, (m, n) =>
-        s"((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()" +
-        ".setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()")
-    case _: FractionalType =>
-      val math = classOf[DoubleMath].getName
-      defineCodeGen(ctx, ev, (m, n) =>
-        s"$math.roundToInt($m / (double)$n, java.math.RoundingMode.HALF_UP)")
+      case _: DecimalType =>
+        nullSafeCodeGen(ctx, ev, (m, n) =>
+          s"""
+             |$checkDivideByZero
+             |${ev.value} = ((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()
+             |  .setScale(0, java.math.RoundingMode.HALF_UP).intValueExact();
+        """.stripMargin)
+      case _: FractionalType =>
+        val math = classOf[DoubleMath].getName
+        nullSafeCodeGen(ctx, ev, (m, n) =>
+          s"""
+             |$checkDivideByZero
+             |${ev.value} = $math.roundToInt($m / (double)$n, java.math.RoundingMode.HALF_UP);
+        """.stripMargin)
+    }
   }
 
   override def toString: String = s"($left / $right)"
@@ -674,7 +699,8 @@ case class DivideYMInterval(
 // Divide a day-time interval by a numeric
 case class DivideDTInterval(
     interval: Expression,
-    num: Expression)
+    num: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide
     with NullIntolerant with Serializable {
   override def left: Expression = interval
