@@ -121,7 +121,7 @@ class ParquetReadSupport(
          |Catalyst requested schema:
          |${catalystRequestedSchema.treeString}
        """.stripMargin)
-    new ReadContext(parquetClippedSchema, Map.empty[String, String].asJava)
+    new ReadContext(parquetRequestedSchema, Map.empty[String, String].asJava)
   }
 
   /**
