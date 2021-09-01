@@ -2747,13 +2747,23 @@ def merge(
 
 
 @no_type_check
-def to_numeric(arg):
+def to_numeric(arg, errors="coerce"):
     """
     Convert argument to a numeric type.
 
     Parameters
     ----------
     arg : scalar, list, tuple, 1-d array, or Series
+        Argument to be converted.
+    errors : {'ignore', 'raise', 'coerce'}, default 'coerce'
+        * If 'coerce', then invalid parsing will be set as NaN.
+        * If 'ignore', then invalid parsing will return the input.
+        * If 'raise', then invalid parsing will raise an exception.
+
+    Notes
+    -----
+    Unlike pandas, the default value for `errors` is 'coerce', since 'raise' is not supported yet
+    when the `arg` is Series.
 
     Returns
     -------
@@ -2797,7 +2807,7 @@ def to_numeric(arg):
     1    1.0
     2    2.0
     3   -3.0
-    dtype: float32
+    dtype: float64
 
     Also support for list, tuple, np.array, or a scalar
 
@@ -2814,9 +2824,18 @@ def to_numeric(arg):
     1.0
     """
     if isinstance(arg, Series):
-        return arg._with_new_scol(arg.spark.column.cast("float"))
+        if errors == "coerce":
+            return arg._with_new_scol(arg.spark.column.cast("int"))
+        elif errors == "ignore":
+            scol = arg.spark.column
+            casted_scol = scol.cast("int")
+            return arg._with_new_scol(F.when(casted_scol.isNull(), scol).otherwise(casted_scol))
+        elif errors == "raise":
+            raise NotImplementedError("'raise' is not implemented yet, when the `arg` is Series.")
+        else:
+            raise ValueError("invalid error value specified")
     else:
-        return pd.to_numeric(arg)
+        return pd.to_numeric(arg, errors=errors)
 
 
 def broadcast(obj: DataFrame) -> DataFrame:
