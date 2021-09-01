@@ -168,7 +168,7 @@ class ArrowTests(ReusedSQLTestCase):
         assert_frame_equal(expected, pdf_arrow)
 
     def test_create_data_frame_to_pandas_timestamp_ntz(self):
-        # SPARK-36608: Test TimestampNTZ in createDataFrame and toPandas
+        # SPARK-36626: Test TimestampNTZ in createDataFrame and toPandas
         with self.sql_conf({"spark.sql.session.timeZone": "America/Los_Angeles"}):
             origin = pd.DataFrame({"a": [datetime.datetime(2012, 2, 2, 2, 2, 2)]})
             df = self.spark.createDataFrame(

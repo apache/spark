@@ -554,7 +554,7 @@ class UDFTests(ReusedSQLTestCase):
         self.assertEqual(return_type, f_.returnType)
 
     def test_udf_timestamp_ntz(self):
-        # SPARK-36608: Test TimestampNTZ in Python UDF
+        # SPARK-36626: Test TimestampNTZ in Python UDF
         @udf(TimestampNTZType())
         def noop(x):
             assert x == datetime.datetime(1970, 1, 1, 0, 0)

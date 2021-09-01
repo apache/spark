@@ -241,7 +241,7 @@ class PandasUDFTests(ReusedSQLTestCase):
             df.withColumn('udf', udf('id')).collect()
 
     def test_pandas_udf_timestamp_ntz(self):
-        # SPARK-36608: Test TimestampNTZ in pandas UDF
+        # SPARK-36626: Test TimestampNTZ in pandas UDF
         @pandas_udf(returnType="timestamp_ntz")
         def noop(s):
             assert s.iloc[0] == datetime.datetime(1970, 1, 1, 0, 0)
