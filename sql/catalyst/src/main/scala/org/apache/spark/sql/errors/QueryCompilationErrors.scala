@@ -2333,7 +2333,12 @@ object QueryCompilationErrors {
   }
 
   def cannotModifyValueOfSparkConfigError(key: String): Throwable = {
-    new AnalysisException(s"Cannot modify the value of a Spark config: $key")
+    new AnalysisException(
+      s"""
+      |Cannot modify the value of a Spark config: $key,
+      |please set spark.sql.legacy.setCommandRejectsSparkCoreConfs as 'false' in
+      |order to make change value of Spark config: $key .
+      """.stripMargin.replaceAll("\n", " "))
   }
 
   def commandExecutionInRunnerUnsupportedError(runner: String): Throwable = {
