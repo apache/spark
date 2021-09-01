@@ -43,6 +43,7 @@ public interface SupportsIndex extends CatalogPlugin {
    * @param indexType the IndexType of the index to be created
    * @param table the table on which index to be created
    * @param columns the columns on which index to be created
+   * @param columnPropertyList the properties of the columns on which index to be created
    * @param properties the properties of the index to be created
    * @throws IndexAlreadyExistsException If the index already exists (optional)
    * @throws UnsupportedOperationException If create index is not a supported operation
@@ -51,6 +52,7 @@ public interface SupportsIndex extends CatalogPlugin {
       String indexType,
       Identifier table,
       FieldReference[] columns,
+      Map<String, String>[] columnPropertyList,
       Map<String, String> properties)
       throws IndexAlreadyExistsException, UnsupportedOperationException;
 
