@@ -142,9 +142,9 @@ class UISeleniumSuite
 
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
         go to (baseURL + "/sqlserver")
-        val statements = findAll(
-          cssSelector("span.description-input")).map(_.text).filter(_.startsWith("CREATE")).toSeq
-        statements.size should be (2)
+        // Take description of 2 statements executed within this test.
+        val statements = findAll(cssSelector("span.description-input"))
+          .map(_.text).filter(_.startsWith("CREATE")).take(2).toSeq
 
         val nonMaskedStatement = statements.filter(_.contains("test_tbl1"))
         nonMaskedStatement.size should be (1)
