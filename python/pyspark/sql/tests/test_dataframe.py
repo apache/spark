@@ -719,7 +719,7 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST(col7 AS BOOLEAN) AS boolean,
             CAST(col8 AS STRING) AS string,
             timestamp_seconds(col9) AS timestamp,
-            timestamp_seconds(col9) AS timestamp_ntz
+            timestamp_seconds(col10) AS timestamp_ntz
             FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
                         (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
             """

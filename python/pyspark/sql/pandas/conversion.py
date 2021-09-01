@@ -339,7 +339,7 @@ class SparkConversionMixin(object):
                     warnings.warn(msg)
                     raise
 
-        should_localize = self._wrapped._conf.timestampType().typeName() == "timestamp"
+        should_localize = not self._is_timestamp_ntz_preferred()
         data = self._convert_from_pandas(data, schema, timezone, should_localize)
         return self._create_dataframe(data, schema, samplingRatio, verifySchema)
 
@@ -456,8 +456,7 @@ class SparkConversionMixin(object):
         if isinstance(schema, (list, tuple)):
             arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
             struct = StructType()
-            prefer_timestamp_ntz = (
-                self._wrapped._conf.timestampType().typeName() == "timestamp_ntz")
+            prefer_timestamp_ntz = self._is_timestamp_ntz_preferred()
             for name, field in zip(schema, arrow_schema):
                 struct.add(
                     name,
