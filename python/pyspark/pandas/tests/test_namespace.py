@@ -357,6 +357,11 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
             'Unable to parse string "hello" at position 4',
             lambda: ps.to_numeric(data, errors="raise"),
         )
+        self.assertRaisesRegex(
+            ValueError,
+            "invalid error value specified",
+            lambda: ps.to_numeric(psser, errors="errors"),
+        )
 
 
 if __name__ == "__main__":
