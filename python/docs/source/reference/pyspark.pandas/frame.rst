@@ -100,6 +100,7 @@ Binary operator functions
    DataFrame.ne
    DataFrame.eq
    DataFrame.dot
+   DataFrame.combine_first
 
 Function application, GroupBy & Window
 --------------------------------------
