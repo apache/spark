@@ -1723,6 +1723,40 @@ class JDBCSuite extends QueryTest
       Row("fred", 1) :: Nil)
   }
 
+  test(
+    "SPARK-36574: pushDownPredicate=false should prevent push down filters to JDBC data source") {
+    val df = spark.read.format("jdbc")
+      .option("Url", urlWithUserAndPass)
+      .option("dbTable", "test.people")
+    val df1 = df
+      .option("pushDownPredicate", false)
+      .load()
+      .filter("theid = 1")
+      .select("name", "theid")
+    val df2 = df
+      .option("pushDownPredicate", true)
+      .load()
+      .filter("theid = 1")
+      .select("name", "theid")
+    val df3 = df
+      .load()
+      .select("name", "theid")
+
+    def getRowCount(df: DataFrame): Long = {
+      val queryExecution = df.queryExecution
+      val rawPlan = queryExecution.executedPlan.collect {
+        case p: DataSourceScanExec => p
+      } match {
+        case Seq(p) => p
+        case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
+      }
+      rawPlan.execute().count()
+    }
+
+    assert(getRowCount(df1) == df3.count)
+    assert(getRowCount(df2) < df3.count)
+  }
+
   test("SPARK-26383 throw IllegalArgumentException if wrong kind of driver to the given url") {
     val e = intercept[IllegalArgumentException] {
       val opts = Map(

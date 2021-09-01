@@ -455,9 +455,11 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       ENV_EXECUTOR_MEMORY -> "1024m",
       ENV_APPLICATION_ID -> KubernetesTestConf.APP_ID,
       ENV_SPARK_CONF_DIR -> SPARK_CONF_DIR_INTERNAL,
-      ENV_EXECUTOR_POD_IP -> null,
       ENV_SPARK_USER -> Utils.getCurrentUserName(),
-      ENV_RESOURCE_PROFILE_ID -> "0")
+      ENV_RESOURCE_PROFILE_ID -> "0",
+      // These are populated by K8s on scheduling
+      ENV_EXECUTOR_POD_IP -> null,
+      ENV_EXECUTOR_POD_NAME -> null)
 
     val extraJavaOptsStart = additionalEnvVars.keys.count(_.startsWith(ENV_JAVA_OPT_PREFIX))
     val extraJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
