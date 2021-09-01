@@ -123,7 +123,8 @@ private[spark] class YarnClientSchedulerBackend(
         allowInterrupt = false
         sc.stop()
         state match {
-          case FinalApplicationStatus.FAILED | FinalApplicationStatus.KILLED =>
+          case FinalApplicationStatus.FAILED | FinalApplicationStatus.KILLED
+            if conf.get(AM_CLIENT_MODE_EXIT_DIRECTLY) =>
             logWarning(s"ApplicationMaster finished with status ${state}, " +
               s"SparkContext should exit with code 1.")
             System.exit(1)

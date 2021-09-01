@@ -52,6 +52,14 @@ package object config extends Logging {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
+  private[spark] val AM_CLIENT_MODE_EXIT_DIRECTLY =
+    ConfigBuilder("spark.yarn.am.clientModeExitDirectly")
+      .doc("When ture, if YarnClientSchedulerBackend.MonitorThread got report with " +
+        "KILLED or FAILED status, driver will stop SparkContext and exit program with code 1.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
     ConfigBuilder("spark.yarn.executor.failuresValidityInterval")
       .doc("Interval after which Executor failures will be considered independent and not " +
