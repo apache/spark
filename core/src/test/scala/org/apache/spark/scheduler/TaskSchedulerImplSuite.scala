@@ -25,21 +25,17 @@ import org.mockito.Mockito.{atLeast, atMost, never, spy, times, verify, when}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 import org.scalatestplus.mockito.MockitoSugar
-
-
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
-
-import org.apache.spark.util.{Clock, ManualClock}
-
+import org.apache.spark.util.{Clock}
 import org.apache.spark.util.{ManualClock, ThreadUtils}
 
 import java.util.Properties
-import java.util.concurrent.ExecutorService
+import java.util.concurrent.{CountDownLatch, ExecutorService, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 
 class FakeSchedulerBackend extends SchedulerBackend {
   def start(): Unit = {}
@@ -2003,9 +1999,20 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   test("SPARK-36575: Executor lost cause task hang") {
     val taskScheduler = setupScheduler()
 
+    val latch = new CountDownLatch(2)
     val resultGetter = new TaskResultGetter(sc.env, taskScheduler) {
       override protected val getTaskResultExecutor: ExecutorService =
-        ThreadUtils.newDaemonFixedThreadPool(1, "task-result-getter")
+        new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue[Runnable],
+          ThreadUtils.namedThreadFactory("task-result-getter")) {
+          override def execute(command: Runnable): Unit = {
+            super.execute(new Runnable {
+              override def run(): Unit = {
+                command.run()
+                latch.countDown()
+              }
+            })
+          }
+        }
       def taskResultExecutor() : ExecutorService = getTaskResultExecutor
     }
     taskScheduler.taskResultGetter = resultGetter
@@ -2030,15 +2037,27 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val directResult = new DirectTaskResult[Int](ser.serialize(1), Seq(), Array.empty)
     val resultBytes = ser.serialize(directResult)
 
-    // make getTaskResultExecutor busy
     import scala.language.reflectiveCalls
-    resultGetter.taskResultExecutor().submit( new Runnable {
-      override def run(): Unit = Thread.sleep(100)
-    })
+    val busyTask = new Runnable {
+      val lock : Object = new Object
+      override def run(): Unit = {
+        lock.synchronized {
+          lock.wait()
+        }
+      }
+      def markTaskDone: Unit = {
+        lock.synchronized {
+          lock.notify()
+        }
+      }
+    }
+    // make getTaskResultExecutor busy
+    resultGetter.taskResultExecutor().submit(busyTask)
 
     // task1 finished
+    val tid = taskDescriptions(0).taskId
     taskScheduler.statusUpdate(
-      tid = taskDescriptions(0).taskId,
+      tid = tid,
       state = TaskState.FINISHED,
       serializedData = resultBytes
     )
@@ -2047,12 +2066,15 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskScheduler.executorLost(taskDescriptions(0).executorId, ExecutorProcessLost("Executor " +
       "heartbeat timed out"))
 
-    // Wait a while until all events are processed
-    Thread.sleep(100)
+    busyTask.markTaskDone
+
+    // Wait until all events are processed
+    latch.await()
 
     val taskSetManager = taskScheduler.taskIdToTaskSetManager.get(taskDescriptions(1).taskId)
     assert(taskSetManager != null)
     assert(0 == taskSetManager.tasksSuccessful)
+    assert(false == taskSetManager.successful(taskDescriptions(0).index))
   }
 
   /**
