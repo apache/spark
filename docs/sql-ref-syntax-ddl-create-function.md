@@ -74,7 +74,6 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
     * Should extend `UDF` or `UDAF` in `org.apache.hadoop.hive.ql.exec` package.
     * Should extend `AbstractGenericUDAFResolver`, `GenericUDF`, or
       `GenericUDTF` in `org.apache.hadoop.hive.ql.udf.generic` package.
-    * Should extend `UserDefinedAggregateFunction` in `org.apache.spark.sql.expressions` package.
 
 * **resource_locations**
 
