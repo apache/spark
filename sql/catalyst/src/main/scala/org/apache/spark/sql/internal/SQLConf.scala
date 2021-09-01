@@ -903,6 +903,13 @@ object SQLConf {
     .intConf
     .createWithDefault(4096)
 
+  val PARQUET_COLUMN_INDEX_ACCESS = buildConf("spark.sql.parquet.columnIndexAccess")
+    .doc("When true, we access the parquet files by column index instead of catalyst schema" +
+      " mapping at the executor side.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
       "`orc.compress` is specified in the table-specific options/properties, the precedence " +

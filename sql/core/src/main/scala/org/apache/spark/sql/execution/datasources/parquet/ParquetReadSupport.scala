@@ -88,9 +88,11 @@ class ParquetReadSupport(
       SQLConf.CASE_SENSITIVE.defaultValue.get)
     val schemaPruningEnabled = conf.getBoolean(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key,
       SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.defaultValue.get)
+    val columnIndexAccess = conf.getBoolean(SQLConf.PARQUET_COLUMN_INDEX_ACCESS.key,
+      SQLConf.PARQUET_COLUMN_INDEX_ACCESS.defaultValue.get)
     val parquetFileSchema = context.getFileSchema
     val parquetClippedSchema = ParquetReadSupport.clipParquetSchema(parquetFileSchema,
-      catalystRequestedSchema, caseSensitive)
+      catalystRequestedSchema, caseSensitive, columnIndexAccess)
 
     // We pass two schema to ParquetRecordMaterializer:
     // - parquetRequestedSchema: the schema of the file data we want to read
@@ -119,7 +121,7 @@ class ParquetReadSupport(
          |Catalyst requested schema:
          |${catalystRequestedSchema.treeString}
        """.stripMargin)
-    new ReadContext(parquetRequestedSchema, Map.empty[String, String].asJava)
+    new ReadContext(parquetClippedSchema, Map.empty[String, String].asJava)
   }
 
   /**
@@ -155,9 +157,10 @@ object ParquetReadSupport {
   def clipParquetSchema(
       parquetSchema: MessageType,
       catalystSchema: StructType,
-      caseSensitive: Boolean = true): MessageType = {
+      caseSensitive: Boolean = true,
+      columnIndexAccess: Boolean = true): MessageType = {
     val clippedParquetFields = clipParquetGroupFields(
-      parquetSchema.asGroupType(), catalystSchema, caseSensitive)
+      parquetSchema.asGroupType(), catalystSchema, caseSensitive, columnIndexAccess)
     if (clippedParquetFields.isEmpty) {
       ParquetSchemaConverter.EMPTY_MESSAGE
     } else {
@@ -309,7 +312,8 @@ object ParquetReadSupport {
    */
   private def clipParquetGroup(
       parquetRecord: GroupType, structType: StructType, caseSensitive: Boolean): GroupType = {
-    val clippedParquetFields = clipParquetGroupFields(parquetRecord, structType, caseSensitive)
+    val clippedParquetFields =
+      clipParquetGroupFields(parquetRecord, structType, caseSensitive, false)
     Types
       .buildGroup(parquetRecord.getRepetition)
       .as(parquetRecord.getLogicalTypeAnnotation)
@@ -323,9 +327,20 @@ object ParquetReadSupport {
    * @return A list of clipped [[GroupType]] fields, which can be empty.
    */
   private def clipParquetGroupFields(
-      parquetRecord: GroupType, structType: StructType, caseSensitive: Boolean): Seq[Type] = {
+      parquetRecord: GroupType,
+      structType: StructType,
+      caseSensitive: Boolean,
+      columnIndexAccess: Boolean): Seq[Type] = {
     val toParquet = new SparkToParquetSchemaConverter(writeLegacyParquetFormat = false)
-    if (caseSensitive) {
+    if (columnIndexAccess) {
+      structType.zipWithIndex.map { case (f, i) =>
+        if (i >= parquetRecord.getFieldCount) {
+          toParquet.convertField(f)
+        } else {
+          parquetRecord.getType(i)
+        }
+      }
+    } else if (caseSensitive) {
       val caseSensitiveParquetFieldMap =
         parquetRecord.getFields.asScala.map(f => f.getName -> f).toMap
       structType.map { f =>
