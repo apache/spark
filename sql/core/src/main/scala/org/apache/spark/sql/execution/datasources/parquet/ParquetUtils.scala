@@ -159,6 +159,7 @@ object ParquetUtils {
       partitionSchema: StructType,
       aggregation: Aggregation,
       aggSchema: StructType,
+      datetimeRebaseMode: LegacyBehaviorPolicy.Value,
       isCaseSensitive: Boolean): InternalRow = {
     val (primitiveType, values) =
       getPushedDownAggResult(footer, dataSchema, partitionSchema, aggregation, isCaseSensitive)
@@ -169,7 +170,7 @@ object ParquetUtils {
 
     val schemaConverter = new ParquetToSparkSchemaConverter
     val converter = new ParquetRowConverter(schemaConverter, parquetSchema, aggSchema,
-      None, LegacyBehaviorPolicy.CORRECTED, LegacyBehaviorPolicy.CORRECTED, NoopUpdater)
+      None, datetimeRebaseMode, LegacyBehaviorPolicy.CORRECTED, NoopUpdater)
     val primitiveTypeName = primitiveType.map(_.getPrimitiveTypeName)
     primitiveTypeName.zipWithIndex.foreach {
       case (PrimitiveType.PrimitiveTypeName.BOOLEAN, i) =>
@@ -216,6 +217,7 @@ object ParquetUtils {
       aggSchema: StructType,
       columnBatchSize: Int,
       offHeap: Boolean,
+      datetimeRebaseMode: LegacyBehaviorPolicy.Value,
       isCaseSensitive: Boolean): ColumnarBatch = {
     val row = createAggInternalRowFromFooter(
       footer,
@@ -223,6 +225,7 @@ object ParquetUtils {
       partitionSchema,
       aggregation,
       aggSchema,
+      datetimeRebaseMode,
       isCaseSensitive)
     val converter = new RowToColumnConverter(aggSchema)
     val columnVectors = if (offHeap) {

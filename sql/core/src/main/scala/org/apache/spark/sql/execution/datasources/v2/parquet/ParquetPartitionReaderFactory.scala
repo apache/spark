@@ -27,7 +27,7 @@ import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate}
 import org.apache.parquet.format.converter.ParquetMetadataConverter.{NO_FILTER, SKIP_ROW_GROUPS}
 import org.apache.parquet.hadoop.{ParquetInputFormat, ParquetRecordReader}
-import org.apache.parquet.hadoop.metadata.ParquetMetadata
+import org.apache.parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
 
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
@@ -96,6 +96,13 @@ case class ParquetPartitionReaderFactory(
     }
   }
 
+  private def getDatetimeRebaseMode(
+      footerFileMetaData: FileMetaData): LegacyBehaviorPolicy.Value = {
+    DataSourceUtils.datetimeRebaseMode(
+      footerFileMetaData.getKeyValueMetaData.get,
+      datetimeRebaseModeInRead)
+  }
+
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.parquetVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
       resultSchema.length <= sqlConf.wholeStageMaxNumFields &&
@@ -127,7 +134,8 @@ case class ParquetPartitionReaderFactory(
           hasNext = false
           val footer = getFooter(file)
           ParquetUtils.createAggInternalRowFromFooter(footer, dataSchema, partitionSchema,
-            aggregation.get, readDataSchema, isCaseSensitive)
+            aggregation.get, readDataSchema, getDatetimeRebaseMode(footer.getFileMetaData),
+            isCaseSensitive)
         }
 
         override def close(): Unit = {}
@@ -162,7 +170,7 @@ case class ParquetPartitionReaderFactory(
           val footer = getFooter(file)
           ParquetUtils.createAggColumnarBatchFromFooter(footer, dataSchema, partitionSchema,
             aggregation.get, readDataSchema, columnBatchSize, enableOffHeapColumnVector,
-            isCaseSensitive)
+            getDatetimeRebaseMode(footer.getFileMetaData), isCaseSensitive)
         }
 
         override def close(): Unit = {}
@@ -184,9 +192,7 @@ case class ParquetPartitionReaderFactory(
     val split = new FileSplit(filePath, file.start, file.length, Array.empty[String])
 
     lazy val footerFileMetaData = getFooter(file).getFileMetaData
-    val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
-      footerFileMetaData.getKeyValueMetaData.get,
-      datetimeRebaseModeInRead)
+    val datetimeRebaseMode = getDatetimeRebaseMode(footerFileMetaData)
     // Try to push down filters when filter push-down is enabled.
     val pushed = if (enableParquetFilterPushDown) {
       val parquetSchema = footerFileMetaData.getSchema
