@@ -242,14 +242,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     ) -> DataFrame: ...
     @overload
     def approxQuantile(
-        self, col: str, probabilities: Union[List[float], Tuple[float]], relativeError: float
+        self,
+        col: str,
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
     ) -> List[float]: ...
     @overload
     def approxQuantile(
         self,
         col: Union[List[str], Tuple[str]],
         probabilities: Union[List[float], Tuple[float]],
-        relativeError: float
+        relativeError: float,
     ) -> List[List[float]]: ...
     def corr(self, col1: str, col2: str, method: Optional[str] = ...) -> float: ...
     def cov(self, col1: str, col2: str) -> float: ...
@@ -325,14 +328,17 @@ class DataFrameStatFunctions:
     def __init__(self, df: DataFrame) -> None: ...
     @overload
     def approxQuantile(
-        self, col: str, probabilities: Union[List[float], Tuple[float]], relativeError: float
+        self,
+        col: str,
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
     ) -> List[float]: ...
     @overload
     def approxQuantile(
         self,
         col: Union[List[str], Tuple[str]],
         probabilities: Union[List[float], Tuple[float]],
-        relativeError: float
+        relativeError: float,
     ) -> List[List[float]]: ...
     def corr(self, col1: str, col2: str, method: Optional[str] = ...) -> float: ...
     def cov(self, col1: str, col2: str) -> float: ...
