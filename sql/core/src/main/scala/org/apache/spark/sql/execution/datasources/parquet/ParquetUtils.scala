@@ -215,7 +215,6 @@ object ParquetUtils {
       partitionSchema: StructType,
       aggregation: Aggregation,
       aggSchema: StructType,
-      columnBatchSize: Int,
       offHeap: Boolean,
       datetimeRebaseMode: LegacyBehaviorPolicy.Value,
       isCaseSensitive: Boolean): ColumnarBatch = {
@@ -229,9 +228,9 @@ object ParquetUtils {
       isCaseSensitive)
     val converter = new RowToColumnConverter(aggSchema)
     val columnVectors = if (offHeap) {
-      OffHeapColumnVector.allocateColumns(columnBatchSize, aggSchema)
+      OffHeapColumnVector.allocateColumns(1, aggSchema)
     } else {
-      OnHeapColumnVector.allocateColumns(columnBatchSize, aggSchema)
+      OnHeapColumnVector.allocateColumns(1, aggSchema)
     }
     converter.convert(row, columnVectors.toArray)
     new ColumnarBatch(columnVectors.asInstanceOf[Array[ColumnVector]], 1)

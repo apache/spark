@@ -513,7 +513,6 @@ class ParquetV1AggregatePushDownSuite extends ParquetAggregatePushDownSuite {
 
 class ParquetV2AggregatePushDownSuite extends ParquetAggregatePushDownSuite {
 
-  // TODO: enable Parquet V2 write path after file source V2 writers are workable.
   override protected def sparkConf: SparkConf =
     super
       .sparkConf

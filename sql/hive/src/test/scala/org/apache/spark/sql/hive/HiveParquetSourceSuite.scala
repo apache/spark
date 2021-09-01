@@ -208,7 +208,7 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
 
   // We can have something like MAX(C) in column name for aggregate push down
   // ignore this test for now
-  ignore("Aggregation attribute names can't contain special chars \" ,;{}()\\n\\t=\"") {
+  test("Aggregation attribute names can't contain special chars \" ,;{}()\\n\\t=\"") {
     withTempDir { tempDir =>
       val filePath = new File(tempDir, "testParquet").getCanonicalPath
       val filePath2 = new File(tempDir, "testParquet2").getCanonicalPath

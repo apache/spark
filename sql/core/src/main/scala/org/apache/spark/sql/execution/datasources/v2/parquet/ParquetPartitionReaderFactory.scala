@@ -126,7 +126,7 @@ case class ParquetPartitionReaderFactory(
       }
     } else {
       new PartitionReader[InternalRow] {
-        var hasNext = true
+        private var hasNext = true
 
         override def next(): Boolean = hasNext
 
@@ -161,7 +161,7 @@ case class ParquetPartitionReaderFactory(
       }
     } else {
       new PartitionReader[ColumnarBatch] {
-        var hasNext = true
+        private var hasNext = true
 
         override def next(): Boolean = hasNext
 
@@ -169,7 +169,7 @@ case class ParquetPartitionReaderFactory(
           hasNext = false
           val footer = getFooter(file)
           ParquetUtils.createAggColumnarBatchFromFooter(footer, dataSchema, partitionSchema,
-            aggregation.get, readDataSchema, columnBatchSize, enableOffHeapColumnVector,
+            aggregation.get, readDataSchema, enableOffHeapColumnVector,
             getDatetimeRebaseMode(footer.getFileMetaData), isCaseSensitive)
         }
 
