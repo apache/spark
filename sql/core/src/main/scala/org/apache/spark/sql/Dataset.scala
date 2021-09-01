@@ -2492,13 +2492,13 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset by updating an exisitng column with metadata.
+   * Returns a new Dataset by updating an existing column with metadata.
    *
    * @group untypedrel
    * @since 3.3.0
    */
-  def withMetadata(existingColumnName: String, metadata: Metadata): DataFrame = {
-    withColumn(existingColumnName, col(existingColumnName), metadata)
+  def withMetadata(columnName: String, metadata: Metadata): DataFrame = {
+    withColumn(columnName, col(columnName), metadata)
   }
 
   /**
