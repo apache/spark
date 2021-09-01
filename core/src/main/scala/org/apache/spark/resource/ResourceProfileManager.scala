@@ -127,4 +127,18 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
       readLock.unlock()
     }
   }
+
+  /*
+   * Get all compatible profiles
+   */
+  def getCompatibleProfiles(rp: ResourceProfile): Map[Int, ResourceProfile] = {
+    readLock.lock()
+    try {
+      resourceProfileIdToResourceProfile.filter { case (_, rpEntry) =>
+        rpEntry.resourcesCompatible(rp)
+      }.toMap
+    } finally {
+      readLock.unlock()
+    }
+  }
 }

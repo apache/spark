@@ -286,6 +286,72 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTarget(manager, rprof1.id) === 2)
   }
 
+  test("reuse executors") {
+    // scalastyle:off println
+
+    val manager = createManager(createConfReuseExecutors(1, 10, 1))
+    println("--- SparkListenerStageSubmitted defaultProfile ---")
+    post(SparkListenerStageSubmitted(createStageInfo(0, 1000, rp = defaultProfile)))
+    val rp1 = new ResourceProfileBuilder()
+    val execReqs = new ExecutorResourceRequests().cores(4)
+    val taskReqs = new TaskResourceRequests().cpus(2)
+    rp1.require(execReqs).require(taskReqs)
+    val rprof1 = rp1.build
+    rpManager.addResourceProfile(rprof1)
+    println("--- SparkListenerStageSubmitted rprof1 ---")
+    post(SparkListenerStageSubmitted(createStageInfo(1, 1000, rp = rprof1)))
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
+    // Keep adding until the limit is reached
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    assert(numExecutorsToAdd(manager, rprof1) === 1)
+    assert(numExecutorsTarget(manager, rprof1.id) === 1)
+    println("--- addExecutorsToTarget ---")
+    assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 1)
+    println("--- doUpdateRequest ---")
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 2)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    assert(numExecutorsToAdd(manager, rprof1) === 2)
+    assert(numExecutorsTarget(manager, rprof1.id) === 2)
+    println("--- addExecutorsToTarget ---")
+    assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 2)
+    println("--- doUpdateRequest ---")
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 4)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 4)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 4)
+    assert(numExecutorsToAdd(manager, rprof1) === 4)
+    assert(numExecutorsTarget(manager, rprof1.id) === 4)
+    assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 4)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 8)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 8)
+    // reached the limit of 10
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    assert(numExecutorsToAdd(manager, rprof1) === 8)
+    assert(numExecutorsTarget(manager, rprof1.id) === 8)
+    assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    assert(numExecutorsToAdd(manager, rprof1) === 1)
+    assert(numExecutorsTarget(manager, rprof1.id) === 10)
+    assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 0)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(numExecutorsToAdd(manager, rprof1) === 1)
+    assert(numExecutorsTarget(manager, rprof1.id) === 10)
+
+    // scalastyle:on println
+  }
+
   test("remove executors multiple profiles") {
     val manager = createManager(createConf(5, 10, 5))
     val rp1 = new ResourceProfileBuilder()
@@ -1715,6 +1781,32 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       // and thread "pool-1-thread-1-ScalaTest-running".
       .set(TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED, false)
       .set(DECOMMISSION_ENABLED, decommissioningEnabled)
+    sparkConf
+  }
+
+  private def createConfReuseExecutors(
+      minExecutors: Int = 1,
+      maxExecutors: Int = 5,
+      initialExecutors: Int = 1,
+      decommissioningEnabled: Boolean = false): SparkConf = {
+    val sparkConf = new SparkConf()
+      .set(config.DYN_ALLOCATION_ENABLED, true)
+      .set(config.DYN_ALLOCATION_MIN_EXECUTORS, minExecutors)
+      .set(config.DYN_ALLOCATION_MAX_EXECUTORS, maxExecutors)
+      .set(config.DYN_ALLOCATION_INITIAL_EXECUTORS, initialExecutors)
+      .set(config.DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT.key,
+        s"${schedulerBacklogTimeout.toString}s")
+      .set(config.DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key,
+        s"${sustainedSchedulerBacklogTimeout.toString}s")
+      .set(config.DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, s"${executorIdleTimeout.toString}s")
+      .set(config.SHUFFLE_SERVICE_ENABLED, true)
+      .set(config.DYN_ALLOCATION_TESTING, true)
+      // SPARK-22864/SPARK-32287: effectively disable the allocation schedule for the tests so that
+      // we won't result in the race condition between thread "spark-dynamic-executor-allocation"
+      // and thread "pool-1-thread-1-ScalaTest-running".
+      .set(TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED, false)
+      .set(DECOMMISSION_ENABLED, decommissioningEnabled)
+      .set(config.EXECUTOR_CORES, 4)
     sparkConf
   }
 
