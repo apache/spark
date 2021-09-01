@@ -19,6 +19,7 @@ import datetime
 import warnings
 from typing import Any, Union
 
+import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
@@ -29,10 +30,10 @@ from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
-    _as_bool_type,
     _as_categorical_type,
     _as_other_type,
     _as_string_type,
+    _sanitize_list_like,
 )
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import pandas_on_spark_type
@@ -48,6 +49,7 @@ class DateOps(DataTypeOps):
         return "dates"
 
     def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' in days from date's subtraction.
         msg = (
@@ -62,9 +64,10 @@ class DateOps(DataTypeOps):
             warnings.warn(msg, UserWarning)
             return column_op(F.datediff)(left, SF.lit(right)).astype("long")
         else:
-            raise TypeError("date subtraction can only be applied to date series.")
+            raise TypeError("Date subtraction can only be applied to date series.")
 
     def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' in days from date's subtraction.
         msg = (
@@ -76,26 +79,30 @@ class DateOps(DataTypeOps):
             warnings.warn(msg, UserWarning)
             return -column_op(F.datediff)(left, SF.lit(right)).astype("long")
         else:
-            raise TypeError("date subtraction can only be applied to date series.")
+            raise TypeError("Date subtraction can only be applied to date series.")
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
+        _sanitize_list_like(right)
         return column_op(Column.__lt__)(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
+        _sanitize_list_like(right)
         return column_op(Column.__le__)(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
+        _sanitize_list_like(right)
         return column_op(Column.__ge__)(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
+        _sanitize_list_like(right)
         return column_op(Column.__gt__)(left, right)
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
@@ -104,7 +111,12 @@ class DateOps(DataTypeOps):
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)
         elif isinstance(spark_type, BooleanType):
-            return _as_bool_type(index_ops, dtype)
+            return index_ops._with_new_scol(
+                index_ops.spark.column.isNotNull(),
+                field=index_ops._internal.data_fields[0].copy(
+                    dtype=np.dtype(bool), spark_type=spark_type, nullable=False
+                ),
+            )
         elif isinstance(spark_type, StringType):
             return _as_string_type(index_ops, dtype, null_str=str(pd.NaT))
         else:

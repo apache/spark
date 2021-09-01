@@ -107,6 +107,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
   test("cast string to date") {
     var c = Calendar.getInstance()
+    c.set(12345, 0, 1, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    checkEvaluation(Cast(Literal("12345"), DateType), new Date(c.getTimeInMillis))
+    c.set(12345, 11, 18, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    checkEvaluation(Cast(Literal("12345-12-18"), DateType), new Date(c.getTimeInMillis))
     c.set(2015, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     checkEvaluation(Cast(Literal("2015"), DateType), new Date(c.getTimeInMillis))
@@ -144,7 +150,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       c.set(Calendar.MILLISECOND, 0)
       checkCastStringToTimestamp("2015-03-18", new Timestamp(c.getTimeInMillis))
       checkCastStringToTimestamp("2015-03-18 ", new Timestamp(c.getTimeInMillis))
-      checkCastStringToTimestamp("2015-03-18T", new Timestamp(c.getTimeInMillis))
 
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 18, 12, 3, 17)

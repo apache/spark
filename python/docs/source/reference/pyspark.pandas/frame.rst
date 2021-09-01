@@ -100,6 +100,7 @@ Binary operator functions
    DataFrame.ne
    DataFrame.eq
    DataFrame.dot
+   DataFrame.combine_first
 
 Function application, GroupBy & Window
 --------------------------------------
@@ -276,20 +277,15 @@ in Spark. These can be accessed by ``DataFrame.spark.<function/property>``.
 .. autosummary::
    :toctree: api/
 
-   DataFrame.spark.schema
-   DataFrame.spark.print_schema
    DataFrame.spark.frame
    DataFrame.spark.cache
    DataFrame.spark.persist
    DataFrame.spark.hint
    DataFrame.spark.to_table
    DataFrame.spark.to_spark_io
-   DataFrame.spark.explain
    DataFrame.spark.apply
    DataFrame.spark.repartition
    DataFrame.spark.coalesce
-   DataFrame.spark.checkpoint
-   DataFrame.spark.local_checkpoint
 
 .. _api.dataframe.plot:
 
@@ -321,6 +317,5 @@ These can be accessed by ``DataFrame.pandas_on_spark.<function/property>``.
 .. autosummary::
    :toctree: api/
 
-   DataFrame.pandas_on_spark.attach_id_column
    DataFrame.pandas_on_spark.apply_batch
    DataFrame.pandas_on_spark.transform_batch

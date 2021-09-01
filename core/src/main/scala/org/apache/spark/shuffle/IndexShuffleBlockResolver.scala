@@ -22,6 +22,8 @@ import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.file.Files
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.io.NioBufferedFileInputStream
@@ -29,6 +31,7 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.client.StreamCallbackWithID
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.{ExecutorDiskUtils, MergedBlockMeta}
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.storage._
@@ -113,28 +116,31 @@ private[spark] class IndexShuffleBlockResolver(
   private def getMergedBlockDataFile(
       appId: String,
       shuffleId: Int,
+      shuffleMergeId: Int,
       reduceId: Int,
       dirs: Option[Array[String]] = None): File = {
     blockManager.diskBlockManager.getMergedShuffleFile(
-      ShuffleMergedDataBlockId(appId, shuffleId, reduceId), dirs)
+      ShuffleMergedDataBlockId(appId, shuffleId, shuffleMergeId, reduceId), dirs)
   }
 
   private def getMergedBlockIndexFile(
       appId: String,
       shuffleId: Int,
+      shuffleMergeId: Int,
       reduceId: Int,
       dirs: Option[Array[String]] = None): File = {
     blockManager.diskBlockManager.getMergedShuffleFile(
-      ShuffleMergedIndexBlockId(appId, shuffleId, reduceId), dirs)
+      ShuffleMergedIndexBlockId(appId, shuffleId, shuffleMergeId, reduceId), dirs)
   }
 
   private def getMergedBlockMetaFile(
       appId: String,
       shuffleId: Int,
+      shuffleMergeId: Int,
       reduceId: Int,
       dirs: Option[Array[String]] = None): File = {
     blockManager.diskBlockManager.getMergedShuffleFile(
-      ShuffleMergedMetaBlockId(appId, shuffleId, reduceId), dirs)
+      ShuffleMergedMetaBlockId(appId, shuffleId, shuffleMergeId, reduceId), dirs)
   }
 
   /**
@@ -142,17 +148,18 @@ private[spark] class IndexShuffleBlockResolver(
    */
   def removeDataByMap(shuffleId: Int, mapId: Long): Unit = {
     var file = getDataFile(shuffleId, mapId)
-    if (file.exists()) {
-      if (!file.delete()) {
-        logWarning(s"Error deleting data ${file.getPath()}")
-      }
+    if (file.exists() && !file.delete()) {
+      logWarning(s"Error deleting data ${file.getPath()}")
     }
 
     file = getIndexFile(shuffleId, mapId)
-    if (file.exists()) {
-      if (!file.delete()) {
-        logWarning(s"Error deleting index ${file.getPath()}")
-      }
+    if (file.exists() && !file.delete()) {
+      logWarning(s"Error deleting index ${file.getPath()}")
+    }
+
+    file = getChecksumFile(shuffleId, mapId, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
+    if (file.exists() && !file.delete()) {
+      logWarning(s"Error deleting checksum ${file.getPath()}")
     }
   }
 
@@ -303,22 +310,42 @@ private[spark] class IndexShuffleBlockResolver(
 
 
   /**
-   * Write an index file with the offsets of each block, plus a final offset at the end for the
-   * end of the output file. This will be used by getBlockData to figure out where each block
-   * begins and ends.
+   * Commit the data and metadata files as an atomic operation, use the existing ones, or
+   * replace them with new ones. Note that the metadata parameters (`lengths`, `checksums`)
+   * will be updated to match the existing ones if use the existing ones.
    *
-   * It will commit the data and index file as an atomic operation, use the existing ones, or
-   * replace them with new ones.
+   * There're two kinds of metadata files:
    *
-   * Note: the `lengths` will be updated to match the existing index file if use the existing ones.
+   * - index file
+   * An index file contains the offsets of each block, plus a final offset at the end
+   * for the end of the output file. It will be used by [[getBlockData]] to figure out
+   * where each block begins and ends.
+   *
+   * - checksum file (optional)
+   * An checksum file contains the checksum of each block. It will be used to diagnose
+   * the cause when a block is corrupted. Note that empty `checksums` indicate that
+   * checksum is disabled.
    */
-  def writeIndexFileAndCommit(
+  def writeMetadataFileAndCommit(
       shuffleId: Int,
       mapId: Long,
       lengths: Array[Long],
+      checksums: Array[Long],
       dataTmp: File): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)
     val indexTmp = Utils.tempFileWith(indexFile)
+
+    val checksumEnabled = checksums.nonEmpty
+    val (checksumFileOpt, checksumTmpOpt) = if (checksumEnabled) {
+      assert(lengths.length == checksums.length,
+        "The size of partition lengths and checksums should be equal")
+      val checksumFile =
+        getChecksumFile(shuffleId, mapId, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
+      (Some(checksumFile), Some(Utils.tempFileWith(checksumFile)))
+    } else {
+      (None, None)
+    }
+
     try {
       val dataFile = getDataFile(shuffleId, mapId)
       // There is only one IndexShuffleBlockResolver per executor, this synchronization make sure
@@ -329,36 +356,46 @@ private[spark] class IndexShuffleBlockResolver(
           // Another attempt for the same task has already written our map outputs successfully,
           // so just use the existing partition lengths and delete our temporary map outputs.
           System.arraycopy(existingLengths, 0, lengths, 0, lengths.length)
+          if (checksumEnabled) {
+            val existingChecksums = getChecksums(checksumFileOpt.get, checksums.length)
+            if (existingChecksums != null) {
+              System.arraycopy(existingChecksums, 0, checksums, 0, lengths.length)
+            } else {
+              // It's possible that the previous task attempt succeeded writing the
+              // index file and data file but failed to write the checksum file. In
+              // this case, the current task attempt could write the missing checksum
+              // file by itself.
+              writeMetadataFile(checksums, checksumTmpOpt.get, checksumFileOpt.get, false)
+            }
+          }
           if (dataTmp != null && dataTmp.exists()) {
             dataTmp.delete()
           }
         } else {
           // This is the first successful attempt in writing the map outputs for this task,
           // so override any existing index and data files with the ones we wrote.
-          val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexTmp)))
-          Utils.tryWithSafeFinally {
-            // We take in lengths of each block, need to convert it to offsets.
-            var offset = 0L
-            out.writeLong(offset)
-            for (length <- lengths) {
-              offset += length
-              out.writeLong(offset)
-            }
-          } {
-            out.close()
-          }
 
-          if (indexFile.exists()) {
-            indexFile.delete()
-          }
+          val offsets = lengths.scanLeft(0L)(_ + _)
+          writeMetadataFile(offsets, indexTmp, indexFile, true)
+
           if (dataFile.exists()) {
             dataFile.delete()
           }
-          if (!indexTmp.renameTo(indexFile)) {
-            throw new IOException("fail to rename file " + indexTmp + " to " + indexFile)
-          }
           if (dataTmp != null && dataTmp.exists() && !dataTmp.renameTo(dataFile)) {
             throw new IOException("fail to rename file " + dataTmp + " to " + dataFile)
+          }
+
+          // write the checksum file
+          checksumTmpOpt.zip(checksumFileOpt).foreach { case (checksumTmp, checksumFile) =>
+            try {
+              writeMetadataFile(checksums, checksumTmp, checksumFile, false)
+            } catch {
+              case e: Exception =>
+                // It's not worthwhile to fail here after index file and data file are
+                // already successfully stored since checksum is only a best-effort for
+                // the corner error case.
+                logError("Failed to write checksum file", e)
+            }
           }
         }
       }
@@ -366,6 +403,63 @@ private[spark] class IndexShuffleBlockResolver(
       logDebug(s"Shuffle index for mapId $mapId: ${lengths.mkString("[", ",", "]")}")
       if (indexTmp.exists() && !indexTmp.delete()) {
         logError(s"Failed to delete temporary index file at ${indexTmp.getAbsolutePath}")
+      }
+      checksumTmpOpt.foreach { checksumTmp =>
+        if (checksumTmp.exists()) {
+          try {
+            if (!checksumTmp.delete()) {
+              logError(s"Failed to delete temporary checksum file " +
+                s"at ${checksumTmp.getAbsolutePath}")
+            }
+          } catch {
+            case e: Exception =>
+              // Unlike index deletion, we won't propagate the error for the checksum file since
+              // checksum is only a best-effort.
+              logError(s"Failed to delete temporary checksum file " +
+                s"at ${checksumTmp.getAbsolutePath}", e)
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Write the metadata file (index or checksum). Metadata values will be firstly write into
+   * the tmp file and the tmp file will be renamed to the target file at the end to avoid dirty
+   * writes.
+   * @param metaValues The metadata values
+   * @param tmpFile The temp file
+   * @param targetFile The target file
+   * @param propagateError Whether to propagate the error for file operation. Unlike index file,
+   *                       checksum is only a best-effort so we won't fail the whole task due to
+   *                       the error from checksum.
+   */
+  private def writeMetadataFile(
+      metaValues: Array[Long],
+      tmpFile: File,
+      targetFile: File,
+      propagateError: Boolean): Unit = {
+    val out = new DataOutputStream(
+      new BufferedOutputStream(
+        new FileOutputStream(tmpFile)
+      )
+    )
+    Utils.tryWithSafeFinally {
+      metaValues.foreach(out.writeLong)
+    } {
+      out.close()
+    }
+
+    if (targetFile.exists()) {
+      targetFile.delete()
+    }
+
+    if (!tmpFile.renameTo(targetFile)) {
+      val errorMsg = s"fail to rename file $tmpFile to $targetFile"
+      if (propagateError) {
+        throw new IOException(errorMsg)
+      } else {
+        logWarning(errorMsg)
       }
     }
   }
@@ -376,11 +470,13 @@ private[spark] class IndexShuffleBlockResolver(
    * knows how to consume local merged shuffle file as multiple chunks.
    */
   override def getMergedBlockData(
-      blockId: ShuffleBlockId,
+      blockId: ShuffleMergedBlockId,
       dirs: Option[Array[String]]): Seq[ManagedBuffer] = {
     val indexFile =
-      getMergedBlockIndexFile(conf.getAppId, blockId.shuffleId, blockId.reduceId, dirs)
-    val dataFile = getMergedBlockDataFile(conf.getAppId, blockId.shuffleId, blockId.reduceId, dirs)
+      getMergedBlockIndexFile(conf.getAppId, blockId.shuffleId, blockId.shuffleMergeId,
+        blockId.reduceId, dirs)
+    val dataFile = getMergedBlockDataFile(conf.getAppId, blockId.shuffleId,
+      blockId.shuffleMergeId, blockId.reduceId, dirs)
     // Load all the indexes in order to identify all chunks in the specified merged shuffle file.
     val size = indexFile.length.toInt
     val offsets = Utils.tryWithResource {
@@ -403,15 +499,55 @@ private[spark] class IndexShuffleBlockResolver(
    * This is only used for reading local merged block meta data.
    */
   override def getMergedBlockMeta(
-      blockId: ShuffleBlockId,
+      blockId: ShuffleMergedBlockId,
       dirs: Option[Array[String]]): MergedBlockMeta = {
     val indexFile =
-      getMergedBlockIndexFile(conf.getAppId, blockId.shuffleId, blockId.reduceId, dirs)
+      getMergedBlockIndexFile(conf.getAppId, blockId.shuffleId,
+        blockId.shuffleMergeId, blockId.reduceId, dirs)
     val size = indexFile.length.toInt
     val numChunks = (size / 8) - 1
-    val metaFile = getMergedBlockMetaFile(conf.getAppId, blockId.shuffleId, blockId.reduceId, dirs)
+    val metaFile = getMergedBlockMetaFile(conf.getAppId, blockId.shuffleId,
+      blockId.shuffleMergeId, blockId.reduceId, dirs)
     val chunkBitMaps = new FileSegmentManagedBuffer(transportConf, metaFile, 0L, metaFile.length)
     new MergedBlockMeta(numChunks, chunkBitMaps)
+  }
+
+  private[shuffle] def getChecksums(checksumFile: File, blockNum: Int): Array[Long] = {
+    if (!checksumFile.exists()) return null
+    val checksums = new ArrayBuffer[Long]
+    // Read the checksums of blocks
+    var in: DataInputStream = null
+    try {
+      in = new DataInputStream(new NioBufferedFileInputStream(checksumFile))
+      while (checksums.size < blockNum) {
+        checksums += in.readLong()
+      }
+    } catch {
+      case _: IOException | _: EOFException =>
+        return null
+    } finally {
+      in.close()
+    }
+
+    checksums.toArray
+  }
+
+  /**
+   * Get the shuffle checksum file.
+   *
+   * When the dirs parameter is None then use the disk manager's local directories. Otherwise,
+   * read from the specified directories.
+   */
+  def getChecksumFile(
+      shuffleId: Int,
+      mapId: Long,
+      algorithm: String,
+      dirs: Option[Array[String]] = None): File = {
+    val blockId = ShuffleChecksumBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
+    val fileName = ShuffleChecksumHelper.getChecksumFileName(blockId.name, algorithm)
+    dirs
+      .map(ExecutorDiskUtils.getFile(_, blockManager.subDirsPerLocalDir, fileName))
+      .getOrElse(blockManager.diskBlockManager.getFile(fileName))
   }
 
   override def getBlockData(

@@ -17,12 +17,10 @@
 
 import datetime
 
-import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
-from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
@@ -30,19 +28,23 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 class DatetimeOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     @property
     def pser(self):
-        return pd.Series(pd.date_range("1994-1-31 10:30:15", periods=3, freq="M"))
+        return pd.Series(pd.date_range("1994-1-31 10:30:15", periods=3, freq="D"))
 
     @property
     def psser(self):
         return ps.from_pandas(self.pser)
 
     @property
-    def other_pser(self):
-        return pd.Series(pd.date_range("1994-4-30 10:30:15", periods=3, freq="M"))
+    def datetime_pdf(self):
+        psers = {
+            "this": self.pser,
+            "that": pd.Series(pd.date_range("1994-2-1 10:30:15", periods=3, freq="D")),
+        }
+        return pd.concat(psers, axis=1)
 
     @property
-    def other_psser(self):
-        return ps.from_pandas(self.other_pser)
+    def datetime_psdf(self):
+        return ps.from_pandas(self.datetime_pdf)
 
     @property
     def some_datetime(self):
@@ -53,9 +55,8 @@ class DatetimeOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: self.psser + 1)
         self.assertRaises(TypeError, lambda: self.psser + self.some_datetime)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser + psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser + psser)
 
     def test_sub(self):
         self.assertRaises(TypeError, lambda: self.psser - "x")
@@ -64,60 +65,62 @@ class DatetimeOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             (self.pser - self.some_datetime).dt.total_seconds().astype("int"),
             self.psser - self.some_datetime,
         )
-        with option_context("compute.ops_on_diff_frames", True):
-            for pser, psser in self.pser_psser_pairs:
-                if pser.dtype == np.dtype("<M8[ns]"):
-                    self.assert_eq(
-                        (self.pser - pser).dt.total_seconds().astype("int"),
-                        (self.psser - psser).sort_index(),
-                    )
-                else:
-                    self.assertRaises(TypeError, lambda: self.psser - psser)
+
+        pdf, psdf = self.pdf, self.psdf
+        for col in self.df_cols:
+            if col == "datetime":
+                self.assert_eq(
+                    (pdf["datetime"] - pdf[col]).dt.total_seconds().astype("int"),
+                    psdf["datetime"] - psdf[col],
+                )
+            else:
+                self.assertRaises(TypeError, lambda: psdf["datetime"] - psdf[col])
+
+        pdf, psdf = self.datetime_pdf, self.datetime_psdf
+        self.assert_eq(
+            (pdf["that"] - pdf["this"]).dt.total_seconds().astype("int"),
+            psdf["that"] - psdf["this"],
+        )
 
     def test_mul(self):
         self.assertRaises(TypeError, lambda: self.psser * "x")
         self.assertRaises(TypeError, lambda: self.psser * 1)
         self.assertRaises(TypeError, lambda: self.psser * self.some_datetime)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser * psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser * psser)
 
     def test_truediv(self):
         self.assertRaises(TypeError, lambda: self.psser / "x")
         self.assertRaises(TypeError, lambda: self.psser / 1)
         self.assertRaises(TypeError, lambda: self.psser / self.some_datetime)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser / psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser / psser)
 
     def test_floordiv(self):
         self.assertRaises(TypeError, lambda: self.psser // "x")
         self.assertRaises(TypeError, lambda: self.psser // 1)
         self.assertRaises(TypeError, lambda: self.psser // self.some_datetime)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser // psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser // psser)
 
     def test_mod(self):
         self.assertRaises(TypeError, lambda: self.psser % "x")
         self.assertRaises(TypeError, lambda: self.psser % 1)
         self.assertRaises(TypeError, lambda: self.psser % self.some_datetime)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser % psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser % psser)
 
     def test_pow(self):
         self.assertRaises(TypeError, lambda: self.psser ** "x")
         self.assertRaises(TypeError, lambda: self.psser ** 1)
         self.assertRaises(TypeError, lambda: self.psser ** self.some_datetime)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser ** psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser ** psser)
 
     def test_radd(self):
         self.assertRaises(TypeError, lambda: "x" + self.psser)
@@ -202,46 +205,34 @@ class DatetimeOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: ~self.psser)
 
     def test_eq(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser == self.other_pser, (self.psser == self.other_psser).sort_index()
-            )
-            self.assert_eq(self.pser == self.pser, (self.psser == self.psser).sort_index())
+        pdf, psdf = self.datetime_pdf, self.datetime_psdf
+        self.assert_eq(pdf["this"] == pdf["that"], psdf["this"] == psdf["that"])
+        self.assert_eq(pdf["this"] == pdf["this"], psdf["this"] == psdf["this"])
 
     def test_ne(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser != self.other_pser, (self.psser != self.other_psser).sort_index()
-            )
-            self.assert_eq(self.pser != self.pser, (self.psser != self.psser).sort_index())
+        pdf, psdf = self.datetime_pdf, self.datetime_psdf
+        self.assert_eq(pdf["this"] != pdf["that"], psdf["this"] != psdf["that"])
+        self.assert_eq(pdf["this"] != pdf["this"], psdf["this"] != psdf["this"])
 
     def test_lt(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser < self.other_pser, (self.psser < self.other_psser).sort_index()
-            )
-            self.assert_eq(self.pser < self.pser, (self.psser < self.psser).sort_index())
+        pdf, psdf = self.datetime_pdf, self.datetime_psdf
+        self.assert_eq(pdf["this"] < pdf["that"], psdf["this"] < psdf["that"])
+        self.assert_eq(pdf["this"] < pdf["this"], psdf["this"] < psdf["this"])
 
     def test_le(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser <= self.other_pser, (self.psser <= self.other_psser).sort_index()
-            )
-            self.assert_eq(self.pser <= self.pser, (self.psser <= self.psser).sort_index())
+        pdf, psdf = self.datetime_pdf, self.datetime_psdf
+        self.assert_eq(pdf["this"] <= pdf["that"], psdf["this"] <= psdf["that"])
+        self.assert_eq(pdf["this"] <= pdf["this"], psdf["this"] <= psdf["this"])
 
     def test_gt(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser > self.other_pser, (self.psser > self.other_psser).sort_index()
-            )
-            self.assert_eq(self.pser > self.pser, (self.psser > self.psser).sort_index())
+        pdf, psdf = self.datetime_pdf, self.datetime_psdf
+        self.assert_eq(pdf["this"] > pdf["that"], psdf["this"] > psdf["that"])
+        self.assert_eq(pdf["this"] > pdf["this"], psdf["this"] > psdf["this"])
 
     def test_ge(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser >= self.other_pser, (self.psser >= self.other_psser).sort_index()
-            )
-            self.assert_eq(self.pser >= self.pser, (self.psser >= self.psser).sort_index())
+        pdf, psdf = self.datetime_pdf, self.datetime_psdf
+        self.assert_eq(pdf["this"] >= pdf["that"], psdf["this"] >= psdf["that"])
+        self.assert_eq(pdf["this"] >= pdf["this"], psdf["this"] >= psdf["this"])
 
 
 if __name__ == "__main__":

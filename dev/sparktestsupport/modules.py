@@ -437,6 +437,7 @@ pyspark_sql = Module(
         "pyspark.sql.pandas.serializers",
         "pyspark.sql.pandas.typehints",
         "pyspark.sql.pandas.utils",
+        "pyspark.sql.observation",
         # unittests
         "pyspark.sql.tests.test_arrow",
         "pyspark.sql.tests.test_catalog",
@@ -622,7 +623,6 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.data_type_ops.test_complex_ops",
         "pyspark.pandas.tests.data_type_ops.test_date_ops",
         "pyspark.pandas.tests.data_type_ops.test_datetime_ops",
-        "pyspark.pandas.tests.data_type_ops.test_decimal_ops",
         "pyspark.pandas.tests.data_type_ops.test_null_ops",
         "pyspark.pandas.tests.data_type_ops.test_num_ops",
         "pyspark.pandas.tests.data_type_ops.test_string_ops",

@@ -623,8 +623,9 @@ class DataFrameWriter(OptionUtils):
         return self
 
     def bucketBy(self, numBuckets, col, *cols):
-        """Buckets the output by the given columns.If specified,
-        the output is laid out on the file system similar to Hive's bucketing scheme.
+        """Buckets the output by the given columns. If specified,
+        the output is laid out on the file system similar to Hive's bucketing scheme,
+        but with a different bucket hash function and is not compatible with Hive's bucketing.
 
         .. versionadded:: 2.3.0
 
@@ -745,7 +746,16 @@ class DataFrameWriter(OptionUtils):
         It requires that the schema of the :class:`DataFrame` is the same as the
         schema of the table.
 
-        Optionally overwriting any existing data.
+        Parameters
+        ----------
+        overwrite : bool, optional
+            If true, overwrites existing data. Disabled by default
+
+        Notes
+        -----
+        Unlike :meth:`DataFrameWriter.saveAsTable`, :meth:`DataFrameWriter.insertInto` ignores
+        the column names and just uses position-based resolution.
+
         """
         if overwrite is not None:
             self.mode("overwrite" if overwrite else "append")
@@ -765,6 +775,14 @@ class DataFrameWriter(OptionUtils):
         * `ignore`: Silently ignore this operation if data already exists.
 
         .. versionadded:: 1.4.0
+
+        Notes
+        -----
+        When `mode` is `Append`, if there is an existing table, we will use the format and
+        options of the existing table. The column order in the schema of the :class:`DataFrame`
+        doesn't need to be same as that of the existing table. Unlike
+        :meth:`DataFrameWriter.insertInto`, :meth:`DataFrameWriter.saveAsTable` will use the
+        column names to find the correct column positions.
 
         Parameters
         ----------

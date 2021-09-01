@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import java.io.ByteArrayInputStream
+import java.util.{Map => JavaMap}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -26,8 +27,8 @@ import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
-import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
-import org.codehaus.janino.ClassBodyEvaluator
+import org.codehaus.commons.compiler.CompileException
+import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, InternalCompilerException, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
 
 import org.apache.spark.{TaskContext, TaskKilledException}
@@ -1249,7 +1250,7 @@ class CodegenContext extends Logging {
       // at least two nodes) as the cost of doing it is expected to be low.
 
       val subExprCode = s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
-      subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
+      subexprFunctions += subExprCode
       val state = SubExprEliminationState(
         ExprCode(code"$subExprCode",
           JavaCode.isNullGlobal(isNull),
@@ -1519,7 +1520,14 @@ object CodeGenerator extends Logging {
    */
   private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): ByteCodeStats = {
     // First retrieve the generated classes.
-    val classes = evaluator.getBytecodes.asScala
+    val classes = {
+      val resultField = classOf[SimpleCompiler].getDeclaredField("result")
+      resultField.setAccessible(true)
+      val loader = resultField.get(evaluator).asInstanceOf[ByteArrayClassLoader]
+      val classesField = loader.getClass.getDeclaredField("classes")
+      classesField.setAccessible(true)
+      classesField.get(loader).asInstanceOf[JavaMap[String, Array[Byte]]].asScala
+    }
 
     // Then walk the classes to get at the method bytecode.
     val codeAttr = Utils.classForName("org.codehaus.janino.util.ClassFile$CodeAttribute")

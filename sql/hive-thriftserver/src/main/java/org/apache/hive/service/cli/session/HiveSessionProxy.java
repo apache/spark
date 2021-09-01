@@ -55,13 +55,7 @@ public class HiveSessionProxy implements InvocationHandler {
       if (method.getDeclaringClass() == HiveSessionBase.class) {
         return invoke(method, args);
       }
-      return ugi.doAs(
-        new PrivilegedExceptionAction<Object>() {
-          @Override
-          public Object run() throws HiveSQLException {
-            return invoke(method, args);
-          }
-        });
+      return ugi.doAs((PrivilegedExceptionAction<Object>) () -> invoke(method, args));
     } catch (UndeclaredThrowableException e) {
       Throwable innerException = e.getCause();
       if (innerException instanceof PrivilegedActionException) {

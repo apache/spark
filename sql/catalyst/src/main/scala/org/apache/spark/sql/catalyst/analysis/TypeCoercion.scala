@@ -158,7 +158,7 @@ abstract class TypeCoercionBase {
     }
   }
 
-  private def castIfNotSameType(expr: Expression, dt: DataType): Expression = {
+  protected def castIfNotSameType(expr: Expression, dt: DataType): Expression = {
     if (!expr.dataType.sameType(dt)) {
       Cast(expr, dt)
     } else {
@@ -624,29 +624,6 @@ abstract class TypeCoercionBase {
     }
   }
 
-  object DateTimeOperations extends TypeCoercionRule {
-    override val transform: PartialFunction[Expression, Expression] = {
-      // Skip nodes who's children have not been resolved yet.
-      case e if !e.childrenResolved => e
-      case d @ DateAdd(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateAdd(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-
-      case s @ SubtractTimestamps(DateType(), AnyTimestampType(), _, _) =>
-        s.copy(left = Cast(s.left, s.right.dataType))
-      case s @ SubtractTimestamps(AnyTimestampType(), DateType(), _, _) =>
-        s.copy(right = Cast(s.right, s.left.dataType))
-      case s @ SubtractTimestamps(AnyTimestampType(), AnyTimestampType(), _, _)
-        if s.left.dataType != s.right.dataType =>
-        val newLeft = castIfNotSameType(s.left, TimestampNTZType)
-        val newRight = castIfNotSameType(s.right, TimestampNTZType)
-        s.copy(left = newLeft, right = newRight)
-
-      case t @ TimeAdd(StringType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
-    }
-  }
-
   /**
    * Casts types according to the expected input types for [[Expression]]s.
    */
@@ -867,6 +844,14 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
         Some(TimestampType)
 
+      case (t1: DayTimeIntervalType, t2: DayTimeIntervalType) =>
+        Some(DayTimeIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
+      case (t1: YearMonthIntervalType, t2: YearMonthIntervalType) =>
+        Some(YearMonthIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
+
+      case (_: TimestampNTZType, _: DateType) | (_: DateType, _: TimestampNTZType) =>
+        Some(TimestampNTZType)
+
       case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
   }
 
@@ -875,6 +860,18 @@ object TypeCoercion extends TypeCoercionBase {
     case (StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(StringType)
     case (t1: AtomicType, StringType) if t1 != BinaryType && t1 != BooleanType => Some(StringType)
     case _ => None
+  }
+
+  // Return whether a string literal can be promoted as the give data type in a binary comparison.
+  private def canPromoteAsInBinaryComparison(dt: DataType) = dt match {
+    // If a binary comparison contains interval type and string type, we can't decide which
+    // interval type the string should be promoted as. There are many possible interval
+    // types, such as year interval, month interval, day interval, hour interval, etc.
+    case _: YearMonthIntervalType | _: DayTimeIntervalType => false
+    // There is no need to add `Cast` for comparison between strings.
+    case _: StringType => false
+    case _: AtomicType => true
+    case _ => false
   }
 
   /**
@@ -906,8 +903,8 @@ object TypeCoercion extends TypeCoercionBase {
     case (n: DecimalType, s: StringType) => Some(DoubleType)
     case (s: StringType, n: DecimalType) => Some(DoubleType)
 
-    case (l: StringType, r: AtomicType) if r != StringType => Some(r)
-    case (l: AtomicType, r: StringType) if l != StringType => Some(l)
+    case (l: StringType, r: AtomicType) if canPromoteAsInBinaryComparison(r) => Some(r)
+    case (l: AtomicType, r: StringType) if canPromoteAsInBinaryComparison(l) => Some(l)
     case (l, r) => None
   }
 
@@ -1153,6 +1150,30 @@ object TypeCoercion extends TypeCoercionBase {
         EqualNullSafe(left, Cast(right, left.dataType))
     }
   }
+
+  object DateTimeOperations extends TypeCoercionRule {
+    override val transform: PartialFunction[Expression, Expression] = {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+      case d @ DateAdd(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateAdd(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+
+      case s @ SubtractTimestamps(DateType(), AnyTimestampType(), _, _) =>
+        s.copy(left = Cast(s.left, s.right.dataType))
+      case s @ SubtractTimestamps(AnyTimestampType(), DateType(), _, _) =>
+        s.copy(right = Cast(s.right, s.left.dataType))
+      case s @ SubtractTimestamps(AnyTimestampType(), AnyTimestampType(), _, _)
+        if s.left.dataType != s.right.dataType =>
+        val newLeft = castIfNotSameType(s.left, TimestampNTZType)
+        val newRight = castIfNotSameType(s.right, TimestampNTZType)
+        s.copy(left = newLeft, right = newRight)
+
+      case t @ TimeAdd(StringType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
+    }
+  }
+
 }
 
 trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {

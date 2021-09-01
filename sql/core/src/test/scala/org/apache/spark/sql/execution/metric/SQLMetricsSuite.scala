@@ -22,6 +22,9 @@ import java.io.File
 import scala.reflect.{classTag, ClassTag}
 import scala.util.Random
 
+import org.apache.hadoop.mapreduce.TaskAttemptContext
+
+import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -29,6 +32,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
+import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, SQLHadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
 import org.apache.spark.sql.functions._
@@ -402,10 +406,10 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     val rightDf = (1 to 10).map(i => (i.toString, i.toString)).toDF("key2", "value")
     Seq(
       // Test unique key on build side
-      (uniqueLeftDf, rightDf, 11, 134228048, 10, 134221824),
+      (uniqueLeftDf, rightDf, 11, 10),
       // Test non-unique key on build side
-      (nonUniqueLeftDf, rightDf, 12, 134228552, 11, 134221824)
-    ).foreach { case (leftDf, rightDf, fojRows, fojBuildSize, rojRows, rojBuildSize) =>
+      (nonUniqueLeftDf, rightDf, 12, 11)
+    ).foreach { case (leftDf, rightDf, fojRows, rojRows) =>
       val fojDf = leftDf.hint("shuffle_hash").join(
         rightDf, $"key" === $"key2", "full_outer")
       fojDf.collect()
@@ -413,8 +417,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         case s: ShuffledHashJoinExec => s
       }
       assert(fojPlan.isDefined, "The query plan should have shuffled hash join")
-      testMetricsInSparkPlanOperator(fojPlan.get,
-        Map("numOutputRows" -> fojRows, "buildDataSize" -> fojBuildSize))
+      testMetricsInSparkPlanOperator(fojPlan.get, Map("numOutputRows" -> fojRows))
+      val fojBuildSize = fojPlan.get.metrics("buildDataSize").value
 
       // Test right outer join as well to verify build data size to be different
       // from full outer join. This makes sure we take extra BitSet/OpenHashSet
@@ -426,8 +430,10 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         case s: ShuffledHashJoinExec => s
       }
       assert(rojPlan.isDefined, "The query plan should have shuffled hash join")
-      testMetricsInSparkPlanOperator(rojPlan.get,
-        Map("numOutputRows" -> rojRows, "buildDataSize" -> rojBuildSize))
+      testMetricsInSparkPlanOperator(rojPlan.get, Map("numOutputRows" -> rojRows))
+      val rojBuildSize = rojPlan.get.metrics("buildDataSize").value
+      assert(fojBuildSize > rojBuildSize && rojBuildSize > 0,
+        "Build size of full outer join should be larger than the size of right outer join")
     }
   }
 
@@ -788,6 +794,24 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     }
   }
 
+  test("SPARK-34399: Add job commit duration metrics for DataWritingCommand") {
+    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+      "org.apache.spark.sql.execution.metric.CustomFileCommitProtocol") {
+      withTable("t", "t2") {
+        sql("CREATE TABLE t(id STRING) USING PARQUET")
+        val df = sql("INSERT INTO TABLE t SELECT 'abc'")
+        val insert = df.queryExecution.executedPlan.collect {
+          case CommandResultExec(_, dataWriting: DataWritingCommandExec, _) => dataWriting.cmd
+        }
+        assert(insert.size == 1)
+        assert(insert.head.metrics.contains(BasicWriteJobStatsTracker.JOB_COMMIT_TIME))
+        assert(insert.head.metrics.contains(BasicWriteJobStatsTracker.TASK_COMMIT_TIME))
+        assert(insert.head.metrics(BasicWriteJobStatsTracker.JOB_COMMIT_TIME).value > 0)
+        assert(insert.head.metrics(BasicWriteJobStatsTracker.TASK_COMMIT_TIME).value > 0)
+      }
+    }
+  }
+
   test("SPARK-34567: Add metrics for CTAS operator") {
     withTable("t") {
       val df = sql("CREATE TABLE t USING PARQUET AS SELECT 1 as a")
@@ -803,5 +827,17 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       assert(createTableAsSelect.metrics.contains("numOutputRows"))
       assert(createTableAsSelect.metrics("numOutputRows").value == 1)
     }
+  }
+}
+
+case class CustomFileCommitProtocol(
+    jobId: String,
+    path: String,
+    dynamicPartitionOverwrite: Boolean = false)
+  extends SQLHadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite) {
+  override def commitTask(
+    taskContext: TaskAttemptContext): FileCommitProtocol.TaskCommitMessage = {
+    Thread.sleep(Random.nextInt(100))
+    super.commitTask(taskContext)
   }
 }

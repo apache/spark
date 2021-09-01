@@ -402,7 +402,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def json(paths: String*): DataFrame = format("json").load(paths : _*)
+  def json(paths: String*): DataFrame = {
+    userSpecifiedSchema.foreach(ExprUtils.checkJsonSchema(_).foreach(throw _))
+    format("json").load(paths : _*)
+  }
 
   /**
    * Loads a `JavaRDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON
@@ -449,7 +452,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
-    val schema = userSpecifiedSchema.getOrElse {
+    userSpecifiedSchema.foreach(ExprUtils.checkJsonSchema(_).foreach(throw _))
+    val schema = userSpecifiedSchema.map(_.asNullable).getOrElse {
       TextInputJsonDataSource.inferFromDataset(jsonDataset, parsedOptions)
     }
 
@@ -521,7 +525,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         None
       }
 
-    val schema = userSpecifiedSchema.getOrElse {
+    val schema = userSpecifiedSchema.map(_.asNullable).getOrElse {
       TextInputCSVDataSource.inferFromDataset(
         sparkSession,
         csvDataset,

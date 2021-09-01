@@ -40,6 +40,8 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   setupTestData()
 
+  private val EnsureRequirements = new EnsureRequirements()
+
   private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
     val planner = spark.sessionState.planner
     import planner._

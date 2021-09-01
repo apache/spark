@@ -103,7 +103,7 @@ object FlatMapGroupsWithStateExecHelper {
 
     override def getAllState(store: StateStore): Iterator[StateData] = {
       val stateData = StateData()
-      store.getRange(None, None).map { p =>
+      store.iterator().map { p =>
         stateData.withNew(p.key, p.value, getStateObject(p.value), getTimestamp(p.value))
       }
     }

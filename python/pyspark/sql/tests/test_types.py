@@ -511,8 +511,7 @@ class TypesTests(ReusedSQLTestCase):
     def test_parse_datatype_string(self):
         from pyspark.sql.types import _all_atomic_types, _parse_datatype_string
         for k, t in _all_atomic_types.items():
-            if t != NullType:
-                self.assertEqual(t(), _parse_datatype_string(k))
+            self.assertEqual(t(), _parse_datatype_string(k))
         self.assertEqual(IntegerType(), _parse_datatype_string("int"))
         self.assertEqual(DecimalType(1, 1), _parse_datatype_string("decimal(1  ,1)"))
         self.assertEqual(DecimalType(10, 1), _parse_datatype_string("decimal( 10,1 )"))

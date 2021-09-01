@@ -23,7 +23,7 @@ import java.util.concurrent.RejectedExecutionException
 import org.apache.hive.service.ServiceException
 import org.apache.hive.service.cli.{HiveSQLException, OperationType}
 
-import org.apache.spark.SparkError
+import org.apache.spark.SparkThrowable
 
 /**
  * Object for grouping error messages from (most) exceptions thrown during
@@ -37,10 +37,10 @@ object HiveThriftServerErrors {
   }
 
   def runningQueryError(e: Throwable): Throwable = e match {
-    case se: SparkError =>
-      val errorClassPrefix = se.errorClass.map(e => s"[$e] ").getOrElse("")
+    case st: SparkThrowable =>
+      val errorClassPrefix = Option(st.getErrorClass).map(e => s"[$e] ").getOrElse("")
       new HiveSQLException(
-        s"Error running query: ${errorClassPrefix}${se.toString}", se.sqlState.orNull, se)
+        s"Error running query: ${errorClassPrefix}${st.toString}", st.getSqlState, st)
     case _ => new HiveSQLException(s"Error running query: ${e.toString}", e)
   }
 

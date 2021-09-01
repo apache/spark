@@ -259,8 +259,10 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     spark.conf.set(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key, "1g")
     assert(spark.conf.get(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES) === 1073741824)
 
-    spark.conf.set(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key, "-1")
-    assert(spark.conf.get(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES) === -1)
+    // test negative value
+    intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key, "-1")
+    }
 
     // Test overflow exception
     intercept[IllegalArgumentException] {

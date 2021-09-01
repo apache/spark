@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.YearMonthIntervalType.fieldToString
  * @since 3.2.0
  */
 @Unstable
-case class YearMonthIntervalType(startField: Byte, endField: Byte) extends AtomicType {
+case class YearMonthIntervalType(startField: Byte, endField: Byte) extends AnsiIntervalType {
   /**
    * Internally, values of year-month intervals are stored in `Int` values as amount of months
    * that are calculated by the formula:

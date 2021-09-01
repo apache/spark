@@ -26,7 +26,7 @@ import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
-import org.apache.spark.SparkError
+import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
@@ -71,9 +71,9 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
       tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)
     } catch {
-        case se: SparkError =>
-          logDebug(s"Failed in [$command]", se)
-          new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(se), se.sqlState.orNull, se)
+        case st: SparkThrowable =>
+          logDebug(s"Failed in [$command]", st)
+          new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(st), st.getSqlState, st)
         case cause: Throwable =>
           logError(s"Failed in [$command]", cause)
           new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(cause), null, cause)

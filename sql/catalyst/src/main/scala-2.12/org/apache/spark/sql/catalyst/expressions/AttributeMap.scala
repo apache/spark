@@ -50,4 +50,6 @@ class AttributeMap[A](val baseMap: Map[ExprId, (Attribute, A)])
   override def iterator: Iterator[(Attribute, A)] = baseMap.valuesIterator
 
   override def -(key: Attribute): Map[Attribute, A] = baseMap.values.toMap - key
+
+  def ++(other: AttributeMap[A]): AttributeMap[A] = new AttributeMap(baseMap ++ other.baseMap)
 }

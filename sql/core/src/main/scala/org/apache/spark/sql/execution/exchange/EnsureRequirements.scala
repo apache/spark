@@ -32,8 +32,14 @@ import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoin
  * [[org.apache.spark.sql.catalyst.plans.physical.Distribution Distribution]] requirements for
  * each operator by inserting [[ShuffleExchangeExec]] Operators where required.  Also ensure that
  * the input partition ordering requirements are met.
+ *
+ * @param optimizeOutRepartition A flag to indicate that if this rule should optimize out
+ *                               user-specified repartition shuffles or not. This is mostly true,
+ *                               but can be false in AQE when AQE optimization may change the plan
+ *                               output partitioning and need to retain the user-specified
+ *                               repartition shuffles in the plan.
  */
-object EnsureRequirements extends Rule[SparkPlan] {
+case class EnsureRequirements(optimizeOutRepartition: Boolean = true) extends Rule[SparkPlan] {
 
   private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
     val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution
@@ -249,13 +255,9 @@ object EnsureRequirements extends Rule[SparkPlan] {
   }
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
-    // TODO: remove this after we create a physical operator for `RepartitionByExpression`.
-    // SPARK-35989: AQE will change the partition number so we should retain the REPARTITION_BY_NUM
-    // shuffle which is specified by user. And also we can not remove REBALANCE_PARTITIONS_BY_COL,
-    // it is a special shuffle used to rebalance partitions.
-    // So, here we only remove REPARTITION_BY_COL in AQE.
     case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, shuffleOrigin)
-        if shuffleOrigin == REPARTITION_BY_COL || !conf.adaptiveExecutionEnabled =>
+        if optimizeOutRepartition &&
+          (shuffleOrigin == REPARTITION_BY_COL || shuffleOrigin == REPARTITION_BY_NUM) =>
       def hasSemanticEqualPartitioning(partitioning: Partitioning): Boolean = {
         partitioning match {
           case lower: HashPartitioning if upper.semanticEquals(lower) => true

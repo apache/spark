@@ -153,6 +153,18 @@ private[sql] class AvroFileFormat extends FileFormat
   }
 
   override def supportDataType(dataType: DataType): Boolean = AvroUtils.supportsDataType(dataType)
+
+  override def supportFieldName(name: String): Boolean = {
+    if (name.length == 0) {
+      false
+    } else {
+      name.zipWithIndex.forall {
+        case (c, 0) if !Character.isLetter(c) && c != '_' => false
+        case (c, _) if !Character.isLetterOrDigit(c) && c != '_' => false
+        case _ => true
+      }
+    }
+  }
 }
 
 private[avro] object AvroFileFormat {

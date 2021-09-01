@@ -285,8 +285,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           input.write.format(cls.getName).option("path", path).mode("overwrite").save()
         }
         assert(e3.getMessage.contains("Writing job aborted"))
-        assert(e3.errorClass.contains("WRITING_JOB_ABORTED"))
-        assert(e3.sqlState.contains("40000"))
+        assert(e3.getErrorClass == "WRITING_JOB_ABORTED")
+        assert(e3.getSqlState == "40000")
         // make sure we don't have partial data.
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
       }

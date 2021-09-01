@@ -244,7 +244,9 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 paths = rootPath.toString :: Nil,
                 userSpecifiedSchema = Option(updatedTable.dataSchema),
                 bucketSpec = None,
-                options = options,
+                // Do not interpret the 'path' option at all when tables are read using the Hive
+                // source, since the URIs will already have been read from the table's LOCATION.
+                options = options.filter { case (k, _) => !k.equalsIgnoreCase("path") },
                 className = fileType).resolveRelation(),
               table = updatedTable)
 

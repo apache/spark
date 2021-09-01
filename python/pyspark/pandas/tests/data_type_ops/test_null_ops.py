@@ -19,7 +19,6 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
-from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
@@ -37,57 +36,50 @@ class NullOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: self.psser + "x")
         self.assertRaises(TypeError, lambda: self.psser + 1)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser + psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser + psser)
 
     def test_sub(self):
         self.assertRaises(TypeError, lambda: self.psser - "x")
         self.assertRaises(TypeError, lambda: self.psser - 1)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser - psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser - psser)
 
     def test_mul(self):
         self.assertRaises(TypeError, lambda: self.psser * "x")
         self.assertRaises(TypeError, lambda: self.psser * 1)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser * psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser * psser)
 
     def test_truediv(self):
         self.assertRaises(TypeError, lambda: self.psser / "x")
         self.assertRaises(TypeError, lambda: self.psser / 1)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser / psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser / psser)
 
     def test_floordiv(self):
         self.assertRaises(TypeError, lambda: self.psser // "x")
         self.assertRaises(TypeError, lambda: self.psser // 1)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser // psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser // psser)
 
     def test_mod(self):
         self.assertRaises(TypeError, lambda: self.psser % "x")
         self.assertRaises(TypeError, lambda: self.psser % 1)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser % psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser % psser)
 
     def test_pow(self):
         self.assertRaises(TypeError, lambda: self.psser ** "x")
         self.assertRaises(TypeError, lambda: self.psser ** 1)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser ** psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser ** psser)
 
     def test_radd(self):
         self.assertRaises(TypeError, lambda: "x" + self.psser)
@@ -145,28 +137,28 @@ class NullOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: ~self.psser)
 
     def test_eq(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(self.pser == self.pser, (self.psser == self.psser).sort_index())
+        pser, psser = self.pser, self.psser
+        self.assert_eq(pser == pser, psser == psser)
 
     def test_ne(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(self.pser != self.pser, (self.psser != self.psser).sort_index())
+        pser, psser = self.pser, self.psser
+        self.assert_eq(pser != pser, psser != psser)
 
     def test_lt(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(self.pser < self.pser, (self.psser < self.psser).sort_index())
+        pser, psser = self.pser, self.psser
+        self.assert_eq(pser < pser, psser < psser)
 
     def test_le(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(self.pser <= self.pser, (self.psser <= self.psser).sort_index())
+        pser, psser = self.pser, self.psser
+        self.assert_eq(pser <= pser, psser <= psser)
 
     def test_gt(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(self.pser > self.pser, (self.psser > self.psser).sort_index())
+        pser, psser = self.pser, self.psser
+        self.assert_eq(pser > pser, psser > psser)
 
     def test_ge(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(self.pser >= self.pser, (self.psser >= self.psser).sort_index())
+        pser, psser = self.pser, self.psser
+        self.assert_eq(pser >= pser, psser >= psser)
 
 
 if __name__ == "__main__":

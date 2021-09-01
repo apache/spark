@@ -877,7 +877,7 @@ interval
     ;
 
 errorCapturingMultiUnitsInterval
-    : multiUnitsInterval unitToUnitInterval?
+    : body=multiUnitsInterval unitToUnitInterval?
     ;
 
 multiUnitsInterval
@@ -1805,6 +1805,8 @@ HAT: '^';
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
     | '"' ( ~('"'|'\\') | ('\\' .) )* '"'
+    | 'R\'' (~'\'')* '\''
+    | 'R"'(~'"')* '"'
     ;
 
 BIGINT_LITERAL

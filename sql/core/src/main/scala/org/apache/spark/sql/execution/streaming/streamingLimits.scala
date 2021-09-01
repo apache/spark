@@ -52,7 +52,7 @@ case class StreamingGlobalLimitExec(
         getStateInfo,
         keySchema,
         valueSchema,
-        indexOrdinal = None,
+        numColsPrefixKey = 0,
         session.sessionState,
         Some(session.streams.stateStoreCoordinator)) { (store, iter) =>
       val key = UnsafeProjection.create(keySchema)(new GenericInternalRow(Array[Any](null)))

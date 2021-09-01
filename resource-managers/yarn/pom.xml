@@ -78,6 +78,9 @@
     </profile>
     <profile>
       <id>hadoop-3.2</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
       <dependencies>
         <!-- Used by MiniYARNCluster -->
         <dependency>

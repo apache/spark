@@ -137,8 +137,8 @@
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.12.0</parquet.version>
-    <orc.version>1.6.9</orc.version>
-    <jetty.version>9.4.42.v20210604</jetty.version>
+    <orc.version>1.6.10</orc.version>
+    <jetty.version>9.4.43.v20210629</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
     <ivy.version>2.5.0</ivy.version>
@@ -162,27 +162,27 @@
     <commons.collections.version>3.2.2</commons.collections.version>
     <scala.version>2.12.14</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
-    <scalatest-maven-plugin.version>2.0.0</scalatest-maven-plugin.version>
+    <scalatest-maven-plugin.version>2.0.2</scalatest-maven-plugin.version>
     <scalafmt.parameters>--test</scalafmt.parameters>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.12.3</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.12.5</fasterxml.jackson.version>
     <snappy.version>1.1.8.4</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <netlib.ludovic.dev.version>2.2.0</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
-    <commons-compress.version>1.20</commons-compress.version>
+    <commons-compress.version>1.21</commons-compress.version>
     <commons-io.version>2.8.0</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.12.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
-    <commons-pool2.version>2.6.2</commons-pool2.version>
+    <commons-pool2.version>2.11.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
-    <janino.version>3.1.4</janino.version>
+    <janino.version>3.0.16</janino.version>
     <jersey.version>2.34</jersey.version>
     <joda.version>2.10.10</joda.version>
     <jodd.version>3.5.2</jodd.version>
@@ -196,6 +196,7 @@
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.2</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
+    <tink.version>1.6.0</tink.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -203,7 +204,7 @@
     <arrow.version>2.0.0</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>5.5.0</kubernetes-client.version>
+    <kubernetes-client.version>5.6.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -265,7 +266,7 @@
     <spark.test.docker.keepContainer>false</spark.test.docker.keepContainer>
     <spark.test.docker.removePulledImage>true</spark.test.docker.removePulledImage>
 
-    <CodeCacheSize>1g</CodeCacheSize>
+    <CodeCacheSize>128m</CodeCacheSize>
     <!-- Needed for consistent times -->
     <maven.build.timestamp.format>yyyy-MM-dd HH:mm:ss z</maven.build.timestamp.format>
   </properties>
@@ -704,12 +705,12 @@
       <dependency>
         <groupId>org.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.7.1</version>
+        <version>1.8.0</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.0-2</version>
+        <version>1.5.0-4</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -880,7 +881,7 @@
       <dependency>
         <groupId>org.scalanlp</groupId>
         <artifactId>breeze_${scala.binary.version}</artifactId>
-        <version>1.0</version>
+        <version>1.2</version>
         <exclusions>
           <exclusion>
             <groupId>org.apache.commons</groupId>
@@ -2274,10 +2275,6 @@
         <scope>${orc.deps.scope}</scope>
         <exclusions>
           <exclusion>
-            <groupId>javax.xml.bind</groupId>
-            <artifactId>jaxb-api</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
           </exclusion>
@@ -2290,6 +2287,11 @@
             <artifactId>hive-storage-api</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>io.airlift</groupId>
+        <artifactId>aircompressor</artifactId>
+        <version>0.21</version>
       </dependency>
       <dependency>
         <groupId>org.apache.orc</groupId>
@@ -2409,6 +2411,11 @@
             <artifactId>jna</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>com.google.crypto.tink</groupId>
+        <artifactId>tink</artifactId>
+        <version>${tink.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.arrow</groupId>
@@ -2566,7 +2573,8 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>4.5.3</version>
+          <!-- SPARK-36547: Please don't upgrade the version below, otherwise there will be an error on building Hadoop 2.7 package -->
+          <version>4.3.0</version>
           <executions>
             <execution>
               <id>eclipse-add-source</id>
@@ -2611,8 +2619,9 @@
             </args>
             <jvmArgs>
               <jvmArg>-Xss128m</jvmArg>
-              <jvmArg>-Xms2048m</jvmArg>
-              <jvmArg>-Xmx2048m</jvmArg>
+              <jvmArg>-Xms4g</jvmArg>
+              <jvmArg>-Xmx4g</jvmArg>
+              <jvmArg>-XX:MaxMetaspaceSize=2g</jvmArg>
               <jvmArg>-XX:ReservedCodeCacheSize=${CodeCacheSize}</jvmArg>
             </jvmArgs>
             <javacArgs>
@@ -2661,7 +2670,7 @@
               <include>**/*Suite.java</include>
             </includes>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
-            <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
+            <argLine>-ea -Xmx4g -Xss4m -XX:MaxMetaspaceSize=2g -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
             <environmentVariables>
               <!--
                 Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
@@ -2712,7 +2721,7 @@
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
-            <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
+            <argLine>-ea -Xmx4g -Xss4m -XX:MaxMetaspaceSize=2g -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
             <stderr/>
             <environmentVariables>
               <!--
@@ -3089,7 +3098,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>3.1.1</version>
+        <version>3.1.2</version>
         <configuration>
           <failOnViolation>false</failOnViolation>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>
@@ -3109,7 +3118,7 @@
           <dependency>
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>8.39</version>
+            <version>8.43</version>
           </dependency>
         </dependencies>
         <executions>

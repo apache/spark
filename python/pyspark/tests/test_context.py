@@ -230,7 +230,7 @@ class ContextTests(unittest.TestCase):
             t.daemon = True
             t.start()
             # wait for scheduler to start
-            time.sleep(1)
+            time.sleep(3)
 
             tracker = sc.statusTracker()
             jobIds = tracker.getJobIdsForGroup('test_progress_api')

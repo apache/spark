@@ -1556,12 +1556,18 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         if extension_object_dtypes_available:
             from pandas import StringDtype
 
-            self._check_extension(
-                psser.astype("M").astype("string"), pser.astype("M").astype("string")
-            )
-            self._check_extension(
-                psser.astype("M").astype(StringDtype()), pser.astype("M").astype(StringDtype())
-            )
+            # The behavior of casting datetime to nullable string is changed from pandas 1.3.
+            if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+                self._check_extension(
+                    psser.astype("M").astype("string"), pser.astype("M").astype("string")
+                )
+                self._check_extension(
+                    psser.astype("M").astype(StringDtype()), pser.astype("M").astype(StringDtype())
+                )
+            else:
+                expected = ps.Series(["2020-10-27 00:00:01", None], name="x", dtype="string")
+                self._check_extension(psser.astype("M").astype("string"), expected)
+                self._check_extension(psser.astype("M").astype(StringDtype()), expected)
 
         with self.assertRaisesRegex(TypeError, "not understood"):
             psser.astype("int63")
@@ -2444,6 +2450,11 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.hasnans, psser.hasnans)
 
+        # empty
+        pser = pd.Series([])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.hasnans, psser.hasnans)
+
     def test_last_valid_index(self):
         pser = pd.Series([250, 1.5, 320, 1, 0.3, None, None, None, None])
         psser = ps.from_pandas(pser)
@@ -2875,6 +2886,24 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             pser.at_time("0:20").sort_index(),
             psser.at_time("0:20").sort_index(),
         )
+
+    def test_combine_first(self):
+        pdf = pd.DataFrame(
+            {
+                "A": {"falcon": 330.0, "eagle": 160.0},
+                "B": {"falcon": 345.0, "eagle": 200.0, "duck": 30.0},
+            }
+        )
+        pser1, pser2 = pdf.A, pdf.B
+        psdf = ps.from_pandas(pdf)
+        psser1, psser2 = psdf.A, psdf.B
+
+        self.assert_eq(psser1.combine_first(psser2), pser1.combine_first(pser2))
+
+        psser1.name = pser1.name = ("X", "A")
+        psser2.name = pser2.name = ("Y", "B")
+
+        self.assert_eq(psser1.combine_first(psser2), pser1.combine_first(pser2))
 
 
 if __name__ == "__main__":

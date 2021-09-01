@@ -654,30 +654,35 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             psser1.combine_first(psser2).sort_index(), pser1.combine_first(pser2).sort_index()
         )
 
-        # Series come from same DataFrame
-        pdf = pd.DataFrame(
-            {
-                "A": {"falcon": 330.0, "eagle": 160.0},
-                "B": {"falcon": 345.0, "eagle": 200.0, "duck": 30.0},
-            }
-        )
-        pser1 = pdf.A
-        pser2 = pdf.B
-        psser1 = ps.from_pandas(pser1)
-        psser2 = ps.from_pandas(pser2)
+        # DataFrame
+        pdf1 = pd.DataFrame({"A": [None, 0], "B": [4, None]})
+        psdf1 = ps.from_pandas(pdf1)
+        pdf2 = pd.DataFrame({"C": [3, 3], "B": [1, 1]})
+        psdf2 = ps.from_pandas(pdf2)
 
-        self.assert_eq(
-            psser1.combine_first(psser2).sort_index(), pser1.combine_first(pser2).sort_index()
-        )
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
+            self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2).sort_index())
+        else:
+            # pandas < 1.2.0 returns unexpected dtypes,
+            # please refer to https://github.com/pandas-dev/pandas/issues/28481 for details
+            expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
+            self.assert_eq(expected_pdf, psdf1.combine_first(psdf2).sort_index())
 
-        psser1.name = ("X", "A")
-        psser2.name = ("Y", "B")
-        pser1.name = ("X", "A")
-        pser2.name = ("Y", "B")
+        pdf1.columns = pd.MultiIndex.from_tuples([("A", "willow"), ("B", "pine")])
+        psdf1 = ps.from_pandas(pdf1)
+        pdf2.columns = pd.MultiIndex.from_tuples([("C", "oak"), ("B", "pine")])
+        psdf2 = ps.from_pandas(pdf2)
 
-        self.assert_eq(
-            psser1.combine_first(psser2).sort_index(), pser1.combine_first(pser2).sort_index()
-        )
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
+            self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2).sort_index())
+        else:
+            # pandas < 1.2.0 returns unexpected dtypes,
+            # please refer to https://github.com/pandas-dev/pandas/issues/28481 for details
+            expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
+            expected_pdf.columns = pd.MultiIndex.from_tuples(
+                [("A", "willow"), ("B", "pine"), ("C", "oak")]
+            )
+            self.assert_eq(expected_pdf, psdf1.combine_first(psdf2).sort_index())
 
     def test_insert(self):
         #
@@ -1954,6 +1959,26 @@ class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
             psser ** psser_other
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
             psser.rpow(psser_other)
+
+    def test_combine_first(self):
+        pdf1 = pd.DataFrame({"A": [None, 0], "B": [4, None]})
+        psdf1 = ps.from_pandas(pdf1)
+
+        self.assertRaises(TypeError, lambda: psdf1.combine_first(ps.Series([1, 2])))
+
+        pser1 = pd.Series({"falcon": 330.0, "eagle": 160.0})
+        pser2 = pd.Series({"falcon": 345.0, "eagle": 200.0, "duck": 30.0})
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
+        with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
+            psser1.combine_first(psser2)
+
+        pdf1 = pd.DataFrame({"A": [None, 0], "B": [4, None]})
+        psdf1 = ps.from_pandas(pdf1)
+        pdf2 = pd.DataFrame({"C": [3, 3], "B": [1, 1]})
+        psdf2 = ps.from_pandas(pdf2)
+        with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
+            psdf1.combine_first(psdf2)
 
 
 if __name__ == "__main__":

@@ -70,7 +70,7 @@ class SeriesDateTimeTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.DataFrame(
             {"a": pd.date_range("2016-12-31", "2017-01-08", freq="D"), "b": pd.Series(range(9))}
         )
-        expected_error_message = "datetime subtraction can only be applied to datetime series."
+        expected_error_message = "Datetime subtraction can only be applied to datetime series."
         with self.assertRaisesRegex(TypeError, expected_error_message):
             psdf["a"] - psdf["b"]
         with self.assertRaisesRegex(TypeError, expected_error_message):
@@ -104,7 +104,7 @@ class SeriesDateTimeTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser % other)
             self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other % psser)
 
-        expected_err_msg = "datetime subtraction can only be applied to datetime series."
+        expected_err_msg = "Datetime subtraction can only be applied to datetime series."
 
         for other in [1, 0.1]:
             self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser - other)
@@ -135,7 +135,7 @@ class SeriesDateTimeTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.DataFrame(
             {"a": pd.date_range("2016-12-31", "2017-01-08", freq="D"), "b": pd.Series(range(9))}
         )
-        expected_error_message = "date subtraction can only be applied to date series."
+        expected_error_message = "Date subtraction can only be applied to date series."
         with self.assertRaisesRegex(TypeError, expected_error_message):
             psdf["a"].dt.date - psdf["b"]
         with self.assertRaisesRegex(TypeError, expected_error_message):
