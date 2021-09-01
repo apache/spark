@@ -432,11 +432,13 @@ WINDOW w AS (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
 ORDER BY id;
 
 SELECT
-	employee_name,
-	department,
-	salary,
-	FIRST_VALUE(employee_name) OVER w highest_salary,
 	NTH_VALUE(employee_name, 2) OVER w second_highest_salary
+FROM
+	basic_pays
+ORDER BY department;
+
+SELECT
+	SUM(salary) OVER w sum_salary
 FROM
 	basic_pays
 ORDER BY department;
