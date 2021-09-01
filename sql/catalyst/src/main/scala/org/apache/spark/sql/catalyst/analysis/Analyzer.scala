@@ -2492,6 +2492,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       // Collect all Windowed Aggregate Expressions.
       val windowedAggExprs: Set[Expression] = exprs.flatMap { expr =>
         expr.collect {
+          case UnresolvedWindowExpression(_, windowSpec) =>
+            throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowSpec.name)
           case WindowExpression(ae: AggregateExpression, _) => ae
           case WindowExpression(e: PythonUDF, _) if PythonUDF.isGroupedAggPandasUDF(e) => e
         }
