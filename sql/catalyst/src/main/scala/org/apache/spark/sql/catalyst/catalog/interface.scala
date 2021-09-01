@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
-import java.time.ZoneOffset
 import java.util.Date
 
 import scala.collection.mutable
@@ -657,7 +656,7 @@ object CatalogColumnStat extends Logging {
   private def getTimestampFormatter(isParsing: Boolean): TimestampFormatter = {
     TimestampFormatter(
       format = "yyyy-MM-dd HH:mm:ss.SSSSSS",
-      zoneId = ZoneOffset.UTC,
+      zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone),
       isParsing = isParsing)
   }
 

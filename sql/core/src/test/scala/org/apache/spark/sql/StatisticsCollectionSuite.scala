@@ -184,14 +184,20 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("analyze column command - result verification") {
-    // (data.head.productArity - 1) because the last column does not support stats collection.
-    assert(stats.size == data.head.productArity - 1)
-    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
-    checkColStats(df, stats)
+    val originalZone = TimeZone.getDefault
+    TimeZone.setDefault(TimeZoneUTC)
+    try {
+      // (data.head.productArity - 1) because the last column does not support stats collection.
+      assert(stats.size == data.head.productArity - 1)
+      val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
+      checkColStats(df, stats)
 
-    // test column stats with histograms
-    withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_NUM_BINS.key -> "2") {
-      checkColStats(df, statsWithHgms)
+      // test column stats with histograms
+      withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_NUM_BINS.key -> "2") {
+        checkColStats(df, statsWithHgms)
+      }
+    } finally {
+      TimeZone.setDefault(originalZone)
     }
   }
 
@@ -429,6 +435,31 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-36604 timestamp column stats consistent with the time zone") {
+    val (start, end) = (0, TimeUnit.DAYS.toSeconds(2))
+    val tableName = "timestamp_stats_test"
+    val columnName = "T"
+    val colType = TimestampType
+    val originalZone = TimeZone.getDefault
+    try {
+      DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
+        val timeZone = TimeZone.getTimeZone(zid)
+        TimeZone.setDefault(timeZone)
+        sql(s"DROP TABLE IF EXISTS $tableName")
+        spark.range(start, end)
+          .select(timestamp_seconds($"id").cast(colType).as(columnName))
+          .write.saveAsTable(tableName)
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS $columnName")
+        val stats = getCatalogTable(tableName)
+          .stats.get.colStats(columnName).toPlanStat(columnName, colType)
+        assert(stats.min.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(start))
+        assert(stats.max.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(end - 1))
+      }
+    } finally {
+      TimeZone.setDefault(originalZone)
+    }
+  }
+
   test("store and retrieve column stats in different time zones") {
     val (start, end) = (0, TimeUnit.DAYS.toSeconds(2))
 
@@ -462,10 +493,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       checkTimestampStats(DateType, TimeZoneUTC, timeZone) { stats =>
         assert(stats.min.get.asInstanceOf[Int] == TimeUnit.SECONDS.toDays(start))
         assert(stats.max.get.asInstanceOf[Int] == TimeUnit.SECONDS.toDays(end - 1))
-      }
-      checkTimestampStats(TimestampType, TimeZoneUTC, timeZone) { stats =>
-        assert(stats.min.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(start))
-        assert(stats.max.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(end - 1))
       }
     }
   }

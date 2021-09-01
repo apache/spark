@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.{File, PrintWriter}
 import java.sql.Timestamp
-import java.util.Locale
+import java.util.{Locale, TimeZone}
 
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, HiveTableRelation}
 import org.apache.spark.sql.catalyst.plans.logical.HistogramBin
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, StringUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
 import org.apache.spark.sql.execution.command.{AnalyzeColumnCommand, CommandUtils, DDLUtils}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
@@ -1087,32 +1088,41 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   }
 
   test("verify serialized column stats after analyzing columns") {
-    import testImplicits._
+    val originalZone = TimeZone.getDefault
+    TimeZone.setDefault(TimeZoneUTC)
 
-    val tableName = "column_stats_test_ser"
-    // (data.head.productArity - 1) because the last column does not support stats collection.
-    assert(stats.size == data.head.productArity - 1)
-    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
+    try {
+      import testImplicits._
 
-    def checkColStatsProps(expected: Map[String, String]): Unit = {
-      sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS " + stats.keys.mkString(", "))
-      val table = hiveClient.getTable("default", tableName)
-      val props = table.properties.filterKeys(_.startsWith("spark.sql.statistics.colStats")).toMap
-      assert(props == expected)
-    }
+      val tableName = "column_stats_test_ser"
+      // (data.head.productArity - 1) because the last column does not support stats collection.
+      assert(stats.size == data.head.productArity - 1)
+      val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
 
-    withTable(tableName) {
-      df.write.saveAsTable(tableName)
-
-      // Collect and validate statistics
-      checkColStatsProps(expectedSerializedColStats)
-
-      withSQLConf(
-        SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_NUM_BINS.key -> "2") {
-
-        checkColStatsProps(expectedSerializedColStats ++ expectedSerializedHistograms)
+      def checkColStatsProps(expected: Map[String, String]): Unit = {
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS " + stats.keys.mkString(", "))
+        val table = hiveClient.getTable("default", tableName)
+        val props = table.properties.filterKeys(_.startsWith("spark.sql.statistics.colStats")).toMap
+        assert(props == expected)
       }
+
+      withTable(tableName) {
+        df.write.saveAsTable(tableName)
+
+        // Collect and validate statistics
+        checkColStatsProps(expectedSerializedColStats)
+
+        withSQLConf(
+          SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_NUM_BINS.key -> "2") {
+
+          checkColStatsProps(expectedSerializedColStats ++ expectedSerializedHistograms)
+        }
+      }
+    } finally {
+      TimeZone.setDefault(originalZone)
     }
+
+
   }
 
   test("verify column stats can be deserialized from tblproperties") {
