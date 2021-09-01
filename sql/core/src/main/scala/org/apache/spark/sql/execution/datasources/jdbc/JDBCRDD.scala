@@ -172,12 +172,12 @@ object JDBCRDD extends Logging {
    *
    * @param sc - Your SparkContext.
    * @param schema - The Catalyst schema of the underlying database table.
-   * @param requiredColumns - The names of the columns to SELECT.
+   * @param requiredColumns - The names of the columns or aggregate columns to SELECT.
    * @param filters - The filters to include in all WHERE clauses.
    * @param parts - An array of JDBCPartitions specifying partition ids and
    *    per-partition WHERE clauses.
    * @param options - JDBC options that contains url, table and other information.
-   * @param outputSchema - The schema of the columns to SELECT.
+   * @param outputSchema - The schema of the columns or aggregate columns to SELECT.
    * @param groupByColumns - The pushed down group by columns.
    *
    * @return An RDD representing "SELECT requiredColumns FROM fqTable".
@@ -213,8 +213,8 @@ object JDBCRDD extends Logging {
 }
 
 /**
- * An RDD representing a table in a database accessed via JDBC.  Both the
- * driver code and the workers must be able to access the database; the driver
+ * An RDD representing a query is related to a table in a database accessed via JDBC.
+ * Both the driver code and the workers must be able to access the database; the driver
  * needs to fetch the schema while the workers need to fetch the data.
  */
 private[jdbc] class JDBCRDD(
@@ -237,11 +237,7 @@ private[jdbc] class JDBCRDD(
   /**
    * `columns`, but as a String suitable for injection into a SQL query.
    */
-  private val columnList: String = {
-    val sb = new StringBuilder()
-    columns.foreach(x => sb.append(",").append(x))
-    if (sb.isEmpty) "1" else sb.substring(1)
-  }
+  private val columnList: String = if (columns.isEmpty) "1" else columns.mkString(",")
 
   /**
    * `filters`, but as a WHERE clause suitable for injection into a SQL query.
