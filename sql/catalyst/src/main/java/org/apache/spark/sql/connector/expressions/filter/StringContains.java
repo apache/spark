@@ -19,6 +19,8 @@ package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.connector.expressions.FieldReference;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * A filter that evaluates to `true` iff the field evaluates to
@@ -28,20 +30,25 @@ import org.apache.spark.sql.connector.expressions.Expression;
  */
 @Evolving
 public final class StringContains extends Filter {
-  private final Expression column;
+  private final Expression expr;
   private final String value;
 
-  public StringContains(Expression column, String value) {
-    this.column = column;
+  public StringContains(Expression expr, String value) {
+    this.expr = expr;
     this.value = value;
   }
 
-  public Expression column() { return column; }
+  public Expression expr() { return expr; }
   public String value() { return value; }
 
   @Override
-  public String toString() { return column.describe() + " CONTAINS " + value; }
+  public String toString() { return "STRING_CONTAINS(" + expr.describe() + ", " + value + ")"; }
 
   @Override
-  public Expression[] references() { return new Expression[] { column }; }
+  public NamedReference[] references() {
+    if (expr instanceof FieldReference){
+      return new NamedReference[] { (FieldReference)expr };
+    }
+    return EMPTY_REFERENCE;
+  }
 }

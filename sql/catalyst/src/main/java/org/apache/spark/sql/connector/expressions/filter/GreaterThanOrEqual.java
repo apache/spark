@@ -19,7 +19,9 @@ package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.Literal;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * A filter that evaluates to `true` iff the field evaluates to a value
@@ -28,20 +30,26 @@ import org.apache.spark.sql.connector.expressions.Literal;
  * @since 3.3.0
  */
 @Evolving
-public final class GreaterThanOrEqual<T> extends Filter {
-  private final Expression column;
-  private final Literal<T> value;
+public final class GreaterThanOrEqual extends Filter {
+  private final Expression expr;
+  private final Literal<?> value;
 
-  public GreaterThanOrEqual(Expression column, Literal<T> value) {
-    this.column = column;
+  public GreaterThanOrEqual(Expression expr, Literal<?> value) {
+    this.expr = expr;
     this.value = value;
   }
 
-  public Expression column() { return column; }
-  public Literal<T> value() { return value; }
+  public Expression expr() { return expr; }
+  public Literal<?> value() { return value; }
 
   @Override
-  public String toString() { return column.describe() + " >= " + value.describe(); }
+  public String toString() { return expr.describe() + " >= " + value.describe(); }
 
-  public Expression[] references() { return new Expression[] { column }; }
+  @Override
+  public NamedReference[] references() {
+    if (expr instanceof FieldReference){
+      return new NamedReference[] { (FieldReference)expr };
+    }
+    return EMPTY_REFERENCE;
+  }
 }

@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * Filter base class
@@ -28,14 +29,14 @@ import org.apache.spark.sql.connector.expressions.Expression;
 @Evolving
 public abstract class Filter implements Expression {
 
-  protected static final Expression[] EMPTY_REFERENCE = new Expression[0];
+  protected static final NamedReference[] EMPTY_REFERENCE = new NamedReference[0];
 
   /**
    * Returns list of columns that are referenced by this filter.
    */
-  public abstract Expression[] references();
+  public abstract NamedReference[] references();
 
-  protected Expression[] findReferences(Object filter) {
+  protected NamedReference[] findReferences(Object filter) {
     if (filter instanceof Filter) {
       return ((Filter) filter).references();
     } else {

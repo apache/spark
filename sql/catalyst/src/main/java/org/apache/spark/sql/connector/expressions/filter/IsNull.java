@@ -19,6 +19,8 @@ package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.connector.expressions.FieldReference;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * A filter that evaluates to `true` iff the field evaluates to null.
@@ -27,17 +29,22 @@ import org.apache.spark.sql.connector.expressions.Expression;
  */
 @Evolving
 public final class IsNull extends Filter {
-  private final Expression column;
+  private final Expression expr;
 
-  public IsNull(Expression column) {
-    this.column = column;
+  public IsNull(Expression expr) {
+    this.expr = expr;
   }
 
-  public Expression column() { return column; }
+  public Expression expr() { return expr; }
 
   @Override
-  public String toString() { return column.describe() + " IS NULL"; }
+  public String toString() { return expr.describe() + " IS NULL"; }
 
   @Override
-  public Expression[] references() { return new Expression[] { column }; }
+  public NamedReference[] references() {
+    if (expr instanceof FieldReference){
+      return new NamedReference[] { (FieldReference)expr };
+    }
+    return EMPTY_REFERENCE;
+  }
 }

@@ -23,7 +23,9 @@ import java.util.stream.Collectors;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.Literal;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * A filter that evaluates to `true` iff the field evaluates to one of the values in the array.
@@ -31,29 +33,29 @@ import org.apache.spark.sql.connector.expressions.Literal;
  * @since 3.3.0
  */
 @Evolving
-public final class In<T> extends Filter {
-  private final Expression column;
-  private final Literal<T>[] values;
+public final class In extends Filter {
+  private final Expression expr;
+  private final Literal<?>[] values;
 
-  public In(Expression column, Literal<T>[] values) {
-    this.column = column;
+  public In(Expression expr, Literal<?>[] values) {
+    this.expr = expr;
     this.values = values;
   }
 
-  public Expression column() { return column; }
-  public Literal<T>[] values() { return values; }
+  public Expression expr() { return expr; }
+  public Literal<?>[] values() { return values; }
 
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
-    In<?> in = (In<?>) o;
-    return Objects.equals(column, in.column) && Arrays.equals(values, in.values);
+    In in = (In) o;
+    return Objects.equals(expr, in.expr) && Arrays.equals(values, in.values);
   }
 
   @Override
   public int hashCode() {
-    int result = Objects.hash(column);
+    int result = Objects.hash(expr);
     result = 31 * result + Arrays.hashCode(values);
     return result;
   }
@@ -61,9 +63,15 @@ public final class In<T> extends Filter {
   @Override
   public String toString() {
     String res = Arrays.stream(values).map(Literal::describe).collect(Collectors.joining(", "));
-    return column.describe() + " IN (" + res + ")";
+    return expr.describe() + " IN (" + res + ")";
   }
 
   @Override
-  public Expression[] references() { return new Expression[] { column }; }
+  public NamedReference[] references() {
+    if (expr instanceof FieldReference){
+      return new NamedReference[] { (FieldReference)expr };
+    }
+    return EMPTY_REFERENCE;
+  }
+
 }
