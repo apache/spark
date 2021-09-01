@@ -74,9 +74,10 @@ case class EnsureRequirements(
     }.map(_._2)
 
     // If there are more than one children, we'll need to check partitioning & distribution of them
-    // and see if we need to insert extra shuffle.
+    // and see if extra shuffles are necessary.
     if (childrenIndexes.length > 1 && childrenIndexes.map(requiredChildDistributions(_))
         .forall(_.isInstanceOf[ClusteredDistribution])) {
+      // TODO: can we handle AllTuples together?
       val childrenWithDistribution = childrenIndexes
           .map(i => (children(i).outputPartitioning,
               requiredChildDistributions(i).asInstanceOf[ClusteredDistribution]))
@@ -98,7 +99,7 @@ case class EnsureRequirements(
             if (best.isCompatibleWith(child.outputPartitioning, clustering)) {
               None
             } else {
-              Some(requirements.max.createPartitioning(clustering))
+              Some(best.createPartitioning(clustering))
             }
           }
 
