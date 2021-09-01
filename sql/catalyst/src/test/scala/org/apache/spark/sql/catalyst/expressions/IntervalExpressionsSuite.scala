@@ -456,6 +456,12 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         expectedErrMsg)
     }
 
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkExceptionInExpression[ArithmeticException](
+        DivideDTInterval(Literal(Duration.ofDays(1)), Literal(0)),
+        "divide by zero")
+    }
+
     numericTypes.foreach { numType =>
       dayTimeIntervalTypes.foreach { it =>
         checkConsistencyBetweenInterpretedAndCodegenAllowingException(
