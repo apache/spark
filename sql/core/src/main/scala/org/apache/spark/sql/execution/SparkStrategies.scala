@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning
 import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.adaptive.LogicalQueryStage
 import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
@@ -327,8 +328,16 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         }
 
+        def canBroadcast(plan: LogicalPlan): Boolean = {
+          if (conf.usePhysicalStatsToSelectJoinEnabled && plan.isInstanceOf[LogicalQueryStage]) {
+              plan.stats.isRuntime && canBroadcastBySize(plan, conf)
+          } else {
+            canBroadcastBySize(plan, conf)
+          }
+        }
+
         def createJoinWithoutHint() = {
-          createBroadcastNLJoin(canBroadcastBySize(left, conf), canBroadcastBySize(right, conf))
+          createBroadcastNLJoin(canBroadcast(left), canBroadcast(right))
             .orElse(createCartesianProduct())
             .getOrElse {
               // This join could be very slow or OOM

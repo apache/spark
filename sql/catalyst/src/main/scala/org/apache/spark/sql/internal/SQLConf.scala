@@ -626,6 +626,13 @@ object SQLConf {
       .checkValue(_ >= 0, "The non-empty partition ratio must be positive number.")
       .createWithDefault(0.2)
 
+  val USE_PHYSICAL_STATS_TO_SELECT_JOIN_ENABLED =
+    buildConf("spark.sql.adaptive.broadcastJoin.usePhysicalStats.enabled")
+      .doc("When true, we only use physical statistics from shuffle blocks, a.k.a stats in " +
+        "`LogicalQueryStage`, to decide whether to use broadcast join or not.")
+      .booleanConf
+      .createWithDefault(false)
+
   val ADAPTIVE_OPTIMIZER_EXCLUDED_RULES =
     buildConf("spark.sql.adaptive.optimizer.excludedRules")
       .doc("Configures a list of rules to be disabled in the adaptive optimizer, in which the " +
@@ -3637,6 +3644,9 @@ class SQLConf extends Serializable with Logging {
 
   def nonEmptyPartitionRatioForBroadcastJoin: Double =
     getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
+
+  def usePhysicalStatsToSelectJoinEnabled: Boolean =
+    getConf(USE_PHYSICAL_STATS_TO_SELECT_JOIN_ENABLED)
 
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
 
