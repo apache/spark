@@ -338,12 +338,10 @@ class SparkConversionMixin(object):
                         "has been set to false.\n  %s" % str(e))
                     warnings.warn(msg)
                     raise
-
-        should_localize = not self._is_timestamp_ntz_preferred()
-        data = self._convert_from_pandas(data, schema, timezone, should_localize)
+        data = self._convert_from_pandas(data, schema, timezone)
         return self._create_dataframe(data, schema, samplingRatio, verifySchema)
 
-    def _convert_from_pandas(self, pdf, schema, timezone, should_localize):
+    def _convert_from_pandas(self, pdf, schema, timezone):
         """
          Convert a pandas.DataFrame to list of records that can be used to make a DataFrame
 
@@ -376,6 +374,7 @@ class SparkConversionMixin(object):
             else:
                 for column, series in pdf.iteritems():
                     s = series
+                    should_localize = not self._is_timestamp_ntz_preferred()
                     if should_localize and is_datetime64tz_dtype(s.dtype) and s.dt.tz is not None:
                         s = _check_series_convert_timestamps_tz_local(series, timezone)
                     if s is not series:
