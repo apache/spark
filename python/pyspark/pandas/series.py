@@ -972,6 +972,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         if not isinstance(other, Series):
             raise TypeError("unsupported type: %s" % type(other))
+        if not np.issubdtype(self.dtype, np.number):
+            raise TypeError("unsupported dtype: %s" % self.dtype)
+        if not np.issubdtype(other.dtype, np.number):
+            raise TypeError("unsupported dtype: %s" % other.dtype)
 
         min_periods = 1 if min_periods is None else min_periods
 
