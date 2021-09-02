@@ -129,7 +129,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
   }
 
   /*
-   * Get all compatible profiles
+   * Get all compatible profiles including itself
    */
   def getCompatibleProfiles(rp: ResourceProfile): Map[Int, ResourceProfile] = {
     readLock.lock()
@@ -137,6 +137,47 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
       resourceProfileIdToResourceProfile.filter { case (_, rpEntry) =>
         rpEntry.resourcesCompatible(rp)
       }.toMap
+    } finally {
+      readLock.unlock()
+    }
+  }
+
+  /*
+   * Get all compatible profile IDs excluding itself
+   */
+  def getOtherCompatibleProfileIds(rpId: Int): Set[Int] = {
+    val resourceProfile = resourceProfileFromId(rpId)
+    readLock.lock()
+    try {
+      resourceProfileIdToResourceProfile.filter { case (id: Int, rpEntry: ResourceProfile) =>
+        id != rpId && rpEntry.resourcesCompatible(resourceProfile)
+      }.map(_._1).toSet
+    } finally {
+      readLock.unlock()
+    }
+  }
+
+  /*
+   * Get all compatible profile count including itself
+   */
+//  def getCompatibleProfileCount(rpId: Int): Int = {
+//    val resourceProfile = resourceProfileFromId(rpId)
+//    readLock.lock()
+//    try {
+//      resourceProfileIdToResourceProfile.count { case (_, rpEntry) =>
+//        rpEntry.resourcesCompatible(resourceProfile)
+//      }
+//    } finally {
+//      readLock.unlock()
+//    }
+//  }
+
+  def dumpResourceProfile(): Unit = {
+    readLock.lock()
+    try {
+      resourceProfileIdToResourceProfile.foreach { case (id: Int, rpEntry: ResourceProfile) =>
+        println("profile " + id + ": " + rpEntry)
+      }
     } finally {
       readLock.unlock()
     }

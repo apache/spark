@@ -572,6 +572,12 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val DYN_ALLOCATION_REUSE_EXECUTORS =
+    ConfigBuilder("spark.dynamicAllocation.reuseExecutors")
+      .version("1.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val DYN_ALLOCATION_TESTING =
     ConfigBuilder("spark.dynamicAllocation.testing")
       .version("1.2.0")

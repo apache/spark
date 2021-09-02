@@ -241,9 +241,10 @@ class ResourceProfile(
     rp.taskResources == taskResources && rp.executorResources == executorResources
   }
 
+  // TODO: define what a compatible executor is, right now is equal cores
   // check that executor resources are equal, but the task resources could be different
   private[spark] def resourcesCompatible(rp: ResourceProfile): Boolean = {
-    rp.executorResources == executorResources
+    rp.executorResources("cores") == executorResources("cores")
   }
 
   override def hashCode(): Int = Seq(taskResources, executorResources).hashCode()

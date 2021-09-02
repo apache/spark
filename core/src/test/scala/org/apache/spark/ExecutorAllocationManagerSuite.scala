@@ -119,7 +119,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   }
 
   test("add executors default profile") {
-    val manager = createManager(createConf(1, 10, 1))
+    val manager = createManager(createConfReuseExecutors(1, 10, 1))
     post(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
 
     val updatesNeeded =
@@ -290,6 +290,12 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     // scalastyle:off println
 
     val manager = createManager(createConfReuseExecutors(1, 10, 1))
+//    rpManager.dumpResourceProfile()
+
+//    onExecutorAddedDefaultProfile(manager, "first")
+//    onExecutorAddedDefaultProfile(manager, "second")
+//    onExecutorAddedDefaultProfile(manager, "third")
+
     println("--- SparkListenerStageSubmitted defaultProfile ---")
     post(SparkListenerStageSubmitted(createStageInfo(0, 1000, rp = defaultProfile)))
     val rp1 = new ResourceProfileBuilder()
@@ -298,8 +304,15 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     rp1.require(execReqs).require(taskReqs)
     val rprof1 = rp1.build
     rpManager.addResourceProfile(rprof1)
+//    rpManager.dumpResourceProfile()
     println("--- SparkListenerStageSubmitted rprof1 ---")
     post(SparkListenerStageSubmitted(createStageInfo(1, 1000, rp = rprof1)))
+
+//    onExecutorAdded(manager, "firstrp1", rprof1)
+//    onExecutorAdded(manager, "secondrp1", rprof1)
+//    onExecutorAdded(manager, "thirdrp1", rprof1)
+//    onExecutorAdded(manager, "fourthrp1", rprof1)
+
     val updatesNeeded =
       new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
 
@@ -348,6 +361,45 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsToAddForDefaultProfile(manager) === 1)
     assert(numExecutorsToAdd(manager, rprof1) === 1)
     assert(numExecutorsTarget(manager, rprof1.id) === 10)
+
+    println("--- Register previously requested executors ---")
+
+    onExecutorAddedDefaultProfile(manager, "first")
+    onExecutorAddedDefaultProfile(manager, "second")
+    logDebug(numExecutorsTargetForDefaultProfileId(manager).toString)
+    logDebug(numExecutorsToAddForDefaultProfile(manager).toString)
+    onExecutorAddedDefaultProfile(manager, "third")
+    onExecutorAddedDefaultProfile(manager, "fourth")
+
+    logDebug("numExecutorsTargetForDefaultProfileId: " +
+      numExecutorsTargetForDefaultProfileId(manager).toString)
+    logDebug("numExecutorsToAddForDefaultProfile: " +
+      numExecutorsToAddForDefaultProfile(manager).toString)
+    logDebug("addExecutorsToTargetForDefaultProfile: " +
+      addExecutorsToTargetForDefaultProfile(manager, updatesNeeded).toString)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+
+    onExecutorAdded(manager, "firstrp1", rprof1)
+    onExecutorAdded(manager, "secondrp1", rprof1)
+
+    logDebug("numExecutorsTargetForDefaultProfileId: " +
+      numExecutorsTargetForDefaultProfileId(manager).toString)
+    logDebug("numExecutorsToAddForDefaultProfile: " +
+      numExecutorsToAddForDefaultProfile(manager).toString)
+    logDebug("addExecutorsToTargetForDefaultProfile: " +
+      addExecutorsToTargetForDefaultProfile(manager, updatesNeeded).toString)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+
+    onExecutorAdded(manager, "thirdrp1", rprof1)
+    onExecutorAdded(manager, "fourthrp1", rprof1)
+
+    logDebug("numExecutorsTargetForDefaultProfileId: " +
+      numExecutorsTargetForDefaultProfileId(manager).toString)
+    logDebug("numExecutorsToAddForDefaultProfile: " +
+      numExecutorsToAddForDefaultProfile(manager).toString)
+    logDebug("addExecutorsToTargetForDefaultProfile: " +
+      addExecutorsToTargetForDefaultProfile(manager, updatesNeeded).toString)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
 
     // scalastyle:on println
   }
@@ -1791,6 +1843,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       decommissioningEnabled: Boolean = false): SparkConf = {
     val sparkConf = new SparkConf()
       .set(config.DYN_ALLOCATION_ENABLED, true)
+      .set(config.DYN_ALLOCATION_REUSE_EXECUTORS, true)
       .set(config.DYN_ALLOCATION_MIN_EXECUTORS, minExecutors)
       .set(config.DYN_ALLOCATION_MAX_EXECUTORS, maxExecutors)
       .set(config.DYN_ALLOCATION_INITIAL_EXECUTORS, initialExecutors)
