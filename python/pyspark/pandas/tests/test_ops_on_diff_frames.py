@@ -1814,7 +1814,7 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         ):
             psser1.cov(pser2)
 
-    def _test_cov(self, pser1: pd.Series, pser2: pd.Series):
+    def _test_cov(self, pser1, pser2):
         psser1 = ps.from_pandas(pser1)
         psser2 = ps.from_pandas(pser2)
 

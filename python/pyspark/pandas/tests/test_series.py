@@ -2935,7 +2935,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         self._test_cov(pdf)
 
-    def _test_cov(self, pdf: pd.DataFrame):
+    def _test_cov(self, pdf):
         psdf = ps.from_pandas(pdf)
 
         pcov = pdf["s1"].cov(pdf["s2"])
