@@ -4236,7 +4236,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         sql("insert into t2 select 3, 'kyuubi'")
         sql(s"create table t3 (myid int, myname string, myage int) using parquet location '$loc'")
 
-        withSQLConf((SQLConf.PARQUET_COLUMN_INDEX_ACCESS.key, "false")) {
+        withSQLConf((SQLConf.PARQUET_ACCESS_BY_INDEX.key, "false")) {
           checkAnswer(sql("select my_id from t1"), Seq(Row(1), Row(null), Row(null)))
           checkAnswer(sql("select my_id, my_name from t1"),
             Seq(Row(1, "kent"), Row(null, null), Row(null, null)))
@@ -4247,7 +4247,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
               Row(null, null, null)))
         }
 
-        withSQLConf((SQLConf.PARQUET_COLUMN_INDEX_ACCESS.key, "true")) {
+        withSQLConf((SQLConf.PARQUET_ACCESS_BY_INDEX.key, "true")) {
           checkAnswer(sql("select my_id from t1"), Seq(Row(1), Row(2), Row(3)))
           val e1 = {
             intercept[SparkException](sql("select my_name from t1").collect())

@@ -903,8 +903,8 @@ object SQLConf {
     .intConf
     .createWithDefault(4096)
 
-  val PARQUET_COLUMN_INDEX_ACCESS = buildConf("spark.sql.parquet.columnIndexAccess")
-    .doc("When true, we access the parquet files by column index instead of catalyst schema" +
+  val PARQUET_ACCESS_BY_INDEX = buildConf("spark.sql.parquet.accessByIndex")
+    .doc("When true, we access the Parquet files by column index instead of catalyst schema" +
       " mapping at the executor side.")
     .version("3.3.0")
     .booleanConf
