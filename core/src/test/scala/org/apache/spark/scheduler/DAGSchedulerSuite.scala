@@ -3949,11 +3949,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     pushComplete(shuffleStage2.shuffleDep.shuffleId, 0)
     pushComplete(shuffleStage2.shuffleDep.shuffleId, 1)
-/*    // Verify the finalize task is reset with 0 delay after push completion ratio is reached
-    assert(shuffleStage2.shuffleDep.getFinalizeTask.nonEmpty)
-    val finalizeTask3 = shuffleStage2.shuffleDep.getFinalizeTask.get
-      .asInstanceOf[DummyScheduledFuture]
-    assert(finalizeTask3.delay == 0 && finalizeTask3.registerMergeResults)*/
 
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep1.shuffleId) == parts)
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep2.shuffleId) == parts)
