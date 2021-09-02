@@ -2747,7 +2747,7 @@ def merge(
 
 
 @no_type_check
-def to_numeric(arg, errors="coerce"):
+def to_numeric(arg, errors="raise"):
     """
     Convert argument to a numeric type.
 
@@ -2756,14 +2756,11 @@ def to_numeric(arg, errors="coerce"):
     arg : scalar, list, tuple, 1-d array, or Series
         Argument to be converted.
     errors : {'ignore', 'raise', 'coerce'}, default 'coerce'
+        Note that 'ignore' are not supported yet when the `arg` is Series.
+
         * If 'coerce', then invalid parsing will be set as NaN.
         * If 'ignore', then invalid parsing will return the input.
         * If 'raise', then invalid parsing will raise an exception.
-
-    Notes
-    -----
-    Unlike pandas, the default value for `errors` is 'coerce', since 'raise' and 'ignore'
-    are not supported yet when the `arg` is Series.
 
     Returns
     -------
@@ -2827,7 +2824,17 @@ def to_numeric(arg, errors="coerce"):
         if errors == "coerce":
             return arg._with_new_scol(arg.spark.column.cast("float"))
         elif errors == "raise":
-            raise NotImplementedError("'raise' is not implemented yet, when the `arg` is Series.")
+            scol = arg.spark.column
+            scol_casted = scol.cast("float")
+            cond = scol.isNotNull() & scol_casted.isNull()
+            # Filter out if there are data that satisfy the condition.
+            sdf = arg._internal.spark_frame.select(scol).filter(cond)
+            head_sdf = sdf.head(1)
+            # If at least one data satisfies the condition, raise the ValueError.
+            if len(head_sdf) == 1:
+                raise ValueError('Unable to parse string "{}"'.format(head_sdf[0][0]))
+            else:
+                return arg._with_new_scol(scol_casted)
         elif errors == "ignore":
             raise NotImplementedError("'ignore' is not implemented yet, when the `arg` is Series.")
         else:
