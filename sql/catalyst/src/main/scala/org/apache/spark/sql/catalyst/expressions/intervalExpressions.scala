@@ -603,8 +603,7 @@ trait IntervalDivide {
 // Divide an year-month interval by a numeric
 case class DivideYMInterval(
     interval: Expression,
-    num: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
+    num: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide
     with NullIntolerant with Serializable {
   override def left: Expression = interval
@@ -616,45 +615,28 @@ case class DivideYMInterval(
   @transient
   private lazy val evalFunc: (Int, Any) => Any = right.dataType match {
     case LongType => (months: Int, num) =>
+      if (num == 0) throw QueryExecutionErrors.divideByZeroError()
       // Year-month interval has `Int` as the internal type. The result of the divide operation
       // of `Int` by `Long` must fit to `Int`. So, the casting to `Int` cannot cause overflow.
       LongMath.divide(months, num.asInstanceOf[Long], RoundingMode.HALF_UP).toInt
     case _: IntegralType => (months: Int, num) =>
+      if (num == 0) throw QueryExecutionErrors.divideByZeroError()
       IntMath.divide(months, num.asInstanceOf[Number].intValue(), RoundingMode.HALF_UP)
     case _: DecimalType => (months: Int, num) =>
+      if (num.asInstanceOf[Decimal].isZero) throw QueryExecutionErrors.divideByZeroError()
       val decimalRes = ((new Decimal).set(months) / num.asInstanceOf[Decimal]).toJavaBigDecimal
       decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()
     case _: FractionalType => (months: Int, num) =>
+      if (num == 0) throw QueryExecutionErrors.divideByZeroError()
       DoubleMath.roundToInt(months / num.asInstanceOf[Number].doubleValue(), RoundingMode.HALF_UP)
-  }
-
-  @transient
-  private lazy val evalExactFunc: (Int, Any) => Any = if (failOnError) {
-    right.dataType match {
-      case _: DecimalType => (months: Int, num) =>
-        if (num.asInstanceOf[Decimal].isZero) throw QueryExecutionErrors.divideByZeroError()
-        evalFunc(months, num)
-      case _ => (months: Int, num) =>
-        if (num == 0) throw QueryExecutionErrors.divideByZeroError()
-        evalFunc(months, num)
-    }
-  } else {
-    (months: Int, num) => evalFunc(months, num)
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
     checkDivideOverflow(interval.asInstanceOf[Int], Int.MinValue, right, num)
-    evalExactFunc(interval.asInstanceOf[Int], num)
+    evalFunc(interval.asInstanceOf[Int], num)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val num = right.genCode(ctx)
-    val checkDivideByZero = if (failOnError) {
-      s"""
-         |if (${num.value} == 0)
-         |  throw QueryExecutionErrors.divideByZeroError();
-         """.stripMargin
-    } else ""
     right.dataType match {
       case t: IntegralType =>
         val math = t match {
@@ -663,6 +645,12 @@ case class DivideYMInterval(
         }
         val javaType = CodeGenerator.javaType(dataType)
         val months = left.genCode(ctx)
+        val num = right.genCode(ctx)
+        val checkDivideByZero =
+          s"""
+             |if (${num.value} == 0)
+             |  throw QueryExecutionErrors.divideByZeroError();
+             |""".stripMargin
         val checkIntegralDivideOverflow =
           s"""
              |if (${months.value} == ${Int.MinValue} && ${num.value} == -1)
@@ -672,30 +660,26 @@ case class DivideYMInterval(
           // Similarly to non-codegen code. The result of `divide(Int, Long, ...)` must fit
           // to `Int`. Casting to `Int` is safe here.
           s"""
-             |$checkIntegralDivideOverflow
              |$checkDivideByZero
+             |$checkIntegralDivideOverflow
              |${ev.value} = ($javaType)$math.divide($m, $n, java.math.RoundingMode.HALF_UP);
         """.stripMargin)
       case _: DecimalType =>
-        val checkDecimalDivideByZero = if (failOnError) {
-          s"""
-             |if (${num.value}.isZero())
-             |  throw QueryExecutionErrors.divideByZeroError();
-         """.stripMargin
-        } else ""
         nullSafeCodeGen(ctx, ev, (m, n) =>
           s"""
-             |$checkDecimalDivideByZero
+             |if ($n.isZero())
+             |  throw QueryExecutionErrors.divideByZeroError();
              |${ev.value} = ((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()
              |  .setScale(0, java.math.RoundingMode.HALF_UP).intValueExact();
-        """.stripMargin)
+           """.stripMargin)
       case _: FractionalType =>
         val math = classOf[DoubleMath].getName
         nullSafeCodeGen(ctx, ev, (m, n) =>
           s"""
-             |$checkDivideByZero
+             |if ($n == 0)
+             |  throw QueryExecutionErrors.divideByZeroError();
              |${ev.value} = $math.roundToInt($m / (double)$n, java.math.RoundingMode.HALF_UP);
-        """.stripMargin)
+           """.stripMargin)
     }
   }
 
@@ -710,8 +694,7 @@ case class DivideYMInterval(
 // Divide a day-time interval by a numeric
 case class DivideDTInterval(
     interval: Expression,
-    num: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
+    num: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide
     with NullIntolerant with Serializable {
   override def left: Expression = interval

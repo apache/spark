@@ -236,8 +236,8 @@ select interval '2' year / 0
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-/ by zero
+org.apache.spark.SparkArithmeticException
+divide by zero
 
 
 -- !query
