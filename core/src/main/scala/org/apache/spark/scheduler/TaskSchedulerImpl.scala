@@ -839,6 +839,10 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
+  def shufflePushCompleted(shuffleId: Int, mapIndex: Int): Unit = {
+    dagScheduler.shufflePushCompleted(shuffleId, mapIndex)
+  }
+
   /**
    * Update metrics for in-progress tasks and executor metrics, and let the master know that the
    * BlockManager is still alive. Return true if the driver knows about the given block manager.

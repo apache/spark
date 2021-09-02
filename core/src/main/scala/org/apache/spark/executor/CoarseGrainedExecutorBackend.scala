@@ -106,6 +106,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
+      SparkEnv.driverRpcEndpoint = Some(ref)
       ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls,
         extractAttributes, _resources, resourceProfile.id))
     }(ThreadUtils.sameThread).onComplete {

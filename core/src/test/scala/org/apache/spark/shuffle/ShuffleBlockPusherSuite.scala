@@ -37,6 +37,8 @@ import org.apache.spark.network.server.BlockPushNonFatalFailure
 import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode
 import org.apache.spark.network.shuffle.{BlockPushingListener, BlockStoreClient}
 import org.apache.spark.network.util.TransportConf
+import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.ShufflePushCompletion
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.ShuffleBlockPusher.PushRequest
 import org.apache.spark.storage._
@@ -46,6 +48,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
   @Mock(answer = RETURNS_SMART_NULLS) private var blockManager: BlockManager = _
   @Mock(answer = RETURNS_SMART_NULLS) private var dependency: ShuffleDependency[Int, Int, Int] = _
   @Mock(answer = RETURNS_SMART_NULLS) private var shuffleClient: BlockStoreClient = _
+  @Mock(answer = RETURNS_SMART_NULLS) private var driverRpcEndpoint: RpcEndpointRef = _
 
   private var conf: SparkConf = _
   private var pushedBlocks = new ArrayBuffer[String]
@@ -54,6 +57,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     super.beforeEach()
     conf = new SparkConf(loadDefaults = false)
     MockitoAnnotations.openMocks(this).close()
+    when(dependency.shuffleId).thenReturn(0)
     when(dependency.partitioner).thenReturn(new HashPartitioner(8))
     when(dependency.serializer).thenReturn(new JavaSerializer(conf))
     when(dependency.getMergerLocs).thenReturn(Seq(BlockManagerId("test-client", "test-client", 1)))
@@ -62,6 +66,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     when(mockEnv.conf).thenReturn(conf)
     when(mockEnv.blockManager).thenReturn(blockManager)
     SparkEnv.set(mockEnv)
+    SparkEnv.driverRpcEndpoint = Some(driverRpcEndpoint)
     when(blockManager.blockStoreClient).thenReturn(shuffleClient)
   }
 
@@ -91,6 +96,13 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     })
   }
 
+  private def verifyBlockPushCompleted(
+      blockPusher: ShuffleBlockPusher): Unit = {
+    verify(driverRpcEndpoint, times(1))
+      .send(ShufflePushCompletion(dependency.shuffleId, 0))
+    assert(blockPusher.isPushCompletionNotified)
+  }
+
   test("A batch of blocks is limited by maxBlocksBatchSize") {
     conf.set("spark.shuffle.push.maxBlockBatchSize", "1m")
     conf.set("spark.shuffle.push.maxBlockSizeToPush", "2048k")
@@ -101,6 +113,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
       mock(classOf[File]), Array(2, 2, 2, largeBlockSize, largeBlockSize), mergerLocs,
       mock(classOf[TransportConf]))
     assert(pushRequests.length == 3)
+    verifyBlockPushCompleted(blockPusher)
     verifyPushRequests(pushRequests, Seq(6, largeBlockSize, largeBlockSize))
   }
 
@@ -112,6 +125,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
       mock(classOf[File]), Array(2, 2, 2, 1028, 1024), mergerLocs, mock(classOf[TransportConf]))
     assert(pushRequests.length == 2)
     verifyPushRequests(pushRequests, Seq(6, 1024))
+    verifyBlockPushCompleted(blockPusher)
   }
 
   test("Number of blocks in a push request are limited by maxBlocksInFlightPerAddress ") {
@@ -122,6 +136,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
       mock(classOf[File]), Array(2, 2, 2, 2, 2), mergerLocs, mock(classOf[TransportConf]))
     assert(pushRequests.length == 5)
     verifyPushRequests(pushRequests, Seq(2, 2, 2, 2, 2))
+    verifyBlockPushCompleted(blockPusher)
   }
 
   test("Basic block push") {
@@ -133,6 +148,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     verify(shuffleClient, times(1))
       .pushBlocks(any(), any(), any(), any(), any())
     assert(pushedBlocks.length == dependency.partitioner.numPartitions)
+    verifyBlockPushCompleted(blockPusher)
     ShuffleBlockPusher.stop()
   }
 
@@ -146,6 +162,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     verify(shuffleClient, times(1))
       .pushBlocks(any(), any(), any(), any(), any())
     assert(pushedBlocks.length == dependency.partitioner.numPartitions - 1)
+    verifyBlockPushCompleted(pusher)
     ShuffleBlockPusher.stop()
   }
 
@@ -159,6 +176,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     verify(shuffleClient, times(8))
       .pushBlocks(any(), any(), any(), any(), any())
     assert(pushedBlocks.length == dependency.partitioner.numPartitions)
+    verifyBlockPushCompleted(pusher)
     ShuffleBlockPusher.stop()
   }
 
@@ -199,6 +217,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     verify(shuffleClient, times(4))
       .pushBlocks(any(), any(), any(), any(), any())
     assert(pushedBlocks.length == 8)
+    verifyBlockPushCompleted(pusher)
     ShuffleBlockPusher.stop()
   }
 
@@ -213,6 +232,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     verify(shuffleClient, times(4))
       .pushBlocks(any(), any(), any(), any(), any())
     assert(pushedBlocks.length == dependency.partitioner.numPartitions)
+    verifyBlockPushCompleted(pusher)
     ShuffleBlockPusher.stop()
   }
 
@@ -279,6 +299,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     verify(shuffleClient, times(8))
       .pushBlocks(any(), any(), any(), any(), any())
     assert(pushedBlocks.length == 7)
+    verifyBlockPushCompleted(pusher)
   }
 
   test("More blocks are not pushed when a block push fails with too late " +
@@ -308,6 +329,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     verify(shuffleClient, times(1))
       .pushBlocks(any(), any(), any(), any(), any())
     assert(pushedBlocks.isEmpty)
+    verifyBlockPushCompleted(pusher)
   }
 
   test("Connect exceptions remove all the push requests for that host") {
@@ -333,6 +355,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     // 2 blocks for each merger locations
     assert(pushedBlocks.length == 4)
     assert(pusher.unreachableBlockMgrs.size == 2)
+    verifyBlockPushCompleted(pusher)
   }
 
   test("SPARK-36255: FileNotFoundException stops the push") {

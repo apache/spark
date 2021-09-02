@@ -111,3 +111,6 @@ private[scheduler] case class RegisterMergeStatuses(
 
 private[scheduler] case class ShuffleMergeFinalized(stage: ShuffleMapStage)
   extends DAGSchedulerEvent
+
+private[scheduler] case class ShufflePushCompleted(shuffleId: Int, mapIndex: Int)
+  extends DAGSchedulerEvent

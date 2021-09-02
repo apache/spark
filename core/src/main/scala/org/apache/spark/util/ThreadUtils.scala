@@ -171,8 +171,16 @@ private[spark] object ThreadUtils {
    * Wrapper over ScheduledThreadPoolExecutor.
    */
   def newDaemonSingleThreadScheduledExecutor(threadName: String): ScheduledExecutorService = {
+    newDaemonFixedThreadScheduledExecutor(1, threadName)
+  }
+
+  /**
+   * Wrapper over ScheduledThreadPoolExecutor with multiple threads.
+   */
+  def newDaemonFixedThreadScheduledExecutor(
+      nThreads: Int, threadName: String): ScheduledExecutorService = {
     val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
-    val executor = new ScheduledThreadPoolExecutor(1, threadFactory)
+    val executor = new ScheduledThreadPoolExecutor(nThreads, threadFactory)
     // By default, a cancelled task is not automatically removed from the work queue until its delay
     // elapses. We have to enable it manually.
     executor.setRemoveOnCancelPolicy(true)

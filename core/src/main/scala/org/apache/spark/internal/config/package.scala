@@ -2193,6 +2193,29 @@ package object config {
       // with small MB sized chunk of data.
       .createWithDefaultString("3m")
 
+  private[spark] val PUSH_BASED_SHUFFLE_MERGE_FINALIZE_THREADS =
+    ConfigBuilder("spark.shuffle.push.merge.finalizeThreads")
+      .doc("Specify the number of threads used by DAGScheduler to finalize shuffle merge. " +
+        "Since it could potentially take seconds for a large shuffle to finalize, having " +
+        "multiple threads helps DAGScheduler to handle multiple concurrent shuffle merge " +
+        "finalize requests when push-based shuffle is enabled.")
+      .intConf
+      .createWithDefault(3)
+
+  private[spark] val PUSH_BASED_SHUFFLE_SIZE_MIN_SHUFFLE_SIZE_TO_WAIT =
+    ConfigBuilder("spark.shuffle.push.minShuffleSizeToWait")
+      .doc("The min size of total shuffle size for DAGScheduler to actually wait for merge " +
+        "finalization when push based shuffle is enabled.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("500m")
+
+  private[spark] val PUSH_BASED_SHUFFLE_MIN_PUSH_RATIO =
+    ConfigBuilder("spark.shuffle.push.minPushRatio")
+      .doc("The min percentage of map tasks that have completed pushing their shuffle output " +
+        "for DAGScheduler to start merge finalization.")
+      .doubleConf
+      .createWithDefault(1.0)
+
   private[spark] val JAR_IVY_REPO_PATH =
     ConfigBuilder("spark.jars.ivy")
       .doc("Path to specify the Ivy user directory, used for the local Ivy cache and " +
