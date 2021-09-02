@@ -372,9 +372,9 @@ class SparkConversionMixin(object):
                                 copied = True
                             pdf[field.name] = s
             else:
+                should_localize = not self._is_timestamp_ntz_preferred()
                 for column, series in pdf.iteritems():
                     s = series
-                    should_localize = not self._is_timestamp_ntz_preferred()
                     if should_localize and is_datetime64tz_dtype(s.dtype) and s.dt.tz is not None:
                         s = _check_series_convert_timestamps_tz_local(series, timezone)
                     if s is not series:
