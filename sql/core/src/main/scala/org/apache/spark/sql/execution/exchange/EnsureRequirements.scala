@@ -38,8 +38,13 @@ import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoin
  *                               but can be false in AQE when AQE optimization may change the plan
  *                               output partitioning and need to retain the user-specified
  *                               repartition shuffles in the plan.
+ * @param requiredDistribution The root required distribution we should ensure. This value is used
+ *                             in AQE in case we change final stage output partitioning.
  */
-case class EnsureRequirements(optimizeOutRepartition: Boolean = true) extends Rule[SparkPlan] {
+case class EnsureRequirements(
+    optimizeOutRepartition: Boolean = true,
+    requiredDistribution: Option[Distribution] = None)
+  extends Rule[SparkPlan] {
 
   private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
     val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution
@@ -254,25 +259,40 @@ case class EnsureRequirements(optimizeOutRepartition: Boolean = true) extends Ru
     }
   }
 
-  def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
-    case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, shuffleOrigin)
+  def apply(plan: SparkPlan): SparkPlan = {
+    val newPlan = plan.transformUp {
+      case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, shuffleOrigin)
         if optimizeOutRepartition &&
           (shuffleOrigin == REPARTITION_BY_COL || shuffleOrigin == REPARTITION_BY_NUM) =>
-      def hasSemanticEqualPartitioning(partitioning: Partitioning): Boolean = {
-        partitioning match {
-          case lower: HashPartitioning if upper.semanticEquals(lower) => true
-          case lower: PartitioningCollection =>
-            lower.partitionings.exists(hasSemanticEqualPartitioning)
-          case _ => false
+        def hasSemanticEqualPartitioning(partitioning: Partitioning): Boolean = {
+          partitioning match {
+            case lower: HashPartitioning if upper.semanticEquals(lower) => true
+            case lower: PartitioningCollection =>
+              lower.partitionings.exists(hasSemanticEqualPartitioning)
+            case _ => false
+          }
         }
-      }
-      if (hasSemanticEqualPartitioning(child.outputPartitioning)) {
-        child
-      } else {
-        operator
-      }
+        if (hasSemanticEqualPartitioning(child.outputPartitioning)) {
+          child
+        } else {
+          operator
+        }
 
-    case operator: SparkPlan =>
-      ensureDistributionAndOrdering(reorderJoinPredicates(operator))
+      case operator: SparkPlan =>
+        ensureDistributionAndOrdering(reorderJoinPredicates(operator))
+    }
+
+    requiredDistribution match {
+      case Some(d) if !newPlan.outputPartitioning.satisfies(d) =>
+        val numPartitions = d.requiredNumPartitions.getOrElse(conf.numShufflePartitions)
+        val shuffleOrigin = if (d.requiredNumPartitions.isDefined) {
+          REPARTITION_BY_NUM
+        } else {
+          REPARTITION_BY_COL
+        }
+        ShuffleExchangeExec(d.createPartitioning(numPartitions), newPlan, shuffleOrigin)
+
+      case _ => newPlan
+    }
   }
 }

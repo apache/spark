@@ -105,7 +105,7 @@ case class AdaptiveSparkPlanExec(
       Seq(OptimizeSkewedJoin,
         // Add the EnsureRequirements rule here since OptimizeSkewedJoin will change
         // output partitioning, make sure we have right distribution.
-        EnsureRequirements(optimizeOutRepartition = requiredDistribution.isDefined))
+        EnsureRequirements(requiredDistribution.isDefined, requiredDistribution))
     } else {
       Nil
     }
@@ -116,7 +116,7 @@ case class AdaptiveSparkPlanExec(
       // the final plan, but we do need to respect the user-specified repartition. Here we ask
       // `EnsureRequirements` to not optimize out the user-specified repartition-by-col to work
       // around this case.
-      EnsureRequirements(optimizeOutRepartition = requiredDistribution.isDefined),
+      EnsureRequirements(requiredDistribution.isDefined, requiredDistribution),
       RemoveRedundantSorts,
       DisableUnnecessaryBucketedScan
     ) ++ optimizeSkewedJoinRules ++ context.session.sessionState.queryStagePrepRules
@@ -181,13 +181,10 @@ case class AdaptiveSparkPlanExec(
   def prepareQueryStages(
       plan: SparkPlan,
       optimizeSkewedJoin: Boolean): SparkPlan = {
-    AQEUtils.ensureRequiredDistribution(
-      applyPhysicalRules(
-        plan,
-        preprocessingRules ++ queryStagePreparationRules(optimizeSkewedJoin),
-        Some((planChangeLogger, "AQE Replanning"))),
-      requiredDistribution,
-      conf)
+    applyPhysicalRules(
+      plan,
+      preprocessingRules ++ queryStagePreparationRules(optimizeSkewedJoin),
+      Some((planChangeLogger, "AQE Replanning")))
   }
 
   @transient private val costEvaluator =
