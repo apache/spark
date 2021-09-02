@@ -68,7 +68,7 @@ abstract class FileScanBuilder(
     StructType(fields)
   }
 
-  override def pushCatalystFilters(filters: Seq[Expression]): (Array[Filter], Seq[Expression]) = {
+  override def pushFilters(filters: Seq[Expression]): Seq[Expression] = {
     val partitionColNames =
       partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
     val partitionCol = filters.flatMap { expr =>
@@ -89,8 +89,10 @@ abstract class FileScanBuilder(
       }
     }
     pushedDataFilters = pushDataFilters(translatedFilters.toArray)
-    (pushedDataFilters, dataFilters)
+    dataFilters
   }
+
+  override def pushedFilters: Array[Filter] = pushedDataFilters
 
   protected def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = Array.empty[Filter]
 
