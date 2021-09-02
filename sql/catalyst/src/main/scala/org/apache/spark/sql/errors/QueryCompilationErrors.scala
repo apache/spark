@@ -2336,8 +2336,9 @@ object QueryCompilationErrors {
     new AnalysisException(
       s"""
       |Cannot modify the value of a Spark config: $key,
-      |please set spark.sql.legacy.setCommandRejectsSparkCoreConfs as 'false' in
-      |order to make change value of Spark config: $key
+      |please refer to the Spark migration documentation
+      |'https://spark.apache.org/docs/latest/sql-migration-guide.html#ddl-statements'
+      |for further details to modify the value of a Spark config.
       """.stripMargin.replaceAll("\n", " "))
   }
 
