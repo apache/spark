@@ -670,15 +670,10 @@ sparkCheckInstall <- function(sparkHome, master, deployMode) {
             "Will you download and install (or reuse if it exists) Spark package ",
             "under the cache [", sparkCachePath(), "]? (y/n): ")
 
-          # Dispatch on R shell in case readLines does not work in RStudio
-          # See also https://stackoverflow.com/questions/30191232/use-stdin-from-within-r-studio
-          if (interactive()) {
-            answer <- readline(prompt = msg)
-          } else {
-            cat(msg)
-            answer <- readLines("stdin", n = 1)
-          }
-          while (answer != "y" && answer != "n") {
+          answer <- NA
+          while (is.na(answer) || (answer != "y" && answer != "n")) {
+            # Dispatch on R shell in case readLines does not work in RStudio
+            # See https://stackoverflow.com/questions/30191232/use-stdin-from-within-r-studio
             if (interactive()) {
               answer <- readline(prompt = msg)
             } else {
@@ -689,9 +684,9 @@ sparkCheckInstall <- function(sparkHome, master, deployMode) {
           if (answer == "n") {
             stop(paste0(
              "Please make sure Spark package is installed in this machine.\n",
-             "- If there is one, set the path in sparkHome parameter or ",
+             "  - If there is one, set the path in sparkHome parameter or ",
              "environment variable SPARK_HOME.\n",
-             "- If not, you may run install.spark function to do the job. "))
+             "  - If not, you may run install.spark function to do the job."))
           }
         }
         packageLocalDir <- install.spark()
