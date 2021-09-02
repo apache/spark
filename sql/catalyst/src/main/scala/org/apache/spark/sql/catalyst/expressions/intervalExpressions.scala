@@ -656,8 +656,8 @@ case class DivideYMInterval(
            |  throw QueryExecutionErrors.overflowInIntegralDivideError();
            |""".stripMargin
       nullSafeCodeGen(ctx, ev, (m, n) =>
-        // Similarly to non-codegen code. The result of `divide(Int, Long, ...)` must fit
-        // to `Int`. Casting to `Int` is safe here.
+        // Similarly to non-codegen code. The result of `divide(Int, Long, ...)` must fit to `Int`.
+        // Casting to `Int` is safe here.
         s"""
            |$checkDivideByZero
            |$checkIntegralDivideOverflow
