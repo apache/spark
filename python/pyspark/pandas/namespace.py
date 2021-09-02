@@ -2762,8 +2762,8 @@ def to_numeric(arg, errors="coerce"):
 
     Notes
     -----
-    Unlike pandas, the default value for `errors` is 'coerce', since 'raise' is not supported yet
-    when the `arg` is Series.
+    Unlike pandas, the default value for `errors` is 'coerce', since 'raise' and 'ignore'
+    are not supported yet when the `arg` is Series.
 
     Returns
     -------
@@ -2825,13 +2825,11 @@ def to_numeric(arg, errors="coerce"):
     """
     if isinstance(arg, Series):
         if errors == "coerce":
-            return arg._with_new_scol(arg.spark.column.cast("int"))
-        elif errors == "ignore":
-            scol = arg.spark.column
-            casted_scol = scol.cast("int")
-            return arg._with_new_scol(F.when(casted_scol.isNull(), scol).otherwise(casted_scol))
+            return arg._with_new_scol(arg.spark.column.cast("float"))
         elif errors == "raise":
             raise NotImplementedError("'raise' is not implemented yet, when the `arg` is Series.")
+        elif errors == "ignore":
+            raise NotImplementedError("'ignore' is not implemented yet, when the `arg` is Series.")
         else:
             raise ValueError("invalid error value specified")
     else:

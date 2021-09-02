@@ -340,22 +340,28 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
         pser = pd.Series(["1", "2", None, "4", "hello"])
         psser = ps.from_pandas(pser)
 
-        self.assert_eq(pd.to_numeric(pser, errors="coerce"), ps.to_numeric(psser, errors="coerce"))
-        self.assert_eq(pd.to_numeric(pser, errors="ignore"), ps.to_numeric(psser, errors="ignore"))
+        self.assert_eq(
+            pd.to_numeric(pser, errors="coerce"), ps.to_numeric(psser, errors="coerce"), almost=True
+        )
 
         data = ["1", "2", None, "4", "hello"]
         self.assert_eq(pd.to_numeric(data, errors="coerce"), ps.to_numeric(data, errors="coerce"))
         self.assert_eq(pd.to_numeric(data, errors="ignore"), ps.to_numeric(data, errors="ignore"))
 
         self.assertRaisesRegex(
+            ValueError,
+            'Unable to parse string "hello" at position 4',
+            lambda: ps.to_numeric(data, errors="raise"),
+        )
+        self.assertRaisesRegex(
             NotImplementedError,
             "'raise' is not implemented yet, when the `arg` is Series.",
             lambda: ps.to_numeric(psser, errors="raise"),
         )
         self.assertRaisesRegex(
-            ValueError,
-            'Unable to parse string "hello" at position 4',
-            lambda: ps.to_numeric(data, errors="raise"),
+            NotImplementedError,
+            "'ignore' is not implemented yet, when the `arg` is Series.",
+            lambda: ps.to_numeric(psser, errors="ignore"),
         )
         self.assertRaisesRegex(
             ValueError,
