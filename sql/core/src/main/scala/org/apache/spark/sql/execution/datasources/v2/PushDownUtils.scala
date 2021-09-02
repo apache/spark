@@ -19,14 +19,13 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, NamedExpression, PredicateHelper, SchemaPruning}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils, PushableColumnWithoutNestedColumn}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PushableColumnWithoutNestedColumn}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
@@ -71,11 +70,8 @@ object PushDownUtils extends PredicateHelper {
         (r.pushedFilters(), (untranslatableExprs ++ postScanFilters).toSeq)
 
       case f: FileScanBuilder =>
-        val (partitionFilters, dataFilters) =
-          DataSourceUtils.getPartitionKeyFiltersAndDataFilters(
-            f.getSparkSession, scanBuilderHolder.relation, f.readPartitionSchema(), filters)
-        f.pushCatalystFilters(ExpressionSet(partitionFilters).toSeq, dataFilters)
-        (Nil, dataFilters)
+        val (pushedFilters, postScanFilters) = f.pushCatalystFilters(filters)
+        (pushedFilters, postScanFilters)
       case _ => (Nil, filters)
     }
   }

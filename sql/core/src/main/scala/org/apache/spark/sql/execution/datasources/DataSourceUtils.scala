@@ -26,10 +26,9 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.SparkUpgradeException
-import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96, SPARK_VERSION_METADATA_KEY, SparkSession}
+import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
-import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, ExpressionSet, PredicateHelper}
-import org.apache.spark.sql.catalyst.plans.logical.LeafNode
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
@@ -245,20 +244,15 @@ object DataSourceUtils extends PredicateHelper {
     }
   }
 
-  def getPartitionKeyFiltersAndDataFilters(
-      sparkSession: SparkSession,
-      relation: LeafNode,
-      partitionSchema: StructType,
-      normalizedFilters: Seq[Expression]): (ExpressionSet, Seq[Expression]) = {
-    val partitionColumns =
-      relation.resolve(partitionSchema, sparkSession.sessionState.analyzer.resolver)
+  def getPartitionFiltersAndDataFilters(
+      partitionColumns: Seq[Attribute],
+      normalizedFilters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
     val partitionSet = AttributeSet(partitionColumns)
     val (partitionFilters, dataFilters) = normalizedFilters.partition(f =>
       f.references.subsetOf(partitionSet)
     )
     val extraPartitionFilter =
       dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
-
-    (ExpressionSet(partitionFilters ++ extraPartitionFilter), dataFilters)
+    (ExpressionSet(partitionFilters ++ extraPartitionFilter).toSeq, dataFilters)
   }
 }

@@ -17,16 +17,17 @@
 package org.apache.spark.sql.internal.connector
 
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.sources.Filter
 
 /**
- * A mix-in interface for {@link FileScanBuilder}. This can be used to push down partitionFilters
- * and dataFilters to FileIndex in the format of catalyst Expression.
+ * A mix-in interface for {@link FileScanBuilder}. This can be used to push down filters to
+ * FileIndex in the format of catalyst Expression.
  */
 trait SupportsPushDownCatalystFilters {
   /**
-   * Pushes down partitionFilters and dataFilters to FileIndex in the format of catalyst
-   * Expression. These catalyst Expression filters are used for partition pruning. The dataFilters
-   * are also translated into data source filters and used for selecting records.
+   * Pushes down filters to FileIndex in the format of catalyst Expression. The filters will be
+   * separated into partition filters and data filters. The data filters that are pushed to the
+   * data source and the date filters that need to be evaluated after scanning are returned.
    */
-  def pushCatalystFilters(partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Unit
+  def pushCatalystFilters(partitionFilters: Seq[Expression]): (Array[Filter], Seq[Expression])
 }

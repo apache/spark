@@ -66,12 +66,13 @@ private[sql] object PruneFileSourcePartitions
       val normalizedFilters = DataSourceStrategy.normalizeExprs(
         filters.filter(f => f.deterministic && !SubqueryExpression.hasSubquery(f)),
         logicalRelation.output)
-      val (partitionKeyFilters, _) = DataSourceUtils.getPartitionKeyFiltersAndDataFilters(
-        fsRelation.sparkSession, logicalRelation, partitionSchema, normalizedFilters
-        )
+      val partitionColumns = logicalRelation
+        .resolve(partitionSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
+      val (partitionKeyFilters, _) = DataSourceUtils
+        .getPartitionFiltersAndDataFilters(partitionColumns, normalizedFilters)
 
       if (partitionKeyFilters.nonEmpty) {
-        val prunedFileIndex = catalogFileIndex.filterPartitions(partitionKeyFilters.toSeq)
+        val prunedFileIndex = catalogFileIndex.filterPartitions(partitionKeyFilters)
         val prunedFsRelation =
           fsRelation.copy(location = prunedFileIndex)(fsRelation.sparkSession)
         // Change table stats based on the sizeInBytes of pruned files

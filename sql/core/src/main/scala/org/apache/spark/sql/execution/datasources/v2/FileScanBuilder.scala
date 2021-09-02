@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable
 
 import org.apache.spark.sql.{sources, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PartitioningAwareFileIndex, PartitioningUtils}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils, PartitioningAwareFileIndex, PartitioningUtils}
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
@@ -68,11 +68,17 @@ abstract class FileScanBuilder(
     StructType(fields)
   }
 
-  // Note: The partitionFilters and dataFilters need to be pushed to FileIndex in the format of
-  // Expression because partition pruning uses the Expression Filters, not sources.Filters.
-  override def pushCatalystFilters(
-      partitionFilters: Seq[Expression],
-      dataFilters: Seq[Expression]): Unit = {
+  override def pushCatalystFilters(filters: Seq[Expression]): (Array[Filter], Seq[Expression]) = {
+    val partitionColNames =
+      partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
+    val partitionCol = filters.flatMap { expr =>
+      expr.collect {
+        case attr: AttributeReference if partitionColNames.contains(attr.name) =>
+          attr
+      }
+    }
+    val (partitionFilters, dataFilters) =
+      DataSourceUtils.getPartitionFiltersAndDataFilters(partitionCol, filters)
     this.partitionFilters = partitionFilters
     this.dataFilters = dataFilters
     val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
@@ -82,13 +88,11 @@ abstract class FileScanBuilder(
         translatedFilters += translated.get
       }
     }
-    this.pushedDataFilters = pushDataFilters(translatedFilters.toArray)
+    pushedDataFilters = pushDataFilters(translatedFilters.toArray)
+    (pushedDataFilters, dataFilters)
   }
 
   protected def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = Array.empty[Filter]
-
-
-  def getSparkSession: SparkSession = sparkSession
 
   private def createRequiredNameSet(): Set[String] =
     requiredSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
