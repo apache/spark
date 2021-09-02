@@ -116,7 +116,7 @@ case class AdaptiveSparkPlanExec(
       // the final plan, but we do need to respect the user-specified repartition. Here we ask
       // `EnsureRequirements` to not optimize out the user-specified repartition-by-col to work
       // around this case.
-      EnsureRequirements(requiredDistribution.isDefined, requiredDistribution),
+      EnsureRequirements(requiredDistribution.isDefined),
       RemoveRedundantSorts,
       DisableUnnecessaryBucketedScan
     ) ++ optimizeSkewedJoinRules ++ context.session.sessionState.queryStagePrepRules
