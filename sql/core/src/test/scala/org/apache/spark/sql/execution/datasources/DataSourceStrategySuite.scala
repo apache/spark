@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.sql.{sources, QueryTest, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.execution.FileSourceScanExec
-import org.apache.spark.sql.sources
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
-class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
+class DataSourceStrategySuite extends QueryTest with SharedSparkSession {
   val attrInts = Seq(
     'cint.int,
     Symbol("c.int").int,
@@ -319,11 +318,12 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
     withTable(t) {
       import testImplicits._
       Seq(Some(true), Some(false), None).toDF().write.saveAsTable(t)
-      val df = spark.table(t)
-      df.where("value").queryExecution.executedPlan.collectFirst {
+      val df = spark.table(t).where("value")
+      df.queryExecution.executedPlan.collectFirst {
         case f: FileSourceScanExec =>
           assert(f.metadata("PushedFilters") == "[IsNotNull(value), EqualTo(value,true)]")
       }
+      checkAnswer(df, Row(true))
     }
   }
 
