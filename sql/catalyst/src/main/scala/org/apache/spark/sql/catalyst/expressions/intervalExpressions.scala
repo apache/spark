@@ -630,9 +630,14 @@ case class DivideYMInterval(
 
   @transient
   private lazy val evalExactFunc: (Int, Any) => Any = if (failOnError) {
-    (months: Int, num) =>
-      if (num == 0) throw QueryExecutionErrors.divideByZeroError()
-      evalFunc(months, num)
+    right.dataType match {
+      case _: DecimalType => (months: Int, num) =>
+        if (num.asInstanceOf[Decimal].isZero) throw QueryExecutionErrors.divideByZeroError()
+        evalFunc(months, num)
+      case _ => (months: Int, num) =>
+        if (num == 0) throw QueryExecutionErrors.divideByZeroError()
+        evalFunc(months, num)
+    }
   } else {
     (months: Int, num) => evalFunc(months, num)
   }
