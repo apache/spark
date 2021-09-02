@@ -448,7 +448,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       }
 
       case p @ Project(projectList, _) =>
-        println(p)
         projectList.foreach(_.transformDownWithPruning(
           _.containsPattern(UNRESOLVED_WINDOW_EXPRESSION), ruleId) {
           case UnresolvedWindowExpression(_, windowSpec) =>
