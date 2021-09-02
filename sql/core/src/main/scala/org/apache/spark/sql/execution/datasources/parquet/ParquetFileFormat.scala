@@ -219,7 +219,7 @@ class ParquetFileFormat
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
     hadoopConf.setBoolean(
       SQLConf.PARQUET_ACCESS_BY_INDEX.key,
-      sparkSession.sessionState.conf.getConf(SQLConf.PARQUET_ACCESS_BY_INDEX))
+      sparkSession.sessionState.conf.parquetAccessByIndex)
 
     ParquetWriteSupport.setSchema(requiredSchema, hadoopConf)
 

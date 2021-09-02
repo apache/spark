@@ -3724,6 +3724,8 @@ class SQLConf extends Serializable with Logging {
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
+  def parquetAccessByIndex: Boolean = getConf(PARQUET_ACCESS_BY_INDEX)
+
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
