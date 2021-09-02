@@ -717,7 +717,7 @@ class BlockManagerMasterEndpoint(
       hostsToFilter: Set[String]): Seq[BlockManagerId] = {
     val blockManagerHosts = blockManagerIdByExecutor
       .filterNot(_._2.isDriver).values.map(_.host).toSet
-    val filteredBlockManagerHosts = blockManagerHosts.filterNot(hostsToFilter.contains(_))
+    val filteredBlockManagerHosts = blockManagerHosts.diff(hostsToFilter)
     val filteredMergersWithExecutors = filteredBlockManagerHosts.map(
       BlockManagerId(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER, _, externalShuffleServicePort))
     // Enough mergers are available as part of active executors list

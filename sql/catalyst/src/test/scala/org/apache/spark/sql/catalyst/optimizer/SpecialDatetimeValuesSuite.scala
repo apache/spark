@@ -91,9 +91,9 @@ class SpecialDatetimeValuesSuite extends PlanTest {
     testSpecialDatetimeValues { zoneId =>
       val expected = Set(
         LocalDateTime.of(1970, 1, 1, 0, 0),
-        LocalDateTime.now(),
-        LocalDateTime.now().`with`(LocalTime.MIDNIGHT).plusDays(1),
-        LocalDateTime.now().`with`(LocalTime.MIDNIGHT).minusDays(1)
+        LocalDateTime.now(zoneId),
+        LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT).plusDays(1),
+        LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT).minusDays(1)
       ).map(localDateTimeToMicros)
       testSpecialTs(TimestampNTZType, expected, zoneId)
     }

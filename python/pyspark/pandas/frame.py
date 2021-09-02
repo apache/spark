@@ -841,12 +841,6 @@ class DataFrame(Frame, Generic[T]):
     def __radd__(self, other: Any) -> "DataFrame":
         return self._map_series_op("radd", other)
 
-    def __div__(self, other: Any) -> "DataFrame":
-        return self._map_series_op("div", other)
-
-    def __rdiv__(self, other: Any) -> "DataFrame":
-        return self._map_series_op("rdiv", other)
-
     def __truediv__(self, other: Any) -> "DataFrame":
         return self._map_series_op("truediv", other)
 
@@ -3185,7 +3179,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
 
     def where(
-        self, cond: DataFrameOrSeries, other: Union[DataFrameOrSeries, Any] = np.nan
+        self,
+        cond: DataFrameOrSeries,
+        other: Union[DataFrameOrSeries, Any] = np.nan,
+        axis: Axis = None,
     ) -> "DataFrame":
         """
         Replace values where the condition is False.
@@ -3197,6 +3194,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             replace with corresponding value from other.
         other : scalar, DataFrame
             Entries where cond is False are replaced with corresponding value from other.
+        axis : int, default None
+            Can only be set to 0 at the moment for compatibility with pandas.
 
         Returns
         -------
@@ -3294,6 +3293,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> reset_option("compute.ops_on_diff_frames")
         """
         from pyspark.pandas.series import Series
+
+        axis = validate_axis(axis)
+        if axis != 0:
+            raise NotImplementedError('axis should be either 0 or "index" currently.')
 
         tmp_cond_col_name = "__tmp_cond_col_{}__".format
         tmp_other_col_name = "__tmp_other_col_{}__".format
@@ -7894,6 +7897,89 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
         return join_psdf.reset_index() if need_set_index else join_psdf
 
+    def combine_first(self, other: "DataFrame") -> "DataFrame":
+        """
+        Update null elements with value in the same location in `other`.
+
+        Combine two DataFrame objects by filling null values in one DataFrame
+        with non-null values from other DataFrame. The row and column indexes
+        of the resulting DataFrame will be the union of the two.
+
+        Parameters
+        ----------
+        other : DataFrame
+            Provided DataFrame to use to fill null values.
+
+        Returns
+        -------
+        DataFrame
+
+        Examples
+        --------
+        >>> ps.set_option("compute.ops_on_diff_frames", True)
+        >>> df1 = ps.DataFrame({'A': [None, 0], 'B': [None, 4]})
+        >>> df2 = ps.DataFrame({'A': [1, 1], 'B': [3, 3]})
+
+        >>> df1.combine_first(df2).sort_index()
+             A    B
+        0  1.0  3.0
+        1  0.0  4.0
+
+        Null values still persist if the location of that null value does not exist in other
+
+        >>> df1 = ps.DataFrame({'A': [None, 0], 'B': [4, None]})
+        >>> df2 = ps.DataFrame({'B': [3, 3], 'C': [1, 1]}, index=[1, 2])
+
+        >>> df1.combine_first(df2).sort_index()
+             A    B    C
+        0  NaN  4.0  NaN
+        1  0.0  3.0  1.0
+        2  NaN  3.0  1.0
+        >>> ps.reset_option("compute.ops_on_diff_frames")
+        """
+        if not isinstance(other, DataFrame):
+            raise TypeError("`combine_first` only allows `DataFrame` for parameter `other`")
+        if same_anchor(self, other):
+            combined = self
+            this = self
+            that = other
+        else:
+            combined = combine_frames(self, other)
+            this = combined["this"]
+            that = combined["that"]
+
+        intersect_column_labels = set(self._internal.column_labels).intersection(
+            set(other._internal.column_labels)
+        )
+
+        column_labels, data_spark_columns = [], []
+        for column_label in this._internal.column_labels:
+            this_scol = this._internal.spark_column_for(column_label)
+            if column_label in intersect_column_labels:
+                that_scol = that._internal.spark_column_for(column_label)
+                this_scol_name = this._internal.spark_column_name_for(column_label)
+                combined_scol = (
+                    F.when(this_scol.isNull(), that_scol).otherwise(this_scol).alias(this_scol_name)
+                )
+                data_spark_columns.append(combined_scol)
+            else:
+                data_spark_columns.append(this_scol)
+            column_labels.append(column_label)
+
+        for column_label in that._internal.column_labels:
+            if column_label not in intersect_column_labels:
+                that_scol = that._internal.spark_column_for(column_label)
+                data_spark_columns.append(that_scol)
+                column_labels.append(column_label)
+
+        internal = combined._internal.copy(
+            column_labels=column_labels,
+            data_spark_columns=data_spark_columns,
+            data_fields=None,  # TODO: dtype?
+            column_label_names=self._internal.column_label_names,
+        )
+        return DataFrame(internal)
+
     def append(
         self,
         other: "DataFrame",
@@ -8744,10 +8830,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 index = labels
             elif axis == 1:
                 columns = labels
-            else:
-                raise ValueError(
-                    "No axis named %s for object type %s." % (axis, type(axis).__name__)
-                )
 
         if index is not None and not is_list_like(index):
             raise TypeError(
@@ -9911,8 +9993,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                             col = midx_col
                         else:
                             col = col | midx_col
-                else:
-                    raise ValueError("Single or multi index must be specified.")
                 return DataFrame(self._internal.with_filter(col))
             else:
                 return self[items]
@@ -10098,11 +10178,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 )
             elif axis == 1:
                 columns_mapper_fn, _, _ = gen_mapper_fn(mapper)
-            else:
-                raise ValueError(
-                    "argument axis should be either the axis name "
-                    "(‘index’, ‘columns’) or number (0, 1)"
-                )
         else:
             if index:
                 index_mapper_fn, index_mapper_ret_dtype, index_mapper_ret_stype = gen_mapper_fn(

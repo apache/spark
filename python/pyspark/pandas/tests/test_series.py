@@ -2935,15 +2935,22 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psser.apply(udf)
 
     def test_combine_first(self):
-        pser = self.pser
-        psser = self.psser
-
-        self.assert_eq(pser.combine_first(pser), psser.combine_first(psser))
-
-        pdf = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+        pdf = pd.DataFrame(
+            {
+                "A": {"falcon": 330.0, "eagle": 160.0},
+                "B": {"falcon": 345.0, "eagle": 200.0, "duck": 30.0},
+            }
+        )
+        pser1, pser2 = pdf.A, pdf.B
         psdf = ps.from_pandas(pdf)
+        psser1, psser2 = psdf.A, psdf.B
 
-        self.assert_eq(pdf.A.combine_first(pdf.B), psdf.A.combine_first(psdf.B))
+        self.assert_eq(psser1.combine_first(psser2), pser1.combine_first(pser2))
+
+        psser1.name = pser1.name = ("X", "A")
+        psser2.name = pser2.name = ("Y", "B")
+
+        self.assert_eq(psser1.combine_first(psser2), pser1.combine_first(pser2))
 
 
 if __name__ == "__main__":
