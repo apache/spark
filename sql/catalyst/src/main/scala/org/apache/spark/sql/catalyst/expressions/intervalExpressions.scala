@@ -672,9 +672,15 @@ case class DivideYMInterval(
              |${ev.value} = ($javaType)$math.divide($m, $n, java.math.RoundingMode.HALF_UP);
         """.stripMargin)
       case _: DecimalType =>
+        val checkDecimalDivideByZero = if (failOnError) {
+          s"""
+             |if (${num.value}.isZero())
+             |  throw QueryExecutionErrors.divideByZeroError();
+         """.stripMargin
+        } else ""
         nullSafeCodeGen(ctx, ev, (m, n) =>
           s"""
-             |$checkDivideByZero
+             |$checkDecimalDivideByZero
              |${ev.value} = ((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()
              |  .setScale(0, java.math.RoundingMode.HALF_UP).intValueExact();
         """.stripMargin)
