@@ -42,9 +42,6 @@ case class ParquetScanBuilder(
     sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
   }
 
-  // Note: for Parquet, the actual filter push down happens in [[ParquetPartitionReaderFactory]].
-  // It requires the Parquet physical schema to determine whether a filter is convertible.
-  // All filters that can be converted to Parquet are pushed down.
   lazy val pushedParquetFilters = {
     val sqlConf = sparkSession.sessionState.conf
     val pushDownDate = sqlConf.parquetFilterPushDownDate
@@ -71,9 +68,12 @@ case class ParquetScanBuilder(
 
   override protected val supportsNestedSchemaPruning: Boolean = true
 
-  override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
-    dataFilters
-  }
+  override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = dataFilters
+
+  // Note: for Parquet, the actual filter push down happens in [[ParquetPartitionReaderFactory]].
+  // It requires the Parquet physical schema to determine whether a filter is convertible.
+  // All filters that can be converted to Parquet are pushed down.
+  override def pushedFilters(): Array[Filter] = pushedParquetFilters
 
   override def build(): Scan = {
     ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, readDataSchema(),

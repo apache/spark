@@ -86,6 +86,11 @@ abstract class FileScanBuilder(
 
   override def pushedFilters: Array[Filter] = pushedDataFilters
 
+  /*
+   * Push down data filters to the file source, so the data filters can be evaluated there to
+   * reduce the size of the data to be read. By default, data filters are not pushed down.
+   * File source needs to implement this method to push down data filters.
+   */
   protected def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = Array.empty[Filter]
 
   private def createRequiredNameSet(): Set[String] =

@@ -28,13 +28,14 @@ import org.apache.spark.sql.sources.Filter
 trait SupportsPushDownCatalystFilters {
 
   /**
-   * Pushes down catalyst Expression filters, and returns filters that need to be evaluated after
-   * scanning.
+   * Pushes down catalyst Expression filters (which will be separated into partition filters and
+   * data filters), and returns data filters that need to be evaluated after scanning.
    */
   def pushFilters(filters: Seq[Expression]): Seq[Expression]
 
   /**
-   * Returns the filters that are pushed to the data source via {@link #pushFilters(Filter[])}.
+   * Returns the data filters that are pushed to the data source via
+   * {@link #pushFilters(Expression[])}.
    */
   def pushedFilters: Array[Filter]
 }
