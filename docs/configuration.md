@@ -2985,6 +2985,21 @@ External users can query the static sql config values via `SparkSession.conf` or
 </tr>
 </table>
 
+### REPL
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+<tr>
+  <td><code>spark.repl.inactivityTimeout</code></td>
+  <td>0s</td>
+  <td>
+    Idle timeout for user input in spark-shell. The shell and the SparkContext will be closed if no new lines are
+    entered for the specified amount of time. The default value (0s) disables the feature.
+  </td>
+  <td>3.3.0</td>
+</tr>
+</table>
+
 ### Deploy
 
 <table class="table">

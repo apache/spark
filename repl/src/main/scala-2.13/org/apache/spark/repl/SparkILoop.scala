@@ -17,6 +17,8 @@
 
 package org.apache.spark.repl
 
+import org.apache.spark.repl.InactivityTimeout.{startInactivityTimer, stopInactivityTimer}
+
 import java.io.{BufferedReader, PrintWriter}
 
 // scalastyle:off println
@@ -104,6 +106,13 @@ class SparkILoop(in0: BufferedReader, out: PrintWriter)
     echo(welcomeMsg)
     echo("Type in expressions to have them evaluated.")
     echo("Type :help for more information.")
+    startInactivityTimer()
+  }
+
+  override def command(line: String): Result = {
+    stopInactivityTimer()
+    super.command(line)
+    startInactivityTimer()
   }
 
   /** Available commands */

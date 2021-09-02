@@ -44,7 +44,7 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
-  def runInterpreter(master: String, input: String): String = {
+  def runInterpreter(master: String, input: String, readLineDelay: Long = 0L): String = {
     val CONF_EXECUTOR_CLASSPATH = "spark.executor.extraClassPath"
 
     val oldExecutorClasspath = System.getProperty(CONF_EXECUTOR_CLASSPATH)
@@ -55,7 +55,14 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
     Main.sparkSession = null // causes recreation of SparkContext for each test.
     Main.conf.set("spark.master", master)
 
-    val in = new BufferedReader(new StringReader(input + "\n"))
+    class SlowBufferedReader(in: Reader, readLineDelay: Long) extends BufferedReader(in) {
+      override def readLine(): String = {
+        if (readLineDelay > 0) Thread.sleep(readLineDelay)
+        super.readLine()
+      }
+    }
+
+    val in = new SlowBufferedReader(new StringReader(input + "\n"), readLineDelay)
     val out = new StringWriter()
     Main.doMain(Array("-classpath", classpath), new SparkILoop(in, new PrintWriter(out)))
 
@@ -381,5 +388,42 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
     assertContains(errorLogMessage1, out)
     assertContains(infoLogMessage1, out)
     assertContains(infoLogMessage2, out)
+  }
+
+  def runInterpreterAndGetErrors(input: String, readLineDelay: Long): List[String] = {
+    import scala.collection.JavaConverters._
+    import org.apache.log4j.{FileAppender, SimpleLayout}
+
+    val tempFile = Files.createTempFile("repl-test", ".log")
+    tempFile.toFile.deleteOnExit()
+
+    val fileAppender = new FileAppender(new SimpleLayout, tempFile.toFile.getAbsolutePath)
+    fileAppender.setThreshold(Level.ERROR)
+    LogManager.getRootLogger.addAppender(fileAppender)
+    try {
+      runInterpreter("local", input, readLineDelay)
+    } finally {
+      LogManager.getRootLogger.removeAppender(fileAppender)
+    }
+    Files.readAllLines(tempFile).asScala.toList
+  }
+
+  test("inactivity timeout is triggered") {
+    InactivityTimeout.inactivityTimeoutMs = 500
+    InactivityTimeout.isTest = true
+    val logs = runInterpreterAndGetErrors("val a = 5 * 5", 2000)
+    assert(logs.exists(_.contains("Inactivity timeout")))
+  }
+
+  test("inactivity timeout does not interrupt long running command") {
+    InactivityTimeout.inactivityTimeoutMs = 500
+    InactivityTimeout.isTest = true
+    val logs = runInterpreterAndGetErrors(
+      s"""
+         |Thread.sleep(2000)
+         |val a = 5 * 5
+         |""".stripMargin,
+      10)
+    assert(!logs.exists(_.contains("Inactivity timeout")))
   }
 }

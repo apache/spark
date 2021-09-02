@@ -34,6 +34,8 @@ import scala.tools.nsc.interpreter.StdReplTags.tagOfIMain
 import scala.tools.nsc.util.stringFromStream
 import scala.util.Properties.{javaVersion, javaVmName, versionString}
 
+import org.apache.spark.repl.InactivityTimeout.{startInactivityTimer, stopInactivityTimer}
+
 /**
  *  A Spark-specific interactive shell.
  */
@@ -103,6 +105,13 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
     echo(welcomeMsg)
     echo("Type in expressions to have them evaluated.")
     echo("Type :help for more information.")
+    startInactivityTimer()
+  }
+
+  override def command(line: String): Result = {
+    stopInactivityTimer()
+    super.command(line)
+    startInactivityTimer()
   }
 
   /** Available commands */
