@@ -698,7 +698,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
     withLogAppender(hintAppender, level = Some(Level.WARN)) {
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "67108865") {
+        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "64MB") {
         df1.join(df2.repartition($"b1"), $"a1" =!= $"b1").collect()
       }
       val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
