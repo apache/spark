@@ -37,9 +37,9 @@ object PushDownUtils extends PredicateHelper {
    * @return pushed filter and post-scan filters.
    */
   def pushFilters(
-      scanBuilderHolder: ScanBuilderHolder,
+      scanBuilder: ScanBuilder,
       filters: Seq[Expression]): (Seq[sources.Filter], Seq[Expression]) = {
-    scanBuilderHolder.builder match {
+    scanBuilder match {
       case r: SupportsPushDownFilters =>
         // A map from translated data source leaf node filters to original catalyst filter
         // expressions. For a `And`/`Or` predicate, it is possible that the predicate is partially
