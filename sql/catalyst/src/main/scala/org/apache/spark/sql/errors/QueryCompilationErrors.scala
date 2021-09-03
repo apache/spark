@@ -2146,7 +2146,8 @@ object QueryCompilationErrors {
       strategy: String, timeString: String): Throwable = {
     new AnalysisException(
       s"The timestamp provided for the '$strategy' option is invalid. The expected format " +
-        s"is 'YYYY-MM-DDTHH:mm:ss', but the provided timestamp: $timeString")
+        "is 'YYYY-MM-DD'T'HH:mm:ss' or special values like 'today', 'tomorrow', but the provided " +
+        s"timestamp: $timeString")
   }
 
   def hostOptionNotSetError(): Throwable = {

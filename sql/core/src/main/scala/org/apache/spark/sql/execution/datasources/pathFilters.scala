@@ -89,10 +89,13 @@ object ModifiedDateFilter {
 
   def toThreshold(timeString: String, timeZoneId: String, strategy: String): Long = {
     val timeZone: TimeZone = DateTimeUtils.getTimeZone(timeZoneId)
+    val zoneId = timeZone.toZoneId
     val ts = UTF8String.fromString(timeString)
-    DateTimeUtils.stringToTimestamp(ts, timeZone.toZoneId).getOrElse {
-      throw QueryCompilationErrors.invalidTimestampProvidedForStrategyError(strategy, timeString)
-    }
+    DateTimeUtils.convertSpecialTimestamp(timeString, zoneId)
+      .orElse(DateTimeUtils.stringToTimestamp(ts, zoneId))
+      .getOrElse {
+        throw QueryCompilationErrors.invalidTimestampProvidedForStrategyError(strategy, timeString)
+      }
   }
 }
 

@@ -222,6 +222,19 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-36662: special timestamps support for path filters -  modifiedBefore/modifiedAfter") {
+    withTempPath { path =>
+      val dataDir = path.getCanonicalPath
+      Seq("foo").toDS().write.text(dataDir)
+      val df = spark.read.option("modifiedbefore", "yesterday").text(dataDir)
+      assert(df.isEmpty)
+
+      // Both glob pattern in option and path should be effective to filter files.
+      val df2 = spark.read.option("modifiedbefore", "tomorrow").text(dataDir)
+      checkAnswer(df2, Row("foo"))
+    }
+  }
+
   private def executeTest(
       dir: File,
       fileDates: Seq[LocalDateTime],
