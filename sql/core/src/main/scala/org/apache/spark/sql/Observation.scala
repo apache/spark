@@ -150,10 +150,12 @@ class Observation(name: String) {
 private[sql] case class ObservationListener(observation: Observation)
   extends QueryExecutionListener {
 
-  override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit =
+  override def onSuccess(
+      funcName: String, executionId: Long, qe: QueryExecution, durationNs: Long): Unit =
     observation.onFinish(qe)
 
-  override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit =
+  override def onFailure(
+      funcName: String, executionId: Long, qe: QueryExecution, exception: Exception): Unit =
     observation.onFinish(qe)
 
 }

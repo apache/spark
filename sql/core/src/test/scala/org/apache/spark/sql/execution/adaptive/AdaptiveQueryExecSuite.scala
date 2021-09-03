@@ -1450,7 +1450,8 @@ class AdaptiveQueryExecSuite
       val df = data.toDF("i", "j").repartition($"j")
       var noLocalread: Boolean = false
       val listener = new QueryExecutionListener {
-        override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        override def onSuccess(
+            funcName: String, executionId: Long, qe: QueryExecution, durationNs: Long): Unit = {
           qe.executedPlan match {
             case plan@(_: DataWritingCommandExec | _: V2TableWriteExec) =>
               assert(plan.asInstanceOf[UnaryExecNode].child.isInstanceOf[AdaptiveSparkPlanExec])
@@ -1460,8 +1461,8 @@ class AdaptiveQueryExecSuite
             case _ => // ignore other events
           }
         }
-        override def onFailure(funcName: String, qe: QueryExecution,
-          exception: Exception): Unit = {}
+        override def onFailure(
+            funcName: String, executionId: Long, qe: QueryExecution, exception: Exception): Unit = {}
       }
       spark.listenerManager.register(listener)
 

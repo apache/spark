@@ -41,6 +41,7 @@ trait QueryExecutionListener {
    * A callback function that will be called when a query executed successfully.
    *
    * @param funcName name of the action that triggered this query.
+   * @param executionId identifier of a query execution.
    * @param qe the QueryExecution object that carries detail information like logical plan,
    *           physical plan, etc.
    * @param durationNs the execution time for this query in nanoseconds.
@@ -48,12 +49,13 @@ trait QueryExecutionListener {
    * @note This can be invoked by multiple different threads.
    */
   @DeveloperApi
-  def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit
+  def onSuccess(funcName: String, executionId: Long, qe: QueryExecution, durationNs: Long): Unit
 
   /**
    * A callback function that will be called when a query execution failed.
    *
    * @param funcName the name of the action that triggered this query.
+   * @param executionId identifier of a query execution.
    * @param qe the QueryExecution object that carries detail information like logical plan,
    *           physical plan, etc.
    * @param exception the exception that failed this query. If `java.lang.Error` is thrown during
@@ -62,7 +64,7 @@ trait QueryExecutionListener {
    * @note This can be invoked by multiple different threads.
    */
   @DeveloperApi
-  def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit
+  def onFailure(funcName: String, executionId: Long, qe: QueryExecution, exception: Exception): Unit
 }
 
 
@@ -153,9 +155,9 @@ private[sql] class ExecutionListenerBus private(sessionUUID: String)
             case other: Throwable =>
               QueryExecutionErrors.failedToExecuteQueryError(other)
           }
-          listener.onFailure(funcName, event.qe, exception)
+          listener.onFailure(funcName, event.executionId, event.qe, exception)
         case _ =>
-          listener.onSuccess(funcName, event.qe, event.duration)
+          listener.onSuccess(funcName, event.executionId, event.qe, event.duration)
       }
     }
   }

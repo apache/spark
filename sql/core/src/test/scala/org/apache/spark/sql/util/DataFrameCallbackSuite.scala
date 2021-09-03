@@ -44,9 +44,11 @@ class DataFrameCallbackSuite extends QueryTest
     val metrics = ArrayBuffer.empty[(String, QueryExecution, Long)]
     val listener = new QueryExecutionListener {
       // Only test successful case here, so no need to implement `onFailure`
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(
+          funcName: String, executionId: Long, qe: QueryExecution, exception: Exception): Unit = {}
 
-      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+      override def onSuccess(
+          funcName: String, executionId: Long, qe: QueryExecution, duration: Long): Unit = {
         metrics += ((funcName, qe, duration))
       }
     }
@@ -73,12 +75,14 @@ class DataFrameCallbackSuite extends QueryTest
   testQuietly("execute callback functions when a DataFrame action failed") {
     val metrics = ArrayBuffer.empty[(String, QueryExecution, Exception)]
     val listener = new QueryExecutionListener {
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+      override def onFailure(
+          funcName: String, executionId: Long, qe: QueryExecution, exception: Exception): Unit = {
         metrics += ((funcName, qe, exception))
       }
 
       // Only test failed case here, so no need to implement `onSuccess`
-      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {}
+      override def onSuccess(
+          funcName: String, executionId: Long, qe: QueryExecution, duration: Long): Unit = {}
     }
     spark.listenerManager.register(listener)
 
@@ -100,9 +104,11 @@ class DataFrameCallbackSuite extends QueryTest
     val metrics = ArrayBuffer.empty[Long]
     val listener = new QueryExecutionListener {
       // Only test successful case here, so no need to implement `onFailure`
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(
+          funcName: String, executionId: Long, qe: QueryExecution, exception: Exception): Unit = {}
 
-      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+      override def onSuccess(
+          funcName: String, executionId: Long, qe: QueryExecution, duration: Long): Unit = {
         val metric = stripAQEPlan(qe.executedPlan) match {
           case w: WholeStageCodegenExec => w.child.longMetric("numOutputRows")
           case other => other.longMetric("numOutputRows")
@@ -140,9 +146,11 @@ class DataFrameCallbackSuite extends QueryTest
     val metrics = ArrayBuffer.empty[Long]
     val listener = new QueryExecutionListener {
       // Only test successful case here, so no need to implement `onFailure`
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(
+          funcName: String, executionId: Long, qe: QueryExecution, exception: Exception): Unit = {}
 
-      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+      override def onSuccess(
+          funcName: String, executionId: Long, qe: QueryExecution, duration: Long): Unit = {
         metrics += qe.executedPlan.longMetric("dataSize").value
         val bottomAgg = qe.executedPlan.children(0).children(0)
         metrics += bottomAgg.longMetric("dataSize").value
@@ -182,11 +190,13 @@ class DataFrameCallbackSuite extends QueryTest
     val commands = ArrayBuffer.empty[(String, LogicalPlan)]
     val exceptions = ArrayBuffer.empty[(String, Exception)]
     val listener = new QueryExecutionListener {
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+      override def onFailure(
+          funcName: String, executionId: Long, qe: QueryExecution, exception: Exception): Unit = {
         exceptions += funcName -> exception
       }
 
-      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+      override def onSuccess(
+          funcName: String, executionId: Long, qe: QueryExecution, duration: Long): Unit = {
         commands += funcName -> qe.logical
       }
     }
@@ -310,11 +320,13 @@ class DataFrameCallbackSuite extends QueryTest
   private def validateObservedMetrics(df: Dataset[JLong]): Unit = {
     val metricMaps = ArrayBuffer.empty[Map[String, Row]]
     val listener = new QueryExecutionListener {
-      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+      override def onSuccess(
+          funcName: String, executionId: Long, qe: QueryExecution, duration: Long): Unit = {
         metricMaps += qe.observedMetrics
       }
 
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+      override def onFailure(
+          funcName: String, executionId: Long, qe: QueryExecution, exception: Exception): Unit = {
         // No-op
       }
     }
@@ -348,10 +360,12 @@ class DataFrameCallbackSuite extends QueryTest
   testQuietly("SPARK-31144: QueryExecutionListener should receive `java.lang.Error`") {
     var e: Exception = null
     val listener = new QueryExecutionListener {
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+      override def onFailure(
+          funcName: String, executionId: Long, qe: QueryExecution, exception: Exception): Unit = {
         e = exception
       }
-      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {}
+      override def onSuccess(
+          funcName: String, executionId: Long, qe: QueryExecution, duration: Long): Unit = {}
     }
     spark.listenerManager.register(listener)
 

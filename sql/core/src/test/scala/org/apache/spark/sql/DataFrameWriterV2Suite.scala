@@ -67,11 +67,14 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     var plan: LogicalPlan = null
     val listener = new QueryExecutionListener {
-      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+      override def onSuccess(
+          funcName: String, executionId: Long, qe: QueryExecution, durationNs: Long): Unit = {
+
         plan = qe.analyzed
 
       }
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(
+          funcName: String, executionId: Long, qe: QueryExecution, exception: Exception): Unit = {}
     }
     spark.listenerManager.register(listener)
 

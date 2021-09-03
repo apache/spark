@@ -135,8 +135,10 @@ class SessionStateSuite extends SparkFunSuite {
   test("fork new session and inherit listener manager") {
     class CommandCollector extends QueryExecutionListener {
       val commands: ArrayBuffer[String] = ArrayBuffer.empty[String]
-      override def onFailure(funcName: String, qe: QueryExecution, ex: Exception) : Unit = {}
-      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+      override def onFailure(
+          funcName: String, executionId: Long, qe: QueryExecution, ex: Exception) : Unit = {}
+      override def onSuccess(
+          funcName: String, executionId: Long, qe: QueryExecution, duration: Long): Unit = {
         commands += funcName
       }
     }
