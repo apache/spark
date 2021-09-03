@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog.functions;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.DataType;
 
@@ -133,7 +134,10 @@ import org.apache.spark.sql.types.DataType;
  *
  * @param <R> the JVM type of result values, MUST be consistent with the {@link DataType}
  *          returned via {@link #resultType()}, according to the mapping above.
+ *
+ * @since 3.2.0
  */
+@Evolving
 public interface ScalarFunction<R> extends BoundFunction {
   String MAGIC_METHOD_NAME = "invoke";
 

@@ -2887,6 +2887,24 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psser.at_time("0:20").sort_index(),
         )
 
+    def test_combine_first(self):
+        pdf = pd.DataFrame(
+            {
+                "A": {"falcon": 330.0, "eagle": 160.0},
+                "B": {"falcon": 345.0, "eagle": 200.0, "duck": 30.0},
+            }
+        )
+        pser1, pser2 = pdf.A, pdf.B
+        psdf = ps.from_pandas(pdf)
+        psser1, psser2 = psdf.A, psdf.B
+
+        self.assert_eq(psser1.combine_first(psser2), pser1.combine_first(pser2))
+
+        psser1.name = pser1.name = ("X", "A")
+        psser2.name = pser2.name = ("Y", "B")
+
+        self.assert_eq(psser1.combine_first(psser2), pser1.combine_first(pser2))
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.test_series import *  # noqa: F401

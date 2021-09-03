@@ -139,6 +139,13 @@ private[spark] class BasicExecutorFeatureStep(
             .build())
           .build())
       } ++ {
+        Seq(new EnvVarBuilder()
+          .withName(ENV_EXECUTOR_POD_NAME)
+          .withValueFrom(new EnvVarSourceBuilder()
+            .withNewFieldRef("v1", "metadata.name")
+            .build())
+          .build())
+      } ++ {
         if (kubernetesConf.get(AUTH_SECRET_FILE_EXECUTOR).isEmpty) {
           Option(secMgr.getSecretKey()).map { authSecret =>
             new EnvVarBuilder()
@@ -260,16 +267,22 @@ private[spark] class BasicExecutorFeatureStep(
         .withUid(pod.getMetadata.getUid)
         .build()
     }
+
+    val policy = kubernetesConf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR) match {
+      case "statefulset" => "Always"
+      case _ => "Never"
+    }
     val executorPodBuilder = new PodBuilder(pod.pod)
       .editOrNewMetadata()
         .withName(name)
         .addToLabels(kubernetesConf.labels.asJava)
+        .addToLabels(SPARK_RESOURCE_PROFILE_ID_LABEL, resourceProfile.id.toString)
         .addToAnnotations(kubernetesConf.annotations.asJava)
         .addToOwnerReferences(ownerReference.toSeq: _*)
         .endMetadata()
       .editOrNewSpec()
         .withHostname(hostname)
-        .withRestartPolicy("Never")
+        .withRestartPolicy(policy)
         .addToNodeSelector(kubernetesConf.nodeSelector.asJava)
         .addToNodeSelector(kubernetesConf.executorNodeSelector.asJava)
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets: _*)
