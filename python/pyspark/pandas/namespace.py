@@ -2760,7 +2760,7 @@ def to_numeric(arg, errors="raise"):
         * If 'raise', then invalid parsing will raise an exception.
         * If 'ignore', then invalid parsing will return the input.
 
-        .. note:: 'ignore' doesn't work for pandas-on-Spark Series.
+        .. note:: 'ignore' doesn't work yet when `arg` is pandas-on-Spark Series.
 
     Returns
     -------
