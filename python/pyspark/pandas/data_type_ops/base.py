@@ -194,6 +194,19 @@ def _sanitize_list_like(operand: Any) -> None:
         raise TypeError("The operation can not be applied to %s." % type(operand).__name__)
 
 
+def _is_valid_for_logical_operator(right: Any) -> bool:
+    from pyspark.pandas.base import IndexOpsMixin
+
+    return (
+        isinstance(right, IndexOpsMixin)
+        and (
+            isinstance(right.spark.data_type, BooleanType)
+            or isinstance(right.spark.data_type, IntegralType)
+        )
+        or isinstance(right, (int, bool))
+    )
+
+
 class DataTypeOps(object, metaclass=ABCMeta):
     """The base class for binary operations of pandas-on-Spark objects (of different data types)."""
 
@@ -316,12 +329,19 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def __and__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("Bitwise and can not be applied to %s." % self.pretty_name)
 
+    def xor(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise TypeError("Bitwise xor can not be applied to %s." % self.pretty_name)
+
     def __or__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("Bitwise or can not be applied to %s." % self.pretty_name)
 
     def rand(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
         return left.__and__(right)
+
+    def rxor(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+        return left ^ right
 
     def ror(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
