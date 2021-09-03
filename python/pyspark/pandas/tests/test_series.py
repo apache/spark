@@ -2905,6 +2905,51 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assert_eq(psser1.combine_first(psser2), pser1.combine_first(pser2))
 
+    def test_cov(self):
+        pdf = pd.DataFrame(
+            {
+                "s1": ["a", "b", "c"],
+                "s2": [0.12528585, 0.26962463, 0.51111198],
+            },
+            index=[0, 1, 2],
+        )
+        psdf = ps.from_pandas(pdf)
+        with self.assertRaisesRegex(TypeError, "unsupported dtype: object"):
+            psdf["s1"].cov(psdf["s2"])
+
+        pdf = pd.DataFrame(
+            {
+                "s1": [0.90010907, 0.13484424, 0.62036035],
+                "s2": [0.12528585, 0.26962463, 0.51111198],
+            },
+            index=[0, 1, 2],
+        )
+        self._test_cov(pdf)
+
+        pdf = pd.DataFrame(
+            {
+                "s1": [0.90010907, np.nan, 0.13484424, 0.62036035],
+                "s2": [0.12528585, 0.81131178, 0.26962463, 0.51111198],
+            },
+            index=[0, 1, 2, 3],
+        )
+        self._test_cov(pdf)
+
+    def _test_cov(self, pdf):
+        psdf = ps.from_pandas(pdf)
+
+        pcov = pdf["s1"].cov(pdf["s2"])
+        pscov = psdf["s1"].cov(psdf["s2"])
+        self.assert_eq(pcov, pscov, almost=True)
+
+        pcov = pdf["s1"].cov(pdf["s2"], min_periods=3)
+        pscov = psdf["s1"].cov(psdf["s2"], min_periods=3)
+        self.assert_eq(pcov, pscov, almost=True)
+
+        pcov = pdf["s1"].cov(pdf["s2"], min_periods=4)
+        pscov = psdf["s1"].cov(psdf["s2"], min_periods=4)
+        self.assert_eq(pcov, pscov, almost=True)
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.test_series import *  # noqa: F401
