@@ -320,7 +320,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(e2.message.contains("Cannot modify the value of a static config"))
   }
 
-  test("Cannot modify the value of a Spark config") {
+  test("SPARK-36643: Cannot modify the value of a Spark config") {
     val e1 = intercept[AnalysisException](spark.conf.set("spark.driver.host", "myhost"))
     assert(e1.message.contains("Cannot modify the value of a Spark config"))
   }
