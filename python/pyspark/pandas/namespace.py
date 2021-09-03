@@ -218,6 +218,7 @@ def read_csv(
     quotechar: Optional[str] = None,
     escapechar: Optional[str] = None,
     comment: Optional[str] = None,
+    thousands: Optional[str] = None,
     **options: Any
 ) -> Union[DataFrame, Series]:
     """Read CSV (comma-separated) file into DataFrame or Series.
@@ -270,6 +271,11 @@ def read_csv(
         One-character string used to escape delimiter
     comment: str, optional
         Indicates the line should not be parsed.
+    thousands: str, optional
+        Thousands separator.
+
+        .. note:
+
     options : dict
         All other options passed directly into Spark's data source.
 
@@ -407,6 +413,18 @@ def read_csv(
         index_spark_column_names = []
         index_names = []
 
+    data_spark_columns = [scol_for(sdf, col) for col in column_labels.values()]
+    if thousands:
+        new_data_spark_columns = list()
+        for scol in data_spark_columns:
+            scol_replaced = F.regexp_replace(scol, ",", "")
+            cond = F.when(scol_replaced.isNull(), np.nan).otherwise(scol_replaced.cast("float"))
+            if len(sdf.select(cond).filter(cond.isNull()).head(1)) == 0:
+                new_data_spark_columns.append(cond)
+            else:
+                new_data_spark_columns.append(scol)
+        data_spark_columns = new_data_spark_columns
+
     psdf = DataFrame(
         InternalFrame(
             spark_frame=sdf,
@@ -415,7 +433,7 @@ def read_csv(
             column_labels=[
                 label if is_name_like_tuple(label) else (label,) for label in column_labels
             ],
-            data_spark_columns=[scol_for(sdf, col) for col in column_labels.values()],
+            data_spark_columns=data_spark_columns,
         )
     )  # type: DataFrame
 

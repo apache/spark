@@ -118,6 +118,17 @@ class CsvTest(PandasOnSparkTestCase, TestUtils):
             """
         )
 
+    @property
+    def csv_text_with_thousands_separator(self):
+        return normalize_text(
+            """
+            name;age;job;money
+            Jorge;30;Developer;1,000,000
+            Bob;32;Developer;-20,000,000
+            Bob;29;Developer;
+            """
+        )
+
     @contextmanager
     def csv_file(self, csv):
         with self.temp_file() as tmp:
@@ -293,6 +304,14 @@ class CsvTest(PandasOnSparkTestCase, TestUtils):
             self.assert_eq(
                 ps.read_csv(fn, escapechar="ABC", escape="E"),
                 pd.read_csv(fn, escapechar="E"),
+                almost=True,
+            )
+
+    def test_read_csv_with_thousands(self):
+        with self.csv_file(self.csv_text_with_thousands_separator) as fn:
+            self.assert_eq(
+                ps.read_csv(fn, sep=";", thousands=","),
+                pd.read_csv(fn, sep=";", thousands=","),
                 almost=True,
             )
 
