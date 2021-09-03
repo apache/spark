@@ -96,6 +96,7 @@
     <module>streaming</module>
     <module>sql/catalyst</module>
     <module>sql/core</module>
+    <module>sql/hive-shaded</module>
     <module>sql/hive</module>
     <module>assembly</module>
     <module>examples</module>
