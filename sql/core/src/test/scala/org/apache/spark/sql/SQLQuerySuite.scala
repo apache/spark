@@ -4223,55 +4223,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(sql("""SELECT from_json(r'{"a": "\\"}', 'a string')"""), Row(Row("\\")))
     checkAnswer(sql("""SELECT from_json(R'{"a": "\\"}', 'a string')"""), Row(Row("\\")))
   }
-
-  test("SPARK-36634: Support access and read parquet file by column index") {
-    withTempDir { dir =>
-      val loc = s"file:///$dir/t"
-
-      withTable("t1", "t2", "t3") {
-        sql(s"create table t1 (my_id int, my_name string) using parquet location '$loc'")
-        sql(s"create table t2 (myid int, myName string) using parquet location '$loc'")
-        sql("insert into t1 select 1, 'apache'")
-        sql("insert into t2 select 2, 'software'")
-        sql("insert into t2 select 3, 'foundation'")
-        sql(s"create table t3 (myid int, myname string, myage int) using parquet location '$loc'")
-
-        withSQLConf((SQLConf.PARQUET_ACCESS_BY_ORDINAL.key, "false")) {
-          checkAnswer(sql("select my_id from t1"), Seq(Row(1), Row(null), Row(null)))
-          checkAnswer(sql("select my_id, my_name from t1"),
-            Seq(Row(1, "apache"), Row(null, null), Row(null, null)))
-          assert(sql("select my_id, my_name from t1 where my_id=2").isEmpty)
-          checkAnswer(sql("select myid, myname, myage from t3"),
-            Seq(Row(2, "software", null),
-              Row(3, "foundation", null),
-              Row(null, null, null)))
-        }
-
-        sql("insert into t3 select 4, 'spark', 11")
-
-        Seq("true", "false").foreach { vectorized =>
-          withSQLConf((SQLConf.PARQUET_ACCESS_BY_ORDINAL.key, "true"),
-            (SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized)) {
-            checkAnswer(sql("select my_id from t1"), Seq(Row(1), Row(2), Row(3)))
-            val e1 = {
-              intercept[SparkException](sql("select my_name from t1").collect())
-            }
-            assert(e1.getCause.getMessage.contains("Parquet column cannot be converted in"))
-
-            checkAnswer(sql("select my_id, my_name from t1"),
-              Seq(Row(1, "apache"), Row(2, "software"), Row(3, "foundation")))
-            checkAnswer(sql("select my_id, my_name from t1 where my_id=2"), Row(2, "software"))
-
-            checkAnswer(sql("select myid, myname, myage from t3"),
-              Seq(Row(1, "apache", null),
-                Row(2, "software", null),
-                Row(3, "foundation", null),
-                Row(4, "spark", 11)))
-          }
-        }
-      }
-    }
-  }
 }
 
 case class Foo(bar: Option[String])

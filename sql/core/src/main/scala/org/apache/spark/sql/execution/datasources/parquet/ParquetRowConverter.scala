@@ -139,7 +139,8 @@ private[parquet] class ParquetRowConverter(
     convertTz: Option[ZoneId],
     datetimeRebaseMode: LegacyBehaviorPolicy.Value,
     int96RebaseMode: LegacyBehaviorPolicy.Value,
-    updater: ParentContainerUpdater)
+    updater: ParentContainerUpdater,
+    parquetAccessByOrdinal: Boolean)
   extends ParquetGroupConverter(updater) with Logging {
 
   assert(
@@ -200,7 +201,7 @@ private[parquet] class ParquetRowConverter(
 
   // Converters for each field.
   private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
-    if (SQLConf.get.parquetAccessByOrdinal) {
+    if (parquetAccessByOrdinal) {
       // SPARK-36634: When access parquet file by the idx of columns, we can not ensure 2 types
       // matched
       parquetType.getFields.asScala.zip(catalystType).zipWithIndex.map {
@@ -435,7 +436,8 @@ private[parquet] class ParquetRowConverter(
           convertTz,
           datetimeRebaseMode,
           int96RebaseMode,
-          wrappedUpdater)
+          wrappedUpdater,
+          parquetAccessByOrdinal)
 
       case t =>
         throw QueryExecutionErrors.cannotCreateParquetConverterForDataTypeError(
