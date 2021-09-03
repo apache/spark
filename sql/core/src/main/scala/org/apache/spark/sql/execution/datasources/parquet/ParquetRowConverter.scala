@@ -200,7 +200,7 @@ private[parquet] class ParquetRowConverter(
 
   // Converters for each field.
   private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
-    if (SQLConf.get.parquetAccessByIndex) {
+    if (SQLConf.get.parquetAccessByOrdinal) {
       // SPARK-36634: When access parquet file by the idx of columns, we can not ensure 2 types
       // matched
       parquetType.getFields.asScala.zip(catalystType).zipWithIndex.map {
