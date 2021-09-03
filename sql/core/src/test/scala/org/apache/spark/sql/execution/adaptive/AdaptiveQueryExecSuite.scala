@@ -1462,7 +1462,10 @@ class AdaptiveQueryExecSuite
           }
         }
         override def onFailure(
-            funcName: String, executionId: Long, qe: QueryExecution, exception: Exception): Unit = {}
+            funcName: String,
+            executionId: Long,
+            qe: QueryExecution,
+            exception: Exception): Unit = {}
       }
       spark.listenerManager.register(listener)
 
