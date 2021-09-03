@@ -103,6 +103,8 @@ private[spark] class TaskSchedulerImpl(
   // of tasks that are very short.
   val MIN_TIME_TO_SPECULATION = conf.get(SPECULATION_MIN_THRESHOLD)
 
+  private val reuseExecutors = conf.get(DYN_ALLOCATION_REUSE_EXECUTORS)
+
   private val speculationScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-scheduler-speculation")
 
@@ -384,9 +386,18 @@ private[spark] class TaskSchedulerImpl(
       val execId = shuffledOffers(i).executorId
       val host = shuffledOffers(i).host
       val taskSetRpID = taskSet.taskSet.resourceProfileId
-      // make the resource profile id a hard requirement for now - ie only put tasksets
-      // on executors where resource profile exactly matches.
-      if (taskSetRpID == shuffledOffers(i).resourceProfileId) {
+
+      val assignTasks = if (reuseExecutors) {
+        val compatibleProfiles = sc.resourceProfileManager.getOtherCompatibleProfileIds(taskSetRpID)
+        taskSetRpID == shuffledOffers(i).resourceProfileId ||
+          compatibleProfiles.contains(shuffledOffers(i).resourceProfileId)
+        } else {
+        // make the resource profile id a hard requirement for now - ie only put tasksets
+        // on executors where resource profile exactly matches.
+        taskSetRpID == shuffledOffers(i).resourceProfileId
+      }
+
+      if (assignTasks) {
         val taskResAssignmentsOpt = resourcesMeetTaskRequirements(taskSet, availableCpus(i),
           availableResources(i))
         taskResAssignmentsOpt.foreach { taskResAssignments =>

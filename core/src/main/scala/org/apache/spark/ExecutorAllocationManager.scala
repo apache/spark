@@ -301,10 +301,16 @@ private[spark] class ExecutorAllocationManager(
     val tasksPerExecutor = rp.maxTasksPerExecutor(conf)
 //  logDebug(s"max needed for rpId: $rpId numpending: $numRunningOrPendingTasks," +
 //    s" tasksperexecutor: $tasksPerExecutor")
-    val numOtherCompatibleExecutors = executorCountWithCompatibleResourceProfile(rpId)
-    val maxNeeded = math.ceil(numRunningOrPendingTasks * executorAllocationRatio /
-      tasksPerExecutor).toInt - numOtherCompatibleExecutors
 
+    val numOtherCompatibleExecutors = executorCountWithCompatibleResourceProfile(rpId)
+    // if reusing executors, should subtract number of compatible executors
+    val maxNeeded = if (reuseExecutors) {
+      math.ceil(numRunningOrPendingTasks * executorAllocationRatio /
+        tasksPerExecutor).toInt - numOtherCompatibleExecutors
+    } else {
+      math.ceil(numRunningOrPendingTasks * executorAllocationRatio /
+        tasksPerExecutor).toInt
+    }
     logDebug(s"$numOtherCompatibleExecutors compatible executors and " +
       s"$maxNeeded max needed for rpId: $rpId numpending: $numRunningOrPendingTasks," +
       s" tasksperexecutor: $tasksPerExecutor")
