@@ -948,6 +948,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Compute covariance with Series, excluding missing values.
 
+        .. versionadded:: 3.3.0
+
         Parameters
         ----------
         other : Series
