@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
