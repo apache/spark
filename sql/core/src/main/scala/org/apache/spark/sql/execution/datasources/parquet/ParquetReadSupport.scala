@@ -160,9 +160,9 @@ object ParquetReadSupport {
       parquetSchema: MessageType,
       catalystSchema: StructType,
       caseSensitive: Boolean = true,
-      columnIndexAccess: Boolean = false): MessageType = {
+      accessByColumnOrdinal: Boolean = false): MessageType = {
     val clippedParquetFields = clipParquetGroupFields(
-      parquetSchema.asGroupType(), catalystSchema, caseSensitive, columnIndexAccess)
+      parquetSchema.asGroupType(), catalystSchema, caseSensitive, accessByColumnOrdinal)
     if (clippedParquetFields.isEmpty) {
       ParquetSchemaConverter.EMPTY_MESSAGE
     } else {
@@ -174,23 +174,25 @@ object ParquetReadSupport {
   }
 
   private def clipParquetType(
-      parquetType: Type, catalystType: DataType, caseSensitive: Boolean,
-      columnIndexAccess: Boolean): Type = {
+      parquetType: Type,
+      catalystType: DataType,
+      caseSensitive: Boolean,
+      accessByColumnOrdinal: Boolean): Type = {
     catalystType match {
       case t: ArrayType if !isPrimitiveCatalystType(t.elementType) =>
         // Only clips array types with nested type as element type.
         clipParquetListType(
-          parquetType.asGroupType(), t.elementType, caseSensitive, columnIndexAccess)
+          parquetType.asGroupType(), t.elementType, caseSensitive, accessByColumnOrdinal)
 
       case t: MapType
         if !isPrimitiveCatalystType(t.keyType) ||
            !isPrimitiveCatalystType(t.valueType) =>
         // Only clips map types with nested key type or value type
         clipParquetMapType(
-          parquetType.asGroupType(), t.keyType, t.valueType, caseSensitive, columnIndexAccess)
+          parquetType.asGroupType(), t.keyType, t.valueType, caseSensitive, accessByColumnOrdinal)
 
       case t: StructType =>
-        clipParquetGroup(parquetType.asGroupType(), t, caseSensitive, columnIndexAccess)
+        clipParquetGroup(parquetType.asGroupType(), t, caseSensitive, accessByColumnOrdinal)
 
       case _ =>
         // UDTs and primitive types are not clipped.  For UDTs, a clipped version might not be able
@@ -217,8 +219,10 @@ object ParquetReadSupport {
    * [[StructType]].
    */
   private def clipParquetListType(
-      parquetList: GroupType, elementType: DataType, caseSensitive: Boolean,
-      columnIndexAccess: Boolean): Type = {
+      parquetList: GroupType,
+      elementType: DataType,
+      caseSensitive: Boolean,
+      accessByColumnOrdinal: Boolean): Type = {
     // Precondition of this method, should only be called for lists with nested element types.
     assert(!isPrimitiveCatalystType(elementType))
 
@@ -226,7 +230,7 @@ object ParquetReadSupport {
     // list element type is just the group itself.  Clip it.
     if (parquetList.getLogicalTypeAnnotation == null &&
       parquetList.isRepetition(Repetition.REPEATED)) {
-      clipParquetType(parquetList, elementType, caseSensitive, columnIndexAccess)
+      clipParquetType(parquetList, elementType, caseSensitive, accessByColumnOrdinal)
     } else {
       assert(
         parquetList.getLogicalTypeAnnotation.isInstanceOf[ListLogicalTypeAnnotation],
@@ -258,7 +262,8 @@ object ParquetReadSupport {
         Types
           .buildGroup(parquetList.getRepetition)
           .as(LogicalTypeAnnotation.listType())
-          .addField(clipParquetType(repeatedGroup, elementType, caseSensitive, columnIndexAccess))
+          .addField(clipParquetType(
+            repeatedGroup, elementType, caseSensitive, accessByColumnOrdinal))
           .named(parquetList.getName)
       } else {
         // Otherwise, the repeated field's type is the element type with the repeated field's
@@ -270,7 +275,7 @@ object ParquetReadSupport {
             Types
               .repeatedGroup()
               .addField(clipParquetType(
-                repeatedGroup.getType(0), elementType, caseSensitive, columnIndexAccess))
+                repeatedGroup.getType(0), elementType, caseSensitive, accessByColumnOrdinal))
               .named(repeatedGroup.getName))
           .named(parquetList.getName)
       }
@@ -287,7 +292,7 @@ object ParquetReadSupport {
       keyType: DataType,
       valueType: DataType,
       caseSensitive: Boolean,
-      columnIndexAccess: Boolean): GroupType = {
+      accessByColumnOrdinal: Boolean): GroupType = {
     // Precondition of this method, only handles maps with nested key types or value types.
     assert(!isPrimitiveCatalystType(keyType) || !isPrimitiveCatalystType(valueType))
 
@@ -299,8 +304,9 @@ object ParquetReadSupport {
       Types
         .repeatedGroup()
         .as(repeatedGroup.getLogicalTypeAnnotation)
-        .addField(clipParquetType(parquetKeyType, keyType, caseSensitive, columnIndexAccess))
-        .addField(clipParquetType(parquetValueType, valueType, caseSensitive, columnIndexAccess))
+        .addField(clipParquetType(parquetKeyType, keyType, caseSensitive, accessByColumnOrdinal))
+        .addField(clipParquetType(
+          parquetValueType, valueType, caseSensitive, accessByColumnOrdinal))
         .named(repeatedGroup.getName)
 
     Types
@@ -322,9 +328,9 @@ object ParquetReadSupport {
       parquetRecord: GroupType,
       structType: StructType,
       caseSensitive: Boolean,
-      columnIndexAccess: Boolean): GroupType = {
+      accessByColumnOrdinal: Boolean): GroupType = {
     val clippedParquetFields =
-      clipParquetGroupFields(parquetRecord, structType, caseSensitive, columnIndexAccess)
+      clipParquetGroupFields(parquetRecord, structType, caseSensitive, accessByColumnOrdinal)
     Types
       .buildGroup(parquetRecord.getRepetition)
       .as(parquetRecord.getLogicalTypeAnnotation)
@@ -341,12 +347,13 @@ object ParquetReadSupport {
       parquetRecord: GroupType,
       structType: StructType,
       caseSensitive: Boolean,
-      columnIndexAccess: Boolean): Seq[Type] = {
+      accessByColumnOrdinal: Boolean): Seq[Type] = {
     val toParquet = new SparkToParquetSchemaConverter(writeLegacyParquetFormat = false)
-    if (columnIndexAccess) {
+    if (accessByColumnOrdinal) {
       structType.zipWithIndex.map { case (f, i) =>
         if (i < parquetRecord.getFieldCount) {
-          clipParquetType(parquetRecord.getType(i), f.dataType, caseSensitive, columnIndexAccess)
+          clipParquetType(
+            parquetRecord.getType(i), f.dataType, caseSensitive, accessByColumnOrdinal)
         } else {
           toParquet.convertField(f)
         }
@@ -357,7 +364,7 @@ object ParquetReadSupport {
       structType.map { f =>
         caseSensitiveParquetFieldMap
           .get(f.name)
-          .map(clipParquetType(_, f.dataType, caseSensitive, columnIndexAccess))
+          .map(clipParquetType(_, f.dataType, caseSensitive, accessByColumnOrdinal))
           .getOrElse(toParquet.convertField(f))
       }
     } else {
@@ -374,7 +381,7 @@ object ParquetReadSupport {
               throw QueryExecutionErrors.foundDuplicateFieldInCaseInsensitiveModeError(
                 f.name, parquetTypesString)
             } else {
-              clipParquetType(parquetTypes.head, f.dataType, caseSensitive, columnIndexAccess)
+              clipParquetType(parquetTypes.head, f.dataType, caseSensitive, accessByColumnOrdinal)
             }
           }.getOrElse(toParquet.convertField(f))
       }
