@@ -15,25 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2.text
+package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.read.Scan
-import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
-import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-case class TextScanBuilder(
-    sparkSession: SparkSession,
-    fileIndex: PartitioningAwareFileIndex,
-    schema: StructType,
-    dataSchema: StructType,
-    options: CaseInsensitiveStringMap)
-  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
+/**
+ * This class wraps a [[Source]] and makes it supports Trigger.AvailableNow.
+ *
+ * See [[AvailableNowDataStreamWrapper]] for more details.
+ */
+class AvailableNowSourceWrapper(delegate: Source)
+  extends AvailableNowDataStreamWrapper(delegate) with Source {
 
-  override def build(): Scan = {
-    TextScan(sparkSession, fileIndex, dataSchema, readDataSchema(), readPartitionSchema(), options,
-      partitionFilters, dataFilters)
-  }
+  override def schema: StructType = delegate.schema
+
+  override def getOffset: Option[Offset] = throw new UnsupportedOperationException(
+    "latestOffset(Offset, ReadLimit) should be called instead of this method")
+
+  override def getBatch(start: Option[Offset], end: Offset): DataFrame =
+    delegate.getBatch(start, end)
 }

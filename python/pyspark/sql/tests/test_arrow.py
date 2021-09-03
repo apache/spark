@@ -27,8 +27,8 @@ from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import rand, udf
 from pyspark.sql.types import StructType, StringType, IntegerType, LongType, \
-    FloatType, DoubleType, DecimalType, DateType, TimestampType, BinaryType, StructField, \
-    ArrayType, NullType
+    FloatType, DoubleType, DecimalType, DateType, TimestampType, TimestampNTZType, \
+    BinaryType, StructField, ArrayType, NullType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
@@ -166,6 +166,18 @@ class ArrowTests(ReusedSQLTestCase):
         expected = self.create_pandas_data_frame()
         assert_frame_equal(expected, pdf)
         assert_frame_equal(expected, pdf_arrow)
+
+    def test_create_data_frame_to_pandas_timestamp_ntz(self):
+        # SPARK-36626: Test TimestampNTZ in createDataFrame and toPandas
+        with self.sql_conf({"spark.sql.session.timeZone": "America/Los_Angeles"}):
+            origin = pd.DataFrame({"a": [datetime.datetime(2012, 2, 2, 2, 2, 2)]})
+            df = self.spark.createDataFrame(
+                origin, schema=StructType([StructField("a", TimestampNTZType(), True)]))
+            df.selectExpr("assert_true('2012-02-02 02:02:02' == CAST(a AS STRING))").collect()
+
+            pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
+            assert_frame_equal(origin, pdf)
+            assert_frame_equal(pdf, pdf_arrow)
 
     def test_toPandas_respect_session_timezone(self):
         df = self.spark.createDataFrame(self.data, schema=self.schema)

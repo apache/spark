@@ -25,9 +25,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
-import org.apache.spark.sql.execution.datasources.PushableColumnWithoutNestedColumn
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PushableColumnWithoutNestedColumn}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
@@ -71,6 +69,9 @@ object PushDownUtils extends PredicateHelper {
         }
         (r.pushedFilters(), (untranslatableExprs ++ postScanFilters).toSeq)
 
+      case f: FileScanBuilder =>
+        val postScanFilters = f.pushFilters(filters)
+        (f.pushedFilters, postScanFilters)
       case _ => (Nil, filters)
     }
   }

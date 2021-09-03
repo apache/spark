@@ -40,7 +40,6 @@ class _MissingPandasLikeDataFrame(object):
     asof = _unsupported_function("asof")
     boxplot = _unsupported_function("boxplot")
     combine = _unsupported_function("combine")
-    combine_first = _unsupported_function("combine_first")
     compare = _unsupported_function("compare")
     convert_dtypes = _unsupported_function("convert_dtypes")
     corrwith = _unsupported_function("corrwith")
