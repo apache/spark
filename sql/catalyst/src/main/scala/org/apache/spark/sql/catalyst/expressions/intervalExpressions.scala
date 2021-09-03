@@ -704,11 +704,14 @@ case class DivideDTInterval(
   @transient
   private lazy val evalFunc: (Long, Any) => Any = right.dataType match {
     case _: IntegralType => (micros: Long, num) =>
+      if (num == 0) throw QueryExecutionErrors.divideByZeroError()
       LongMath.divide(micros, num.asInstanceOf[Number].longValue(), RoundingMode.HALF_UP)
     case _: DecimalType => (micros: Long, num) =>
+      if (num.asInstanceOf[Decimal].isZero) throw QueryExecutionErrors.divideByZeroError()
       val decimalRes = ((new Decimal).set(micros) / num.asInstanceOf[Decimal]).toJavaBigDecimal
       decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()
     case _: FractionalType => (micros: Long, num) =>
+      if (num == 0) throw QueryExecutionErrors.divideByZeroError()
       DoubleMath.roundToLong(micros / num.asInstanceOf[Number].doubleValue(), RoundingMode.HALF_UP)
   }
 
@@ -722,6 +725,11 @@ case class DivideDTInterval(
       val math = classOf[LongMath].getName
       val micros = left.genCode(ctx)
       val num = right.genCode(ctx)
+      val checkDivideByZero =
+        s"""
+           |if (${num.value} == 0)
+           |  throw QueryExecutionErrors.divideByZeroError();
+           |""".stripMargin
       val checkIntegralDivideOverflow =
         s"""
            |if (${micros.value} == ${Long.MinValue}L && ${num.value} == -1L)
@@ -729,17 +737,26 @@ case class DivideDTInterval(
            |""".stripMargin
       nullSafeCodeGen(ctx, ev, (m, n) =>
         s"""
+           |$checkDivideByZero
            |$checkIntegralDivideOverflow
            |${ev.value} = $math.divide($m, $n, java.math.RoundingMode.HALF_UP);
         """.stripMargin)
     case _: DecimalType =>
-      defineCodeGen(ctx, ev, (m, n) =>
-        s"((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()" +
-        ".setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()")
+      nullSafeCodeGen(ctx, ev, (m, n) =>
+        s"""
+           |if ($n.isZero())
+           |  throw QueryExecutionErrors.divideByZeroError();
+           |${ev.value} = ((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()
+           |  .setScale(0, java.math.RoundingMode.HALF_UP).longValueExact();
+        """.stripMargin)
     case _: FractionalType =>
       val math = classOf[DoubleMath].getName
-      defineCodeGen(ctx, ev, (m, n) =>
-        s"$math.roundToLong($m / (double)$n, java.math.RoundingMode.HALF_UP)")
+      nullSafeCodeGen(ctx, ev, (m, n) =>
+        s"""
+           |if ($n == 0)
+           |  throw QueryExecutionErrors.divideByZeroError();
+           |${ev.value} = $math.roundToLong($m / (double)$n, java.math.RoundingMode.HALF_UP);
+        """.stripMargin)
   }
 
   override def toString: String = s"($left / $right)"
