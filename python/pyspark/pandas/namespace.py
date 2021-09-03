@@ -2755,10 +2755,10 @@ def to_numeric(arg, errors="raise"):
     ----------
     arg : scalar, list, tuple, 1-d array, or Series
         Argument to be converted.
-    errors : {'raise', 'coerce'}, default 'coerce'
+    errors : {'raise', 'coerce'}, default 'raise'
         * If 'coerce', then invalid parsing will be set as NaN.
         * If 'raise', then invalid parsing will raise an exception.
-        
+
         .. note:: pandas support 'ignore' but this is not implemented yet.
 
     Returns
