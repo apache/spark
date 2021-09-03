@@ -23,6 +23,7 @@ from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
+    _as_bool_type,
     _as_categorical_type,
     _as_other_type,
     _as_string_type,
@@ -99,9 +100,7 @@ class BinaryOps(DataTypeOps):
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)
         elif isinstance(spark_type, BooleanType):
-            # Cannot cast binary to boolean in Spark.
-            # We should cast binary to str first, and cast it to boolean
-            return index_ops.astype(str).astype(bool)
+            return _as_bool_type(index_ops, dtype)
         elif isinstance(spark_type, StringType):
             return _as_string_type(index_ops, dtype)
         else:

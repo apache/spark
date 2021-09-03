@@ -140,6 +140,11 @@ def _as_categorical_type(
 def _as_bool_type(index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
     """Cast `index_ops` to BooleanType Spark type, given `dtype`."""
     spark_type = BooleanType()
+    # Cannot cast binary to boolean directly in Spark.
+    # We should cast binary to str first, and cast it to boolean
+    if isinstance(index_ops.spark.data_type, BinaryType):
+        return index_ops.astype(str).astype(bool)
+
     if isinstance(dtype, extension_dtypes):
         scol = index_ops.spark.column.cast(spark_type)
     else:
