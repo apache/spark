@@ -803,27 +803,57 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     // Verify state before starting a new set of updates
     assert(getLatestData(provider).isEmpty)
 
-    val store = provider.getStore(0)
+    var store = provider.getStore(0)
 
-    val key1 = Seq("a", "b", "c")
-    val key2 = Seq(1, 2, 3)
-    val keys = for (k1 <- key1; k2 <- key2) yield (k1, k2)
-
-    val randomizedKeys = scala.util.Random.shuffle(keys.toList)
-
-    randomizedKeys.foreach { case (key1, key2) =>
-      put(store, key1, key2, key2)
+    def putCompositeKeys(keys: Seq[(String, Int)]): Unit = {
+      val randomizedKeys = scala.util.Random.shuffle(keys.toList)
+      randomizedKeys.foreach { case (key1, key2) =>
+        put(store, key1, key2, key2)
+      }
     }
 
-    key1.foreach { k1 =>
-      val keyValueSet = store.prefixScan(dataToPrefixKeyRow(k1)).map { pair =>
-        rowPairToDataPair(pair.withRows(pair.key.copy(), pair.value.copy()))
-      }.toSet
+    def verifyScan(key1: Seq[String], key2: Seq[Int]): Unit = {
+      key1.foreach { k1 =>
+        val keyValueSet = store.prefixScan(dataToPrefixKeyRow(k1)).map { pair =>
+          rowPairToDataPair(pair.withRows(pair.key.copy(), pair.value.copy()))
+        }.toSet
 
-      assert(keyValueSet === key2.map(k2 => ((k1, k2), k2)).toSet)
+        assert(keyValueSet === key2.map(k2 => ((k1, k2), k2)).toSet)
+      }
     }
+
+    val key1AtVersion0 = Seq("a", "b", "c")
+    val key2AtVersion0 = Seq(1, 2, 3)
+    val keysAtVersion0 = for (k1 <- key1AtVersion0; k2 <- key2AtVersion0) yield (k1, k2)
+
+    putCompositeKeys(keysAtVersion0)
+    verifyScan(key1AtVersion0, key2AtVersion0)
 
     assert(store.prefixScan(dataToPrefixKeyRow("non-exist")).isEmpty)
+
+    // committing and loading the version 1 (the version being committed)
+    store.commit()
+    store = provider.getStore(1)
+
+    // before putting the new key-value pairs, verify prefix scan works for existing keys
+    verifyScan(key1AtVersion0, key2AtVersion0)
+
+    val key1AtVersion1 = Seq("c", "d")
+    val key2AtVersion1 = Seq(4, 5, 6)
+    val keysAtVersion1 = for (k1 <- key1AtVersion1; k2 <- key2AtVersion1) yield (k1, k2)
+
+    // put a new key-value pairs, and verify that prefix scan reflects the changes
+    putCompositeKeys(keysAtVersion1)
+    verifyScan(Seq("c"), Seq(1, 2, 3, 4, 5, 6))
+    verifyScan(Seq("d"), Seq(4, 5, 6))
+
+    // aborting and loading the version 1 again (keysAtVersion1 should be rolled back)
+    store.abort()
+    store = provider.getStore(1)
+
+    // prefix scan should not reflect the uncommitted changes
+    verifyScan(key1AtVersion0, key2AtVersion0)
+    verifyScan(Seq("d"), Seq.empty)
   }
 
   testWithAllCodec("numKeys metrics") {

@@ -22,7 +22,7 @@ from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.types import IntegralType
 from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, \
-    DoubleType, BooleanType, MapType, TimestampType, StructType, DataType
+    DoubleType, BooleanType, MapType, TimestampType, TimestampNTZType, StructType, DataType
 from pyspark.traceback_utils import SCCallSiteSync
 
 
@@ -238,6 +238,8 @@ class PandasConversionMixin(object):
             return np.bool
         elif type(dt) == TimestampType:
             return np.datetime64
+        elif type(dt) == TimestampNTZType:
+            return np.datetime64
         else:
             return None
 
@@ -354,6 +356,8 @@ class SparkConversionMixin(object):
 
         if timezone is not None:
             from pyspark.sql.pandas.types import _check_series_convert_timestamps_tz_local
+            from pandas.core.dtypes.common import is_datetime64tz_dtype
+
             copied = False
             if isinstance(schema, StructType):
                 for field in schema:
@@ -368,8 +372,11 @@ class SparkConversionMixin(object):
                                 copied = True
                             pdf[field.name] = s
             else:
+                should_localize = not self._is_timestamp_ntz_preferred()
                 for column, series in pdf.iteritems():
-                    s = _check_series_convert_timestamps_tz_local(series, timezone)
+                    s = series
+                    if should_localize and is_datetime64tz_dtype(s.dtype) and s.dt.tz is not None:
+                        s = _check_series_convert_timestamps_tz_local(series, timezone)
                     if s is not series:
                         if not copied:
                             # Copy once if the series is modified to prevent the original
@@ -448,8 +455,12 @@ class SparkConversionMixin(object):
         if isinstance(schema, (list, tuple)):
             arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
             struct = StructType()
+            prefer_timestamp_ntz = self._is_timestamp_ntz_preferred()
             for name, field in zip(schema, arrow_schema):
-                struct.add(name, from_arrow_type(field.type), nullable=field.nullable)
+                struct.add(
+                    name,
+                    from_arrow_type(field.type, prefer_timestamp_ntz),
+                    nullable=field.nullable)
             schema = struct
 
         # Determine arrow types to coerce data when creating batches

@@ -72,12 +72,6 @@ trait FileScan extends Scan
   def dataFilters: Seq[Expression]
 
   /**
-   * Create a new `FileScan` instance from the current one
-   * with different `partitionFilters` and `dataFilters`
-   */
-  def withFilters(partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): FileScan
-
-  /**
    * If a file with `path` is unsplittable, return the unsplittable reason,
    * otherwise return `None`.
    */
