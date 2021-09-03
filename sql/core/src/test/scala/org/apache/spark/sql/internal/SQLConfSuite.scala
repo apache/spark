@@ -206,7 +206,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     // spark core conf w/ entry registered
     val e1 = intercept[AnalysisException](sql("RESET spark.executor.cores"))
     val str_match = "Cannot modify the value of a Spark config: spark.executor.cores"
-    assert(e1.getMessage.contains(s"${str_match}"))
+    assert(e1.getMessage.contains(str_match))
 
     // user defined settings
     sql("SET spark.abc=xyz")
@@ -320,7 +320,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(e2.message.contains("Cannot modify the value of a static config"))
   }
 
-  test("SPARK-36643: Cannot modify the value of a Spark config") {
+  test("SPARK-36643: Show migration guide when attempting SparkConf") {
     val e1 = intercept[AnalysisException](spark.conf.set("spark.driver.host", "myhost"))
     assert(e1.message.contains("Cannot modify the value of a Spark config"))
   }

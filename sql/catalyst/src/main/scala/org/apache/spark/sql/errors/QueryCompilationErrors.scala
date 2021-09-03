@@ -2335,10 +2335,8 @@ object QueryCompilationErrors {
   def cannotModifyValueOfSparkConfigError(key: String): Throwable = {
     new AnalysisException(
       s"""
-         |Cannot modify the value of a Spark config: $key,
-         |please refer to the Spark migration documentation
-         |'https://spark.apache.org/docs/latest/sql-migration-guide.html#ddl-statements'
-         |for further details to modify the value of a Spark config.
+         |Cannot modify the value of a Spark config: $key.
+         |See also 'https://spark.apache.org/docs/latest/sql-migration-guide.html#ddl-statements'
        """.stripMargin.replaceAll("\n", " "))
   }
 
