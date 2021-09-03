@@ -2758,8 +2758,9 @@ def to_numeric(arg, errors="raise"):
     errors : {'raise', 'coerce'}, default 'raise'
         * If 'coerce', then invalid parsing will be set as NaN.
         * If 'raise', then invalid parsing will raise an exception.
+        * If 'ignore', then invalid parsing will return the input.
 
-        .. note:: pandas support 'ignore' but this is not implemented yet.
+        .. note:: 'ignore' doesn't work for pandas-on-Spark Series.
 
     Returns
     -------
@@ -2789,6 +2790,7 @@ def to_numeric(arg, errors="raise"):
     dtype: float32
 
     If given Series contains invalid value to cast float, just cast it to `np.nan`
+    when `errors` is set to "coerce".
 
     >>> psser = ps.Series(['apple', '1.0', '2', '-3'])
     >>> psser
@@ -2798,12 +2800,12 @@ def to_numeric(arg, errors="raise"):
     3       -3
     dtype: object
 
-    >>> ps.to_numeric(psser)
+    >>> ps.to_numeric(psser, errors="coerce")
     0    NaN
     1    1.0
     2    2.0
     3   -3.0
-    dtype: float64
+    dtype: float32
 
     Also support for list, tuple, np.array, or a scalar
 
@@ -2826,7 +2828,7 @@ def to_numeric(arg, errors="raise"):
             scol = arg.spark.column
             scol_casted = scol.cast("float")
             cond = F.when(
-                F.assert_true(~(scol.isNotNull() & scol_casted.isNull())).isNull(), scol_casted
+                F.assert_true(scol.isNull() | scol_casted.isNotNull()).isNull(), scol_casted
             )
             return arg._with_new_scol(cond)
         elif errors == "ignore":
