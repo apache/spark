@@ -7905,6 +7905,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         with non-null values from other DataFrame. The row and column indexes
         of the resulting DataFrame will be the union of the two.
 
+        .. versionadded:: 3.3.0
+
         Parameters
         ----------
         other : DataFrame
