@@ -598,6 +598,11 @@ trait IntervalDivide {
       }
     }
   }
+
+  def divideByZeroCheckCodegen(expr: Expression, value: String): String = expr.dataType match {
+    case _: DecimalType => s"if ($value.isZero()) throw QueryExecutionErrors.divideByZeroError();"
+    case _ => s"if ($value == 0) throw QueryExecutionErrors.divideByZeroError();"
+  }
 }
 
 // Divide an year-month interval by a numeric
@@ -613,7 +618,7 @@ case class DivideYMInterval(
   override def dataType: DataType = YearMonthIntervalType()
 
   @transient
-  private lazy val checkFunc: (Any) => Unit = right.dataType match {
+  private lazy val divideByZeroCheck: Any => Unit = right.dataType match {
     case _: DecimalType => (num) =>
       if (num.asInstanceOf[Decimal].isZero) throw QueryExecutionErrors.divideByZeroError()
     case _ => (num) => if (num == 0) throw QueryExecutionErrors.divideByZeroError()
@@ -636,7 +641,7 @@ case class DivideYMInterval(
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
     checkDivideOverflow(interval.asInstanceOf[Int], Int.MinValue, right, num)
-    checkFunc(num)
+    divideByZeroCheck(num)
     evalFunc(interval.asInstanceOf[Int], num)
   }
 
@@ -649,11 +654,6 @@ case class DivideYMInterval(
       val javaType = CodeGenerator.javaType(dataType)
       val months = left.genCode(ctx)
       val num = right.genCode(ctx)
-      val checkDivideByZero =
-        s"""
-           |if (${num.value} == 0)
-           |  throw QueryExecutionErrors.divideByZeroError();
-           |""".stripMargin
       val checkIntegralDivideOverflow =
         s"""
            |if (${months.value} == ${Int.MinValue} && ${num.value} == -1)
@@ -663,26 +663,24 @@ case class DivideYMInterval(
         // Similarly to non-codegen code. The result of `divide(Int, Long, ...)` must fit to `Int`.
         // Casting to `Int` is safe here.
         s"""
-           |$checkDivideByZero
+           |${divideByZeroCheckCodegen(right, n)}
            |$checkIntegralDivideOverflow
            |${ev.value} = ($javaType)$math.divide($m, $n, java.math.RoundingMode.HALF_UP);
-        """.stripMargin)
+         """.stripMargin)
     case _: DecimalType =>
       nullSafeCodeGen(ctx, ev, (m, n) =>
         s"""
-           |if ($n.isZero())
-           |  throw QueryExecutionErrors.divideByZeroError();
+           |${divideByZeroCheckCodegen(right, n)}
            |${ev.value} = ((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()
            |  .setScale(0, java.math.RoundingMode.HALF_UP).intValueExact();
-           """.stripMargin)
+         """.stripMargin)
     case _: FractionalType =>
       val math = classOf[DoubleMath].getName
       nullSafeCodeGen(ctx, ev, (m, n) =>
         s"""
-           |if ($n == 0)
-           |  throw QueryExecutionErrors.divideByZeroError();
+           |${divideByZeroCheckCodegen(right, n)}
            |${ev.value} = $math.roundToInt($m / (double)$n, java.math.RoundingMode.HALF_UP);
-           """.stripMargin)
+         """.stripMargin)
   }
 
   override def toString: String = s"($left / $right)"
@@ -706,7 +704,7 @@ case class DivideDTInterval(
   override def dataType: DataType = DayTimeIntervalType()
 
   @transient
-  private lazy val checkFunc: (Any) => Unit = right.dataType match {
+  private lazy val divideByZeroCheck: Any => Unit = right.dataType match {
     case _: DecimalType => (num) =>
       if (num.asInstanceOf[Decimal].isZero) throw QueryExecutionErrors.divideByZeroError()
     case _ => (num) => if (num == 0) throw QueryExecutionErrors.divideByZeroError()
@@ -725,7 +723,7 @@ case class DivideDTInterval(
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
     checkDivideOverflow(interval.asInstanceOf[Long], Long.MinValue, right, num)
-    checkFunc(num)
+    divideByZeroCheck(num)
     evalFunc(interval.asInstanceOf[Long], num)
   }
 
@@ -734,11 +732,6 @@ case class DivideDTInterval(
       val math = classOf[LongMath].getName
       val micros = left.genCode(ctx)
       val num = right.genCode(ctx)
-      val checkDivideByZero =
-        s"""
-           |if (${num.value} == 0)
-           |  throw QueryExecutionErrors.divideByZeroError();
-           |""".stripMargin
       val checkIntegralDivideOverflow =
         s"""
            |if (${micros.value} == ${Long.MinValue}L && ${num.value} == -1L)
@@ -746,26 +739,24 @@ case class DivideDTInterval(
            |""".stripMargin
       nullSafeCodeGen(ctx, ev, (m, n) =>
         s"""
-           |$checkDivideByZero
+           |${divideByZeroCheckCodegen(right, n)}
            |$checkIntegralDivideOverflow
            |${ev.value} = $math.divide($m, $n, java.math.RoundingMode.HALF_UP);
-        """.stripMargin)
+         """.stripMargin)
     case _: DecimalType =>
       nullSafeCodeGen(ctx, ev, (m, n) =>
         s"""
-           |if ($n.isZero())
-           |  throw QueryExecutionErrors.divideByZeroError();
+           |${divideByZeroCheckCodegen(right, n)}
            |${ev.value} = ((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()
            |  .setScale(0, java.math.RoundingMode.HALF_UP).longValueExact();
-        """.stripMargin)
+         """.stripMargin)
     case _: FractionalType =>
       val math = classOf[DoubleMath].getName
       nullSafeCodeGen(ctx, ev, (m, n) =>
         s"""
-           |if ($n == 0)
-           |  throw QueryExecutionErrors.divideByZeroError();
+           |${divideByZeroCheckCodegen(right, n)}
            |${ev.value} = $math.roundToLong($m / (double)$n, java.math.RoundingMode.HALF_UP);
-        """.stripMargin)
+         """.stripMargin)
   }
 
   override def toString: String = s"($left / $right)"
