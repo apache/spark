@@ -88,8 +88,8 @@ class ParquetReadSupport(
       SQLConf.CASE_SENSITIVE.defaultValue.get)
     val schemaPruningEnabled = conf.getBoolean(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key,
       SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.defaultValue.get)
-    val columnIndexAccess = conf.getBoolean(SQLConf.PARQUET_ACCESS_BY_INDEX.key,
-      SQLConf.PARQUET_ACCESS_BY_INDEX.defaultValue.get)
+    val columnIndexAccess = conf.getBoolean(SQLConf.PARQUET_ACCESS_BY_ORDINAL.key,
+      SQLConf.PARQUET_ACCESS_BY_ORDINAL.defaultValue.get)
     val parquetFileSchema = context.getFileSchema
     val parquetClippedSchema = ParquetReadSupport.clipParquetSchema(parquetFileSchema,
       catalystRequestedSchema, caseSensitive, columnIndexAccess)

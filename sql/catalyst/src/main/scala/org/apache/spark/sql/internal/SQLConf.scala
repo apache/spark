@@ -903,7 +903,7 @@ object SQLConf {
     .intConf
     .createWithDefault(4096)
 
-  val PARQUET_ACCESS_BY_INDEX = buildConf("spark.sql.parquet.accessByIndex")
+  val PARQUET_ACCESS_BY_ORDINAL = buildConf("spark.sql.parquet.accessByColumnOrdinal")
     .doc("When true, we access the Parquet files by column index instead of catalyst schema" +
       " mapping at the executor side.")
     .version("3.3.0")
@@ -3724,7 +3724,7 @@ class SQLConf extends Serializable with Logging {
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
-  def parquetAccessByIndex: Boolean = getConf(PARQUET_ACCESS_BY_INDEX)
+  def parquetAccessByIndex: Boolean = getConf(PARQUET_ACCESS_BY_ORDINAL)
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
