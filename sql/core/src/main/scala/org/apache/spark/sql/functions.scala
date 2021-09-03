@@ -1805,7 +1805,7 @@ object functions {
    * @return cotangent of the angle
    *
    * @group math_funcs
-   * @since 3.2.0
+   * @since 3.3.0
    */
   def cot(e: Column): Column = withExpr { Cot(e.expr) }
 
