@@ -53,17 +53,28 @@ case class TryEval(child: Expression) extends UnaryExpression with NullIntoleran
     copy(child = newChild)
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns `expr1`+`expr2` and the result is null on overflow.",
+  usage = "_FUNC_(expr1, expr2) - Returns the sum of `expr1`and `expr2` and the result is null on overflow. " +
+    "The acceptable input types are the same with the `+` operator.",
   examples = """
     Examples:
       > SELECT _FUNC_(1, 2);
        3
       > SELECT _FUNC_(2147483647, 1);
        NULL
+      > SELECT _FUNC_(date'2021-01-01', 1);
+       2021-01-02
+      > SELECT _FUNC_(date'2021-01-01', interval 1 year);
+       2022-01-01
+      > SELECT _FUNC_(timestamp'2021-01-01 00:00:00', interval 1 day);
+       2021-01-02 00:00:00
+      > SELECT _FUNC_(interval 1 year, interval 2 year);
+       3-0
   """,
   since = "3.2.0",
   group = "math_funcs")
+// scalastyle:on line.size.limit
 case class TryAdd(left: Expression, right: Expression, child: Expression)
     extends RuntimeReplaceable {
   def this(left: Expression, right: Expression) =
@@ -81,7 +92,8 @@ case class TryAdd(left: Expression, right: Expression, child: Expression)
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns `expr1`/`expr2`. It always performs floating point division. Its result is always null if `expr2` is 0.",
+  usage = "_FUNC_(dividend, divisor) - Returns `dividend`/`divisor`. It always performs floating point division. Its result is always null if `expr2` is 0. " +
+    "`dividend` must be a numeric or an interval. `divisor` must be a numeric.",
   examples = """
     Examples:
       > SELECT _FUNC_(3, 2);
@@ -89,6 +101,10 @@ case class TryAdd(left: Expression, right: Expression, child: Expression)
       > SELECT _FUNC_(2L, 2L);
        1.0
       > SELECT _FUNC_(1, 0);
+       NULL
+      > SELECT _FUNC_(interval 2 month, 2);
+       0-1
+      > SELECT _FUNC_(interval 2 month, 0);
        NULL
   """,
   since = "3.2.0",

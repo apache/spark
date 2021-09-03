@@ -15,21 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions;
+package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.FieldReference;
 
 /**
- * An aggregate function that returns the summation of all the values in a group.
+ * An aggregate function that returns the number of the specific row in a group.
  *
  * @since 3.2.0
  */
 @Evolving
-public final class Sum implements AggregateFunc {
+public final class Count implements AggregateFunc {
   private final FieldReference column;
   private final boolean isDistinct;
 
-  public Sum(FieldReference column, boolean isDistinct) {
+  public Count(FieldReference column, boolean isDistinct) {
     this.column = column;
     this.isDistinct = isDistinct;
   }
@@ -40,9 +41,9 @@ public final class Sum implements AggregateFunc {
   @Override
   public String toString() {
     if (isDistinct) {
-      return "SUM(DISTINCT " + column.describe() + ")";
+      return "COUNT(DISTINCT " + column.describe() + ")";
     } else {
-      return "SUM(" + column.describe() + ")";
+      return "COUNT(" + column.describe() + ")";
     }
   }
 

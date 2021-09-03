@@ -2256,6 +2256,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 for c in psdf._internal.data_spark_column_names
                 if c not in groupkey_names
             ]
+
             return_schema = StructType([field.struct_field for field in data_fields])
 
             sdf = GroupBy._spark_group_map_apply(

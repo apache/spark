@@ -288,7 +288,6 @@ Tuning
     :toctree: api/
 
     ParamGridBuilder
-    ParamRandomBuilder
     CrossValidator
     CrossValidatorModel
     TrainValidationSplit

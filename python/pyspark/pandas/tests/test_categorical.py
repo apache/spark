@@ -74,10 +74,10 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         pser.cat.categories = ["z", "y", "x"]
         psser.cat.categories = ["z", "y", "x"]
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-            pass
-        else:
-            self.assert_eq(pser, psser)
+            # Bug in pandas 1.3. dtype is not updated properly with `inplace` argument.
+            pser = pser.astype(CategoricalDtype(categories=["x", "y", "z"]))
+
+        self.assert_eq(pser, psser)
         self.assert_eq(pdf, psdf)
 
         with self.assertRaises(ValueError):
@@ -96,10 +96,10 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         pser.cat.add_categories(4, inplace=True)
         psser.cat.add_categories(4, inplace=True)
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-            pass
-        else:
-            self.assert_eq(pser, psser)
+            # Bug in pandas 1.3. dtype is not updated properly with `inplace` argument.
+            pser = pser.astype(CategoricalDtype(categories=[1, 2, 3, 4]))
+
+        self.assert_eq(pser, psser)
         self.assert_eq(pdf, psdf)
 
         self.assertRaises(ValueError, lambda: psser.cat.add_categories(4))
@@ -124,10 +124,10 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         pser.cat.remove_categories(2, inplace=True)
         psser.cat.remove_categories(2, inplace=True)
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-            pass
-        else:
-            self.assert_eq(pser, psser)
+            # Bug in pandas 1.3. dtype is not updated properly with `inplace` argument.
+            pser = pser.astype(CategoricalDtype(categories=[1, 3]))
+
+        self.assert_eq(pser, psser)
         self.assert_eq(pdf, psdf)
 
         self.assertRaises(ValueError, lambda: psser.cat.remove_categories(4))
@@ -151,10 +151,10 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         pser.cat.remove_unused_categories(inplace=True)
         psser.cat.remove_unused_categories(inplace=True)
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-            pass
-        else:
-            self.assert_eq(pser, psser)
+            # Bug in pandas 1.3. dtype is not updated properly with `inplace` argument.
+            pser = pser.astype(CategoricalDtype(categories=[1, 3]))
+
+        self.assert_eq(pser, psser)
         self.assert_eq(pdf, psdf)
 
     def test_reorder_categories(self):
@@ -180,20 +180,17 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
 
         pser.cat.reorder_categories([1, 2, 3], inplace=True)
         psser.cat.reorder_categories([1, 2, 3], inplace=True)
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-            pass
-        else:
-            self.assert_eq(pser, psser)
+
+        self.assert_eq(pser, psser)
         self.assert_eq(pdf, psdf)
 
         pser.cat.reorder_categories([3, 2, 1], ordered=True, inplace=True)
         psser.cat.reorder_categories([3, 2, 1], ordered=True, inplace=True)
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-            pass
-        else:
-            self.assert_eq(pser, psser)
+            # Bug in pandas 1.3. dtype is not updated properly with `inplace` argument.
+            pser = pser.astype(CategoricalDtype(categories=[3, 2, 1], ordered=True))
+
+        self.assert_eq(pser, psser)
         self.assert_eq(pdf, psdf)
 
         self.assertRaises(ValueError, lambda: psser.cat.reorder_categories([1, 2]))
@@ -214,10 +211,10 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         pser.cat.as_ordered(inplace=True)
         psser.cat.as_ordered(inplace=True)
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-            pass
-        else:
-            self.assert_eq(pser, psser)
+            # Bug in pandas 1.3. dtype is not updated properly with `inplace` argument.
+            pser = pser.astype(CategoricalDtype(categories=[1, 2, 3], ordered=True))
+
+        self.assert_eq(pser, psser)
         self.assert_eq(pdf, psdf)
 
         # as_unordered
@@ -225,6 +222,11 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
 
         pser.cat.as_unordered(inplace=True)
         psser.cat.as_unordered(inplace=True)
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            # Bug in pandas 1.3. dtype is not updated properly with `inplace` argument.
+            pser = pser.astype(CategoricalDtype(categories=[1, 2, 3], ordered=False))
+            pdf.a = pser
+
         self.assert_eq(pser, psser)
         self.assert_eq(pdf, psdf)
 
@@ -445,13 +447,16 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
 
         dtype = CategoricalDtype(categories=["a", "b", "c", "d"])
 
-        def astype(x) -> ps.Series[dtype]:
+        # The behavior for CategoricalDtype is changed from pandas 1.3
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            ret_dtype = pdf.b.dtype
+        else:
+            ret_dtype = dtype
+
+        def astype(x) -> ps.Series[ret_dtype]:
             return x.astype(dtype)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-            pass
-        elif LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
             self.assert_eq(
                 psdf.groupby("a").transform(astype).sort_values("b").reset_index(drop=True),
                 pdf.groupby("a").transform(astype).sort_values("b").reset_index(drop=True),
@@ -670,28 +675,30 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         pser.cat.rename_categories({"a": "A", "c": "C"}, inplace=True)
         psser.cat.rename_categories({"a": "A", "c": "C"}, inplace=True)
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-            pass
-        else:
-            self.assert_eq(pser, psser)
+            # Bug in pandas 1.3. dtype is not updated properly with `inplace` argument.
+            pser = pser.astype(CategoricalDtype(categories=["C", "b", "d", "A"]))
+
+        self.assert_eq(pser, psser)
         self.assert_eq(pdf, psdf)
 
         pser.cat.rename_categories(lambda x: x.upper(), inplace=True)
         psser.cat.rename_categories(lambda x: x.upper(), inplace=True)
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-            pass
-        else:
-            self.assert_eq(pser, psser)
+            # Bug in pandas 1.3. dtype is not updated properly with `inplace` argument.
+            pser = pser.astype(CategoricalDtype(categories=["C", "B", "D", "A"]))
+            pdf.b = pser
+
+        self.assert_eq(pser, psser)
         self.assert_eq(pdf, psdf)
 
         pser.cat.rename_categories([0, 1, 3, 2], inplace=True)
         psser.cat.rename_categories([0, 1, 3, 2], inplace=True)
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-            pass
-        else:
-            self.assert_eq(pser, psser)
+            # Bug in pandas 1.3. dtype is not updated properly with `inplace` argument.
+            pser = pser.astype(CategoricalDtype(categories=[0, 1, 3, 2]))
+            pdf.b = pser
+
+        self.assert_eq(pser, psser)
         self.assert_eq(pdf, psdf)
 
         self.assertRaisesRegex(
@@ -762,19 +769,20 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
             psser.cat.set_categories(["a", "c", "b", "o"], inplace=True, rename=True),
         )
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-            pass
-        else:
-            self.assert_eq(pser, psser)
+            # Bug in pandas 1.3. dtype is not updated properly with `inplace` argument.
+            pser = pser.astype(CategoricalDtype(categories=["a", "c", "b", "o"]))
+
+        self.assert_eq(pser, psser)
         self.assert_eq(pdf, psdf)
 
         pser.cat.set_categories([2, 3, 1, 0], inplace=True, rename=False),
         psser.cat.set_categories([2, 3, 1, 0], inplace=True, rename=False),
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-            pass
-        else:
-            self.assert_eq(pser, psser)
+            # Bug in pandas 1.3. dtype is not updated properly with `inplace` argument.
+            pser = pser.astype(CategoricalDtype(categories=[2, 3, 1, 0]))
+            pdf.b = pser
+
+        self.assert_eq(pser, psser)
         self.assert_eq(pdf, psdf)
 
         self.assertRaisesRegex(

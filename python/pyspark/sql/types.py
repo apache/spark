@@ -34,8 +34,9 @@ from pyspark.serializers import CloudPickleSerializer
 
 __all__ = [
     "DataType", "NullType", "StringType", "BinaryType", "BooleanType", "DateType",
-    "TimestampType", "DecimalType", "DoubleType", "FloatType", "ByteType", "IntegerType",
-    "LongType", "ShortType", "ArrayType", "MapType", "StructField", "StructType"]
+    "TimestampType", "TimestampNTZType", "DecimalType", "DoubleType", "FloatType",
+    "ByteType", "IntegerType", "LongType", "ShortType", "ArrayType", "MapType",
+    "StructField", "StructType"]
 
 
 class DataType(object):
@@ -186,6 +187,29 @@ class TimestampType(AtomicType, metaclass=DataTypeSingleton):
         if ts is not None:
             # using int to avoid precision loss in float
             return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
+
+
+class TimestampNTZType(AtomicType, metaclass=DataTypeSingleton):
+    """Timestamp (datetime.datetime) data type without timezone information.
+    """
+
+    def needConversion(self):
+        return True
+
+    @classmethod
+    def typeName(cls):
+        return 'timestamp_ntz'
+
+    def toInternal(self, dt):
+        if dt is not None:
+            seconds = calendar.timegm(dt.timetuple())
+            return int(seconds) * 1000000 + dt.microsecond
+
+    def fromInternal(self, ts):
+        if ts is not None:
+            # using int to avoid precision loss in float
+            return datetime.datetime.utcfromtimestamp(
+                ts // 1000000).replace(microsecond=ts % 1000000)
 
 
 class DecimalType(FractionalType):
@@ -767,7 +791,8 @@ class UserDefinedType(DataType):
 
 
 _atomic_types = [StringType, BinaryType, BooleanType, DecimalType, FloatType, DoubleType,
-                 ByteType, ShortType, IntegerType, LongType, DateType, TimestampType, NullType]
+                 ByteType, ShortType, IntegerType, LongType, DateType, TimestampType,
+                 TimestampNTZType, NullType]
 _all_atomic_types = dict((t.typeName(), t) for t in _atomic_types)
 _all_complex_types = dict((v.typeName(), v)
                           for v in [ArrayType, MapType, StructType])
@@ -901,6 +926,8 @@ def _parse_datatype_json_value(json_value):
             return _all_atomic_types[json_value]()
         elif json_value == 'decimal':
             return DecimalType()
+        elif json_value == 'timestamp_ntz':
+            return TimestampNTZType()
         elif _FIXED_DECIMAL.match(json_value):
             m = _FIXED_DECIMAL.match(json_value)
             return DecimalType(int(m.group(1)), int(m.group(2)))
@@ -926,8 +953,8 @@ _type_mappings = {
     bytearray: BinaryType,
     decimal.Decimal: DecimalType,
     datetime.date: DateType,
-    datetime.datetime: TimestampType,
-    datetime.time: TimestampType,
+    datetime.datetime: TimestampType,  # can be TimestampNTZType
+    datetime.time: TimestampType,  # can be TimestampNTZType
     bytes: BinaryType,
 }
 
@@ -1005,7 +1032,7 @@ if sys.version_info[0] < 4:
     _array_type_mappings['u'] = StringType
 
 
-def _infer_type(obj, infer_dict_as_struct=False):
+def _infer_type(obj, infer_dict_as_struct=False, prefer_timestamp_ntz=False):
     """Infer the DataType from obj
     """
     if obj is None:
@@ -1018,6 +1045,8 @@ def _infer_type(obj, infer_dict_as_struct=False):
     if dataType is DecimalType:
         # the precision and scale of `obj` may be different from row to row.
         return DecimalType(38, 18)
+    if dataType is TimestampType and prefer_timestamp_ntz and obj.tzname() is None:
+        return TimestampNTZType()
     elif dataType is not None:
         return dataType()
 
@@ -1026,18 +1055,21 @@ def _infer_type(obj, infer_dict_as_struct=False):
             struct = StructType()
             for key, value in obj.items():
                 if key is not None and value is not None:
-                    struct.add(key, _infer_type(value, infer_dict_as_struct), True)
+                    struct.add(
+                        key, _infer_type(value, infer_dict_as_struct, prefer_timestamp_ntz), True)
             return struct
         else:
             for key, value in obj.items():
                 if key is not None and value is not None:
-                    return MapType(_infer_type(key, infer_dict_as_struct),
-                                   _infer_type(value, infer_dict_as_struct), True)
+                    return MapType(
+                        _infer_type(key, infer_dict_as_struct, prefer_timestamp_ntz),
+                        _infer_type(value, infer_dict_as_struct, prefer_timestamp_ntz), True)
             return MapType(NullType(), NullType(), True)
     elif isinstance(obj, list):
         for v in obj:
             if v is not None:
-                return ArrayType(_infer_type(obj[0], infer_dict_as_struct), True)
+                return ArrayType(
+                    _infer_type(obj[0], infer_dict_as_struct, prefer_timestamp_ntz), True)
         return ArrayType(NullType(), True)
     elif isinstance(obj, array):
         if obj.typecode in _array_type_mappings:
@@ -1051,7 +1083,7 @@ def _infer_type(obj, infer_dict_as_struct=False):
             raise TypeError("not supported type: %s" % type(obj))
 
 
-def _infer_schema(row, names=None, infer_dict_as_struct=False):
+def _infer_schema(row, names=None, infer_dict_as_struct=False, prefer_timestamp_ntz=False):
     """Infer the schema from dict/namedtuple/object"""
     if isinstance(row, dict):
         items = sorted(row.items())
@@ -1077,7 +1109,8 @@ def _infer_schema(row, names=None, infer_dict_as_struct=False):
     fields = []
     for k, v in items:
         try:
-            fields.append(StructField(k, _infer_type(v, infer_dict_as_struct), True))
+            fields.append(StructField(
+                k, _infer_type(v, infer_dict_as_struct, prefer_timestamp_ntz), True))
         except TypeError as e:
             raise TypeError("Unable to infer the type of the field {}.".format(k)) from e
     return StructType(fields)
@@ -1107,6 +1140,10 @@ def _merge_type(a, b, name=None):
         return b
     elif isinstance(b, NullType):
         return a
+    elif isinstance(a, TimestampType) and isinstance(b, TimestampNTZType):
+        return a
+    elif isinstance(a, TimestampNTZType) and isinstance(b, TimestampType):
+        return b
     elif type(a) is not type(b):
         # TODO: type cast (such as int -> long)
         raise TypeError(new_msg("Can not merge type %s and %s" % (type(a), type(b))))
@@ -1211,6 +1248,7 @@ _acceptable_types = {
     BinaryType: (bytearray, bytes),
     DateType: (datetime.date, datetime.datetime),
     TimestampType: (datetime.datetime,),
+    TimestampNTZType: (datetime.datetime,),
     ArrayType: (list, tuple, array),
     MapType: (dict,),
     StructType: (tuple, list, dict),

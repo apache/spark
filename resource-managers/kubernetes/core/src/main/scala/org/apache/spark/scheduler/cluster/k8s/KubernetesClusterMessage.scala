@@ -14,27 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.scheduler.cluster.k8s
 
-package org.apache.spark.sql.connector.expressions;
+import java.io.Serializable
 
-import org.apache.spark.annotation.Evolving;
-
-/**
- * An aggregate function that returns the maximum value in a group.
- *
- * @since 3.2.0
- */
-@Evolving
-public final class Max implements AggregateFunc {
-  private final FieldReference column;
-
-  public Max(FieldReference column) { this.column = column; }
-
-  public FieldReference column() { return column; }
-
-  @Override
-  public String toString() { return "MAX(" + column.describe() + ")"; }
-
-  @Override
-  public String describe() { return this.toString(); }
-}
+case class GenerateExecID(podName: String) extends Serializable

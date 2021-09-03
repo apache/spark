@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2.orc
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownFilters}
+import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.orc.OrcFilters
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
@@ -35,7 +35,7 @@ case class OrcScanBuilder(
     schema: StructType,
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
-  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) with SupportsPushDownFilters {
+  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
   lazy val hadoopConf = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
@@ -45,20 +45,17 @@ case class OrcScanBuilder(
   override protected val supportsNestedSchemaPruning: Boolean = true
 
   override def build(): Scan = {
-    OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema,
-      readDataSchema(), readPartitionSchema(), options, pushedFilters())
+    OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema, readDataSchema(),
+      readPartitionSchema(), options, pushedDataFilters, partitionFilters, dataFilters)
   }
 
-  private var _pushedFilters: Array[Filter] = Array.empty
-
-  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+  override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       val dataTypeMap = OrcFilters.getSearchableTypeMap(
         readDataSchema(), SQLConf.get.caseSensitiveAnalysis)
-      _pushedFilters = OrcFilters.convertibleFilters(dataTypeMap, filters).toArray
+      OrcFilters.convertibleFilters(dataTypeMap, dataFilters).toArray
+    } else {
+      Array.empty[Filter]
     }
-    filters
   }
-
-  override def pushedFilters(): Array[Filter] = _pushedFilters
 }
