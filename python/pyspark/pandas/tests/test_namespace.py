@@ -344,11 +344,7 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(
             pd.to_numeric(pser, errors="coerce"), ps.to_numeric(psser, errors="coerce"), almost=True
         )
-        self.assertRaisesRegex(
-            ValueError,
-            'Unable to parse string "hello"',
-            lambda: ps.to_numeric(psser, errors="raise"),
-        )
+
         # "raise" with Series that contains parsable data only.
         pser = pd.Series(["1", "2", None, "4", "5.0"])
         psser = ps.from_pandas(pser)

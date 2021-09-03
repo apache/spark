@@ -2825,15 +2825,10 @@ def to_numeric(arg, errors="raise"):
         elif errors == "raise":
             scol = arg.spark.column
             scol_casted = scol.cast("float")
-            cond = scol.isNotNull() & scol_casted.isNull()
-            # Filter out if there are data that satisfy the condition.
-            sdf = arg._internal.spark_frame.select(scol).filter(cond)
-            head_sdf = sdf.head(1)
-            # If at least one data satisfies the condition, raise the ValueError.
-            if len(head_sdf) == 1:
-                raise ValueError('Unable to parse string "{}"'.format(head_sdf[0][0]))
-            else:
-                return arg._with_new_scol(scol_casted)
+            cond = F.when(
+                F.assert_true(~(scol.isNotNull() & scol_casted.isNull())).isNull(), scol_casted
+            )
+            return arg._with_new_scol(cond)
         elif errors == "ignore":
             raise NotImplementedError("'ignore' is not implemented yet, when the `arg` is Series.")
         else:
