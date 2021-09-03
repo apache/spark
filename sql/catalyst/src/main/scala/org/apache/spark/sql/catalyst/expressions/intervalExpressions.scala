@@ -613,26 +613,30 @@ case class DivideYMInterval(
   override def dataType: DataType = YearMonthIntervalType()
 
   @transient
+  private lazy val checkFunc: (Any) => Unit = right.dataType match {
+    case _: DecimalType => (num) =>
+      if (num.asInstanceOf[Decimal].isZero) throw QueryExecutionErrors.divideByZeroError()
+    case _ => (num) => if (num == 0) throw QueryExecutionErrors.divideByZeroError()
+  }
+
+  @transient
   private lazy val evalFunc: (Int, Any) => Any = right.dataType match {
     case LongType => (months: Int, num) =>
-      if (num == 0) throw QueryExecutionErrors.divideByZeroError()
       // Year-month interval has `Int` as the internal type. The result of the divide operation
       // of `Int` by `Long` must fit to `Int`. So, the casting to `Int` cannot cause overflow.
       LongMath.divide(months, num.asInstanceOf[Long], RoundingMode.HALF_UP).toInt
     case _: IntegralType => (months: Int, num) =>
-      if (num == 0) throw QueryExecutionErrors.divideByZeroError()
       IntMath.divide(months, num.asInstanceOf[Number].intValue(), RoundingMode.HALF_UP)
     case _: DecimalType => (months: Int, num) =>
-      if (num.asInstanceOf[Decimal].isZero) throw QueryExecutionErrors.divideByZeroError()
       val decimalRes = ((new Decimal).set(months) / num.asInstanceOf[Decimal]).toJavaBigDecimal
       decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()
     case _: FractionalType => (months: Int, num) =>
-      if (num == 0) throw QueryExecutionErrors.divideByZeroError()
       DoubleMath.roundToInt(months / num.asInstanceOf[Number].doubleValue(), RoundingMode.HALF_UP)
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
     checkDivideOverflow(interval.asInstanceOf[Int], Int.MinValue, right, num)
+    checkFunc(num)
     evalFunc(interval.asInstanceOf[Int], num)
   }
 
@@ -702,21 +706,26 @@ case class DivideDTInterval(
   override def dataType: DataType = DayTimeIntervalType()
 
   @transient
+  private lazy val checkFunc: (Any) => Unit = right.dataType match {
+    case _: DecimalType => (num) =>
+      if (num.asInstanceOf[Decimal].isZero) throw QueryExecutionErrors.divideByZeroError()
+    case _ => (num) => if (num == 0) throw QueryExecutionErrors.divideByZeroError()
+  }
+
+  @transient
   private lazy val evalFunc: (Long, Any) => Any = right.dataType match {
     case _: IntegralType => (micros: Long, num) =>
-      if (num == 0) throw QueryExecutionErrors.divideByZeroError()
       LongMath.divide(micros, num.asInstanceOf[Number].longValue(), RoundingMode.HALF_UP)
     case _: DecimalType => (micros: Long, num) =>
-      if (num.asInstanceOf[Decimal].isZero) throw QueryExecutionErrors.divideByZeroError()
       val decimalRes = ((new Decimal).set(micros) / num.asInstanceOf[Decimal]).toJavaBigDecimal
       decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()
     case _: FractionalType => (micros: Long, num) =>
-      if (num == 0) throw QueryExecutionErrors.divideByZeroError()
       DoubleMath.roundToLong(micros / num.asInstanceOf[Number].doubleValue(), RoundingMode.HALF_UP)
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
     checkDivideOverflow(interval.asInstanceOf[Long], Long.MinValue, right, num)
+    checkFunc(num)
     evalFunc(interval.asInstanceOf[Long], num)
   }
 
