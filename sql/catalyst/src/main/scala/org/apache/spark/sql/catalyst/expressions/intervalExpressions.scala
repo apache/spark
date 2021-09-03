@@ -666,7 +666,7 @@ case class DivideYMInterval(
            |${divideByZeroCheckCodegen(right, n)}
            |$checkIntegralDivideOverflow
            |${ev.value} = ($javaType)$math.divide($m, $n, java.math.RoundingMode.HALF_UP);
-         """.stripMargin)
+        """.stripMargin)
     case _: DecimalType =>
       nullSafeCodeGen(ctx, ev, (m, n) =>
         s"""
@@ -742,7 +742,7 @@ case class DivideDTInterval(
            |${divideByZeroCheckCodegen(right, n)}
            |$checkIntegralDivideOverflow
            |${ev.value} = $math.divide($m, $n, java.math.RoundingMode.HALF_UP);
-         """.stripMargin)
+        """.stripMargin)
     case _: DecimalType =>
       nullSafeCodeGen(ctx, ev, (m, n) =>
         s"""
