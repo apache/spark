@@ -1920,4 +1920,28 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row(0, 1) :: Row(1, 2) :: Nil)
     }
   }
+
+  test("SPARK-36656: Do not collapse projects with correlate scalar subqueries") {
+    withTempView("t1", "t2") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((0, 2), (0, 3)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      val correctAnswer = Row(0, 2, 20) :: Row(1, null, null) :: Nil
+      checkAnswer(
+        sql(
+          """
+            |select c1, s, s * 10 from (
+            |  select c1, (select first(c2) from t2 where t1.c1 = t2.c1) s from t1)
+            |""".stripMargin),
+        correctAnswer)
+      checkAnswer(
+        sql(
+          """
+            |select c1, s, s * 10 from (
+            |  select c1, sum((select first(c2) from t2 where t1.c1 = t2.c1)) s
+            |  from t1 group by c1
+            |)
+            |""".stripMargin),
+        correctAnswer)
+    }
+  }
 }
