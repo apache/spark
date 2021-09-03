@@ -315,6 +315,12 @@ class CsvTest(PandasOnSparkTestCase, TestUtils):
                 almost=True,
             )
 
+            self.assertRaisesRegex(
+                ValueError,
+                "Only length-1 comment characters supported",
+                lambda: ps.read_csv(fn, thousands=",,"),
+            )
+
     def test_to_csv(self):
         pdf = pd.DataFrame({"aa": [1, 2, 3], "bb": [4, 5, 6]}, index=[0, 1, 3])
         psdf = ps.DataFrame(pdf)

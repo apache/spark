@@ -411,10 +411,12 @@ def read_csv(
         index_names = []
 
     data_spark_columns = [scol_for(sdf, col) for col in column_labels.values()]
-    if thousands:
+    if thousands is not None:
+        if not isinstance(thousands, str) or len(thousands) != 1:
+            raise ValueError("Only length-1 comment characters supported")
         new_data_spark_columns = list()
         for scol in data_spark_columns:
-            scol_replaced = F.regexp_replace(scol, ",", "")
+            scol_replaced = F.regexp_replace(scol, thousands, "")
             cond = F.when(scol_replaced.isNull(), np.nan).otherwise(scol_replaced.cast("float"))
             if len(sdf.select(cond).filter(cond.isNull()).head(1)) == 0:
                 new_data_spark_columns.append(cond)
