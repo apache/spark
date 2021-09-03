@@ -37,6 +37,8 @@ import org.apache.spark.sql.types.StructType
  *                           calendar
  * @param int96RebaseMode the mode of rebasing INT96 timestamp from Julian to Proleptic Gregorian
  *                           calendar
+ * @param accessByColumnOrdinal when true, mapping parquet schema with catalyst schema by column
+ *                              ordinals; otherwise, by column names
  */
 private[parquet] class ParquetRecordMaterializer(
     parquetSchema: MessageType,

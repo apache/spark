@@ -131,6 +131,9 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
  * @param int96RebaseMode the mode of rebasing INT96 timestamp from Julian to Proleptic Gregorian
  *                           calendar
  * @param updater An updater which propagates converted field values to the parent container
+ *
+ * @param accessByColumnOrdinal when true, mapping parquet schema with catalyst schema by column
+ *                              ordinals; otherwise, by column names
  */
 private[parquet] class ParquetRowConverter(
     schemaConverter: ParquetToSparkSchemaConverter,
@@ -140,7 +143,7 @@ private[parquet] class ParquetRowConverter(
     datetimeRebaseMode: LegacyBehaviorPolicy.Value,
     int96RebaseMode: LegacyBehaviorPolicy.Value,
     updater: ParentContainerUpdater,
-    parquetAccessByOrdinal: Boolean)
+    accessByColumnOrdinal: Boolean)
   extends ParquetGroupConverter(updater) with Logging {
 
   assert(
@@ -201,7 +204,7 @@ private[parquet] class ParquetRowConverter(
 
   // Converters for each field.
   private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
-    if (parquetAccessByOrdinal) {
+    if (accessByColumnOrdinal) {
       // SPARK-36634: When access parquet file by the idx of columns, we can not ensure 2 types
       // matched
       parquetType.getFields.asScala.zip(catalystType).zipWithIndex.map {
@@ -437,7 +440,7 @@ private[parquet] class ParquetRowConverter(
           datetimeRebaseMode,
           int96RebaseMode,
           wrappedUpdater,
-          parquetAccessByOrdinal)
+          accessByColumnOrdinal)
 
       case t =>
         throw QueryExecutionErrors.cannotCreateParquetConverterForDataTypeError(
