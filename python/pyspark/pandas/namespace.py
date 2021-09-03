@@ -273,9 +273,6 @@ def read_csv(
         Indicates the line should not be parsed.
     thousands: str, optional
         Thousands separator.
-
-        .. note:
-
     options : dict
         All other options passed directly into Spark's data source.
 
