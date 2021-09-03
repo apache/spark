@@ -1835,6 +1835,64 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(2 == taskDescriptions.head.resources(GPU).addresses.size)
   }
 
+  test("Scheduler works with reusable executors for multiple ResourceProfiles") {
+    val taskCpus = 1
+    val executorCpus = 4
+
+    val taskScheduler = setupScheduler(numCores = executorCpus,
+      config.EXECUTOR_CORES.key -> executorCpus.toString,
+      config.CPUS_PER_TASK.key -> taskCpus.toString)
+
+    val ereqs = new ExecutorResourceRequests().cores(4)
+    val treqs = new TaskResourceRequests().cpus(2)
+    val rp = new ResourceProfile(ereqs.requests, treqs.requests)
+    taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
+    val taskSet = FakeTask.createTaskSet(3)
+    val rpTaskSet = FakeTask.createTaskSet(5, stageId = 1, stageAttemptId = 0,
+      priority = 0, rpId = rp.id)
+
+    val resourcesDefaultProf = Map(GPU -> ArrayBuffer("0", "1", "2", "3"))
+    val resources = Map(GPU -> ArrayBuffer("4", "5", "6", "7", "8", "9"))
+
+    val workerOffers =
+      IndexedSeq(new WorkerOffer("executor0", "host0", 2, None, resourcesDefaultProf),
+        new WorkerOffer("executor1", "host1", 6, None, resources, rp.id))
+    taskScheduler.submitTasks(taskSet)
+    taskScheduler.submitTasks(rpTaskSet)
+    // should have 2 for default profile and 2 for additional resource profile
+    var taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+
+    logDebug(taskDescriptions.mkString("\n"))
+
+//    assert(5 === taskDescriptions.length)
+//    var has2Gpus = 0
+//    var has1Gpu = 0
+//    for (tDesc <- taskDescriptions) {
+//      assert(tDesc.resources.contains(GPU))
+//      if (tDesc.resources(GPU).addresses.size == 2) {
+//        has2Gpus += 1
+//      }
+//      if (tDesc.resources(GPU).addresses.size == 1) {
+//        has1Gpu += 1
+//      }
+//    }
+//    assert(has2Gpus == 3)
+//    assert(has1Gpu == 2)
+//
+//    val resources3 = Map(GPU -> ArrayBuffer("14", "15", "16", "17", "18", "19"))
+//
+//    // clear the first 2 worker offers so they don't have any room and add a third
+//    // for the resource profile
+//    val workerOffers3 = IndexedSeq(
+//      new WorkerOffer("executor0", "host0", 0, None, Map.empty),
+//      new WorkerOffer("executor1", "host1", 0, None, Map.empty, rp.id),
+//      new WorkerOffer("executor2", "host2", 6, None, resources3, rp.id))
+//    taskDescriptions = taskScheduler.resourceOffers(workerOffers3).flatten
+//    assert(2 === taskDescriptions.length)
+//    assert(taskDescriptions.head.resources.contains(GPU))
+//    assert(2 == taskDescriptions.head.resources(GPU).addresses.size)
+  }
+
   private def setupSchedulerForDecommissionTests(clock: Clock, numTasks: Int): TaskSchedulerImpl = {
     // one task per host
     val numHosts = numTasks
