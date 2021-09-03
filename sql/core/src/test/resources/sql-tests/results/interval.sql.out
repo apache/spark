@@ -203,8 +203,8 @@ select interval '2 seconds' / 0
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-/ by zero
+org.apache.spark.SparkArithmeticException
+divide by zero
 
 
 -- !query
