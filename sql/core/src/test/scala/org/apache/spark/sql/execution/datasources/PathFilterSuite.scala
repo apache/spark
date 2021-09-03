@@ -226,12 +226,10 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     withTempPath { path =>
       val dataDir = path.getCanonicalPath
       Seq("foo").toDS().write.text(dataDir)
-      val df = spark.read.option("modifiedbefore", "yesterday").text(dataDir)
-      assert(df.isEmpty)
-
-      // Both glob pattern in option and path should be effective to filter files.
-      val df2 = spark.read.option("modifiedbefore", "tomorrow").text(dataDir)
-      checkAnswer(df2, Row("foo"))
+      assert(spark.read.option("modifiedbefore", "yesterday").text(dataDir).isEmpty)
+      assert(spark.read.option("modifiedAfter", "tomorrow").text(dataDir).isEmpty)
+      checkAnswer(spark.read.option("modifiedbefore", "tomorrow").text(dataDir), Row("foo"))
+      checkAnswer(spark.read.option("modifiedAfter", "yesterday").text(dataDir), Row("foo"))
     }
   }
 
