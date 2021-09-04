@@ -400,6 +400,7 @@ org.apache.hive:hive-common
 org.apache.hive:hive-shims-scheduler
 org.apache.hive:hive-storage-api
 org.apache.hive:hive-vector-code-gen
+org.apache.hive:hive-contrib
 org.datanucleus:javax.jdo
 com.tdunning:json
 org.apache.velocity:velocity

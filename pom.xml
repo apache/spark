@@ -333,6 +333,10 @@
         <enabled>true</enabled>
       </snapshots>
     </repository>
+    <repository>
+      <id>Cloudera repository</id>
+      <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
+    </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>
@@ -2450,6 +2454,18 @@
           <exclusion>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hive</groupId>
+        <artifactId>hive-contrib</artifactId>
+        <version>1.1.0-cdh5.16.2</version>
+        <scope>compile</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-exec</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
