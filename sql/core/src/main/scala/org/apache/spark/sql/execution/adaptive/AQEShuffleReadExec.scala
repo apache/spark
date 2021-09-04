@@ -82,8 +82,11 @@ case class AQEShuffleReadExec private(
         // `RoundRobinPartitioning` but we don't need to retain the number of partitions.
         case r: RoundRobinPartitioning =>
           r.copy(numPartitions = partitionSpecs.length)
-        case other => throw new IllegalStateException(
-          "Unexpected partitioning for coalesced shuffle read: " + other)
+        case _ =>
+          // Spark plugins may have custom partitioning and may replace this operator
+          // during the postStageOptimization phase, so return UnknownPartitioning here
+          // rather than throw an exception
+          UnknownPartitioning(partitionSpecs.length)
       }
     } else {
       UnknownPartitioning(partitionSpecs.length)
