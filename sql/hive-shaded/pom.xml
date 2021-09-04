@@ -95,6 +95,12 @@
               </excludes>
             </filter>
           </filters>
+          <relocations>
+            <relocation>
+              <pattern>com.google.common</pattern>
+              <shadedPattern>${spark.shade.packageName}.com.google.common</shadedPattern>
+            </relocation>
+          </relocations>
         </configuration>
         <executions>
           <execution>
