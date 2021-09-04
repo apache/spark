@@ -18,8 +18,6 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Expression;
-import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
@@ -31,25 +29,20 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  */
 @Evolving
 public final class GreaterThanOrEqual extends Filter {
-  private final Expression expr;
+  private final FilterColExpr expr;
   private final Literal<?> value;
 
-  public GreaterThanOrEqual(Expression expr, Literal<?> value) {
+  public GreaterThanOrEqual(FilterColExpr expr, Literal<?> value) {
     this.expr = expr;
     this.value = value;
   }
 
-  public Expression expr() { return expr; }
+  public FilterColExpr expr() { return expr; }
   public Literal<?> value() { return value; }
 
   @Override
   public String toString() { return expr.describe() + " >= " + value.describe(); }
 
   @Override
-  public NamedReference[] references() {
-    if (expr instanceof FieldReference){
-      return new NamedReference[] { (FieldReference)expr };
-    }
-    return EMPTY_REFERENCE;
-  }
+  public NamedReference[] references() { return expr.references(); }
 }

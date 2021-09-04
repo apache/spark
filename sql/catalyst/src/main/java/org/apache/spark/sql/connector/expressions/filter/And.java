@@ -44,7 +44,7 @@ public final class And extends Filter {
   }
 
   @Override
-  public  NamedReference[] references() {
+  public NamedReference[] references() {
     NamedReference[] refLeft = left.references();
     NamedReference[] refRight = right.references();
     NamedReference[] arr = new NamedReference[refLeft.length + refRight.length];

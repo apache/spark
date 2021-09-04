@@ -18,8 +18,6 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Expression;
-import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
@@ -30,25 +28,20 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  */
 @Evolving
 public final class StringStartsWith extends Filter {
-  private final Expression expr;
+  private final FilterColExpr expr;
   private final String value;
 
-  public StringStartsWith(Expression expr, String value) {
+  public StringStartsWith(FilterColExpr expr, String value) {
     this.expr = expr;
     this.value = value;
   }
 
-  public Expression expr() { return expr; }
+  public FilterColExpr expr() { return expr; }
   public String value() { return value; }
 
   @Override
   public String toString() { return "STRING_STARTS_WITH(" + expr.describe() + ", " + value + ")"; }
 
   @Override
-  public NamedReference[] references() {
-    if (expr instanceof FieldReference){
-      return new NamedReference[] { (FieldReference)expr };
-    }
-    return EMPTY_REFERENCE;
-  }
+  public NamedReference[] references() { return expr.references(); }
 }
