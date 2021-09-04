@@ -253,9 +253,9 @@
       when the Hadoop profile is hadoop-2.7, because these are only available in 3.x. Note that,
       as result we have to include the same hadoop-client dependency multiple times in hadoop-2.7.
     -->
-    <hadoop-client-api.artifact>hadoop-client-api</hadoop-client-api.artifact>
-    <hadoop-client-runtime.artifact>hadoop-client-runtime</hadoop-client-runtime.artifact>
-    <hadoop-client-minicluster.artifact>hadoop-client-minicluster</hadoop-client-minicluster.artifact>
+    <hadoop-client-api.artifact>hadoop-client</hadoop-client-api.artifact>
+    <hadoop-client-runtime.artifact>hadoop-client</hadoop-client-runtime.artifact>
+    <hadoop-client-minicluster.artifact>hadoop-client</hadoop-client-minicluster.artifact>
 
     <!--
       Overridable test home. So that you can call individual pom files directly without
