@@ -2045,7 +2045,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Shut down the SparkContext.
    */
-  def stop(callBack: Option[() => Unit] = None): Unit = {
+  def stop(): Unit = {
     if (LiveListenerBus.withinListenerThread.value) {
       throw new SparkException(s"Cannot stop SparkContext within listener bus thread.")
     }
@@ -2137,9 +2137,6 @@ class SparkContext(config: SparkConf) extends Logging {
     // Unset YARN mode system env variable, to allow switching between cluster types.
     SparkContext.clearActiveContext()
     logInfo("Successfully stopped SparkContext")
-    callBack.foreach { call =>
-      call()
-    }
   }
 
 
