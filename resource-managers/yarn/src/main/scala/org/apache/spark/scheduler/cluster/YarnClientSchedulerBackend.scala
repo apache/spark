@@ -121,15 +121,15 @@ private[spark] class YarnClientSchedulerBackend(
           logError(s"Diagnostics message: $err")
         }
         allowInterrupt = false
-        sc.stop()
-        state match {
-          case FinalApplicationStatus.FAILED | FinalApplicationStatus.KILLED
-            if conf.get(AM_CLIENT_MODE_EXIT_DIRECTLY) =>
-            logWarning(s"ApplicationMaster finished with status ${state}, " +
-              s"SparkContext should exit with code 1.")
-            System.exit(1)
-          case _ =>
-        }
+        sc.stop(Some(() =>
+          state match {
+            case FinalApplicationStatus.FAILED | FinalApplicationStatus.KILLED
+              if conf.get(AM_CLIENT_MODE_EXIT_DIRECTLY) =>
+              logWarning(s"ApplicationMaster finished with status $state, " +
+                s"Application should exit with code 1.")
+              System.exit(1)
+            case _ =>
+          }))
       } catch {
         case _: InterruptedException | _: InterruptedIOException =>
           logInfo("Interrupting monitor thread")
