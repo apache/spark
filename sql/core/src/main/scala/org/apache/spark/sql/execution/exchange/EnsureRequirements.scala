@@ -46,15 +46,15 @@ case class EnsureRequirements(
     requiredDistribution: Option[Distribution] = None)
   extends Rule[SparkPlan] {
 
-  private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
-    val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution
-    val requiredChildOrderings: Seq[Seq[SortOrder]] = operator.requiredChildOrdering
-    var children: Seq[SparkPlan] = operator.children
-    assert(requiredChildDistributions.length == children.length)
-    assert(requiredChildOrderings.length == children.length)
-
+  private def ensureDistributionAndOrdering(
+      originChildren: Seq[SparkPlan],
+      requiredChildDistributions: Seq[Distribution],
+      requiredChildOrderings: Seq[Seq[SortOrder]],
+      isRootDistribution: Boolean): Seq[SparkPlan] = {
+    assert(requiredChildDistributions.length == originChildren.length)
+    assert(requiredChildOrderings.length == originChildren.length)
     // Ensure that the operator's children satisfy their output distribution requirements.
-    children = children.zip(requiredChildDistributions).map {
+    var children = originChildren.zip(requiredChildDistributions).map {
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
         child
       case (child, BroadcastDistribution(mode)) =>
@@ -62,7 +62,16 @@ case class EnsureRequirements(
       case (child, distribution) =>
         val numPartitions = distribution.requiredNumPartitions
           .getOrElse(conf.numShufflePartitions)
-        ShuffleExchangeExec(distribution.createPartitioning(numPartitions), child)
+        val shuffleOrigin = if (isRootDistribution) {
+          if (distribution.requiredNumPartitions.isDefined) {
+            REPARTITION_BY_NUM
+          } else {
+            REPARTITION_BY_COL
+          }
+        } else {
+          ENSURE_REQUIREMENTS
+        }
+        ShuffleExchangeExec(distribution.createPartitioning(numPartitions), child, shuffleOrigin)
     }
 
     // Get the indexes of children which have specified distribution requirements and need to have
@@ -83,7 +92,7 @@ case class EnsureRequirements(
           index => requiredChildDistributions(index).requiredNumPartitions
         }.toSet
         assert(numPartitionsSet.size <= 1,
-          s"$operator have incompatible requirements of the number of partitions for its children")
+          s"$requiredChildDistributions have incompatible requirements of the number of partitions")
         numPartitionsSet.headOption
       }
 
@@ -138,7 +147,7 @@ case class EnsureRequirements(
       }
     }
 
-    operator.withNewChildren(children)
+    children
   }
 
   private def reorder(
@@ -279,20 +288,25 @@ case class EnsureRequirements(
         }
 
       case operator: SparkPlan =>
-        ensureDistributionAndOrdering(reorderJoinPredicates(operator))
+        val reordered = reorderJoinPredicates(operator)
+        val newChildren = ensureDistributionAndOrdering(
+          reordered.children,
+          reordered.requiredChildDistribution,
+          reordered.requiredChildOrdering,
+          false)
+        reordered.withNewChildren(newChildren)
     }
 
-    requiredDistribution match {
-      case Some(d) if !newPlan.outputPartitioning.satisfies(d) =>
-        val numPartitions = d.requiredNumPartitions.getOrElse(conf.numShufflePartitions)
-        val shuffleOrigin = if (d.requiredNumPartitions.isDefined) {
-          REPARTITION_BY_NUM
-        } else {
-          REPARTITION_BY_COL
-        }
-        ShuffleExchangeExec(d.createPartitioning(numPartitions), newPlan, shuffleOrigin)
-
-      case _ => newPlan
+    if (requiredDistribution.isDefined) {
+      val finalPlan = ensureDistributionAndOrdering(
+        newPlan :: Nil,
+        requiredDistribution.get :: Nil,
+        Seq(Nil),
+        true)
+      assert(finalPlan.size == 1)
+      finalPlan.head
+    } else {
+      newPlan
     }
   }
 }

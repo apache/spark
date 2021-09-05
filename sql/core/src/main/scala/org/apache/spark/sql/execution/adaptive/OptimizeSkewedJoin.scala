@@ -22,9 +22,10 @@ import scala.collection.mutable
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.exchange.ENSURE_REQUIREMENTS
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -49,7 +50,10 @@ import org.apache.spark.sql.internal.SQLConf
  * (L3, R3-1), (L3, R3-2),
  * (L4-1, R4-1), (L4-2, R4-1), (L4-1, R4-2), (L4-2, R4-2)
  */
-object OptimizeSkewedJoin extends Rule[SparkPlan] {
+case class OptimizeSkewedJoin(
+    requiredDistribution: Option[Distribution],
+    costEvaluator: CostEvaluator)
+  extends Rule[SparkPlan] {
 
   /**
    * A partition is considered as a skewed partition if its size is larger than the median
@@ -249,7 +253,19 @@ object OptimizeSkewedJoin extends Rule[SparkPlan] {
       // SHJ
       //   Shuffle
       //   Shuffle
-      optimizeSkewJoin(plan)
+      val optimized =
+        EnsureRequirements(requiredDistribution.isDefined, requiredDistribution)
+          .apply(optimizeSkewJoin(plan))
+      val originCost = costEvaluator.evaluateCost(plan)
+      val optimizedCost = costEvaluator.evaluateCost(optimized)
+      // two cases we will pick new plan:
+      //   1. optimize the skew join without extra shuffle
+      //   2. optimize the skew join with extra shuffle but the costEvaluator think it's better
+      if (optimizedCost < originCost || (originCost == optimizedCost && optimized != plan)) {
+        optimized
+      } else {
+        plan
+      }
     } else {
       plan
     }

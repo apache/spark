@@ -97,30 +97,26 @@ case class AdaptiveSparkPlanExec(
     AQEUtils.getRequiredDistribution(inputPlan)
   }
 
+  @transient private val costEvaluator =
+    conf.getConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS) match {
+      case Some(className) => CostEvaluator.instantiate(className, session.sparkContext.getConf)
+      case _ => SimpleCostEvaluator(conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN))
+    }
+
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
-  private def queryStagePreparationRules(optimizeSkewedJoin: Boolean): Seq[Rule[SparkPlan]] = {
-    val optimizeSkewedJoinRules = if (optimizeSkewedJoin) {
-      Seq(OptimizeSkewedJoin,
-        // Add the EnsureRequirements rule here since OptimizeSkewedJoin will change
-        // output partitioning, make sure we have right distribution.
-        EnsureRequirements(requiredDistribution.isDefined, requiredDistribution))
-    } else {
-      Nil
-    }
-
-    Seq(
-      RemoveRedundantProjects,
-      // For cases like `df.repartition(a, b).select(c)`, there is no distribution requirement for
-      // the final plan, but we do need to respect the user-specified repartition. Here we ask
-      // `EnsureRequirements` to not optimize out the user-specified repartition-by-col to work
-      // around this case.
-      EnsureRequirements(requiredDistribution.isDefined),
-      RemoveRedundantSorts,
-      DisableUnnecessaryBucketedScan
-    ) ++ optimizeSkewedJoinRules ++ context.session.sessionState.queryStagePrepRules
-  }
+  @transient private val queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
+    RemoveRedundantProjects,
+    // For cases like `df.repartition(a, b).select(c)`, there is no distribution requirement for
+    // the final plan, but we do need to respect the user-specified repartition. Here we ask
+    // `EnsureRequirements` to not optimize out the user-specified repartition-by-col to work
+    // around this case.
+    EnsureRequirements(optimizeOutRepartition = requiredDistribution.isDefined),
+    RemoveRedundantSorts,
+    DisableUnnecessaryBucketedScan,
+    OptimizeSkewedJoin(requiredDistribution, costEvaluator)
+  ) ++ context.session.sessionState.queryStagePrepRules
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
@@ -178,24 +174,9 @@ case class AdaptiveSparkPlanExec(
     optimized
   }
 
-  def prepareQueryStages(
-      plan: SparkPlan,
-      optimizeSkewedJoin: Boolean): SparkPlan = {
-    applyPhysicalRules(
-      plan,
-      preprocessingRules ++ queryStagePreparationRules(optimizeSkewedJoin),
-      Some((planChangeLogger, "AQE Replanning")))
-  }
-
-  @transient private val costEvaluator =
-    conf.getConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS) match {
-      case Some(className) => CostEvaluator.instantiate(className, session.sparkContext.getConf)
-      case _ => SimpleCostEvaluator(conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN))
-    }
-
   @transient val initialPlan = context.session.withActive {
     applyPhysicalRules(
-      inputPlan, queryStagePreparationRules(false), Some((planChangeLogger, "AQE Preparations")))
+      inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
   }
 
   @volatile private var currentPhysicalPlan = initialPlan
@@ -315,24 +296,14 @@ case class AdaptiveSparkPlanExec(
         // plans are updated, we can clear the query stage list because at this point the two plans
         // are semantically and physically in sync again.
         val logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
-        val (newPhysicalPlans, newLogicalPlan) = reOptimize(logicalPlan)
-        // We pick the first newPhysicalPlan if have the same cost otherwise pick smaller cost one
-        val (preferredNewPhysicalPlan, newCost) =
-          newPhysicalPlans
-            .map(plan => (plan, costEvaluator.evaluateCost(plan)))
-            .reduce { (last, current) =>
-              if (current._2 < last._2) {
-                current
-              } else {
-                last
-              }
-            }
+        val (newPhysicalPlan, newLogicalPlan) = reOptimize(logicalPlan)
         val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
+        val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
         if (newCost < origCost ||
-            (newCost == origCost && currentPhysicalPlan != preferredNewPhysicalPlan)) {
-          logOnLevel(s"Plan changed from\n$currentPhysicalPlan\nto\n$preferredNewPhysicalPlan")
-          cleanUpTempTags(preferredNewPhysicalPlan)
-          currentPhysicalPlan = preferredNewPhysicalPlan
+            (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
+          logOnLevel(s"Plan changed from $currentPhysicalPlan to $newPhysicalPlan")
+          cleanUpTempTags(newPhysicalPlan)
+          currentPhysicalPlan = newPhysicalPlan
           currentLogicalPlan = newLogicalPlan
           stagesToReplace = Seq.empty[QueryStageExec]
         }
@@ -668,12 +639,14 @@ case class AdaptiveSparkPlanExec(
    * Re-optimize and run physical planning on the current logical plan based on the latest stats.
    */
   private def reOptimize(
-      logicalPlan: LogicalPlan): (Seq[SparkPlan], LogicalPlan) = context.qe.withCteMap {
+      logicalPlan: LogicalPlan): (SparkPlan, LogicalPlan) = context.qe.withCteMap {
     logicalPlan.invalidateStatsCache()
     val optimized = optimizer.execute(logicalPlan)
     val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
-    val optimizedPhysicalPlan = prepareQueryStages(sparkPlan, false)
-    val optimizedWithSkewedJoin = prepareQueryStages(sparkPlan, true)
+    val newPlan = applyPhysicalRules(
+      sparkPlan,
+      preprocessingRules ++ queryStagePreparationRules,
+      Some((planChangeLogger, "AQE Replanning")))
 
     // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
     // add the `BroadcastExchangeExec` node manually in the DPP subquery,
@@ -682,19 +655,13 @@ case class AdaptiveSparkPlanExec(
     // node to prevent the loss of the `BroadcastExchangeExec` node in DPP subquery.
     // Here, we also need to avoid to insert the `BroadcastExchangeExec` node when the newPlan
     // is already the `BroadcastExchangeExec` plan after apply the `LogicalQueryStageStrategy` rule.
-    def updateBroadcastExchange(plan: SparkPlan): SparkPlan = currentPhysicalPlan match {
+    val finalPlan = currentPhysicalPlan match {
       case b: BroadcastExchangeLike
-        if (!plan.isInstanceOf[BroadcastExchangeLike]) => b.withNewChildren(Seq(plan))
-      case _ => plan
+        if (!newPlan.isInstanceOf[BroadcastExchangeLike]) => b.withNewChildren(Seq(newPlan))
+      case _ => newPlan
     }
 
-    val newPhysicalPlans = if (optimizedPhysicalPlan.fastEquals(optimizedWithSkewedJoin)) {
-      updateBroadcastExchange(optimizedPhysicalPlan) :: Nil
-    } else {
-      updateBroadcastExchange(optimizedWithSkewedJoin) ::
-        updateBroadcastExchange(optimizedPhysicalPlan) :: Nil
-    }
-    (newPhysicalPlans, optimized)
+    (finalPlan, optimized)
   }
 
   /**
