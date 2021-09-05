@@ -173,7 +173,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           case s: Star =>
             withPosition(s) {
-              throw QueryCompilationErrors.invalidStarUsageError(operator.nodeName)
+              throw QueryCompilationErrors.invalidStarUsageError(operator.nodeName, Seq(s))
             }
 
           case e: Expression if e.checkInputDataTypes().isFailure =>

@@ -76,7 +76,8 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
 
   override def name: String = v1Table.identifier.quoted
 
-  override def capabilities: util.Set[TableCapability] = new util.HashSet[TableCapability]()
+  override def capabilities: util.Set[TableCapability] =
+    util.EnumSet.noneOf(classOf[TableCapability])
 
   override def toString: String = s"V1Table($name)"
 }

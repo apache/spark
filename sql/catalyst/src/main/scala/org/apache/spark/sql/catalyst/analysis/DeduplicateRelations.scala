@@ -225,6 +225,10 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
         Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
 
+      case oldVersion @ AttachDistributedSequence(sequenceAttr, _)
+        if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
+        Seq((oldVersion, oldVersion.copy(sequenceAttr = sequenceAttr.newInstance())))
+
       case oldVersion: Generate
           if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
         val newOutput = oldVersion.generatorOutput.map(_.newInstance())

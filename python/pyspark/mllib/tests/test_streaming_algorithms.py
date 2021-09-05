@@ -226,7 +226,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
             self.assertAlmostEqual(rel, 0.1, 1)
             return True
 
-        eventually(condition, timeout=60.0, catch_assertions=True)
+        eventually(condition, timeout=120.0, catch_assertions=True)
 
     def test_convergence(self):
         """

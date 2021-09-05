@@ -169,7 +169,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     private def checkHintNonEquiJoin(hint: JoinHint): Unit = {
-      if (hintToShuffleHashJoin(hint) || hintToSortMergeJoin(hint)) {
+      if (hintToShuffleHashJoin(hint) || hintToPreferShuffleHashJoin(hint) ||
+          hintToSortMergeJoin(hint)) {
         assert(hint.leftHint.orElse(hint.rightHint).isDefined)
         hintErrorHandler.joinHintNotSupported(hint.leftHint.orElse(hint.rightHint).get,
           "no equi-join keys")
@@ -754,6 +755,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           func, output, planLater(left), planLater(right)) :: Nil
       case logical.MapInPandas(func, output, child) =>
         execution.python.MapInPandasExec(func, output, planLater(child)) :: Nil
+      case logical.AttachDistributedSequence(attr, child) =>
+        execution.python.AttachDistributedSequenceExec(attr, planLater(child)) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>
         execution.MapElementsExec(f, objAttr, planLater(child)) :: Nil
       case logical.AppendColumns(f, _, _, in, out, child) =>

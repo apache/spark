@@ -742,6 +742,32 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-36594: ORC vectorized reader should properly check maximal number of fields") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(10).map { x =>
+        val stringColumn = s"$x" * 10
+        val structColumn = (x, s"$x" * 100)
+        val arrayColumn = (0 until 5).map(i => (x + i, s"$x" * 5))
+        val mapColumn = Map(s"$x" -> (x * 0.1, (x, s"$x" * 100)))
+        (x, stringColumn, structColumn, arrayColumn, mapColumn)
+      }.toDF("int_col", "string_col", "struct_col", "array_col", "map_col")
+      df.write.format("orc").save(path)
+
+      Seq(("5", false), ("10", true)).foreach {
+        case (maxNumFields, vectorizedEnabled) =>
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+            SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> maxNumFields) {
+            val scanPlan = spark.read.orc(path).queryExecution.executedPlan
+            assert(scanPlan.find {
+              case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
+              case _ => false
+            }.isDefined == vectorizedEnabled)
+          }
+      }
+    }
+  }
 }
 
 class OrcV1QuerySuite extends OrcQuerySuite {

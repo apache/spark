@@ -117,7 +117,7 @@ license: |
 
   - In Spark 3.2, `CREATE TABLE AS SELECT` with non-empty `LOCATION` will throw `AnalysisException`. To restore the behavior before Spark 3.2, you can set `spark.sql.legacy.allowNonEmptyLocationInCTAS` to `true`.
 
-  - In Spark 3.2, special datetime values such as `epoch`, `today`, `yesterday`, `tomorrow`, and `now` are supported in typed literals only, for instance, `select timestamp'now'`. In Spark 3.1 and 3.0, such special values are supported in any casts of strings to dates/timestamps. To keep these special values as dates/timestamps in Spark 3.1 and 3.0, you should replace them manually, e.g. `if (c in ('now', 'today'), current_date(), cast(c as date))`.
+  - In Spark 3.2, special datetime values such as `epoch`, `today`, `yesterday`, `tomorrow`, and `now` are supported in typed literals or in cast of foldable strings only, for instance, `select timestamp'now'` or `select cast('today' as date)`. In Spark 3.1 and 3.0, such special values are supported in any casts of strings to dates/timestamps. To keep these special values as dates/timestamps in Spark 3.1 and 3.0, you should replace them manually, e.g. `if (c in ('now', 'today'), current_date(), cast(c as date))`.
   
   - In Spark 3.2, `FloatType` is mapped to `FLOAT` in MySQL. Prior to this, it used to be mapped to `REAL`, which is by default a synonym to `DOUBLE PRECISION` in MySQL. 
 
