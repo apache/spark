@@ -28,27 +28,14 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 import org.apache.spark.util.sketch.BloomFilter
 
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the mean calculated from values of a group.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
-       2.0
-      > SELECT _FUNC_(col) FROM VALUES (1), (2), (NULL) AS tab(col);
-       1.5
-  """,
-  group = "agg_funcs",
-  since = "1.0.0")
 case class BuildBloomFilter(
        child: Expression,
-       expectedNumItems: Long = 100000000,
+       expectedNumItems: Long,
        override val mutableAggBufferOffset: Int,
        override val inputAggBufferOffset: Int)
   extends TypedImperativeAggregate[BloomFilter]
     with ExpectsInputTypes
     with UnaryLike[Expression] {
-
-  def this(child: Expression) = this(child, expectedNumItems = 100000000, 0, 0)
 
   override def inputTypes: Seq[AbstractDataType] = {
     Seq(TypeCollection(BuildBloomFilter.buildBloomFilterTypes: _*))
