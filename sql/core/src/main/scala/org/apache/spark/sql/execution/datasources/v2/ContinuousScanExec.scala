@@ -58,7 +58,7 @@ case class ContinuousScanExec(
       conf.continuousStreamingExecutorPollIntervalMs,
       partitions,
       schema,
-      readerFactory.asInstanceOf[ContinuousPartitionReaderFactory],
+      readerFactory,
       customMetrics)
   }
 }
