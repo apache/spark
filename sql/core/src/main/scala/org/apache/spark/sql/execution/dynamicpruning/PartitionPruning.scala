@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeFiltering
@@ -48,7 +46,10 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
  *    subquery query twice, we keep the duplicated subquery
  *    (3) otherwise, we drop the subquery.
  */
-object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
+object PartitionPruning extends Rule[LogicalPlan]
+  with PredicateHelper
+  with JoinSelectionHelper
+  with DynamicPruningHelper {
 
   /**
    * Searches for a table scan that can be filtered for a given column in a logical plan.
@@ -133,12 +134,6 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       otherExpr: Expression,
       otherPlan: LogicalPlan,
       canBuildBroadcast: Boolean): Boolean = {
-
-    // get the distinct counts of an attribute for a given table
-    def distinctCounts(attr: Attribute, plan: LogicalPlan): Option[BigInt] = {
-      plan.stats.attributeStats.get(attr).flatMap(_.distinctCount)
-    }
-
     // the default filtering ratio when CBO stats are missing, but there is a
     // predicate that is likely to be selective
     val fallbackRatio = conf.dynamicPartitionPruningFallbackFilterRatio
@@ -177,51 +172,6 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     }
   }
 
-  /**
-   * Returns whether an expression is likely to be selective
-   */
-  private def isLikelySelective(e: Expression): Boolean = e match {
-    case Not(expr) => isLikelySelective(expr)
-    case And(l, r) => isLikelySelective(l) || isLikelySelective(r)
-    case Or(l, r) => isLikelySelective(l) && isLikelySelective(r)
-    case _: StringRegexExpression => true
-    case _: BinaryComparison => true
-    case _: In | _: InSet => true
-    case _: StringPredicate => true
-    case _: MultiLikeBase => true
-    case _ => false
-  }
-
-  /**
-   * Search a filtering predicate in a given logical plan
-   */
-  private def hasSelectivePredicate(plan: LogicalPlan): Boolean = {
-    plan.find {
-      case f: Filter => isLikelySelective(f.condition)
-      case _ => false
-    }.isDefined
-  }
-
-  /**
-   * To be able to prune partitions on a join key, the filtering side needs to
-   * meet the following requirements:
-   *   (1) it can not be a stream
-   *   (2) it needs to contain a selective predicate used for filtering
-   */
-  private def hasPartitionPruningFilter(plan: LogicalPlan): Boolean = {
-    !plan.isStreaming && hasSelectivePredicate(plan)
-  }
-
-  private def canPruneLeft(joinType: JoinType): Boolean = joinType match {
-    case Inner | LeftSemi | RightOuter => true
-    case _ => false
-  }
-
-  private def canPruneRight(joinType: JoinType): Boolean = joinType match {
-    case Inner | LeftSemi | LeftOuter => true
-    case _ => false
-  }
-
   private def prune(plan: LogicalPlan): LogicalPlan = {
     plan transformUp {
       // skip this rule if there's already a DPP subquery on the LHS of a join
@@ -231,23 +181,11 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
         var newLeft = left
         var newRight = right
 
-        // extract the left and right keys of the join condition
-        val (leftKeys, rightKeys) = j match {
-          case ExtractEquiJoinKeys(_, lkeys, rkeys, _, _, _, _) => (lkeys, rkeys)
-          case _ => (Nil, Nil)
-        }
-
-        // checks if two expressions are on opposite sides of the join
-        def fromDifferentSides(x: Expression, y: Expression): Boolean = {
-          def fromLeftRight(x: Expression, y: Expression) =
-            !x.references.isEmpty && x.references.subsetOf(left.outputSet) &&
-              !y.references.isEmpty && y.references.subsetOf(right.outputSet)
-          fromLeftRight(x, y) || fromLeftRight(y, x)
-        }
+        val (leftKeys, rightKeys) = extractEquiJoinKeys(j)
 
         splitConjunctivePredicates(condition).foreach {
           case EqualTo(a: Expression, b: Expression)
-              if fromDifferentSides(a, b) =>
+              if fromDifferentSides(a, b, left, right) =>
             val (l, r) = if (a.references.subsetOf(left.outputSet) &&
               b.references.subsetOf(right.outputSet)) {
               a -> b
@@ -259,13 +197,13 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
             // otherwise the pruning will not trigger
             var filterableScan = getFilterableTableScan(l, left)
             if (filterableScan.isDefined && canPruneLeft(joinType) &&
-                hasPartitionPruningFilter(right)) {
+              supportDynamicPruning(right)) {
               newLeft = insertPredicate(l, newLeft, r, right, rightKeys, filterableScan.get,
                 canBuildBroadcastRight(joinType))
             } else {
               filterableScan = getFilterableTableScan(r, right)
               if (filterableScan.isDefined && canPruneRight(joinType) &&
-                  hasPartitionPruningFilter(left) ) {
+                supportDynamicPruning(left)) {
                 newRight = insertPredicate(r, newRight, l, left, leftKeys, filterableScan.get,
                   canBuildBroadcastLeft(joinType))
               }

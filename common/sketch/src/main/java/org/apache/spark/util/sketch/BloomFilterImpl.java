@@ -19,7 +19,7 @@ package org.apache.spark.util.sketch;
 
 import java.io.*;
 
-class BloomFilterImpl extends BloomFilter implements Serializable {
+public class BloomFilterImpl extends BloomFilter implements Serializable {
 
   private int numHashFunctions;
 
