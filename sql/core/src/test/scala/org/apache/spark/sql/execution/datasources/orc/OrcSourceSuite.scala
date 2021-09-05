@@ -36,7 +36,7 @@ import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
@@ -645,7 +645,7 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
           StructField("3", StringType)))
     }
 
-    // test for nested columns
+    // test for struct in struct
     withTempPath { dir =>
       val path = dir.getAbsolutePath
       spark.sql(
@@ -653,13 +653,157 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
         .write.orc(path)
       val df = spark.read.orc(path)
       checkAnswer(df, Row("a", Row("b", Row("c"))))
-      assert(df.schema.toArray ===
-        Array(
-          StructField("10", StringType),
-          StructField("50", StructType(
+      assert(df.schema.toArray === Array(
+        StructField("10", StringType),
+        StructField("50",
+          StructType(
             StructField("20", StringType) ::
-            StructField("30", StructType(
-              StructField("40", StringType) :: Nil)) :: Nil))))
+            StructField("30",
+              StructType(
+                StructField("40", StringType) :: Nil)) :: Nil))))
+    }
+
+    // test for struct in array
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.sql("SELECT array(array(named_struct('123', 'a'), named_struct('123', 'b'))) as `789`")
+        .write.orc(path)
+      val df = spark.read.orc(path)
+      checkAnswer(df, Row(Seq(Seq(Row("a"), Row("b")))))
+      assert(df.schema.toArray === Array(
+        StructField("789",
+          ArrayType(
+            ArrayType(
+              StructType(
+                StructField("123", StringType) :: Nil))))))
+    }
+
+    // test for struct in map
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.sql(
+        """
+          |SELECT
+          |  map(
+          |    named_struct('123', 'a'),
+          |    map(
+          |      named_struct('456', 'b'),
+          |      named_struct('789', 'c'))) as `012`""".stripMargin).write.orc(path)
+      val df = spark.read.orc(path)
+      checkAnswer(df, Row(Map(Row("a") -> Map(Row("b") -> Row("c")))))
+      assert(df.schema.toArray === Array(
+        StructField("012",
+          MapType(
+            StructType(
+              StructField("123", StringType) :: Nil),
+            MapType(
+              StructType(
+                StructField("456", StringType) :: Nil),
+              StructType(
+                StructField("789", StringType) :: Nil))))))
+    }
+
+    // test for deeply nested struct with complex types
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.sql(
+        """
+          |SELECT
+          |  named_struct('123',
+          |    array(
+          |      map(
+          |        named_struct('456', 'a'),
+          |        named_struct('789', 'b')))) as `1000`,
+          |  named_struct('123',
+          |    map(
+          |      array(named_struct('456', 'a')),
+          |      array(named_struct('789', 'b')))) as `2000`,
+          |  array(
+          |    named_struct('123',
+          |      map(
+          |        named_struct('456', 'a'),
+          |        named_struct('789', 'b')))) as `3000`,
+          |  array(
+          |    map(
+          |      named_struct('123', 'a'),
+          |      named_struct('456', 'b'))) as `4000`,
+          |  map(
+          |    named_struct('123',
+          |      array(
+          |        named_struct('456', 'a'))),
+          |    named_struct('789',
+          |      array(
+          |        named_struct('012', 'b')))) as `5000`,
+          |  map(
+          |    array(
+          |      named_struct('123', 'a')),
+          |    array(
+          |      named_struct('456', 'b'))) as `6000`
+        """.stripMargin).write.orc(path)
+      val df = spark.read.orc(path)
+      checkAnswer(df, Row(
+        Row(Seq(Map(Row("a") -> Row("b")))),
+        Row(Map(Seq(Row("a")) -> Seq(Row("b")))),
+        Seq(Row(Map(Row("a") -> Row("b")))),
+        Seq(Map(Row("a") -> Row("b"))),
+        Map(Row(Seq(Row("a"))) -> Row(Seq(Row("b")))),
+        Map(Seq(Row("a")) -> Seq(Row("b")))))
+      assert(df.schema.toArray === Array(
+        StructField("1000",
+          StructType(
+            StructField("123",
+              ArrayType(
+                MapType(
+                  StructType(
+                    StructField("456", StringType) :: Nil),
+                  StructType(
+                    StructField("789", StringType) :: Nil)))) :: Nil)),
+        StructField("2000",
+          StructType(
+            StructField("123",
+              MapType(
+                ArrayType(
+                  StructType(
+                    StructField("456", StringType) :: Nil)),
+                ArrayType(
+                  StructType(
+                    StructField("789", StringType) :: Nil)))) :: Nil)),
+        StructField("3000",
+          ArrayType(
+            StructType(
+              StructField("123",
+                MapType(
+                  StructType(
+                    StructField("456", StringType) :: Nil),
+                  StructType(
+                    StructField("789", StringType) :: Nil))) :: Nil))),
+        StructField("4000",
+          ArrayType(
+            MapType(
+              StructType(
+                StructField("123", StringType) :: Nil),
+              StructType(
+                StructField("456", StringType) :: Nil)))),
+        StructField("5000",
+          MapType(
+            StructType(
+              StructField("123",
+                ArrayType(
+                  StructType(
+                    StructField("456", StringType) :: Nil))) :: Nil),
+            StructType(
+              StructField("789",
+                ArrayType(
+                  StructType(
+                    StructField("012", StringType) :: Nil))) :: Nil))),
+        StructField("6000",
+          MapType(
+            ArrayType(
+              StructType(
+                StructField("123", StringType) :: Nil)),
+            ArrayType(
+              StructType(
+                StructField("456", StringType) :: Nil))))))
     }
   }
 }
