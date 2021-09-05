@@ -343,7 +343,7 @@ Input [3]: [cr_item_sk#39, cr_order_number#40, cr_returned_date_sk#41]
 
 (61) Filter [codegen id : 12]
 Input [3]: [cr_item_sk#39, cr_order_number#40, cr_returned_date_sk#41]
-Condition : (((isnotnull(cr_item_sk#39) AND isnotnull(cr_order_number#40)) AND dynamicpruningexpression(cr_item_sk#39 IN BLOOM FILTER subquery#42)) AND dynamicpruningexpression(cr_order_number#40 IN BLOOM FILTER subquery#43))
+Condition : (isnotnull(cr_item_sk#39) AND isnotnull(cr_order_number#40))
 
 (62) Project [codegen id : 12]
 Output [2]: [cr_item_sk#39, cr_order_number#40]
@@ -351,7 +351,7 @@ Input [3]: [cr_item_sk#39, cr_order_number#40, cr_returned_date_sk#41]
 
 (63) Exchange
 Input [2]: [cr_item_sk#39, cr_order_number#40]
-Arguments: hashpartitioning(cr_item_sk#39, cr_order_number#40, 5), ENSURE_REQUIREMENTS, [id=#44]
+Arguments: hashpartitioning(cr_item_sk#39, cr_order_number#40, 5), ENSURE_REQUIREMENTS, [id=#42]
 
 (64) Sort [codegen id : 13]
 Input [2]: [cr_item_sk#39, cr_order_number#40]
@@ -370,23 +370,23 @@ Input [7]: [cs_item_sk#4, cs_order_number#6, w_warehouse_name#16, i_item_desc#19
 Input [3]: [w_warehouse_name#16, i_item_desc#19, d_week_seq#29]
 Keys [3]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29]
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#45]
-Results [4]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, count#46]
+Aggregate Attributes [1]: [count#43]
+Results [4]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, count#44]
 
 (68) Exchange
-Input [4]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, count#46]
-Arguments: hashpartitioning(i_item_desc#19, w_warehouse_name#16, d_week_seq#29, 5), ENSURE_REQUIREMENTS, [id=#47]
+Input [4]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, count#44]
+Arguments: hashpartitioning(i_item_desc#19, w_warehouse_name#16, d_week_seq#29, 5), ENSURE_REQUIREMENTS, [id=#45]
 
 (69) HashAggregate [codegen id : 15]
-Input [4]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, count#46]
+Input [4]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, count#44]
 Keys [3]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29]
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#48]
-Results [6]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, count(1)#48 AS no_promo#49, count(1)#48 AS promo#50, count(1)#48 AS total_cnt#51]
+Aggregate Attributes [1]: [count(1)#46]
+Results [6]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, count(1)#46 AS no_promo#47, count(1)#46 AS promo#48, count(1)#46 AS total_cnt#49]
 
 (70) TakeOrderedAndProject
-Input [6]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, no_promo#49, promo#50, total_cnt#51]
-Arguments: 100, [total_cnt#51 DESC NULLS LAST, i_item_desc#19 ASC NULLS FIRST, w_warehouse_name#16 ASC NULLS FIRST, d_week_seq#29 ASC NULLS FIRST], [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, no_promo#49, promo#50, total_cnt#51]
+Input [6]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, no_promo#47, promo#48, total_cnt#49]
+Arguments: 100, [total_cnt#49 DESC NULLS LAST, i_item_desc#19 ASC NULLS FIRST, w_warehouse_name#16 ASC NULLS FIRST, d_week_seq#29 ASC NULLS FIRST], [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, no_promo#47, promo#48, total_cnt#49]
 
 ===== Subqueries =====
 
@@ -399,81 +399,25 @@ BroadcastExchange (75)
 
 
 (71) Scan parquet default.date_dim
-Output [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#52]
+Output [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#50]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,1999), IsNotNull(d_date_sk), IsNotNull(d_week_seq), IsNotNull(d_date)]
 ReadSchema: struct<d_date_sk:int,d_date:date,d_week_seq:int,d_year:int>
 
 (72) ColumnarToRow [codegen id : 1]
-Input [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#52]
+Input [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#50]
 
 (73) Filter [codegen id : 1]
-Input [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#52]
-Condition : ((((isnotnull(d_year#52) AND (d_year#52 = 1999)) AND isnotnull(d_date_sk#27)) AND isnotnull(d_week_seq#29)) AND isnotnull(d_date#28))
+Input [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#50]
+Condition : ((((isnotnull(d_year#50) AND (d_year#50 = 1999)) AND isnotnull(d_date_sk#27)) AND isnotnull(d_week_seq#29)) AND isnotnull(d_date#28))
 
 (74) Project [codegen id : 1]
 Output [3]: [d_date_sk#27, d_date#28, d_week_seq#29]
-Input [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#52]
+Input [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#50]
 
 (75) BroadcastExchange
 Input [3]: [d_date_sk#27, d_date#28, d_week_seq#29]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#53]
-
-Subquery:2 Hosting operator id = 61 Hosting Expression = cr_item_sk#39 IN BLOOM FILTER subquery#42
-ObjectHashAggregate (79)
-+- ObjectHashAggregate (78)
-   +- Coalesce (77)
-      +- ReusedExchange (76)
-
-
-(76) ReusedExchange [Reuses operator id: 57]
-Output [5]: [cs_item_sk#4, cs_order_number#6, w_warehouse_name#16, i_item_desc#19, d_week_seq#29]
-
-(77) Coalesce
-Input [5]: [cs_item_sk#4, cs_order_number#6, w_warehouse_name#16, i_item_desc#19, d_week_seq#29]
-Arguments: 1
-
-(78) ObjectHashAggregate
-Input [5]: [cs_item_sk#4, cs_order_number#6, w_warehouse_name#16, i_item_desc#19, d_week_seq#29]
-Keys: []
-Functions [1]: [partial_buildbloomfilter(cs_item_sk#4, 0, 0, 0)]
-Aggregate Attributes [1]: [buf#54]
-Results [1]: [buf#55]
-
-(79) ObjectHashAggregate
-Input [1]: [buf#55]
-Keys: []
-Functions [1]: [buildbloomfilter(cs_item_sk#4, 0, 0, 0)]
-Aggregate Attributes [1]: [buildbloomfilter(cs_item_sk#4, 0, 0, 0)#56]
-Results [1]: [buildbloomfilter(cs_item_sk#4, 0, 0, 0)#56 AS buildbloomfilter(spark_catalog.default.catalog_sales.cs_item_sk)#57]
-
-Subquery:3 Hosting operator id = 61 Hosting Expression = cr_order_number#40 IN BLOOM FILTER subquery#43
-ObjectHashAggregate (83)
-+- ObjectHashAggregate (82)
-   +- Coalesce (81)
-      +- ReusedExchange (80)
-
-
-(80) ReusedExchange [Reuses operator id: 57]
-Output [5]: [cs_item_sk#4, cs_order_number#6, w_warehouse_name#16, i_item_desc#19, d_week_seq#29]
-
-(81) Coalesce
-Input [5]: [cs_item_sk#4, cs_order_number#6, w_warehouse_name#16, i_item_desc#19, d_week_seq#29]
-Arguments: 1
-
-(82) ObjectHashAggregate
-Input [5]: [cs_item_sk#4, cs_order_number#6, w_warehouse_name#16, i_item_desc#19, d_week_seq#29]
-Keys: []
-Functions [1]: [partial_buildbloomfilter(cs_order_number#6, 0, 0, 0)]
-Aggregate Attributes [1]: [buf#58]
-Results [1]: [buf#59]
-
-(83) ObjectHashAggregate
-Input [1]: [buf#59]
-Keys: []
-Functions [1]: [buildbloomfilter(cs_order_number#6, 0, 0, 0)]
-Aggregate Attributes [1]: [buildbloomfilter(cs_order_number#6, 0, 0, 0)#60]
-Results [1]: [buildbloomfilter(cs_order_number#6, 0, 0, 0)#60 AS buildbloomfilter(spark_catalog.default.catalog_sales.cs_order_number)#61]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#51]
 
 

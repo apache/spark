@@ -62,16 +62,6 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                             WholeStageCodegen (5)
                                                               Project [cr_item_sk,cr_order_number,cr_return_quantity,cr_return_amount]
                                                                 Filter [cr_order_number,cr_item_sk]
-                                                                  Subquery #2
-                                                                    ObjectHashAggregate [buf] [buildbloomfilter(cs_order_number, 0, 0, 0),buildbloomfilter(spark_catalog.default.catalog_sales.cs_order_number),buf]
-                                                                      ObjectHashAggregate [cs_order_number] [buf,buf]
-                                                                        Coalesce
-                                                                          ReusedExchange [cs_item_sk,cs_order_number,cs_quantity,cs_ext_sales_price,i_brand_id,i_class_id,i_category_id,i_manufact_id,d_year] #4
-                                                                  Subquery #3
-                                                                    ObjectHashAggregate [buf] [buildbloomfilter(cs_item_sk, 0, 0, 0),buildbloomfilter(spark_catalog.default.catalog_sales.cs_item_sk),buf]
-                                                                      ObjectHashAggregate [cs_item_sk] [buf,buf]
-                                                                        Coalesce
-                                                                          ReusedExchange [cs_item_sk,cs_order_number,cs_quantity,cs_ext_sales_price,i_brand_id,i_class_id,i_category_id,i_manufact_id,d_year] #4
                                                                   ColumnarToRow
                                                                     InputAdapter
                                                                       Scan parquet default.catalog_returns [cr_item_sk,cr_order_number,cr_return_quantity,cr_return_amount,cr_returned_date_sk]
@@ -105,16 +95,6 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                             WholeStageCodegen (12)
                                                               Project [sr_item_sk,sr_ticket_number,sr_return_quantity,sr_return_amt]
                                                                 Filter [sr_ticket_number,sr_item_sk]
-                                                                  Subquery #4
-                                                                    ObjectHashAggregate [buf] [buildbloomfilter(ss_ticket_number, 0, 0, 0),buildbloomfilter(spark_catalog.default.store_sales.ss_ticket_number),buf]
-                                                                      ObjectHashAggregate [ss_ticket_number] [buf,buf]
-                                                                        Coalesce
-                                                                          ReusedExchange [ss_item_sk,ss_ticket_number,ss_quantity,ss_ext_sales_price,i_brand_id,i_class_id,i_category_id,i_manufact_id,d_year] #8
-                                                                  Subquery #5
-                                                                    ObjectHashAggregate [buf] [buildbloomfilter(ss_item_sk, 0, 0, 0),buildbloomfilter(spark_catalog.default.store_sales.ss_item_sk),buf]
-                                                                      ObjectHashAggregate [ss_item_sk] [buf,buf]
-                                                                        Coalesce
-                                                                          ReusedExchange [ss_item_sk,ss_ticket_number,ss_quantity,ss_ext_sales_price,i_brand_id,i_class_id,i_category_id,i_manufact_id,d_year] #8
                                                                   ColumnarToRow
                                                                     InputAdapter
                                                                       Scan parquet default.store_returns [sr_item_sk,sr_ticket_number,sr_return_quantity,sr_return_amt,sr_returned_date_sk]
@@ -148,16 +128,6 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                             WholeStageCodegen (19)
                                                               Project [wr_item_sk,wr_order_number,wr_return_quantity,wr_return_amt]
                                                                 Filter [wr_order_number,wr_item_sk]
-                                                                  Subquery #6
-                                                                    ObjectHashAggregate [buf] [buildbloomfilter(ws_order_number, 0, 0, 0),buildbloomfilter(spark_catalog.default.web_sales.ws_order_number),buf]
-                                                                      ObjectHashAggregate [ws_order_number] [buf,buf]
-                                                                        Coalesce
-                                                                          ReusedExchange [ws_item_sk,ws_order_number,ws_quantity,ws_ext_sales_price,i_brand_id,i_class_id,i_category_id,i_manufact_id,d_year] #10
-                                                                  Subquery #7
-                                                                    ObjectHashAggregate [buf] [buildbloomfilter(ws_item_sk, 0, 0, 0),buildbloomfilter(spark_catalog.default.web_sales.ws_item_sk),buf]
-                                                                      ObjectHashAggregate [ws_item_sk] [buf,buf]
-                                                                        Coalesce
-                                                                          ReusedExchange [ws_item_sk,ws_order_number,ws_quantity,ws_ext_sales_price,i_brand_id,i_class_id,i_category_id,i_manufact_id,d_year] #10
                                                                   ColumnarToRow
                                                                     InputAdapter
                                                                       Scan parquet default.web_returns [wr_item_sk,wr_order_number,wr_return_quantity,wr_return_amt,wr_returned_date_sk]
@@ -196,7 +166,7 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                                         ColumnarToRow
                                                                           InputAdapter
                                                                             Scan parquet default.catalog_sales [cs_item_sk,cs_order_number,cs_quantity,cs_ext_sales_price,cs_sold_date_sk]
-                                                                              SubqueryBroadcast [d_date_sk] #8
+                                                                              SubqueryBroadcast [d_date_sk] #2
                                                                                 BroadcastExchange #16
                                                                                   WholeStageCodegen (1)
                                                                                     Filter [d_year,d_date_sk]
@@ -211,23 +181,7 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                     WholeStageCodegen (31)
                                                       Sort [cr_order_number,cr_item_sk]
                                                         InputAdapter
-                                                          Exchange [cr_order_number,cr_item_sk] #17
-                                                            WholeStageCodegen (30)
-                                                              Project [cr_item_sk,cr_order_number,cr_return_quantity,cr_return_amount]
-                                                                Filter [cr_order_number,cr_item_sk]
-                                                                  Subquery #9
-                                                                    ObjectHashAggregate [buf] [buildbloomfilter(cs_order_number, 0, 0, 0),buildbloomfilter(spark_catalog.default.catalog_sales.cs_order_number),buf]
-                                                                      ObjectHashAggregate [cs_order_number] [buf,buf]
-                                                                        Coalesce
-                                                                          ReusedExchange [cs_item_sk,cs_order_number,cs_quantity,cs_ext_sales_price,i_brand_id,i_class_id,i_category_id,i_manufact_id,d_year] #15
-                                                                  Subquery #10
-                                                                    ObjectHashAggregate [buf] [buildbloomfilter(cs_item_sk, 0, 0, 0),buildbloomfilter(spark_catalog.default.catalog_sales.cs_item_sk),buf]
-                                                                      ObjectHashAggregate [cs_item_sk] [buf,buf]
-                                                                        Coalesce
-                                                                          ReusedExchange [cs_item_sk,cs_order_number,cs_quantity,cs_ext_sales_price,i_brand_id,i_class_id,i_category_id,i_manufact_id,d_year] #15
-                                                                  ColumnarToRow
-                                                                    InputAdapter
-                                                                      Scan parquet default.catalog_returns [cr_item_sk,cr_order_number,cr_return_quantity,cr_return_amount,cr_returned_date_sk]
+                                                          ReusedExchange [cr_item_sk,cr_order_number,cr_return_quantity,cr_return_amount] #7
                                             WholeStageCodegen (39)
                                               Project [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,ss_quantity,sr_return_quantity,ss_ext_sales_price,sr_return_amt]
                                                 SortMergeJoin [ss_ticket_number,ss_item_sk,sr_ticket_number,sr_item_sk]
@@ -235,7 +189,7 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                     WholeStageCodegen (36)
                                                       Sort [ss_ticket_number,ss_item_sk]
                                                         InputAdapter
-                                                          Exchange [ss_ticket_number,ss_item_sk] #18
+                                                          Exchange [ss_ticket_number,ss_item_sk] #17
                                                             WholeStageCodegen (35)
                                                               Project [ss_item_sk,ss_ticket_number,ss_quantity,ss_ext_sales_price,i_brand_id,i_class_id,i_category_id,i_manufact_id,d_year]
                                                                 BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
@@ -245,7 +199,7 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                                         ColumnarToRow
                                                                           InputAdapter
                                                                             Scan parquet default.store_sales [ss_item_sk,ss_ticket_number,ss_quantity,ss_ext_sales_price,ss_sold_date_sk]
-                                                                              ReusedSubquery [d_date_sk] #8
+                                                                              ReusedSubquery [d_date_sk] #2
                                                                       InputAdapter
                                                                         ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id,i_manufact_id] #6
                                                                   InputAdapter
@@ -254,23 +208,7 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                     WholeStageCodegen (38)
                                                       Sort [sr_ticket_number,sr_item_sk]
                                                         InputAdapter
-                                                          Exchange [sr_ticket_number,sr_item_sk] #19
-                                                            WholeStageCodegen (37)
-                                                              Project [sr_item_sk,sr_ticket_number,sr_return_quantity,sr_return_amt]
-                                                                Filter [sr_ticket_number,sr_item_sk]
-                                                                  Subquery #11
-                                                                    ObjectHashAggregate [buf] [buildbloomfilter(ss_ticket_number, 0, 0, 0),buildbloomfilter(spark_catalog.default.store_sales.ss_ticket_number),buf]
-                                                                      ObjectHashAggregate [ss_ticket_number] [buf,buf]
-                                                                        Coalesce
-                                                                          ReusedExchange [ss_item_sk,ss_ticket_number,ss_quantity,ss_ext_sales_price,i_brand_id,i_class_id,i_category_id,i_manufact_id,d_year] #18
-                                                                  Subquery #12
-                                                                    ObjectHashAggregate [buf] [buildbloomfilter(ss_item_sk, 0, 0, 0),buildbloomfilter(spark_catalog.default.store_sales.ss_item_sk),buf]
-                                                                      ObjectHashAggregate [ss_item_sk] [buf,buf]
-                                                                        Coalesce
-                                                                          ReusedExchange [ss_item_sk,ss_ticket_number,ss_quantity,ss_ext_sales_price,i_brand_id,i_class_id,i_category_id,i_manufact_id,d_year] #18
-                                                                  ColumnarToRow
-                                                                    InputAdapter
-                                                                      Scan parquet default.store_returns [sr_item_sk,sr_ticket_number,sr_return_quantity,sr_return_amt,sr_returned_date_sk]
+                                                          ReusedExchange [sr_item_sk,sr_ticket_number,sr_return_quantity,sr_return_amt] #9
                                             WholeStageCodegen (46)
                                               Project [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,ws_quantity,wr_return_quantity,ws_ext_sales_price,wr_return_amt]
                                                 SortMergeJoin [ws_order_number,ws_item_sk,wr_order_number,wr_item_sk]
@@ -278,7 +216,7 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                     WholeStageCodegen (43)
                                                       Sort [ws_order_number,ws_item_sk]
                                                         InputAdapter
-                                                          Exchange [ws_order_number,ws_item_sk] #20
+                                                          Exchange [ws_order_number,ws_item_sk] #18
                                                             WholeStageCodegen (42)
                                                               Project [ws_item_sk,ws_order_number,ws_quantity,ws_ext_sales_price,i_brand_id,i_class_id,i_category_id,i_manufact_id,d_year]
                                                                 BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
@@ -288,7 +226,7 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                                         ColumnarToRow
                                                                           InputAdapter
                                                                             Scan parquet default.web_sales [ws_item_sk,ws_order_number,ws_quantity,ws_ext_sales_price,ws_sold_date_sk]
-                                                                              ReusedSubquery [d_date_sk] #8
+                                                                              ReusedSubquery [d_date_sk] #2
                                                                       InputAdapter
                                                                         ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id,i_manufact_id] #6
                                                                   InputAdapter
@@ -297,20 +235,4 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                                     WholeStageCodegen (45)
                                                       Sort [wr_order_number,wr_item_sk]
                                                         InputAdapter
-                                                          Exchange [wr_order_number,wr_item_sk] #21
-                                                            WholeStageCodegen (44)
-                                                              Project [wr_item_sk,wr_order_number,wr_return_quantity,wr_return_amt]
-                                                                Filter [wr_order_number,wr_item_sk]
-                                                                  Subquery #13
-                                                                    ObjectHashAggregate [buf] [buildbloomfilter(ws_order_number, 0, 0, 0),buildbloomfilter(spark_catalog.default.web_sales.ws_order_number),buf]
-                                                                      ObjectHashAggregate [ws_order_number] [buf,buf]
-                                                                        Coalesce
-                                                                          ReusedExchange [ws_item_sk,ws_order_number,ws_quantity,ws_ext_sales_price,i_brand_id,i_class_id,i_category_id,i_manufact_id,d_year] #20
-                                                                  Subquery #14
-                                                                    ObjectHashAggregate [buf] [buildbloomfilter(ws_item_sk, 0, 0, 0),buildbloomfilter(spark_catalog.default.web_sales.ws_item_sk),buf]
-                                                                      ObjectHashAggregate [ws_item_sk] [buf,buf]
-                                                                        Coalesce
-                                                                          ReusedExchange [ws_item_sk,ws_order_number,ws_quantity,ws_ext_sales_price,i_brand_id,i_class_id,i_category_id,i_manufact_id,d_year] #20
-                                                                  ColumnarToRow
-                                                                    InputAdapter
-                                                                      Scan parquet default.web_returns [wr_item_sk,wr_order_number,wr_return_quantity,wr_return_amt,wr_returned_date_sk]
+                                                          ReusedExchange [wr_item_sk,wr_order_number,wr_return_quantity,wr_return_amt] #11

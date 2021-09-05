@@ -154,18 +154,20 @@ object DynamicBloomFilterPruning extends Rule[LogicalPlan]
             lazy val leftFilterableScan = getFilterableTableScan(l, left)
             lazy val rightFilterableScan = getFilterableTableScan(r, right)
 
-            if (isRightSideSmall && canPruneLeft(joinType) && leftFilterableScan.nonEmpty &&
+            if (isRightSideSmall && canPruneLeft(joinType) && rightRowCnt > 0 &&
               rightRowCnt <= conf.dynamicBloomFilterJoinPruningMaxBloomFilterEntries &&
               !hasDynamicBloomFilterPruningSubquery(right) && supportDynamicPruning(right) &&
+              leftFilterableScan.nonEmpty &&
               pruningHasBenefit(rightRowCnt, rightDistCnt, leftDistCnt, leftFilterableScan.get)) {
               newLeft = insertPredicate(
                 l, newLeft, r, right, rightKeys, rightDistCnt.getOrElse(rightRowCnt))
               newHint = newHint.copy(rightHint = Some(HintInfo(strategy = Some(SHUFFLE_MERGE))))
             }
 
-            if (isLeftSideSmall && canPruneRight(joinType) && rightFilterableScan.nonEmpty &&
+            if (isLeftSideSmall && canPruneRight(joinType) && leftRowCount > 0 &&
               leftRowCount <= conf.dynamicBloomFilterJoinPruningMaxBloomFilterEntries &&
               !hasDynamicBloomFilterPruningSubquery(left) && supportDynamicPruning(left) &&
+              rightFilterableScan.nonEmpty &&
               pruningHasBenefit(leftRowCount, leftDistCnt, rightDistCnt, rightFilterableScan.get)) {
               newRight = insertPredicate(
                 r, newRight, l, left, leftKeys, leftDistCnt.getOrElse(leftRowCount))
