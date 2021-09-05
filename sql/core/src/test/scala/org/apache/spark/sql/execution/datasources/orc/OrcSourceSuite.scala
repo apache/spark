@@ -36,7 +36,7 @@ import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{LongType, StructField, StructType}
+import org.apache.spark.sql.types.{LongType, StringType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
@@ -628,6 +628,38 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
 
       spark.sql("INSERT INTO t1 values(1, '2', struct('a', 'b', 'c', 10L))")
       checkAnswer(spark.sql("SELECT _col0, _col2.c1 FROM t1"), Seq(Row(1, "a")))
+    }
+  }
+
+  test("SPARK-36663: OrcUtils.toCatalystSchema should correctly handle " +
+    "a column name which consists of only numbers") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.sql("SELECT 'a' as `1`, 'b' as `2`, 'c' as `3`").write.orc(path)
+      val df = spark.read.orc(path)
+      checkAnswer(df, Row("a", "b", "c"))
+      assert(df.schema.toArray ===
+        Array(
+          StructField("1", StringType),
+          StructField("2", StringType),
+          StructField("3", StringType)))
+    }
+
+    // test for nested columns
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.sql(
+        "SELECT 'a' as `10`, named_struct('20', 'b', '30', named_struct('40', 'c')) as `50`")
+        .write.orc(path)
+      val df = spark.read.orc(path)
+      checkAnswer(df, Row("a", Row("b", Row("c"))))
+      assert(df.schema.toArray ===
+        Array(
+          StructField("10", StringType),
+          StructField("50", StructType(
+            StructField("20", StringType) ::
+            StructField("30", StructType(
+              StructField("40", StringType) :: Nil)) :: Nil))))
     }
   }
 }

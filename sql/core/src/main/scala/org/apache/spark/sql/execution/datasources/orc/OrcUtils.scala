@@ -87,8 +87,18 @@ object OrcUtils extends Logging {
   private def toCatalystSchema(schema: TypeDescription): StructType = {
     // The Spark query engine has not completely supported CHAR/VARCHAR type yet, and here we
     // replace the orc CHAR/VARCHAR with STRING type.
+    val fieldNames = schema.getFieldNames.asScala
+    val fieldTypes = schema.getChildren.asScala
     CharVarcharUtils.replaceCharVarcharWithStringInSchema(
-      CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType])
+      fieldNames.zip(fieldTypes).foldLeft(new StructType()) {
+        case (resultType, (name, typeDesc)) =>
+          val catalystType = if (typeDesc.getCategory == TypeDescription.Category.STRUCT) {
+            toCatalystSchema(typeDesc)
+          } else {
+            CatalystSqlParser.parseDataType(typeDesc.toString)
+          }
+          resultType.add(StructField(name, catalystType))
+      })
   }
 
   def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
