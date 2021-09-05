@@ -112,7 +112,7 @@ object OrcUtils extends Logging {
     }
 
     def toMapType(orcType: TypeDescription): MapType = {
-      val Seq(keyType, valueType) = orcType.getChildren.asScala
+      val Seq(keyType, valueType) = orcType.getChildren.asScala.toSeq
       val catalystKeyType = toCatalystType(keyType)
       val catalystValueType = toCatalystType(valueType)
       MapType(catalystKeyType, catalystValueType)
