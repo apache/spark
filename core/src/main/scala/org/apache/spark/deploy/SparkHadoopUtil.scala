@@ -32,6 +32,7 @@ import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.security.{SecurityUtil}
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
@@ -145,6 +146,15 @@ private[spark] class SparkHadoopUtil extends Logging {
         s"using principal: ${principalName} and keytab: ${keytabFilename}")
       UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
     }
+  }
+
+  /**
+   *
+   * @param principalName : History server principal name with _HOST
+   * @return : _HOST pattern replace with Server cannonical name
+   */
+  def getServerPrincipal(principalName: String): String = {
+    SecurityUtil.getServerPrincipal(principalName, "")
   }
 
   /**

@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy
 
+import java.net.InetAddress
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -78,6 +80,18 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     new SparkHadoopUtil().appendSparkHadoopConfigs(sc, hadoopConf)
     // the endpoint value will not have been set
     assertConfigValue(hadoopConf, "fs.s3a.endpoint", null)
+  }
+
+  /**
+   * test for _HOST pattern replacement with Server cannonical address
+   */
+  test("server principal with _HOST pattern") {
+    assert(SparkHadoopUtil.get.getServerPrincipal("spark/_HOST@realm.com")
+      === "spark/%s@realm.com".format(InetAddress.getLocalHost.getCanonicalHostName())
+      , s"Mismatch in expected value")
+    assert(SparkHadoopUtil.get.getServerPrincipal("spark/0.0.0.0@realm.com")
+      === "spark/0.0.0.0@realm.com".format(InetAddress.getLocalHost.getCanonicalHostName())
+      , s"Mismatch in expected value")
   }
 
   /**
