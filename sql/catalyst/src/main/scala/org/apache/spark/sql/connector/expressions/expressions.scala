@@ -19,7 +19,6 @@ package org.apache.spark.sql.connector.expressions
 
 import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.connector.expressions.filter.FilterColExpr
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 
 /**
@@ -329,13 +328,16 @@ private[sql] final case class LiteralValue[T](value: T, dataType: DataType) exte
   override def toString: String = describe
 }
 
-private[sql] final case class FieldReference(parts: Seq[String])
-  extends NamedReference with FilterColExpr {
+private[sql] final case class FieldReference(parts: Seq[String]) extends NamedReference {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
   override def fieldNames: Array[String] = parts.toArray
   override def describe: String = parts.quoted
   override def toString: String = describe
-  override def references(): Array[NamedReference] = Array[NamedReference](this)
+
+  /**
+   * Returns list of NamedReference that are referenced by this FieldReference.
+   */
+  def references(): Array[NamedReference] = Array[NamedReference](this)
 }
 
 private[sql] object FieldReference {

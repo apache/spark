@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
@@ -27,13 +28,13 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  */
 @Evolving
 public final class IsNotNull extends Filter {
-  private final FilterColExpr expr;
+  private final FieldReference expr;
 
-  public IsNotNull(FilterColExpr expr) {
+  public IsNotNull( FieldReference expr) {
     this.expr = expr;
   }
 
-  public FilterColExpr expr() { return expr; }
+  public  FieldReference expr() { return expr; }
 
   @Override
   public String toString() { return expr.describe() + " IS NOT NULL"; }

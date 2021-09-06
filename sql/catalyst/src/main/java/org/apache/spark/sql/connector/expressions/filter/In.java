@@ -22,6 +22,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
@@ -32,15 +33,15 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  */
 @Evolving
 public final class In extends Filter {
-  private final FilterColExpr expr;
+  private final FieldReference expr;
   private final Literal<?>[] values;
 
-  public In(FilterColExpr expr, Literal<?>[] values) {
+  public In( FieldReference expr, Literal<?>[] values) {
     this.expr = expr;
     this.values = values;
   }
 
-  public FilterColExpr expr() { return expr; }
+  public  FieldReference expr() { return expr; }
   public Literal<?>[] values() { return values; }
 
   @Override

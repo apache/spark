@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
@@ -28,15 +29,15 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  */
 @Evolving
 public final class StringContains extends Filter {
-  private final FilterColExpr expr;
+  private final FieldReference expr;
   private final String value;
 
-  public StringContains(FilterColExpr expr, String value) {
+  public StringContains( FieldReference expr, String value) {
     this.expr = expr;
     this.value = value;
   }
 
-  public FilterColExpr expr() { return expr; }
+  public  FieldReference expr() { return expr; }
   public String value() { return value; }
 
   @Override

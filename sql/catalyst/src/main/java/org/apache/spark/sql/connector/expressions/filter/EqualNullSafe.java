@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
@@ -30,15 +31,15 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  */
 @Evolving
 public final class EqualNullSafe extends Filter {
-  private final FilterColExpr expr;
+  private final FieldReference expr;
   private final Literal<?> value;
 
-  public EqualNullSafe(FilterColExpr expr, Literal<?> value) {
+  public EqualNullSafe(FieldReference expr, Literal<?> value) {
     this.expr = expr;
     this.value = value;
   }
 
-  public FilterColExpr expr() { return expr; }
+  public FieldReference expr() { return expr; }
   public Literal<?> value() { return value; }
 
   @Override
