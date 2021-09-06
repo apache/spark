@@ -654,6 +654,20 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         df.select($"ym", $"dt").collect())
     }
   }
+
+  test("SPARK-36675: TRANSFORM should support timestamp_ntz (no serde)") {
+    val df = spark.sql("SELECT timestamp_ntz'2021-09-06 20:19:13' col")
+    checkAnswer(
+      df,
+      (child: SparkPlan) => createScriptTransformationExec(
+        script = "cat",
+        output = Seq(
+          AttributeReference("col", TimestampNTZType)()),
+        child = child,
+        ioschema = defaultIOSchema
+      ),
+      df.select($"col").collect())
+  }
 }
 
 case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExecNode {
