@@ -75,6 +75,69 @@ abstract class StringRegexExpression extends BinaryExpression
   }
 }
 
+abstract class LikeBase(left: Expression, right: Expression, escapeChar: Char)
+  extends StringRegexExpression {
+
+  override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeChar)
+
+  override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
+
+  protected def likeName: String
+  override def toString: String = escapeChar match {
+    case '\\' => s"$left $likeName $right"
+    case c => s"$left $likeName $right ESCAPE '$c'"
+  }
+
+  override def sql: String = s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}"
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val patternClass = classOf[Pattern].getName
+    val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
+
+    if (right.foldable) {
+      val rVal = right.eval()
+      if (rVal != null) {
+        val regexStr =
+          StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
+        val pattern = ctx.addMutableState(patternClass, "patternLike",
+          v => s"""$v = $patternClass.compile("$regexStr", $patternFlags);""")
+
+        // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
+        val eval = left.genCode(ctx)
+        ev.copy(code = code"""
+          ${eval.code}
+          boolean ${ev.isNull} = ${eval.isNull};
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          if (!${ev.isNull}) {
+            ${ev.value} = $pattern.matcher(${eval.value}.toString()).matches();
+          }
+        """)
+      } else {
+        ev.copy(code = code"""
+          boolean ${ev.isNull} = true;
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        """)
+      }
+    } else {
+      val pattern = ctx.freshName("pattern")
+      val rightStr = ctx.freshName("rightStr")
+      // We need to escape the escapeChar to make sure the generated code is valid.
+      // Otherwise we'll hit org.codehaus.commons.compiler.CompileException.
+      val escapedEscapeChar = StringEscapeUtils.escapeJava(escapeChar.toString)
+      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+        s"""
+          String $rightStr = $eval2.toString();
+          $patternClass $pattern = $patternClass.compile(
+            $escapeFunc($rightStr, '$escapedEscapeChar'), $patternFlags);
+          ${ev.value} = $pattern.matcher($eval1.toString()).matches();
+        """
+      })
+    }
+  }
+}
+
 // scalastyle:off line.contains.tab
 /**
  * Simple RegEx pattern matching function
@@ -125,67 +188,11 @@ abstract class StringRegexExpression extends BinaryExpression
   group = "predicate_funcs")
 // scalastyle:on line.contains.tab
 case class Like(left: Expression, right: Expression, escapeChar: Char)
-  extends StringRegexExpression {
+  extends LikeBase(left, right, escapeChar) {
 
   def this(left: Expression, right: Expression) = this(left, right, '\\')
 
-  override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeChar)
-
-  override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
-
-  override def toString: String = escapeChar match {
-    case '\\' => s"$left LIKE $right"
-    case c => s"$left LIKE $right ESCAPE '$c'"
-  }
-
-  override def sql: String = s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}"
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val patternClass = classOf[Pattern].getName
-    val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
-
-    if (right.foldable) {
-      val rVal = right.eval()
-      if (rVal != null) {
-        val regexStr =
-          StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
-        val pattern = ctx.addMutableState(patternClass, "patternLike",
-          v => s"""$v = $patternClass.compile("$regexStr", $patternFlags);""")
-
-        // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
-        val eval = left.genCode(ctx)
-        ev.copy(code = code"""
-          ${eval.code}
-          boolean ${ev.isNull} = ${eval.isNull};
-          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-          if (!${ev.isNull}) {
-            ${ev.value} = $pattern.matcher(${eval.value}.toString()).matches();
-          }
-        """)
-      } else {
-        ev.copy(code = code"""
-          boolean ${ev.isNull} = true;
-          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        """)
-      }
-    } else {
-      val pattern = ctx.freshName("pattern")
-      val rightStr = ctx.freshName("rightStr")
-      // We need to escape the escapeChar to make sure the generated code is valid.
-      // Otherwise we'll hit org.codehaus.commons.compiler.CompileException.
-      val escapedEscapeChar = StringEscapeUtils.escapeJava(escapeChar.toString)
-      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-        s"""
-          String $rightStr = $eval2.toString();
-          $patternClass $pattern = $patternClass.compile(
-            $escapeFunc($rightStr, '$escapedEscapeChar'), $patternFlags);
-          ${ev.value} = $pattern.matcher($eval1.toString()).matches();
-        """
-      })
-    }
-  }
+  override protected def likeName: String = "LIKE"
 
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Like =
     copy(left = newLeft, right = newRight)
