@@ -656,20 +656,17 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
   }
 
   test("SPARK-36675: TRANSFORM should support timestamp_ntz (no serde)") {
-    withTempView("v") {
-      val df = spark.sql("SELECT timestamp_ntz'2021-09-06 20:19:13' col")
-
-      checkAnswer(
-        df,
-        (child: SparkPlan) => createScriptTransformationExec(
-          script = "cat",
-          output = Seq(
-            AttributeReference("col", TimestampNTZType)()),
-          child = child,
-          ioschema = defaultIOSchema
-        ),
-        df.select($"col").collect())
-    }
+    val df = spark.sql("SELECT timestamp_ntz'2021-09-06 20:19:13' col")
+    checkAnswer(
+      df,
+      (child: SparkPlan) => createScriptTransformationExec(
+        script = "cat",
+        output = Seq(
+          AttributeReference("col", TimestampNTZType)()),
+        child = child,
+        ioschema = defaultIOSchema
+      ),
+      df.select($"col").collect())
   }
 }
 
