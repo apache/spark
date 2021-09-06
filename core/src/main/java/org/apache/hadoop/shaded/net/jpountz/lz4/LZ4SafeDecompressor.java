@@ -15,18 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.parquet
+package org.apache.hadoop.shaded.net.jpountz.lz4;
 
-import org.apache.spark.sql.execution.datasources.DataSourceCodecTest
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+/**
+ * A temporary workaround for SPARK-36669. We should remove this after Hadoop 3.3.2 release
+ * which fixes the LZ4 relocation in shaded Hadoop client libraries. This does not need
+ * implement all net.jpountz.lz4.LZ4SafeDecompressor API, just the ones used by Hadoop
+ * Lz4Decompressor.
+ */
+public final class LZ4SafeDecompressor {
+  private net.jpountz.lz4.LZ4SafeDecompressor lz4Decompressor;
 
-class ParquetCodecTestSuite extends DataSourceCodecTest with SharedSparkSession {
+  public LZ4SafeDecompressor(net.jpountz.lz4.LZ4SafeDecompressor lz4Decompressor) {
+	this.lz4Decompressor = lz4Decompressor;
+  }
 
-  override def dataSourceName: String = "parquet"
-  override val codecConfigName = SQLConf.PARQUET_COMPRESSION.key
-  // Exclude "lzo" because it is GPL-licenced so not included in Hadoop.
-  override protected def availableCodecs: Seq[String] = Seq("none", "uncompressed", "snappy",
-    "gzip", "brotli", "zstd", "lz4")
+  public void decompress(java.nio.ByteBuffer src, java.nio.ByteBuffer dest) {
+    lz4Decompressor.decompress(src, dest);
+  }
 }
-
