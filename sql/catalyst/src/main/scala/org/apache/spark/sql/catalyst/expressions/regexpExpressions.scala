@@ -75,9 +75,9 @@ abstract class StringRegexExpression extends BinaryExpression
   }
 }
 
-abstract class LikeBase(left: Expression, right: Expression, escapeChar: Char)
-  extends StringRegexExpression {
+sealed abstract class LikeBase extends StringRegexExpression {
 
+  protected def escapeChar: Char
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeChar)
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
@@ -187,8 +187,7 @@ abstract class LikeBase(left: Expression, right: Expression, escapeChar: Char)
   since = "1.0.0",
   group = "predicate_funcs")
 // scalastyle:on line.contains.tab
-case class Like(left: Expression, right: Expression, escapeChar: Char)
-  extends LikeBase(left, right, escapeChar) {
+case class Like(left: Expression, right: Expression, escapeChar: Char) extends LikeBase {
 
   def this(left: Expression, right: Expression) = this(left, right, '\\')
 
