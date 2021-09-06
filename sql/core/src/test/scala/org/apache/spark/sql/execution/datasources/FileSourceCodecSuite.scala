@@ -23,13 +23,13 @@ import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
 trait FileSourceCodecSuite extends QueryTest with SQLTestUtils {
 
-  protected def dataSourceName: String
+  protected def format: String
   protected val codecConfigName: String
   protected def availableCodecs: Seq[String]
 
   def testWithAllCodecs(name: String)(f: => Unit): Unit = {
     for (codec <- availableCodecs) {
-      test(s"$name - data source $dataSourceName - codec: $codec") {
+      test(s"$name - file source $format - codec: $codec") {
         withSQLConf(codecConfigName -> codec) {
           f
         }
@@ -42,10 +42,10 @@ trait FileSourceCodecSuite extends QueryTest with SQLTestUtils {
       testData
         .repartition(5)
         .write
-        .format(dataSourceName)
+        .format(format)
         .save(dir.getCanonicalPath)
 
-      val df = spark.read.format(dataSourceName).load(dir.getCanonicalPath)
+      val df = spark.read.format(format).load(dir.getCanonicalPath)
       checkAnswer(df, testData)
     }
   }
@@ -53,7 +53,7 @@ trait FileSourceCodecSuite extends QueryTest with SQLTestUtils {
 
 class ParquetCodecSuite extends FileSourceCodecSuite with SharedSparkSession {
 
-  override def dataSourceName: String = "parquet"
+  override def format: String = "parquet"
   override val codecConfigName = SQLConf.PARQUET_COMPRESSION.key
   // Exclude "lzo" because it is GPL-licenced so not included in Hadoop.
   override protected def availableCodecs: Seq[String] = Seq("none", "uncompressed", "snappy",
@@ -62,7 +62,7 @@ class ParquetCodecSuite extends FileSourceCodecSuite with SharedSparkSession {
 
 class OrcCodecSuite extends FileSourceCodecSuite with SharedSparkSession{
 
-  override def dataSourceName: String = "orc"
+  override def format: String = "orc"
   override val codecConfigName = SQLConf.ORC_COMPRESSION.key
   override protected def availableCodecs = Seq("none", "uncompressed", "snappy",
     "zlib", "zstd", "lz4", "lzo")
