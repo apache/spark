@@ -1810,15 +1810,6 @@ object functions {
   def cot(e: Column): Column = withExpr { Cot(e.expr) }
 
   /**
-   * @param columnName angle in radians
-   * @return cotangent of the angle
-   *
-   * @group math_funcs
-   * @since 3.2.0
-   */
-  def cot(columnName: String): Column = cot(Column(columnName))
-
-  /**
    * Computes the exponential of the given value.
    *
    * @group math_funcs
