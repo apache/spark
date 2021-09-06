@@ -18,9 +18,10 @@
 package org.apache.hadoop.shaded.net.jpountz.lz4;
 
 /**
- * A temporary workaround for SPARK-36669. We should remove this after Hadoop 3.3.2 release
- * which fixes the LZ4 relocation in shaded Hadoop client libraries. This does not need
- * implement all net.jpountz.lz4.LZ4Compressor API, just the ones used by Hadoop Lz4Compressor.
+ * TODO(SPARK-36679): A temporary workaround for SPARK-36669. We should remove this after
+ * Hadoop 3.3.2 release which fixes the LZ4 relocation in shaded Hadoop client libraries.
+ * This does not need implement all net.jpountz.lz4.LZ4Compressor API, just the ones used
+ * by Hadoop Lz4Compressor.
  */
 public final class LZ4Compressor {
 
