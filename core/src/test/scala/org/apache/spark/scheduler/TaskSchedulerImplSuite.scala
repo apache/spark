@@ -1836,33 +1836,58 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   test("Scheduler works with reusable executors for multiple ResourceProfiles") {
-    val taskCpus = 1
-    val executorCpus = 4
+    val defaultExecutorCpus = 4
+    val defaultTaskCpus = 1
 
-    val taskScheduler = setupScheduler(numCores = executorCpus,
-      config.EXECUTOR_CORES.key -> executorCpus.toString,
-      config.CPUS_PER_TASK.key -> taskCpus.toString)
+    val taskScheduler = setupScheduler(numCores = defaultExecutorCpus,
+      config.EXECUTOR_CORES.key -> defaultExecutorCpus.toString,
+      config.CPUS_PER_TASK.key -> defaultTaskCpus.toString,
+      config.DYN_ALLOCATION_REUSE_EXECUTORS.key -> true.toString)
 
-    val ereqs = new ExecutorResourceRequests().cores(4)
-    val treqs = new TaskResourceRequests().cpus(2)
-    val rp = new ResourceProfile(ereqs.requests, treqs.requests)
-    taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
-    val taskSet = FakeTask.createTaskSet(3)
-    val rpTaskSet = FakeTask.createTaskSet(5, stageId = 1, stageAttemptId = 0,
-      priority = 0, rpId = rp.id)
+    val ereqs1 = new ExecutorResourceRequests().cores(4)
+    val treqs1 = new TaskResourceRequests().cpus(2)
+    val rpCompatible = new ResourceProfile(ereqs1.requests, treqs1.requests)
+    taskScheduler.sc.resourceProfileManager.addResourceProfile(rpCompatible)
 
-    val resourcesDefaultProf = Map(GPU -> ArrayBuffer("0", "1", "2", "3"))
-    val resources = Map(GPU -> ArrayBuffer("4", "5", "6", "7", "8", "9"))
+    val ereqs2 = new ExecutorResourceRequests().cores(6)
+    val treqs2 = new TaskResourceRequests().cpus(2)
+    val rpIncompatible = new ResourceProfile(ereqs2.requests, treqs2.requests)
+    taskScheduler.sc.resourceProfileManager.addResourceProfile(rpIncompatible)
 
-    val workerOffers =
-      IndexedSeq(new WorkerOffer("executor0", "host0", 2, None, resourcesDefaultProf),
-        new WorkerOffer("executor1", "host1", 6, None, resources, rp.id))
+    val taskSet = FakeTask.createTaskSet(8)
+    val rpTaskSetCompatible = FakeTask.createTaskSet(4, stageId = 1, stageAttemptId = 0,
+      priority = 0, rpId = rpCompatible.id)
+    val rpTaskSetInCompatible = FakeTask.createTaskSet(4, stageId = 2, stageAttemptId = 0,
+      priority = 0, rpId = rpIncompatible.id)
+
+    val workerOffersCompatible =
+      IndexedSeq(new WorkerOffer("executor0", "host0", 4, None),
+        new WorkerOffer("executor1", "host1", 4, None, Map.empty, rpCompatible.id))
+
+    val workerOffersIncompatible =
+      IndexedSeq(new WorkerOffer("executor0", "host0", 4, None),
+        new WorkerOffer("executor1", "host1", 6, None, Map.empty, rpIncompatible.id))
+
+    logDebug("8 tasks will be allocated to executor0 and executor1")
     taskScheduler.submitTasks(taskSet)
-    taskScheduler.submitTasks(rpTaskSet)
-    // should have 2 for default profile and 2 for additional resource profile
-    var taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    var taskDescriptions = taskScheduler.resourceOffers(workerOffersCompatible).flatten
+    logDebug("4 tasks will be allocated executor0 since executor1 is incompatible")
+    taskScheduler.submitTasks(taskSet)
+    taskDescriptions = taskScheduler.resourceOffers(workerOffersIncompatible).flatten
 
-    logDebug(taskDescriptions.mkString("\n"))
+//    assert(8 === taskDescriptions.length)
+//    assert(taskDescriptions.exists(_.executorId == "executor0")
+//      && taskDescriptions.exists(_.executorId == "executor1"))
+
+    logDebug("4 tasks will be allocated to both executor0 and executor1")
+    taskScheduler.submitTasks(rpTaskSetCompatible)
+    taskDescriptions = taskScheduler.resourceOffers(workerOffersCompatible).flatten
+    logDebug("3 tasks will be allocated executor1 only since executor0 is incompatible")
+    taskScheduler.submitTasks(rpTaskSetInCompatible)
+    taskDescriptions = taskScheduler.resourceOffers(workerOffersIncompatible).flatten
+//    assert(4 === taskDescriptions.length)
+//    assert(taskDescriptions.exists(_.executorId == "executor0")
+//      && taskDescriptions.exists(_.executorId == "executor1"))
 
 //    assert(5 === taskDescriptions.length)
 //    var has2Gpus = 0
