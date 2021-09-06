@@ -128,11 +128,18 @@ granularity over which files may load during a Spark batch query.
 (Note that Structured Streaming file sources don't support these options.)
 
 * `modifiedBefore`: an optional timestamp to only include files with
-modification times occurring before the specified time. The provided timestamp
-must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+modification times occurring before the specified time.
 * `modifiedAfter`: an optional timestamp to only include files with
-modification times occurring after the specified time. The provided timestamp
-must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+modification times occurring after the specified time.
+
+The provided timestamp must be in the following format: YYYY-MM-DD'T'HH:mm:ss (e.g. 2020-06-01T13:00:00),
+or special values that are converted to ordinary timestamp values when read.
+The following string values are supported for special timestamp values:
+* `epoch` - 1970-01-01 00:00:00+00 (Unix system time zero)
+* `today` - midnight today
+* `yesterday` - midnight yesterday
+* `tomorrow` - midnight tomorrow
+* `now` - current query start time
 
 When a timezone option is not provided, the timestamps will be interpreted according
 to the Spark session timezone (`spark.sql.session.timeZone`).
