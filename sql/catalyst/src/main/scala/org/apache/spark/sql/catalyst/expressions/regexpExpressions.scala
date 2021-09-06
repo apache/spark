@@ -53,11 +53,14 @@ abstract class StringRegexExpression extends BinaryExpression
     case _ => null
   }
 
+  // The flags are used while compiling of an input regexp string to `java.util.regex.Pattern`.
+  protected def patternFlags: Int = 0
+
   protected def compile(str: String): Pattern = if (str == null) {
     null
   } else {
     // Let it raise exception if couldn't compile the regex string
-    Pattern.compile(escape(str))
+    Pattern.compile(escape(str), patternFlags)
   }
 
   protected def pattern(str: String) = if (cache == null) compile(str) else cache
@@ -149,7 +152,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
         val regexStr =
           StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
         val pattern = ctx.addMutableState(patternClass, "patternLike",
-          v => s"""$v = $patternClass.compile("$regexStr");""")
+          v => s"""$v = $patternClass.compile("$regexStr", $patternFlags);""")
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
@@ -177,7 +180,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
         s"""
           String $rightStr = $eval2.toString();
           $patternClass $pattern = $patternClass.compile(
-            $escapeFunc($rightStr, '$escapedEscapeChar'));
+            $escapeFunc($rightStr, '$escapedEscapeChar'), $patternFlags);
           ${ev.value} = $pattern.matcher($eval1.toString()).matches();
         """
       })
@@ -395,7 +398,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
         val regexStr =
           StringEscapeUtils.escapeJava(rVal.asInstanceOf[UTF8String].toString())
         val pattern = ctx.addMutableState(patternClass, "patternRLike",
-          v => s"""$v = $patternClass.compile("$regexStr");""")
+          v => s"""$v = $patternClass.compile("$regexStr", $patternFlags);""")
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
@@ -419,7 +422,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
           String $rightStr = $eval2.toString();
-          $patternClass $pattern = $patternClass.compile($rightStr);
+          $patternClass $pattern = $patternClass.compile($rightStr, $patternFlags);
           ${ev.value} = $pattern.matcher($eval1.toString()).find(0);
         """
       })
