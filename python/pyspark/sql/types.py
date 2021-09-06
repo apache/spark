@@ -1045,7 +1045,7 @@ def _infer_type(obj, infer_dict_as_struct=False, prefer_timestamp_ntz=False):
     if dataType is DecimalType:
         # the precision and scale of `obj` may be different from row to row.
         return DecimalType(38, 18)
-    if dataType is TimestampType and prefer_timestamp_ntz and obj.tzname() is None:
+    if dataType is TimestampType and prefer_timestamp_ntz and obj.tzinfo is None:
         return TimestampNTZType()
     elif dataType is not None:
         return dataType()
