@@ -259,7 +259,7 @@ case class OptimizeSkewedJoin(
       // two cases we will pick new plan:
       //   1. optimize the skew join without extra shuffle
       //   2. optimize the skew join with extra shuffle but the costEvaluator think it's better
-      if (optimizedCost < originCost || (originCost == optimizedCost && optimized != plan)) {
+      if (optimizedCost <= originCost) {
         optimized
       } else {
         plan
