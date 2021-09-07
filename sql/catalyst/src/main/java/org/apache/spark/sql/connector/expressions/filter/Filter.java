@@ -36,14 +36,6 @@ public abstract class Filter implements Expression {
    */
   public abstract NamedReference[] references();
 
-  protected NamedReference[] findReferences(Object filter) {
-    if (filter instanceof Filter) {
-      return ((Filter) filter).references();
-    } else {
-      return EMPTY_REFERENCE;
-    }
-  }
-
   @Override
   public String describe() { return this.toString(); }
 }

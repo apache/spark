@@ -18,31 +18,30 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
- * A filter that evaluates to `true` iff the field evaluates to
+ * A filter that evaluates to `true` iff the column evaluates to
  * a string that starts with `value`.
  *
  * @since 3.3.0
  */
 @Evolving
 public final class StringStartsWith extends Filter {
-  private final FieldReference expr;
+  private final NamedReference column;
   private final String value;
 
-  public StringStartsWith( FieldReference expr, String value) {
-    this.expr = expr;
+  public StringStartsWith(NamedReference column, String value) {
+    this.column = column;
     this.value = value;
   }
 
-  public  FieldReference expr() { return expr; }
+  public NamedReference column() { return column; }
   public String value() { return value; }
 
   @Override
-  public String toString() { return "STRING_STARTS_WITH(" + expr.describe() + ", " + value + ")"; }
+  public String toString() { return "STRING_STARTS_WITH(" + column.describe() + ", " + value + ")"; }
 
   @Override
-  public NamedReference[] references() { return expr.references(); }
+  public NamedReference[] references() { return new NamedReference[]{column}; }
 }

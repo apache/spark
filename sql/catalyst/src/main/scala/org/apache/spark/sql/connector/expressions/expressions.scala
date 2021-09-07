@@ -333,11 +333,6 @@ private[sql] final case class FieldReference(parts: Seq[String]) extends NamedRe
   override def fieldNames: Array[String] = parts.toArray
   override def describe: String = parts.quoted
   override def toString: String = describe
-
-  /**
-   * Returns list of NamedReference that are referenced by this FieldReference.
-   */
-  def references(): Array[NamedReference] = Array[NamedReference](this)
 }
 
 private[sql] object FieldReference {

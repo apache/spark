@@ -22,26 +22,25 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
- * A filter that evaluates to `true` iff the field evaluates to one of the values in the array.
+ * A filter that evaluates to `true` iff the column evaluates to one of the values in the array.
  *
  * @since 3.3.0
  */
 @Evolving
 public final class In extends Filter {
-  private final FieldReference expr;
+  private final NamedReference column;
   private final Literal<?>[] values;
 
-  public In( FieldReference expr, Literal<?>[] values) {
-    this.expr = expr;
+  public In(NamedReference column, Literal<?>[] values) {
+    this.column = column;
     this.values = values;
   }
 
-  public  FieldReference expr() { return expr; }
+  public NamedReference column() { return column; }
   public Literal<?>[] values() { return values; }
 
   @Override
@@ -49,12 +48,12 @@ public final class In extends Filter {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     In in = (In) o;
-    return Objects.equals(expr, in.expr) && Arrays.equals(values, in.values);
+    return Objects.equals(column, in.column) && Arrays.equals(values, in.values);
   }
 
   @Override
   public int hashCode() {
-    int result = Objects.hash(expr);
+    int result = Objects.hash(column);
     result = 31 * result + Arrays.hashCode(values);
     return result;
   }
@@ -62,9 +61,9 @@ public final class In extends Filter {
   @Override
   public String toString() {
     String res = Arrays.stream(values).map(Literal::describe).collect(Collectors.joining(", "));
-    return expr.describe() + " IN (" + res + ")";
+    return column.describe() + " IN (" + res + ")";
   }
 
   @Override
-  public NamedReference[] references() { return expr.references(); }
+  public NamedReference[] references() { return new NamedReference[]{column}; }
 }

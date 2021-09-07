@@ -18,32 +18,31 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
- * A filter that evaluates to `true` iff the field evaluates to a value
+ * A filter that evaluates to `true` iff the column evaluates to a value
  * greater than `value`.
  *
  * @since 3.3.0
  */
 @Evolving
 public final class GreaterThan extends Filter {
-  private final FieldReference expr;
+  private final NamedReference column;
   private final Literal<?> value;
 
-  public GreaterThan( FieldReference expr, Literal<?> value) {
-    this.expr = expr;
+  public GreaterThan(NamedReference column, Literal<?> value) {
+    this.column = column;
     this.value = value;
   }
 
-  public  FieldReference expr() { return expr; }
+  public NamedReference column() { return column; }
   public Literal<?> value() { return value; }
 
   @Override
-  public String toString() { return expr.describe() + " > " + value.describe(); }
+  public String toString() { return column.describe() + " > " + value.describe(); }
 
   @Override
-  public NamedReference[] references() { return expr.references(); }
+  public NamedReference[] references() { return new NamedReference[]{column}; }
 }
