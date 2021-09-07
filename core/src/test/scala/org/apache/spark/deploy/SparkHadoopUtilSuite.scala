@@ -85,13 +85,12 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
   /**
    * test for _HOST pattern replacement with Server cannonical address
    */
-  test("server principal with _HOST pattern") {
+  test("SPARK-36622: server principal with _HOST pattern") {
     assert(SparkHadoopUtil.get.getServerPrincipal("spark/_HOST@realm.com")
-      === "spark/%s@realm.com".format(InetAddress.getLocalHost.getCanonicalHostName())
-      , s"Mismatch in expected value")
+      === "spark/%s@realm.com".format(InetAddress.getLocalHost.getCanonicalHostName()),
+      "Mismatch in expected value")
     assert(SparkHadoopUtil.get.getServerPrincipal("spark/0.0.0.0@realm.com")
-      === "spark/0.0.0.0@realm.com".format(InetAddress.getLocalHost.getCanonicalHostName())
-      , s"Mismatch in expected value")
+      === "spark/0.0.0.0@realm.com", "Mismatch in expected value")
   }
 
   /**

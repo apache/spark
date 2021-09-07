@@ -149,7 +149,6 @@ private[spark] class SparkHadoopUtil extends Logging {
   }
 
   /**
-   *
    * @param principalName : History server principal name with _HOST
    * @return : _HOST pattern replace with Server cannonical name
    */
