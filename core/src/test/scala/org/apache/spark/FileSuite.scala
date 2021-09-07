@@ -28,7 +28,7 @@ import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io._
-import org.apache.hadoop.io.compress.{BZip2Codec, CompressionCodec, DefaultCodec, GzipCodec, Lz4Codec, SnappyCodec}
+import org.apache.hadoop.io.compress.{BZip2Codec, CompressionCodec, DefaultCodec}
 import org.apache.hadoop.mapred.{FileAlreadyExistsException, FileSplit, JobConf, TextInputFormat, TextOutputFormat}
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.{FileSplit => NewFileSplit, TextInputFormat => NewTextInputFormat}
@@ -136,10 +136,11 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   // Hadoop "gzip" codec doesn't support sequence file yet.
-  // Hadoop "zstd" codecs needs native library installed.
-  Seq((new DefaultCodec(), "default"), (new BZip2Codec(), "bzip2"), (new GzipCodec(), "gzip"),
-    (new Lz4Codec(), "lz4"), (new SnappyCodec, "snappy")).foreach { case (codec, codecName) =>
-    runSequenceFileCodecTest(codec, codecName)
+  // Hadoop "zstd" codec needs native library installed.
+  // "snappy" and "lz4" codecs do not work due to SPARK-36669 and SPARK-36681.
+  Seq((new DefaultCodec(), "default"), (new BZip2Codec(), "bzip2")).foreach {
+    case (codec, codecName) =>
+      runSequenceFileCodecTest(codec, codecName)
   }
 
   test("SequenceFile with writable key") {
