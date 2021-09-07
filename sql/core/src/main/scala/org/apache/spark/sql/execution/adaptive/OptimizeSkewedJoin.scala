@@ -51,7 +51,7 @@ import org.apache.spark.sql.internal.SQLConf
  * (L4-1, R4-1), (L4-2, R4-1), (L4-1, R4-2), (L4-2, R4-2)
  */
 case class OptimizeSkewedJoin(
-    requiredDistribution: Option[Distribution],
+    ensureRequirements: EnsureRequirements,
     costEvaluator: CostEvaluator)
   extends Rule[SparkPlan] {
 
@@ -253,9 +253,7 @@ case class OptimizeSkewedJoin(
       // SHJ
       //   Shuffle
       //   Shuffle
-      val optimized =
-        EnsureRequirements(requiredDistribution.isDefined, requiredDistribution)
-          .apply(optimizeSkewJoin(plan))
+      val optimized = ensureRequirements.apply(optimizeSkewJoin(plan))
       val originCost = costEvaluator.evaluateCost(plan)
       val optimizedCost = costEvaluator.evaluateCost(optimized)
       // two cases we will pick new plan:

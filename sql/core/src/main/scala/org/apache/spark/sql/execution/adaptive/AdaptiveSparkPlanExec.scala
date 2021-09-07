@@ -115,7 +115,9 @@ case class AdaptiveSparkPlanExec(
     EnsureRequirements(optimizeOutRepartition = requiredDistribution.isDefined),
     RemoveRedundantSorts,
     DisableUnnecessaryBucketedScan,
-    OptimizeSkewedJoin(requiredDistribution, costEvaluator)
+    OptimizeSkewedJoin(
+      EnsureRequirements(requiredDistribution.isDefined, requiredDistribution),
+      costEvaluator)
   ) ++ context.session.sessionState.queryStagePrepRules
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
