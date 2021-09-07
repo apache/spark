@@ -161,17 +161,12 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
         val listener = new QueryExecutionListener {
           override def onFailure(
               funcName: String,
-              executionId: Long,
               qe: QueryExecution,
               exception: Exception): Unit = {
             exceptions += funcName -> exception
           }
 
-          override def onSuccess(
-              funcName: String,
-              executionId: Long,
-              qe: QueryExecution,
-              duration: Long): Unit = {
+          override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
             commands += funcName -> qe.logical
           }
         }
