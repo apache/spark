@@ -199,16 +199,16 @@ case class Like(left: Expression, right: Expression, escapeChar: Char) extends L
 
 // scalastyle:off line.contains.tab
 /**
- * Simple RegEx pattern matching function
+ * Simple RegEx case-insensitive pattern matching function
  */
 @ExpressionDescription(
   usage = "str _FUNC_ pattern[ ESCAPE escape] - Returns true if str matches `pattern` with " +
-    "`escape`, null if any arguments are null, false otherwise.",
+    "`escape` case-insensitively, null if any arguments are null, false otherwise.",
   arguments = """
     Arguments:
       * str - a string expression
-      * pattern - a string expression. The pattern is a string which is matched literally, with
-          exception to the following special symbols:
+      * pattern - a string expression. The pattern is a string which is matched literally and
+          case-insensitively, with exception to the following special symbols:
 
           _ matches any one character in the input (similar to . in posix regular expressions)
 
