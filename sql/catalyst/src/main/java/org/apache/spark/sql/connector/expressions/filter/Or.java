@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
+import java.util.Objects;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
@@ -37,6 +39,19 @@ public final class Or extends Filter {
 
   public Filter left() { return left; }
   public Filter right() { return right; }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    Or or = (Or) o;
+    return Objects.equals(left, or.left) && Objects.equals(right, or.right);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(left, right);
+  }
 
   @Override
   public String toString() {

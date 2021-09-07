@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
+import java.util.Objects;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * A filter that evaluates to `true` iff the column evaluates to
@@ -29,15 +32,28 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
 @Evolving
 public final class StringEndsWith extends Filter {
   private final NamedReference column;
-  private final String value;
+  private final UTF8String value;
 
-  public StringEndsWith(NamedReference column, String value) {
+  public StringEndsWith(NamedReference column, UTF8String value) {
     this.column = column;
     this.value = value;
   }
 
   public NamedReference column() { return column; }
-  public String value() { return value; }
+  public UTF8String value() { return value; }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    StringEndsWith that = (StringEndsWith) o;
+    return Objects.equals(column, that.column) && Objects.equals(value, that.value);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(column, value);
+  }
 
   @Override
   public String toString() { return "STRING_ENDS_WITH(" + column.describe() + ", " + value + ")"; }

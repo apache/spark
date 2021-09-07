@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
+import java.util.Objects;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
@@ -37,6 +39,19 @@ public final class IsNotNull extends Filter {
 
   @Override
   public String toString() { return column.describe() + " IS NOT NULL"; }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    IsNotNull isNotNull = (IsNotNull) o;
+    return Objects.equals(column, isNotNull.column);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(column);
+  }
 
   @Override
   public NamedReference[] references() { return new NamedReference[]{column}; }

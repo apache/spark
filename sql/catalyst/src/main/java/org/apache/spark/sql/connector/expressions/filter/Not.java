@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
+import java.util.Objects;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
@@ -32,6 +34,19 @@ public final class Not extends Filter {
   public Not(Filter child) { this.child = child; }
 
   public Filter child() { return child; }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    Not not = (Not) o;
+    return Objects.equals(child, not.child);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(child);
+  }
 
   @Override
   public String toString() { return "NOT " + child.describe(); }

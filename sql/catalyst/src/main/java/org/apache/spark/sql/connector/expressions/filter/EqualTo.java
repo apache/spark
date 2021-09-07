@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
+import java.util.Objects;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
@@ -39,6 +41,19 @@ public final class EqualTo extends Filter {
 
   public NamedReference column() { return column; }
   public Literal<?> value() { return value; }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    EqualTo equalTo = (EqualTo) o;
+    return Objects.equals(column, equalTo.column) && Objects.equals(value, equalTo.value);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(column, value);
+  }
 
   @Override
   public String toString() { return column.describe() + " = " + value.describe(); }
