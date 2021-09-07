@@ -1254,13 +1254,9 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         expected_error_message = "Need to specify at least one of 'labels' or 'columns'"
         with self.assertRaisesRegex(ValueError, expected_error_message):
             psdf.drop()
-        # Assert axis cannot be 0
-        with self.assertRaisesRegex(NotImplementedError, "Drop currently only works for axis=1"):
-            psdf.drop("x", axis=0)
+
         # Assert using a str for 'labels' works
         self.assert_eq(psdf.drop("x", axis=1), pdf.drop("x", axis=1))
-        # Assert axis is 1 by default
-        self.assert_eq(psdf.drop("x"), pdf.drop("x", axis=1))
         # Assert using a list for 'labels' works
         self.assert_eq(psdf.drop(["y", "z"], axis=1), pdf.drop(["y", "z"], axis=1))
         self.assert_eq(psdf.drop(["x", "y", "z"], axis=1), pdf.drop(["x", "y", "z"], axis=1))
@@ -1268,11 +1264,6 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.drop(columns="x"), pdf.drop(columns="x"))
         self.assert_eq(psdf.drop(columns=["y", "z"]), pdf.drop(columns=["y", "z"]))
         self.assert_eq(psdf.drop(columns=["x", "y", "z"]), pdf.drop(columns=["x", "y", "z"]))
-
-        # Assert 'labels' being used when both 'labels' and 'columns' are specified
-        # TODO: should throw an error?
-        expected_output = pd.DataFrame({"y": [3, 4], "z": [5, 6]}, index=psdf.index.to_pandas())
-        self.assert_eq(psdf.drop(labels=["x"], columns=["y"]), expected_output)
 
         columns = pd.MultiIndex.from_tuples([(1, "x"), (1, "y"), (2, "z")])
         pdf.columns = columns
@@ -1300,8 +1291,42 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf = pd.DataFrame({10: [1, 2], 20: [3, 4], 30: [5, 6]}, index=np.random.rand(2))
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(psdf.drop(10), pdf.drop(10, axis=1))
-        self.assert_eq(psdf.drop([20, 30]), pdf.drop([20, 30], axis=1))
+        self.assert_eq(psdf.drop(10, axis=1), pdf.drop(10, axis=1))
+        self.assert_eq(psdf.drop([20, 30], axis=1), pdf.drop([20, 30], axis=1))
+
+        #
+        # Drop rows by index
+        #
+
+        pdf = pd.DataFrame({"X": [1, 2, 3], "Y": [4, 5, 6], "Z": [7, 8, 9]}, index=["A", "B", "C"])
+        psdf = ps.from_pandas(pdf)
+
+        # Given labels (and axis = 0)
+        self.assert_eq(psdf.drop(labels="A", axis=0), pdf.drop(labels="A", axis=0))
+        self.assert_eq(psdf.drop(labels="A"), pdf.drop(labels="A"))
+        self.assert_eq(psdf.drop(labels=["A", "C"], axis=0), pdf.drop(labels=["A", "C"], axis=0))
+        self.assert_eq(
+            psdf.drop(labels=["A", "B", "C"], axis=0), pdf.drop(labels=["A", "B", "C"], axis=0)
+        )
+
+        # Given index
+        self.assert_eq(psdf.drop(index="A"), pdf.drop(index="A"))
+        self.assert_eq(psdf.drop(index=["A", "C"]), pdf.drop(index=["A", "C"]))
+        self.assert_eq(psdf.drop(index=["A", "B", "C"]), pdf.drop(index=["A", "B", "C"]))
+
+        # Non-string names
+        pdf.index = [10, 20, 30]
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.drop(labels=10, axis=0), pdf.drop(labels=10, axis=0))
+        self.assert_eq(psdf.drop(labels=[10, 30], axis=0), pdf.drop(labels=[10, 30], axis=0))
+        self.assert_eq(
+            psdf.drop(labels=[10, 20, 30], axis=0), pdf.drop(labels=[10, 20, 30], axis=0)
+        )
+
+        # MultiIndex
+        pdf.index = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        psdf = ps.from_pandas(pdf)
+        self.assertRaises(NotImplementedError, lambda: psdf.drop(labels=[("a", "x")]))
 
     def _test_dropna(self, pdf, axis):
         psdf = ps.from_pandas(pdf)
