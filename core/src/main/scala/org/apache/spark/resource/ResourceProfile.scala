@@ -29,6 +29,7 @@ import org.apache.spark.annotation.{Evolving, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
+import org.apache.spark.resource.ResourceProfile.hasCustomExecutorResources
 import org.apache.spark.util.Utils
 
 /**
@@ -241,10 +242,11 @@ class ResourceProfile(
     rp.taskResources == taskResources && rp.executorResources == executorResources
   }
 
-  // TODO: define what a compatible executor is, right now is equal cores
-  // check that executor resources are equal, but the task resources could be different
+  // check that executor cores resources are equal, but the task resources could be different
+  // custom resources are not supported right now
   private[spark] def resourcesCompatible(rp: ResourceProfile): Boolean = {
-    rp.executorResources("cores") == executorResources("cores")
+    !hasCustomExecutorResources(this) && !hasCustomExecutorResources(rp) &&
+      rp.executorResources("cores") == executorResources("cores")
   }
 
   override def hashCode(): Int = Seq(taskResources, executorResources).hashCode()
@@ -377,6 +379,11 @@ object ResourceProfile extends Logging {
       defaultProfile = None
       defaultProfileExecutorResources = None
     }
+  }
+
+  private[spark] def hasCustomExecutorResources(rp: ResourceProfile): Boolean = {
+    rp.executorResources.keys.exists(
+      k => !ResourceProfile.allSupportedExecutorResources.contains(k))
   }
 
   private[spark] def getCustomTaskResources(
