@@ -95,6 +95,8 @@ class MockTaskContext(val mockStageId: Int, val mockPartitionId: Int,
     new Properties()
   }
 
+  def cpus(): Int = 1
+
   override def resources(): Map[String, ResourceInformation] = Map()
 
   override def resourcesJMap(): util.Map[String, ResourceInformation] =
