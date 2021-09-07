@@ -54,16 +54,16 @@ trait FileSourceCodecSuite extends QueryTest with SQLTestUtils {
 class ParquetCodecSuite extends FileSourceCodecSuite with SharedSparkSession {
 
   override def format: String = "parquet"
-  override val codecConfigName = SQLConf.PARQUET_COMPRESSION.key
+  override val codecConfigName: String = SQLConf.PARQUET_COMPRESSION.key
   // Exclude "lzo" because it is GPL-licenced so not included in Hadoop.
   override protected def availableCodecs: Seq[String] = Seq("none", "uncompressed", "snappy",
     "gzip", "brotli", "zstd", "lz4")
 }
 
-class OrcCodecSuite extends FileSourceCodecSuite with SharedSparkSession{
+class OrcCodecSuite extends FileSourceCodecSuite with SharedSparkSession {
 
   override def format: String = "orc"
-  override val codecConfigName = SQLConf.ORC_COMPRESSION.key
+  override val codecConfigName: String = SQLConf.ORC_COMPRESSION.key
   override protected def availableCodecs = Seq("none", "uncompressed", "snappy",
     "zlib", "zstd", "lz4", "lzo")
 }
