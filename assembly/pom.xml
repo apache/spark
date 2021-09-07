@@ -315,6 +315,11 @@
           <scope>compile</scope>
           <version>27.0-jre</version>
         </dependency>
+        <dependency>
+          <groupId>com.swoop</groupId>
+          <artifactId>spark-alchemy_${scala.binary.version}</artifactId>
+          <version>${spark-alchemy.version}</version>
+        </dependency>
       </dependencies>
     </profile>
     <profile>
