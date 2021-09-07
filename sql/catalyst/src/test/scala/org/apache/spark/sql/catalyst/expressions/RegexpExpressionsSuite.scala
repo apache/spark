@@ -482,4 +482,74 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         .likeAll("%foo%", Literal.create(null, StringType)), null)
     }
   }
+
+  test("SPARK-36674: ILIKE - case insensitive LIKE") {
+    // null handling
+    checkLiteralRow(Literal.create(null, StringType).ilike(_), "a", null)
+    checkEvaluation(Literal.create("a", StringType).ilike(Literal.create(null, StringType)), null)
+    checkEvaluation(Literal.create(null, StringType).ilike(Literal.create(null, StringType)), null)
+    checkEvaluation(
+      Literal.create("a", StringType).ilike(NonFoldableLiteral.create("a", StringType)), true)
+    checkEvaluation(
+      Literal.create("a", StringType).ilike(NonFoldableLiteral.create(null, StringType)), null)
+    checkEvaluation(
+      Literal.create(null, StringType).ilike(NonFoldableLiteral.create("a", StringType)), null)
+    checkEvaluation(
+      Literal.create(null, StringType).ilike(NonFoldableLiteral.create(null, StringType)), null)
+
+    // simple patterns
+    checkLiteralRow("abdef" ilike _, "aBdef", true)
+    checkLiteralRow("a_%b" ilike _, "a\\__b", true)
+    checkLiteralRow("addb" ilike _, "A_%b", true)
+    checkLiteralRow("addb" ilike _, "a\\__b", false)
+    checkLiteralRow("addb" ilike _, "a%\\%b", false)
+    checkLiteralRow("a_%b" ilike _, "a%\\%b", true)
+    checkLiteralRow("addb" ilike _, "A%", true)
+    checkLiteralRow("addb" ilike _, "**", false)
+    checkLiteralRow("abC" ilike _, "a%", true)
+    checkLiteralRow("Abc"  ilike _, "b%", false)
+    checkLiteralRow("abc"  ilike _, "bc%", false)
+    checkLiteralRow("a\nb" ilike _, "a_B", true)
+    checkLiteralRow("Ab" ilike _, "a%b", true)
+    checkLiteralRow("a\nb" ilike _, "a%B", true)
+
+    // empty input
+    checkLiteralRow("" ilike _, "", true)
+    checkLiteralRow("A" ilike _, "", false)
+    checkLiteralRow("" ilike _, "a", false)
+
+    // double-escaping backslash
+    checkLiteralRow("""\\\\""" ilike _, """%\\%""", true)
+    checkLiteralRow("""%%""" ilike _, """%%""", true)
+    checkLiteralRow("""\__""" ilike _, """\\\__""", true)
+    checkLiteralRow("""\\\__""" ilike _, """%\\%\%""", false)
+    checkLiteralRow("""_\\\%""" ilike _, """%\\""", false)
+
+    // unicode
+    // scalastyle:off nonascii
+    checkLiteralRow("a\u20ACA" ilike _, "_\u20AC_", true)
+    checkLiteralRow("A€a" ilike _, "_€_", true)
+    checkLiteralRow("a€AA" ilike _, "_\u20AC_a", true)
+    checkLiteralRow("a\u20ACaz" ilike _, "_€_Z", true)
+    // scalastyle:on nonascii
+
+    // invalid escaping
+    val invalidEscape = intercept[AnalysisException] {
+      evaluateWithoutCodegen("""a""" ilike """\a""")
+    }
+    assert(invalidEscape.getMessage.contains("pattern"))
+
+    val endEscape = intercept[AnalysisException] {
+      evaluateWithoutCodegen("""a""" ilike """a\""")
+    }
+    assert(endEscape.getMessage.contains("pattern"))
+
+    // case
+    checkLiteralRow("A" ilike _, "a%", true)
+    checkLiteralRow("a" ilike _, "A%", true)
+    checkLiteralRow("AaA" ilike _, "_a_", true)
+
+    // example
+    checkLiteralRow("""%SystemDrive%\Users\john""" ilike _, """\%SystemDrive\%\\Users%""", true)
+  }
 }

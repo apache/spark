@@ -197,6 +197,17 @@ case class Like(left: Expression, right: Expression, escapeChar: Char) extends L
     copy(left = newLeft, right = newRight)
 }
 
+case class ILike(left: Expression, right: Expression, escapeChar: Char) extends LikeBase {
+
+  def this(left: Expression, right: Expression) = this(left, right, '\\')
+
+  override protected def patternFlags: Int = java.util.regex.Pattern.CASE_INSENSITIVE
+  override protected def likeName: String = "ILIKE"
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ILike =
+    copy(left = newLeft, right = newRight)
+}
+
 sealed abstract class MultiLikeBase
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
