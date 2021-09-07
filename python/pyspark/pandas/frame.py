@@ -8119,15 +8119,18 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def cov(self, min_periods: Optional[int] = None) -> "DataFrame":
         """
         Compute pairwise covariance of columns, excluding NA/null values.
+
         Compute the pairwise covariance among the series of a DataFrame.
         The returned data frame is the `covariance matrix
         <https://en.wikipedia.org/wiki/Covariance_matrix>`__ of the columns
         of the DataFrame.
+
         Both NA and null values are automatically excluded from the
         calculation. (See the note below about bias from missing values.)
         A threshold can be set for the minimum number of
         observations for each value created. Comparisons with observations
         below this threshold will be returned as ``NaN``.
+
         This method is generally used for the analysis of time series data to
         understand the relationship between different measures
         across time.
@@ -8157,6 +8160,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                   dogs      cats
         dogs  0.666667 -1.000000
         cats -1.000000  1.666667
+
         >>> np.random.seed(42)
         >>> df = ps.DataFrame(np.random.randn(1000, 5),
         ...                   columns=['a', 'b', 'c', 'd', 'e'])
@@ -8169,9 +8173,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         e  0.014144  0.009826 -0.000271 -0.013692  0.977795
 
         **Minimum number of periods**
+
         This method also supports an optional ``min_periods`` keyword
         that specifies the required minimum number of non-NA observations for
         each column pair in order to have a valid result:
+
         >>> np.random.seed(42)
         >>> df = pd.DataFrame(np.random.randn(20, 3),
         ...                   columns=['a', 'b', 'c'])
