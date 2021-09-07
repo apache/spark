@@ -398,7 +398,7 @@ private[python] class PythonMLLibAPI extends Serializable {
 
     if (initialModelWeights != null && initialModelMu != null && initialModelSigma != null) {
       val gaussians = initialModelMu.asScala.toSeq.zip(initialModelSigma.asScala.toSeq).map {
-        case (x, y) => new MultivariateGaussian(x.asInstanceOf[Vector], y.asInstanceOf[Matrix])
+        case (x, y) => new MultivariateGaussian(x, y)
       }
       val initialModel = new GaussianMixtureModel(
         initialModelWeights.asScala.toArray, gaussians.toArray)

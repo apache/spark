@@ -1793,6 +1793,43 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             pdf["Col2"].rank().loc[pdf["Col1"] == 20], psdf["Col2"].rank().loc[psdf["Col1"] == 20]
         )
 
+    def test_cov(self):
+        pser1 = pd.Series([0.90010907, 0.13484424, 0.62036035], index=[0, 1, 2])
+        pser2 = pd.Series([0.12528585, 0.26962463, 0.51111198], index=[1, 2, 3])
+        self._test_cov(pser1, pser2)
+
+        pser1 = pd.Series([0.90010907, 0.13484424, 0.62036035], index=[0, 1, 2])
+        pser2 = pd.Series([0.12528585, 0.26962463, 0.51111198, 0.32076008], index=[1, 2, 3, 4])
+        self._test_cov(pser1, pser2)
+
+        pser1 = pd.Series([0.90010907, 0.13484424, 0.62036035, 0.32076008], index=[0, 1, 2, 3])
+        pser2 = pd.Series([0.12528585, 0.26962463], index=[1, 2])
+        self._test_cov(pser1, pser2)
+
+        psser1 = ps.from_pandas(pser1)
+        with self.assertRaisesRegex(TypeError, "unsupported type: <class 'list'>"):
+            psser1.cov([0.12528585, 0.26962463, 0.51111198])
+        with self.assertRaisesRegex(
+            TypeError, "unsupported type: <class 'pandas.core.series.Series'>"
+        ):
+            psser1.cov(pser2)
+
+    def _test_cov(self, pser1, pser2):
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
+
+        pcov = pser1.cov(pser2)
+        pscov = psser1.cov(psser2)
+        self.assert_eq(pcov, pscov, almost=True)
+
+        pcov = pser1.cov(pser2, min_periods=2)
+        pscov = psser1.cov(psser2, min_periods=2)
+        self.assert_eq(pcov, pscov, almost=True)
+
+        pcov = pser1.cov(pser2, min_periods=3)
+        pscov = psser1.cov(psser2, min_periods=3)
+        self.assert_eq(pcov, pscov, almost=True)
+
 
 class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
     @classmethod

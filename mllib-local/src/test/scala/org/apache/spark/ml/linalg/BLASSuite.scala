@@ -267,7 +267,7 @@ class BLASSuite extends SparkMLFunSuite {
 
     val dATT = dATman.transpose
     val sATT = sATman.transpose
-    val BTT = BTman.transpose.asInstanceOf[DenseMatrix]
+    val BTT = BTman.transpose
 
     assert(dATT.multiply(B) ~== expected absTol 1e-15)
     assert(sATT.multiply(B) ~== expected absTol 1e-15)
