@@ -135,8 +135,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  // Hadoop "gzip" codec doesn't support sequence file yet.
-  // Hadoop "zstd" codec needs native library installed.
+  // Hadoop "gzip" and "zstd" codecs require native library installed for sequence files
   // "snappy" and "lz4" codecs do not work due to SPARK-36669 and SPARK-36681.
   Seq((new DefaultCodec(), "default"), (new BZip2Codec(), "bzip2")).foreach {
     case (codec, codecName) =>
