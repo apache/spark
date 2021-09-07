@@ -91,9 +91,13 @@ private[sql] object DataSourceV2Utils extends Logging {
     }
   }
 
-  def loadV2Source(sparkSession: SparkSession, provider: TableProvider,
-      userSpecifiedSchema: Option[StructType], extraOptions: CaseInsensitiveMap[String],
-                   source: String, paths: String*): Option[DataFrame] = {
+  def loadV2Source(
+      sparkSession: SparkSession,
+      provider: TableProvider,
+      userSpecifiedSchema: Option[StructType],
+      extraOptions: CaseInsensitiveMap[String],
+      source: String,
+      paths: String*): Option[DataFrame] = {
     val catalogManager = sparkSession.sessionState.catalogManager
     val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
       source = provider, conf = sparkSession.sessionState.conf)
@@ -129,7 +133,8 @@ private[sql] object DataSourceV2Utils extends Logging {
     }
   }
 
-  private def getOptionsWithPaths(extraOptions: CaseInsensitiveMap[String],
+  private def getOptionsWithPaths(
+      extraOptions: CaseInsensitiveMap[String],
       paths: String*): CaseInsensitiveMap[String] = {
     if (paths.isEmpty) {
       extraOptions

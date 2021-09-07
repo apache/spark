@@ -203,10 +203,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       throw QueryCompilationErrors.pathOptionNotSetCorrectlyWhenReadingError()
     }
 
-    DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).map { provider =>
+    DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).flatMap { provider =>
       DataSourceV2Utils.loadV2Source(sparkSession, provider, userSpecifiedSchema, extraOptions,
         source, paths: _*)
-    }.flatten.getOrElse(loadV1Source(paths: _*))
+    }.getOrElse(loadV1Source(paths: _*))
   }
 
   private def loadV1Source(paths: String*) = {
