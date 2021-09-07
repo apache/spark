@@ -131,16 +131,16 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
   /*
    * Get all compatible profiles including itself
    */
-  def getCompatibleProfiles(rp: ResourceProfile): Map[Int, ResourceProfile] = {
-    readLock.lock()
-    try {
-      resourceProfileIdToResourceProfile.filter { case (_, rpEntry) =>
-        rpEntry.resourcesCompatible(rp)
-      }.toMap
-    } finally {
-      readLock.unlock()
-    }
-  }
+//  def getCompatibleProfiles(rp: ResourceProfile): Map[Int, ResourceProfile] = {
+//    readLock.lock()
+//    try {
+//      resourceProfileIdToResourceProfile.filter { case (_, rpEntry) =>
+//        rpEntry.resourcesCompatible(rp)
+//      }.toMap
+//    } finally {
+//      readLock.unlock()
+//    }
+//  }
 
   /*
    * Get all compatible profile IDs excluding itself
@@ -176,7 +176,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     readLock.lock()
     try {
       resourceProfileIdToResourceProfile.foreach { case (id: Int, rpEntry: ResourceProfile) =>
-        println("profile " + id + ": " + rpEntry)
+        logDebug("rpId " + id + ": " + rpEntry)
       }
     } finally {
       readLock.unlock()

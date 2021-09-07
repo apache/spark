@@ -216,6 +216,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTarget(manager, rprof1.id) === 8)
     assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 2)
     doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+
     assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
     assert(numExecutorsToAddForDefaultProfile(manager) === 1)
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
@@ -286,17 +287,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTarget(manager, rprof1.id) === 2)
   }
 
-  test("reuse executors") {
-    // scalastyle:off println
-
+  test("reuse executors multiple profiles") {
     val manager = createManager(createConfReuseExecutors(1, 10, 1))
-//    rpManager.dumpResourceProfile()
-
-//    onExecutorAddedDefaultProfile(manager, "first")
-//    onExecutorAddedDefaultProfile(manager, "second")
-//    onExecutorAddedDefaultProfile(manager, "third")
-
-    println("--- SparkListenerStageSubmitted defaultProfile ---")
     post(SparkListenerStageSubmitted(createStageInfo(0, 1000, rp = defaultProfile)))
     val rp1 = new ResourceProfileBuilder()
     val execReqs = new ExecutorResourceRequests().cores(4)
@@ -304,15 +296,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     rp1.require(execReqs).require(taskReqs)
     val rprof1 = rp1.build
     rpManager.addResourceProfile(rprof1)
-//    rpManager.dumpResourceProfile()
-    println("--- SparkListenerStageSubmitted rprof1 ---")
+    rpManager.dumpResourceProfile()
     post(SparkListenerStageSubmitted(createStageInfo(1, 1000, rp = rprof1)))
-
-//    onExecutorAdded(manager, "firstrp1", rprof1)
-//    onExecutorAdded(manager, "secondrp1", rprof1)
-//    onExecutorAdded(manager, "thirdrp1", rprof1)
-//    onExecutorAdded(manager, "fourthrp1", rprof1)
-
     val updatesNeeded =
       new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
 
@@ -322,86 +307,71 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
     assert(numExecutorsToAdd(manager, rprof1) === 1)
     assert(numExecutorsTarget(manager, rprof1.id) === 1)
-    println("--- addExecutorsToTarget ---")
     assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 1)
-    println("--- doUpdateRequest ---")
     doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+
     assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
     assert(numExecutorsToAddForDefaultProfile(manager) === 2)
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
     assert(numExecutorsToAdd(manager, rprof1) === 2)
     assert(numExecutorsTarget(manager, rprof1.id) === 2)
-    println("--- addExecutorsToTarget ---")
     assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 2)
-    println("--- doUpdateRequest ---")
     doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+
     assert(numExecutorsTargetForDefaultProfileId(manager) === 4)
     assert(numExecutorsToAddForDefaultProfile(manager) === 4)
-    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 4)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
     assert(numExecutorsToAdd(manager, rprof1) === 4)
     assert(numExecutorsTarget(manager, rprof1.id) === 4)
-    assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 4)
+    // reached the limit of 10 (compatible executors are shared), no more updates
+    // numExecutorsTargetPerResourceProfileId: 0 -> 6, 2 -> 4
+    assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 0)
     doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
-    assert(numExecutorsTargetForDefaultProfileId(manager) === 8)
-    assert(numExecutorsToAddForDefaultProfile(manager) === 8)
-    // reached the limit of 10
-    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
-    assert(numExecutorsToAdd(manager, rprof1) === 8)
-    assert(numExecutorsTarget(manager, rprof1.id) === 8)
-    assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 2)
-    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
-    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
+
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 6)
     assert(numExecutorsToAddForDefaultProfile(manager) === 1)
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
     assert(numExecutorsToAdd(manager, rprof1) === 1)
-    assert(numExecutorsTarget(manager, rprof1.id) === 10)
+    assert(numExecutorsTarget(manager, rprof1.id) === 4)
     assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 0)
     doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
-    assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
-    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
-    assert(numExecutorsToAdd(manager, rprof1) === 1)
-    assert(numExecutorsTarget(manager, rprof1.id) === 10)
 
-    println("--- Register previously requested executors ---")
-
+    // Register previously requested executors
     onExecutorAddedDefaultProfile(manager, "first")
+    onExecutorAdded(manager, "firstrp1", rprof1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 6)
+    assert(numExecutorsTarget(manager, rprof1.id) === 4)
     onExecutorAddedDefaultProfile(manager, "second")
-    logDebug(numExecutorsTargetForDefaultProfileId(manager).toString)
-    logDebug(numExecutorsToAddForDefaultProfile(manager).toString)
     onExecutorAddedDefaultProfile(manager, "third")
     onExecutorAddedDefaultProfile(manager, "fourth")
-
-    logDebug("numExecutorsTargetForDefaultProfileId: " +
-      numExecutorsTargetForDefaultProfileId(manager).toString)
-    logDebug("numExecutorsToAddForDefaultProfile: " +
-      numExecutorsToAddForDefaultProfile(manager).toString)
-    logDebug("addExecutorsToTargetForDefaultProfile: " +
-      addExecutorsToTargetForDefaultProfile(manager, updatesNeeded).toString)
-    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
-
-    onExecutorAdded(manager, "firstrp1", rprof1)
     onExecutorAdded(manager, "secondrp1", rprof1)
-
-    logDebug("numExecutorsTargetForDefaultProfileId: " +
-      numExecutorsTargetForDefaultProfileId(manager).toString)
-    logDebug("numExecutorsToAddForDefaultProfile: " +
-      numExecutorsToAddForDefaultProfile(manager).toString)
-    logDebug("addExecutorsToTargetForDefaultProfile: " +
-      addExecutorsToTargetForDefaultProfile(manager, updatesNeeded).toString)
-    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
-
     onExecutorAdded(manager, "thirdrp1", rprof1)
     onExecutorAdded(manager, "fourthrp1", rprof1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 6)
+    assert(numExecutorsTarget(manager, rprof1.id) === 4)
+    onExecutorAddedDefaultProfile(manager, "first") // duplicates should not count
+    onExecutorAddedDefaultProfile(manager, "second")
+    onExecutorAdded(manager, "firstrp1", rprof1)
+    onExecutorAdded(manager, "secondrp1", rprof1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 6)
+    assert(numExecutorsTarget(manager, rprof1.id) === 4)
 
-    logDebug("numExecutorsTargetForDefaultProfileId: " +
-      numExecutorsTargetForDefaultProfileId(manager).toString)
-    logDebug("numExecutorsToAddForDefaultProfile: " +
-      numExecutorsToAddForDefaultProfile(manager).toString)
-    logDebug("addExecutorsToTargetForDefaultProfile: " +
-      addExecutorsToTargetForDefaultProfile(manager, updatesNeeded).toString)
+    // Try adding again
+    // This should still fail because the number pending + running is still at the limit
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 0)
     doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
-
-    // scalastyle:on println
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 6)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(numExecutorsToAdd(manager, rprof1) === 1)
+    assert(numExecutorsTarget(manager, rprof1.id) === 4)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    assert(addExecutorsToTarget(manager, updatesNeeded, rprof1) === 0)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 6)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(numExecutorsToAdd(manager, rprof1) === 1)
+    assert(numExecutorsTarget(manager, rprof1.id) === 4)
   }
 
   test("remove executors multiple profiles") {
