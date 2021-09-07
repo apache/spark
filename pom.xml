@@ -300,6 +300,12 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
+    <repository>
+      <id>jitpack.io</id>
+      <url>https://jitpack.io</url>
+      <name>Jitpack.io repository</name>
+      <!-- needed for brotli-codec -->
+    </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>
