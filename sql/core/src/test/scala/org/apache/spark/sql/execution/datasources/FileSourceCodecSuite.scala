@@ -56,12 +56,13 @@ class ParquetCodecSuite extends FileSourceCodecSuite with SharedSparkSession {
   override def format: String = "parquet"
   override val codecConfigName: String = SQLConf.PARQUET_COMPRESSION.key
   // Exclude "lzo" because it is GPL-licenced so not included in Hadoop.
+  // TODO(SPARK-36669): "lz4" codec fails due to HADOOP-17891.
   override protected def availableCodecs: Seq[String] =
     if (System.getProperty("os.arch") == "aarch64") {
       // Exclude "brotli" due to PARQUET-1975.
-      Seq("none", "uncompressed", "snappy", "gzip", "zstd", "lz4")
+      Seq("none", "uncompressed", "snappy", "gzip", "zstd")
     } else {
-      Seq("none", "uncompressed", "snappy", "gzip", "brotli", "zstd", "lz4")
+      Seq("none", "uncompressed", "snappy", "gzip", "brotli", "zstd")
     }
 }
 
