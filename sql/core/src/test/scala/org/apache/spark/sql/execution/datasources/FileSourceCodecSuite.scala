@@ -21,7 +21,7 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
-trait FileSourceCodecSuite extends QueryTest with SQLTestUtils {
+trait FileSourceCodecSuite extends QueryTest with SQLTestUtils with SharedSparkSession {
 
   protected def format: String
   protected val codecConfigName: String
@@ -51,7 +51,7 @@ trait FileSourceCodecSuite extends QueryTest with SQLTestUtils {
   }
 }
 
-class ParquetCodecSuite extends FileSourceCodecSuite with SharedSparkSession {
+class ParquetCodecSuite extends FileSourceCodecSuite {
 
   override def format: String = "parquet"
   override val codecConfigName: String = SQLConf.PARQUET_COMPRESSION.key
@@ -66,7 +66,7 @@ class ParquetCodecSuite extends FileSourceCodecSuite with SharedSparkSession {
     }
 }
 
-class OrcCodecSuite extends FileSourceCodecSuite with SharedSparkSession {
+class OrcCodecSuite extends FileSourceCodecSuite {
 
   override def format: String = "orc"
   override val codecConfigName: String = SQLConf.ORC_COMPRESSION.key

@@ -300,7 +300,6 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
-
     <repository>
       <id>jitpack.io</id>
       <url>https://jitpack.io</url>
