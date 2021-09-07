@@ -106,19 +106,21 @@ case class AdaptiveSparkPlanExec(
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
-  @transient private val queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
-    RemoveRedundantProjects,
+  @transient private val queryStagePreparationRules: Seq[Rule[SparkPlan]] = {
     // For cases like `df.repartition(a, b).select(c)`, there is no distribution requirement for
     // the final plan, but we do need to respect the user-specified repartition. Here we ask
     // `EnsureRequirements` to not optimize out the user-specified repartition-by-col to work
     // around this case.
-    EnsureRequirements(optimizeOutRepartition = requiredDistribution.isDefined),
-    RemoveRedundantSorts,
-    DisableUnnecessaryBucketedScan,
-    OptimizeSkewedJoin(
-      EnsureRequirements(requiredDistribution.isDefined, requiredDistribution),
-      costEvaluator)
-  ) ++ context.session.sessionState.queryStagePrepRules
+    val ensureRequirements =
+      EnsureRequirements(requiredDistribution.isDefined, requiredDistribution)
+    Seq(
+      RemoveRedundantProjects,
+      ensureRequirements,
+      RemoveRedundantSorts,
+      DisableUnnecessaryBucketedScan,
+      OptimizeSkewedJoin(ensureRequirements, costEvaluator)
+    ) ++ context.session.sessionState.queryStagePrepRules
+  }
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
