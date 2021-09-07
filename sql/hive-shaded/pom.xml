@@ -39,37 +39,72 @@
       <groupId>${hive.group}</groupId>
       <artifactId>hive-common</artifactId>
       <scope>${hive.common.scope}</scope>
+      <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-exec</artifactId>
       <classifier>${hive.classifier}</classifier>
+      <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-metastore</artifactId>
+      <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-serde</artifactId>
       <scope>${hive.serde.scope}</scope>
+      <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-shims</artifactId>
       <scope>${hive.shims.scope}</scope>
+      <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>org.apache.hive</groupId>
       <artifactId>hive-llap-common</artifactId>
       <scope>${hive.llap.scope}</scope>
+      <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>org.apache.hive</groupId>
       <artifactId>hive-llap-client</artifactId>
       <scope>${hive.llap.scope}</scope>
+      <optional>true</optional>
     </dependency>
   </dependencies>
+
+  <profiles>
+    <profile>
+      <id>hive-thriftserver</id>
+      <dependencies>
+        <dependency>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-cli</artifactId>
+          <optional>true</optional>
+        </dependency>
+        <dependency>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-jdbc</artifactId>
+          <optional>true</optional>
+        </dependency>
+        <dependency>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-beeline</artifactId>
+          <optional>true</optional>
+        </dependency>
+        <dependency>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-service-rpc</artifactId>
+          <optional>true</optional>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
 
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
@@ -120,27 +155,6 @@
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer"/>
               </transformers>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-enforcer-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>enforce-versions</id>
-            <goals>
-              <goal>enforce</goal>
-            </goals>
-            <configuration>
-              <rules>
-                <bannedDependencies>
-                  <excludes combine.children="append">
-                    <exclude>*:hive-cli</exclude>
-                  </excludes>
-                </bannedDependencies>
-              </rules>
             </configuration>
           </execution>
         </executions>
