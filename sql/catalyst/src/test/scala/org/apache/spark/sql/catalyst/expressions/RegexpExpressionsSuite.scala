@@ -531,6 +531,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkLiteralRow("A€a" ilike _, "_€_", true)
     checkLiteralRow("a€AA" ilike _, "_\u20AC_a", true)
     checkLiteralRow("a\u20ACaz" ilike _, "_€_Z", true)
+    checkLiteralRow("ЀЁЂѺΏỀ" ilike _, "ѐёђѻώề", true)
     // scalastyle:on nonascii
 
     // invalid escaping
@@ -551,5 +552,84 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // example
     checkLiteralRow("""%SystemDrive%\Users\john""" ilike _, """\%SystemDrive\%\\Users%""", true)
+  }
+
+  Seq('/', '#', '\"').foreach { escapeChar =>
+    test(s"SPARK-36674: LIKE Pattern ESCAPE '$escapeChar'") {
+      // null handling
+      checkLiteralRow(Literal.create(null, StringType).ilike(_, escapeChar), "a", null)
+      checkEvaluation(
+        Literal.create("a", StringType).ilike(Literal.create(null, StringType), escapeChar), null)
+      checkEvaluation(
+        Literal.create(null, StringType).ilike(Literal.create(null, StringType), escapeChar), null)
+      checkEvaluation(Literal.create("a", StringType).ilike(
+        NonFoldableLiteral.create("a", StringType), escapeChar), true)
+      checkEvaluation(Literal.create("a", StringType).ilike(
+        NonFoldableLiteral.create(null, StringType), escapeChar), null)
+      checkEvaluation(Literal.create(null, StringType).ilike(
+        NonFoldableLiteral.create("a", StringType), escapeChar), null)
+      checkEvaluation(Literal.create(null, StringType).ilike(
+        NonFoldableLiteral.create(null, StringType), escapeChar), null)
+
+      // simple patterns
+      checkLiteralRow("Abdef" ilike(_, escapeChar), "abdef", true)
+      checkLiteralRow("a_%b" ilike(_, escapeChar), s"a${escapeChar}__b", true)
+      checkLiteralRow("addb" ilike(_, escapeChar), "A_%b", true)
+      checkLiteralRow("addb" ilike(_, escapeChar), s"a${escapeChar}__b", false)
+      checkLiteralRow("Addb" ilike(_, escapeChar), s"a%$escapeChar%b", false)
+      checkLiteralRow("a_%b" ilike(_, escapeChar), s"a%$escapeChar%B", true)
+      checkLiteralRow("Addb" ilike(_, escapeChar), "a%", true)
+      checkLiteralRow("addb" ilike(_, escapeChar), "**", false)
+      checkLiteralRow("Abc" ilike(_, escapeChar), "a%", true)
+      checkLiteralRow("abc"  ilike(_, escapeChar), "b%", false)
+      checkLiteralRow("abc"  ilike(_, escapeChar), "bc%", false)
+      checkLiteralRow("a\nb" ilike(_, escapeChar), "a_B", true)
+      checkLiteralRow("Ab" ilike(_, escapeChar), "a%b", true)
+      checkLiteralRow("a\nb" ilike(_, escapeChar), "a%B", true)
+
+      // empty input
+      checkLiteralRow("" ilike(_, escapeChar), "", true)
+      checkLiteralRow("a" ilike(_, escapeChar), "", false)
+      checkLiteralRow("" ilike(_, escapeChar), "a", false)
+
+      // double-escaping backslash
+      checkLiteralRow(s"""$escapeChar$escapeChar$escapeChar$escapeChar""" ilike(_, escapeChar),
+        s"""%$escapeChar$escapeChar%""", true)
+      checkLiteralRow("""%%""" ilike(_, escapeChar), """%%""", true)
+      checkLiteralRow(s"""${escapeChar}__""" ilike(_, escapeChar),
+        s"""$escapeChar$escapeChar${escapeChar}__""", true)
+      checkLiteralRow(s"""$escapeChar$escapeChar${escapeChar}__""" ilike(_, escapeChar),
+        s"""%$escapeChar$escapeChar%$escapeChar%""", false)
+      checkLiteralRow(s"""_$escapeChar$escapeChar$escapeChar%""" ilike(_, escapeChar),
+        s"""%$escapeChar${escapeChar}""", false)
+
+      // unicode
+      // scalastyle:off nonascii
+      checkLiteralRow("a\u20ACa" ilike(_, escapeChar), "_\u20AC_", true)
+      checkLiteralRow("a€a" ilike(_, escapeChar), "_€_", true)
+      checkLiteralRow("a€a" ilike(_, escapeChar), "_\u20AC_", true)
+      checkLiteralRow("a\u20ACa" ilike(_, escapeChar), "_€_", true)
+      checkLiteralRow("ѐёђѻώề" ilike _, "ЀЁЂѺΏỀ", true)
+      // scalastyle:on nonascii
+
+      // invalid escaping
+      val invalidEscape = intercept[AnalysisException] {
+        evaluateWithoutCodegen("""a""" ilike(s"""${escapeChar}a""", escapeChar))
+      }
+      assert(invalidEscape.getMessage.contains("pattern"))
+      val endEscape = intercept[AnalysisException] {
+        evaluateWithoutCodegen("""a""" ilike(s"""a$escapeChar""", escapeChar))
+      }
+      assert(endEscape.getMessage.contains("pattern"))
+
+      // case
+      checkLiteralRow("A" ilike(_, escapeChar), "a%", true)
+      checkLiteralRow("a" ilike(_, escapeChar), "A%", true)
+      checkLiteralRow("AaA" ilike(_, escapeChar), "_a_", true)
+
+      // example
+      checkLiteralRow(s"""%SystemDrive%${escapeChar}users${escapeChar}John""" ilike(_, escapeChar),
+        s"""$escapeChar%SystemDrive$escapeChar%$escapeChar${escapeChar}Users%""", true)
+    }
   }
 }
