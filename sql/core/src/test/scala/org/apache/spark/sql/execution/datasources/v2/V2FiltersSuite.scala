@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
+import org.apache.spark.sql.connector.expressions.{FieldReference, Literal, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter._
 import org.apache.spark.sql.execution.datasources.v2.FiltersV2Suite.ref
 import org.apache.spark.sql.types.IntegerType
@@ -98,6 +98,19 @@ class FiltersV2Suite extends SparkFunSuite {
     assert(filter1.equals(filter2))
     assert(filter1.references.map(_.describe()).toSeq == Seq("a"))
     assert(filter1.describe.equals("a IN (1, 2, 3, 4)"))
+    
+    val values: Array[Literal[_]] = new Array[Literal[_]](1000)
+    for (i <- 0 until 1000) {
+      values(i) = LiteralValue(i, IntegerType)
+    }
+    val filter3 = new In(ref("a"), values)
+    var expected = "a IN ("
+    for (i <- 0 until 50) {
+      expected += i + ", "
+    }
+    expected = expected.dropRight(2)  // remove the last ", "
+    expected += "...)"
+    assert(filter3.describe.equals(expected))
   }
 
   test("IsNull") {

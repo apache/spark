@@ -61,7 +61,12 @@ public final class In extends Filter {
 
   @Override
   public String toString() {
-    String res = Arrays.stream(values).map(Literal::describe).collect(Collectors.joining(", "));
+    int maxLenToPrint = 50;
+    String res = Arrays.stream(values).limit((maxLenToPrint)).map(Literal::describe)
+      .collect(Collectors.joining(", "));
+    if(values.length > maxLenToPrint){
+      res += "...";
+    }
     return column.describe() + " IN (" + res + ")";
   }
 
