@@ -228,7 +228,9 @@ class SparkSQLFeatureNotSupportedException(errorClass: String, messageParameters
 /**
  * Unsupported Operation exception thrown from Spark with an error class.
  */
-class SparkUnsupportedOperationException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkUnsupportedOperationException(
+        errorClass: String,
+        messageParameters: Array[String])
   extends UnsupportedOperationException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters))
     with SparkThrowable {

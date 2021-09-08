@@ -1478,16 +1478,17 @@ object QueryExecutionErrors {
       pluginClassName: String,
       e: Exception): Throwable = {
     new SparkException(
-      errorClass = "CATALOG_FAIL_TO_FIND_PUBLIC_NO_ARG_CONSTRUCTOR_ERROR",
+      errorClass = "FAILED_TO_FIND_PUBLIC_NO_ARG_CONSTRUCTOR_FOR_CONSTRUCTOR",
       messageParameters = Array(name, pluginClassName), e)
   }
+
 
   def catalogFailToCallPublicNoArgConstructorError(
       name: String,
       pluginClassName: String,
       e: Exception): Throwable = {
     new SparkException(
-      errorClass = "CATALOG_FAIL_TO_CALL_PUBLIC_NO_ARG_CONSTRUCTOR_ERROR",
+      errorClass = "FAILED_TO_CALL_PUBLIC_NO_ARG_CONSTRUCTOR_FOR_CONSTRUCTOR",
       messageParameters = Array(name, pluginClassName), e)
   }
 

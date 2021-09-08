@@ -27,7 +27,9 @@ class CatalogNotFoundException(message: String, cause: Throwable)
   def this(message: String) = this(message, null)
 }
 
-class SparkCatalogNotFoundException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkCatalogNotFoundException(
+        errorClass: String,
+        messageParameters: Array[String])
   extends CatalogNotFoundException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters))
     with SparkThrowable {
