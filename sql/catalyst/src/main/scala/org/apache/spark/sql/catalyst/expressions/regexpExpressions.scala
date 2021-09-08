@@ -242,12 +242,10 @@ case class ILike(
     right: Expression,
     escapeChar: Char,
     child: Expression) extends RuntimeReplaceable {
-  def this(left: Expression, right: Expression, escapeChar: Char) = {
+  def this(left: Expression, right: Expression, escapeChar: Char) =
     this(left, right, escapeChar, Like(Lower(left), Lower(right), escapeChar))
-  }
-  def this(left: Expression, right: Expression) = {
+  def this(left: Expression, right: Expression) =
     this(left, right, '\\')
-  }
 
   override def exprsReplaced: Seq[Expression] = Seq(left, right)
   override def flatArguments: Iterator[Any] = Iterator(left, right, escapeChar)
