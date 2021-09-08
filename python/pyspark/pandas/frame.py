@@ -6726,14 +6726,17 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
             if len(drop_column_labels) == 0:
                 raise KeyError(columns)
-            cols, labels = zip(
-                *(
-                    (column, label)
-                    for column, label in zip(
-                        self._internal.data_spark_column_names, self._internal.column_labels
-                    )
-                    if label not in drop_column_labels
+
+            keep_column_and_label = [
+                (column, label)
+                for column, label in zip(
+                    self._internal.data_spark_column_names, self._internal.column_labels
                 )
+                if label not in drop_column_labels
+            ]
+
+            cols, labels = (
+                zip(*keep_column_and_label) if len(keep_column_and_label) > 0 else ([], [])
             )
             internal = self._internal.with_new_columns([self._psser_for(label) for label in labels])
             return DataFrame(internal)
