@@ -1996,7 +1996,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!normalTSM.runningTasksSet.contains(taskId))
   }
 
-  test("SPARK-36575: Executor lost cause task hang") {
+  test("SPARK-36575: Should ignore task finished event if its task set is gone " +
+    "in TaskSchedulerImpl.handleSuccessfulTask") {
     val taskScheduler = setupScheduler()
 
     val latch = new CountDownLatch(2)
