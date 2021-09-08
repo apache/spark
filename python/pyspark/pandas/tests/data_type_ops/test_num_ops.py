@@ -29,6 +29,7 @@ from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
     extension_float_dtypes_available,
+    extension_object_dtypes_available,
 )
 from pyspark.sql.types import DecimalType, IntegralType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
@@ -350,6 +351,10 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(
             self.float_withnan_psser.astype("category"), self.float_withnan_psser.astype("category")
         )
+        if extension_object_dtypes_available and extension_float_dtypes_available:
+            pser = pd.Series(pd.Categorical([1.0, 2.0, 3.0]), dtype=pd.Float64Dtype())
+            psser = ps.from_pandas(pser)
+            self.assert_eq(pser.astype(pd.BooleanDtype()), psser.astype(pd.BooleanDtype()))
 
     def test_neg(self):
         pdf, psdf = self.pdf, self.psdf

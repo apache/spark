@@ -552,6 +552,9 @@ object DataSourceStrategy
     case expressions.Literal(false, BooleanType) =>
       Some(sources.AlwaysFalse)
 
+    case e @ pushableColumn(name) if e.dataType.isInstanceOf[BooleanType] =>
+      Some(sources.EqualTo(name, true))
+
     case _ => None
   }
 

@@ -22,7 +22,6 @@ import java.time.temporal.ChronoUnit
 import java.util
 import java.util.OptionalLong
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.scalatest.Assertions._
@@ -222,13 +221,13 @@ class InMemoryTable(
     this
   }
 
-  override def capabilities: util.Set[TableCapability] = Set(
+  override def capabilities: util.Set[TableCapability] = util.EnumSet.of(
     TableCapability.BATCH_READ,
     TableCapability.BATCH_WRITE,
     TableCapability.STREAMING_WRITE,
     TableCapability.OVERWRITE_BY_FILTER,
     TableCapability.OVERWRITE_DYNAMIC,
-    TableCapability.TRUNCATE).asJava
+    TableCapability.TRUNCATE)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new InMemoryScanBuilder(schema)

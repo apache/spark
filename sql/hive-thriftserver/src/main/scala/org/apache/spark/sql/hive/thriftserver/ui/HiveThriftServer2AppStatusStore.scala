@@ -29,9 +29,7 @@ import org.apache.spark.util.kvstore.{KVIndex, KVStore}
  * Provides a view of a KVStore with methods that make it easy to query SQL-specific state. There's
  * no state kept in this class, so it's ok to have multiple instances of it in an application.
  */
-class HiveThriftServer2AppStatusStore(
-    store: KVStore,
-    val listener: Option[HiveThriftServer2Listener] = None) {
+class HiveThriftServer2AppStatusStore(store: KVStore) {
 
   def getSessionList: Seq[SessionInfo] = {
     store.view(classOf[SessionInfo]).asScala.toSeq

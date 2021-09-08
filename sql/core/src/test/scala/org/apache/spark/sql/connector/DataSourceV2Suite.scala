@@ -21,8 +21,6 @@ import java.io.File
 import java.util
 import java.util.OptionalLong
 
-import scala.collection.JavaConverters._
-
 import test.org.apache.spark.sql.connector._
 
 import org.apache.spark.SparkException
@@ -466,7 +464,7 @@ abstract class SimpleBatchTable extends Table with SupportsRead  {
 
   override def name(): String = this.getClass.toString
 
-  override def capabilities(): util.Set[TableCapability] = Set(BATCH_READ).asJava
+  override def capabilities(): util.Set[TableCapability] = util.EnumSet.of(BATCH_READ)
 }
 
 abstract class SimpleScanBuilder extends ScanBuilder

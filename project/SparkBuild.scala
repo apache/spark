@@ -274,7 +274,9 @@ object SparkBuild extends PomBuild {
       "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/maven2/",
       DefaultMavenRepository,
       Resolver.mavenLocal,
-      Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
+      Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns),
+      // needed for brotli-codec
+      "jitpack.io" at "https://jitpack.io"
     ),
     externalResolvers := resolvers.value,
     otherResolvers := SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))).value,
@@ -967,6 +969,7 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalog/v2/utils")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org.apache.spark.errors")))
       .map(_.filterNot(_.getCanonicalPath.contains("org.apache.spark.sql.errors")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hive")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/v2/avro")))

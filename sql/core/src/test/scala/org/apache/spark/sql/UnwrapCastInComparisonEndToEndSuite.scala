@@ -190,5 +190,21 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
     }
   }
 
+  test("SPARK-36607: Support BooleanType in UnwrapCastInBinaryComparison") {
+    withTable(t) {
+      Seq(Some(true), Some(false), None).toDF().write.saveAsTable(t)
+      val df = spark.table(t)
+
+      checkAnswer(df.where("value = -1"), Seq.empty)
+      checkAnswer(df.where("value = 0"), Row(false))
+      checkAnswer(df.where("value = 1"), Row(true))
+      checkAnswer(df.where("value = 2"), Seq.empty)
+      checkAnswer(df.where("value <=> -1"), Seq.empty)
+      checkAnswer(df.where("value <=> 0"), Row(false))
+      checkAnswer(df.where("value <=> 1"), Row(true))
+      checkAnswer(df.where("value <=> 2"), Seq.empty)
+    }
+  }
+
   private def decimal(v: BigDecimal): Decimal = Decimal(v, 5, 2)
 }

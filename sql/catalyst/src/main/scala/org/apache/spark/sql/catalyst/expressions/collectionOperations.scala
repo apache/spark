@@ -2903,7 +2903,7 @@ object Sequence {
         val maxEstimatedArrayLength =
           getSequenceLength(startMicros, stopMicros, input3, intervalStepInMicros)
 
-        val stepSign = if (stopMicros >= startMicros) +1 else -1
+        val stepSign = if (intervalStepInMicros > 0) +1 else -1
         val exclusiveItem = stopMicros + stepSign
         val arr = new Array[T](maxEstimatedArrayLength)
         var t = startMicros
@@ -2989,7 +2989,7 @@ object Sequence {
          |
          |  $sequenceLengthCode
          |
-         |  final int $stepSign = $stopMicros >= $startMicros ? +1 : -1;
+         |  final int $stepSign = $intervalInMicros > 0 ? +1 : -1;
          |  final long $exclusiveItem = $stopMicros + $stepSign;
          |
          |  $arr = new $elemType[$arrLength];
