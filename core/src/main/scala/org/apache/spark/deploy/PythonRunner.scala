@@ -99,7 +99,7 @@ object PythonRunner {
       new RedirectThread(
         process.getErrorStream,
         stderrBuffer,
-        "Thread-ScriptTransformation-STDERR-Consumer").start()
+        "Thread-PythonRunner-STDERR-Consumer").start()
       new RedirectThread(process.getInputStream, System.out, "redirect output").start()
 
       val exitCode = process.waitFor()
