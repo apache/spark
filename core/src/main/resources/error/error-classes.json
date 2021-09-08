@@ -49,7 +49,7 @@
     "message" : [ "Plugin class for catalog '%s' does not implement CatalogPlugin: %s" ],
     "sqlState" : "42000"
   },
-  "CONCURRENT_QUERY" : {
+  "CONCURRENT_QUERY_ERROR" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
   "DIVIDE_BY_ZERO" : {
