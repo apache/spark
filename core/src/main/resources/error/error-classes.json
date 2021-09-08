@@ -13,7 +13,7 @@
   },
   "CLASS_UNSUPPORTED_BY_MAP_OBJECTS" : {
     "message" : [ "Class `%s` is not supported by `MapObjects` as resulting collection." ],
-    "sqlState" : "42000"
+    "sqlState" : "0A000"
   },
   "CONCURRENT_QUERY_ERROR" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
@@ -37,7 +37,7 @@
   "FAILED_SET_ORIGINAL_PERMISSION_BACK" : {
     "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ]
   },
-  "FAIL_TO_CONVERT_VALUE_TO_JSON" : {
+  "FAILED_TO_CONVERT_VALUE_TO_JSON" : {
     "message" : [ "Failed to convert value %s (class of %s) with the type of %s to JSON." ],
     "sqlState" : "42000"
   },
@@ -135,7 +135,7 @@
     "sqlState" : "22023"
   },
   "RESOLVE_CANNOT_HANDLE_NESTED_SCHEMA" : {
-    "message" : [ "Can not handle nested schema yet...  plan %s" ],
+    "message" : [ "Can not handle nested schema...  plan %s" ],
     "sqlState" : "42000"
   },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
@@ -146,11 +146,11 @@
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
   },
   "UNEXPECTED_OPERATOR_IN_CORRELATED_SUBQUERY" : {
-    "message" : [ "Unexpected operator %s in correlated subquery%s" ],
+    "message" : [ "Unexpected operator %s in correlated subquery %s" ],
     "sqlState" : "42000"
   },
   "UNREACHABLE" : {
-    "message" : [ "This line should be unreachable%s" ],
+    "message" : [ "This line should be unreachable %s" ],
     "sqlState" : "42000"
   },
   "UNRECOGNIZED_SQL_TYPE" : {
@@ -158,8 +158,8 @@
     "sqlState" : "42000"
   },
   "UNSUPPORTED_ENCODER" : {
-    "message" : [ "Only expression encoders are supported for now." ],
-    "sqlState" : "42000"
+    "message" : [ "Only expression encoders are supported." ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_LITERAL_TYPE" : {
     "message" : [ "Unsupported literal type %s %s" ],
@@ -167,15 +167,15 @@
   },
   "UNSUPPORTED_NATURAL_JOIN_TYPE" : {
     "message" : [ "Unsupported natural join type %s" ],
-    "sqlState" : "42000"
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_OPERATION_NOT_RESOLVED" : {
     "message" : [ "Not resolved" ],
-    "sqlState" : "42000"
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_ROUNDING" : {
     "message" : [ "Not supported rounding mode: %s" ],
-    "sqlState" : "42000"
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER" : {
     "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],

@@ -244,7 +244,9 @@ private[spark] class SparkSQLFeatureNotSupportedException(
 /**
  * Unsupported operation exception thrown from Spark with an error class.
  */
-class SparkUnsupportedOperationException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkUnsupportedOperationException(
+    errorClass: String,
+    messageParameters: Array[String])
   extends UnsupportedOperationException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
@@ -255,7 +257,9 @@ class SparkUnsupportedOperationException(errorClass: String, messageParameters: 
 /**
  * Illegal state exception thrown from Spark with an error class.
  */
-class SparkIllegalStateException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkIllegalStateException(
+    errorClass: String,
+    messageParameters: Array[String])
   extends IllegalStateException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
@@ -266,7 +270,9 @@ class SparkIllegalStateException(errorClass: String, messageParameters: Array[St
 /**
  * Illegal argument exception thrown from Spark with an error class.
  */
-class SparkIllegalArgumentException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkIllegalArgumentException(
+    errorClass: String,
+    messageParameters: Array[String])
   extends IllegalArgumentException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
@@ -277,7 +283,9 @@ class SparkIllegalArgumentException(errorClass: String, messageParameters: Array
 /**
  * Number format exception thrown from Spark with an error class.
  */
-class SparkNumberFormatException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkNumberFormatException(
+    errorClass: String,
+    messageParameters: Array[String])
   extends NumberFormatException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
@@ -288,7 +296,9 @@ class SparkNumberFormatException(errorClass: String, messageParameters: Array[St
 /**
  * Array index out of bounds exception thrown from Spark with an error class.
  */
-class SparkArrayIndexOutOfBoundsException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkArrayIndexOutOfBoundsException(
+    errorClass: String,
+    messageParameters: Array[String])
   extends ArrayIndexOutOfBoundsException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
@@ -299,7 +309,9 @@ class SparkArrayIndexOutOfBoundsException(errorClass: String, messageParameters:
 /**
  * No such element exception thrown from Spark with an error class.
  */
-class SparkNoSuchElementException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkNoSuchElementException(
+    errorClass: String,
+    messageParameters: Array[String])
   extends NoSuchElementException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
