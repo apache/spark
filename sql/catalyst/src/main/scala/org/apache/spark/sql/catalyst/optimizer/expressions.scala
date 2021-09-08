@@ -457,10 +457,6 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case Not(IsNull(e)) => IsNotNull(e)
       case Not(IsNotNull(e)) => IsNull(e)
 
-      // Using Not(null) == null rules
-      case IsNull(Not(e)) => IsNull(e)
-      case IsNotNull(Not(e)) => IsNotNull(e)
-
       // Using (Not(a) === b) == (a === Not(b)), (Not(a) <=> b) == (a <=> Not(b)) rules
       // E.g. `EqualTo(Not(a), b)` where `b = Not(c)`, it will become
       // `EqualTo(a, Not(b))` => `EqualTo(a, Not(Not(c)))` => `EqualTo(a, c)`
@@ -845,6 +841,14 @@ object NullPropagation extends Rule[LogicalPlan] {
       // a null literal.
       case e: NullIntolerant if e.children.exists(isNullLiteral) =>
         Literal.create(null, e.dataType)
+
+      // Using IsNull(e(inputs)) == IsNull(input1) or IsNull(input2) ... rules
+      // E.g. IsNull(Not(null)) == IsNull(null)
+      // E.g. IsNotNull(a === b) == And(IsNotNull(a), IsNotNull(b))
+      case IsNull(e: NullIntolerant) if e.children.nonEmpty => e.children.tail.
+        foldLeft(IsNull(e.children.head): Expression)((a, b) => Or(a, IsNull(b)))
+      case IsNotNull(e: NullIntolerant) if e.children.nonEmpty => e.children.tail.
+        foldLeft(IsNotNull(e.children.head): Expression)((a, b) => And(a, IsNotNull(b)))
     }
   }
 }
