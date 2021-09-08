@@ -242,7 +242,9 @@ private[spark] class SparkUnsupportedOperationException(
 /**
  * No such element exception thrown from Spark with an error class.
  */
-class SparkNoSuchElementException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkNoSuchElementException(
+        errorClass: String,
+        messageParameters: Array[String])
   extends NoSuchElementException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters))
     with SparkThrowable {
