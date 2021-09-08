@@ -37,12 +37,6 @@
     "message" : [ "Cannot set timeout timestamp without enabling event time timeout in [map|flatMapGroupsWithState" ],
     "sqlState" : "42000"
   },
-  "FAILED_TO_CALL_PUBLIC_NO_ARG_CONSTRUCTOR_FOR_CONSTRUCTOR" : {
-    "message" : [ "Failed to call public no-arg constructor for catalog '%s': %s" ]
-  },
-  "FAILED_TO_FIND_PUBLIC_NO_ARG_CONSTRUCTOR_FOR_CONSTRUCTOR" : {
-    "message" : [ "Failed to find public no-arg constructor for catalog '%s': %s" ]
-  },
   "CATALOG_PLUGIN_CLASS_NOT_FOUND" : {
     "message" : [ "Catalog '%s' plugin class not found: spark.sql.catalog.%s is not defined" ],
     "sqlState" : "42000"
@@ -72,6 +66,12 @@
   },
   "FAILED_SET_ORIGINAL_PERMISSION_BACK" : {
     "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ]
+  },
+  "FAILED_TO_CALL_PUBLIC_NO_ARG_CONSTRUCTOR_FOR_CONSTRUCTOR" : {
+    "message" : [ "Failed to call public no-arg constructor for catalog '%s': %s" ]
+  },
+  "FAILED_TO_FIND_PUBLIC_NO_ARG_CONSTRUCTOR_FOR_CONSTRUCTOR" : {
+    "message" : [ "Failed to find public no-arg constructor for catalog '%s': %s" ]
   },
   "FAILED_TO_INSTANTIATE_CONSTRUCTOR_FOR_CATALOG" : {
     "message" : [ "Failed during instantiating constructor for catalog '%s': %s" ]
