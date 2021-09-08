@@ -98,7 +98,6 @@ class FiltersV2Suite extends SparkFunSuite {
     assert(filter1.equals(filter2))
     assert(filter1.references.map(_.describe()).toSeq == Seq("a"))
     assert(filter1.describe.equals("a IN (1, 2, 3, 4)"))
-    
     val values: Array[Literal[_]] = new Array[Literal[_]](1000)
     for (i <- 0 until 1000) {
       values(i) = LiteralValue(i, IntegerType)
