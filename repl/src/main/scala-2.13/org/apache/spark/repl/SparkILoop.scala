@@ -17,8 +17,6 @@
 
 package org.apache.spark.repl
 
-import org.apache.spark.repl.InactivityTimeout.{startInactivityTimer, stopInactivityTimer}
-
 import java.io.{BufferedReader, PrintWriter}
 
 // scalastyle:off println
@@ -29,6 +27,8 @@ import scala.tools.nsc.interpreter.shell.{ILoop, ShellConfig}
 import scala.tools.nsc.util.stringFromStream
 import scala.util.Properties.{javaVersion, javaVmName, versionString}
 // scalastyle:on println
+
+import org.apache.spark.repl.InactivityTimeout.{startInactivityTimer, stopInactivityTimer}
 
 /**
  *  A Spark-specific interactive shell.

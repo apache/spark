@@ -17,10 +17,12 @@
 
 package org.apache.spark.repl
 
-import java.util.{Timer, TimerTask}
+import java.util.Timer
+import java.util.TimerTask
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.repl.Main.{conf, sparkContext}
+import org.apache.spark.repl.Main.conf
+import org.apache.spark.repl.Main.sparkContext
 
 object InactivityTimeout extends Logging {
   private[repl] var inactivityTimeoutMs = conf.getTimeAsMs("spark.repl.inactivityTimeout", "0s")
@@ -47,7 +49,7 @@ object InactivityTimeout extends Logging {
   def startInactivityTimer(): Unit = {
     if (inactivityTimeoutMs > 0) {
       inactivityTimer.foreach(_.cancel())
-      inactivityTimer = Option(new Timer(true))
+      inactivityTimer = Some(new Timer("SparkShellInactivityTimer", true))
       inactivityTimer.foreach(_.schedule(new InactivityTimerTask, inactivityTimeoutMs))
     }
   }

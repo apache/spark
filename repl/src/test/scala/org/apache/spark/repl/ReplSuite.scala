@@ -57,7 +57,9 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     class SlowBufferedReader(in: Reader, readLineDelay: Long) extends BufferedReader(in) {
       override def readLine(): String = {
-        if (readLineDelay > 0) Thread.sleep(readLineDelay)
+        if (readLineDelay > 0) {
+          Thread.sleep(readLineDelay)
+        }
         super.readLine()
       }
     }
