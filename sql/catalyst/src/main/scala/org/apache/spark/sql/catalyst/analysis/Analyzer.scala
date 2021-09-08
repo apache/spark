@@ -1714,6 +1714,11 @@ class Analyzer(override val catalogManager: CatalogManager)
             case s: Star => expand(s, child)
             case o => o :: Nil
           })
+        case s: Star =>
+          expand(s, child) match {
+            case Seq(exp) => exp
+            case _ => s
+          }
         // count(*) has been replaced by count(1)
         case o if containsStar(o.children) =>
           throw QueryCompilationErrors.invalidStarUsageError(s"expression '${o.prettyName}'",

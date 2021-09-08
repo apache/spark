@@ -3032,6 +3032,14 @@ class DataFrameSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-36698: Regular expressions resolve to a single named expression") {
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
+      checkAnswer(sql("SELECT `col_.*`/exp FROM (SELECT 3 AS col_a, 1 as exp)"), Row(3) :: Nil)
+      checkAnswer(sql("SELECT `col_a`/exp FROM (SELECT 3 AS col_a, 1 as exp)"), Row(3) :: Nil)
+      checkAnswer(sql("select `col_a` as `col` from  (SELECT 3 AS col_a, 1 as exp)"), Row(3) :: Nil)
+    }
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
