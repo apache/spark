@@ -250,7 +250,8 @@ case class ILike(left: Expression, right: Expression, escapeChar: Char) extends 
 
   def this(left: Expression, right: Expression) = this(left, right, '\\')
 
-  override protected def patternFlags: Int = java.util.regex.Pattern.CASE_INSENSITIVE
+  override protected def patternFlags: Int =
+    java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE
   override protected def likeName: String = "ILIKE"
 
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ILike =
