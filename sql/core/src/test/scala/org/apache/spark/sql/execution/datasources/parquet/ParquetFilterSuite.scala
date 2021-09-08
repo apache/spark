@@ -244,7 +244,9 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
       checkFilterPredicate(booleanAttr === true, classOf[Eq[_]], resultFun(true))
       checkFilterPredicate(booleanAttr <=> true, classOf[Eq[_]], resultFun(true))
-      checkFilterPredicate(booleanAttr =!= true, classOf[NotEq[_]], resultFun(false))
+      checkFilterPredicate(booleanAttr =!= true, classOf[Eq[_]], resultFun(false))
+      checkFilterPredicate(catalyst.expressions.Not(booleanAttr <=> true), classOf[NotEq[_]],
+        resultFun(false))
     }
   }
 
