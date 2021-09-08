@@ -23,7 +23,8 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
- * A filter that evaluates to `true` iff both `left` and `right` evaluate to `true`.
+ * A filter that evaluates to {@code true} iff both {@code left} and {@code right} evaluate to
+ * {@code true}.
  *
  * @since 3.3.0
  */

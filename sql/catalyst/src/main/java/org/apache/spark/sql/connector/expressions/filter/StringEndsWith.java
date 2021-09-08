@@ -24,8 +24,8 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * A filter that evaluates to `true` iff the column evaluates to
- * a string that ends with `value`.
+ * A filter that evaluates to {@code true} iff the {@code column} evaluates to
+ * a string that ends with {@code value}.
  *
  * @since 3.3.0
  */

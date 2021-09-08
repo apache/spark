@@ -21,7 +21,7 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
- * A filter that always evaluates to `false`.
+ * A filter that always evaluates to {@code false}.
  *
  * @since 3.3.0
  */

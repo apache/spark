@@ -23,7 +23,7 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
- * A filter that evaluates to `true` iff the column evaluates to null.
+ * A filter that evaluates to {@code true} iff the {@code column} evaluates to null.
  *
  * @since 3.3.0
  */

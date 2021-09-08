@@ -24,9 +24,9 @@ import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
- * Performs equality comparison, similar to [[EqualTo]]. However, this differs from [[EqualTo]]
- * in that it returns `true` (rather than NULL) if both inputs are NULL, and `false`
- * (rather than NULL) if one of the input is NULL and the other is not NULL.
+ * Performs equality comparison, similar to {@link EqualTo}. However, this differs from
+ * {@link EqualTo} in that it returns {@code true} (rather than NULL) if both inputs are NULL,
+ * and {@code false} (rather than NULL) if one of the input is NULL and the other is not NULL.
  *
  * @since 3.3.0
  */

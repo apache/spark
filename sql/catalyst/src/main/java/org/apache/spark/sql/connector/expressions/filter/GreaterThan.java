@@ -24,8 +24,8 @@ import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
- * A filter that evaluates to `true` iff the column evaluates to a value
- * greater than `value`.
+ * A filter that evaluates to {@code true} iff the {@code column} evaluates to a value
+ * greater than {@code value}.
  *
  * @since 3.3.0
  */

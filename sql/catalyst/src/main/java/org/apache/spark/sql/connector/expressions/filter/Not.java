@@ -23,7 +23,7 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
- * A filter that evaluates to `true` iff `child` is evaluated to `false`.
+ * A filter that evaluates to {@code true} iff {@code child} is evaluated to {@code false}.
  *
  * @since 3.3.0
  */
