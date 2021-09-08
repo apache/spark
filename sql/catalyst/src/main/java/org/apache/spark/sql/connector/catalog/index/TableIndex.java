@@ -17,36 +17,40 @@
 
 package org.apache.spark.sql.connector.catalog.index;
 
-import java.util.Collections;
-import java.util.Map;
-
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.Identifier;
-import org.apache.spark.sql.connector.expressions.FieldReference;
+import org.apache.spark.sql.connector.expressions.NamedReference;
+
+import java.util.Collections;
+import java.util.Map;
+import java.util.Properties;
 
 /**
- * An Index in a table
+ * Index in a table
  *
  * @since 3.3.0
  */
 @Evolving
-public class Index {
+public final class TableIndex {
   private String indexName;
   private String indexType;
   private Identifier table;
-  private FieldReference[] columns;
-  private Map<String, String> properties = Collections.emptyMap();
+  private NamedReference[] columns;
+  private Map<NamedReference, Properties> columnProperties = Collections.emptyMap();
+  private Properties properties;
 
-  public Index(
+  public TableIndex(
       String indexName,
       String indexType,
       Identifier table,
-      FieldReference[] columns,
-      Map<String, String> properties) {
+      NamedReference[] columns,
+      Map<NamedReference, Properties> columnProperties,
+      Properties properties) {
     this.indexName = indexName;
     this.indexType = indexType;
     this.table = table;
     this.columns = columns;
+    this.columnProperties = columnProperties;
     this.properties = properties;
   }
 
@@ -68,12 +72,19 @@ public class Index {
   /**
    * @return the column(s) this Index is on. Could be multi columns (a multi-column index).
    */
-  FieldReference[] columns() { return columns; }
+  NamedReference[] columns() { return columns; }
 
   /**
-   * Returns the string map of index properties.
+   * @return the map of column and column property map.
    */
-  Map<String, String> properties() {
-    return Collections.emptyMap();
+  Map<NamedReference, Properties> columnProperties() { return columnProperties; }
+
+  /**
+   * Returns the index properties.
+   */
+  Properties properties() {
+    return properties;
   }
+
+  Properties columnProperties(NamedReference column) { return columnProperties.get(column); }
 }
