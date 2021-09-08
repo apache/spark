@@ -55,7 +55,7 @@ public final class Or extends Filter {
 
   @Override
   public String toString() {
-    return String.format("(%s) AND (%s)", left.describe(), right.describe());
+    return String.format("(%s) OR (%s)", left.describe(), right.describe());
   }
 
   @Override

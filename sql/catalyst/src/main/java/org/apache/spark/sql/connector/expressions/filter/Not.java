@@ -49,7 +49,7 @@ public final class Not extends Filter {
   }
 
   @Override
-  public String toString() { return "NOT " + child.describe(); }
+  public String toString() { return "NOT (" + child.describe() + ")"; }
 
   @Override
   public NamedReference[] references() { return child.references(); }

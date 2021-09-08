@@ -121,7 +121,7 @@ class FiltersV2Suite extends SparkFunSuite {
     val filter2 = new Not(new LessThan(ref("a"), LiteralValue(1, IntegerType)))
     assert(filter1.equals(filter2))
     assert(filter1.references.map(_.describe()).toSeq == Seq("a"))
-    assert(filter1.describe.equals("NOT a < 1"))
+    assert(filter1.describe.equals("NOT (a < 1)"))
   }
 
   test("And") {
@@ -141,7 +141,7 @@ class FiltersV2Suite extends SparkFunSuite {
       new EqualTo(ref("b"), LiteralValue(1, IntegerType)))
     assert(filter1.equals(filter2))
     assert(filter1.references.map(_.describe()).toSeq == Seq("a", "b"))
-    assert(filter1.describe.equals("(a = 1) AND (b = 1)"))
+    assert(filter1.describe.equals("(a = 1) OR (b = 1)"))
   }
 
   test("StringStartsWith") {
