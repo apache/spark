@@ -387,7 +387,7 @@ false
 -- !query
 SELECT ilike('abc', '_B_')
 -- !query schema
-struct<abc ILIKE _B_:boolean>
+struct<ilike(abc, _B_):boolean>
 -- !query output
 true
 
@@ -395,6 +395,6 @@ true
 -- !query
 SELECT ilike('DEF', '__f')
 -- !query schema
-struct<DEF ILIKE __f:boolean>
+struct<ilike(DEF, __f):boolean>
 -- !query output
 true

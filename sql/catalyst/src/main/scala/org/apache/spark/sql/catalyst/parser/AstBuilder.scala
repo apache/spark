@@ -1625,8 +1625,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
               }
               str.charAt(0)
             }.getOrElse('\\')
-            val likeExpr = if (ctx.kind.getType == SqlBaseParser.ILIKE) ILike else Like
-            invertIfNotDefined(likeExpr(e, expression(ctx.pattern), escapeChar))
+            val likeExpr = if (ctx.kind.getType == SqlBaseParser.ILIKE) {
+              new ILike(e, expression(ctx.pattern), escapeChar)
+            } else Like(e, expression(ctx.pattern), escapeChar)
+            invertIfNotDefined(likeExpr)
         }
       case SqlBaseParser.RLIKE =>
         invertIfNotDefined(RLike(e, expression(ctx.pattern)))
