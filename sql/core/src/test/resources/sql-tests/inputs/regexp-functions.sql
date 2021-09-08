@@ -51,5 +51,3 @@ SELECT regexp('1a 2b 14m', '\\d+b');
 SELECT regexp('1a 2b 14m', '[a-z]+b');
 SELECT rlike('1a 2b 14m', '\\d+b');
 SELECT rlike('1a 2b 14m', '[a-z]+b');
-SELECT ilike('abc', '_B_');
-SELECT ilike('DEF', '__f');
