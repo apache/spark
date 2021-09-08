@@ -31,6 +31,7 @@ import org.apache.spark.util.sketch.BloomFilter
 case class BuildBloomFilter(
        child: Expression,
        expectedNumItems: Long,
+       changeExpectedNumItemsByAQE: Boolean,
        override val mutableAggBufferOffset: Int,
        override val inputAggBufferOffset: Int)
   extends TypedImperativeAggregate[BloomFilter]

@@ -75,8 +75,10 @@ object DynamicBloomFilterPruning extends Rule[LogicalPlan]
       filteringKey: Expression,
       filteringPlan: LogicalPlan,
       joinKeys: Seq[Expression],
-      distinctCnt: BigInt): LogicalPlan = {
-    val coalescePartitions = math.max(math.ceil(distinctCnt.toDouble / 4000000.0).toInt, 1)
+      distinctCnt: Option[BigInt],
+      rowCount: BigInt): LogicalPlan = {
+    val expectedNumItems = distinctCnt.getOrElse(rowCount)
+    val coalescePartitions = math.max(math.ceil(expectedNumItems.toDouble / 4000000.0).toInt, 1)
     // Use EnsureRequirements shuffle origin to reuse the exchange.
     val repartition = RepartitionByExpression(joinKeys, filteringPlan,
       optNumPartitions = Some(conf.numShufflePartitions),
@@ -84,7 +86,7 @@ object DynamicBloomFilterPruning extends Rule[LogicalPlan]
     // Coalesce partitions to improve build bloom filter performance.
     val coalesce = Repartition(coalescePartitions, shuffle = false, repartition)
     val bloomFilter = Aggregate(Nil,
-      Seq(BuildBloomFilter(filteringKey, distinctCnt.toLong, 0, 0)
+      Seq(BuildBloomFilter(filteringKey, expectedNumItems.toLong, distinctCnt.isEmpty, 0, 0)
         .toAggregateExpression()).map(e => Alias(e, e.sql)()), coalesce)
 
     Filter(
@@ -101,10 +103,10 @@ object DynamicBloomFilterPruning extends Rule[LogicalPlan]
        filteringDistinctCnt: Option[BigInt],
        pruningDistinctCnt: Option[BigInt],
        pruningScan: LogicalPlan): Boolean = {
-    val filterRadio = filteringDistinctCnt
+    val filterRatio = filteringDistinctCnt
       .flatMap(x => pruningDistinctCnt.map(x.toFloat / _.toFloat)).filter(_ < 1.0).map(1.0 - _)
       .getOrElse(conf.dynamicPartitionPruningPruningSideExtraFilterRatio)
-    filteringRowCount.toFloat / (rowCounts(pruningScan).toFloat * filterRadio) < 0.04
+    filteringRowCount.toFloat / (rowCounts(pruningScan).toFloat * filterRatio) < 0.04
   }
 
   /**
@@ -151,27 +153,22 @@ object DynamicBloomFilterPruning extends Rule[LogicalPlan]
             val leftDistCnt = distinctCounts(l, left)
             val rightDistCnt = distinctCounts(r, right)
 
-            lazy val leftFilterableScan = getFilterableTableScan(l, left)
-            lazy val rightFilterableScan = getFilterableTableScan(r, right)
-
             if (isRightSideSmall && canPruneLeft(joinType) && rightRowCnt > 0 &&
               rightRowCnt <= conf.dynamicBloomFilterJoinPruningMaxBloomFilterEntries &&
               !hasDynamicBloomFilterPruningSubquery(right) && supportDynamicPruning(right) &&
-              leftFilterableScan.nonEmpty &&
-              pruningHasBenefit(rightRowCnt, rightDistCnt, leftDistCnt, leftFilterableScan.get)) {
-              newLeft = insertPredicate(
-                l, newLeft, r, right, rightKeys, rightDistCnt.getOrElse(rightRowCnt))
-              newHint = newHint.copy(rightHint = Some(HintInfo(strategy = Some(SHUFFLE_MERGE))))
+              getFilterableTableScan(l, left).exists(
+                pruningHasBenefit(rightRowCnt, rightDistCnt, leftDistCnt, _))) {
+              newLeft = insertPredicate(l, newLeft, r, right, rightKeys, rightDistCnt, rightRowCnt)
+              newHint = newHint.copy(leftHint = Some(HintInfo(strategy = Some(NO_BROADCAST_HASH))))
             }
 
             if (isLeftSideSmall && canPruneRight(joinType) && leftRowCount > 0 &&
               leftRowCount <= conf.dynamicBloomFilterJoinPruningMaxBloomFilterEntries &&
               !hasDynamicBloomFilterPruningSubquery(left) && supportDynamicPruning(left) &&
-              rightFilterableScan.nonEmpty &&
-              pruningHasBenefit(leftRowCount, leftDistCnt, rightDistCnt, rightFilterableScan.get)) {
-              newRight = insertPredicate(
-                r, newRight, l, left, leftKeys, leftDistCnt.getOrElse(leftRowCount))
-              newHint = newHint.copy(leftHint = Some(HintInfo(strategy = Some(SHUFFLE_MERGE))))
+              getFilterableTableScan(r, right).exists(
+                pruningHasBenefit(leftRowCount, leftDistCnt, rightDistCnt, _))) {
+              newRight = insertPredicate(r, newRight, l, left, leftKeys, leftDistCnt, leftRowCount)
+              newHint = newHint.copy(rightHint = Some(HintInfo(strategy = Some(NO_BROADCAST_HASH))))
             }
           case _ =>
         }

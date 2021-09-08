@@ -29,7 +29,7 @@ WholeStageCodegen (10)
                                                         WholeStageCodegen (1)
                                                           Filter [ss_item_sk]
                                                             Subquery #2
-                                                              ObjectHashAggregate [buf] [buildbloomfilter(i_item_sk, 61200, 0, 0),buildbloomfilter(spark_catalog.default.item.i_item_sk),buf]
+                                                              ObjectHashAggregate [buf] [buildbloomfilter(i_item_sk, 61200, false, 0, 0),buildbloomfilter(spark_catalog.default.item.i_item_sk),buf]
                                                                 ObjectHashAggregate [i_item_sk] [buf,buf]
                                                                   Coalesce
                                                                     Exchange [i_item_sk] #6

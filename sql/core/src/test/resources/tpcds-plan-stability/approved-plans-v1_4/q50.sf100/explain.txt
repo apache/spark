@@ -224,16 +224,16 @@ Arguments: 1
 (39) ObjectHashAggregate
 Input [4]: [sr_item_sk#1, sr_customer_sk#2, sr_ticket_number#3, sr_returned_date_sk#4]
 Keys: []
-Functions [1]: [partial_buildbloomfilter(sr_ticket_number#3, 244338, 0, 0)]
+Functions [1]: [partial_buildbloomfilter(sr_ticket_number#3, 244338, false, 0, 0)]
 Aggregate Attributes [1]: [buf#55]
 Results [1]: [buf#56]
 
 (40) ObjectHashAggregate
 Input [1]: [buf#56]
 Keys: []
-Functions [1]: [buildbloomfilter(sr_ticket_number#3, 244338, 0, 0)]
-Aggregate Attributes [1]: [buildbloomfilter(sr_ticket_number#3, 244338, 0, 0)#57]
-Results [1]: [buildbloomfilter(sr_ticket_number#3, 244338, 0, 0)#57 AS buildbloomfilter(spark_catalog.default.store_returns.sr_ticket_number)#58]
+Functions [1]: [buildbloomfilter(sr_ticket_number#3, 244338, false, 0, 0)]
+Aggregate Attributes [1]: [buildbloomfilter(sr_ticket_number#3, 244338, false, 0, 0)#57]
+Results [1]: [buildbloomfilter(sr_ticket_number#3, 244338, false, 0, 0)#57 AS buildbloomfilter(spark_catalog.default.store_returns.sr_ticket_number)#58]
 
 Subquery:3 Hosting operator id = 11 Hosting Expression = ss_item_sk#8 IN BLOOM FILTER subquery#14
 ObjectHashAggregate (44)
@@ -252,16 +252,16 @@ Arguments: 1
 (43) ObjectHashAggregate
 Input [4]: [sr_item_sk#1, sr_customer_sk#2, sr_ticket_number#3, sr_returned_date_sk#4]
 Keys: []
-Functions [1]: [partial_buildbloomfilter(sr_item_sk#1, 3041, 0, 0)]
+Functions [1]: [partial_buildbloomfilter(sr_item_sk#1, 3041, false, 0, 0)]
 Aggregate Attributes [1]: [buf#59]
 Results [1]: [buf#60]
 
 (44) ObjectHashAggregate
 Input [1]: [buf#60]
 Keys: []
-Functions [1]: [buildbloomfilter(sr_item_sk#1, 3041, 0, 0)]
-Aggregate Attributes [1]: [buildbloomfilter(sr_item_sk#1, 3041, 0, 0)#61]
-Results [1]: [buildbloomfilter(sr_item_sk#1, 3041, 0, 0)#61 AS buildbloomfilter(spark_catalog.default.store_returns.sr_item_sk)#62]
+Functions [1]: [buildbloomfilter(sr_item_sk#1, 3041, false, 0, 0)]
+Aggregate Attributes [1]: [buildbloomfilter(sr_item_sk#1, 3041, false, 0, 0)#61]
+Results [1]: [buildbloomfilter(sr_item_sk#1, 3041, false, 0, 0)#61 AS buildbloomfilter(spark_catalog.default.store_returns.sr_item_sk)#62]
 
 Subquery:4 Hosting operator id = 11 Hosting Expression = ss_customer_sk#9 IN BLOOM FILTER subquery#15
 ObjectHashAggregate (48)
@@ -280,15 +280,15 @@ Arguments: 1
 (47) ObjectHashAggregate
 Input [4]: [sr_item_sk#1, sr_customer_sk#2, sr_ticket_number#3, sr_returned_date_sk#4]
 Keys: []
-Functions [1]: [partial_buildbloomfilter(sr_customer_sk#2, 28683, 0, 0)]
+Functions [1]: [partial_buildbloomfilter(sr_customer_sk#2, 28683, false, 0, 0)]
 Aggregate Attributes [1]: [buf#63]
 Results [1]: [buf#64]
 
 (48) ObjectHashAggregate
 Input [1]: [buf#64]
 Keys: []
-Functions [1]: [buildbloomfilter(sr_customer_sk#2, 28683, 0, 0)]
-Aggregate Attributes [1]: [buildbloomfilter(sr_customer_sk#2, 28683, 0, 0)#65]
-Results [1]: [buildbloomfilter(sr_customer_sk#2, 28683, 0, 0)#65 AS buildbloomfilter(spark_catalog.default.store_returns.sr_customer_sk)#66]
+Functions [1]: [buildbloomfilter(sr_customer_sk#2, 28683, false, 0, 0)]
+Aggregate Attributes [1]: [buildbloomfilter(sr_customer_sk#2, 28683, false, 0, 0)#65]
+Results [1]: [buildbloomfilter(sr_customer_sk#2, 28683, false, 0, 0)#65 AS buildbloomfilter(spark_catalog.default.store_returns.sr_customer_sk)#66]
 
 

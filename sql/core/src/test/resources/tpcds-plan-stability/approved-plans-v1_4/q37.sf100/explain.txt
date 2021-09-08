@@ -205,15 +205,15 @@ Arguments: 1
 (36) ObjectHashAggregate
 Input [4]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4]
 Keys: []
-Functions [1]: [partial_buildbloomfilter(i_item_sk#1, 239, 0, 0)]
+Functions [1]: [partial_buildbloomfilter(i_item_sk#1, 239, false, 0, 0)]
 Aggregate Attributes [1]: [buf#20]
 Results [1]: [buf#21]
 
 (37) ObjectHashAggregate
 Input [1]: [buf#21]
 Keys: []
-Functions [1]: [buildbloomfilter(i_item_sk#1, 239, 0, 0)]
-Aggregate Attributes [1]: [buildbloomfilter(i_item_sk#1, 239, 0, 0)#22]
-Results [1]: [buildbloomfilter(i_item_sk#1, 239, 0, 0)#22 AS buildbloomfilter(spark_catalog.default.item.i_item_sk)#23]
+Functions [1]: [buildbloomfilter(i_item_sk#1, 239, false, 0, 0)]
+Aggregate Attributes [1]: [buildbloomfilter(i_item_sk#1, 239, false, 0, 0)#22]
+Results [1]: [buildbloomfilter(i_item_sk#1, 239, false, 0, 0)#22 AS buildbloomfilter(spark_catalog.default.item.i_item_sk)#23]
 
 

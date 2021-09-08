@@ -355,16 +355,17 @@ object SQLConf {
 
   val DYNAMIC_BLOOM_FILTER_JOIN_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicBloomFilterJoinPruning.enabled")
-      .doc("When true, we will generate bloom filter predicate for column when it's used as join " +
-        "key. Note that, dynamic bloom filter join pruning only works if exchange reuse enabled.")
+      .doc("When true, we will generates a bloom filter predicate for a join key column. " +
+        "Note that, dynamic bloom filter join pruning only works with " +
+        s"${EXCHANGE_REUSE_ENABLED.key} enabled.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
 
   val DYNAMIC_BLOOM_FILTER_JOIN_PRUNING_MAX_BLOOM_FILTER_ENTRIES =
     buildConf("spark.sql.optimizer.dynamicBloomFilterJoinPruning.maxBloomFilterEntries")
-      .doc("The maximum number of bloom filter entries allowed when building dynamic bloom filter" +
-        "join pruning.")
+      .doc("The maximum number of bloom filter entries allowed when building dynamic bloom " +
+        "filter join pruning.")
       .version("3.3.0")
       .longConf
       .checkValue(_ > 0, "the value of max bloom filter entries must be greater than 0")

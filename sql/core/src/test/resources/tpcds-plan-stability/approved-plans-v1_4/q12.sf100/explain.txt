@@ -147,16 +147,16 @@ Arguments: 1
 (26) ObjectHashAggregate
 Input [6]: [i_item_sk#7, i_item_id#8, i_item_desc#9, i_current_price#10, i_class#11, i_category#12]
 Keys: []
-Functions [1]: [partial_buildbloomfilter(i_item_sk#7, 61200, 0, 0)]
+Functions [1]: [partial_buildbloomfilter(i_item_sk#7, 61200, false, 0, 0)]
 Aggregate Attributes [1]: [buf#25]
 Results [1]: [buf#26]
 
 (27) ObjectHashAggregate
 Input [1]: [buf#26]
 Keys: []
-Functions [1]: [buildbloomfilter(i_item_sk#7, 61200, 0, 0)]
-Aggregate Attributes [1]: [buildbloomfilter(i_item_sk#7, 61200, 0, 0)#27]
-Results [1]: [buildbloomfilter(i_item_sk#7, 61200, 0, 0)#27 AS buildbloomfilter(spark_catalog.default.item.i_item_sk)#28]
+Functions [1]: [buildbloomfilter(i_item_sk#7, 61200, false, 0, 0)]
+Aggregate Attributes [1]: [buildbloomfilter(i_item_sk#7, 61200, false, 0, 0)#27]
+Results [1]: [buildbloomfilter(i_item_sk#7, 61200, false, 0, 0)#27 AS buildbloomfilter(spark_catalog.default.item.i_item_sk)#28]
 
 Subquery:2 Hosting operator id = 1 Hosting Expression = ws_sold_date_sk#3 IN dynamicpruning#4
 BroadcastExchange (32)

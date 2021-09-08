@@ -158,16 +158,16 @@ Arguments: 1
 (28) ObjectHashAggregate
 Input [3]: [sr_item_sk#1, sr_ticket_number#3, sr_return_quantity#4]
 Keys: []
-Functions [1]: [partial_buildbloomfilter(sr_item_sk#1, 3400, 0, 0)]
+Functions [1]: [partial_buildbloomfilter(sr_item_sk#1, 3400, false, 0, 0)]
 Aggregate Attributes [1]: [buf#27]
 Results [1]: [buf#28]
 
 (29) ObjectHashAggregate
 Input [1]: [buf#28]
 Keys: []
-Functions [1]: [buildbloomfilter(sr_item_sk#1, 3400, 0, 0)]
-Aggregate Attributes [1]: [buildbloomfilter(sr_item_sk#1, 3400, 0, 0)#29]
-Results [1]: [buildbloomfilter(sr_item_sk#1, 3400, 0, 0)#29 AS buildbloomfilter(spark_catalog.default.store_returns.sr_item_sk)#30]
+Functions [1]: [buildbloomfilter(sr_item_sk#1, 3400, false, 0, 0)]
+Aggregate Attributes [1]: [buildbloomfilter(sr_item_sk#1, 3400, false, 0, 0)#29]
+Results [1]: [buildbloomfilter(sr_item_sk#1, 3400, false, 0, 0)#29 AS buildbloomfilter(spark_catalog.default.store_returns.sr_item_sk)#30]
 
 Subquery:2 Hosting operator id = 16 Hosting Expression = ss_ticket_number#12 IN BLOOM FILTER subquery#17
 ObjectHashAggregate (33)
@@ -186,15 +186,15 @@ Arguments: 1
 (32) ObjectHashAggregate
 Input [3]: [sr_item_sk#1, sr_ticket_number#3, sr_return_quantity#4]
 Keys: []
-Functions [1]: [partial_buildbloomfilter(sr_ticket_number#3, 273179, 0, 0)]
+Functions [1]: [partial_buildbloomfilter(sr_ticket_number#3, 273179, false, 0, 0)]
 Aggregate Attributes [1]: [buf#31]
 Results [1]: [buf#32]
 
 (33) ObjectHashAggregate
 Input [1]: [buf#32]
 Keys: []
-Functions [1]: [buildbloomfilter(sr_ticket_number#3, 273179, 0, 0)]
-Aggregate Attributes [1]: [buildbloomfilter(sr_ticket_number#3, 273179, 0, 0)#33]
-Results [1]: [buildbloomfilter(sr_ticket_number#3, 273179, 0, 0)#33 AS buildbloomfilter(spark_catalog.default.store_returns.sr_ticket_number)#34]
+Functions [1]: [buildbloomfilter(sr_ticket_number#3, 273179, false, 0, 0)]
+Aggregate Attributes [1]: [buildbloomfilter(sr_ticket_number#3, 273179, false, 0, 0)#33]
+Results [1]: [buildbloomfilter(sr_ticket_number#3, 273179, false, 0, 0)#33 AS buildbloomfilter(spark_catalog.default.store_returns.sr_ticket_number)#34]
 
 
