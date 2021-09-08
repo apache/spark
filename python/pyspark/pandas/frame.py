@@ -66,7 +66,7 @@ from pandas.core.accessor import CachedAccessor
 from pandas.core.dtypes.inference import is_sequence
 from pyspark import StorageLevel
 from pyspark.sql import Column, DataFrame as SparkDataFrame, functions as F
-from pyspark.sql.functions import pandas_udf
+from pyspark.sql.functions import pandas_udf, isnan
 from pyspark.sql.types import (  # noqa: F401 (SPARK-34943)
     ArrayType,
     BooleanType,
@@ -8190,18 +8190,49 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         b       NaN  1.248003  0.191417
         c -0.150812  0.191417  0.895202
         """
+        min_periods = 1 if min_periods is None else min_periods
+
         numeric_psdf = self[
             [col for col in self.columns if np.issubdtype(self[col].dtype, np.number)]
         ]
 
         num_columns = len(numeric_psdf.columns)
-        covariances = np.zeros([num_columns, num_columns])
+        data_columns = numeric_psdf._internal.data_spark_columns
+        scols = []
+        count_not_null_scols = []
 
         for row in range(0, num_columns):
             for col in range(row, num_columns):
-                covariances[row][col] = numeric_psdf[numeric_psdf.columns[row]].cov(
-                    numeric_psdf[numeric_psdf.columns[col]], min_periods=min_periods
+                scols += [F.covar_samp(data_columns[row], data_columns[col])]
+                count_not_null_scols += [
+                    F.sum(
+                        F.when(
+                            isnan(data_columns[row])
+                            | data_columns[row].isNull()
+                            | isnan(data_columns[col])
+                            | data_columns[col].isNull(),
+                            0,
+                        ).otherwise(1)
+                    )
+                ]
+
+        pair_covariance = numeric_psdf._internal.spark_frame.select(*scols).head(1)[0]
+        count_not_null_values = numeric_psdf._internal.spark_frame.select(
+            *count_not_null_scols
+        ).head(1)[0]
+
+        covariances = np.zeros([num_columns, num_columns])
+        step = 0
+        for row in range(0, num_columns):
+            step += row
+            for col in range(row, num_columns):
+                index = row * num_columns + col - step
+                covariances[row][col] = (
+                    pair_covariance[index]
+                    if count_not_null_values[index] >= min_periods
+                    else np.nan
                 )
+
         covariances = covariances + covariances.T - np.diag(np.diag(covariances))
         return DataFrame(covariances, columns=numeric_psdf.columns, index=numeric_psdf.columns)
 
