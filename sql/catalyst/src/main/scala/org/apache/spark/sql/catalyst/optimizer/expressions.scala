@@ -462,6 +462,10 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case IsNotNull(Not(e)) => IsNotNull(e)
 
       // Using (Not(a) === b) == (a === Not(b)), (Not(a) <=> b) == (a <=> Not(b)) rules
+      // E.g. `EqualTo(Not(a), b)` where `b = Not(c)`, it will become
+      // `EqualTo(a, Not(b))` => `EqualTo(a, Not(Not(c)))` => `EqualTo(a, c)`
+      // In addition, `if canSimplifyNot(b)` checks if the optimization can converge
+      // that avoids the situation two conditions are returning to each other.
       case EqualTo(Not(a), b) if canSimplifyNot(b) => EqualTo(a, Not(b))
       case EqualTo(a, Not(b)) if canSimplifyNot(a) => EqualTo(Not(a), b)
       case EqualNullSafe(Not(a), b) if canSimplifyNot(b) => EqualNullSafe(a, Not(b))
