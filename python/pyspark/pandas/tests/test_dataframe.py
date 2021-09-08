@@ -1328,6 +1328,25 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
         self.assertRaises(NotImplementedError, lambda: psdf.drop(labels=[("a", "x")]))
 
+        #
+        # Drop rows and columns
+        #
+        pdf = pd.DataFrame({"X": [1, 2, 3], "Y": [4, 5, 6], "Z": [7, 8, 9]}, index=["A", "B", "C"])
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.drop(index="A", columns="X"), pdf.drop(index="A", columns="X"))
+        self.assert_eq(
+            psdf.drop(index=["A", "C"], columns=["X", "Z"]),
+            pdf.drop(index=["A", "C"], columns=["X", "Z"]),
+        )
+        self.assert_eq(
+            psdf.drop(index=["A", "B", "C"], columns=["X", "Z"]),
+            pdf.drop(index=["A", "B", "C"], columns=["X", "Z"]),
+        )
+        self.assertRaises(
+            ValueError,
+            lambda: psdf.drop(labels="A", axis=0, columns="X"),
+        )
+
     def _test_dropna(self, pdf, axis):
         psdf = ps.from_pandas(pdf)
 

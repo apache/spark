@@ -6638,8 +6638,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         Drop specified labels from columns.
 
-        Remove rows or columns by specifying label names and corresponding axis,
-        or by specifying directly index or column names.
+        Remove rows and/or columns by specifying label names and corresponding axis,
+        or by specifying directly index and/or column names.
         Drop rows of a MultiIndex DataFrame is not supported yet.
 
         Parameters
@@ -6691,6 +6691,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
            A  B   C   D
         2  8  9  10  11
 
+        >>> df.drop(index=[0, 1], columns='A')
+           B   C   D
+        2  9  10  11
+
         Also support dropping columns for MultiIndex
 
         >>> df = ps.DataFrame({'x': [1, 2], 'y': [3, 4], 'z': [5, 6], 'w': [7, 8]},
@@ -6712,58 +6716,64 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         -----
         Currently, dropping rows of a MultiIndex DataFrame is not supported yet.
         """
+        internal = self._internal
         if labels is not None:
+            if index is not None or columns is not None:
+                raise ValueError("Cannot specify both 'labels' and 'index'/'columns'")
             axis = validate_axis(axis)
             if axis == 1:
-                return self.drop(columns=labels)
+                return self.drop(index=index, columns=labels)
             else:
-                return self.drop(index=labels)
-        elif index is not None:
-            if is_name_like_tuple(index) or is_name_like_value(index):
-                index = [index]
-
-            index_scols = self._internal.index_spark_columns
-            if len(index_scols) == 1:
-                col = None
-                for label in index:
-                    if col is None:
-                        col = index_scols[0] != SF.lit(label)
-                    else:
-                        col = col & (index_scols[0] != SF.lit(label))
-                return DataFrame(self._internal.with_filter(col))
-            else:
-                raise NotImplementedError("Drop rows of MultiIndex DataFrame is not supported yet")
-        elif columns is not None:
-            if is_name_like_tuple(columns):
-                columns = [columns]
-            elif is_name_like_value(columns):
-                columns = [(columns,)]
-            else:
-                columns = [col if is_name_like_tuple(col) else (col,) for col in columns]
-            drop_column_labels = set(
-                label
-                for label in self._internal.column_labels
-                for col in columns
-                if label[: len(col)] == col
-            )
-            if len(drop_column_labels) == 0:
-                raise KeyError(columns)
-
-            keep_columns_and_labels = [
-                (column, label)
-                for column, label in zip(
-                    self._internal.data_spark_column_names, self._internal.column_labels
-                )
-                if label not in drop_column_labels
-            ]
-
-            cols, labels = (
-                zip(*keep_columns_and_labels) if len(keep_columns_and_labels) > 0 else ([], [])
-            )
-            internal = self._internal.with_new_columns([self._psser_for(label) for label in labels])
-            return DataFrame(internal)
+                return self.drop(index=labels, columns=columns)
         else:
-            raise ValueError("Need to specify at least one of 'labels' or 'columns' or 'index'")
+            if index is None and columns is None:
+                raise ValueError("Need to specify at least one of 'labels' or 'columns' or 'index'")
+            if index is not None:
+                if is_name_like_tuple(index) or is_name_like_value(index):
+                    index = [index]
+
+                index_scols = internal.index_spark_columns
+                if len(index_scols) == 1:
+                    col = None
+                    for label in index:
+                        if col is None:
+                            col = index_scols[0] != SF.lit(label)
+                        else:
+                            col = col & (index_scols[0] != SF.lit(label))
+                    internal = internal.with_filter(col)
+                else:
+                    raise NotImplementedError(
+                        "Drop rows of MultiIndex DataFrame is not supported yet"
+                    )
+            if columns is not None:
+                if is_name_like_tuple(columns):
+                    columns = [columns]
+                elif is_name_like_value(columns):
+                    columns = [(columns,)]
+                else:
+                    columns = [col if is_name_like_tuple(col) else (col,) for col in columns]
+                drop_column_labels = set(
+                    label
+                    for label in internal.column_labels
+                    for col in columns
+                    if label[: len(col)] == col
+                )
+                if len(drop_column_labels) == 0:
+                    raise KeyError(columns)
+
+                keep_columns_and_labels = [
+                    (column, label)
+                    for column, label in zip(
+                        self._internal.data_spark_column_names, self._internal.column_labels
+                    )
+                    if label not in drop_column_labels
+                ]
+
+                cols, labels = (
+                    zip(*keep_columns_and_labels) if len(keep_columns_and_labels) > 0 else ([], [])
+                )
+                internal = internal.with_new_columns([self._psser_for(label) for label in labels])
+        return DataFrame(internal)
 
     def _sort(
         self, by: List[Column], ascending: Union[bool, List[bool]], na_position: str
