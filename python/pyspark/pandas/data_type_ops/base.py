@@ -194,6 +194,31 @@ def _sanitize_list_like(operand: Any) -> None:
         raise TypeError("The operation can not be applied to %s." % type(operand).__name__)
 
 
+def _is_valid_for_logical_operator(right: Any) -> bool:
+    from pyspark.pandas.base import IndexOpsMixin
+
+    return (
+        isinstance(right, IndexOpsMixin)
+        and (
+            isinstance(right.spark.data_type, BooleanType)
+            or isinstance(right.spark.data_type, IntegralType)
+        )
+        or isinstance(right, (int, bool))
+    )
+
+
+def _is_boolean_type(right: Any) -> bool:
+    from pyspark.pandas.base import IndexOpsMixin
+
+    return (
+        True
+        if isinstance(right, IndexOpsMixin)
+        and isinstance(right.spark.data_type, BooleanType)
+        or isinstance(right, bool)
+        else False
+    )
+
+
 class DataTypeOps(object, metaclass=ABCMeta):
     """The base class for binary operations of pandas-on-Spark objects (of different data types)."""
 

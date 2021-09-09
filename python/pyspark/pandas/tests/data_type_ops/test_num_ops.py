@@ -527,6 +527,60 @@ class IntegralExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             for pser, psser in self.intergral_extension_pser_psser_pairs:
                 self.check_extension(pser >= pser, (psser >= psser).sort_index())
 
+    def test_and(self):
+        pdf, psdf = self.integral_pdf, self.integral_psdf
+        pser, other_pser = pdf["this"], pdf["that"]
+        psser, other_psser = psdf["this"], psdf["that"]
+
+        self.assert_eq(pser & other_pser, psser & other_psser)
+        self.assert_eq(pser & 2, psser & 2)
+        self.assert_eq(pser & 3, psser & 3)
+        self.assert_eq(pser & False, psser & False)
+        self.assert_eq(pser & True, psser & True)
+
+        with self.assertRaisesRegex(TypeError, "AND can not be applied to given types."):
+            psser & "a"
+
+        with option_context("compute.ops_on_diff_frames", True):
+            pser, other_pser = self.integral_pdf["this"], self.pdf["bool"]
+            psser, other_psser = self.integral_psdf["this"], self.psdf["bool"]
+
+            self.assert_eq(pser & other_pser, psser & other_psser)
+            self.assert_eq(other_pser & pser, other_psser & psser)
+
+    def test_rand(self):
+        pser, psser = self.pdf["int"], self.psdf["int"]
+        self.assert_eq(True & pser, True & psser)
+        self.assert_eq(False & pser, False & psser)
+        self.assert_eq(1 & pser, 1 & psser)
+
+    def test_or(self):
+        pdf, psdf = self.integral_pdf, self.integral_psdf
+        pser, other_pser = pdf["this"], pdf["that"]
+        psser, other_psser = psdf["this"], psdf["that"]
+
+        self.assert_eq(pser | other_pser, psser | other_psser)
+        self.assert_eq(pser | 2, psser | 2)
+        self.assert_eq(pser | 3, psser | 3)
+        self.assert_eq(pser | False, psser | False)
+        self.assert_eq(pser | True, psser | True)
+
+        with self.assertRaisesRegex(TypeError, "OR can not be applied to given types."):
+            psser | "a"
+
+        with option_context("compute.ops_on_diff_frames", True):
+            pser, other_pser = self.integral_pdf["this"], self.pdf["bool"]
+            psser, other_psser = self.integral_psdf["this"], self.psdf["bool"]
+
+            self.assert_eq(pser | other_pser, psser | other_psser)
+            self.assert_eq(other_pser | pser, other_psser | psser)
+
+    def test_ror(self):
+        pser, psser = self.pdf["int"], self.psdf["int"]
+        self.assert_eq(True | pser, True | psser)
+        self.assert_eq(False | pser, False | psser)
+        self.assert_eq(1 | pser, 1 | psser)
+
 
 @unittest.skipIf(
     not extension_float_dtypes_available, "pandas extension float dtypes are not available"

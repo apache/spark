@@ -31,6 +31,7 @@ from pyspark.pandas.data_type_ops.base import (
     _as_categorical_type,
     _as_other_type,
     _sanitize_list_like,
+    _is_valid_for_logical_operator,
 )
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef.typehints import as_spark_type, extension_dtypes, pandas_on_spark_type
@@ -235,7 +236,7 @@ class BooleanOps(DataTypeOps):
         _sanitize_list_like(right)
         if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
             return right.__and__(left)
-        else:
+        elif _is_valid_for_logical_operator(right):
 
             def and_func(left: Column, right: Any) -> Column:
                 if not isinstance(right, Column):
@@ -243,25 +244,33 @@ class BooleanOps(DataTypeOps):
                         right = SF.lit(None)
                     else:
                         right = SF.lit(right)
-                scol = left & right
+                scol = left.cast("integer").bitwiseAND(right.cast("integer")).cast("boolean")
                 return F.when(scol.isNull(), False).otherwise(scol)
 
             return column_op(and_func)(left, right)
+        else:
+            raise TypeError("AND can not be applied to given types.")
 
     def __or__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
         if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
             return right.__or__(left)
-        else:
+        elif _is_valid_for_logical_operator(right):
 
             def or_func(left: Column, right: Any) -> Column:
                 if not isinstance(right, Column) and pd.isna(right):
                     return SF.lit(False)
                 else:
-                    scol = left | SF.lit(right)
+                    scol = (
+                        left.cast("integer")
+                        .bitwiseOR(SF.lit(right).cast("integer"))
+                        .cast("boolean")
+                    )
                     return F.when(left.isNull() | scol.isNull(), False).otherwise(scol)
 
             return column_op(or_func)(left, right)
+        else:
+            raise TypeError("OR can not be applied to given types.")
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)

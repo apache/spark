@@ -33,6 +33,8 @@ from pyspark.pandas.data_type_ops.base import (
     _as_other_type,
     _as_string_type,
     _sanitize_list_like,
+    _is_valid_for_logical_operator,
+    _is_boolean_type,
 )
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef.typehints import extension_dtypes, pandas_on_spark_type
@@ -184,6 +186,54 @@ class IntegralOps(NumericOps):
     @property
     def pretty_name(self) -> str:
         return "integrals"
+
+    def __and__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+
+        if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
+            return right & left
+        elif _is_valid_for_logical_operator(right):
+            right_is_boolean = _is_boolean_type(right)
+
+            def and_func(left: Column, right: Any) -> Column:
+                if not isinstance(right, Column):
+                    if pd.isna(right):
+                        right = SF.lit(None)
+                    else:
+                        right = SF.lit(right)
+                return (
+                    left.bitwiseAND(right.cast("integer")).cast("boolean")
+                    if right_is_boolean
+                    else left.bitwiseAND(right)
+                )
+
+            return column_op(and_func)(left, right)
+        else:
+            raise TypeError("AND can not be applied to given types.")
+
+    def __or__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+
+        if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
+            return right | left
+        elif _is_valid_for_logical_operator(right):
+            right_is_boolean = _is_boolean_type(right)
+
+            def or_func(left: Column, right: Any) -> Column:
+                if not isinstance(right, Column):
+                    if pd.isna(right):
+                        right = SF.lit(None)
+                    else:
+                        right = SF.lit(right)
+                return (
+                    left.bitwiseOR(right.cast("integer")).cast("boolean")
+                    if right_is_boolean
+                    else left.bitwiseOR(right)
+                )
+
+            return column_op(or_func)(left, right)
+        else:
+            raise TypeError("OR can not be applied to given types.")
 
     def mul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
