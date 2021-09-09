@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
+import java.util.Objects;
+
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * A filter that always evaluates to {@code true}.
@@ -25,7 +28,23 @@ import org.apache.spark.annotation.Evolving;
  * @since 3.3.0
  */
 @Evolving
-public final class AlwaysTrue extends TrueFalseFilter {
+public final class AlwaysTrue extends Filter {
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    return true;
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash();
+  }
+
   @Override
   public String toString() { return "TRUE"; }
+
+  @Override
+  public NamedReference[] references() { return EMPTY_REFERENCE; }
 }

@@ -21,27 +21,40 @@ import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * Base class for {@link AlwaysFalse}, {@link AlwaysTrue}
+ * Base class for {@link StringContains}, {@link StringStartsWith},
+ * {@link StringEndsWith}
  *
  * @since 3.3.0
  */
 @Evolving
-public class TrueFalseFilter extends Filter {
+public abstract class StringPredicate extends Filter {
+  protected final NamedReference column;
+  protected final UTF8String value;
+
+  protected StringPredicate(NamedReference column, UTF8String value) {
+    this.column = column;
+    this.value = value;
+  }
+
+  public NamedReference column() { return column; }
+  public UTF8String value() { return value; }
 
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
-    return true;
+    StringPredicate that = (StringPredicate) o;
+    return Objects.equals(column, that.column) && Objects.equals(value, that.value);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash();
+    return Objects.hash(column, value);
   }
 
   @Override
-  public NamedReference[] references() { return EMPTY_REFERENCE; }
+  public NamedReference[] references() { return new NamedReference[] { column }; }
 }

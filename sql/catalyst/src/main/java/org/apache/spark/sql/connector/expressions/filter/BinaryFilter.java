@@ -20,41 +20,46 @@ package org.apache.spark.sql.connector.expressions.filter;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
- * Base class for {@link EqualNullSafe}, {@link EqualTo}, {@link GreaterThan},
- * {@link GreaterThanOrEqual}, {@link LessThan}, {@link LessThanOrEqual}
+ * Base class for {@link And}, {@link Or}
  *
  * @since 3.3.0
  */
 @Evolving
-public class BinaryFilter extends Filter {
-  protected final NamedReference column;
-  protected final Literal<?> value;
+public abstract class BinaryFilter extends Filter {
+  protected final Filter left;
+  protected final Filter right;
 
-  protected BinaryFilter(NamedReference column, Literal<?> value) {
-    this.column = column;
-    this.value = value;
+  protected BinaryFilter(Filter left, Filter right) {
+    this.left = left;
+    this.right = right;
   }
 
-  public NamedReference column() { return column; }
-  public Literal<?> value() { return value; }
+  public Filter left() { return left; }
+  public Filter right() { return right; }
 
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
-    BinaryFilter that = (BinaryFilter) o;
-    return Objects.equals(column, that.column) && Objects.equals(value, that.value);
+    BinaryFilter and = (BinaryFilter) o;
+    return Objects.equals(left, and.left) && Objects.equals(right, and.right);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(column, value);
+    return Objects.hash(left, right);
   }
 
   @Override
-  public NamedReference[] references() { return new NamedReference[]{column}; }
+  public NamedReference[] references() {
+    NamedReference[] refLeft = left.references();
+    NamedReference[] refRight = right.references();
+    NamedReference[] arr = new NamedReference[refLeft.length + refRight.length];
+    System.arraycopy(refLeft, 0, arr, 0, refLeft.length);
+    System.arraycopy(refRight, 0, arr, refLeft.length, refRight.length);
+    return arr;
+  }
 }

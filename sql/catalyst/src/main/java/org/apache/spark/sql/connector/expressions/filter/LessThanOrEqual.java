@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * @since 3.3.0
  */
 @Evolving
-public final class LessThanOrEqual extends BinaryFilter {
+public final class LessThanOrEqual extends BinaryComparison {
 
   public LessThanOrEqual(NamedReference column, Literal<?> value) {
     super(column, value);

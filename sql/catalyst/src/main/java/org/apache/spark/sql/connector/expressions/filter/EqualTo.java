@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * @since 3.3.0
  */
 @Evolving
-public final class EqualTo extends BinaryFilter {
+public final class EqualTo extends BinaryComparison {
 
   public EqualTo(NamedReference column, Literal<?> value) {
     super(column, value);

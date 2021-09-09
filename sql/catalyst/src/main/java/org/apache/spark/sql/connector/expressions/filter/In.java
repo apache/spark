@@ -71,5 +71,5 @@ public final class In extends Filter {
   }
 
   @Override
-  public NamedReference[] references() { return new NamedReference[]{column}; }
+  public NamedReference[] references() { return new NamedReference[] { column }; }
 }

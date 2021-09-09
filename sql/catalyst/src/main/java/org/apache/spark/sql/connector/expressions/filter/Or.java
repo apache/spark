@@ -26,7 +26,7 @@ import org.apache.spark.annotation.Evolving;
  * @since 3.3.0
  */
 @Evolving
-public final class Or extends CompoundFilter {
+public final class Or extends BinaryFilter {
 
   public Or(Filter left, Filter right) {
     super(left, right);

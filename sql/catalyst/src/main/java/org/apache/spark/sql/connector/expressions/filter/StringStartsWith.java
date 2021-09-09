@@ -28,7 +28,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * @since 3.3.0
  */
 @Evolving
-public final class StringStartsWith extends StringCmpFilter {
+public final class StringStartsWith extends StringPredicate {
 
   public StringStartsWith(NamedReference column, UTF8String value) {
     super(column, value);

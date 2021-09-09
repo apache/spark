@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
+import java.util.Objects;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
@@ -26,12 +28,31 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * @since 3.3.0
  */
 @Evolving
-public final class IsNull extends NullCmpFilter {
+public final class IsNull extends Filter {
+  private final NamedReference column;
 
   public IsNull(NamedReference column) {
-    super(column);
+    this.column = column;
   }
+
+  public NamedReference column() { return column; }
 
   @Override
   public String toString() { return column.describe() + " IS NULL"; }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    IsNull isNull = (IsNull) o;
+    return Objects.equals(column, isNull.column);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(column);
+  }
+
+  @Override
+  public NamedReference[] references() { return new NamedReference[] { column }; }
 }
