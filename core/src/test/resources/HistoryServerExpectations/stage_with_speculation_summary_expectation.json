@@ -49,7 +49,7 @@
       "launchTime" : "2021-08-10T23:27:53.885GMT",
       "duration" : 2234,
       "executorId" : "7",
-      "host" : "ltx1-hcl12291.grid.linkedin.com",
+      "host" : "host-12291",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
       "speculative" : false,
@@ -89,8 +89,8 @@
         }
       },
       "executorLogs" : {
-        "stdout" : "http://ltx1-hcl12291.grid.linkedin.com:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000008/vsowrira/stdout?start=-4096",
-        "stderr" : "http://ltx1-hcl12291.grid.linkedin.com:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000008/vsowrira/stderr?start=-4096"
+        "stdout" : "http://host-12291:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000008/john/stdout?start=-4096",
+        "stderr" : "http://host-12291:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000008/john/stderr?start=-4096"
       },
       "schedulerDelay" : 111,
       "gettingResultTime" : 0
@@ -102,7 +102,7 @@
       "launchTime" : "2021-08-10T23:27:53.903GMT",
       "duration" : 2647,
       "executorId" : "5",
-      "host" : "ltx1-hcl5290.grid.linkedin.com",
+      "host" : "host-5290",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
       "speculative" : false,
@@ -142,8 +142,8 @@
         }
       },
       "executorLogs" : {
-        "stdout" : "http://ltx1-hcl5290.grid.linkedin.com:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000006/vsowrira/stdout?start=-4096",
-        "stderr" : "http://ltx1-hcl5290.grid.linkedin.com:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000006/vsowrira/stderr?start=-4096"
+        "stdout" : "http://host-5290:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000006/john/stdout?start=-4096",
+        "stderr" : "http://host-5290:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000006/john/stderr?start=-4096"
       },
       "schedulerDelay" : 89,
       "gettingResultTime" : 0
@@ -155,7 +155,7 @@
       "launchTime" : "2021-08-10T23:27:53.904GMT",
       "duration" : 5124,
       "executorId" : "8",
-      "host" : "ltx1-hcl25261.grid.linkedin.com",
+      "host" : "host-25261",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
       "speculative" : false,
@@ -195,8 +195,8 @@
         }
       },
       "executorLogs" : {
-        "stdout" : "http://ltx1-hcl25261.grid.linkedin.com:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000009/vsowrira/stdout?start=-4096",
-        "stderr" : "http://ltx1-hcl25261.grid.linkedin.com:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000009/vsowrira/stderr?start=-4096"
+        "stdout" : "http://host-25261:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000009/john/stdout?start=-4096",
+        "stderr" : "http://host-25261:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000009/john/stderr?start=-4096"
       },
       "schedulerDelay" : 220,
       "gettingResultTime" : 0
@@ -208,7 +208,7 @@
       "launchTime" : "2021-08-10T23:27:53.904GMT",
       "duration" : 63773,
       "executorId" : "10",
-      "host" : "ltx1-hcl12413.grid.linkedin.com",
+      "host" : "host-12413",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
       "speculative" : false,
@@ -248,8 +248,8 @@
         }
       },
       "executorLogs" : {
-        "stdout" : "http://ltx1-hcl12413.grid.linkedin.com:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000011/vsowrira/stdout?start=-4096",
-        "stderr" : "http://ltx1-hcl12413.grid.linkedin.com:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000011/vsowrira/stderr?start=-4096"
+        "stdout" : "http://host-12413:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000011/john/stdout?start=-4096",
+        "stderr" : "http://host-12413:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000011/john/stderr?start=-4096"
       },
       "schedulerDelay" : 91,
       "gettingResultTime" : 0
@@ -261,7 +261,7 @@
       "launchTime" : "2021-08-10T23:28:04.499GMT",
       "duration" : 53201,
       "executorId" : "7",
-      "host" : "ltx1-hcl12291.grid.linkedin.com",
+      "host" : "host-12291",
       "status" : "KILLED",
       "taskLocality" : "PROCESS_LOCAL",
       "speculative" : true,
@@ -302,8 +302,8 @@
         }
       },
       "executorLogs" : {
-        "stdout" : "http://ltx1-hcl12291.grid.linkedin.com:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000008/vsowrira/stdout?start=-4096",
-        "stderr" : "http://ltx1-hcl12291.grid.linkedin.com:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000008/vsowrira/stderr?start=-4096"
+        "stdout" : "http://host-12291:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000008/john/stdout?start=-4096",
+        "stderr" : "http://host-12291:8042/node/containerlogs/container_e18_1628109047826_1317105_01_000008/john/stderr?start=-4096"
       },
       "schedulerDelay" : 23,
       "gettingResultTime" : 0
@@ -476,10 +476,7 @@
     "numActiveTasks" : 0,
     "numCompletedTasks" : 0,
     "numFailedTasks" : 0,
-    "numKilledTasks" : 1,
-    "killedTasksSummary" : {
-      "original attempt succeeded" : 1
-    }
+    "numKilledTasks" : 1
   },
   "killedTasksSummary" : {
     "another attempt succeeded" : 1

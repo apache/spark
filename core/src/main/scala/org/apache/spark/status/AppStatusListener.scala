@@ -759,11 +759,6 @@ private[spark] class AppStatusListener(
         speculationStageSummary.numFailedTasks += failedDelta
         speculationStageSummary.numKilledTasks += killedDelta
       }
-      speculationStageSummary.killedTasksSummary = killedTaskSummaryForSpeculationStageSummary(
-        event.reason,
-        speculationStageSummary.killedTasksSummary,
-        event.taskInfo.speculative)
-
       if (isLastTask && event.taskInfo.speculative) {
         update(speculationStageSummary, now)
       } else {
@@ -1227,33 +1222,6 @@ private[spark] class AppStatusListener(
       case denied: TaskCommitDenied =>
         val reason = denied.toErrorString
         oldSummary.updated(reason, oldSummary.getOrElse(reason, 0) + 1)
-      case _ =>
-        oldSummary
-    }
-  }
-
-  private def killedTaskSummaryForSpeculationStageSummary(
-      reason: TaskEndReason,
-      oldSummary: Map[String, Int],
-      isSpeculative: Boolean): Map[String, Int] = {
-    reason match {
-      case k: TaskKilled if k.reason.contains("another attempt succeeded") =>
-        if (isSpeculative) {
-          oldSummary.updated("original attempt succeeded",
-            oldSummary.getOrElse("original attempt succeeded", 0) + 1)
-        } else {
-          oldSummary.updated("speculated attempt succeeded",
-            oldSummary.getOrElse("speculated attempt succeeded", 0) + 1)
-        }
-      // If the stage is finished and speculative tasks get killed, then the
-      // kill reason is "stage finished"
-      case k: TaskKilled if k.reason.contains("Stage finished") =>
-        if (isSpeculative) {
-          oldSummary.updated("original attempt succeeded",
-            oldSummary.getOrElse("original attempt succeeded", 0) + 1)
-        } else {
-          oldSummary
-        }
       case _ =>
         oldSummary
     }

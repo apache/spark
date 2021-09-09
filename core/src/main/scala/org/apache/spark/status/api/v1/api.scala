@@ -94,8 +94,7 @@ class SpeculationStageSummary private[spark](
    val numActiveTasks: Int,
    val numCompletedTasks: Int,
    val numFailedTasks: Int,
-   val numKilledTasks: Int,
-   val killedTasksSummary: Map[String, Int])
+   val numKilledTasks: Int)
 
 class ExecutorSummary private[spark](
     val id: String,

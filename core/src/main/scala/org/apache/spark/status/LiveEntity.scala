@@ -401,7 +401,6 @@ private class LiveSpeculationStageSummary(
   var numCompletedTasks = 0
   var numFailedTasks = 0
   var numKilledTasks = 0
-  var killedTasksSummary : Map[String, Int] = Map()
 
   override protected def doUpdate(): Any = {
     val info = new v1.SpeculationStageSummary(
@@ -410,7 +409,6 @@ private class LiveSpeculationStageSummary(
       numCompletedTasks,
       numFailedTasks,
       numKilledTasks,
-      killedTasksSummary
     )
     new SpeculationStageSummaryWrapper(stageId, attemptId, info)
   }

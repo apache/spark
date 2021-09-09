@@ -152,9 +152,6 @@ class AppStatusStoreSuite extends SparkFunSuite {
       assert(metric.numCompletedTasks == 5)
       assert(metric.numFailedTasks == 1)
       assert(metric.numKilledTasks == 2)
-      assert(metric.killedTasksSummary == Map("original attempt succeeded" -> 1,
-        "speculation attempt succeeded" -> 1
-      ))
     }
   }
 
@@ -259,10 +256,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
   private def newSpeculationSummaryData(
       stageId: Int,
       stageAttemptId: Int): SpeculationStageSummaryWrapper = {
-    val speculationStageSummary = new SpeculationStageSummary(10, 2, 5, 1, 2,
-      Map("original attempt succeeded" -> 1,
-        "speculation attempt succeeded" -> 1
-      ))
+    val speculationStageSummary = new SpeculationStageSummary(10, 2, 5, 1, 2)
     new SpeculationStageSummaryWrapper(stageId, stageAttemptId, speculationStageSummary)
   }
 }
