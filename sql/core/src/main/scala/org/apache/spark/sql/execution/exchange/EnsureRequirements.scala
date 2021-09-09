@@ -50,7 +50,7 @@ case class EnsureRequirements(
       originChildren: Seq[SparkPlan],
       requiredChildDistributions: Seq[Distribution],
       requiredChildOrderings: Seq[Seq[SortOrder]],
-      isRootDistribution: Boolean): Seq[SparkPlan] = {
+      shuffleOrigin: ShuffleOrigin): Seq[SparkPlan] = {
     assert(requiredChildDistributions.length == originChildren.length)
     assert(requiredChildOrderings.length == originChildren.length)
     // Ensure that the operator's children satisfy their output distribution requirements.
@@ -62,15 +62,6 @@ case class EnsureRequirements(
       case (child, distribution) =>
         val numPartitions = distribution.requiredNumPartitions
           .getOrElse(conf.numShufflePartitions)
-        val shuffleOrigin = if (isRootDistribution) {
-          if (distribution.requiredNumPartitions.isDefined) {
-            REPARTITION_BY_NUM
-          } else {
-            REPARTITION_BY_COL
-          }
-        } else {
-          ENSURE_REQUIREMENTS
-        }
         ShuffleExchangeExec(distribution.createPartitioning(numPartitions), child, shuffleOrigin)
     }
 
@@ -293,16 +284,21 @@ case class EnsureRequirements(
           reordered.children,
           reordered.requiredChildDistribution,
           reordered.requiredChildOrdering,
-          false)
+          ENSURE_REQUIREMENTS)
         reordered.withNewChildren(newChildren)
     }
 
     if (requiredDistribution.isDefined) {
+      val shuffleOrigin = if (requiredDistribution.get.requiredNumPartitions.isDefined) {
+        REPARTITION_BY_NUM
+      } else {
+        REPARTITION_BY_COL
+      }
       val finalPlan = ensureDistributionAndOrdering(
         newPlan :: Nil,
         requiredDistribution.get :: Nil,
         Seq(Nil),
-        true)
+        shuffleOrigin)
       assert(finalPlan.size == 1)
       finalPlan.head
     } else {
