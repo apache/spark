@@ -732,11 +732,7 @@ object QueryExecutionErrors {
   def foundDuplicateFieldInCaseInsensitiveModeError(
       requiredFieldName: String, matchedOrcFields: String): Throwable = {
     new SparkRuntimeException(errorClass = "FOUND_DUPLICATE_FIELD_IN_CASE_INSENSITIVE_MODE",
-      messageParameters = Array(
-        s"""
-           |Found duplicate field(s) "$requiredFieldName": $matchedOrcFields
-           |in case-insensitive mode
-       """.stripMargin.replaceAll("\n", " ")))
+      messageParameters = Array(requiredFieldName, matchedOrcFields))
   }
 
   def failedToMergeIncompatibleSchemasError(

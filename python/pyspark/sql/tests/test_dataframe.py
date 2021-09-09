@@ -25,7 +25,7 @@ import unittest
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.functions import col, lit, count, sum, mean
 from pyspark.sql.types import StringType, IntegerType, DoubleType, StructType, StructField, \
-    BooleanType, DateType, TimestampType, FloatType
+    BooleanType, DateType, TimestampType, TimestampNTZType, FloatType
 from pyspark.sql.utils import AnalysisException, IllegalArgumentException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils, have_pyarrow, have_pandas, \
     pandas_requirement_message, pyarrow_requirement_message
@@ -575,12 +575,16 @@ class DataFrameTests(ReusedSQLTestCase):
         from datetime import datetime, date
         schema = StructType().add("a", IntegerType()).add("b", StringType())\
                              .add("c", BooleanType()).add("d", FloatType())\
-                             .add("dt", DateType()).add("ts", TimestampType())
+                             .add("dt", DateType()).add("ts", TimestampType())\
+                             .add("ts_ntz", TimestampNTZType())
         data = [
-            (1, "foo", True, 3.0, date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
-            (2, "foo", True, 5.0, None, None),
-            (3, "bar", False, -1.0, date(2012, 3, 3), datetime(2012, 3, 3, 3, 3, 3)),
-            (4, "bar", False, 6.0, date(2100, 4, 4), datetime(2100, 4, 4, 4, 4, 4)),
+            (1, "foo", True, 3.0, date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1),
+             datetime(1969, 1, 1, 1, 1, 1)),
+            (2, "foo", True, 5.0, None, None, None),
+            (3, "bar", False, -1.0, date(2012, 3, 3), datetime(2012, 3, 3, 3, 3, 3),
+             datetime(2012, 3, 3, 3, 3, 3)),
+            (4, "bar", False, 6.0, date(2100, 4, 4), datetime(2100, 4, 4, 4, 4, 4),
+             datetime(2100, 4, 4, 4, 4, 4)),
         ]
         df = self.spark.createDataFrame(data, schema)
         return df.toPandas()
@@ -596,6 +600,7 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(types[3], np.float32)
         self.assertEqual(types[4], np.object)  # datetime.date
         self.assertEqual(types[5], 'datetime64[ns]')
+        self.assertEqual(types[6], 'datetime64[ns]')
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_with_duplicated_column_names(self):
@@ -662,7 +667,8 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST(0 AS DOUBLE) AS double,
             CAST(1 AS BOOLEAN) AS boolean,
             CAST('foo' AS STRING) AS string,
-            CAST('2019-01-01' AS TIMESTAMP) AS timestamp
+            CAST('2019-01-01' AS TIMESTAMP) AS timestamp,
+            CAST('2019-01-01' AS TIMESTAMP_NTZ) AS timestamp_ntz
             """
             dtypes_when_nonempty_df = self.spark.sql(sql).toPandas().dtypes
             dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
@@ -682,7 +688,8 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST(NULL AS DOUBLE) AS double,
             CAST(NULL AS BOOLEAN) AS boolean,
             CAST(NULL AS STRING) AS string,
-            CAST(NULL AS TIMESTAMP) AS timestamp
+            CAST(NULL AS TIMESTAMP) AS timestamp,
+            CAST(NULL AS TIMESTAMP_NTZ) AS timestamp_ntz
             """
             pdf = self.spark.sql(sql).toPandas()
             types = pdf.dtypes
@@ -695,6 +702,7 @@ class DataFrameTests(ReusedSQLTestCase):
             self.assertEqual(types[6], np.object)
             self.assertEqual(types[7], np.object)
             self.assertTrue(np.can_cast(np.datetime64, types[8]))
+            self.assertTrue(np.can_cast(np.datetime64, types[9]))
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_mixed_dataframe(self):
@@ -710,9 +718,10 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST(col6 AS DOUBLE) AS double,
             CAST(col7 AS BOOLEAN) AS boolean,
             CAST(col8 AS STRING) AS string,
-            timestamp_seconds(col9) AS timestamp
-            FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1),
-                        (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
+            timestamp_seconds(col9) AS timestamp,
+            timestamp_seconds(col10) AS timestamp_ntz
+            FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+                        (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
             """
             pdf_with_some_nulls = self.spark.sql(sql).toPandas()
             pdf_with_only_nulls = self.spark.sql(sql).filter('tinyint is null').toPandas()
@@ -737,6 +746,9 @@ class DataFrameTests(ReusedSQLTestCase):
         # test with schema will accept pdf as input
         df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp")
         self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampType))
+        self.assertTrue(isinstance(df.schema['d'].dataType, DateType))
+        df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp_ntz")
+        self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampNTZType))
         self.assertTrue(isinstance(df.schema['d'].dataType, DateType))
 
     @unittest.skipIf(have_pandas, "Required Pandas was found.")

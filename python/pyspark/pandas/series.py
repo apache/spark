@@ -944,6 +944,56 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         return lmask & rmask
 
+    def cov(self, other: "Series", min_periods: Optional[int] = None) -> float:
+        """
+        Compute covariance with Series, excluding missing values.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        other : Series
+            Series with which to compute the covariance.
+        min_periods : int, optional
+            Minimum number of observations needed to have a valid result.
+
+        Returns
+        -------
+        float
+            Covariance between Series and other
+
+        Examples
+        --------
+        >>> from pyspark.pandas.config import set_option, reset_option
+        >>> set_option("compute.ops_on_diff_frames", True)
+        >>> s1 = ps.Series([0.90010907, 0.13484424, 0.62036035])
+        >>> s2 = ps.Series([0.12528585, 0.26962463, 0.51111198])
+        >>> s1.cov(s2)
+        -0.016857626527158744
+        >>> reset_option("compute.ops_on_diff_frames")
+        """
+        if not isinstance(other, Series):
+            raise TypeError("unsupported type: %s" % type(other))
+        if not np.issubdtype(self.dtype, np.number):
+            raise TypeError("unsupported dtype: %s" % self.dtype)
+        if not np.issubdtype(other.dtype, np.number):
+            raise TypeError("unsupported dtype: %s" % other.dtype)
+
+        min_periods = 1 if min_periods is None else min_periods
+
+        if same_anchor(self, other):
+            sdf = self._internal.spark_frame.select(self.spark.column, other.spark.column)
+        else:
+            combined = combine_frames(self.to_frame(), other.to_frame())
+            sdf = combined._internal.spark_frame.select(*combined._internal.data_spark_columns)
+
+        sdf = sdf.dropna()
+
+        if len(sdf.head(min_periods)) < min_periods:
+            return np.nan
+        else:
+            return sdf.select(F.covar_samp(*sdf.columns)).head(1)[0][0]
+
     # TODO: arg should support Series
     # TODO: NaN and None
     def map(self, arg: Union[Dict, Callable]) -> "Series":

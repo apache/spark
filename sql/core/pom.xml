@@ -178,6 +178,12 @@
       <artifactId>htmlunit-driver</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>com.github.rdblue</groupId>
+      <artifactId>brotli-codec</artifactId>
+      <version>0.1.1</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
@@ -252,6 +258,21 @@
         <dependency>
           <groupId>org.scala-lang.modules</groupId>
           <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>hadoop-2.7</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.codehaus.jackson</groupId>
+          <artifactId>jackson-core-asl</artifactId>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.codehaus.jackson</groupId>
+          <artifactId>jackson-mapper-asl</artifactId>
+          <scope>test</scope>
         </dependency>
       </dependencies>
     </profile>

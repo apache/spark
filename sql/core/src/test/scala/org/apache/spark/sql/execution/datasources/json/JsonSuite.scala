@@ -3023,16 +3023,14 @@ class JsonV2Suite extends JsonSuite {
     withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       withTempPath { file =>
         val scanBuilder = getBuilder(file.getCanonicalPath)
-        assert(scanBuilder.pushFilters(filters) === filters)
-        assert(scanBuilder.pushedFilters() === filters)
+        assert(scanBuilder.pushDataFilters(filters) === filters)
       }
     }
 
     withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> "false") {
       withTempPath { file =>
         val scanBuilder = getBuilder(file.getCanonicalPath)
-        assert(scanBuilder.pushFilters(filters) === filters)
-        assert(scanBuilder.pushedFilters() === Array.empty[sources.Filter])
+        assert(scanBuilder.pushDataFilters(filters) === Array.empty[sources.Filter])
       }
     }
   }

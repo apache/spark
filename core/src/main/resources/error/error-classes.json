@@ -18,12 +18,12 @@
   "CONCURRENT_QUERY_ERROR" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
-  "DATA_TYPE_UNSUPPORTED_YET" : {
-    "message" : [ "%s is not supported yet." ],
+  "DATA_TYPE_UNSUPPORTED" : {
+    "message" : [ "%s is not supported." ],
     "sqlState" : "0A000"
   },
-  "DDL_UNSUPPORTED_TEMPORARILY" : {
-    "message" : [ "%s is not supported temporarily." ],
+  "DDL_UNSUPPORTED" : {
+    "message" : [ "%s is not supported." ],
     "sqlState" : "0A000"
   },
   "DIVIDE_BY_ZERO" : {
@@ -45,12 +45,12 @@
   "FAILED_SET_ORIGINAL_PERMISSION_BACK" : {
     "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ]
   },
-  "FAILED_TO_MERGE_IN_COMPATIBLE_SCHEMAS" : {
+  "FAILED_TO_MERGE_INCOMPATIBLE_SCHEMAS" : {
     "message" : [ "Failed to merge incompatible schemas %s and %s" ],
     "sqlState" : "42000"
   },
   "FOUND_DUPLICATE_FIELD_IN_CASE_INSENSITIVE_MODE" : {
-    "message" : [ "%s" ],
+    "message" : [ "Found duplicate field(s) \"%s\": %s in case-insensitive mode" ],
     "sqlState" : "42000"
   },
   "GROUPING_COLUMN_MISMATCH" : {
@@ -90,11 +90,11 @@
     "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]." ],
     "sqlState" : "22023"
   },
-  "INVALID_JDBC_NUMPARTITIONS" : {
+  "INVALID_JDBC_NUM_PARTITIONS" : {
     "message" : [ "Invalid value `%s` for parameter `%s` in table writing via JDBC. The minimum value is 1." ],
     "sqlState" : "42000"
   },
-  "INVALID_JDBC_TXN_ISOLATION_LEVEL" : {
+  "INVALID_JDBC_TRANSACTION_ISOLATION_LEVEL" : {
     "message" : [ "Invalid value `%s` for parameter `%s`. This can be `NONE`, `READ_UNCOMMITTED`, `READ_COMMITTED`, `REPEATABLE_READ` or `SERIALIZABLE`." ],
     "sqlState" : "42000"
   },
@@ -165,7 +165,7 @@
   },
   "UNSUPPORTED_OPERATION_FOR_DATA_TYPE" : {
     "message" : [ "DataType: %s" ],
-    "sqlState" : "42000"
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER" : {
     "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],

@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.connector.catalog.functions;
 
+import org.apache.spark.annotation.Evolving;
+
 import java.io.Serializable;
 
 /**
  * Base class for user-defined functions.
+ *
+ * @since 3.2.0
  */
+@Evolving
 public interface Function extends Serializable {
 
   /**

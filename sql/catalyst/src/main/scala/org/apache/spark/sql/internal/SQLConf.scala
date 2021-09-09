@@ -2647,7 +2647,6 @@ object SQLConf {
 
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
-      .internal()
       .doc("In SQL queries with a SORT followed by a LIMIT like " +
           "'SELECT x FROM t ORDER BY y LIMIT m', if m is under this threshold, do a top-K sort" +
           " in memory, otherwise do a global sort which spills to disk if necessary.")
