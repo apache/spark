@@ -185,15 +185,16 @@ class IntegralOps(NumericOps):
     def xor(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
 
-        right_is_boolean = (
-            True
-            if isinstance(right, bool) or (hasattr(right, "dtype") and right.dtype == "bool")
-            else False
-        )
-
         if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
             return right ^ left
         elif _is_valid_for_logical_operator(right):
+            right_is_boolean = (
+                True
+                if isinstance(right, IndexOpsMixin)
+                and isinstance(right.spark.data_type, BooleanType)
+                or isinstance(right, bool)
+                else False
+            )
 
             def xor_func(left: Column, right: Any) -> Column:
                 if not isinstance(right, Column):
@@ -203,7 +204,7 @@ class IntegralOps(NumericOps):
                         right = SF.lit(right)
                 return (
                     left.bitwiseXOR(right.cast("integer")).cast("boolean")
-                    if right_is_boolean is True
+                    if right_is_boolean
                     else left.bitwiseXOR(right)
                 )
 
