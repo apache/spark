@@ -37,7 +37,7 @@ from pandas.api.types import CategoricalDtype, is_hashable
 from pandas._libs import lib
 
 from pyspark.sql import functions as F, Column
-from pyspark.sql.types import FractionalType, IntegralType, TimestampType
+from pyspark.sql.types import FractionalType, IntegralType, TimestampType, TimestampNTZType
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Dtype, Label, Name, Scalar
@@ -191,7 +191,8 @@ class Index(IndexOpsMixin):
         ):
             instance = object.__new__(Float64Index)
         elif isinstance(
-            anchor._internal.spark_type_for(anchor._internal.index_spark_columns[0]), TimestampType
+            anchor._internal.spark_type_for(anchor._internal.index_spark_columns[0]),
+            (TimestampType, TimestampNTZType),
         ):
             instance = object.__new__(DatetimeIndex)
         else:
@@ -617,7 +618,7 @@ class Index(IndexOpsMixin):
         warnings.warn("We recommend using `{}.to_numpy()` instead.".format(type(self).__name__))
         if isinstance(self.spark.data_type, IntegralType):
             return self.to_numpy()
-        elif isinstance(self.spark.data_type, TimestampType):
+        elif isinstance(self.spark.data_type, (TimestampType, TimestampNTZType)):
             return np.array(list(map(lambda x: x.astype(np.int64), self.to_numpy())))
         else:
             return None
@@ -2123,7 +2124,7 @@ class Index(IndexOpsMixin):
         >>> idx.is_all_dates
         False
         """
-        return isinstance(self.spark.data_type, TimestampType)
+        return isinstance(self.spark.data_type, (TimestampType, TimestampNTZType))
 
     def repeat(self, repeats: int) -> "Index":
         """
