@@ -854,22 +854,22 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   test("SPARK-36488: Regular expression expansion should fail with a meaningful message") {
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
-      assertAnalysisError(testRelation.select(Divide(UnresolvedRegex(".?", None, false), "a")),
+      assertAnalysisError(testRelation2.select(Divide(UnresolvedRegex(".?", None, false), "a")),
         s"Invalid usage of regular expression '.?' in" :: Nil)
-      assertAnalysisError(testRelation.select(
+      assertAnalysisError(testRelation2.select(
         Divide(UnresolvedRegex(".?", None, false), UnresolvedRegex(".*", None, false))),
         s"Invalid usage of regular expressions '.?', '.*' in" :: Nil)
-      assertAnalysisError(testRelation.select(
+      assertAnalysisError(testRelation2.select(
         Divide(UnresolvedRegex(".?", None, false), UnresolvedRegex(".?", None, false))),
         s"Invalid usage of regular expression '.?' in" :: Nil)
-      assertAnalysisError(testRelation.select(Divide(UnresolvedStar(None), "a")),
+      assertAnalysisError(testRelation2.select(Divide(UnresolvedStar(None), "a")),
         "Invalid usage of '*' in" :: Nil)
-      assertAnalysisError(testRelation.select(Divide(UnresolvedStar(None), UnresolvedStar(None))),
+      assertAnalysisError(testRelation2.select(Divide(UnresolvedStar(None), UnresolvedStar(None))),
         "Invalid usage of '*' in" :: Nil)
-      assertAnalysisError(testRelation.select(Divide(UnresolvedStar(None),
+      assertAnalysisError(testRelation2.select(Divide(UnresolvedStar(None),
         UnresolvedRegex(".?", None, false))),
         "Invalid usage of '*' and regular expression '.?' in" :: Nil)
-      assertAnalysisError(testRelation.select(Least(Seq(UnresolvedStar(None),
+      assertAnalysisError(testRelation2.select(Least(Seq(UnresolvedStar(None),
         UnresolvedRegex(".*", None, false), UnresolvedRegex(".?", None, false)))),
         "Invalid usage of '*' and regular expressions '.*', '.?' in" :: Nil)
     }
