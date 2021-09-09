@@ -846,9 +846,9 @@ object NullPropagation extends Rule[LogicalPlan] {
       // Using IsNull(e(inputs)) == IsNull(input1) or IsNull(input2) ... rules
       // E.g. IsNull(Not(null)) == IsNull(null)
       // E.g. IsNotNull(a === b) == And(IsNotNull(a), IsNotNull(b))
-      case IsNull(e: NullIntolerant) if e.children.nonEmpty =>
+      case IsNull(e: NullIntolerant) if !e.isInstanceOf[ExtractValue] && e.children.nonEmpty =>
         e.children.map(IsNull(_): Expression).reduceLeft(Or)
-      case IsNotNull(e: NullIntolerant) if e.children.nonEmpty =>
+      case IsNotNull(e: NullIntolerant) if !e.isInstanceOf[ExtractValue] && e.children.nonEmpty =>
         e.children.map(IsNotNull(_): Expression).reduceLeft(And)
     }
   }
