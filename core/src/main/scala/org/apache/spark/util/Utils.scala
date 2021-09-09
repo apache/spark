@@ -3281,7 +3281,7 @@ private[spark] class RedirectThreadAndCatchErrorMsg(
 
   val stringBuilder = new StringBuilder
 
-  def errorMessage: String = stringBuilder.mkString("\n")
+  def errorMessage: String = stringBuilder.toString
 
   setDaemon(true)
   override def run() {
@@ -3292,11 +3292,11 @@ private[spark] class RedirectThreadAndCatchErrorMsg(
         var line = bufferedReader.readLine()
         while (line != null) {
           if (errorStart) {
-            stringBuilder.append(line)
+            stringBuilder.append(line + "\n")
           } else {
             if (line.contains(errorFlag)) {
               errorStart = true
-              stringBuilder.append(line)
+              stringBuilder.append(line + "\n")
             }
           }
           out.write(line.getBytes)
