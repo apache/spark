@@ -30,7 +30,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * @since 3.3.0
  */
 @Evolving
-public abstract class StringPredicate extends Filter {
+abstract class StringPredicate extends Filter {
   protected final NamedReference column;
   protected final UTF8String value;
 

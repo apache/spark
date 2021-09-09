@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * @since 3.3.0
  */
 @Evolving
-public abstract class BinaryFilter extends Filter {
+abstract class BinaryFilter extends Filter {
   protected final Filter left;
   protected final Filter right;
 
