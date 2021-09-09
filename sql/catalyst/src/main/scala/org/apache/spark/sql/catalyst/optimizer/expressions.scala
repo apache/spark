@@ -468,6 +468,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case EqualNullSafe(a, Not(b)) if canSimplifyNot(a) => EqualNullSafe(Not(a), b)
 
       // Using (a =!= b) == (a === Not(b)), Not(a <=> b) == (a <=> Not(b)) rules
+      // E.g. Not(EqualTo(x, false)) => EqualTo(x, true)
       case Not(EqualTo(a, b)) if canSimplifyNot(b) => EqualTo(a, Not(b))
       case Not(EqualTo(a, b)) if canSimplifyNot(a) => EqualTo(Not(a), b)
       case Not(EqualNullSafe(a, b)) if !a.nullable && !b.nullable && canSimplifyNot(b) =>
@@ -845,10 +846,10 @@ object NullPropagation extends Rule[LogicalPlan] {
       // Using IsNull(e(inputs)) == IsNull(input1) or IsNull(input2) ... rules
       // E.g. IsNull(Not(null)) == IsNull(null)
       // E.g. IsNotNull(a === b) == And(IsNotNull(a), IsNotNull(b))
-      case IsNull(e: NullIntolerant) if e.children.nonEmpty => e.children.tail.
-        foldLeft(IsNull(e.children.head): Expression)((a, b) => Or(a, IsNull(b)))
-      case IsNotNull(e: NullIntolerant) if e.children.nonEmpty => e.children.tail.
-        foldLeft(IsNotNull(e.children.head): Expression)((a, b) => And(a, IsNotNull(b)))
+      case IsNull(e: NullIntolerant) if e.children.nonEmpty =>
+        e.children.map(IsNull(_): Expression).reduceLeft(Or)
+      case IsNotNull(e: NullIntolerant) if e.children.nonEmpty =>
+        e.children.map(IsNotNull(_): Expression).reduceLeft(And)
     }
   }
 }
