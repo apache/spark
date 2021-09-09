@@ -261,11 +261,11 @@ class BooleanOps(DataTypeOps):
                 if not isinstance(right, Column) and pd.isna(right):
                     return SF.lit(False)
                 else:
-                    scol = (
-                        left.cast("integer")
-                        .bitwiseOR(SF.lit(right).cast("integer"))
-                        .cast("boolean")
+                    left_scol = F.when(left.isNull(), 0).otherwise(left.cast("integer"))
+                    right_scol = F.when(SF.lit(right).isNull(), 0).otherwise(
+                        SF.lit(right).cast("integer")
                     )
+                    scol = left_scol.bitwiseOR(right_scol).cast("boolean")
                     return F.when(left.isNull() | scol.isNull(), False).otherwise(scol)
 
             return column_op(or_func)(left, right)

@@ -280,34 +280,26 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) % psser)
 
     def test_and(self):
-        psdf = self.psdf
-        for col in self.numeric_df_cols:
-            psser = psdf[col]
-            self.assertRaises(TypeError, lambda: psser & True)
-            self.assertRaises(TypeError, lambda: psser & False)
-            self.assertRaises(TypeError, lambda: psser & psser)
+        psser = self.psdf["float"]
+        self.assertRaises(TypeError, lambda: psser & True)
+        self.assertRaises(TypeError, lambda: psser & False)
+        self.assertRaises(TypeError, lambda: psser & psser)
 
     def test_rand(self):
-        psdf = self.psdf
-        for col in self.numeric_df_cols:
-            psser = psdf[col]
-            self.assertRaises(TypeError, lambda: True & psser)
-            self.assertRaises(TypeError, lambda: False & psser)
+        psser = self.psdf["float"]
+        self.assertRaises(TypeError, lambda: True & psser)
+        self.assertRaises(TypeError, lambda: False & psser)
 
     def test_or(self):
-        psdf = self.psdf
-        for col in self.numeric_df_cols:
-            psser = psdf[col]
-            self.assertRaises(TypeError, lambda: psser | True)
-            self.assertRaises(TypeError, lambda: psser | False)
-            self.assertRaises(TypeError, lambda: psser | psser)
+        psser = self.psdf["float"]
+        self.assertRaises(TypeError, lambda: psser | True)
+        self.assertRaises(TypeError, lambda: psser | False)
+        self.assertRaises(TypeError, lambda: psser | psser)
 
     def test_ror(self):
-        psdf = self.psdf
-        for col in self.numeric_df_cols:
-            psser = psdf[col]
-            self.assertRaises(TypeError, lambda: True | psser)
-            self.assertRaises(TypeError, lambda: False | psser)
+        psser = self.psdf["float"]
+        self.assertRaises(TypeError, lambda: True | psser)
+        self.assertRaises(TypeError, lambda: False | psser)
 
     def test_from_to_pandas(self):
         pdf, psdf = self.pdf, self.psdf
