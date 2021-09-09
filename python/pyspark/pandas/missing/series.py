@@ -55,7 +55,7 @@ class MissingPandasLikeSeries(object):
     slice_shift = _unsupported_function(
         "slice_shift", deprecated=True, reason="Use DataFrame/Series.shift instead."
     )
-    tshift = _unsupported_function("slice_shift", deprecated=True, reason="Use `shift` instead.")
+    tshift = _unsupported_function("tshift", deprecated=True, reason="Use `shift` instead.")
 
     # Properties we won't support.
     array = common.array(_unsupported_property)
