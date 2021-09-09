@@ -520,6 +520,14 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser1 | pser2, (psser1 | psser2).sort_index())
         self.assert_eq(pser1 & pser2, (psser1 & psser2).sort_index())
 
+        pser1 = pd.Series([True, False, True, False, np.nan, np.nan, True, False])
+        pser2 = pd.Series([1, 0, 0, 1, 1, 0, 0, 0])
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
+
+        self.assert_eq(pser1 | pser2, (psser1 | psser2).sort_index())
+        self.assert_eq(pser1 & pser2, (psser1 & psser2).sort_index())
+
     @unittest.skipIf(
         not extension_object_dtypes_available, "pandas extension object dtypes are not available"
     )
