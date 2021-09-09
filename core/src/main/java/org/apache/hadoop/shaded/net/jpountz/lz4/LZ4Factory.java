@@ -32,15 +32,15 @@ public final class LZ4Factory {
   }
 
   public static LZ4Factory fastestInstance() {
-	return new LZ4Factory(net.jpountz.lz4.LZ4Factory.fastestInstance());
+    return new LZ4Factory(net.jpountz.lz4.LZ4Factory.fastestInstance());
   }
 
   public LZ4Compressor highCompressor() {
-	return new LZ4Compressor(lz4Factory.highCompressor());
+    return new LZ4Compressor(lz4Factory.highCompressor());
   }
 
   public LZ4Compressor fastCompressor() {
-	return new LZ4Compressor(lz4Factory.fastCompressor());
+    return new LZ4Compressor(lz4Factory.fastCompressor());
   }
 
   public LZ4SafeDecompressor safeDecompressor() {

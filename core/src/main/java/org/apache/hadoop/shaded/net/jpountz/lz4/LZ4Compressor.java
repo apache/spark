@@ -35,4 +35,3 @@ public final class LZ4Compressor {
     lz4Compressor.compress(src, dest);
   }
 }
-

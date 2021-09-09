@@ -27,7 +27,7 @@ public final class LZ4SafeDecompressor {
   private net.jpountz.lz4.LZ4SafeDecompressor lz4Decompressor;
 
   public LZ4SafeDecompressor(net.jpountz.lz4.LZ4SafeDecompressor lz4Decompressor) {
-	this.lz4Decompressor = lz4Decompressor;
+    this.lz4Decompressor = lz4Decompressor;
   }
 
   public void decompress(java.nio.ByteBuffer src, java.nio.ByteBuffer dest) {
