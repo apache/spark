@@ -594,7 +594,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                     psdf[temp_key_col] = key
                 if isinstance(value, Series):
                     psdf[temp_value_col] = value
-                psdf = psdf.sort_values(temp_natural_order).drop(temp_natural_order)
+                psdf = psdf.sort_values(temp_natural_order).drop(columns=temp_natural_order)
 
                 psser = psdf._psser_for(column_label)
                 if isinstance(key, Series):
@@ -686,7 +686,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                     psdf[temp_key_col] = rows_sel
                 if isinstance(value, Series):
                     psdf[temp_value_col] = value
-                psdf = psdf.sort_values(temp_natural_order).drop(temp_natural_order)
+                psdf = psdf.sort_values(temp_natural_order).drop(columns=temp_natural_order)
 
                 if isinstance(rows_sel, Series):
                     rows_sel = F.col(
