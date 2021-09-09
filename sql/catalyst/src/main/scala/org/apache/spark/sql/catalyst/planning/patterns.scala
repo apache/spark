@@ -371,13 +371,16 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
    * which is very time consuming because it's an O(M*N) calculation.
    * But if it's a single column case O(M*N) calculation could be optimized into O(M)
    * using hash lookup instead of loop lookup.
+   *
+   * [SPARK-36665] IsNull(EqualTo(a=b)) gets optimized to Or(IsNull(a), IsNull(b))
+   * In addition, it is possible that Or(IsNull(a), IsNull(b)) gets optimized to IsNull(a)
+   * when a is nullable and b is not, vice versa
    */
   def unapply(join: Join): Option[ReturnType] = join match {
     case Join(left, right, LeftAnti,
-      Some(Or(e @ EqualTo(leftAttr: Expression, rightAttr: Expression),
-        IsNull(e2 @ EqualTo(_, _)))), _)
+      Some(Or(e @ EqualTo(leftAttr: Expression, rightAttr: Expression), IsNull(e2))), _)
         if SQLConf.get.optimizeNullAwareAntiJoin &&
-          e.semanticEquals(e2) =>
+          (e.semanticEquals(e2) || e.left.semanticEquals(e2) || e.right.semanticEquals(e2)) =>
       if (canEvaluate(leftAttr, left) && canEvaluate(rightAttr, right)) {
         Some(Seq(leftAttr), Seq(rightAttr))
       } else if (canEvaluate(leftAttr, right) && canEvaluate(rightAttr, left)) {
@@ -385,6 +388,8 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
       } else {
         None
       }
+    case Join(left, right, LeftAnti, Some(Or(e: EqualTo, Or(IsNull(e2), IsNull(e3)))), hint) =>
+      unapply(Join(left, right, LeftAnti, Some(Or(e, IsNull(EqualTo(e2, e3)))), hint))
     case _ => None
   }
 }

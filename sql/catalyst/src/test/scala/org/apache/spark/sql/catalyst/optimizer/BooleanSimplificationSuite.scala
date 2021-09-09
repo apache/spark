@@ -438,6 +438,8 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
     checkCondition(('a <= 'b) =!= 'f, ('a > 'b) === 'f)
     checkCondition('e =!= ('a <= 'b), 'e === ('a > 'b))
 
+    checkCondition('e =!= ('f === ('g === Not('h))), 'e === ('f === ('g === 'h)))
+
     // Properly avoid non optimize-able cases
     checkCondition(Not(('a > 'b) <=> 'f), Not(('a > 'b) <=> 'f))
     checkCondition(Not('e <=> ('a > 'b)), Not('e <=> ('a > 'b)))
