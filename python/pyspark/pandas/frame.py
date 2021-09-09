@@ -6735,17 +6735,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
                 if internal.index_level == 1:
                     internal = internal.resolved_copy
-                    index_sdf_col = "__index"
-                    index_sdf = default_session().createDataFrame(
-                        pd.DataFrame({index_sdf_col: index})
+                    self_index_column = self.index.to_series()
+                    self_index_type = self_index_column.spark.data_type
+                    cond = ~self_index_column.spark.column.isin(
+                        [SF.lit(label).cast(self_index_type) for label in index]
                     )
-                    self_sdf = internal.spark_frame
-                    joined_sdf = self_sdf.join(
-                        other=F.broadcast(index_sdf),
-                        on=internal.index_spark_columns[0] == scol_for(index_sdf, index_sdf_col),
-                        how="anti",
-                    )
-                    internal = internal.with_new_sdf(joined_sdf)
+                    filtered_sdf = internal.spark_frame.filter(cond)
+                    internal = internal.with_new_sdf(filtered_sdf)
                 else:
                     raise NotImplementedError(
                         "Drop rows of MultiIndex DataFrame is not supported yet"
