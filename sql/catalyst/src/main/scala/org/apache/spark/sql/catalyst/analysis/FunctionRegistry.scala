@@ -470,6 +470,7 @@ object FunctionRegistry {
     expression[Length]("length"),
     expression[Levenshtein]("levenshtein"),
     expression[Like]("like"),
+    expression[ILike]("ilike"),
     expression[Lower]("lower"),
     expression[OctetLength]("octet_length"),
     expression[StringLocate]("locate"),

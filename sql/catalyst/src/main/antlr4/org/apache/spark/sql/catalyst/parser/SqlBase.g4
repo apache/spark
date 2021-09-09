@@ -798,7 +798,7 @@ predicate
     | NOT? kind=IN '(' query ')'
     | NOT? kind=RLIKE pattern=valueExpression
     | NOT? kind=LIKE quantifier=(ANY | SOME | ALL) ('('')' | '(' expression (',' expression)* ')')
-    | NOT? kind=LIKE pattern=valueExpression (ESCAPE escapeChar=STRING)?
+    | NOT? kind=(LIKE | ILIKE) pattern=valueExpression (ESCAPE escapeChar=STRING)?
     | IS NOT? kind=NULL
     | IS NOT? kind=(TRUE | FALSE | UNKNOWN)
     | IS NOT? kind=DISTINCT FROM right=valueExpression
@@ -1126,6 +1126,7 @@ ansiNonReserved
     | LAST
     | LAZY
     | LIKE
+    | ILIKE
     | LIMIT
     | LINES
     | LIST
@@ -1380,6 +1381,7 @@ nonReserved
     | LAZY
     | LEADING
     | LIKE
+    | ILIKE
     | LIMIT
     | LINES
     | LIST
@@ -1641,6 +1643,7 @@ LAZY: 'LAZY';
 LEADING: 'LEADING';
 LEFT: 'LEFT';
 LIKE: 'LIKE';
+ILIKE: 'ILIKE';
 LIMIT: 'LIMIT';
 LINES: 'LINES';
 LIST: 'LIST';
