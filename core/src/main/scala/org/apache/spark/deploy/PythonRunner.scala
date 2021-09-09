@@ -28,7 +28,7 @@ import scala.util.Try
 import org.apache.spark.{SparkConf, SparkUserAppException}
 import org.apache.spark.api.python.{Py4JServer, PythonUtils}
 import org.apache.spark.internal.config._
-import org.apache.spark.util.{CircularBuffer, RedirectThread, Utils}
+import org.apache.spark.util.{RedirectThreadAndCatchErrorMsg, Utils}
 
 /**
  * A main class used to launch Python applications. It executes python as a
@@ -92,19 +92,16 @@ object PythonRunner {
       // see https://github.com/numpy/numpy/issues/10455
       sparkConf.getOption("spark.driver.cores").foreach(env.put("OMP_NUM_THREADS", _))
     }
+    builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
     try {
       val process = builder.start()
 
-      val stderrBuffer = new CircularBuffer(2048)
-      new RedirectThread(
-        process.getErrorStream,
-        stderrBuffer,
-        "Thread-PythonRunner-STDERR-Consumer").start()
-      new RedirectThread(process.getInputStream, System.out, "redirect output").start()
-
+      val redirectOutput = new RedirectThreadAndCatchErrorMsg(
+        process.getInputStream, System.out, "redirect output", "Traceback")
+        redirectOutput.start()
       val exitCode = process.waitFor()
       if (exitCode != 0) {
-        throw new SparkUserAppException(exitCode, Some(stderrBuffer.toString))
+        throw new SparkUserAppException(exitCode, Some(redirectOutput.errorMessage))
       }
     } finally {
       gatewayServer.shutdown()

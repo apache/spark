@@ -3269,6 +3269,50 @@ private[spark] class RedirectThread(
 }
 
 /**
+ * A utility class to redirect the child process's stdout or stderr and catch error message.
+ */
+private[spark] class RedirectThreadAndCatchErrorMsg(
+  in: InputStream,
+  out: OutputStream,
+  name: String,
+  errorFlag: String,
+  propagateEof: Boolean = false)
+  extends Thread(name) {
+
+  val stringBuilder = new StringBuilder
+
+  def errorMessage: String = stringBuilder.mkString("\n")
+
+  setDaemon(true)
+  override def run() {
+    scala.util.control.Exception.ignoring(classOf[IOException]) {
+      Utils.tryWithSafeFinally {
+        val bufferedReader = new BufferedReader(new InputStreamReader(in))
+        var errorStart = false
+        var line = bufferedReader.readLine()
+        while (line != null) {
+          if (errorStart) {
+            stringBuilder.append(line)
+          } else {
+            if (line.contains(errorFlag)) {
+              errorStart = true
+              stringBuilder.append(line)
+            }
+          }
+          out.write(line.getBytes)
+          out.flush()
+          line = bufferedReader.readLine()
+        }
+      } {
+        if (propagateEof) {
+          out.close()
+        }
+      }
+    }
+  }
+}
+
+/**
  * An [[OutputStream]] that will store the last 10 kilobytes (by default) written to it
  * in a circular buffer. The current contents of the buffer can be accessed using
  * the toString method.
