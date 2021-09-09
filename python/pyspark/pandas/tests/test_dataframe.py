@@ -1255,8 +1255,13 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(ValueError, expected_error_message):
             psdf.drop()
 
+        #
+        # Drop columns
+        #
+
         # Assert using a str for 'labels' works
         self.assert_eq(psdf.drop("x", axis=1), pdf.drop("x", axis=1))
+        self.assert_eq((psdf + 1).drop("x", axis=1), (pdf + 1).drop("x", axis=1))
         # Assert using a list for 'labels' works
         self.assert_eq(psdf.drop(["y", "z"], axis=1), pdf.drop(["y", "z"], axis=1))
         self.assert_eq(psdf.drop(["x", "y", "z"], axis=1), pdf.drop(["x", "y", "z"], axis=1))
@@ -1295,7 +1300,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.drop([20, 30], axis=1), pdf.drop([20, 30], axis=1))
 
         #
-        # Drop rows by index
+        # Drop rows
         #
 
         pdf = pd.DataFrame({"X": [1, 2, 3], "Y": [4, 5, 6], "Z": [7, 8, 9]}, index=["A", "B", "C"])
@@ -1304,6 +1309,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         # Given labels (and axis = 0)
         self.assert_eq(psdf.drop(labels="A", axis=0), pdf.drop(labels="A", axis=0))
         self.assert_eq(psdf.drop(labels="A"), pdf.drop(labels="A"))
+        self.assert_eq((psdf + 1).drop(labels="A"), (pdf + 1).drop(labels="A"))
         self.assert_eq(psdf.drop(labels=["A", "C"], axis=0), pdf.drop(labels=["A", "C"], axis=0))
         self.assert_eq(
             psdf.drop(labels=["A", "B", "C"], axis=0), pdf.drop(labels=["A", "B", "C"], axis=0)

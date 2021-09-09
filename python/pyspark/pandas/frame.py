@@ -6716,7 +6716,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         -----
         Currently, dropping rows of a MultiIndex DataFrame is not supported yet.
         """
-        internal = self._internal
         if labels is not None:
             if index is not None or columns is not None:
                 raise ValueError("Cannot specify both 'labels' and 'index'/'columns'")
@@ -6728,11 +6727,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             if index is None and columns is None:
                 raise ValueError("Need to specify at least one of 'labels' or 'columns' or 'index'")
+
+            internal = self._internal
             if index is not None:
                 if is_name_like_tuple(index) or is_name_like_value(index):
                     index = [index]
 
                 if internal.index_level == 1:
+                    internal = internal.resolved_copy
                     index_sdf_col = "__index"
                     index_sdf = default_session().createDataFrame(
                         pd.DataFrame({index_sdf_col: index})
@@ -6740,8 +6742,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     self_sdf = internal.spark_frame
                     joined_sdf = self_sdf.join(
                         other=F.broadcast(index_sdf),
-                        on=scol_for(self_sdf, SPARK_INDEX_NAME_FORMAT(0))
-                        == scol_for(index_sdf, index_sdf_col),
+                        on=internal.index_spark_columns[0] == scol_for(index_sdf, index_sdf_col),
                         how="anti",
                     )
                     internal = internal.with_new_sdf(joined_sdf)
