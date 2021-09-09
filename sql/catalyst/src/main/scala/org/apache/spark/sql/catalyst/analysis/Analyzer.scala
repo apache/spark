@@ -1714,7 +1714,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             case s: Star => expand(s, child)
             case o => o :: Nil
           })
-        case s: Star =>
+        case s: UnresolvedRegex =>
           expand(s, child) match {
             case Seq(exp) => exp
             case _ => s
