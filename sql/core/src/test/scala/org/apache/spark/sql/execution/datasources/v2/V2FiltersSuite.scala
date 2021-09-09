@@ -40,6 +40,22 @@ class FiltersV2Suite extends SparkFunSuite {
     assert(filter3.describe.equals("```a``.b`.c = 1"))
   }
 
+  test("AlwaysTrue") {
+    val filter1 = new AlwaysTrue
+    val filter2 = new AlwaysTrue
+    assert(filter1.equals(filter2))
+    assert(filter1.references.map(_.describe()).length == 0)
+    assert(filter1.describe.equals("TRUE"))
+  }
+
+  test("AlwaysFalse") {
+    val filter1 = new AlwaysFalse
+    val filter2 = new AlwaysFalse
+    assert(filter1.equals(filter2))
+    assert(filter1.references.map(_.describe()).length == 0)
+    assert(filter1.describe.equals("FALSE"))
+  }
+
   test("EqualTo") {
     val filter1 = new EqualTo(ref("a"), LiteralValue(1, IntegerType))
     val filter2 = new EqualTo(ref("a"), LiteralValue(1, IntegerType))

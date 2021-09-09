@@ -17,59 +17,49 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
-import java.util.Arrays;
-import java.util.Objects;
-import java.util.stream.Collectors;
-
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
+import java.util.Objects;
+
 /**
- * A filter that evaluates to {@code true} iff the {@code column} evaluates to one of the
- * {@code values} in the array.
+ * Base class for {@link And}, {@link Or}
  *
  * @since 3.3.0
  */
 @Evolving
-public final class In extends Filter {
-  static final int MAX_LEN_TO_PRINT = 50;
-  private final NamedReference column;
-  private final Literal<?>[] values;
+public class CompoundFilter extends Filter {
+  protected final Filter left;
+  protected final Filter right;
 
-  public In(NamedReference column, Literal<?>[] values) {
-    this.column = column;
-    this.values = values;
+  protected CompoundFilter(Filter left, Filter right) {
+    this.left = left;
+    this.right = right;
   }
 
-  public NamedReference column() { return column; }
-  public Literal<?>[] values() { return values; }
+  public Filter left() { return left; }
+  public Filter right() { return right; }
 
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
-    In in = (In) o;
-    return Objects.equals(column, in.column) && Arrays.equals(values, in.values);
+    CompoundFilter and = (CompoundFilter) o;
+    return Objects.equals(left, and.left) && Objects.equals(right, and.right);
   }
 
   @Override
   public int hashCode() {
-    int result = Objects.hash(column);
-    result = 31 * result + Arrays.hashCode(values);
-    return result;
+    return Objects.hash(left, right);
   }
 
   @Override
-  public String toString() {
-    String res = Arrays.stream(values).limit((MAX_LEN_TO_PRINT)).map(Literal::describe)
-      .collect(Collectors.joining(", "));
-    if(values.length > MAX_LEN_TO_PRINT) {
-      res += "...";
-    }
-    return column.describe() + " IN (" + res + ")";
+  public NamedReference[] references() {
+    NamedReference[] refLeft = left.references();
+    NamedReference[] refRight = right.references();
+    NamedReference[] arr = new NamedReference[refLeft.length + refRight.length];
+    System.arraycopy(refLeft, 0, arr, 0, refLeft.length);
+    System.arraycopy(refRight, 0, arr, refLeft.length, refRight.length);
+    return arr;
   }
-
-  @Override
-  public NamedReference[] references() { return new NamedReference[]{column}; }
 }

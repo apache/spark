@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
-import java.util.Objects;
-
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
@@ -30,34 +28,12 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * @since 3.3.0
  */
 @Evolving
-public final class EqualTo extends Filter {
-  private final NamedReference column;
-  private final Literal<?> value;
+public final class EqualTo extends BinaryFilter {
 
   public EqualTo(NamedReference column, Literal<?> value) {
-    this.column = column;
-    this.value = value;
-  }
-
-  public NamedReference column() { return column; }
-  public Literal<?> value() { return value; }
-
-  @Override
-  public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
-    EqualTo equalTo = (EqualTo) o;
-    return Objects.equals(column, equalTo.column) && Objects.equals(value, equalTo.value);
-  }
-
-  @Override
-  public int hashCode() {
-    return Objects.hash(column, value);
+    super(column, value);
   }
 
   @Override
   public String toString() { return column.describe() + " = " + value.describe(); }
-
-  @Override
-  public NamedReference[] references() { return new NamedReference[]{column}; }
 }

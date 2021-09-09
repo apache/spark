@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * A filter that always evaluates to {@code false}.
@@ -26,11 +25,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * @since 3.3.0
  */
 @Evolving
-public final class AlwaysFalse extends Filter {
-
+public final class AlwaysFalse extends TrueFalseFilter {
   @Override
   public String toString() { return "FALSE"; }
-
-  @Override
-  public NamedReference[] references() { return EMPTY_REFERENCE; }
 }

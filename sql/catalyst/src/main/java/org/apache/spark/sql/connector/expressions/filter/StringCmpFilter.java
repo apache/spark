@@ -17,23 +17,44 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
+import java.util.Objects;
+
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * A filter that evaluates to {@code true} iff the {@code column} evaluates to a value
- * less than or equal to {@code value}.
+ * Base class for {@link StringContains}, {@link StringStartsWith},
+ * {@link StringEndsWith}
  *
  * @since 3.3.0
  */
 @Evolving
-public final class LessThanOrEqual extends BinaryFilter {
+public class StringCmpFilter extends Filter {
+  protected final NamedReference column;
+  protected final UTF8String value;
 
-  public LessThanOrEqual(NamedReference column, Literal<?> value) {
-    super(column, value);
+  protected StringCmpFilter(NamedReference column, UTF8String value) {
+    this.column = column;
+    this.value = value;
+  }
+
+  public NamedReference column() { return column; }
+  public UTF8String value() { return value; }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    StringCmpFilter that = (StringCmpFilter) o;
+    return Objects.equals(column, that.column) && Objects.equals(value, that.value);
   }
 
   @Override
-  public String toString() { return column.describe() + " <= " + value.describe(); }
+  public int hashCode() {
+    return Objects.hash(column, value);
+  }
+
+  @Override
+  public NamedReference[] references() { return new NamedReference[]{column}; }
 }

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
-import java.util.Objects;
-
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -30,36 +28,14 @@ import org.apache.spark.unsafe.types.UTF8String;
  * @since 3.3.0
  */
 @Evolving
-public final class StringStartsWith extends Filter {
-  private final NamedReference column;
-  private final UTF8String value;
+public final class StringStartsWith extends StringCmpFilter {
 
   public StringStartsWith(NamedReference column, UTF8String value) {
-    this.column = column;
-    this.value = value;
-  }
-
-  public NamedReference column() { return column; }
-  public UTF8String value() { return value; }
-
-  @Override
-  public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
-    StringStartsWith that = (StringStartsWith) o;
-    return Objects.equals(column, that.column) && Objects.equals(value, that.value);
-  }
-
-  @Override
-  public int hashCode() {
-    return Objects.hash(column, value);
+    super(column, value);
   }
 
   @Override
   public String toString() {
     return "STRING_STARTS_WITH(" + column.describe() + ", " + value + ")";
   }
-
-  @Override
-  public NamedReference[] references() { return new NamedReference[]{column}; }
 }
