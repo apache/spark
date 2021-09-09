@@ -128,10 +128,6 @@ case class ParquetScan(
       Map("PushedGroupBy" -> pushedGroupByStr)
   }
 
-  override def withFilters(
-      partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): FileScan =
-    this.copy(partitionFilters = partitionFilters, dataFilters = dataFilters)
-
   private def equivalentAggregations(a: Aggregation, b: Aggregation): Boolean = {
     a.aggregateExpressions.sortBy(_.hashCode())
       .sameElements(b.aggregateExpressions.sortBy(_.hashCode())) &&
