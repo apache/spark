@@ -55,7 +55,7 @@ trait DynamicPruningHelper {
   /**
    * Search a filtering predicate in a given logical plan
    */
-  private def hasSelectivePredicate(plan: LogicalPlan): Boolean = {
+  def hasSelectivePredicate(plan: LogicalPlan): Boolean = {
     plan.find {
       case f: Filter => isLikelySelective(f.condition)
       case _ => false

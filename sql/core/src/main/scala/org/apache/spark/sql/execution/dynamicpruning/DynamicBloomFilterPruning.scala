@@ -130,7 +130,7 @@ object DynamicBloomFilterPruning extends Rule[LogicalPlan]
           if !canPlanAsBroadcastHashJoin(j, conf) =>
         var newLeft = left
         var newRight = right
-        var newHint = hint
+        var newHint = hint // Avoid convert to BHJ if stream side has bloom filter.
 
         val (leftKeys, rightKeys) = extractEquiJoinKeys(j)
 
@@ -156,8 +156,10 @@ object DynamicBloomFilterPruning extends Rule[LogicalPlan]
             if (isRightSideSmall && canPruneLeft(joinType) && rightRowCnt > 0 &&
               rightRowCnt <= conf.dynamicBloomFilterJoinPruningMaxBloomFilterEntries &&
               !hasDynamicBloomFilterPruningSubquery(right) && supportDynamicPruning(right) &&
-              getFilterableTableScan(l, left).exists(
-                pruningHasBenefit(rightRowCnt, rightDistCnt, leftDistCnt, _))) {
+              getFilterableTableScan(l, left).exists { p =>
+                !hasSelectivePredicate(p) &&
+                  pruningHasBenefit(rightRowCnt, rightDistCnt, leftDistCnt, p)
+              }) {
               newLeft = insertPredicate(l, newLeft, r, right, rightKeys, rightDistCnt, rightRowCnt)
               newHint = newHint.copy(leftHint = Some(HintInfo(strategy = Some(NO_BROADCAST_HASH))))
             }
@@ -165,8 +167,10 @@ object DynamicBloomFilterPruning extends Rule[LogicalPlan]
             if (isLeftSideSmall && canPruneRight(joinType) && leftRowCount > 0 &&
               leftRowCount <= conf.dynamicBloomFilterJoinPruningMaxBloomFilterEntries &&
               !hasDynamicBloomFilterPruningSubquery(left) && supportDynamicPruning(left) &&
-              getFilterableTableScan(r, right).exists(
-                pruningHasBenefit(leftRowCount, leftDistCnt, rightDistCnt, _))) {
+              getFilterableTableScan(r, right).exists { p =>
+                !hasSelectivePredicate(p) &&
+                  pruningHasBenefit(leftRowCount, leftDistCnt, rightDistCnt, p)
+              }) {
               newRight = insertPredicate(r, newRight, l, left, leftKeys, leftDistCnt, leftRowCount)
               newHint = newHint.copy(rightHint = Some(HintInfo(strategy = Some(NO_BROADCAST_HASH))))
             }

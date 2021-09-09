@@ -41,7 +41,7 @@ case class SubqueryAdaptiveShuffleExec(
 
   protected override def doCanonicalize(): SparkPlan = {
     val keys = buildKeys.map(k => QueryPlan.normalizeExpressions(k, child.output))
-    copy(name = "dpp", buildKeys = keys, child = child.canonicalized)
+    copy(name = "dbfp", buildKeys = keys, child = child.canonicalized)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SubqueryAdaptiveShuffleExec =
