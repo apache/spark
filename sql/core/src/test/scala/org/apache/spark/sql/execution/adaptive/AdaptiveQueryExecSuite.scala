@@ -2255,6 +2255,36 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-37674: Add a new partitionSize for the output stage to reduce the " +
+    "partition and avoid producing small files.") {
+    withTable("tb") {
+      spark.sql("CREATE TABLE IF NOT EXISTS tb (key INT, value INT) USING ORC")
+      spark.range(128).selectExpr("id as k", "id % 2 as v")
+        .createOrReplaceTempView("v1")
+      spark.range(128).selectExpr("id as k", "id % 3 as v")
+        .createOrReplaceTempView("v2")
+      Seq(10000, 100).foreach { dataWritePartitionSize =>
+        withSQLConf(
+          SQLConf.DATAWRITE_PARTITION_SIZE_IN_BYTES.key -> dataWritePartitionSize.toString,
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          spark.sql(
+            """
+              |INSERT OVERWRITE TABLE tb
+              |SELECT v1.k, v2.v from v1
+              |JOIN v2
+              |ON v1.k = v2.k
+            """.stripMargin)
+          val filesNum = spark.sql("SELECT key FROM tb").inputFiles.length
+          if (dataWritePartitionSize >= 10000) {
+            assert(filesNum == 1)
+          } else {
+            assert(filesNum == 5)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-37742: AQE reads invalid InMemoryRelation stats and mistakenly plans BHJ") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",

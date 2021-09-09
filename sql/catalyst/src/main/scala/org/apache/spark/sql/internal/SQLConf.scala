@@ -512,6 +512,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DATAWRITE_PARTITION_SIZE_IN_BYTES =
+    buildConf("spark.sql.adaptive.dataWritePartitionSizeInBytes")
+      .doc("The advisory size in bytes of the shuffle partition during adaptive optimization " +
+        s"(when ${ADAPTIVE_EXECUTION_ENABLED.key} and ${COALESCE_PARTITIONS_ENABLED.key} is " +
+        s"true). It takes effect the finalStage with `DataWritingCommand` or `V2TableWriteExec` " +
+        s"coalesces small shuffle partitions or splits skewed shuffle partition")
+      .version("3.3.0")
+      .fallbackConf(ADVISORY_PARTITION_SIZE_IN_BYTES)
+
   val COALESCE_PARTITIONS_PARALLELISM_FIRST =
     buildConf("spark.sql.adaptive.coalescePartitions.parallelismFirst")
       .doc("When true, Spark does not respect the target size specified by " +

@@ -39,6 +39,8 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.bucketing.DisableUnnecessaryBucketedScan
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
+import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
@@ -148,11 +150,33 @@ case class AdaptiveSparkPlanExec(
     collapseCodegenStagesRule
   )
 
+  private lazy val hasWriterCommand = context.qe.sparkPlan match {
+    case _: DataWritingCommandExec | _: V2TableWriteExec => true
+    case _ => false
+  }
+
   private def optimizeQueryStage(
       plan: SparkPlan,
       isFinalStage: Boolean): SparkPlan = context.qe.withCteMap {
     val optimized = queryStageOptimizerRules.foldLeft(plan) { case (latestPlan, rule) =>
-      val applied = rule.apply(latestPlan)
+
+      // Use a new partition size for the finalStage with `DataWritingCommand` or `V2TableWriteExec`
+      // to avoid small files.
+
+      // Before that, the partition size of the finalStage with `DataWritingCommand` or
+      // `V2TableWriteExec` may use the ADVISORY_PARTITION_SIZE_IN_BYTES which is smaller one and
+      // may produce some small files, it may bad for production, we should use a new partition
+      // size for the finalStage with `DataWritingCommand` or `V2TableWriteExec` to avoid small
+      // files.
+      val applied = if (isFinalStage && hasWriterCommand) {
+        rule match {
+          case c: CoalesceShufflePartitions =>
+            c.copy(isDataWritingStage = true).apply(latestPlan)
+          case other => other.apply(latestPlan)
+        }
+      } else {
+        rule.apply(latestPlan)
+      }
       val result = rule match {
         case _: AQEShuffleReadRule if !applied.fastEquals(latestPlan) =>
           val distribution = if (isFinalStage) {
