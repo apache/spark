@@ -1586,7 +1586,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         invertIfNotDefined(InSubquery(getValueExpressions(e), ListQuery(plan(ctx.query))))
       case SqlBaseParser.IN =>
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression).toSeq))
-      case SqlBaseParser.LIKE =>
+      case SqlBaseParser.LIKE | SqlBaseParser.ILIKE =>
         Option(ctx.quantifier).map(_.getType) match {
           case Some(SqlBaseParser.ANY) | Some(SqlBaseParser.SOME) =>
             validate(!ctx.expression.isEmpty, "Expected something between '(' and ')'.", ctx)
@@ -1625,7 +1625,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
               }
               str.charAt(0)
             }.getOrElse('\\')
-            invertIfNotDefined(Like(e, expression(ctx.pattern), escapeChar))
+            val likeExpr = if (ctx.kind.getType == SqlBaseParser.ILIKE) {
+              new ILike(e, expression(ctx.pattern), escapeChar)
+            } else Like(e, expression(ctx.pattern), escapeChar)
+            invertIfNotDefined(likeExpr)
         }
       case SqlBaseParser.RLIKE =>
         invertIfNotDefined(RLike(e, expression(ctx.pattern)))
@@ -2133,25 +2136,27 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           val specialDate = convertSpecialDate(value, zoneId).map(Literal(_, DateType))
           specialDate.getOrElse(toLiteral(stringToDate, DateType))
         case "TIMESTAMP_NTZ" =>
-          val specialTs = convertSpecialTimestampNTZ(value).map(Literal(_, TimestampNTZType))
-          specialTs.getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
+          convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
+            .map(Literal(_, TimestampNTZType))
+            .getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
         case "TIMESTAMP_LTZ" =>
           constructTimestampLTZLiteral(value)
         case "TIMESTAMP" =>
           SQLConf.get.timestampType match {
             case TimestampNTZType =>
-              val specialTs = convertSpecialTimestampNTZ(value).map(Literal(_, TimestampNTZType))
-              specialTs.getOrElse {
-                val containsTimeZonePart =
-                  DateTimeUtils.parseTimestampString(UTF8String.fromString(value))._2.isDefined
-                // If the input string contains time zone part, return a timestamp with local time
-                // zone literal.
-                if (containsTimeZonePart) {
-                  constructTimestampLTZLiteral(value)
-                } else {
-                  toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType)
+              convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
+                .map(Literal(_, TimestampNTZType))
+                .getOrElse {
+                  val containsTimeZonePart =
+                    DateTimeUtils.parseTimestampString(UTF8String.fromString(value))._2.isDefined
+                  // If the input string contains time zone part, return a timestamp with local time
+                  // zone literal.
+                  if (containsTimeZonePart) {
+                    constructTimestampLTZLiteral(value)
+                  } else {
+                    toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType)
+                  }
                 }
-              }
 
             case TimestampType =>
               constructTimestampLTZLiteral(value)
@@ -2997,7 +3002,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[CreateNamespaceStatement]] command.
+   * Create a [[CreateNamespace]] command.
    *
    * For example:
    * {{{
@@ -3035,8 +3040,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       properties += PROP_LOCATION -> _
     }
 
-    CreateNamespaceStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
+    CreateNamespace(
+      UnresolvedDBObjectName(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        isNamespace = true),
       ctx.EXISTS != null,
       properties)
   }

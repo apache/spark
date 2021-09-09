@@ -136,8 +136,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-14415: All functions should have own descriptions") {
     for (f <- spark.sessionState.functionRegistry.listFunction()) {
-      if (!Seq("cube", "grouping", "grouping_id", "rollup", "window",
-          "session_window").contains(f.unquotedString)) {
+      if (!Seq("cube", "grouping", "grouping_id", "rollup").contains(f.unquotedString)) {
         checkKeywordsNotExist(sql(s"describe function $f"), "N/A.")
       }
     }
@@ -4214,6 +4213,15 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             Row("CAL_DT=2021-06-29") :: Row("CAL_DT=2021-06-30") :: Nil)
       }
     }
+  }
+
+  test("SPARK-36371: Support raw string literal") {
+    checkAnswer(sql("""SELECT r'a\tb\nc'"""), Row("""a\tb\nc"""))
+    checkAnswer(sql("""SELECT R'a\tb\nc'"""), Row("""a\tb\nc"""))
+    checkAnswer(sql("""SELECT r"a\tb\nc""""), Row("""a\tb\nc"""))
+    checkAnswer(sql("""SELECT R"a\tb\nc""""), Row("""a\tb\nc"""))
+    checkAnswer(sql("""SELECT from_json(r'{"a": "\\"}', 'a string')"""), Row(Row("\\")))
+    checkAnswer(sql("""SELECT from_json(R'{"a": "\\"}', 'a string')"""), Row(Row("\\")))
   }
 }
 

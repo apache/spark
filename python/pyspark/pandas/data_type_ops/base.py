@@ -40,6 +40,7 @@ from pyspark.sql.types import (
     StringType,
     StructType,
     TimestampType,
+    TimestampNTZType,
     UserDefinedType,
 )
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
@@ -155,7 +156,7 @@ def _as_string_type(
     index_ops: IndexOpsLike, dtype: Union[str, type, Dtype], *, null_str: str = str(None)
 ) -> IndexOpsLike:
     """Cast `index_ops` to StringType Spark type, given `dtype` and `null_str`,
-    representing null Spark column.
+    representing null Spark column. Note that `null_str` is for non-extension dtypes only.
     """
     spark_type = StringType()
     if isinstance(dtype, extension_dtypes):
@@ -203,7 +204,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
         from pyspark.pandas.data_type_ops.categorical_ops import CategoricalOps
         from pyspark.pandas.data_type_ops.complex_ops import ArrayOps, MapOps, StructOps
         from pyspark.pandas.data_type_ops.date_ops import DateOps
-        from pyspark.pandas.data_type_ops.datetime_ops import DatetimeOps
+        from pyspark.pandas.data_type_ops.datetime_ops import DatetimeOps, DatetimeNTZOps
         from pyspark.pandas.data_type_ops.null_ops import NullOps
         from pyspark.pandas.data_type_ops.num_ops import (
             DecimalOps,
@@ -246,6 +247,8 @@ class DataTypeOps(object, metaclass=ABCMeta):
                 return object.__new__(BooleanOps)
         elif isinstance(spark_type, TimestampType):
             return object.__new__(DatetimeOps)
+        elif isinstance(spark_type, TimestampNTZType):
+            return object.__new__(DatetimeNTZOps)
         elif isinstance(spark_type, DateType):
             return object.__new__(DateOps)
         elif isinstance(spark_type, BinaryType):

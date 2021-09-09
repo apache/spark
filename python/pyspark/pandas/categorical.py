@@ -22,6 +22,7 @@ from pandas.api.types import CategoricalDtype, is_dict_like, is_list_like
 
 from pyspark.pandas.internal import InternalField
 from pyspark.pandas.spark import functions as SF
+from pyspark.pandas.data_type_ops.categorical_ops import _to_cat
 from pyspark.sql import functions as F
 from pyspark.sql.types import StructField
 
@@ -735,7 +736,7 @@ class CategoricalAccessor(object):
                 return self._data.copy()
         else:
             dtype = CategoricalDtype(categories=new_categories, ordered=ordered)
-            psser = self._data.astype(dtype)
+            psser = _to_cat(self._data).astype(dtype)
 
             if inplace:
                 internal = self._data._psdf._internal.with_new_spark_column(

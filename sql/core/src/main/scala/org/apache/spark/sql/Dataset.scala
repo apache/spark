@@ -2492,6 +2492,16 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns a new Dataset by updating an existing column with metadata.
+   *
+   * @group untypedrel
+   * @since 3.3.0
+   */
+  def withMetadata(columnName: String, metadata: Metadata): DataFrame = {
+    withColumn(columnName, col(columnName), metadata)
+  }
+
+  /**
    * Returns a new Dataset with a column dropped. This is a no-op if schema doesn't contain
    * column name.
    *
@@ -3541,24 +3551,11 @@ class Dataset[T] private[sql](
    * This is for 'distributed-sequence' default index in pandas API on Spark.
    */
   private[sql] def withSequenceColumn(name: String) = {
-    val rdd: RDD[InternalRow] =
-      // Checkpoint the DataFrame to fix the partition ID.
-      localCheckpoint(false)
-      .queryExecution.toRdd.zipWithIndex().mapPartitions { iter =>
-      val joinedRow = new JoinedRow
-      val unsafeRowWriter =
-        new org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter(1)
-
-      iter.map { case (row, id) =>
-        // Writes to an UnsafeRow directly
-        unsafeRowWriter.reset()
-        unsafeRowWriter.write(0, id)
-        joinedRow(unsafeRowWriter.getRow, row)
-      }
-    }
-
-    sparkSession.internalCreateDataFrame(
-      rdd, StructType(StructField(name, LongType, nullable = false) +: schema), isStreaming)
+    Dataset.ofRows(
+      sparkSession,
+      AttachDistributedSequence(
+        AttributeReference(name, LongType, nullable = false)(),
+        logicalPlan))
   }
 
   /**

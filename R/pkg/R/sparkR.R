@@ -655,6 +655,40 @@ sparkCheckInstall <- function(sparkHome, master, deployMode) {
     } else {
       if (interactive() || isMasterLocal(master)) {
         message("Spark not found in SPARK_HOME: ", sparkHome)
+        # If EXISTING_SPARKR_BACKEND_PORT environment variable is set, assume
+        # that we're in Spark submit. spark-submit always sets Spark home
+        # so this case should not happen. This is just a safeguard.
+        isSparkRSubmit <- Sys.getenv("EXISTING_SPARKR_BACKEND_PORT", "") != ""
+
+        # SPARKR_ASK_INSTALLATION is an internal environment variable in case
+        # users want to disable this behavior. This environment variable should
+        # be removed if no user complains. This environment variable was added
+        # in case other notebook projects are affected.
+        if (!isSparkRSubmit && Sys.getenv("SPARKR_ASK_INSTALLATION", "TRUE") == "TRUE") {
+          # Finally, we're either plain R shell or Rscript.
+          msg <- paste0(
+            "Will you download and install (or reuse if it exists) Spark package ",
+            "under the cache [", sparkCachePath(), "]? (y/n): ")
+
+          answer <- NA
+          while (is.na(answer) || (answer != "y" && answer != "n")) {
+            # Dispatch on R shell in case readLines does not work in RStudio
+            # See https://stackoverflow.com/questions/30191232/use-stdin-from-within-r-studio
+            if (interactive()) {
+              answer <- readline(prompt = msg)
+            } else {
+              cat(msg)
+              answer <- readLines("stdin", n = 1)
+            }
+          }
+          if (answer == "n") {
+            stop(paste0(
+             "Please make sure Spark package is installed in this machine.\n",
+             "  - If there is one, set the path in sparkHome parameter or ",
+             "environment variable SPARK_HOME.\n",
+             "  - If not, you may run install.spark function to do the job."))
+          }
+        }
         packageLocalDir <- install.spark()
         packageLocalDir
       } else if (isClientMode(master) || deployMode == "client") {

@@ -17,32 +17,59 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Represent the session window.
  *
  * @param timeColumn the start time of session window
- * @param gapDuration the duration of session gap, meaning the session will close if there is
- *                    no new element appeared within "the last element in session + gap".
+ * @param gapDuration the duration of session gap. For static gap duration, meaning the session
+ *                    will close if there is no new element appeared within "the last element in
+ *                    session + gap". Besides a static gap duration value, users can also provide
+ *                    an expression to specify gap duration dynamically based on the input row.
+ *                    With dynamic gap duration, the closing of a session window does not depend
+ *                    on the latest input anymore. A session window's range is the union of all
+ *                    events' ranges which are determined by event start time and evaluated gap
+ *                    duration during the query execution. Note that the rows with negative or
+ *                    zero gap duration will be filtered out from the aggregation.
  */
-case class SessionWindow(timeColumn: Expression, gapDuration: Long) extends UnaryExpression
+// scalastyle:off line.size.limit line.contains.tab
+@ExpressionDescription(
+  usage = """
+    _FUNC_(time_column, gap_duration) - Generates session window given a timestamp specifying column and gap duration.
+      See <a href="https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html#types-of-time-windows">'Types of time windows'</a> in Structured Streaming guide doc for detailed explanation and examples.
+  """,
+  arguments = """
+    Arguments:
+      * time_column - The column or the expression to use as the timestamp for windowing by time. The time column must be of TimestampType.
+      * gap_duration - A string specifying the timeout of the session represented as "interval value"
+        (See <a href="https://spark.apache.org/docs/latest/sql-ref-literals.html#interval-literal">Interval Literal</a> for more details.) for the fixed gap duration, or
+        an expression which is applied for each input and evaluated to the "interval value" for the dynamic gap duration.
+  """,
+  examples = """
+    Examples:
+      > SELECT a, session_window.start, session_window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:10:00'), ('A2', '2021-01-01 00:01:00') AS tab(a, b) GROUP by a, _FUNC_(b, '5 minutes') ORDER BY a, start;
+        A1	2021-01-01 00:00:00	2021-01-01 00:09:30	2
+        A1	2021-01-01 00:10:00	2021-01-01 00:15:00	1
+        A2	2021-01-01 00:01:00	2021-01-01 00:06:00	1
+      > SELECT a, session_window.start, session_window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:10:00'), ('A2', '2021-01-01 00:01:00'), ('A2', '2021-01-01 00:04:30') AS tab(a, b) GROUP by a, _FUNC_(b, CASE WHEN a = 'A1' THEN '5 minutes' WHEN a = 'A2' THEN '1 minute' ELSE '10 minutes' END) ORDER BY a, start;
+        A1	2021-01-01 00:00:00	2021-01-01 00:09:30	2
+        A1	2021-01-01 00:10:00	2021-01-01 00:15:00	1
+        A2	2021-01-01 00:01:00	2021-01-01 00:02:00	1
+        A2	2021-01-01 00:04:30	2021-01-01 00:05:30	1
+  """,
+  group = "datetime_funcs",
+  since = "3.2.0")
+// scalastyle:on line.size.limit line.contains.tab
+case class SessionWindow(timeColumn: Expression, gapDuration: Expression) extends Expression
   with ImplicitCastInputTypes
   with Unevaluable
   with NonSQLExpression {
 
-  //////////////////////////
-  // SQL Constructors
-  //////////////////////////
-
-  def this(timeColumn: Expression, gapDuration: Expression) = {
-    this(timeColumn, TimeWindow.parseExpression(gapDuration))
-  }
-
-  override def child: Expression = timeColumn
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+  override def children: Seq[Expression] = Seq(timeColumn, gapDuration)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, AnyDataType)
   override def dataType: DataType = new StructType()
     .add(StructField("start", TimestampType))
     .add(StructField("end", TimestampType))
@@ -50,19 +77,10 @@ case class SessionWindow(timeColumn: Expression, gapDuration: Long) extends Unar
   // This expression is replaced in the analyzer.
   override lazy val resolved = false
 
-  /** Validate the inputs for the gap duration in addition to the input data type. */
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val dataTypeCheck = super.checkInputDataTypes()
-    if (dataTypeCheck.isSuccess) {
-      if (gapDuration <= 0) {
-        return TypeCheckFailure(s"The window duration ($gapDuration) must be greater than 0.")
-      }
-    }
-    dataTypeCheck
-  }
+  override def nullable: Boolean = false
 
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(timeColumn = newChild)
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(timeColumn = newChildren(0), gapDuration = newChildren(1))
 }
 
 object SessionWindow {
@@ -72,6 +90,7 @@ object SessionWindow {
       timeColumn: Expression,
       gapDuration: String): SessionWindow = {
     SessionWindow(timeColumn,
-      TimeWindow.getIntervalInMicroSeconds(gapDuration))
+      Literal(IntervalUtils.safeStringToInterval(UTF8String.fromString(gapDuration)),
+        CalendarIntervalType))
   }
 }

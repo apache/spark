@@ -131,9 +131,6 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
   test("SPARK-32870: Default expressions in FunctionRegistry should have their " +
     "usage, examples, since, and group filled") {
     val ignoreSet = Set(
-      // Explicitly inherits NonSQLExpression, and has no ExpressionDescription
-      "org.apache.spark.sql.catalyst.expressions.TimeWindow",
-      "org.apache.spark.sql.catalyst.expressions.SessionWindow",
       // Cast aliases do not need examples
       "org.apache.spark.sql.catalyst.expressions.Cast")
 
