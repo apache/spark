@@ -6732,15 +6732,19 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 if is_name_like_tuple(index) or is_name_like_value(index):
                     index = [index]
 
-                index_scols = internal.index_spark_columns
-                if len(index_scols) == 1:
-                    col = None
-                    for label in index:
-                        if col is None:
-                            col = index_scols[0] != SF.lit(label)
-                        else:
-                            col = col & (index_scols[0] != SF.lit(label))
-                    internal = internal.with_filter(col)
+                if internal.index_level == 1:
+                    index_sdf_col = "__index"
+                    index_sdf = default_session().createDataFrame(
+                        pd.DataFrame({index_sdf_col: index})
+                    )
+                    self_sdf = internal.spark_frame
+                    joined_sdf = self_sdf.join(
+                        other=F.broadcast(index_sdf),
+                        on=scol_for(self_sdf, SPARK_INDEX_NAME_FORMAT(0))
+                        == scol_for(index_sdf, index_sdf_col),
+                        how="anti",
+                    )
+                    internal = internal.with_new_sdf(joined_sdf)
                 else:
                     raise NotImplementedError(
                         "Drop rows of MultiIndex DataFrame is not supported yet"
@@ -6773,7 +6777,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     zip(*keep_columns_and_labels) if len(keep_columns_and_labels) > 0 else ([], [])
                 )
                 internal = internal.with_new_columns([self._psser_for(label) for label in labels])
-        return DataFrame(internal)
+            return DataFrame(internal)
 
     def _sort(
         self, by: List[Column], ascending: Union[bool, List[bool]], na_position: str
