@@ -2862,7 +2862,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3       NaN
         """
         result = self[item]
-        self._update_internal_frame(self.drop(item)._internal)
+        self._update_internal_frame(self.drop(columns=item)._internal)
         return result
 
     # TODO: add axis parameter can work when '1' or 'columns'
