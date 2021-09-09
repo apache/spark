@@ -1263,9 +1263,11 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.drop("x"), pdf.drop("x", axis=1))
         # Assert using a list for 'labels' works
         self.assert_eq(psdf.drop(["y", "z"], axis=1), pdf.drop(["y", "z"], axis=1))
+        self.assert_eq(psdf.drop(["x", "y", "z"], axis=1), pdf.drop(["x", "y", "z"], axis=1))
         # Assert using 'columns' instead of 'labels' produces the same results
         self.assert_eq(psdf.drop(columns="x"), pdf.drop(columns="x"))
         self.assert_eq(psdf.drop(columns=["y", "z"]), pdf.drop(columns=["y", "z"]))
+        self.assert_eq(psdf.drop(columns=["x", "y", "z"]), pdf.drop(columns=["x", "y", "z"]))
 
         # Assert 'labels' being used when both 'labels' and 'columns' are specified
         # TODO: should throw an error?
@@ -1279,9 +1281,20 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.drop(columns=1), pdf.drop(columns=1))
         self.assert_eq(psdf.drop(columns=(1, "x")), pdf.drop(columns=(1, "x")))
         self.assert_eq(psdf.drop(columns=[(1, "x"), 2]), pdf.drop(columns=[(1, "x"), 2]))
+        self.assert_eq(
+            psdf.drop(columns=[(1, "x"), (1, "y"), (2, "z")]),
+            pdf.drop(columns=[(1, "x"), (1, "y"), (2, "z")]),
+        )
 
         self.assertRaises(KeyError, lambda: psdf.drop(columns=3))
         self.assertRaises(KeyError, lambda: psdf.drop(columns=(1, "z")))
+
+        pdf.index = pd.MultiIndex.from_tuples([("i", 0), ("j", 1)])
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            psdf.drop(columns=[(1, "x"), (1, "y"), (2, "z")]),
+            pdf.drop(columns=[(1, "x"), (1, "y"), (2, "z")]),
+        )
 
         # non-string names
         pdf = pd.DataFrame({10: [1, 2], 20: [3, 4], 30: [5, 6]}, index=np.random.rand(2))
