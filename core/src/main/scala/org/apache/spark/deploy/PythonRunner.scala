@@ -99,6 +99,7 @@ object PythonRunner {
       val redirectOutput = new RedirectThreadAndCatchErrorMsg(
         process.getInputStream, System.out, "redirect output", "Traceback")
         redirectOutput.start()
+
       val exitCode = process.waitFor()
       if (exitCode != 0) {
         throw new SparkUserAppException(exitCode, Some(redirectOutput.errorMessage))
