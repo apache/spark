@@ -6733,19 +6733,18 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 if is_name_like_tuple(index) or is_name_like_value(index):
                     index = [index]
 
-                if internal.index_level == 1:
-                    internal = internal.resolved_copy
-                    self_index_column = self.index.to_series()
-                    self_index_type = self_index_column.spark.data_type
-                    cond = ~self_index_column.spark.column.isin(
-                        [SF.lit(label).cast(self_index_type) for label in index]
-                    )
-                    filtered_sdf = internal.spark_frame.filter(cond)
-                    internal = internal.with_new_sdf(filtered_sdf)
-                else:
-                    raise NotImplementedError(
-                        "Drop rows of MultiIndex DataFrame is not supported yet"
-                    )
+                if len(index) > 0:
+                    if internal.index_level == 1:
+                        internal = internal.resolved_copy
+                        self_index_type = self.index.to_series().spark.data_type
+                        cond = ~internal.index_spark_columns[0].isin(
+                            [SF.lit(label).cast(self_index_type) for label in index]
+                        )
+                        internal = internal.with_filter(cond)
+                    else:
+                        raise NotImplementedError(
+                            "Drop rows of MultiIndex DataFrame is not supported yet"
+                        )
             if columns is not None:
                 if is_name_like_tuple(columns):
                     columns = [columns]
@@ -6753,27 +6752,33 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     columns = [(columns,)]
                 else:
                     columns = [col if is_name_like_tuple(col) else (col,) for col in columns]
-                drop_column_labels = set(
-                    label
-                    for label in internal.column_labels
-                    for col in columns
-                    if label[: len(col)] == col
-                )
-                if len(drop_column_labels) == 0:
-                    raise KeyError(columns)
 
-                keep_columns_and_labels = [
-                    (column, label)
-                    for column, label in zip(
-                        self._internal.data_spark_column_names, self._internal.column_labels
+                if len(columns) > 0:
+                    drop_column_labels = set(
+                        label
+                        for label in internal.column_labels
+                        for col in columns
+                        if label[: len(col)] == col
                     )
-                    if label not in drop_column_labels
-                ]
+                    if len(drop_column_labels) == 0:
+                        raise KeyError(columns)
 
-                cols, labels = (
-                    zip(*keep_columns_and_labels) if len(keep_columns_and_labels) > 0 else ([], [])
-                )
-                internal = internal.with_new_columns([self._psser_for(label) for label in labels])
+                    keep_columns_and_labels = [
+                        (column, label)
+                        for column, label in zip(
+                            self._internal.data_spark_column_names, self._internal.column_labels
+                        )
+                        if label not in drop_column_labels
+                    ]
+
+                    cols, labels = (
+                        zip(*keep_columns_and_labels)
+                        if len(keep_columns_and_labels) > 0
+                        else ([], [])
+                    )
+                    internal = internal.with_new_columns(
+                        [self._psser_for(label) for label in labels]
+                    )
             return DataFrame(internal)
 
     def _sort(

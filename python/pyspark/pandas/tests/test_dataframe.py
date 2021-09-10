@@ -1269,6 +1269,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.drop(columns="x"), pdf.drop(columns="x"))
         self.assert_eq(psdf.drop(columns=["y", "z"]), pdf.drop(columns=["y", "z"]))
         self.assert_eq(psdf.drop(columns=["x", "y", "z"]), pdf.drop(columns=["x", "y", "z"]))
+        self.assert_eq(psdf.drop(columns=[]), pdf.drop(columns=[]))
 
         columns = pd.MultiIndex.from_tuples([(1, "x"), (1, "y"), (2, "z")])
         pdf.columns = columns
@@ -1319,6 +1320,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.drop(index="A"), pdf.drop(index="A"))
         self.assert_eq(psdf.drop(index=["A", "C"]), pdf.drop(index=["A", "C"]))
         self.assert_eq(psdf.drop(index=["A", "B", "C"]), pdf.drop(index=["A", "B", "C"]))
+        self.assert_eq(psdf.drop(index=[]), pdf.drop(index=[]))
 
         # Non-string names
         pdf.index = [10, 20, 30]
@@ -1347,6 +1349,18 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(
             psdf.drop(index=["A", "B", "C"], columns=["X", "Z"]),
             pdf.drop(index=["A", "B", "C"], columns=["X", "Z"]),
+        )
+        self.assert_eq(
+            psdf.drop(index=[], columns=["X", "Z"]),
+            pdf.drop(index=[], columns=["X", "Z"]),
+        )
+        self.assert_eq(
+            psdf.drop(index=["A", "B", "C"], columns=[]),
+            pdf.drop(index=["A", "B", "C"], columns=[]),
+        )
+        self.assert_eq(
+            psdf.drop(index=[], columns=[]),
+            pdf.drop(index=[], columns=[]),
         )
         self.assertRaises(
             ValueError,
