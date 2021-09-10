@@ -23,7 +23,7 @@ import org.apache.spark.annotation.Private
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
- * A wrap of [[OpenHashSet]] that can handle null, Double.NaN and Float.NaN.
+ * A wrap of [[OpenHashSet]] that can handle null, Double.NaN and Float.NaN w.r.t. the SQL semantic.
  */
 @Private
 class SQLOpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
@@ -36,31 +36,30 @@ class SQLOpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
 
   private val hashSet = new OpenHashSet[T](initialCapacity, loadFactor)
 
-  private var containsNull = false
-  private var containsDoubleNaN = false
-  private var containsFloatNaN = false
+  private var containNull = false
+  private var containNaN = false
+
+  def addNull(): Unit = {
+    containNull = true
+  }
+
+  def addNaN(): Unit = {
+    containNaN = true
+  }
 
   def add(k: T): Unit = {
-    if (k == null) {
-      containsNull = true
-    } else if (Double.NaN.equals(k)) {
-      containsDoubleNaN = true
-    } else if (Float.NaN.equals(k)) {
-      containsFloatNaN = true
-    } else {
-      hashSet.add(k)
-    }
+    hashSet.add(k)
   }
 
   def contains(k: T): Boolean = {
-    if (k == null) {
-      containsNull
-    } else if (Double.NaN.equals(k)) {
-      containsDoubleNaN
+    if (Double.NaN.equals(k)) {
+      containNaN
     } else if (Float.NaN.equals(k)) {
-      containsFloatNaN
+      containNaN
     } else {
       hashSet.contains(k)
     }
   }
+
+  def containsNull(): Boolean = containNull
 }

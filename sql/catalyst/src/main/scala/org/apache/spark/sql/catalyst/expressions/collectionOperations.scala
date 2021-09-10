@@ -3551,6 +3551,10 @@ object ArrayBinaryLike {
   def throwUnionLengthOverflowException(length: Int): Unit = {
     throw QueryExecutionErrors.unionArrayWithElementsExceedLimitError(length)
   }
+
+  def isNaN(value: Any): Boolean = {
+    Double.NaN.equals(value) || Float.NaN.equals(value)
+  }
 }
 
 
@@ -3581,14 +3585,25 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
         Seq(array1, array2).foreach { array =>
           var i = 0
           while (i < array.numElements()) {
+            if (array.isNullAt(i)) {
+              if (!hs.containsNull) {
+                hs.addNull
+                arrayBuffer += null
+              }
+            } else {
               val elem = array.get(i, elementType)
               if (!hs.contains(elem)) {
                 if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
                   ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
                 }
                 arrayBuffer += elem
-                hs.add(elem)
+                if (ArrayBinaryLike.isNaN(elem)) {
+                  hs.addNaN
+                } else {
+                  hs.add(elem)
+                }
               }
+            }
             i += 1
           }
         }
@@ -3654,22 +3669,39 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
 
-        val processArray =
+        def withArrayNullAssignment(body: String) =
+          if (dataType.asInstanceOf[ArrayType].containsNull) {
+            s"""
+               |if ($array.isNullAt($i)) {
+               |  if (!$hashSet.containsNull()) {
+               |    $nullElementIndex = $size;
+               |    $size++;
+               |    $hashSet.addNull();
+               |    $builder.$$plus$$eq($nullValueHolder);
+               |  }
+               |} else {
+               |  $body
+               |}
+             """.stripMargin
+          } else {
+            body
+          }
+
+        val processArray = withArrayNullAssignment(
           s"""
              |$jt $value = ${genGetValue(array, i)};
              |if (!$hashSet.contains($hsValueCast$value)) {
              |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
              |    break;
              |  }
-             |  $hashSet.add$hsPostFix($hsValueCast$value);
-             |  if ($array.isNullAt($i)) {
-             |    $nullElementIndex = $size - 1;
-             |    $builder.$$plus$$eq($nullValueHolder);
+             |  if (${ArrayBinaryLike.getClass.getName.stripSuffix("$")}.isNaN($value)) {
+             |   $hashSet.addNaN();
              |  } else {
-             |    $builder.$$plus$$eq($value);
+             |    $hashSet.add$hsPostFix($hsValueCast$value);
              |  }
+             |  $builder.$$plus$$eq($value);
              |}
-           """.stripMargin
+           """.stripMargin)
 
         s"""
            |$openHashSet $hashSet = new $openHashSet$hsPostFix($classTag);
