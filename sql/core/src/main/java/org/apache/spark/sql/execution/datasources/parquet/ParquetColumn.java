@@ -41,17 +41,17 @@ final class ParquetColumn {
   private final WritableColumnVector vector;
 
   /**
-   * repetition & definition levels
-   * these are allocated only for leaf columns; for non-leaf columns, they simply maintain
+   * Repetition & Definition levels
+   * These are allocated only for leaf columns; for non-leaf columns, they simply maintain
    * references to that of the former.
    */
   private WritableColumnVector repetitionLevels;
   private WritableColumnVector definitionLevels;
 
-  /** whether this column is primitive (i.e., leaf column) */
+  /** Whether this column is primitive (i.e., leaf column) */
   private final boolean isPrimitive;
 
-  /** reader for this column - only set if 'isPrimitive' is true */
+  /** Reader for this column - only set if 'isPrimitive' is true */
   private VectorizedColumnReader columnReader;
 
   ParquetColumn(
@@ -118,7 +118,7 @@ final class ParquetColumn {
   }
 
   /**
-   * Assemble this column and calculate collection offsets recursively.
+   * Assembles this column and calculate collection offsets recursively.
    * This is a no-op for primitive columns.
    */
   void assemble() {

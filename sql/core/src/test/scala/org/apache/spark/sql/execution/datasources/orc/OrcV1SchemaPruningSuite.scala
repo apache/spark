@@ -32,5 +32,4 @@ class OrcV1SchemaPruningSuite extends SchemaPruningSuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
-
 }
