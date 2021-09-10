@@ -50,7 +50,8 @@ public final class In extends Filter {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     In in = (In) o;
-    return Objects.equals(column, in.column) && Arrays.equals(values, in.values);
+    return Objects.equals(column, in.column) && values.length == in.values.length
+      && Arrays.asList(values).containsAll(Arrays.asList(in.values));
   }
 
   @Override
@@ -64,7 +65,7 @@ public final class In extends Filter {
   public String toString() {
     String res = Arrays.stream(values).limit((MAX_LEN_TO_PRINT)).map(Literal::describe)
       .collect(Collectors.joining(", "));
-    if(values.length > MAX_LEN_TO_PRINT) {
+    if (values.length > MAX_LEN_TO_PRINT) {
       res += "...";
     }
     return column.describe() + " IN (" + res + ")";

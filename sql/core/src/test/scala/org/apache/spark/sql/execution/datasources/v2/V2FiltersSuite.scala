@@ -109,8 +109,8 @@ class FiltersV2Suite extends SparkFunSuite {
       Array(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType),
         LiteralValue(3, IntegerType), LiteralValue(4, IntegerType)))
     val filter2 = new In(ref("a"),
-      Array(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType),
-        LiteralValue(3, IntegerType), LiteralValue(4, IntegerType)))
+      Array(LiteralValue(4, IntegerType), LiteralValue(2, IntegerType),
+        LiteralValue(3, IntegerType), LiteralValue(1, IntegerType)))
     assert(filter1.equals(filter2))
     assert(filter1.references.map(_.describe()).toSeq == Seq("a"))
     assert(filter1.describe.equals("a IN (1, 2, 3, 4)"))
