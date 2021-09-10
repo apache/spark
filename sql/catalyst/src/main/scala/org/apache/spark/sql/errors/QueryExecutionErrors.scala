@@ -233,7 +233,7 @@ object QueryExecutionErrors {
   }
 
   def dataTypeUnexpectedError(dataType: DataType): Throwable = {
-    new SparkUnsupportedOperationException("UNEXPECTED_DATATYPE", Array(dataType.catalogString))
+    new SparkUnsupportedOperationException("UNEXPECTED_TYPE", Array(dataType.catalogString))
   }
 
   def typeUnsupportedError(dataType: DataType): Throwable = {

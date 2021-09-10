@@ -186,10 +186,6 @@
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
   },
-  "UNEXPECTED_DATATYPE" : {
-    "message" : [ "Unexpected data type %s" ],
-    "sqlState" : "42000"
-  },
   "UNEXPECTED_TYPE" : {
     "message" : [ "Unexpected type %s" ],
     "sqlState" : "42000"
