@@ -178,10 +178,11 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
   def getPos(k: T): Int = {
     var pos = hashcode(hasher.hash(k)) & _mask
     var delta = 1
+    var value: T = null.asInstanceOf[T]
     while (true) {
       if (!_bitset.get(pos)) {
         return INVALID_POS
-      } else if (k == _data(pos)) {
+      } else if ((value = _data(pos)) == k || value.equals(k)) {
         return pos
       } else {
         // quadratic probing with values increase by 1, 2, 3, ...

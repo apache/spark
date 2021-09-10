@@ -2291,4 +2291,10 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       }
     }
   }
+
+  test("SPARK-36702: array_union should not produce duplicated result") {
+    val a1 = Literal(Seq(Double.NaN, Double.NaN), ArrayType(DoubleType))
+    val a2 = Literal(Seq.empty[Double], ArrayType(DoubleType))
+    checkEvaluation(ArrayUnion(a1, a2), Seq(Double.NaN))
+  }
 }

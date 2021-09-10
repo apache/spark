@@ -269,4 +269,13 @@ class OpenHashSetSuite extends SparkFunSuite with Matchers {
       assert(pos1 == pos2)
     }
   }
+
+  test("SPARK-36702: support Double.NaN") {
+    val set = new OpenHashSet[Double]()
+    assert(set.size == 0)
+    assert(!set.contains(Double.NaN))
+    set.add(Double.NaN)
+    assert(set.size == 1)
+    assert(set.contains(Double.NaN))
+  }
 }
