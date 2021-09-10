@@ -3,7 +3,7 @@
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
   },
-  "CONCURRENT_QUERY_ERROR" : {
+  "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
   "DIVIDE_BY_ZERO" : {
