@@ -623,7 +623,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         """
           |(2) Filter [codegen id : 2]
           |Input [1]: [id#xL]
-          |Condition : (id#xL > Subquery subquery#x, [id=#x])
+          |Condition : ((id#xL > Subquery subquery#x, [id=#x]) AND isnotnull((id#xL % 10)))
           |""".stripMargin,
         """
           |(6) BroadcastQueryStage

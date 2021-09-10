@@ -1185,7 +1185,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       // negative hand-written left anti join
       // not match pattern Or(EqualTo(a=b), IsNull(EqualTo(a=b))
       assertJoin((
-        "select * from testData2 left anti join testData3 ON testData2.a = testData3.a or " +
+        "select * from testData2 left anti join testData3 ON testData2.a = testData3.b or " +
           "isnull(testData2.b = testData3.b)",
         classOf[BroadcastNestedLoopJoinExec]))
     }

@@ -848,9 +848,13 @@ object NullPropagation extends Rule[LogicalPlan] {
       // E.g. IsNotNull(a === b) == And(IsNotNull(a), IsNotNull(b))
       // The query planner uses `ExtractValue` resolve the columns.
       // E.g. the planner may resolve column `a` to `a#123`, then IsNull(a#123) cannot be optimized
-      case IsNull(e: NullIntolerant) if !e.isInstanceOf[ExtractValue] && e.children.nonEmpty =>
+      // [SPARK-36665] only UnaryExpression for now as applying this optimization is too disruptive
+      // for some tests(e.g. [SPARK-32290]). TODO remove e.isInstanceOf[UnaryExpression]
+      case IsNull(e: NullIntolerant) if e.isInstanceOf[UnaryExpression] &&
+          !e.isInstanceOf[ExtractValue] && e.children.nonEmpty =>
         e.children.map(IsNull(_): Expression).reduceLeft(Or)
-      case IsNotNull(e: NullIntolerant) if !e.isInstanceOf[ExtractValue] && e.children.nonEmpty =>
+      case IsNotNull(e: NullIntolerant) if e.isInstanceOf[UnaryExpression] &&
+        !e.isInstanceOf[ExtractValue] && e.children.nonEmpty =>
         e.children.map(IsNotNull(_): Expression).reduceLeft(And)
     }
   }
