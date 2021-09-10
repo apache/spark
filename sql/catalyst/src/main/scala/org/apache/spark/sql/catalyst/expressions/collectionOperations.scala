@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SQLOpenHashSet
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
@@ -3575,17 +3576,11 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
     if (TypeUtils.typeWithProperEquals(elementType)) {
       (array1, array2) =>
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-        val hs = new OpenHashSet[Any]
+        val hs = new SQLOpenHashSet[Any]
         var foundNullElement = false
         Seq(array1, array2).foreach { array =>
           var i = 0
           while (i < array.numElements()) {
-            if (array.isNullAt(i)) {
-              if (!foundNullElement) {
-                arrayBuffer += null
-                foundNullElement = true
-              }
-            } else {
               val elem = array.get(i, elementType)
               if (!hs.contains(elem)) {
                 if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
@@ -3594,7 +3589,6 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
                 arrayBuffer += elem
                 hs.add(elem)
               }
-            }
             i += 1
           }
         }
@@ -3649,37 +3643,18 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
       val ptName = CodeGenerator.primitiveTypeName(jt)
 
       nullSafeCodeGen(ctx, ev, (array1, array2) => {
-        val foundNullElement = ctx.freshName("foundNullElement")
         val nullElementIndex = ctx.freshName("nullElementIndex")
         val builder = ctx.freshName("builder")
         val array = ctx.freshName("array")
         val arrays = ctx.freshName("arrays")
         val arrayDataIdx = ctx.freshName("arrayDataIdx")
-        val openHashSet = classOf[OpenHashSet[_]].getName
+        val openHashSet = classOf[SQLOpenHashSet[_]].getName
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
         val hashSet = ctx.freshName("hashSet")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
 
-        def withArrayNullAssignment(body: String) =
-          if (dataType.asInstanceOf[ArrayType].containsNull) {
-            s"""
-               |if ($array.isNullAt($i)) {
-               |  if (!$foundNullElement) {
-               |    $nullElementIndex = $size;
-               |    $foundNullElement = true;
-               |    $size++;
-               |    $builder.$$plus$$eq($nullValueHolder);
-               |  }
-               |} else {
-               |  $body
-               |}
-             """.stripMargin
-          } else {
-            body
-          }
-
-        val processArray = withArrayNullAssignment(
+        val processArray =
           s"""
              |$jt $value = ${genGetValue(array, i)};
              |if (!$hashSet.contains($hsValueCast$value)) {
@@ -3687,23 +3662,18 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
              |    break;
              |  }
              |  $hashSet.add$hsPostFix($hsValueCast$value);
-             |  $builder.$$plus$$eq($value);
+             |  if ($array.isNullAt($i)) {
+             |    $nullElementIndex = $size - 1;
+             |    $builder.$$plus$$eq($nullValueHolder);
+             |  } else {
+             |    $builder.$$plus$$eq($value);
+             |  }
              |}
-           """.stripMargin)
-
-        // Only need to track null element index when result array's element is nullable.
-        val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
-          s"""
-             |boolean $foundNullElement = false;
-             |int $nullElementIndex = -1;
            """.stripMargin
-        } else {
-          ""
-        }
 
         s"""
            |$openHashSet $hashSet = new $openHashSet$hsPostFix($classTag);
-           |$declareNullTrackVariables
+           |int $nullElementIndex = -1;
            |int $size = 0;
            |$arrayBuilderClass $builder = new $arrayBuilderClass();
            |ArrayData[] $arrays = new ArrayData[]{$array1, $array2};
