@@ -378,9 +378,10 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
    */
   def unapply(join: Join): Option[ReturnType] = join match {
     case Join(left, right, LeftAnti,
-      Some(Or(e @ EqualTo(leftAttr: Expression, rightAttr: Expression), IsNull(e2))), _)
+      Some(Or(e @ EqualTo(leftAttr: Expression, rightAttr: Expression),
+        IsNull(e2 @ EqualTo(_, _)))), _)
         if SQLConf.get.optimizeNullAwareAntiJoin &&
-          (e.semanticEquals(e2) || e.left.semanticEquals(e2) || e.right.semanticEquals(e2)) =>
+          e.semanticEquals(e2) =>
       if (canEvaluate(leftAttr, left) && canEvaluate(rightAttr, right)) {
         Some(Seq(leftAttr), Seq(rightAttr))
       } else if (canEvaluate(leftAttr, right) && canEvaluate(rightAttr, left)) {
@@ -388,6 +389,12 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
       } else {
         None
       }
+    case Join(left, right, LeftAnti, Some(Or(e: EqualTo, IsNull(e2))), hint)
+      if e.left.semanticEquals(e2) =>
+      unapply(Join(left, right, LeftAnti, Some(Or(e, IsNull(EqualTo(e2, e.right)))), hint))
+    case Join(left, right, LeftAnti, Some(Or(e: EqualTo, IsNull(e2))), hint)
+      if e.right.semanticEquals(e2) =>
+      unapply(Join(left, right, LeftAnti, Some(Or(e, IsNull(EqualTo(e.left, e2)))), hint))
     case Join(left, right, LeftAnti, Some(Or(e: EqualTo, Or(IsNull(e2), IsNull(e3)))), hint) =>
       unapply(Join(left, right, LeftAnti, Some(Or(e, IsNull(EqualTo(e2, e3)))), hint))
     case _ => None

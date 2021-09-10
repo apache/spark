@@ -457,7 +457,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case Not(IsNull(e)) => IsNotNull(e)
       case Not(IsNotNull(e)) => IsNull(e)
 
-      // Using (Not(a) === b) == (a === Not(b)), (Not(a) <=> b) == (a <=> Not(b)) rules
+      // Move `Not` from one side of `EqualTo`/`EqualNullSafe` to the other side if it's beneficial.
       // E.g. `EqualTo(Not(a), b)` where `b = Not(c)`, it will become
       // `EqualTo(a, Not(b))` => `EqualTo(a, Not(Not(c)))` => `EqualTo(a, c)`
       // In addition, `if canSimplifyNot(b)` checks if the optimization can converge
@@ -467,7 +467,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case EqualNullSafe(Not(a), b) if canSimplifyNot(b) => EqualNullSafe(a, Not(b))
       case EqualNullSafe(a, Not(b)) if canSimplifyNot(a) => EqualNullSafe(Not(a), b)
 
-      // Using (a =!= b) == (a === Not(b)), Not(a <=> b) == (a <=> Not(b)) rules
+      // Push `Not` to one side of `EqualTo`/`EqualNullSafe` if it's beneficial.
       // E.g. Not(EqualTo(x, false)) => EqualTo(x, true)
       case Not(EqualTo(a, b)) if canSimplifyNot(b) => EqualTo(a, Not(b))
       case Not(EqualTo(a, b)) if canSimplifyNot(a) => EqualTo(Not(a), b)
@@ -846,6 +846,8 @@ object NullPropagation extends Rule[LogicalPlan] {
       // Using IsNull(e(inputs)) == IsNull(input1) or IsNull(input2) ... rules
       // E.g. IsNull(Not(null)) == IsNull(null)
       // E.g. IsNotNull(a === b) == And(IsNotNull(a), IsNotNull(b))
+      // The query planner uses `ExtractValue` resolve the columns.
+      // E.g. the planner may resolve column `a` to `a#123`, then IsNull(a#123) cannot be optimized
       case IsNull(e: NullIntolerant) if !e.isInstanceOf[ExtractValue] && e.children.nonEmpty =>
         e.children.map(IsNull(_): Expression).reduceLeft(Or)
       case IsNotNull(e: NullIntolerant) if !e.isInstanceOf[ExtractValue] && e.children.nonEmpty =>
