@@ -3622,6 +3622,19 @@ setMethod("ntile",
           })
 
 #' @details
+#' \code{octet_length}:  Calculates the byte length for the specified string column.
+#'
+#' @rdname column_string_functions
+#' @aliases octet_length octet_length,Column-method
+#' @note length since 3.3.0
+setMethod("octet_length",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "octet_length", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{percent_rank}: Returns the relative rank (i.e. percentile) of rows within a window
 #' partition.
 #' This is computed by: (rank of row in its partition - 1) / (number of rows in the partition - 1).
