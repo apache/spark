@@ -3703,9 +3703,18 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
              |}
            """.stripMargin)
 
+        // Only need to track null element index when result array's element is nullable.
+        val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
+          s"""
+             |int $nullElementIndex = -1;
+           """.stripMargin
+        } else {
+          ""
+        }
+
         s"""
            |$openHashSet $hashSet = new $openHashSet$hsPostFix($classTag);
-           |int $nullElementIndex = -1;
+           |$declareNullTrackVariables
            |int $size = 0;
            |$arrayBuilderClass $builder = new $arrayBuilderClass();
            |ArrayData[] $arrays = new ArrayData[]{$array1, $array2};
