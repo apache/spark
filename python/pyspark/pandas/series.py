@@ -48,7 +48,6 @@ import pandas as pd
 from pandas.core.accessor import CachedAccessor
 from pandas.io.formats.printing import pprint_thing
 from pandas.api.types import is_list_like, is_hashable
-from pandas.api.extensions import ExtensionDtype
 from pandas.tseries.frequencies import DateOffset
 from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
@@ -109,6 +108,7 @@ from pyspark.pandas.typedef import (
     spark_type_to_pandas_dtype,
     ScalarType,
     SeriesType,
+    create_type_for_series_type,
 )
 
 if TYPE_CHECKING:
@@ -343,18 +343,6 @@ dtype: float64
 str_type = str
 
 
-def _create_type_for_series_type(param: Any) -> Type[SeriesType]:
-    from pyspark.pandas.typedef import NameTypeHolder
-
-    if isinstance(param, ExtensionDtype):
-        new_class = type("NameType", (NameTypeHolder,), {})  # type: Type[NameTypeHolder]
-        new_class.tpe = param
-    else:
-        new_class = param.type if isinstance(param, np.dtype) else param
-
-    return SeriesType[new_class]  # type: ignore
-
-
 if (3, 5) <= sys.version_info < (3, 7) and __name__ != "__main__":
     from typing import GenericMeta  # type: ignore
 
@@ -363,7 +351,7 @@ if (3, 5) <= sys.version_info < (3, 7) and __name__ != "__main__":
     @no_type_check
     def new_getitem(self, params):
         if hasattr(self, "is_series"):
-            return old_getitem(self, _create_type_for_series_type(params))
+            return old_getitem(self, create_type_for_series_type(params))
         else:
             return old_getitem(self, params)
 
@@ -6365,7 +6353,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     if sys.version_info >= (3, 7):
         # In order to support the type hints such as Series[...]. See DataFrame.__class_getitem__.
         def __class_getitem__(cls, params: Any) -> Type[SeriesType]:
-            return _create_type_for_series_type(params)
+            return create_type_for_series_type(params)
 
     elif (3, 5) <= sys.version_info < (3, 7):
         # The implementation is in its metaclass so this flag is needed to distinguish

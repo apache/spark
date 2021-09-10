@@ -20,6 +20,7 @@ Utilities to deal with types. This is mostly focused on python3.
 """
 import datetime
 import decimal
+from collections import Iterable
 from inspect import getfullargspec, isclass
 from typing import (  # noqa: F401
     Any,
@@ -29,11 +30,13 @@ from typing import (  # noqa: F401
     Optional,
     Tuple,
     Union,
+    Type,
 )
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype, pandas_dtype
+from pandas.api.extensions import ExtensionDtype
 
 try:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
@@ -84,10 +87,23 @@ class SeriesType(Generic[T]):
 
 class DataFrameType(object):
     def __init__(
-        self, dtypes: List[Dtype], spark_types: List[types.DataType], names: List[Optional[str]]
+        self,
+        index_name: Optional[str],
+        index_dtype: Dtype,
+        data_dtypes: List[Dtype],
+        data_names: List[Optional[str]],
+        spark_types: List[types.DataType],
     ):
         from pyspark.pandas.internal import InternalField
         from pyspark.pandas.utils import name_like_string
+
+        names = [index_name] + data_names if index_dtype is not None else data_names
+        dtypes = [index_dtype] + data_dtypes if index_dtype is not None else data_dtypes
+
+        self.index_name = index_name
+        self.index_dtype = index_dtype
+        self.data_dtypes = data_dtypes
+        self.data_names = data_names
 
         self.fields = [
             InternalField(
@@ -129,6 +145,11 @@ class UnknownType(object):
 
     def __repr__(self) -> str:
         return "UnknownType[{}]".format(self.tpe)
+
+
+class IndexNameTypeHolder(object):
+    name = None
+    tpe = None
 
 
 class NameTypeHolder(object):
@@ -481,11 +502,62 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     CategoricalDtype(categories=[3, 4, 5], ordered=False)
     >>> inferred.spark_type
     LongType
+
+    >>> def func() -> ps.DataFrame[int, [int, int]]:
+    ...     pass
+    >>> inferred = infer_return_type(func)
+    >>> inferred.dtypes
+    [dtype('int64'), dtype('int64'), dtype('int64')]
+    >>> inferred.index_dtype
+    dtype('int64')
+    >>> inferred.index_name is None
+    True
+    >>> print(inferred.spark_type.simpleString())
+    struct<c0:bigint,c1:bigint,c2:bigint>
+
+    >>> def func() -> ps.DataFrame[pdf.index.dtype, pdf.dtypes]:
+    ...     pass
+    >>> inferred = infer_return_type(func)
+    >>> inferred.index_dtype
+    dtype('int64')
+    >>> inferred.index_name is None
+    True
+    >>> inferred.dtypes
+    [dtype('int64'), dtype('int64'), CategoricalDtype(categories=[3, 4, 5], ordered=False)]
+    >>> print(inferred.spark_type.simpleString())
+    struct<c0:bigint,c1:bigint,c2:bigint>
+
+    >>> def func() -> ps.DataFrame[
+    ...     ("index", CategoricalDtype(categories=[3, 4, 5], ordered=False)),
+    ...     [("id", int), ("A", int)]]:
+    ...     pass
+    >>> inferred = infer_return_type(func)
+    >>> inferred.index_dtype
+    CategoricalDtype(categories=[3, 4, 5], ordered=False)
+    >>> inferred.index_name
+    'index'
+    >>> inferred.dtypes
+    [CategoricalDtype(categories=[3, 4, 5], ordered=False), dtype('int64'), dtype('int64')]
+    >>> print(inferred.spark_type.simpleString())
+    struct<index:bigint,id:bigint,A:bigint>
+
+    >>> def func() -> ps.DataFrame[
+    ...         (pdf.index.name, pdf.index.dtype), zip(pdf.columns, pdf.dtypes)]:
+    ...     pass
+    >>> inferred = infer_return_type(func)
+    >>> inferred.index_dtype
+    dtype('int64')
+    >>> inferred.index_name is None
+    True
+    >>> inferred.dtypes
+    [dtype('int64'), dtype('int64'), CategoricalDtype(categories=[3, 4, 5], ordered=False)]
+    >>> print(inferred.spark_type.simpleString())
+    struct<c0:bigint,a:bigint,b:bigint>
     """
     # We should re-import to make sure the class 'SeriesType' is not treated as a class
     # within this module locally. See Series.__class_getitem__ which imports this class
     # canonically.
-    from pyspark.pandas.typedef import SeriesType, NameTypeHolder
+    from pyspark.pandas.typedef import SeriesType, NameTypeHolder, IndexNameTypeHolder
 
     spec = getfullargspec(f)
     tpe = spec.annotations.get("return", None)
@@ -518,24 +590,198 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
             parameters = getattr(tuple_type, "__tuple_params__")
         else:
             parameters = getattr(tuple_type, "__args__")
-        dtypes, spark_types = zip(
+
+        index_parameters = [p for p in parameters if issubclass(p, IndexNameTypeHolder)]
+        assert len(index_parameters) <= 1
+        data_parameters = [p for p in parameters if p not in index_parameters]
+
+        index_name = index_parameters[0].name if len(index_parameters) == 1 else None
+        index_dtype, index_spark_type = (
+            pandas_on_spark_type(index_parameters[0].tpe)
+            if len(index_parameters) == 1
+            else (None, None)
+        )
+
+        data_dtypes, data_spark_types = zip(
             *(
                 pandas_on_spark_type(p.tpe)
                 if isclass(p) and issubclass(p, NameTypeHolder)
                 else pandas_on_spark_type(p)
-                for p in parameters
+                for p in data_parameters
             )
         )
-        names = [
-            p.name if isclass(p) and issubclass(p, NameTypeHolder) else None for p in parameters
+        data_names = [
+            p.name if isclass(p) and issubclass(p, NameTypeHolder) else None
+            for p in data_parameters
         ]
-        return DataFrameType(list(dtypes), list(spark_types), names)
+        spark_types = (
+            [index_spark_type] + list(data_spark_types)
+            if index_spark_type is not None
+            else list(data_spark_types)
+        )
+        return DataFrameType(
+            index_name=index_name,
+            index_dtype=index_dtype,
+            data_dtypes=list(data_dtypes),
+            data_names=data_names,
+            spark_types=spark_types,
+        )
 
     types = pandas_on_spark_type(tpe)
     if types is None:
         return UnknownType(tpe)
     else:
         return ScalarType(*types)
+
+
+# TODO: once pandas exposes a typing module like numpy.typing, we should deprecate
+#   this logic and migrate to it with implementing the typing module in pandas API on Spark.
+
+
+def create_type_for_series_type(param: Any) -> Type[SeriesType]:
+    """
+    Supported syntax:
+
+    >>> str(pd.Series[float]).endswith("SeriesType[float]")
+    True
+    """
+    from pyspark.pandas.typedef import NameTypeHolder
+
+    if isinstance(param, ExtensionDtype):
+        new_class = type("NameType", (NameTypeHolder,), {})  # type: Type[NameTypeHolder]
+        new_class.tpe = param
+    else:
+        new_class = param.type if isinstance(param, np.dtype) else param
+
+    return SeriesType[new_class]  # type: ignore
+
+
+# TODO: Remove this variadic-generic hack by tuple once ww drop Python up to 3.9.
+#   See also PEP 646. One problem is that pandas doesn't inherits Generic[T]
+#   so we might have to leave this hack only for monkey-patching pandas DataFrame.
+def create_tuple_for_frame_type(params: Any) -> object:
+    """
+    This is a workaround to support variadic generic in DataFrame.
+
+    See https://github.com/python/typing/issues/193
+    we always wraps the given type hints by a tuple to mimic the variadic generic.
+
+    Supported syntax:
+
+    >>> import pandas as pd
+    >>> pdf = pd.DataFrame({'a': range(1)})
+
+    Typing data columns only:
+
+        >>> pd.DataFrame[float, float]
+        typing.Tuple[float, float]
+        >>> pd.DataFrame[pdf.dtypes]
+        typing.Tuple[numpy.int64]
+        >>> pd.DataFrame["id": int, "A": int]  # doctest: +ELLIPSIS
+        typing.Tuple[...NameType, ...NameType]
+        >>> pd.DataFrame[zip(pdf.columns, pdf.dtypes)]  # doctest: +ELLIPSIS
+        typing.Tuple[...NameType]
+
+    Typing data columns with an index:
+
+        >>> pd.DataFrame[int, [int, int]]  # doctest: +ELLIPSIS
+        typing.Tuple[...IndexNameType, int, int]
+        >>> pd.DataFrame[pdf.index.dtype, pdf.dtypes]  # doctest: +ELLIPSIS
+        typing.Tuple[...IndexNameType, numpy.int64]
+        >>> pd.DataFrame[("index", int), [("id", int), ("A", int)]]  # doctest: +ELLIPSIS
+        typing.Tuple[...IndexNameType, ...NameType, ...NameType]
+        >>> pd.DataFrame[(pdf.index.name, pdf.index.dtype), zip(pdf.columns, pdf.dtypes)]
+        ... # doctest: +ELLIPSIS
+        typing.Tuple[...IndexNameType, ...NameType]
+    """
+    return Tuple[extract_types(params)]
+
+
+# TODO(SPARK-36708): numpy.typing (numpy 1.21+) support for nested types.
+def extract_types(params: Any) -> Tuple:
+    if not isinstance(params, Iterable):
+        params = (params,)
+
+    if isinstance(params, zip):  # type: ignore
+        # Example:
+        #   DataFrame[zip(pdf.columns, pdf.dtypes)]
+        params = tuple(slice(name, tpe) for name, tpe in params)  # type: ignore
+
+    if all(
+        isinstance(param, slice)
+        and param.start is not None
+        and param.step is None
+        and param.stop is not None
+        for param in params
+    ):
+        # Example:
+        #   DataFrame["id": int, "A": int]
+        for param in params:
+            if isinstance(param.start, str) and param.step is not None:
+                raise TypeError(
+                    "Type hints should be specified as "
+                    "DataFrame['name': type]; however, got %s" % param
+                )
+
+        new_params = []
+        for param in params:
+            new_param = type("NameType", (NameTypeHolder,), {})  # type: Type[NameTypeHolder]
+            new_param.name = param.start
+            # When the given argument is a numpy's dtype instance.
+            new_param.tpe = param.stop.type if isinstance(param.stop, np.dtype) else param.stop
+            new_params.append(new_param)
+
+        return tuple(new_params)
+    elif len(params) == 2 and isinstance(params[1], (zip, list, pd.Series)):
+        # Example:
+        #   DataFrame[int, [int, int]]
+        #   DataFrame[pdf.index.dtype, pdf.dtypes]
+        #   DataFrame[("index", int), [("id", int), ("A", int)]]
+        #   DataFrame[(pdf.index.name, pdf.index.dtype), zip(pdf.columns, pdf.dtypes)]
+
+        index_param = params[0]
+        index_type = type(
+            "IndexNameType", (IndexNameTypeHolder,), {}
+        )  # type: Type[IndexNameTypeHolder]
+        if isinstance(index_param, tuple):
+            if len(index_param) != 2:
+                raise TypeError(
+                    "Type hints for index should be specified as "
+                    "DataFrame[('name', type), ...]; however, got %s" % index_param
+                )
+            name, tpe = index_param
+        else:
+            name, tpe = None, index_param
+
+        index_type.name = name
+        if isinstance(tpe, ExtensionDtype):
+            index_type.tpe = tpe
+        else:
+            index_type.tpe = tpe.type if isinstance(tpe, np.dtype) else tpe
+
+        data_types = params[1]
+        if (
+            isinstance(data_types, list)
+            and len(data_types) > 1
+            and isinstance(data_types[0], tuple)
+        ):  # type: ignore
+            # Example:
+            #   DataFrame[("index", int), [("id", int), ("A", int)]]
+            data_types = zip((name for name, _ in data_types), (tpe for _, tpe in data_types))
+        return (index_type,) + extract_types(data_types)
+    else:
+        # Exaxmples:
+        #   DataFrame[float, float]
+        #   DataFrame[pdf.dtypes]
+        new_types = []
+        for param in params:
+            if isinstance(param, ExtensionDtype):
+                new_type = type("NameType", (NameTypeHolder,), {})  # type: Type[NameTypeHolder]
+                new_type.tpe = param
+                new_types.append(new_type)
+            else:
+                new_types.append(param.type if isinstance(param, np.dtype) else param)
+        return tuple(new_types)
 
 
 def _test() -> None:
