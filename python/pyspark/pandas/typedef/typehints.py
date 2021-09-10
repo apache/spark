@@ -699,13 +699,16 @@ def create_tuple_for_frame_type(params: Any) -> object:
 
 # TODO(SPARK-36708): numpy.typing (numpy 1.21+) support for nested types.
 def extract_types(params: Any) -> Tuple:
-    if not isinstance(params, Iterable):
-        params = (params,)
-
+    origin = params
     if isinstance(params, zip):  # type: ignore
         # Example:
         #   DataFrame[zip(pdf.columns, pdf.dtypes)]
         params = tuple(slice(name, tpe) for name, tpe in params)  # type: ignore
+
+    if isinstance(params, Iterable):
+        params = tuple(params)
+    else:
+        params = (params,)
 
     if all(
         isinstance(param, slice)
@@ -716,13 +719,6 @@ def extract_types(params: Any) -> Tuple:
     ):
         # Example:
         #   DataFrame["id": int, "A": int]
-        for param in params:
-            if isinstance(param.start, str) and param.step is not None:
-                raise TypeError(
-                    "Type hints should be specified as "
-                    "DataFrame['name': type]; however, got %s" % param
-                )
-
         new_params = []
         for param in params:
             new_param = type("NameType", (NameTypeHolder,), {})  # type: Type[NameTypeHolder]
@@ -769,7 +765,7 @@ def extract_types(params: Any) -> Tuple:
             #   DataFrame[("index", int), [("id", int), ("A", int)]]
             data_types = zip((name for name, _ in data_types), (tpe for _, tpe in data_types))
         return (index_type,) + extract_types(data_types)
-    else:
+    elif all(not isinstance(param, slice) and not isinstance(param, Iterable) for param in params):
         # Exaxmples:
         #   DataFrame[float, float]
         #   DataFrame[pdf.dtypes]
@@ -782,6 +778,19 @@ def extract_types(params: Any) -> Tuple:
             else:
                 new_types.append(param.type if isinstance(param, np.dtype) else param)
         return tuple(new_types)
+    else:
+        raise TypeError(
+            """Type hints should be specified as one of:
+  - DataFrame[type, type, ...]
+  - DataFrame[name: type, name: type, ...]
+  - DataFrame[dtypes instance]
+  - DataFrame[zip(names, types)]
+  - DataFrame[index_type, [type, ...]]
+  - DataFrame[(index_name, index_type), [(name, type), ...]]
+  - DataFrame[dtype instance, dtypes instance]
+  - DataFrame[(index_name, index_type), zip(names, types)]\n"""
+            + "However, got %s." % str(origin)
+        )
 
 
 def _test() -> None:
