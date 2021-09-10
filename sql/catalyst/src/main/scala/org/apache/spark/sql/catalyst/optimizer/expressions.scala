@@ -451,6 +451,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
  * 1) Replace '<=>' with 'true' literal.
  * 2) Replace '=', '<=', and '>=' with 'true' literal if both operands are non-nullable.
  * 3) Replace '<' and '>' with 'false' literal if both operands are non-nullable.
+ * 4) Unwrap '=', '<=>' if one side is a boolean literal
  */
 object SimplifyBinaryComparison
   extends Rule[LogicalPlan] with PredicateHelper with ConstraintHelper {
@@ -488,6 +489,20 @@ object SimplifyBinaryComparison
         // False with inequality
         case a GreaterThan b if canSimplifyComparison(a, b, notNullExpressions) => FalseLiteral
         case a LessThan b if canSimplifyComparison(a, b, notNullExpressions) => FalseLiteral
+
+        // One side is Literal
+        case a EqualTo TrueLiteral if a.dataType.isInstanceOf[BooleanType] => a
+        case TrueLiteral EqualTo b if b.dataType.isInstanceOf[BooleanType] => b
+        case a EqualTo FalseLiteral if a.dataType.isInstanceOf[BooleanType] => Not(a)
+        case FalseLiteral EqualTo b if b.dataType.isInstanceOf[BooleanType] => Not(b)
+        case a EqualNullSafe TrueLiteral if a.dataType.isInstanceOf[BooleanType] =>
+          And(a, IsNotNull(a))
+        case TrueLiteral EqualNullSafe b if b.dataType.isInstanceOf[BooleanType] =>
+          And(b, IsNotNull(b))
+        case a EqualNullSafe FalseLiteral if a.dataType.isInstanceOf[BooleanType] =>
+          And(Not(a), IsNotNull(a))
+        case FalseLiteral EqualNullSafe b if b.dataType.isInstanceOf[BooleanType] =>
+          And(Not(b), IsNotNull(b))
       }
   }
 }
