@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, StructField, StructType}
 
 class InferFiltersFromGenerateSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -111,4 +112,23 @@ class InferFiltersFromGenerateSuite extends PlanTest {
        comparePlans(optimized, originalQuery)
      }
    }
+
+  test("SPARK-36715: infer filters from UDF") {
+    Seq(Explode(_), PosExplode(_)).foreach { f =>
+      val udf = ScalaUDF(
+        (i: Int) => (0 until i).toArray,
+        ArrayType(IntegerType), Literal(8) :: Nil,
+        Option(ExpressionEncoder[Int]().resolveAndBind()) :: Nil)
+      val generator = f(udf)
+
+      val originalQuery = OneRowRelation().generate(generator).analyze
+      val optimized = OptimizeInferAndConstantFold.execute(originalQuery)
+      val correctAnswer = OneRowRelation()
+        .where(IsNotNull(udf) && Size(udf) > 0)
+        .generate(generator)
+        .analyze
+
+      comparePlans(optimized, correctAnswer)
+    }
+  }
 }
