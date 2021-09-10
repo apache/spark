@@ -843,14 +843,12 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e: NullIntolerant if e.children.exists(isNullLiteral) =>
         Literal.create(null, e.dataType)
 
-      // Using IsNull(e(inputs)) == IsNull(input1) or IsNull(input2) ... rules
+      // [SPARK-36665] Unwrap inside of IsNull/IsNotNull if the inside is NullIntolerant
       // E.g. IsNull(Not(null)) == IsNull(null)
-      // E.g. IsNotNull(a === b) == And(IsNotNull(a), IsNotNull(b))
-      // The query planner uses `ExtractValue` resolve the columns.
+      // Cannot apply to `ExtractValue` as the query planner uses the trait to resolve the columns.
       // E.g. the planner may resolve column `a` to `a#123`, then IsNull(a#123) cannot be optimized
-      // [SPARK-36665] UnaryExpression only for now as applying this optimization to other
-      // expressions is too disruptive for some tests (e.g. [SPARK-32290].)
-      // TODO remove e.isInstanceOf[UnaryExpression]
+      // UnaryExpression only for now as applying this optimization to other expressions is too
+      // disruptive for some tests (e.g. [SPARK-32290].) TODO remove e.isInstanceOf[UnaryExpression]
       case IsNull(e: NullIntolerant) if e.isInstanceOf[UnaryExpression] &&
         !e.isInstanceOf[ExtractValue] && e.children.nonEmpty =>
         e.children.map(IsNull(_): Expression).reduceLeft(Or)
