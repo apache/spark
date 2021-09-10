@@ -80,8 +80,9 @@ public final class Platform {
           // See comment below for more context
           constructor = null;
           cleanerField = null;
+        } else {
+          throw re;
         }
-        throw re;
       }
       // Have to set these values no matter what:
       DBB_CONSTRUCTOR = constructor;
