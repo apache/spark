@@ -44,8 +44,10 @@ import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.util.IOMode;
 import org.apache.spark.network.util.NettyUtils;
+import org.apache.spark.network.util.NettyLogger;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.util.TransportFrameDecoder;
+
 
 /**
  * Contains the context to create a {@link TransportServer}, {@link TransportClientFactory}, and to
@@ -64,6 +66,7 @@ import org.apache.spark.network.util.TransportFrameDecoder;
 public class TransportContext implements Closeable {
   private static final Logger logger = LoggerFactory.getLogger(TransportContext.class);
 
+  private static final NettyLogger nettyLogger = new NettyLogger();
   private final TransportConf conf;
   private final RpcHandler rpcHandler;
   private final boolean closeIdleConnections;
@@ -187,7 +190,11 @@ public class TransportContext implements Closeable {
       RpcHandler channelRpcHandler) {
     try {
       TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
-      ChannelPipeline pipeline = channel.pipeline()
+      ChannelPipeline pipeline = channel.pipeline();
+      if (nettyLogger.getLoggingHandler() != null) {
+        pipeline.addLast("loggingHandler", nettyLogger.getLoggingHandler());
+      }
+      pipeline
         .addLast("encoder", ENCODER)
         .addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder())
         .addLast("decoder", DECODER)
