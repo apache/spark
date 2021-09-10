@@ -486,6 +486,28 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("string / binary octet-length function") {
+    val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123, 2.0f, 3.015, "\ud83d\udc08"))
+      .toDF("a", "b", "c", "d", "e", "f")
+    checkAnswer(
+      df.select(octet_length($"a"), octet_length($"b")),
+      Row(3, 4))
+
+    checkAnswer(
+      df.selectExpr("octet_length(a)", "octet_length(b)"),
+      Row(3, 4))
+
+    checkAnswer(
+      df.selectExpr("octet_length(c)", "octet_length(d)", "octet_length(e)"),
+      Row(3, 3, 5)
+    )
+
+    checkAnswer(
+      df.selectExpr("length(f)", "octet_length(f)"),
+      Row(1, 4)
+    )
+  }
+
   test("initcap function") {
     val df = Seq(("ab", "a B", "sParK")).toDF("x", "y", "z")
     checkAnswer(
