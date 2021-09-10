@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $ */
+/* global $, getBaseURI */
 
 var baseParams;
 

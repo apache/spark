@@ -17,7 +17,7 @@
 
 /* global $, ConvertDurationString, Mustache, createRESTEndPointForExecutorsPage */
 /* global createTemplateURI, formatBytes, formatDate, formatDuration, formatLogsCells */
-/* global getStandAloneAppId, setDataTableDefaults, uiRoot */
+/* global getStandAloneAppId, setDataTableDefaults, getBaseURI, uiRoot */
 
 var shouldBlockUI = true;
 
