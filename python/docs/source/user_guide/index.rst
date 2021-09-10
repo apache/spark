@@ -16,25 +16,65 @@
     under the License.
 
 
-==========
-User Guide
-==========
+.. ==========
+.. PySpark User Guide
+.. ==========
 
-There are basic guides shared with other languages in Programming Guides
-at `the Spark documentation <https://spark.apache.org/docs/latest/index.html#where-to-go-from-here>`_ as below:
-
-- `RDD Programming Guide <https://spark.apache.org/docs/latest/rdd-programming-guide.html>`_
-- `Spark SQL, DataFrames and Datasets Guide <https://spark.apache.org/docs/latest/sql-programming-guide.html>`_
-- `Structured Streaming Programming Guide <https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html>`_
-- `Spark Streaming Programming Guide <https://spark.apache.org/docs/latest/streaming-programming-guide.html>`_
-- `Machine Learning Library (MLlib) Guide <https://spark.apache.org/docs/latest/ml-guide.html>`_
-
-PySpark specific user guide is as follows:
+.. The PySpark specific user guide is as follows:
 
 .. toctree::
-   :maxdepth: 2
+..   :maxdepth: 2
 
-   python_packaging
-   sql/index
-   pandas_on_spark/index
+..   python_packaging
+..   sql/index
+..   pandas_on_spark/index
+
+=============
+Proposed PySpark User Guide
+=============
+
+Installation and the Spark Internals
+============
+
+- Installing packages: `Python package management <python_packaging.html>`_
+
+        - `Using the PySpark Native Features <python_packaging.html#using-pyspark-native-features>`_
+
+        - `Using Conda <python_packaging.html#using-conda>`_
+        
+        - `Using Virtualenv <python_packaging.html#using-virtualenv>`_
+        
+        - `Using PEX <python_packaging.html#using-pex>`_
+
+- The Spark internals:  `Spark Core + SQL Engine <sql/arrow_pandas.html>`_
+
+Data Access APIs
+================
+
+- `PySpark DataFrame <../getting_started/quickstart_df.html>`_
+- `Executing SQL in PySpark <pandas_on_spark/index.html>`_
+- `The pandas API on PySpark <../getting_started/quickstart_ps.html>`_
+
+High-level APIs
+===============
+
+- `Streaming in PySpark <pandas_on_spark/index.html>`_
+- `Machine Learning in PySpark <pandas_on_spark/index.html>`_
+
+
+==========
+Spark User Guide (All languages)
+==========
+The following guides shared with other languages in the Programming Guides section
+at `the Spark documentation <https://spark.apache.org/docs/latest/index.html#where-to-go-from-here>`_ as listed below:
+
+- `Spark SQL, DataFrames and Datasets Guide <https://spark.apache.org/docs/latest/sql-programming-guide.html>`_
+- `Structured Streaming Programming Guide <https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html>`_
+- `Machine Learning Library (MLlib) Guide <https://spark.apache.org/docs/latest/ml-guide.html>`_
+- `pandas API on Spark Guide <https://koalas.readthedocs.io/en/latest/user_guide/index.html>`_
+
+The following APIs are deprecated and no longer recommended for use:
+
+- `RDD Programming Guide <https://spark.apache.org/docs/latest/rdd-programming-guide.html>`_ 
+- `Spark Streaming Programming Guide <https://spark.apache.org/docs/latest/streaming-programming-guide.html>`_ 
 

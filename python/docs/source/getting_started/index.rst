@@ -29,6 +29,8 @@ There are live notebooks where you can try PySpark out without any other step:
 
 * |binder_df|_
 * |binder_ps|_
+* binder for streaming possibly
+* binder for ML
 
 The list below is the contents of this quickstart page:
 

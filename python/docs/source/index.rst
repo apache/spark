@@ -36,13 +36,13 @@ of Spark's features such as Spark SQL, DataFrame, Streaming, MLlib
 Data Processing
 *******************
 
-**Spark SQL and DataFrame**
+`Spark SQL and DataFrame <https://spark.apache.org/docs/latest/sql-programming-guide.html>`_
 
 Spark SQL is a Spark module, similar to SQL, that can be used for structured data processing. It provides
 a programming abstraction called DataFrame and can also act as distributed
 SQL query engine.
 
-**pandas API on Spark**
+`pandas API on Spark <https://koalas.readthedocs.io/en/latest/>`_
 
 The pandas API on Spark allows you to scale your pandas workload out.
 With this package, you can:
@@ -51,7 +51,7 @@ With this package, you can:
 * Have a single codebase that works both with pandas (tests, smaller datasets) and with Spark (distributed datasets).
 * Switch to pandas API and PySpark API contexts easily without any overhead.
 
-**Streaming**
+`Streaming <https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html>`_
 
 Running on top of Spark, the streaming feature in Apache Spark enables powerful
 interactive and analytical applications across both streaming and historical data,
@@ -61,7 +61,7 @@ while inheriting Spark's ease of use and fault tolerance characteristics.
 Machine Learning
 *****************
 
-**MLlib**
+`MLlib <https://spark.apache.org/docs/latest/ml-guide.html>`_
 
 Built on top of Spark, MLlib is a scalable machine learning library that provides
 a uniform set of high-level APIs that help users create and tune practical machine
