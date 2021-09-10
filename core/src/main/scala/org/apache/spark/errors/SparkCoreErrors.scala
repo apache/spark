@@ -17,14 +17,12 @@
 
 package org.apache.spark.errors
 
-import java.io.EOFException
 import java.io.IOException
 import java.util.concurrent.TimeoutException
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkException, TaskKilledException, TaskNotSerializableException}
-import org.apache.spark.api.r.JVMObjectId
+import org.apache.spark.{SparkException, TaskNotSerializableException}
 import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleManager}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, BlockSavedOnDecommissionedBlockManagerException, RDDBlockId, UnrecognizedBlockId}
@@ -37,100 +35,19 @@ object SparkCoreErrors {
     new RuntimeException(s"Unexpected Py4J server ${other.getClass}")
   }
 
-  def dataOfTypeCannotBeUsedError(className: String): Throwable = {
-    new SparkException(s"Data of type $className cannot be used")
-  }
-
-  def unexpectedValuePairwiseRDDError(x: Seq[Array[Byte]]): Throwable = {
-    new SparkException("PairwiseRDD: unexpected value: " + x)
-  }
-
-  def unexpectedElementTypeError(other: Object): Throwable = {
-    new SparkException("Unexpected element type " + other.getClass)
-  }
-
-  def eofBeforePythonServerAcknowledgedError(): Throwable = {
-    new SparkException("EOF reached before Python server acknowledged")
-  }
-
-  def taskInterruptionError(reason: String): Throwable = {
-    new TaskKilledException(reason)
-  }
-
-  def pythonWorkerCrashedError(eof: EOFException): Throwable = {
-    new SparkException("Python worker exited unexpectedly (crashed)", eof)
-  }
-
-  def serverSocketFailedError(): Throwable = {
-    new SparkException("ServerSocket failed to bind to Java side.")
-  }
-
-  def invalidPortNumberError(
-      daemonModule: String,
-      daemonPort: Int,
-      command: String,
-      pythonPath: String): Throwable = {
-    new SparkException(
-      f"""
-         |Bad data in $daemonModule's standard output. Invalid port number:
-         |  $daemonPort (0x$daemonPort%08x)
-         |Python command to execute the daemon was:
-         |  $command
-         |Check that you don't have any unexpected modules or libraries in
-         |your PYTHONPATH:
-         |  $pythonPath
-         |Also, check if you have a sitecustomize.py module in your python path,
-         |or in your python installation, that is printing to standard output""".stripMargin
-    )
-  }
-
-  def failedToConnectBackPythonWorkerError(e: Exception): Throwable = {
-    new SparkException("Python worker failed to connect back.", e)
-  }
-
-  def eofExceptionWhileReadingPortNumberFromDaemonOutputError(daemonModule: String): Throwable = {
-    new SparkException("EOFException occurred while reading the port number " +
-      s"from $daemonModule's stdout")
-  }
-
   def eofExceptionWhileReadPortNumberError(
       daemonModule: String,
-      daemonExitValue: Int): Throwable = {
-    new SparkException(
-      s"EOFException occurred while reading the port number from $daemonModule's" +
-        s" stdout and terminated with code: $daemonExitValue.")
-  }
-
-  def RDDElementOfTypeCannotBeUsedError(otherName: String): Throwable = {
-    new SparkException(s"RDD element of type $otherName cannot be used")
+      daemonExitValue: Option[Int] = null): Throwable = {
+    var msg = s"EOFException occurred while reading the port number from $daemonModule's" +
+      s" stdout"
+    if (daemonExitValue != null) {
+      msg = msg + s" and terminated with code: $daemonExitValue."
+    }
+    new SparkException(msg)
   }
 
   def unsupportedDataTypeError(other: Any): Throwable = {
     new SparkException(s"Data of type $other is not supported")
-  }
-
-  def RWorkerExitedError(errorLine: String, e: Exception): Throwable = {
-    var msg = "R unexpectedly exited."
-    if (errorLine.trim().nonEmpty) {
-      msg += s"\nR worker produced errors: $errorLine\n"
-    }
-    new SparkException(msg, e)
-  }
-
-  def jvmObjectIdNotExistError(id: JVMObjectId): Throwable = {
-    new NoSuchElementException(s"$id does not exist.")
-  }
-
-  def noMatchedMethodFoundError(cls: Object, methodName: String): Throwable = {
-    new Exception(s"No matched method found for $cls.$methodName")
-  }
-
-  def noMatchedConstructorFoundError(cls: Object): Throwable = {
-    new Exception(s"No matched constructor found for $cls")
-  }
-
-  def cannotLocateSparkRPackage(): Throwable = {
-    new SparkException("SPARK_HOME not set. Can't locate SparkR package.")
   }
 
   def rddBlockNotFoundError(blockId: BlockId, id: Int): Throwable = {

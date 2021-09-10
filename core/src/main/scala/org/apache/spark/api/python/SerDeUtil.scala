@@ -26,8 +26,8 @@ import scala.util.Try
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 
@@ -206,8 +206,8 @@ private[spark] object SerDeUtil extends Logging {
         // we only accept (K, V)
       case Array() =>
         // we also accept empty collections
-      case Array(other) => throw SparkCoreErrors.RDDElementOfTypeCannotBeUsedError(
-        other.getClass.getName)
+      case Array(other) => throw new SparkException(
+        s"RDD element of type ${other.getClass.getName} cannot be used")
     }
     rdd.map { obj =>
       val arr = obj.asInstanceOf[Array[_]]

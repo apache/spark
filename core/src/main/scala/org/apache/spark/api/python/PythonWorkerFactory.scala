@@ -186,7 +186,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         return (socket, Some(pid))
       } catch {
         case e: Exception =>
-          throw SparkCoreErrors.failedToConnectBackPythonWorkerError(e)
+          throw new SparkException("Python worker failed to connect back.", e)
       }
     } finally {
       if (serverSocket != null) {
@@ -220,19 +220,28 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
           daemonPort = in.readInt()
         } catch {
           case _: EOFException if daemon.isAlive =>
-            throw SparkCoreErrors.eofExceptionWhileReadingPortNumberFromDaemonOutputError(
+            throw SparkCoreErrors.eofExceptionWhileReadPortNumberError(
               daemonModule)
           case _: EOFException =>
             throw SparkCoreErrors.
-              eofExceptionWhileReadPortNumberError(daemonModule, daemon.exitValue)
+              eofExceptionWhileReadPortNumberError(daemonModule, Some(daemon.exitValue))
         }
 
         // test that the returned port number is within a valid range.
         // note: this does not cover the case where the port number
         // is arbitrary data but is also coincidentally within range
         if (daemonPort < 1 || daemonPort > 0xffff) {
-          throw SparkCoreErrors.invalidPortNumberError(daemonModule, daemonPort,
-            command.asScala.mkString(" "), pythonPath)
+          val exceptionMessage = f"""
+            |Bad data in $daemonModule's standard output. Invalid port number:
+            |  $daemonPort (0x$daemonPort%08x)
+            |Python command to execute the daemon was:
+            |  ${command.asScala.mkString(" ")}
+            |Check that you don't have any unexpected modules or libraries in
+            |your PYTHONPATH:
+            |  $pythonPath
+            |Also, check if you have a sitecustomize.py module in your python path,
+            |or in your python installation, that is printing to standard output"""
+          throw new SparkException(exceptionMessage.stripMargin)
         }
 
         // Redirect daemon stdout and stderr

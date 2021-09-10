@@ -26,7 +26,6 @@ import scala.util.Try
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.R._
@@ -137,7 +136,12 @@ private[spark] abstract class BaseRRunner[IN, OUT](
 
     protected val handleException: PartialFunction[Throwable, OUT] = {
       case e: Exception =>
-        throw SparkCoreErrors.RWorkerExitedError(errThread.getLines(), e)
+        var msg = "R unexpectedly exited."
+        val lines = errThread.getLines()
+        if (lines.trim().nonEmpty) {
+          msg += s"\nR worker produced errors: $lines\n"
+        }
+        throw new SparkException(msg, e)
     }
   }
 

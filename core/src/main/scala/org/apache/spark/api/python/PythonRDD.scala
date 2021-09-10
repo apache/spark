@@ -35,7 +35,6 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, OutputFormat 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
@@ -115,7 +114,7 @@ private class PairwiseRDD(prev: RDD[Array[Byte]]) extends RDD[(Long, Array[Byte]
   override def compute(split: Partition, context: TaskContext): Iterator[(Long, Array[Byte])] =
     prev.iterator(split, context).grouped(2).map {
       case Seq(a, b) => (Utils.deserializeLongValue(a), b)
-      case x => throw SparkCoreErrors.unexpectedValuePairwiseRDDError(x)
+      case x => throw new SparkException("PairwiseRDD: unexpected value: " + x)
     }
   val asJavaPairRDD : JavaPairRDD[Long, Array[Byte]] = JavaPairRDD.fromRDD(this)
 }
@@ -302,7 +301,7 @@ private[spark] object PythonRDD extends Logging {
         write(key)
         write(value)
       case other =>
-        throw SparkCoreErrors.unexpectedElementTypeError(other.getClass)
+        throw new SparkException("Unexpected element type " + other.getClass)
     }
 
     iter.foreach(write)
@@ -734,7 +733,7 @@ private[spark] class PythonAccumulatorV2(
       // Wait for a byte from the Python side as an acknowledgement
       val byteRead = in.read()
       if (byteRead == -1) {
-        throw SparkCoreErrors.eofBeforePythonServerAcknowledgedError()
+        throw new SparkException("EOF reached before Python server acknowledged")
       }
     }
   }

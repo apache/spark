@@ -20,9 +20,8 @@ package org.apache.spark.api.r
 import java.io.File
 import java.util.Arrays
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.api.java.JavaSparkContext
-import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.config._
 
 private[spark] object RUtils {
@@ -88,7 +87,7 @@ private[spark] object RUtils {
     } else {
       // Otherwise, assume the package is local
       val sparkRPkgPath = localSparkRPackagePath.getOrElse {
-          throw SparkCoreErrors.cannotLocateSparkRPackage()
+          throw new SparkException("SPARK_HOME not set. Can't locate SparkR package.")
       }
       if (!rPackages.isEmpty) {
         Seq(sparkRPkgPath, rPackages.get)

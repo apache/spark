@@ -29,7 +29,6 @@ import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark._
-import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
@@ -328,7 +327,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         if (boundPort == -1) {
           val message = "ServerSocket failed to bind to Java side."
           logError(message)
-          throw SparkCoreErrors.serverSocketFailedError()
+          throw new SparkException(message)
         } else if (isBarrier) {
           logDebug(s"Started ServerSocket on port $boundPort.")
         }
@@ -569,8 +568,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     protected val handleException: PartialFunction[Throwable, OUT] = {
       case e: Exception if context.isInterrupted =>
         logDebug("Exception thrown after task interruption", e)
-        throw SparkCoreErrors.
-          taskInterruptionError(context.getKillReason().getOrElse("unknown reason"))
+        throw new TaskKilledException(context.getKillReason().getOrElse("unknown reason"))
 
       case e: Exception if writerThread.exception.isDefined =>
         logError("Python worker exited unexpectedly (crashed)", e)
@@ -585,7 +583,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         throw new SparkException(s"Python worker exited unexpectedly (crashed): $error", eof)
 
       case eof: EOFException =>
-        throw SparkCoreErrors.pythonWorkerCrashedError(eof)
+        throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
     }
   }
 
