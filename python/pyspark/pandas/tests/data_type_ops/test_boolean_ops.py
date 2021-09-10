@@ -713,6 +713,26 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.check_extension(True | pser, True | psser)
         self.check_extension(False | pser, False | psser)
 
+    def test_xor(self):
+        pdf, psdf = self.boolean_pdf, self.boolean_psdf
+        pser, psser = pdf["this"], psdf["this"]
+        other_pser, other_psser = pdf["that"], psdf["that"]
+        self.check_extension(pser ^ True, psser ^ True)
+        self.check_extension(pser ^ False, psser ^ False)
+        self.check_extension(pser ^ pser, psser ^ psser)
+
+        self.check_extension(pser ^ other_pser, psser ^ other_psser)
+        self.check_extension(other_pser ^ pser, other_psser ^ psser)
+        with self.assertRaisesRegex(TypeError, "XOR can not be applied to given types."):
+            psser ^ 2
+
+    def test_rxor(self):
+        pser, psser = self.boolean_pdf["this"], self.boolean_psdf["this"]
+        self.check_extension(True | pser, True | psser)
+        self.check_extension(False | pser, False | psser)
+        with self.assertRaisesRegex(TypeError, "XOR can not be applied to given types."):
+            1 ^ psser
+
     def test_from_to_pandas(self):
         data = [True, True, False, None]
         pser = pd.Series(data, dtype="boolean")
