@@ -17,6 +17,10 @@
   "CANNOT_GENERATE_CODE_FOR_EXPRESSION" : {
     "message" : [ "Cannot generate code for expression: %s" ]
   },
+  "CANNOT_GENERATE_CODE_FOR_UNCOMPARABLE_TYPE" : {
+    "message" : [ "cannot generate %s code for un-comparable type: %s" ],
+    "sqlState" : "0A000"
+  },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"
@@ -32,8 +36,7 @@
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
   "COPY_NULL_FIELD" : {
-    "message" : [ "Do not attempt to copy a null field" ],
-    "sqlState" : "39004"
+    "message" : [ "Do not attempt to copy a null field" ]
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero" ],
@@ -44,8 +47,7 @@
     "sqlState" : "23000"
   },
   "EXCEED_ARRAY_SIZE_WHEN_ZIP_MAP" : {
-    "message" : [ "Unsuccessful try to zip maps with %s unique keys due to exceeding the array size limit %s." ],
-    "sqlState" : "22026"
+    "message" : [ "Unsuccessful try to zip maps with %s unique keys due to exceeding the array size limit %s." ]
   },
   "FAILED_EXECUTE_UDF" : {
     "message" : [ "Failed to execute user defined function (%s: (%s) => %s)" ]
@@ -74,7 +76,7 @@
   },
   "GROUP_INDEX_EXCEED_GROUP_COUNT" : {
     "message" : [ "Regex group count is %s, but the specified group index is %s" ],
-    "sqlState" : "07009"
+    "sqlState" : "42000"
   },
   "GROUP_INDEX_LESS_THAN_ZERO" : {
     "message" : [ "The specified group index cannot be less than zero" ],
@@ -86,10 +88,6 @@
   "INCOMPARABLE_PIVOT_COLUMN" : {
     "message" : [ "Invalid pivot column '%s'. Pivot columns must be comparable." ],
     "sqlState" : "42000"
-  },
-  "INCOMPARABLE_TYPE" : {
-    "message" : [ "cannot generate %s code for un-comparable type: %s" ],
-    "sqlState" : "07006"
   },
   "INCOMPATIBLE_DATASOURCE_REGISTER" : {
     "message" : [ "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: %s" ]
@@ -122,7 +120,11 @@
   },
   "INVALID_URL" : {
     "message" : [ "Find an invalid url string %s" ],
-    "sqlState" : "22000"
+    "sqlState" : "42000"
+  },
+  "MERGE_UNSUPPORTED_BY_WINDOW_FUNCTIONS" : {
+    "message" : [ "Window Functions do not support merging." ],
+    "sqlState" : "0A000"
   },
     "LOGICAL_HINT_OPERATOR_NOT_REMOVED_DURING_ANALYSIS" : {
     "message" : [ "Internal error: logical hint operator should have been removed during analysis" ]
@@ -152,11 +154,7 @@
   },
   "NOT_MATCH_FUNCTION_NAME" : {
     "message" : [ "%s is not matched at addNewFunction" ],
-    "sqlState" : "07000"
-  },
-  "NOT_SUPPORT_ORDERED_OPERATIONS" : {
-    "message" : [ "Type %s does not support ordered operations" ],
-    "sqlState" : "07006"
+    "sqlState" : "42000"
   },
   "NO_DEFAULT_FOR_TYPE" : {
     "message" : [ "no default for type %s" ],
@@ -179,23 +177,22 @@
     "sqlState" : "22023"
   },
   "SHOULD_NOT_CALL_ALIAS_DO_GEN_CODE" : {
-    "message" : [ "Alias.doGenCode should not be called." ],
-    "sqlState" : "42000"
+    "message" : [ "Alias.doGenCode should not be called." ]
   },
   "SUM_OF_DECIMAL_OVERFLOW" : {
     "message" : [ "Overflow in sum of decimals." ],
-    "sqlState" : "22015"
+    "sqlState" : "22003"
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
   },
   "UNEXPECTED_DATATYPE" : {
     "message" : [ "Unexpected data type %s" ],
-    "sqlState" : "22000"
+    "sqlState" : "42000"
   },
   "UNEXPECTED_TYPE" : {
     "message" : [ "Unexpected type %s" ],
-    "sqlState" : "22000"
+    "sqlState" : "42000"
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [ "Unrecognized SQL type %s" ],
@@ -221,6 +218,10 @@
     "message" : [ "Unsupported literal type %s %s" ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_ORDERED_OPERATIONS" : {
+    "message" : [ "Type %s does not support ordered operations" ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID" : {
     "message" : [ "%s does not implement simpleStringWithNodeId" ]
   },
@@ -228,8 +229,8 @@
     "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],
     "sqlState" : "0A000"
   },
-  "WINDOW_NOT_SUPPORT_MERGING" : {
-    "message" : [ "Window Functions do not support merging." ],
+  "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER" : {
+    "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],
     "sqlState" : "0A000"
   },
   "WRITING_JOB_ABORTED" : {

@@ -628,7 +628,7 @@ class CodegenContext extends Logging {
     case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
     case NullType => "false"
     case _ =>
-      throw QueryExecutionErrors.cannotGenerateCodeForIncomparableTypeError(
+      throw QueryExecutionErrors.cannotGenerateCodeForUncomparableTypeError(
         "equality", dataType)
   }
 
@@ -719,7 +719,7 @@ class CodegenContext extends Logging {
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
-      throw QueryExecutionErrors.cannotGenerateCodeForIncomparableTypeError("compare", dataType)
+      throw QueryExecutionErrors.cannotGenerateCodeForUncomparableTypeError("compare", dataType)
   }
 
   /**

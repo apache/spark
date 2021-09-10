@@ -207,7 +207,7 @@ object QueryExecutionErrors {
   }
 
   def orderedOperationUnsupportedByDataTypeError(dataType: DataType): Throwable = {
-    new SparkIllegalArgumentException("NOT_SUPPORT_ORDERED_OPERATIONS", Array(dataType.toString))
+    new SparkIllegalArgumentException("UNSUPPORTED_ORDERED_OPERATIONS", Array(dataType.toString))
   }
 
   def regexGroupIndexLessThanZeroError(): Throwable = {
@@ -229,7 +229,7 @@ object QueryExecutionErrors {
   }
 
   def mergeUnsupportedByWindowFunctionError(): Throwable = {
-    new SparkUnsupportedOperationException("WINDOW_NOT_SUPPORT_MERGING", Array.empty)
+    new SparkUnsupportedOperationException("MERGE_UNSUPPORTED_BY_WINDOW_FUNCTIONS", Array.empty)
   }
 
   def dataTypeUnexpectedError(dataType: DataType): Throwable = {
@@ -249,9 +249,10 @@ object QueryExecutionErrors {
     new SparkIllegalArgumentException("NOT_MATCH_FUNCTION_NAME", Array(funcName))
   }
 
-  def cannotGenerateCodeForIncomparableTypeError(
+  def cannotGenerateCodeForUncomparableTypeError(
       codeType: String, dataType: DataType): Throwable = {
-    new SparkIllegalArgumentException("INCOMPARABLE_TYPE", Array(codeType, dataType.catalogString))
+    new SparkIllegalArgumentException("CANNOT_GENERATE_CODE_FOR_UNCOMPARABLE_TYPE",
+      Array(codeType, dataType.catalogString))
   }
 
   def cannotGenerateCodeForUnsupportedTypeError(dataType: DataType): Throwable = {
