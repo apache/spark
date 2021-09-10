@@ -1232,6 +1232,10 @@ setGeneric("n_distinct", function(x, ...) { standardGeneric("n_distinct") })
 
 #' @rdname column_string_functions
 #' @name NULL
+setGeneric("octet_length", function(x, ...) { standardGeneric("octet_length") })
+
+#' @rdname column_string_functions
+#' @name NULL
 setGeneric("overlay", function(x, replace, pos, ...) { standardGeneric("overlay") })
 
 #' @rdname column_window_functions
