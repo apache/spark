@@ -3675,8 +3675,8 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
                |if ($array.isNullAt($i)) {
                |  if (!$hashSet.containsNull()) {
                |    $nullElementIndex = $size;
-               |    $size++;
                |    $hashSet.addNull();
+               |    $size++;
                |    $builder.$$plus$$eq($nullValueHolder);
                |  }
                |} else {
