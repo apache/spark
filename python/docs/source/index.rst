@@ -29,7 +29,8 @@ interactively analyzing your data in a distributed environment. PySpark supports
 of Spark's features such as Spark SQL, DataFrame, Streaming, MLlib
 (Machine Learning) and Spark Core.
 
-.. image:: ../../../docs/img/pyspark-components.png
+.. .. image:: ../../../docs/img/pyspark-components.png
+.. image:: ../../../docs/img/SparkComponents.png
   :alt: PySpark Components
 
 *******************

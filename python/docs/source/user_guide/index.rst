@@ -30,7 +30,7 @@
 ..   pandas_on_spark/index
 
 =============
-Proposed PySpark User Guide
+PySpark User Guide
 =============
 
 Installation and the Spark Internals
@@ -52,14 +52,14 @@ Data Access APIs
 ================
 
 - `PySpark DataFrame <../getting_started/quickstart_df.html>`_
-- `Executing SQL in PySpark <pandas_on_spark/index.html>`_
+- `Executing SQL in PySpark <../getting_started/quickstart_df.html#Working-with-SQL>`_
 - `The pandas API on PySpark <../getting_started/quickstart_ps.html>`_
 
 High-level APIs
 ===============
 
-- `Streaming in PySpark <pandas_on_spark/index.html>`_
-- `Machine Learning in PySpark <pandas_on_spark/index.html>`_
+- `Streaming in PySpark <https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html>`_
+- `Machine Learning in PySpark <https://spark.apache.org/docs/latest/ml-guide.html>`_ 
 
 
 ==========
