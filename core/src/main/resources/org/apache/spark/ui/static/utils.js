@@ -228,11 +228,7 @@ function createRESTEndPointForMiscellaneousProcess(appId) {
   return uiRoot + "/api/v1/applications/" + appId + "/allmiscellaneousprocess";
 }
 
-function getBaseURI(){
-  let baseURI = document.baseURI;
-  if(!baseURI){
-    baseURI = document.URL;
-  }
-  return baseURI;
+function getBaseURI() {
+  return document.baseURI || document.URL;
 }
 /* eslint-enable no-unused-vars */
