@@ -66,7 +66,7 @@ from pandas.core.accessor import CachedAccessor
 from pandas.core.dtypes.inference import is_sequence
 from pyspark import StorageLevel
 from pyspark.sql import Column, DataFrame as SparkDataFrame, functions as F
-from pyspark.sql.functions import pandas_udf, isnan
+from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (  # noqa: F401 (SPARK-34943)
     ArrayType,
     BooleanType,
@@ -78,6 +78,7 @@ from pyspark.sql.types import (  # noqa: F401 (SPARK-34943)
     StringType,
     StructField,
     StructType,
+    DecimalType,
 )
 from pyspark.sql.window import Window
 
@@ -8192,49 +8193,53 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         min_periods = 1 if min_periods is None else min_periods
 
-        numeric_psdf = self[
-            [col for col in self.columns if np.issubdtype(self[col].dtype, np.number)]
+        psdf = self[
+            [
+                col
+                for col in self.columns
+                if isinstance(self[col].spark.data_type, BooleanType)
+                or (
+                    isinstance(self[col].spark.data_type, NumericType)
+                    and not isinstance(self[col].spark.data_type, DecimalType)
+                )
+            ]
         ]
 
-        num_columns = len(numeric_psdf.columns)
-        data_columns = numeric_psdf._internal.data_spark_columns
-        scols = []
+        num_cols = len(psdf.columns)
+        data_cols = psdf._internal.data_spark_column_names
+        cov_scols = []
         count_not_null_scols = []
 
-        for row in range(0, num_columns):
-            for col in range(row, num_columns):
-                scols += [F.covar_samp(data_columns[row], data_columns[col])]
-                count_not_null_scols += [
-                    F.sum(
-                        F.when(
-                            isnan(data_columns[row])
-                            | data_columns[row].isNull()
-                            | isnan(data_columns[col])
-                            | data_columns[col].isNull(),
-                            0,
-                        ).otherwise(1)
+        for r in range(0, num_cols):
+            for c in range(r, num_cols):
+                cov_scols.append(
+                    F.covar_samp(
+                        F.col(data_cols[r]).cast("double"), F.col(data_cols[c]).cast("double")
                     )
-                ]
-
-        pair_covariance = numeric_psdf._internal.spark_frame.select(*scols).head(1)[0]
-        count_not_null_values = numeric_psdf._internal.spark_frame.select(
-            *count_not_null_scols
-        ).head(1)[0]
-
-        covariances = np.zeros([num_columns, num_columns])
-        step = 0
-        for row in range(0, num_columns):
-            step += row
-            for col in range(row, num_columns):
-                index = row * num_columns + col - step
-                covariances[row][col] = (
-                    pair_covariance[index]
-                    if count_not_null_values[index] >= min_periods
-                    else np.nan
+                )
+                count_not_null_scols.append(
+                    F.count(
+                        F.when(F.col(data_cols[r]).isNotNull() & F.col(data_cols[c]).isNotNull(), 1)
+                    )
                 )
 
-        covariances = covariances + covariances.T - np.diag(np.diag(covariances))
-        return DataFrame(covariances, columns=numeric_psdf.columns, index=numeric_psdf.columns)
+        pair_cov = psdf._internal.spark_frame.select(*cov_scols).head(1)[0]
+        count_not_null = (
+            psdf._internal.spark_frame.replace(float("nan"), None)
+            .select(*count_not_null_scols)
+            .head(1)[0]
+        )
+
+        cov = np.zeros([num_cols, num_cols])
+        step = 0
+        for r in range(0, num_cols):
+            step += r
+            for c in range(r, num_cols):
+                idx = r * num_cols + c - step
+                cov[r][c] = pair_cov[idx] if count_not_null[idx] >= min_periods else np.nan
+
+        cov = cov + cov.T - np.diag(np.diag(cov))
+        return DataFrame(cov, columns=psdf.columns, index=psdf.columns)
 
     def sample(
         self,
