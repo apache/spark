@@ -90,7 +90,6 @@
       <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
     </dependency>
     --><!-- #endif scala-2.13 -->
-
     <!-- hive-serde already depends on avro, but this brings in customized config of avro deps from parent -->
     <dependency>
       <groupId>org.apache.avro</groupId>
