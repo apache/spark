@@ -1343,7 +1343,7 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
   }
 
   private def stopThriftServer(): Unit = {
-    if (pidDir.list.length > 0) {
+    if (pidDir.list.nonEmpty) {
       // The `spark-daemon.sh' script uses kill, which is not synchronous, have to wait for a while.
       Utils.executeAndGetOutput(
         command = Seq(stopScript),
