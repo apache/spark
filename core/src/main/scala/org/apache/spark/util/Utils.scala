@@ -3284,7 +3284,7 @@ private[spark] class RedirectThreadAndCatchErrorMsg(
   def errorMessage: String = stringBuilder.toString
 
   setDaemon(true)
-  override def run() {
+  override def run(): Unit = {
     scala.util.control.Exception.ignoring(classOf[IOException]) {
       Utils.tryWithSafeFinally {
         val bufferedReader = new BufferedReader(new InputStreamReader(in))
