@@ -36,7 +36,11 @@ case class SimpleCost(value: Long) extends Cost {
 }
 
 /**
- * A skew join aware implementation of [[Cost]], which consider shuffle number and skew join number
+ * A skew join aware implementation of [[Cost]], which consider shuffle number and skew join number.
+ *
+ * We always pick the cost which has more skew join even if it introduces one or more extra shuffle.
+ * Otherwise, if two costs have the same number of skew join or no skew join, we will pick the one
+ * with small number of shuffle.
  */
 case class SkewJoinAwareCost(
     numShuffles: Int,
