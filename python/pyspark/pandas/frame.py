@@ -8212,31 +8212,38 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         for r in range(0, num_cols):
             for c in range(r, num_cols):
-                cov_scols.append(
-                    F.covar_samp(
-                        F.col(data_cols[r]).cast("double"), F.col(data_cols[c]).cast("double")
-                    )
-                )
                 count_not_null_scols.append(
                     F.count(
                         F.when(F.col(data_cols[r]).isNotNull() & F.col(data_cols[c]).isNotNull(), 1)
                     )
                 )
 
-        pair_cov = psdf._internal.spark_frame.select(*cov_scols).head(1)[0]
         count_not_null = (
             psdf._internal.spark_frame.replace(float("nan"), None)
             .select(*count_not_null_scols)
             .head(1)[0]
         )
 
+        step = 0
+        for r in range(0, num_cols):
+            step += r
+            for c in range(r, num_cols):
+                cov_scols.append(
+                    F.covar_samp(
+                        F.col(data_cols[r]).cast("double"), F.col(data_cols[c]).cast("double")
+                    )
+                    if count_not_null[r * num_cols + c - step] >= min_periods
+                    else F.lit(None)
+                )
+
+        pair_cov = psdf._internal.spark_frame.select(*cov_scols).head(1)[0]
+
         cov = np.zeros([num_cols, num_cols])
         step = 0
         for r in range(0, num_cols):
             step += r
             for c in range(r, num_cols):
-                idx = r * num_cols + c - step
-                cov[r][c] = pair_cov[idx] if count_not_null[idx] >= min_periods else np.nan
+                cov[r][c] = pair_cov[r * num_cols + c - step]
 
         cov = cov + cov.T - np.diag(np.diag(cov))
         return DataFrame(cov, columns=psdf.columns, index=psdf.columns)
