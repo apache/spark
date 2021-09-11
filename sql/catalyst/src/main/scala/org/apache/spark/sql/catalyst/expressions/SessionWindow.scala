@@ -69,10 +69,10 @@ case class SessionWindow(timeColumn: Expression, gapDuration: Expression) extend
   with NonSQLExpression {
 
   override def children: Seq[Expression] = Seq(timeColumn, gapDuration)
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, AnyDataType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampType, AnyDataType)
   override def dataType: DataType = new StructType()
-    .add(StructField("start", TimestampType))
-    .add(StructField("end", TimestampType))
+    .add(StructField("start", children.head.dataType))
+    .add(StructField("end", children.head.dataType))
 
   // This expression is replaced in the analyzer.
   override lazy val resolved = false
