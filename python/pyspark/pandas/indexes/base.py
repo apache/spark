@@ -2604,7 +2604,7 @@ class Index(IndexOpsMixin):
         return self.symmetric_difference(other)
 
     def __rxor__(self, other: Any) -> "Index":
-        raise NotImplementedError("Index.__rxor__ is currently not supported.")
+        return NotImplemented
 
     def __bool__(self) -> bool:
         raise ValueError(
