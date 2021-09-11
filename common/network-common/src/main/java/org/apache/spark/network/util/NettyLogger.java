@@ -59,7 +59,7 @@ public class NettyLogger {
     }
   }
 
-  public LoggingHandler getLoggingHandler(){
+  public LoggingHandler getLoggingHandler() {
     return loggingHandler;
   }
 }

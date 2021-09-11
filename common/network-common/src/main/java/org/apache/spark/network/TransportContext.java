@@ -48,7 +48,6 @@ import org.apache.spark.network.util.NettyLogger;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.util.TransportFrameDecoder;
 
-
 /**
  * Contains the context to create a {@link TransportServer}, {@link TransportClientFactory}, and to
  * setup Netty Channel pipelines with a
