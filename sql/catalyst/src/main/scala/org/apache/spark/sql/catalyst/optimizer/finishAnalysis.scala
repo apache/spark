@@ -129,8 +129,7 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
   private val conv = Map[DataType, (String, java.time.ZoneId) => Option[Any]](
     DateType -> convertSpecialDate,
     TimestampType -> convertSpecialTimestamp,
-    TimestampNTZType -> ((s: String, _: java.time.ZoneId) => convertSpecialTimestampNTZ(s))
-  )
+    TimestampNTZType -> convertSpecialTimestampNTZ)
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformAllExpressionsWithPruning(_.containsPattern(CAST)) {
       case cast @ Cast(e, dt @ (DateType | TimestampType | TimestampNTZType), _, _)

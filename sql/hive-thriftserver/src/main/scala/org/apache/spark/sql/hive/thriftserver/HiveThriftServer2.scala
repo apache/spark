@@ -73,7 +73,7 @@ object HiveThriftServer2 extends Logging {
     listener = new HiveThriftServer2Listener(kvStore, sc.conf, Some(server))
     sc.listenerBus.addToStatusQueue(listener)
     uiTab = if (sc.getConf.get(UI_ENABLED)) {
-      Some(new ThriftServerTab(new HiveThriftServer2AppStatusStore(kvStore, Some(listener)),
+      Some(new ThriftServerTab(new HiveThriftServer2AppStatusStore(kvStore),
         ThriftServerTab.getSparkUI(sc)))
     } else {
       None

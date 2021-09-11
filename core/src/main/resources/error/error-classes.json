@@ -31,7 +31,7 @@
     "message" : [ "Casting %s to %s causes overflow" ],
     "sqlState" : "22018"
   },
-  "CONCURRENT_QUERY_ERROR" : {
+  "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
   "DIVIDE_BY_ZERO" : {

@@ -67,9 +67,9 @@ private[spark] class ExecutorPodsPollingSnapshotSource(
       if (conf.get(KUBERNETES_EXECUTOR_API_POLLING_WITH_RESOURCE_VERSION)) {
         val list = pods.list(new ListOptionsBuilder().withResourceVersion("0").build())
         val newResourceVersion = UnsignedLong.valueOf(list.getMetadata.getResourceVersion())
-        // Replace only when we receive a monotonically increased resourceVersion
+        // Replace only when we receive a monotonically increased or equal resourceVersion
         // because some K8s API servers may return old(smaller) cached versions in case of HA setup.
-        if (resourceVersion == null || newResourceVersion.compareTo(resourceVersion) > 0) {
+        if (resourceVersion == null || newResourceVersion.compareTo(resourceVersion) >= 0) {
           resourceVersion = newResourceVersion
           snapshotsStore.replaceSnapshot(list.getItems.asScala.toSeq)
         }

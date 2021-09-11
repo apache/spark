@@ -927,6 +927,10 @@ setGeneric("concat_ws", function(sep, x, ...) { standardGeneric("concat_ws") })
 #' @name NULL
 setGeneric("conv", function(x, fromBase, toBase) { standardGeneric("conv") })
 
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("cot", function(x) { standardGeneric("cot") })
+
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("count_distinct", function(x, ...) { standardGeneric("count_distinct") })

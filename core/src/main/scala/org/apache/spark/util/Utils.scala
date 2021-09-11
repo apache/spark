@@ -2820,7 +2820,7 @@ private[spark] object Utils extends Logging {
             klass.getConstructor().newInstance()
         }
 
-        Some(ext.asInstanceOf[T])
+        Some(ext)
       } catch {
         case _: NoSuchMethodException =>
           throw new SparkException(
@@ -3094,13 +3094,6 @@ private[spark] object Utils extends Logging {
     } else {
       0
     }
-  }
-
-  def executorTimeoutMs(conf: SparkConf): Long = {
-    // "spark.network.timeout" uses "seconds", while `spark.storage.blockManagerSlaveTimeoutMs` uses
-    // "milliseconds"
-    conf.get(config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT)
-      .getOrElse(Utils.timeStringAsMs(s"${conf.get(Network.NETWORK_TIMEOUT)}s"))
   }
 
   /** Returns a string message about delegation token generation failure */
