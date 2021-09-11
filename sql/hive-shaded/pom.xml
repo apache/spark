@@ -139,7 +139,7 @@
               <relocations>
                 <relocation>
                   <pattern>com.google.common</pattern>
-                  <shadedPattern>org.apache.spark.com.google.common</shadedPattern>
+                  <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
                 </relocation>
               </relocations>
               <transformers>
