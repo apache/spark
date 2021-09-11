@@ -291,7 +291,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
  */
 object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
   // Given argument x, return true if expression Not(x) can be simplified
-  // E.g. when x == Not(y), Not(x) == Not(Not(y)) == y
+  // E.g. let x == Not(y), then canSimplifyNot(x) == true because Not(x) == Not(Not(y)) == y
   // For the case of x = EqualTo(a, b), recursively check each child expression
   // Extra nullable check is required for EqualNullSafe because
   // Not(EqualNullSafe(x, null)) is different from EqualNullSafe(x, Not(null))
