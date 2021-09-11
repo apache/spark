@@ -1510,9 +1510,16 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     conf.set(SHUFFLE_SERVICE_ENABLED, true)
     conf.set(SparkLauncher.SPARK_MASTER, "yarn")
     conf.set("spark.yarn.maxAttempts", "1")
+    conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
     assert(Utils.isPushBasedShuffleEnabled(conf) === true)
     conf.set("spark.yarn.maxAttempts", "2")
     assert(Utils.isPushBasedShuffleEnabled(conf) === true)
+    conf.set(IO_ENCRYPTION_ENABLED, true)
+    assert(Utils.isPushBasedShuffleEnabled(conf) === false)
+    conf.set(IO_ENCRYPTION_ENABLED, false)
+    assert(Utils.isPushBasedShuffleEnabled(conf) === true)
+    conf.set(SERIALIZER, "org.apache.spark.serializer.JavaSerializer")
+    assert(Utils.isPushBasedShuffleEnabled(conf) === false)
   }
 }
 
