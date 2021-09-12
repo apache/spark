@@ -408,7 +408,7 @@ private class LiveSpeculationStageSummary(
       numActiveTasks,
       numCompletedTasks,
       numFailedTasks,
-      numKilledTasks,
+      numKilledTasks
     )
     new SpeculationStageSummaryWrapper(stageId, attemptId, info)
   }
