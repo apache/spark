@@ -215,9 +215,9 @@ class AirflowConfigParser(ConfigParser):
         for section, replacement in self.deprecated_values.items():
             for name, info in replacement.items():
                 old, new, version = info
-                current_value = self.get(section, name, fallback=None)
+                current_value = self.get(section, name, fallback="")
                 if self._using_old_value(old, current_value):
-                    new_value = re.sub(old, new, current_value)
+                    new_value = old.sub(new, current_value)
                     self._update_env_var(section=section, name=name, new_value=new_value)
                     self._create_future_warning(
                         name=name,
@@ -285,6 +285,8 @@ class AirflowConfigParser(ConfigParser):
         # would be read and used instead of the value we set
         env_var = self._env_var_name(section, name)
         os.environ.pop(env_var, None)
+        if not self.has_section(section):
+            self.add_section(section)
         self.set(section, name, new_value)
 
     @staticmethod
