@@ -1930,9 +1930,10 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
           val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
           val parquetFilters = createParquetFilters(schema)
           // In this test suite, all the simple predicates are convertible here.
-          assert(parquetFilters.convertibleFilters(sourceFilters) === pushedFilters)
+          assert(parquetFilters.convertibleFilters(sourceFilters).toArray
+            === pushedFilters.map(_.toV1))
           val pushedParquetFilters = pushedFilters.map { pred =>
-            val maybeFilter = parquetFilters.createFilter(pred)
+            val maybeFilter = parquetFilters.createFilter(pred.toV1)
             assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
             maybeFilter.get
           }

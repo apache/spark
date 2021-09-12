@@ -34,6 +34,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter, IsNotNull}
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache}
 import org.apache.spark.sql.execution.datasources.v2.json.JsonScanBuilder
@@ -3019,7 +3021,7 @@ class JsonV2Suite extends JsonSuite {
       val options = CaseInsensitiveStringMap.empty()
       new JsonScanBuilder(spark, fileIndex, schema, schema, options)
     }
-    val filters: Array[sources.Filter] = Array(sources.IsNotNull(attr))
+    val filters: Array[V2Filter] = Array(new IsNotNull(new FieldReference(Array(attr))))
     withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       withTempPath { file =>
         val scanBuilder = getBuilder(file.getCanonicalPath)

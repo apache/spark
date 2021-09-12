@@ -36,4 +36,9 @@ public final class StringContains extends StringPredicate {
 
   @Override
   public String toString() { return "STRING_CONTAINS(" + column.describe() + ", " + value + ")"; }
+
+  @Override
+  public org.apache.spark.sql.sources.Filter toV1() {
+    return new org.apache.spark.sql.sources.StringContains(column.describe(), value.toString());
+  }
 }

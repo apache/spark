@@ -18,12 +18,12 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.{sources, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter}
 import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils, PartitioningAwareFileIndex, PartitioningUtils}
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitioningAwareFileIndex, PartitioningUtils}
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
-import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 
 abstract class FileScanBuilder(
@@ -39,7 +39,7 @@ abstract class FileScanBuilder(
   protected var requiredSchema = StructType(dataSchema.fields ++ partitionSchema.fields)
   protected var partitionFilters = Seq.empty[Expression]
   protected var dataFilters = Seq.empty[Expression]
-  protected var pushedDataFilters = Array.empty[Filter]
+  protected var pushedDataFilters = Array.empty[V2Filter]
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // [SPARK-30107] While `requiredSchema` might have pruned nested columns,
@@ -73,9 +73,9 @@ abstract class FileScanBuilder(
       DataSourceUtils.getPartitionFiltersAndDataFilters(partitionSchema, filters)
     this.partitionFilters = partitionFilters
     this.dataFilters = dataFilters
-    val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
+    val translatedFilters = mutable.ArrayBuffer.empty[V2Filter]
     for (filterExpr <- dataFilters) {
-      val translated = DataSourceStrategy.translateFilter(filterExpr, true)
+      val translated = DataSourceV2Strategy.translateFilterV2(filterExpr, true)
       if (translated.nonEmpty) {
         translatedFilters += translated.get
       }
@@ -84,14 +84,15 @@ abstract class FileScanBuilder(
     dataFilters
   }
 
-  override def pushedFilters: Array[Filter] = pushedDataFilters
+  override def pushedFilters: Array[V2Filter] = pushedDataFilters
 
   /*
    * Push down data filters to the file source, so the data filters can be evaluated there to
    * reduce the size of the data to be read. By default, data filters are not pushed down.
    * File source needs to implement this method to push down data filters.
    */
-  protected def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = Array.empty[Filter]
+  protected def pushDataFilters(dataFilters: Array[V2Filter]): Array[V2Filter] =
+    Array.empty[V2Filter]
 
   private def createRequiredNameSet(): Set[String] =
     requiredSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet

@@ -22,8 +22,11 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalyst.CatalystTypeConverters;
 import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
+
+import static org.apache.spark.sql.types.DataTypes.StringType;
 
 /**
  * A filter that evaluates to {@code true} iff the {@code column} evaluates to one of the
@@ -73,4 +76,19 @@ public final class In extends Filter {
 
   @Override
   public NamedReference[] references() { return new NamedReference[] { column }; }
+
+  @Override
+  public org.apache.spark.sql.sources.Filter toV1() {
+    Object[] array = new Object[values.length];
+    int index = 0;
+    for (Literal value: values) {
+      if (value.dataType().sameType(StringType)) {
+        array[index] = value.value().toString();
+      } else {
+        array[index] = CatalystTypeConverters.convertToScala(value.value(), value.dataType());
+      }
+      index++;
+    }
+    return new org.apache.spark.sql.sources.In(column.describe(), array);
+  }
 }

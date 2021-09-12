@@ -71,7 +71,7 @@ object PushDownUtils extends PredicateHelper {
 
       case f: FileScanBuilder =>
         val postScanFilters = f.pushFilters(filters)
-        (f.pushedFilters, postScanFilters)
+        (f.pushedFilters.map(_.toV1).toSeq, postScanFilters)
       case _ => (Nil, filters)
     }
   }

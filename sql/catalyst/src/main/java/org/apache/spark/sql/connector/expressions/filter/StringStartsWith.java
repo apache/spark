@@ -38,4 +38,9 @@ public final class StringStartsWith extends StringPredicate {
   public String toString() {
     return "STRING_STARTS_WITH(" + column.describe() + ", " + value + ")";
   }
+
+  @Override
+  public org.apache.spark.sql.sources.Filter toV1() {
+    return new org.apache.spark.sql.sources.StringStartsWith(column.describe(), value.toString());
+  }
 }

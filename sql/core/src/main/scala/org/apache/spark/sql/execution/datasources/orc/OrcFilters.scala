@@ -26,10 +26,13 @@ import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
+import org.apache.spark.sql.connector.expressions.Literal
+import org.apache.spark.sql.connector.expressions.filter.{And => V2And, EqualNullSafe => V2EqualNullSafe, EqualTo => V2EqualTo, Filter => V2Filter, GreaterThan => V2GreaterThan, GreaterThanOrEqual => V2GreaterThanOrEqual, In => V2In, IsNotNull => V2IsNotNull, IsNull => V2IsNull, LessThan => V2LessThan, LessThanOrEqual => V2LessThanOrEqual, Not => V2Not, Or => V2Or}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Helper object for building ORC `SearchArgument`s, which are used for ORC predicate push-down.
@@ -65,9 +68,17 @@ import org.apache.spark.sql.types._
 private[sql] object OrcFilters extends OrcFiltersBase {
 
   /**
-   * Create ORC filter as a SearchArgument instance.
+   * Create ORC filter as a SearchArgument instance from V1 Filters.
    */
-  def createFilter(schema: StructType, filters: Seq[Filter]): Option[SearchArgument] = {
+  def createFilter(schema: StructType, filters: Seq[Filter])(implicit d: DummyImplicit)
+  : Option[SearchArgument] = {
+    createFilter(schema, filters.map(_.toV2))
+  }
+
+  /**
+   * Create ORC filter as a SearchArgument instance from V2 Filters.
+   */
+  def createFilter(schema: StructType, filters: Seq[V2Filter]): Option[SearchArgument] = {
     val dataTypeMap = OrcFilters.getSearchableTypeMap(schema, SQLConf.get.caseSensitiveAnalysis)
     // Combines all convertible filters using `And` to produce a single conjunction
     val conjunctionOptional = buildTree(convertibleFilters(dataTypeMap, filters))
@@ -81,12 +92,11 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
   def convertibleFilters(
       dataTypeMap: Map[String, OrcPrimitiveField],
-      filters: Seq[Filter]): Seq[Filter] = {
-    import org.apache.spark.sql.sources._
+      filters: Seq[V2Filter]): Seq[V2Filter] = {
 
     def convertibleFiltersHelper(
-        filter: Filter,
-        canPartialPushDown: Boolean): Option[Filter] = filter match {
+        filter: V2Filter,
+        canPartialPushDown: Boolean): Option[V2Filter] = filter match {
       // At here, it is not safe to just convert one side and remove the other side
       // if we do not understand what the parent filters are.
       //
@@ -98,11 +108,11 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       // Pushing one side of AND down is only safe to do at the top level or in the child
       // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
       // can be safely removed.
-      case And(left, right) =>
-        val leftResultOptional = convertibleFiltersHelper(left, canPartialPushDown)
-        val rightResultOptional = convertibleFiltersHelper(right, canPartialPushDown)
+      case f: V2And =>
+        val leftResultOptional = convertibleFiltersHelper(f.left, canPartialPushDown)
+        val rightResultOptional = convertibleFiltersHelper(f.right, canPartialPushDown)
         (leftResultOptional, rightResultOptional) match {
-          case (Some(leftResult), Some(rightResult)) => Some(And(leftResult, rightResult))
+          case (Some(leftResult), Some(rightResult)) => Some(new V2And(leftResult, rightResult))
           case (Some(leftResult), None) if canPartialPushDown => Some(leftResult)
           case (None, Some(rightResult)) if canPartialPushDown => Some(rightResult)
           case _ => None
@@ -119,14 +129,14 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       // The predicate can be converted as
       // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
       // As per the logical in And predicate, we can push down (a1 OR b1).
-      case Or(left, right) =>
+      case f: V2Or =>
         for {
-          lhs <- convertibleFiltersHelper(left, canPartialPushDown)
-          rhs <- convertibleFiltersHelper(right, canPartialPushDown)
-        } yield Or(lhs, rhs)
-      case Not(pred) =>
-        val childResultOptional = convertibleFiltersHelper(pred, canPartialPushDown = false)
-        childResultOptional.map(Not)
+          lhs <- convertibleFiltersHelper(f.left, canPartialPushDown)
+          rhs <- convertibleFiltersHelper(f.right, canPartialPushDown)
+        } yield new V2Or(lhs, rhs)
+      case f: V2Not =>
+        val childResultOptional = convertibleFiltersHelper(f.child, canPartialPushDown = false)
+        childResultOptional.map(new V2Not(_))
       case other =>
         for (_ <- buildLeafSearchArgument(dataTypeMap, other, newBuilder())) yield other
     }
@@ -157,16 +167,32 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    */
   private def castLiteralValue(value: Any, dataType: DataType): Any = dataType match {
     case ByteType | ShortType | IntegerType | LongType =>
-      value.asInstanceOf[Number].longValue
+      value.asInstanceOf[Literal[_]].value.asInstanceOf[Number].longValue
     case FloatType | DoubleType =>
-      value.asInstanceOf[Number].doubleValue()
+      value.asInstanceOf[Literal[_]].value.asInstanceOf[Number].doubleValue()
+    case _: DecimalType
+      if value.asInstanceOf[Literal[_]].value.isInstanceOf[java.math.BigDecimal] =>
+      new HiveDecimalWritable(HiveDecimal.create
+      (value.asInstanceOf[Literal[_]].value.asInstanceOf[java.math.BigDecimal]))
     case _: DecimalType =>
-      new HiveDecimalWritable(HiveDecimal.create(value.asInstanceOf[java.math.BigDecimal]))
-    case _: DateType if value.isInstanceOf[LocalDate] =>
-      toJavaDate(localDateToDays(value.asInstanceOf[LocalDate]))
-    case _: TimestampType if value.isInstanceOf[Instant] =>
-      toJavaTimestamp(instantToMicros(value.asInstanceOf[Instant]))
-    case _ => value
+      new HiveDecimalWritable(HiveDecimal.create
+        (value.asInstanceOf[Literal[_]].value.asInstanceOf[Decimal].toJavaBigDecimal))
+    case _: DateType if value.asInstanceOf[Literal[_]].value.isInstanceOf[LocalDate] =>
+      toJavaDate(localDateToDays(value.asInstanceOf[Literal[_]].value.asInstanceOf[LocalDate]))
+    case _: DateType if value.asInstanceOf[Literal[_]].value.isInstanceOf[Integer] =>
+      toJavaDate(value.asInstanceOf[Literal[_]].value.asInstanceOf[Integer])
+    case _: TimestampType if value.asInstanceOf[Literal[_]].value.isInstanceOf[Instant] =>
+      toJavaTimestamp(instantToMicros(value.asInstanceOf[Literal[_]].value.asInstanceOf[Instant]))
+    case _: TimestampType if value.asInstanceOf[Literal[_]].value.isInstanceOf[Long] =>
+      toJavaTimestamp(value.asInstanceOf[Literal[_]].value.asInstanceOf[Long])
+    case StringType =>
+      val str = value.asInstanceOf[Literal[_]].value
+      if(str.isInstanceOf[UTF8String]) {
+        str.asInstanceOf[UTF8String].toString
+      } else {
+        str
+      }
+    case _ => value.asInstanceOf[Literal[_]].value
   }
 
   /**
@@ -179,23 +205,22 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    */
   private def buildSearchArgument(
       dataTypeMap: Map[String, OrcPrimitiveField],
-      expression: Filter,
+      expression: V2Filter,
       builder: Builder): Builder = {
-    import org.apache.spark.sql.sources._
 
     expression match {
-      case And(left, right) =>
-        val lhs = buildSearchArgument(dataTypeMap, left, builder.startAnd())
-        val rhs = buildSearchArgument(dataTypeMap, right, lhs)
+      case f: V2And =>
+        val lhs = buildSearchArgument(dataTypeMap, f.left, builder.startAnd())
+        val rhs = buildSearchArgument(dataTypeMap, f.right, lhs)
         rhs.end()
 
-      case Or(left, right) =>
-        val lhs = buildSearchArgument(dataTypeMap, left, builder.startOr())
-        val rhs = buildSearchArgument(dataTypeMap, right, lhs)
+      case f: V2Or =>
+        val lhs = buildSearchArgument(dataTypeMap, f.left, builder.startOr())
+        val rhs = buildSearchArgument(dataTypeMap, f.right, lhs)
         rhs.end()
 
-      case Not(child) =>
-        buildSearchArgument(dataTypeMap, child, builder.startNot()).end()
+      case f: V2Not =>
+        buildSearchArgument(dataTypeMap, f.child, builder.startNot()).end()
 
       case other =>
         buildLeafSearchArgument(dataTypeMap, other, builder).getOrElse {
@@ -215,58 +240,67 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    */
   private def buildLeafSearchArgument(
       dataTypeMap: Map[String, OrcPrimitiveField],
-      expression: Filter,
+      expression: V2Filter,
       builder: Builder): Option[Builder] = {
     def getType(attribute: String): PredicateLeaf.Type =
       getPredicateLeafType(dataTypeMap(attribute).fieldType)
-
-    import org.apache.spark.sql.sources._
 
     // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
     // call is mandatory. ORC `SearchArgument` builder requires that all leaf predicates must be
     // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
     expression match {
-      case EqualTo(name, value) if dataTypeMap.contains(name) =>
-        val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
-        Some(builder.startAnd()
-          .equals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
+      case f: V2EqualTo if dataTypeMap.contains(f.column.describe) =>
+        val colName = f.column.describe
+        val castedValue = castLiteralValue(f.value, dataTypeMap(colName).fieldType)
+        Some(builder.startAnd().equals(
+          dataTypeMap(colName).fieldName, getType(colName), castedValue).end())
 
-      case EqualNullSafe(name, value) if dataTypeMap.contains(name) =>
-        val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
-        Some(builder.startAnd()
-          .nullSafeEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
+      case f: V2EqualNullSafe
+        if dataTypeMap.contains(f.column.describe) =>
+        val colName = f.column.describe
+        val castedValue = castLiteralValue(f.value, dataTypeMap(colName).fieldType)
+        Some(builder.startAnd().nullSafeEquals(
+          dataTypeMap(colName).fieldName, getType(colName), castedValue).end())
 
-      case LessThan(name, value) if dataTypeMap.contains(name) =>
-        val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
-        Some(builder.startAnd()
-          .lessThan(dataTypeMap(name).fieldName, getType(name), castedValue).end())
+      case f: V2LessThan if dataTypeMap.contains(f.column.describe) =>
+        val colName = f.column.describe
+        val castedValue = castLiteralValue(f.value, dataTypeMap(colName).fieldType)
+        Some(builder.startAnd().lessThan(
+          dataTypeMap(colName).fieldName, getType(colName), castedValue).end())
 
-      case LessThanOrEqual(name, value) if dataTypeMap.contains(name) =>
-        val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
-        Some(builder.startAnd()
-          .lessThanEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
+      case f: V2LessThanOrEqual
+        if dataTypeMap.contains(f.column.describe) =>
+        val colName = f.column.describe
+        val castedValue = castLiteralValue(f.value, dataTypeMap(colName).fieldType)
+        Some(builder.startAnd().lessThanEquals(
+          dataTypeMap(colName).fieldName, getType(colName), castedValue).end())
 
-      case GreaterThan(name, value) if dataTypeMap.contains(name) =>
-        val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
-        Some(builder.startNot()
-          .lessThanEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
+      case f: V2GreaterThan
+        if dataTypeMap.contains(f.column.describe) =>
+        val colName = f.column.describe
+        val castedValue = castLiteralValue(f.value, dataTypeMap(colName).fieldType)
+        Some(builder.startNot().lessThanEquals(
+          dataTypeMap(colName).fieldName, getType(colName), castedValue).end())
 
-      case GreaterThanOrEqual(name, value) if dataTypeMap.contains(name) =>
-        val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
-        Some(builder.startNot()
-          .lessThan(dataTypeMap(name).fieldName, getType(name), castedValue).end())
+      case f: V2GreaterThanOrEqual
+        if dataTypeMap.contains(f.column.describe) =>
+        val colName = f.column.describe
+        val castedValue = castLiteralValue(f.value, dataTypeMap(colName).fieldType)
+        Some(builder.startNot().lessThan(
+          dataTypeMap(colName).fieldName, getType(colName), castedValue).end())
 
-      case IsNull(name) if dataTypeMap.contains(name) =>
-        Some(builder.startAnd()
-          .isNull(dataTypeMap(name).fieldName, getType(name)).end())
+      case f: V2IsNull if dataTypeMap.contains(f.column.describe) =>
+        val colName = f.column.describe
+        Some(builder.startAnd().isNull(dataTypeMap(colName).fieldName, getType(colName)).end())
 
-      case IsNotNull(name) if dataTypeMap.contains(name) =>
-        Some(builder.startNot()
-          .isNull(dataTypeMap(name).fieldName, getType(name)).end())
+      case f: V2IsNotNull if dataTypeMap.contains(f.column.describe) =>
+        val colName = f.column.describe
+        Some(builder.startNot().isNull(dataTypeMap(colName).fieldName, getType(colName)).end())
 
-      case In(name, values) if dataTypeMap.contains(name) =>
-        val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(name).fieldType))
-        Some(builder.startAnd().in(dataTypeMap(name).fieldName, getType(name),
+      case f: V2In if dataTypeMap.contains(f.column.describe) =>
+        val colName = f.column.describe
+        val castedValues = f.values.map(v => castLiteralValue(v, dataTypeMap(colName).fieldType))
+        Some(builder.startAnd().in(dataTypeMap(colName).fieldName, getType(colName),
           castedValues.map(_.asInstanceOf[AnyRef]): _*).end())
 
       case _ => None

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.sources.{And, Filter}
+import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Filter => V2Filter}
 import org.apache.spark.sql.types.{AtomicType, BinaryType, DataType, StructField, StructType}
 
 /**
@@ -28,14 +28,14 @@ import org.apache.spark.sql.types.{AtomicType, BinaryType, DataType, StructField
  */
 trait OrcFiltersBase {
 
-  private[sql] def buildTree(filters: Seq[Filter]): Option[Filter] = {
+  private[sql] def buildTree(filters: Seq[V2Filter]): Option[V2Filter] = {
     filters match {
       case Seq() => None
       case Seq(filter) => Some(filter)
-      case Seq(filter1, filter2) => Some(And(filter1, filter2))
+      case Seq(filter1, filter2) => Some(new V2And(filter1, filter2))
       case _ => // length > 2
         val (left, right) = filters.splitAt(filters.length / 2)
-        Some(And(buildTree(left).get, buildTree(right).get))
+        Some(new V2And(buildTree(left).get, buildTree(right).get))
     }
   }
 

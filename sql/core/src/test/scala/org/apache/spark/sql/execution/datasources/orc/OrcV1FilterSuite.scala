@@ -55,7 +55,7 @@ class OrcV1FilterSuite extends OrcFilterSuite {
       DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
     assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
-    val maybeFilter = OrcFilters.createFilter(query.schema, selectedFilters)
+    val maybeFilter = OrcFilters.createFilter(query.schema, selectedFilters.map(_.toV2))
     assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $selectedFilters")
     checker(maybeFilter.get)
   }

@@ -125,7 +125,7 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
           assert(o.pushedFilters.isEmpty, "Unsupported filters should not show in pushed filters")
         } else {
           assert(o.pushedFilters.nonEmpty, "No filter is pushed down")
-          val maybeFilter = OrcFilters.createFilter(query.schema, o.pushedFilters)
+          val maybeFilter = OrcFilters.createFilter(query.schema, o.pushedFilters.map(_.toV1))
           assert(maybeFilter.isEmpty, s"Couldn't generate filter predicate for ${o.pushedFilters}")
         }
 

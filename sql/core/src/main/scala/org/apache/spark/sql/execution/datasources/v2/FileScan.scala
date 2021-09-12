@@ -27,12 +27,12 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, ExpressionSet}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter}
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, Scan, Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.connector.SupportsMetadata
-import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -200,7 +200,7 @@ trait FileScan extends Scan
     StructType(readDataSchema.fields ++ readPartitionSchema.fields)
 
   // Returns whether the two given arrays of [[Filter]]s are equivalent.
-  protected def equivalentFilters(a: Array[Filter], b: Array[Filter]): Boolean = {
+  protected def equivalentFilters(a: Array[V2Filter], b: Array[V2Filter]): Boolean = {
     a.sortBy(_.hashCode()).sameElements(b.sortBy(_.hashCode()))
   }
 

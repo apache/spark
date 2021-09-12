@@ -18,10 +18,10 @@ package org.apache.spark.sql.execution.datasources.v2.json
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.StructFilters
+import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter}
 import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
-import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -45,11 +45,11 @@ class JsonScanBuilder (
       dataFilters)
   }
 
-  override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
+  override def pushDataFilters(dataFilters: Array[V2Filter]): Array[V2Filter] = {
     if (sparkSession.sessionState.conf.jsonFilterPushDown) {
-      StructFilters.pushedFilters(dataFilters, dataSchema)
+      StructFilters.pushedFiltersV2(dataFilters, dataSchema)
     } else {
-      Array.empty[Filter]
+      Array.empty[V2Filter]
     }
   }
 }

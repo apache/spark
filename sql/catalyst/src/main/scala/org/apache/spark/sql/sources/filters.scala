@@ -17,8 +17,16 @@
 
 package org.apache.spark.sql.sources
 
+import java.sql.{Date, Timestamp}
+import java.time.Instant
+
 import org.apache.spark.annotation.{Evolving, Stable}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
+import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse => V2AlwaysFalse, AlwaysTrue => V2AlwaysTrue, And => V2And, EqualNullSafe => V2EqualNullSafe, EqualTo => V2EqualTo, Filter => V2Filter, GreaterThan => V2GreaterThan, GreaterThanOrEqual => V2GreaterThanOrEqual, In => V2In, IsNotNull => V2IsNotNull, IsNull => V2IsNull, LessThan => V2LessThan, LessThanOrEqual => V2LessThanOrEqual, Not => V2Not, Or => V2Or, StringContains => V2StringContains, StringEndsWith => V2StringEndsWith, StringStartsWith => V2StringStartsWith}
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, TimestampType}
+import org.apache.spark.unsafe.types.UTF8String
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines all the filters that we can push down to the data sources.
@@ -42,6 +50,27 @@ sealed abstract class Filter {
    * @since 2.1.0
    */
   def references: Array[String]
+
+  private[sql] def toV2: V2Filter
+
+  private[sql] def getLiteralValue(value: Any): LiteralValue[_] = value match {
+    case _: java.math.BigDecimal => LiteralValue(value, DecimalType.SYSTEM_DEFAULT)
+    case _: Boolean => LiteralValue(value, BooleanType)
+    case _: Byte => LiteralValue(value, ByteType)
+    case _: Array[Byte] => LiteralValue(value, BinaryType)
+    case _: Date => LiteralValue(value, DateType)
+    case _: java.time.LocalDate => LiteralValue(value, DateType)
+    case _: Double => LiteralValue(value, DoubleType)
+    case _: Float => LiteralValue(value, FloatType)
+    case _: Integer => LiteralValue(value, IntegerType)
+    case _: Long => LiteralValue(value, LongType)
+    case _: Short => LiteralValue(value, ShortType)
+    case _: String => LiteralValue(UTF8String.fromString(value.toString), StringType)
+    case _: Timestamp => LiteralValue(value, TimestampType)
+    case _: Instant => LiteralValue(value, TimestampType)
+    case _ =>
+      throw QueryCompilationErrors.invalidDataTypeForFilterValue(value)
+  }
 
   protected def findReferences(value: Any): Array[String] = value match {
     case f: Filter => f.references
@@ -78,6 +107,9 @@ sealed abstract class Filter {
 @Stable
 case class EqualTo(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
+  override private[sql] def toV2 = {
+    new V2EqualTo(FieldReference(attribute), getLiteralValue(value))
+  }
 }
 
 /**
@@ -93,6 +125,8 @@ case class EqualTo(attribute: String, value: Any) extends Filter {
 @Stable
 case class EqualNullSafe(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
+  override private[sql] def toV2 =
+    new V2EqualNullSafe(FieldReference(attribute), getLiteralValue(value))
 }
 
 /**
@@ -107,6 +141,8 @@ case class EqualNullSafe(attribute: String, value: Any) extends Filter {
 @Stable
 case class GreaterThan(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
+  override private[sql] def toV2 =
+    new V2GreaterThan(FieldReference(attribute), getLiteralValue(value))
 }
 
 /**
@@ -121,6 +157,8 @@ case class GreaterThan(attribute: String, value: Any) extends Filter {
 @Stable
 case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
+  override private[sql] def toV2 =
+    new V2GreaterThanOrEqual(FieldReference(attribute), getLiteralValue(value))
 }
 
 /**
@@ -135,6 +173,8 @@ case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter {
 @Stable
 case class LessThan(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
+  override private[sql] def toV2 =
+    new V2LessThan(FieldReference(attribute), getLiteralValue(value))
 }
 
 /**
@@ -149,6 +189,8 @@ case class LessThan(attribute: String, value: Any) extends Filter {
 @Stable
 case class LessThanOrEqual(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
+  override private[sql] def toV2 =
+    new V2LessThanOrEqual(FieldReference(attribute), getLiteralValue(value))
 }
 
 /**
@@ -185,6 +227,9 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
   }
 
   override def references: Array[String] = Array(attribute) ++ values.flatMap(findReferences)
+  override private[sql] def toV2 =
+    new V2In(FieldReference(attribute),
+      values.map(value => getLiteralValue(value)))
 }
 
 /**
@@ -198,6 +243,7 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
 @Stable
 case class IsNull(attribute: String) extends Filter {
   override def references: Array[String] = Array(attribute)
+  override private[sql] def toV2 = new V2IsNull(FieldReference(attribute))
 }
 
 /**
@@ -211,6 +257,7 @@ case class IsNull(attribute: String) extends Filter {
 @Stable
 case class IsNotNull(attribute: String) extends Filter {
   override def references: Array[String] = Array(attribute)
+  override private[sql] def toV2 = new V2IsNotNull(FieldReference(attribute))
 }
 
 /**
@@ -221,6 +268,7 @@ case class IsNotNull(attribute: String) extends Filter {
 @Stable
 case class And(left: Filter, right: Filter) extends Filter {
   override def references: Array[String] = left.references ++ right.references
+  override private[sql] def toV2 = new V2And(left.toV2, right.toV2)
 }
 
 /**
@@ -231,6 +279,7 @@ case class And(left: Filter, right: Filter) extends Filter {
 @Stable
 case class Or(left: Filter, right: Filter) extends Filter {
   override def references: Array[String] = left.references ++ right.references
+  override private[sql] def toV2 = new V2Or(left.toV2, right.toV2)
 }
 
 /**
@@ -241,6 +290,7 @@ case class Or(left: Filter, right: Filter) extends Filter {
 @Stable
 case class Not(child: Filter) extends Filter {
   override def references: Array[String] = child.references
+  override private[sql] def toV2 = new V2Not(child.toV2)
 }
 
 /**
@@ -255,6 +305,8 @@ case class Not(child: Filter) extends Filter {
 @Stable
 case class StringStartsWith(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
+  override private[sql] def toV2 = new V2StringStartsWith(FieldReference(attribute),
+    UTF8String.fromString(value))
 }
 
 /**
@@ -269,6 +321,8 @@ case class StringStartsWith(attribute: String, value: String) extends Filter {
 @Stable
 case class StringEndsWith(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
+  override private[sql] def toV2 = new V2StringEndsWith(FieldReference(attribute),
+    UTF8String.fromString(value))
 }
 
 /**
@@ -283,6 +337,8 @@ case class StringEndsWith(attribute: String, value: String) extends Filter {
 @Stable
 case class StringContains(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
+  override private[sql] def toV2 = new V2StringContains(FieldReference(attribute),
+    UTF8String.fromString(value))
 }
 
 /**
@@ -293,6 +349,7 @@ case class StringContains(attribute: String, value: String) extends Filter {
 @Evolving
 case class AlwaysTrue() extends Filter {
   override def references: Array[String] = Array.empty
+  override private[sql] def toV2 = new V2AlwaysTrue()
 }
 
 @Evolving
@@ -307,6 +364,7 @@ object AlwaysTrue extends AlwaysTrue {
 @Evolving
 case class AlwaysFalse() extends Filter {
   override def references: Array[String] = Array.empty
+  override private[sql] def toV2 = new V2AlwaysFalse()
 }
 
 @Evolving

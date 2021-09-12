@@ -17,7 +17,7 @@
 package org.apache.spark.sql.internal.connector
 
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter}
 
 /**
  * A mix-in interface for {@link FileScanBuilder}. File sources can implement this interface to
@@ -37,5 +37,5 @@ trait SupportsPushDownCatalystFilters {
    * Returns the data filters that are pushed to the data source via
    * {@link #pushFilters(Expression[])}.
    */
-  def pushedFilters: Array[Filter]
+  def pushedFilters: Array[V2Filter]
 }

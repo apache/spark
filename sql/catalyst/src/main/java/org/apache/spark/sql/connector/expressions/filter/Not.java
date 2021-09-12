@@ -53,4 +53,9 @@ public final class Not extends Filter {
 
   @Override
   public NamedReference[] references() { return child.references(); }
+
+  @Override
+  public org.apache.spark.sql.sources.Filter toV1() {
+    return new org.apache.spark.sql.sources.Not(child.toV1());
+  }
 }

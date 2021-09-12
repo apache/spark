@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalyst.CatalystTypeConverters;
 import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
@@ -36,4 +37,10 @@ public final class GreaterThanOrEqual extends BinaryComparison {
 
   @Override
   public String toString() { return column.describe() + " >= " + value.describe(); }
+
+  @Override
+  public org.apache.spark.sql.sources.Filter toV1() {
+    return new org.apache.spark.sql.sources.GreaterThanOrEqual(
+      column.describe(), CatalystTypeConverters.convertToScala(value.value(), value.dataType()));
+  }
 }

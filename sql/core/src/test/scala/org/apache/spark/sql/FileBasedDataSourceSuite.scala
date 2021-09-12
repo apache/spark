@@ -887,10 +887,10 @@ class FileBasedDataSourceSuite extends QueryTest
       format match {
         case "orc" =>
           assert(scan.isInstanceOf[OrcScan])
-          assert(scan.asInstanceOf[OrcScan].pushedFilters === filters)
+          assert(scan.asInstanceOf[OrcScan].pushedFilters.map(_.toV1) === filters)
         case "parquet" =>
           assert(scan.isInstanceOf[ParquetScan])
-          assert(scan.asInstanceOf[ParquetScan].pushedFilters === filters)
+          assert(scan.asInstanceOf[ParquetScan].pushedFilters.map(_.toV1) === filters)
         case _ =>
           fail(s"unknown format $format")
       }

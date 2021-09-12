@@ -21,6 +21,7 @@ import scala.util.Try
 
 import org.apache.spark.sql.catalyst.StructFilters._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{BooleanType, StructType}
 
@@ -91,6 +92,16 @@ object StructFilters {
   def pushedFilters(filters: Array[sources.Filter], schema: StructType): Array[sources.Filter] = {
     val fieldNames = schema.fieldNames.toSet
     filters.filter(checkFilterRefs(_, fieldNames))
+  }
+
+  private def checkFilterRefsV2(filter: V2Filter, fieldNames: Set[String]): Boolean = {
+    // The names have been normalized and case sensitivity is not a concern here.
+    filter.references.map(_.fieldNames().mkString(".")).forall(fieldNames.contains)
+  }
+
+  def pushedFiltersV2(filters: Array[V2Filter], schema: StructType): Array[V2Filter] = {
+    val fieldNames = schema.fieldNames.toSet
+    filters.filter(checkFilterRefsV2(_, fieldNames))
   }
 
   private def zip[A, B](a: Option[A], b: Option[B]): Option[(A, B)] = {
