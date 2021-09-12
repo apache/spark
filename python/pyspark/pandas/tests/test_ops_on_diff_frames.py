@@ -1358,8 +1358,8 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.sort_index(), pser.sort_index())
         self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
-        pser1 = pd.Series()
-        pser2 = pd.Series()
+        pser1 = pd.Series([None, 2, 3, 4, 5, 6, 7, 8, None])
+        pser2 = pd.Series([None, 5, None, 3, 2, 1, None, 0, 0])
         psser1 = ps.from_pandas(pser1)
         psser2 = ps.from_pandas(pser2)
 
