@@ -593,6 +593,10 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       require(capacity < 512000000, "Cannot broadcast 512 million or more rows")
       var n = 1
       while (n < capacity) n *= 2
+      // n is estimated number of rows, to the next power of 2
+      // the below assumes (because we don't know yet) that the keys are unique.
+      // check that we have enough memory for both the key array (2 longs per entry)
+      // plus the page (which will start off as 1M bytes)
       ensureAcquireMemory(n * 2L * 8 + (1 << 20))
       array = new Array[Long](n * 2)
       mask = n * 2 - 2
@@ -613,6 +617,8 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
    * Returns total memory consumption.
    */
   def getTotalMemoryConsumption: Long = array.length * 8L + page.length * 8L
+
+  def numUniqueKeys: Long = numKeys
 
   /**
    * Returns the first slot of array that store the keys (sparse mode).
@@ -1073,8 +1079,29 @@ private[joins] object LongHashedRelation {
         return HashedRelationWithAllNullKeys
       }
     }
-    map.optimize()
-    new LongHashedRelation(numFields, map)
+    // if needed, compact the nodes of each linked lists such
+    // that they are contiguous in memory
+    val mapToUse = if (!map.keyIsUnique) {
+      scala.Console.err.print(s"Compacting map at ${System.currentTimeMillis()}\n")
+      val resultRow = new UnsafeRow(numFields)
+      val keyIt = map.keys()
+      val compactMap = new LongToUnsafeRowMap(taskMemoryManager, map.numUniqueKeys.toInt)
+      while (keyIt.hasNext) {
+        val key = keyIt.next.getLong(0);
+        val valueIt = map.get(key, resultRow)
+        while (valueIt.hasNext) {
+          val value = valueIt.next()
+          compactMap.append(key, value);
+        }
+      }
+      map.free()
+      scala.Console.err.print(s"Done compacting map at ${System.currentTimeMillis()}\n")
+      compactMap
+    } else {
+      map
+    }
+    mapToUse.optimize()
+    new LongHashedRelation(numFields, mapToUse)
   }
 }
 
