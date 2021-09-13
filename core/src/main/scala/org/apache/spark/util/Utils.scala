@@ -3129,8 +3129,8 @@ private[spark] object Utils extends Logging {
       logInfo(s"Unzipped from $dfsZipFile\n\t${files.mkString("\n\t")}")
     } finally {
       // Close everything no matter what happened
-      JavaUtils.closeQuietly(in)
-      JavaUtils.closeQuietly(out)
+      IOUtils.closeQuietly(in)
+      IOUtils.closeQuietly(out)
     }
     files.toSeq
   }
