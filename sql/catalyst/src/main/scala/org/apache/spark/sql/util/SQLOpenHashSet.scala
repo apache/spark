@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.util
 
-import java.lang
-
 import scala.reflect._
 
 import org.apache.spark.annotation.Private
