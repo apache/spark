@@ -41,7 +41,7 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
       && (c.references.nonEmpty || conf.useOptimizedConstraintPropagation))
 
     } else {
-      ExpressionSet()
+      ExpressionSet(Set.empty)
     }
   }
 
@@ -56,6 +56,9 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
   protected lazy val validConstraints: ExpressionSet =
        if (SQLConf.get.useOptimizedConstraintPropagation) new ConstraintSet()
        else ExpressionSet(Set.empty[Expression])
+
+  // For testing purposes
+  def getValidConstraints: ExpressionSet = validConstraints
 }
 
 trait ConstraintHelper {
