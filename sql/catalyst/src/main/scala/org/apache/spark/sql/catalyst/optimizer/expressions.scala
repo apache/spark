@@ -288,6 +288,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
  * 2. Eliminates / extracts common factors.
  * 3. Merge same expressions
  * 4. Removes `Not` operator.
+ * 5. Move/Push `Not` operator if it's beneficial.
  */
 object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
   // Given argument x, return true if expression Not(x) can be simplified
@@ -462,10 +463,12 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       // `EqualTo(a, Not(b))` => `EqualTo(a, Not(Not(c)))` => `EqualTo(a, c)`
       // In addition, `if canSimplifyNot(b)` checks if the optimization can converge
       // that avoids the situation two conditions are returning to each other.
-      case EqualTo(Not(a), b) if canSimplifyNot(b) => EqualTo(a, Not(b))
-      case EqualTo(a, Not(b)) if canSimplifyNot(a) => EqualTo(Not(a), b)
-      case EqualNullSafe(Not(a), b) if canSimplifyNot(b) => EqualNullSafe(a, Not(b))
-      case EqualNullSafe(a, Not(b)) if canSimplifyNot(a) => EqualNullSafe(Not(a), b)
+      case EqualTo(Not(a), b) if !canSimplifyNot(a) && canSimplifyNot(b) => EqualTo(a, Not(b))
+      case EqualTo(a, Not(b)) if canSimplifyNot(a) && !canSimplifyNot(b) => EqualTo(Not(a), b)
+      case EqualNullSafe(Not(a), b) if !canSimplifyNot(a) && canSimplifyNot(b) =>
+        EqualNullSafe(a, Not(b))
+      case EqualNullSafe(a, Not(b)) if canSimplifyNot(a) && !canSimplifyNot(b) =>
+        EqualNullSafe(Not(a), b)
 
       // Push `Not` to one side of `EqualTo`/`EqualNullSafe` if it's beneficial.
       // E.g. Not(EqualTo(x, false)) => EqualTo(x, true)
