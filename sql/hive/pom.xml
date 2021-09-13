@@ -79,6 +79,12 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <!-- #if scala-2.13 --><!--
+    <dependency>
+      <groupId>org.scala-lang.modules</groupId>
+      <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+    </dependency>
+    --><!-- #endif scala-2.13 -->
 <!--
     <dependency>
       <groupId>com.google.guava</groupId>
@@ -216,15 +222,6 @@
           </plugin>
         </plugins>
       </build>
-    </profile>
-    <profile>
-      <id>scala-2.13</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.scala-lang.modules</groupId>
-          <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
-        </dependency>
-      </dependencies>
     </profile>
   </profiles>
 
