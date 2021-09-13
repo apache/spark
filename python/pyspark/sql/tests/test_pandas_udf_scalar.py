@@ -343,11 +343,13 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         df = self.spark.range(10)
         return_type = StructType([
             StructField('ts', TimestampType()),
-            StructField('arr', ArrayType(LongType()))])
+            StructField('arr', ArrayType(LongType())),
+            StructField('timestamp_array', ArrayType(TimestampType()))])
 
         def _scalar_f(id):
             return pd.DataFrame({'ts': id.apply(lambda i: pd.Timestamp(i)),
-                                 'arr': id.apply(lambda i: [i, i + 1])})
+                                 'arr': id.apply(lambda i: [i, i + 1]),
+                                 'timestamp_array': id.apply(lambda i: [pd.Timestamp(i)])})
 
         scalar_f = pandas_udf(_scalar_f, returnType=return_type)
 
@@ -363,6 +365,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 self.assertEqual(i, id)
                 self.assertEqual(pd.Timestamp(i).to_pydatetime(), f[0])
                 self.assertListEqual([i, i + 1], f[1])
+                self.assertListEqual([pd.Timestamp(i).to_pydatetime()], f[2])
 
     def test_vectorized_udf_nested_struct(self):
         nested_type = StructType([
@@ -518,9 +521,10 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
                 with self.assertRaisesRegex(
-                        NotImplementedError,
-                        'Invalid return type.*scalar Pandas UDF.*ArrayType.*TimestampType'):
-                    pandas_udf(lambda x: x, ArrayType(TimestampType()), udf_type)
+                    NotImplementedError,
+                        'Invalid return type.*scalar Pandas'
+                        ' UDF.*ArrayType.*ArrayType*.TimestampType'):
+                    pandas_udf(lambda x: x, ArrayType(ArrayType(TimestampType())), udf_type)
 
     def test_vectorized_udf_return_scalar(self):
         df = self.spark.range(10)
@@ -592,8 +596,9 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
                 with self.assertRaisesRegex(
                         NotImplementedError,
-                        'Invalid return type.*scalar Pandas UDF.*ArrayType.*TimestampType'):
-                    pandas_udf(lambda x: x, ArrayType(TimestampType()), udf_type)
+                        'Invalid return type.*scalar Pandas '
+                        'UDF.*ArrayType.*ArrayType*.TimestampType'):
+                    pandas_udf(lambda x: x, ArrayType(ArrayType(TimestampType())), udf_type)
                 with self.assertRaisesRegex(
                         NotImplementedError,
                         'Invalid return type.*scalar Pandas UDF.*ArrayType.StructType'):
@@ -691,6 +696,35 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 self.assertEqual(data[i][1], result[i][1])  # "timestamp" col
                 self.assertEqual(data[i][1], result[i][2])  # "timestamp_copy" col
                 self.assertIsNone(result[i][3])  # "check_data" col
+
+    def test_vectorized_udf_timestamps_array(self):
+        schema = StructType([
+            StructField("idx", LongType(), True),
+            StructField("timestamp_array", ArrayType(TimestampType()), True),
+            StructField("timestamp", TimestampType(), True)])
+        data = [(0, [datetime(1969, 1, 1, 1, 1, 1), datetime(1969, 1, 1, 1, 1, 1)],
+                datetime(1969, 1, 1, 1, 1, 1)), (1, [datetime(2012, 2, 2, 2, 2, 2)],
+                datetime(2012, 2, 2, 2, 2, 2)),
+                (2, [datetime(2100, 3, 3, 3, 3, 3)], datetime(2100, 3, 3, 3, 3, 3)),
+                (4, None, None)]
+
+        df = self.spark.createDataFrame(data, schema=schema)
+        df = df.repartition(1)
+        f_timestamp_arr_copy = pandas_udf(lambda t: t,
+                                          returnType=ArrayType(TimestampType()),
+                                          functionType=PandasUDFType.SCALAR)
+        f_timestamp_copy = pandas_udf(lambda t: t,
+                                      returnType=TimestampType(), functionType=PandasUDFType.SCALAR)
+
+        df = df.withColumn("timestamp_arr_copy", f_timestamp_arr_copy(col("timestamp_array")))\
+            .withColumn("timestamp_copy", f_timestamp_copy(col("timestamp")))\
+            .withColumn("timestamp_copy", f_timestamp_copy(col("timestamp")))
+        df = df.sort(col("idx")).collect()
+        for i in range(len(df)):
+            if df[i][1] is not None:
+                self.assertListEqual(df[i][1], df[i][3])
+                self.assertEqual(df[i][2], df[i][4])
+                self.assertListEqual(df[i][1], data[i][1])
 
     def test_vectorized_udf_return_timestamp_tz(self):
         df = self.spark.range(10)

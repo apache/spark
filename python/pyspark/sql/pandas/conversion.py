@@ -23,7 +23,9 @@ from pyspark.rdd import _load_from_socket  # type: ignore[attr-defined]
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.types import IntegralType
 from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, \
-    DoubleType, BooleanType, MapType, TimestampType, TimestampNTZType, StructType, DataType
+    DoubleType, BooleanType, MapType, TimestampType, TimestampNTZType, StructType, \
+    DataType, ArrayType
+
 from pyspark.sql.utils import is_timestamp_ntz_preferred
 from pyspark.traceback_utils import SCCallSiteSync
 
@@ -110,7 +112,7 @@ class PandasConversionMixin(object):
             if use_arrow:
                 try:
                     from pyspark.sql.pandas.types import _check_series_localize_timestamps, \
-                        _convert_map_items_to_dict
+                        _convert_map_items_to_dict, _is_series_contain_timestamp
                     import pyarrow
                     # Rename columns to avoid duplicated column names.
                     tmp_column_names = ['col_{}'.format(i) for i in range(len(self.columns))]
@@ -146,6 +148,12 @@ class PandasConversionMixin(object):
                             if isinstance(field.dataType, TimestampType):
                                 pdf[field.name] = \
                                     _check_series_localize_timestamps(pdf[field.name], timezone)
+                            if isinstance(field.dataType, ArrayType) and \
+                                    _is_series_contain_timestamp(pdf[field.name]):
+                                pdf[field.name] = \
+                                    _check_series_localize_timestamps(
+                                        pdf[field.name], timezone, ArrayType.__name__)
+
                             elif isinstance(field.dataType, MapType):
                                 pdf[field.name] = \
                                     _convert_map_items_to_dict(pdf[field.name])
@@ -183,8 +191,8 @@ class PandasConversionMixin(object):
             # to integer type e.g., np.int16, we will hit exception. So we use the inferred
             # float type, not the corrected type from the schema in this case.
             if pandas_type is not None and \
-                not(isinstance(field.dataType, IntegralType) and field.nullable and
-                    pandas_col.isnull().any()):
+                    not (isinstance(field.dataType, IntegralType) and field.nullable and
+                         pandas_col.isnull().any()):
                 dtype[fieldIdx] = pandas_type
             # Ensure we fall back to nullable numpy types, even when whole column is null:
             if isinstance(field.dataType, IntegralType) and pandas_col.isnull().any():
@@ -218,12 +226,18 @@ class PandasConversionMixin(object):
         if timezone is None:
             return pdf
         else:
-            from pyspark.sql.pandas.types import _check_series_convert_timestamps_local_tz
+            from pyspark.sql.pandas.types import _check_series_convert_timestamps_local_tz, \
+                _is_series_contain_timestamp
             for field in self.schema:
-                # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
                 if isinstance(field.dataType, TimestampType):
                     pdf[field.name] = \
                         _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
+
+                if isinstance(field.dataType, ArrayType) and \
+                        _is_series_contain_timestamp(pdf[field.name]):
+                    pdf[field.name] = \
+                        _check_series_convert_timestamps_local_tz(
+                            pdf[field.name], timezone, ArrayType.__name__)
             return pdf
 
     @staticmethod
@@ -314,7 +328,6 @@ class SparkConversionMixin(object):
     Min-in for the conversion from pandas to Spark. Currently, only :class:`SparkSession`
     can use this class.
     """
-
     @overload
     def createDataFrame(
         self, data: "PandasDataFrameLike", samplingRatio: Optional[float] = ...
@@ -401,7 +414,7 @@ class SparkConversionMixin(object):
         if timezone is not None:
             from pyspark.sql.pandas.types import _check_series_convert_timestamps_tz_local
             from pandas.core.dtypes.common import is_datetime64tz_dtype
-
+            from pyspark.sql.pandas.types import _is_series_contain_timestamp
             copied = False
             if isinstance(schema, StructType):
                 for field in schema:
@@ -415,6 +428,11 @@ class SparkConversionMixin(object):
                                 pdf = pdf.copy()
                                 copied = True
                             pdf[field.name] = s
+                    if isinstance(field.dataType, ArrayType) and \
+                            _is_series_contain_timestamp(pdf[field.name]):
+                        pdf[field.name] = \
+                            _check_series_convert_timestamps_tz_local(
+                                pdf[field.name], timezone, ArrayType.__name__)
             else:
                 should_localize = not is_timestamp_ntz_preferred()
                 for column, series in pdf.iteritems():

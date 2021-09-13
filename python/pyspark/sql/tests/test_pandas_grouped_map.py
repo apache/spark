@@ -250,10 +250,11 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
                     NotImplementedError,
-                    'Invalid return type.*grouped map Pandas UDF.*ArrayType.*TimestampType'):
+                    'Invalid return type.*grouped map Pandas '
+                    'UDF.*ArrayType.*ArrayType*.TimestampType'):
                 pandas_udf(
                     lambda pdf: pdf,
-                    'id long, v array<timestamp>',
+                    'id long, v array<array<timestamp>>',
                     PandasUDFType.GROUPED_MAP)
 
     def test_wrong_args(self):
@@ -280,7 +281,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
     def test_unsupported_types(self):
         common_err_msg = 'Invalid return type.*grouped map Pandas UDF.*'
         unsupported_types = [
-            StructField('arr_ts', ArrayType(TimestampType())),
+            StructField('arr_ts', ArrayType(ArrayType(TimestampType()))),
             StructField('struct', StructType([StructField('l', LongType())])),
         ]
 

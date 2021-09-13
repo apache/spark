@@ -176,9 +176,9 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
                     NotImplementedError,
-                    'Invalid return type.*ArrayType.*TimestampType'):
+                    'Invalid return type.*ArrayType.*ArrayType*.TimestampType'):
                 left.groupby('id').cogroup(right.groupby('id')).applyInPandas(
-                    lambda l, r: l, 'id long, v array<timestamp>')
+                    lambda l, r: l, 'id long, v array<array<timestamp>>')
 
     def test_wrong_args(self):
         left = self.data1

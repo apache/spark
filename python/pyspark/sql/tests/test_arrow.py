@@ -28,7 +28,7 @@ from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import rand, udf
 from pyspark.sql.types import StructType, StringType, IntegerType, LongType, \
     FloatType, DoubleType, DecimalType, DateType, TimestampType, TimestampNTZType, \
-    BinaryType, StructField, ArrayType, NullType
+    BinaryType, StructField, ArrayType, NullType, MapType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
@@ -121,8 +121,8 @@ class ArrowTests(ReusedSQLTestCase):
     def test_toPandas_fallback_enabled(self):
         ts = datetime.datetime(2015, 11, 1, 0, 30)
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": True}):
-            schema = StructType([StructField("a", ArrayType(TimestampType()), True)])
-            df = self.spark.createDataFrame([([ts],)], schema=schema)
+            schema = StructType([StructField("a", ArrayType(ArrayType(TimestampType())), True)])
+            df = self.spark.createDataFrame([([[ts]],)], schema=schema)
             with QuietTest(self.sc):
                 with self.warnings_lock:
                     with warnings.catch_warnings(record=True) as warns:
@@ -133,17 +133,28 @@ class ArrowTests(ReusedSQLTestCase):
                         user_warns = [
                             warn.message for warn in warns if isinstance(warn.message, UserWarning)]
                         self.assertTrue(len(user_warns) > 0)
-                        self.assertTrue(
-                            "Attempting non-optimization" in str(user_warns[-1]))
-                        assert_frame_equal(pdf, pd.DataFrame({"a": [[ts]]}))
+                        self.assertTrue("Attempting non-optimization" in str(user_warns[-1]))
+                        assert_frame_equal(pdf, pd.DataFrame({"a": [[[ts]]]}))
 
     def test_toPandas_fallback_disabled(self):
-        schema = StructType([StructField("a", ArrayType(TimestampType()), True)])
-        df = self.spark.createDataFrame([(None,)], schema=schema)
+        ts = datetime.datetime(2015, 11, 1, 0, 30)
+        schema = StructType([StructField("a", MapType(TimestampType(), TimestampType()), True)])
+        df = self.spark.createDataFrame([({ts: ts},)], schema=schema)
         with QuietTest(self.sc):
             with self.warnings_lock:
                 with self.assertRaisesRegex(Exception, 'Unsupported type'):
                     df.toPandas()
+
+    def test_toPandas_array_timestamp(self):
+        schema = StructType([
+            StructField("idx", LongType(), True),
+            StructField("timestamp_array", ArrayType(TimestampType()), True)])
+        data = [(0, [datetime.datetime(1969, 1, 1, 1, 1, 1)]),
+                (2, [datetime.datetime(2100, 3, 3, 3, 3, 3)])]
+        df = self.spark.createDataFrame(data, schema=schema)
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": False}):
+            pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
+            assert_frame_equal(pdf, pdf_arrow)
 
     def test_null_conversion(self):
         df_null = self.spark.createDataFrame(
@@ -449,6 +460,15 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEqual(pdf_col_names, df.columns)
         self.assertEqual(pdf_col_names, df_arrow.columns)
 
+    def test_createDataFrame_from_pandas(self):
+        ts = datetime.datetime(2015, 11, 1, 0, 30)
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": False}):
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+                df1 = self.spark.createDataFrame(pd.DataFrame({"a": [[ts]]}), "a: array<timestamp>")
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
+                df2 = self.spark.createDataFrame(pd.DataFrame({"a": [[ts]]}), "a: array<timestamp>")
+        self.assertEqual(df1.collect(), df2.collect())
+
     def test_createDataFrame_fallback_enabled(self):
         ts = datetime.datetime(2015, 11, 1, 0, 30)
         with QuietTest(self.sc):
@@ -457,21 +477,24 @@ class ArrowTests(ReusedSQLTestCase):
                     # we want the warnings to appear even if this test is run from a subclass
                     warnings.simplefilter("always")
                     df = self.spark.createDataFrame(
-                        pd.DataFrame({"a": [[ts]]}), "a: array<timestamp>")
+                        pd.DataFrame({"a": [[[ts]]]}), "a: array<array<timestamp>>")
                     # Catch and check the last UserWarning.
                     user_warns = [
                         warn.message for warn in warns if isinstance(warn.message, UserWarning)]
                     self.assertTrue(len(user_warns) > 0)
                     self.assertTrue(
                         "Attempting non-optimization" in str(user_warns[-1]))
-                    self.assertEqual(df.collect(), [Row(a=[ts])])
+                    self.assertEqual(df.collect(), [Row(a=[[ts]])])
+                df = self.spark.createDataFrame(pd.DataFrame({"a": [[[ts]]]}),
+                                                "a: array<array<timestamp>>")
+                self.assertEqual(df.collect(), [Row(a=[[ts]])])
 
     def test_createDataFrame_fallback_disabled(self):
         with QuietTest(self.sc):
             with self.assertRaisesRegex(TypeError, 'Unsupported type'):
                 self.spark.createDataFrame(
-                    pd.DataFrame({"a": [[datetime.datetime(2015, 11, 1, 0, 30)]]}),
-                    "a: array<timestamp>")
+                    pd.DataFrame({"a": [[[datetime.datetime(2015, 11, 1, 0, 30)]]]}),
+                    "a: array<array<timestamp>>")
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):

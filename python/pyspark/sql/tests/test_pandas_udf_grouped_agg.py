@@ -159,7 +159,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
         with QuietTest(self.sc):
             with self.assertRaisesRegex(NotImplementedError, 'not supported'):
-                @pandas_udf(ArrayType(TimestampType()), PandasUDFType.GROUPED_AGG)
+                @pandas_udf(ArrayType(ArrayType(TimestampType())), PandasUDFType.GROUPED_AGG)
                 def mean_and_std_udf(v):
                     return {v.mean(): v.std()}
 

@@ -64,7 +64,9 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
     elif type(dt) == TimestampNTZType:
         arrow_type = pa.timestamp('us', tz=None)
     elif type(dt) == ArrayType:
-        if type(dt.elementType) in [StructType, TimestampType]:
+        if (type(dt.elementType) in [StructType]) or \
+                (type(dt.elementType) == ArrayType and
+                 type(dt.elementType.elementType) in [TimestampType, TimestampNTZType]):
             raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
         arrow_type = pa.list_(to_arrow_type(dt.elementType))
     elif type(dt) == MapType:
@@ -129,7 +131,7 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     elif types.is_timestamp(at):
         spark_type = TimestampType()
     elif types.is_list(at):
-        if types.is_timestamp(at.value_type):
+        if types.is_list(at.value_type) and types.is_timestamp(at.value_type.value_type):
             raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
         spark_type = ArrayType(from_arrow_type(at.value_type))
     elif types.is_map(at):
@@ -176,7 +178,8 @@ def _get_local_timezone() -> str:
     return os.environ.get('TZ', 'dateutil/:')
 
 
-def _check_series_localize_timestamps(s: "PandasSeriesLike", timezone: str) -> "PandasSeriesLike":
+def _check_series_localize_timestamps(s: "PandasSeriesLike", timezone: str, datatype=None
+                                      ) -> "PandasSeriesLike":
     """
     Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone.
 
@@ -196,19 +199,19 @@ def _check_series_localize_timestamps(s: "PandasSeriesLike", timezone: str) -> "
     """
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
     require_minimum_pandas_version()
-
     from pandas.api.types import is_datetime64tz_dtype
     tz = timezone or _get_local_timezone()
-    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+    # Check if its ArrayType<TimeStamp>
+    if datatype == ArrayType.__name__:
+        return s.apply(lambda timestamp_array: modify_timestamp_array(timestamp_array, tz))
     if is_datetime64tz_dtype(s.dtype):
         return s.dt.tz_convert(tz).dt.tz_localize(None)
     else:
         return s
 
 
-def _check_series_convert_timestamps_internal(
-    s: "PandasSeriesLike", timezone: str
-) -> "PandasSeriesLike":
+def _check_series_convert_timestamps_internal(s: "PandasSeriesLike", timezone: str,
+                                              datatype: Optional[str] = None) -> "PandasSeriesLike":
     """
     Convert a tz-naive timestamp in the specified timezone or local timezone to UTC normalized for
     Spark internal storage
@@ -226,9 +229,11 @@ def _check_series_convert_timestamps_internal(
     """
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
     require_minimum_pandas_version()
-
     from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
-    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+    if datatype == list.__name__:
+        tz = timezone or _get_local_timezone()
+        return s.apply(lambda timestamp_array:
+                       modify_timestamp_array(timestamp_array, tz, is_utc=True))
     if is_datetime64_dtype(s.dtype):
         # When tz_localize a tz-naive timestamp, the result is ambiguous if the tz-naive
         # timestamp is during the hour when the clock is adjusted backward during due to
@@ -269,8 +274,8 @@ def _check_series_convert_timestamps_internal(
 
 
 def _check_series_convert_timestamps_localize(
-    s: "PandasSeriesLike", from_timezone: Optional[str], to_timezone: Optional[str]
-) -> "PandasSeriesLike":
+        s: "PandasSeriesLike", from_timezone: Optional[str], to_timezone: Optional[str],
+        datatype: Optional[str] = None) -> "PandasSeriesLike":
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone
 
@@ -294,8 +299,10 @@ def _check_series_convert_timestamps_localize(
     from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype
     from_tz = from_timezone or _get_local_timezone()
     to_tz = to_timezone or _get_local_timezone()
-    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-    if is_datetime64tz_dtype(s.dtype):
+    if datatype == ArrayType.__name__:
+        return s.apply(lambda timestamp_array:
+                       modify_timestamp_array(timestamp_array, to_tz, from_tz))
+    elif is_datetime64tz_dtype(s.dtype):
         return s.dt.tz_convert(to_tz).dt.tz_localize(None)
     elif is_datetime64_dtype(s.dtype) and from_tz != to_tz:
         # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
@@ -306,9 +313,28 @@ def _check_series_convert_timestamps_localize(
         return s
 
 
-def _check_series_convert_timestamps_local_tz(
-    s: "PandasSeriesLike", timezone: str
-) -> "PandasSeriesLike":
+def modify_timestamp_array(data, to_tz: Optional[str], from_tz: Optional[str] = None
+                           , is_utc: bool = False):
+    import pandas as pd
+    if data is None:
+        return [None]
+    else:
+        if is_utc:
+            iterator = map(lambda timestamp: pd.Timestamp(timestamp, tz=to_tz)
+                           .tz_convert('UTC').to_pydatetime(), data)
+            return list(iterator)
+        if from_tz is None:
+            iterator = map(lambda timestamp: pd.Timestamp(timestamp, tz=to_tz)
+                           .tz_localize(None).to_pydatetime(), data)
+        else:
+            iterator = map(lambda timestamp: pd.Timestamp(timestamp)
+                           .tz_localize(from_tz, ambiguous=False)
+                           .tz_convert(to_tz).tz_localize(None).to_pydatetime(), data)
+        return list(iterator)
+
+
+def _check_series_convert_timestamps_local_tz(s: "PandasSeriesLike", timezone: str, datatype=None
+                                              ) -> "PandasSeriesLike":
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone
 
@@ -317,17 +343,18 @@ def _check_series_convert_timestamps_local_tz(
     s : pandas.Series
     timezone : str
         the timezone to convert to. if None then use local timezone
+    datatype : Contains "ArrayType" if  the series contain array of timestamp
 
     Returns
     -------
     pandas.Series
         `pandas.Series` where if it is a timestamp, has been converted to tz-naive
     """
-    return _check_series_convert_timestamps_localize(s, None, timezone)
+    return _check_series_convert_timestamps_localize(s, None, timezone, datatype)
 
 
 def _check_series_convert_timestamps_tz_local(
-    s: "PandasSeriesLike", timezone: str
+    s: "PandasSeriesLike", timezone: str, datatype=None
 ) -> "PandasSeriesLike":
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone
@@ -337,13 +364,14 @@ def _check_series_convert_timestamps_tz_local(
     s : pandas.Series
     timezone : str
         the timezone to convert from. if None then use local timezone
+    datatype : Contains "ArrayType" if  the series contain array of timestamp
 
     Returns
     -------
     pandas.Series
         `pandas.Series` where if it is a timestamp, has been converted to tz-naive
     """
-    return _check_series_convert_timestamps_localize(s, timezone, None)
+    return _check_series_convert_timestamps_localize(s, timezone, None, datatype)
 
 
 def _convert_map_items_to_dict(s: "PandasSeriesLike") -> "PandasSeriesLike":
@@ -356,7 +384,27 @@ def _convert_map_items_to_dict(s: "PandasSeriesLike") -> "PandasSeriesLike":
     return s.apply(lambda m: None if m is None else {k: v for k, v in m})
 
 
-def _convert_dict_to_map_items(s: "PandasSeriesLike") -> "PandasSeriesLike":
+def _is_series_contain_timestamp(s):
+    """
+    checks whether the series contain Timstamp object
+    :param s: pd.series
+    :return:  True if the series contain timestamp object
+    """
+    from numpy import ndarray
+    import datetime
+    from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype
+    if not s.empty and isinstance(s.dtype, object) and \
+            isinstance(s.iloc[0], list) and len(s.iloc[0]) > 0 and \
+            isinstance(s.iloc[0][0], datetime.datetime):
+        return True
+    if not s.empty and isinstance(s.dtype, object) and \
+            isinstance(s.iloc[0], ndarray) and s.iloc[0].size > 0 and \
+            (is_datetime64_dtype(s.iloc[0].dtype) or is_datetime64tz_dtype(s.iloc[0].dtype)):
+        return True
+    return False
+
+
+def _convert_dict_to_map_items(s):
     """
     Convert a series of dictionaries to list of (key, value) pairs to match expected data
     for Arrow column of map type.
