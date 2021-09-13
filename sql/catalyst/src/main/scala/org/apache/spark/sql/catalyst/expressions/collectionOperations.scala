@@ -3667,7 +3667,6 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
         val hashSet = ctx.freshName("hashSet")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
-        val elemType = ctx.freshVariable("elemType", elementType)
 
         def withArrayNullAssignment(body: String) =
           if (dataType.asInstanceOf[ArrayType].containsNull) {
