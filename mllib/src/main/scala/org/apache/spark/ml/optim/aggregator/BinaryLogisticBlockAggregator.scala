@@ -61,12 +61,6 @@ private[ml] class BinaryLogisticBlockAggregator(
       s"got type ${bcCoefficients.value.getClass}.)")
   }
 
-  @transient private lazy val linear = if (fitIntercept) {
-    new DenseVector(coefficientsArray.take(numFeatures))
-  } else {
-    new DenseVector(coefficientsArray)
-  }
-
   // pre-computed margin of an empty vector.
   // with this variable as an offset, for a sparse vector, we only need to
   // deal with non-zero values in prediction.
@@ -94,17 +88,16 @@ private[ml] class BinaryLogisticBlockAggregator(
     if (block.weightIter.forall(_ == 0)) return this
     val size = block.size
 
-    // vec/arr here represents margins
-    val vec = new DenseVector(Array.ofDim[Double](size))
-    val arr = vec.values
+    // arr here represents margins
+    val arr = Array.ofDim[Double](size)
     if (fitIntercept) {
       val offset = if (fitWithMean) marginOffset else coefficientsArray.last
       java.util.Arrays.fill(arr, offset)
     }
-    BLAS.gemv(1.0, block.matrix, linear, 1.0, vec)
+    BLAS.gemv(1.0, block.matrix, coefficientsArray, 1.0, arr)
 
     // in-place convert margins to multiplier
-    // then, vec/arr represents multiplier
+    // then, arr represents multiplier
     var localLossSum = 0.0
     var localWeightSum = 0.0
     var multiplierSum = 0.0
@@ -134,24 +127,7 @@ private[ml] class BinaryLogisticBlockAggregator(
     if (arr.forall(_ == 0)) return this
 
     // update the linear part of gradientSumArray
-    block.matrix match {
-      case dm: DenseMatrix =>
-        BLAS.nativeBLAS.dgemv("N", dm.numCols, dm.numRows, 1.0, dm.values, dm.numCols,
-          vec.values, 1, 1.0, gradientSumArray, 1)
-
-      case sm: SparseMatrix if fitIntercept =>
-        val linearGradSumVec = new DenseVector(Array.ofDim[Double](numFeatures))
-        BLAS.gemv(1.0, sm.transpose, vec, 0.0, linearGradSumVec)
-        BLAS.javaBLAS.daxpy(numFeatures, 1.0, linearGradSumVec.values, 1,
-          gradientSumArray, 1)
-
-      case sm: SparseMatrix if !fitIntercept =>
-        val gradSumVec = new DenseVector(gradientSumArray)
-        BLAS.gemv(1.0, sm.transpose, vec, 1.0, gradSumVec)
-
-      case m =>
-        throw new IllegalArgumentException(s"Unknown matrix type ${m.getClass}.")
-    }
+    BLAS.gemv(1.0, block.matrix.transpose, arr, 1.0, gradientSumArray)
 
     if (fitWithMean) {
       // above update of the linear part of gradientSumArray does NOT take the centering

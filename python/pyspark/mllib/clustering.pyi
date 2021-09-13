@@ -35,7 +35,7 @@ from pyspark.streaming.dstream import DStream
 T = TypeVar("T")
 
 class BisectingKMeansModel(JavaModelWrapper):
-    centers: List[ndarray]
+    centers: List[VectorLike]
     def __init__(self, java_model: JavaObject) -> None: ...
     @property
     def clusterCenters(self) -> List[ndarray]: ...
@@ -62,7 +62,7 @@ class BisectingKMeans:
     ) -> BisectingKMeansModel: ...
 
 class KMeansModel(Saveable, Loader[KMeansModel]):
-    centers: List[ndarray]
+    centers: List[VectorLike]
     def __init__(self, centers: List[VectorLike]) -> None: ...
     @property
     def clusterCenters(self) -> List[ndarray]: ...
@@ -149,7 +149,7 @@ class StreamingKMeansModel(KMeansModel):
     ) -> None: ...
     @property
     def clusterWeights(self) -> List[float64]: ...
-    centers: ndarray
+    centers: List[VectorLike]
     def update(
         self, data: RDD[VectorLike], decayFactor: float, timeUnit: str
     ) -> StreamingKMeansModel: ...

@@ -18,11 +18,14 @@ package org.apache.spark.deploy.k8s
 
 import java.io.File
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient, KubernetesClient}
+import io.fabric8.kubernetes.client.Config.KUBERNETES_REQUEST_RETRY_BACKOFFLIMIT_SYSTEM_PROPERTY
 import io.fabric8.kubernetes.client.Config.autoConfigure
 import io.fabric8.kubernetes.client.utils.HttpClientUtils
+import io.fabric8.kubernetes.client.utils.Utils.getSystemPropertyOrEnvVar
 import okhttp3.Dispatcher
 
 import org.apache.spark.SparkConf
@@ -74,6 +77,11 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       kubeContext.map("context " + _).getOrElse("current context") +
       " from users K8S config file")
 
+    // if backoff limit is not set then set it to 3
+    if (getSystemPropertyOrEnvVar(KUBERNETES_REQUEST_RETRY_BACKOFFLIMIT_SYSTEM_PROPERTY) == null) {
+      System.setProperty(KUBERNETES_REQUEST_RETRY_BACKOFFLIMIT_SYSTEM_PROPERTY, "3")
+    }
+
     // Start from an auto-configured config with the desired context
     // Fabric 8 uses null to indicate that the users current context should be used so if no
     // explicit setting pass null
@@ -102,6 +110,8 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
     val httpClientWithCustomDispatcher = baseHttpClient.newBuilder()
       .dispatcher(dispatcher)
       .build()
+    logDebug("Kubernetes client config: " +
+      new ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(config))
     new DefaultKubernetesClient(httpClientWithCustomDispatcher, config)
   }
 

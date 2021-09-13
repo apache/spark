@@ -208,7 +208,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")),
         StandardCharsets.UTF_8)
       // compare the ASTs so formatting differences don't cause failures
-      import org.json4s._
       import org.json4s.jackson.JsonMethods._
       val jsonAst = parse(clearLastUpdated(jsonOpt.get))
       val expAst = parse(exp)

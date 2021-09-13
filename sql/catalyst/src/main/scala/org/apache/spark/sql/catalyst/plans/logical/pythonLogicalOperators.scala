@@ -115,3 +115,20 @@ case class ArrowEvalPython(
   override protected def withNewChildInternal(newChild: LogicalPlan): ArrowEvalPython =
     copy(child = newChild)
 }
+
+/**
+ * A logical plan that adds a new long column with the name `name` that
+ * increases one by one. This is for 'distributed-sequence' default index
+ * in pandas API on Spark.
+ */
+case class AttachDistributedSequence(
+    sequenceAttr: Attribute,
+    child: LogicalPlan) extends UnaryNode {
+
+  override val producedAttributes: AttributeSet = AttributeSet(sequenceAttr)
+
+  override val output: Seq[Attribute] = sequenceAttr +: child.output
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): AttachDistributedSequence =
+    copy(child = newChild)
+}

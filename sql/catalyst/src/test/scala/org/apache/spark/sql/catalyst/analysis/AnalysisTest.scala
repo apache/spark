@@ -24,6 +24,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
+import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -99,13 +100,19 @@ trait AnalysisTest extends PlanTest {
   protected def checkAnalysisWithoutViewWrapper(
       inputPlan: LogicalPlan,
       expectedPlan: LogicalPlan,
-      caseSensitive: Boolean = true): Unit = {
+      caseSensitive: Boolean = true,
+      inlineCTE: Boolean = false): Unit = {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-      val actualPlan = getAnalyzer.executeAndCheck(inputPlan, new QueryPlanningTracker)
-      val transformed = EliminateSubqueryAliases(actualPlan) transformUp {
+      val analyzed = getAnalyzer.executeAndCheck(inputPlan, new QueryPlanningTracker)
+      val transformed = EliminateSubqueryAliases(analyzed) transformUp {
         case v: View if v.isTempViewStoringAnalyzedPlan => v.child
       }
-      comparePlans(transformed, expectedPlan)
+      val actualPlan = if (inlineCTE) {
+        InlineCTE(transformed)
+      } else {
+        transformed
+      }
+      comparePlans(actualPlan, expectedPlan)
     }
   }
 

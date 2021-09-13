@@ -50,30 +50,30 @@ class SeriesStringTest(PandasOnSparkTestCase, SQLTestUtils):
 
     def test_string_add_str_num(self):
         pdf = pd.DataFrame(dict(col1=["a"], col2=[1]))
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         with self.assertRaises(TypeError):
-            kdf["col1"] + kdf["col2"]
+            psdf["col1"] + psdf["col2"]
 
     def test_string_add_assign(self):
         pdf = pd.DataFrame(dict(col1=["a", "b", "c"], col2=["1", "2", "3"]))
-        kdf = ps.from_pandas(pdf)
-        kdf["col1"] += kdf["col2"]
+        psdf = ps.from_pandas(pdf)
+        psdf["col1"] += psdf["col2"]
         pdf["col1"] += pdf["col2"]
-        self.assert_eq(kdf["col1"], pdf["col1"])
+        self.assert_eq(psdf["col1"], pdf["col1"])
 
     def test_string_add_str_str(self):
         pdf = pd.DataFrame(dict(col1=["a", "b", "c"], col2=["1", "2", "3"]))
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         # TODO: Fix the Series names
-        self.assert_eq(kdf["col1"] + kdf["col2"], pdf["col1"] + pdf["col2"])
-        self.assert_eq(kdf["col2"] + kdf["col1"], pdf["col2"] + pdf["col1"])
+        self.assert_eq(psdf["col1"] + psdf["col2"], pdf["col1"] + pdf["col2"])
+        self.assert_eq(psdf["col2"] + psdf["col1"], pdf["col2"] + pdf["col1"])
 
     def test_string_add_str_lit(self):
         pdf = pd.DataFrame(dict(col1=["a", "b", "c"]))
-        kdf = ps.from_pandas(pdf)
-        self.assert_eq(kdf["col1"] + "_lit", pdf["col1"] + "_lit")
-        self.assert_eq("_lit" + kdf["col1"], "_lit" + pdf["col1"])
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf["col1"] + "_lit", pdf["col1"] + "_lit")
+        self.assert_eq("_lit" + psdf["col1"], "_lit" + pdf["col1"])
 
     def test_string_capitalize(self):
         self.check_func(lambda x: x.str.capitalize())
@@ -147,9 +147,9 @@ class SeriesStringTest(PandasOnSparkTestCase, SQLTestUtils):
         self.check_func(lambda x: x.str.isdecimal())
 
     def test_string_cat(self):
-        kser = ps.from_pandas(self.pser)
+        psser = ps.from_pandas(self.pser)
         with self.assertRaises(NotImplementedError):
-            kser.str.cat()
+            psser.str.cat()
 
     def test_string_center(self):
         self.check_func(lambda x: x.str.center(0))
@@ -167,24 +167,24 @@ class SeriesStringTest(PandasOnSparkTestCase, SQLTestUtils):
         self.check_func(lambda x: x.str.count("WH", flags=re.IGNORECASE))
 
     def test_string_decode(self):
-        kser = ps.from_pandas(self.pser)
+        psser = ps.from_pandas(self.pser)
         with self.assertRaises(NotImplementedError):
-            kser.str.decode("utf-8")
+            psser.str.decode("utf-8")
 
     def test_string_encode(self):
-        kser = ps.from_pandas(self.pser)
+        psser = ps.from_pandas(self.pser)
         with self.assertRaises(NotImplementedError):
-            kser.str.encode("utf-8")
+            psser.str.encode("utf-8")
 
     def test_string_extract(self):
-        kser = ps.from_pandas(self.pser)
+        psser = ps.from_pandas(self.pser)
         with self.assertRaises(NotImplementedError):
-            kser.str.extract("pat")
+            psser.str.extract("pat")
 
     def test_string_extractall(self):
-        kser = ps.from_pandas(self.pser)
+        psser = ps.from_pandas(self.pser)
         with self.assertRaises(NotImplementedError):
-            kser.str.extractall("pat")
+            psser.str.extractall("pat")
 
     def test_string_find(self):
         self.check_func(lambda x: x.str.find("a"))
@@ -334,7 +334,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

@@ -63,7 +63,7 @@ class BlockManagerMasterEndpoint(
 
   // Mapping from external shuffle service block manager id to the block statuses.
   private val blockStatusByShuffleService =
-    new mutable.HashMap[BlockManagerId, JHashMap[BlockId, BlockStatus]]
+    new mutable.HashMap[BlockManagerId, BlockStatusPerBlockId]
 
   // Mapping from executor ID to block manager ID.
   private val blockManagerIdByExecutor = new mutable.HashMap[String, BlockManagerId]
@@ -267,8 +267,8 @@ class BlockManagerMasterEndpoint(
           val blockIdsToDel = blocksToDeleteByShuffleService.getOrElseUpdate(bmIdForShuffleService,
             new mutable.HashSet[RDDBlockId]())
           blockIdsToDel += blockId
-          blockStatusByShuffleService.get(bmIdForShuffleService).foreach { blockStatus =>
-            blockStatus.remove(blockId)
+          blockStatusByShuffleService.get(bmIdForShuffleService).foreach { blockStatusForId =>
+            blockStatusForId.remove(blockId)
           }
         }
       }
@@ -300,6 +300,7 @@ class BlockManagerMasterEndpoint(
 
     Future.sequence(removeRddFromExecutorsFutures ++ removeRddBlockViaExtShuffleServiceFutures)
   }
+
   private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
     // Nothing to do in the BlockManagerMasterEndpoint data structures
     val removeMsg = RemoveShuffle(shuffleId)
@@ -544,8 +545,12 @@ class BlockManagerMasterEndpoint(
 
       val externalShuffleServiceBlockStatus =
         if (externalShuffleServiceRddFetchEnabled) {
+          // The blockStatusByShuffleService entries are never removed as they belong to the
+          // external shuffle service instances running on the cluster nodes. To decrease its
+          // memory footprint when all the disk persisted blocks are removed for a shuffle service
+          // BlockStatusPerBlockId releases the backing HashMap.
           val externalShuffleServiceBlocks = blockStatusByShuffleService
-            .getOrElseUpdate(externalShuffleServiceIdOnHost(id), new JHashMap[BlockId, BlockStatus])
+            .getOrElseUpdate(externalShuffleServiceIdOnHost(id), new BlockStatusPerBlockId)
           Some(externalShuffleServiceBlocks)
         } else {
           None
@@ -574,12 +579,12 @@ class BlockManagerMasterEndpoint(
     if (blockId.isShuffle) {
       blockId match {
         case ShuffleIndexBlockId(shuffleId, mapId, _) =>
-          // Don't update the map output on just the index block
-          logDebug(s"Received shuffle index block update for ${shuffleId} ${mapId}, ignoring.")
+          // We need to update this at index file because there exists the index-only block
+          logDebug(s"Received shuffle index block update for ${shuffleId} ${mapId}, updating.")
+          mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
           return true
         case ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int) =>
-          logDebug(s"Received shuffle data block update for ${shuffleId} ${mapId}, updating.")
-          mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
+          logDebug(s"Received shuffle data block update for ${shuffleId} ${mapId}, ignore.")
           return true
         case _ =>
           logDebug(s"Unexpected shuffle block type ${blockId}" +
@@ -645,7 +650,7 @@ class BlockManagerMasterEndpoint(
     val locations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
     val status = locations.headOption.flatMap { bmId =>
       if (externalShuffleServiceRddFetchEnabled && bmId.port == externalShuffleServicePort) {
-        Option(blockStatusByShuffleService(bmId).get(blockId))
+        blockStatusByShuffleService.get(bmId).flatMap(m => m.get(blockId))
       } else {
         blockManagerInfo.get(bmId).flatMap(_.getStatus(blockId))
       }
@@ -691,8 +696,9 @@ class BlockManagerMasterEndpoint(
   private def getShufflePushMergerLocations(
       numMergersNeeded: Int,
       hostsToFilter: Set[String]): Seq[BlockManagerId] = {
-    val blockManagerHosts = blockManagerIdByExecutor.values.map(_.host).toSet
-    val filteredBlockManagerHosts = blockManagerHosts.filterNot(hostsToFilter.contains(_))
+    val blockManagerHosts = blockManagerIdByExecutor
+      .filterNot(_._2.isDriver).values.map(_.host).toSet
+    val filteredBlockManagerHosts = blockManagerHosts.diff(hostsToFilter)
     val filteredMergersWithExecutors = filteredBlockManagerHosts.map(
       BlockManagerId(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER, _, externalShuffleServicePort))
     // Enough mergers are available as part of active executors list
@@ -749,18 +755,43 @@ object BlockStatus {
   def empty: BlockStatus = BlockStatus(StorageLevel.NONE, memSize = 0L, diskSize = 0L)
 }
 
+/**
+ * Stores block statuses for block IDs but removes the reference to the Map which used for storing
+ * the data when all the blocks are removed to avoid keeping the memory when not needed.
+ */
+private[spark] class BlockStatusPerBlockId {
+
+  private var blocks: JHashMap[BlockId, BlockStatus] = _
+
+  def get(blockId: BlockId): Option[BlockStatus] =
+    if (blocks == null) None else Option(blocks.get(blockId))
+
+  def put(blockId: BlockId, blockStatus: BlockStatus): Unit = {
+    if (blocks == null) {
+      blocks = new JHashMap[BlockId, BlockStatus]
+    }
+    blocks.put(blockId, blockStatus)
+  }
+
+  def remove(blockId: BlockId): Unit = {
+    blocks.remove(blockId)
+    if (blocks.isEmpty) {
+      blocks = null
+    }
+  }
+
+}
+
 private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,
     timeMs: Long,
     val maxOnHeapMem: Long,
     val maxOffHeapMem: Long,
     val storageEndpoint: RpcEndpointRef,
-    val externalShuffleServiceBlockStatus: Option[JHashMap[BlockId, BlockStatus]])
+    val externalShuffleServiceBlockStatus: Option[BlockStatusPerBlockId])
   extends Logging {
 
   val maxMem = maxOnHeapMem + maxOffHeapMem
-
-  val externalShuffleServiceEnabled = externalShuffleServiceBlockStatus.isDefined
 
   private var _lastSeenMs: Long = timeMs
   private var _remainingMem: Long = maxMem

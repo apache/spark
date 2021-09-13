@@ -203,13 +203,12 @@ object SparkBuild extends PomBuild {
   // Silencer: Scala compiler plugin for warning suppression
   // Aim: enable fatal warnings, but suppress ones related to using of deprecated APIs
   // depends on scala version:
-  // <2.13 - silencer 1.6.0 and compiler settings to enable fatal warnings
-  // 2.13.0,2.13.1 - silencer 1.7.1 and compiler settings to enable fatal warnings
+  // <2.13.2 - silencer 1.7.5 and compiler settings to enable fatal warnings
   // 2.13.2+ - no silencer and configured warnings to achieve the same
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies ++= {
       if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = if (scalaBinaryVersion.value == "2.13") "1.7.1" else "1.6.0"
+        val silencerVersion = "1.7.5"
         Seq(
           "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
           compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),
@@ -249,7 +248,9 @@ object SparkBuild extends PomBuild {
           "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s",
           "-Wconf:msg=Auto-application to \\`\\(\\)\\` is deprecated:s",
           "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
-          "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s"
+          "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s",
+          // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
+          "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e"
         )
       }
     }
@@ -264,7 +265,7 @@ object SparkBuild extends PomBuild {
       .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
       .map(file),
     publishMavenStyle := true,
-    unidocGenjavadocVersion := "0.17",
+    unidocGenjavadocVersion := "0.18",
 
     // Override SBT's default resolvers:
     resolvers := Seq(
@@ -273,7 +274,9 @@ object SparkBuild extends PomBuild {
       "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/maven2/",
       DefaultMavenRepository,
       Resolver.mavenLocal,
-      Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
+      Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns),
+      // needed for brotli-codec
+      "jitpack.io" at "https://jitpack.io"
     ),
     externalResolvers := resolvers.value,
     otherResolvers := SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))).value,
@@ -516,7 +519,8 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.hive.thriftserver.SparkSQLEnvSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite",
-    "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite"
+    "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite",
+    "org.apache.spark.shuffle.KubernetesLocalDiskShuffleDataIOSuite"
   )
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
@@ -735,9 +739,6 @@ object Catalyst {
 }
 
 object SQL {
-
-  import sbtavro.SbtAvro.autoImport._
-
   lazy val settings = Seq(
     (console / initialCommands) :=
       """
@@ -759,10 +760,8 @@ object SQL {
         |import sqlContext.implicits._
         |import sqlContext._
       """.stripMargin,
-    (console / cleanupCommands) := "sc.stop()",
-    Test / avroGenerate := (Compile / avroGenerate).value
+    (console / cleanupCommands) := "sc.stop()"
   )
-
 }
 
 object Hive {
@@ -770,6 +769,9 @@ object Hive {
   lazy val settings = Seq(
     // Specially disable assertions since some Hive tests fail them
     (Test / javaOptions) := (Test / javaOptions).value.filterNot(_ == "-ea"),
+    // Hive tests need higher metaspace size
+    (Test / javaOptions) := (Test / javaOptions).value.filterNot(_.contains("MaxMetaspaceSize")),
+    (Test / javaOptions) += "-XX:MaxMetaspaceSize=2g",
     // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
     // only for this subproject.
     scalacOptions := (scalacOptions map { currentOpts: Seq[String] =>
@@ -800,11 +802,30 @@ object Hive {
 }
 
 object YARN {
+  val genConfigProperties = TaskKey[Unit]("gen-config-properties",
+    "Generate config.properties which contains a setting whether Hadoop is provided or not")
+  val propFileName = "config.properties"
+  val hadoopProvidedProp = "spark.yarn.isHadoopProvided"
+
   lazy val settings = Seq(
     excludeDependencies --= Seq(
       ExclusionRule(organization = "com.sun.jersey"),
       ExclusionRule("javax.servlet", "javax.servlet-api"),
-      ExclusionRule("javax.ws.rs", "jsr311-api"))
+      ExclusionRule("javax.ws.rs", "jsr311-api")),
+    Compile / unmanagedResources :=
+      (Compile / unmanagedResources).value.filter(!_.getName.endsWith(s"$propFileName")),
+    genConfigProperties := {
+      val file = (Compile / classDirectory).value / s"org/apache/spark/deploy/yarn/$propFileName"
+      val isHadoopProvided = SbtPomKeys.effectivePom.value.getProperties.get(hadoopProvidedProp)
+      IO.write(file, s"$hadoopProvidedProp = $isHadoopProvided")
+    },
+    Compile / copyResources := (Def.taskDyn {
+      val c = (Compile / copyResources).value
+      Def.task {
+        (Compile / genConfigProperties).value
+        c
+      }
+    }).value
   )
 }
 
@@ -948,6 +969,8 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalog/v2/utils")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org.apache.spark.errors")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org.apache.spark.sql.errors")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hive")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/v2/avro")))
       .map(_.filterNot(_.getCanonicalPath.contains("SSLOptions")))
@@ -1104,9 +1127,15 @@ object TestSettings {
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     (Test / javaOptions) += "-ea",
     // SPARK-29282 This is for consistency between JDK8 and JDK11.
-    (Test / javaOptions) ++= "-Xmx4g -Xss4m -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads"
-      .split(" ").toSeq,
-    javaOptions += "-Xmx3g",
+    (Test / javaOptions) ++= {
+      val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
+      s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads -XX:ReservedCodeCacheSize=128m"
+        .split(" ").toSeq
+    },
+    javaOptions ++= {
+      val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
+      s"-Xmx4g -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
+    },
     (Test / javaOptions) ++= {
       val jdwpEnabled = sys.props.getOrElse("test.jdwp.enabled", "false").toBoolean
 

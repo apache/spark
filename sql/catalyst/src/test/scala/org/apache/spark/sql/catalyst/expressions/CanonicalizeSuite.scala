@@ -170,4 +170,11 @@ class CanonicalizeSuite extends SparkFunSuite {
       assert(nestedExpr2.canonicalized != nestedExpr3.canonicalized)
     }
   }
+
+  test("SPARK-35742: Expression.semanticEquals should be symmetrical") {
+    val attr = AttributeReference("col", IntegerType)()
+    val expr = PromotePrecision(attr)
+    assert(expr.semanticEquals(attr))
+    assert(attr.semanticEquals(expr))
+  }
 }

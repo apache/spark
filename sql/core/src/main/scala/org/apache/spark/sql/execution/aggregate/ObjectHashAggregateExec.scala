@@ -75,8 +75,7 @@ case class ObjectHashAggregateExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
-    "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext,
-      "number of tasks fall-backed to sort-based aggregation")
+    "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext, "number of sort fallback tasks")
   )
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -84,7 +83,7 @@ case class ObjectHashAggregateExec(
     val aggTime = longMetric("aggTime")
     val spillSize = longMetric("spillSize")
     val numTasksFallBacked = longMetric("numTasksFallBacked")
-    val fallbackCountThreshold = sqlContext.conf.objectAggSortBasedFallbackThreshold
+    val fallbackCountThreshold = conf.objectAggSortBasedFallbackThreshold
 
     child.execute().mapPartitionsWithIndexInternal { (partIndex, iter) =>
       val beforeAgg = System.nanoTime()

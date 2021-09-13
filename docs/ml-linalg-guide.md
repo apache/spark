@@ -21,29 +21,15 @@ license: |
 
 This guide provides necessary information to enable accelerated linear algebra processing for Spark MLlib.
 
-Spark MLlib defines Vector and Matrix as basic data types for machine learning algorithms. On top of them, [BLAS](https://en.wikipedia.org/wiki/Basic_Linear_Algebra_Subprograms) and [LAPACK](https://en.wikipedia.org/wiki/LAPACK) operations are implemented and supported by [netlib-java](https://github.com/fommil/netlib-Java) (the algorithms may call [Breeze](https://github.com/scalanlp/breeze) and it will in turn call `netlib-java`). `netlib-java` can use optimized native linear algebra libraries (refered to as "native libraries" or "BLAS libraries" hereafter) for faster numerical processing. [Intel MKL](https://software.intel.com/content/www/us/en/develop/tools/math-kernel-library.html) and [OpenBLAS](http://www.openblas.net) are two popular ones.
+Spark MLlib defines Vector and Matrix as basic data types for machine learning algorithms. On top of them, [BLAS](https://en.wikipedia.org/wiki/Basic_Linear_Algebra_Subprograms) and [LAPACK](https://en.wikipedia.org/wiki/LAPACK) operations are implemented and supported by [dev.ludovic.netlib](https://github.com/luhenry/netlib) (the algorithms may also call [Breeze](https://github.com/scalanlp/breeze)). `dev.ludovic.netlib` can use optimized native linear algebra libraries (refered to as "native libraries" or "BLAS libraries" hereafter) for faster numerical processing. [Intel MKL](https://software.intel.com/content/www/us/en/develop/tools/math-kernel-library.html) and [OpenBLAS](http://www.openblas.net) are two popular ones.
 
-However due to license differences, the official released Spark binaries by default don't contain native libraries support for `netlib-java`.
+The official released Spark binaries don't contain these native libraries.
 
-The following sections describe how to enable `netlib-java` with native libraries support for Spark MLlib and how to install native libraries and configure them properly.
-
-## Enable `netlib-java` with native library proxies 
-
-`netlib-java` depends on `libgfortran`. It requires GFORTRAN 1.4 or above. This can be obtained by installing `libgfortran` package. After installation, the following command can be used to verify if it is installed properly.
-```
-strings /path/to/libgfortran.so.3.0.0 | grep GFORTRAN_1.4
-```
-
-To build Spark with `netlib-java` native library proxies, you need to add `-Pnetlib-lgpl` to Maven build command line. For example:
-```
-$SPARK_SOURCE_HOME/build/mvn -Pnetlib-lgpl -DskipTests -Pyarn -Phadoop-2.7 clean package
-```
-
-If you only want to enable it in your project, include `com.github.fommil.netlib:all:1.1.2` as a dependency of your project.
+The following sections describe how to install native libraries, configure them properly, and how to point `dev.ludovic.netlib` to these native libraries.
 
 ## Install native linear algebra libraries
 
-Intel MKL and OpenBLAS are two popular native linear algebra libraries. You can choose one of them based on your preference. We provide basic instructions as below. You can refer to [netlib-java documentation](https://github.com/fommil/netlib-java) for more advanced installation instructions.
+Intel MKL and OpenBLAS are two popular native linear algebra libraries. You can choose one of them based on your preference. We provide basic instructions as below.
 
 ### Intel MKL
 
@@ -72,15 +58,19 @@ sudo yum install openblas
 
 To verify native libraries are properly loaded, start `spark-shell` and run the following code:
 ```
-scala> import com.github.fommil.netlib.BLAS;
-scala> System.out.println(BLAS.getInstance().getClass().getName());
+scala> import dev.ludovic.netlib.NativeBLAS
+scala> NativeBLAS.getInstance()
 ```
 
-If they are correctly loaded, it should print `com.github.fommil.netlib.NativeSystemBLAS`. Otherwise the warnings should be printed:
+If they are correctly loaded, it should print `dev.ludovic.netlib.NativeBLAS = dev.ludovic.netlib.blas.JNIBLAS@...`. Otherwise the warnings should be printed:
 ```
-WARN BLAS: Failed to load implementation from:com.github.fommil.netlib.NativeSystemBLAS
-WARN BLAS: Failed to load implementation from:com.github.fommil.netlib.NativeRefBLAS
+WARN NativeBLAS: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+java.lang.RuntimeException: Unable to load native implementation
+  at dev.ludovic.netlib.NativeBLAS.getInstance(NativeBLAS.java:44)
+  ...
 ```
+
+You can also point `dev.ludovic.netlib` to specific libraries names and paths. For example, `-Ddev.ludovic.netlib.blas.nativeLib=libmkl_rt.so` or `-Ddev.ludovic.netlib.blas.nativeLibPath=$MKLROOT/lib/intel64/libmkl_rt.so` for Intel MKL. You have similar parameters for LAPACK and ARPACK: `-Ddev.ludovic.netlib.lapack.nativeLib=...`, `-Ddev.ludovic.netlib.lapack.nativeLibPath=...`, `-Ddev.ludovic.netlib.arpack.nativeLib=...`, and `-Ddev.ludovic.netlib.arpack.nativeLibPath=...`.
 
 If native libraries are not properly configured in the system, the Java implementation (javaBLAS) will be used as fallback option.
 

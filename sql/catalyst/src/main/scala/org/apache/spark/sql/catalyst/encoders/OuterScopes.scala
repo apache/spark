@@ -21,6 +21,7 @@ import java.util.concurrent.ConcurrentMap
 
 import com.google.common.collect.MapMaker
 
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.Utils
 
 object OuterScopes {
@@ -78,7 +79,7 @@ object OuterScopes {
             }
 
             if (obj == null) {
-              throw new RuntimeException(s"Failed to get outer pointer for ${innerCls.getName}")
+              throw QueryExecutionErrors.cannotGetOuterPointerForInnerClassError(innerCls)
             }
 
             outerScopes.putIfAbsent(outerClassName, obj)

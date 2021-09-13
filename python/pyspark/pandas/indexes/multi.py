@@ -17,18 +17,17 @@
 
 from distutils.version import LooseVersion
 from functools import partial
-from typing import Any, Optional, Tuple, Union, cast
-import warnings
+from typing import Any, Callable, Iterator, List, Optional, Tuple, Union, cast, no_type_check
 
 import pandas as pd
-from pandas.api.types import is_list_like
-from pandas.api.types import is_hashable
+from pandas.api.types import is_hashable, is_list_like
 
-from pyspark import sql as spark
-from pyspark.sql import functions as F, Window
+from pyspark.sql import functions as F, Column, Window
+from pyspark.sql.types import DataType
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
+from pyspark.pandas._typing import Label, Name, Scalar
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.indexes.base import Index
@@ -42,11 +41,12 @@ from pyspark.pandas.utils import (
     verify_temp_column_name,
 )
 from pyspark.pandas.internal import (
+    InternalField,
     InternalFrame,
     NATURAL_ORDER_COLUMN_NAME,
     SPARK_INDEX_NAME_FORMAT,
 )
-from pyspark.pandas.typedef import Scalar
+from pyspark.pandas.spark import functions as SF
 
 
 class MultiIndex(Index):
@@ -94,6 +94,7 @@ class MultiIndex(Index):
                )
     """
 
+    @no_type_check
     def __new__(
         cls,
         levels=None,
@@ -104,7 +105,7 @@ class MultiIndex(Index):
         copy=False,
         name=None,
         verify_integrity: bool = True,
-    ):
+    ) -> "MultiIndex":
         if LooseVersion(pd.__version__) < LooseVersion("0.24"):
             if levels is None or codes is None:
                 raise TypeError("Must pass both levels and codes")
@@ -133,37 +134,42 @@ class MultiIndex(Index):
         return ps.from_pandas(pidx)
 
     @property
-    def _internal(self):
-        internal = self._kdf._internal
-        scol = F.struct(internal.index_spark_columns)
+    def _internal(self) -> InternalFrame:
+        internal = self._psdf._internal
+        scol = F.struct(*internal.index_spark_columns)
         return internal.copy(
             column_labels=[None],
             data_spark_columns=[scol],
-            data_dtypes=[None],
+            data_fields=[None],
             column_label_names=None,
         )
 
     @property
-    def _column_label(self):
+    def _column_label(self) -> Optional[Label]:
         return None
 
-    def __abs__(self):
+    def __abs__(self) -> "MultiIndex":
         raise TypeError("TypeError: cannot perform __abs__ with this index type: MultiIndex")
 
-    def _with_new_scol(self, scol: spark.Column, *, dtype=None):
+    def _with_new_scol(
+        self, scol: Column, *, field: Optional[InternalField] = None
+    ) -> "MultiIndex":
         raise NotImplementedError("Not supported for type MultiIndex")
 
-    def _align_and_column_op(self, f, *args) -> Index:
-        raise NotImplementedError("Not supported for type MultiIndex")
-
+    @no_type_check
     def any(self, *args, **kwargs) -> None:
         raise TypeError("cannot perform any with this index type: MultiIndex")
 
+    @no_type_check
     def all(self, *args, **kwargs) -> None:
         raise TypeError("cannot perform all with this index type: MultiIndex")
 
     @staticmethod
-    def from_tuples(tuples, sortorder=None, names=None) -> "MultiIndex":
+    def from_tuples(
+        tuples: List[Tuple],
+        sortorder: Optional[int] = None,
+        names: Optional[List[Name]] = None,
+    ) -> "MultiIndex":
         """
         Convert list of tuples to MultiIndex.
 
@@ -200,7 +206,11 @@ class MultiIndex(Index):
         )
 
     @staticmethod
-    def from_arrays(arrays, sortorder=None, names=None) -> "MultiIndex":
+    def from_arrays(
+        arrays: List[List],
+        sortorder: Optional[int] = None,
+        names: Optional[List[Name]] = None,
+    ) -> "MultiIndex":
         """
         Convert arrays to MultiIndex.
 
@@ -237,7 +247,11 @@ class MultiIndex(Index):
         )
 
     @staticmethod
-    def from_product(iterables, sortorder=None, names=None) -> "MultiIndex":
+    def from_product(
+        iterables: List[List],
+        sortorder: Optional[int] = None,
+        names: Optional[List[Name]] = None,
+    ) -> "MultiIndex":
         """
         Make a MultiIndex from the cartesian product of multiple iterables.
 
@@ -282,7 +296,7 @@ class MultiIndex(Index):
         )
 
     @staticmethod
-    def from_frame(df, names=None) -> "MultiIndex":
+    def from_frame(df: DataFrame, names: Optional[List[Name]] = None) -> "MultiIndex":
         """
         Make a MultiIndex from a DataFrame.
 
@@ -354,14 +368,14 @@ class MultiIndex(Index):
         return cast(MultiIndex, DataFrame(internal).index)
 
     @property
-    def name(self) -> str:
+    def name(self) -> Name:
         raise PandasNotImplementedError(class_name="pd.MultiIndex", property_name="name")
 
     @name.setter
-    def name(self, name: str) -> None:
+    def name(self, name: Name) -> None:
         raise PandasNotImplementedError(class_name="pd.MultiIndex", property_name="name")
 
-    def _verify_for_rename(self, name):
+    def _verify_for_rename(self, name: List[Name]) -> List[Label]:  # type: ignore[override]
         if is_list_like(name):
             if self._internal.index_level != len(name):
                 raise ValueError(
@@ -375,7 +389,7 @@ class MultiIndex(Index):
         else:
             raise TypeError("Must pass list-like as `names`.")
 
-    def swaplevel(self, i=-2, j=-1) -> "MultiIndex":
+    def swaplevel(self, i: int = -2, j: int = -1) -> "MultiIndex":
         """
         Swap level i with level j.
         Calling this method does not change the ordering of the values.
@@ -430,18 +444,18 @@ class MultiIndex(Index):
             zip(
                 self._internal.index_spark_columns,
                 self._internal.index_names,
-                self._internal.index_dtypes,
+                self._internal.index_fields,
             )
         )
-        index_map[i], index_map[j], = index_map[j], index_map[i]
-        index_spark_columns, index_names, index_dtypes = zip(*index_map)
+        index_map[i], index_map[j] = index_map[j], index_map[i]
+        index_spark_columns, index_names, index_fields = zip(*index_map)
         internal = self._internal.copy(
             index_spark_columns=list(index_spark_columns),
             index_names=list(index_names),
-            index_dtypes=list(index_dtypes),
+            index_fields=list(index_fields),
             column_labels=[],
             data_spark_columns=[],
-            data_dtypes=[],
+            data_fields=[],
         )
         return cast(MultiIndex, DataFrame(internal).index)
 
@@ -468,20 +482,22 @@ class MultiIndex(Index):
         return tuple(result)
 
     @staticmethod
-    def _comparator_for_monotonic_increasing(data_type):
+    def _comparator_for_monotonic_increasing(
+        data_type: DataType,
+    ) -> Callable[[Column, Column, Callable[[Column, Column], Column]], Column]:
         return compare_disallow_null
 
-    def _is_monotonic(self, order):
+    def _is_monotonic(self, order: str) -> bool:
         if order == "increasing":
             return self._is_monotonic_increasing().all()
         else:
             return self._is_monotonic_decreasing().all()
 
-    def _is_monotonic_increasing(self):
+    def _is_monotonic_increasing(self) -> Series:
         window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(-1, -1)
 
-        cond = F.lit(True)
-        has_not_null = F.lit(True)
+        cond = SF.lit(True)
+        has_not_null = SF.lit(True)
         for scol in self._internal.index_spark_columns[::-1]:
             data_type = self._internal.spark_type_for(scol)
             prev = F.lag(scol, 1).over(window)
@@ -489,9 +505,7 @@ class MultiIndex(Index):
             # Since pandas 1.1.4, null value is not allowed at any levels of MultiIndex.
             # Therefore, we should check `has_not_null` over the all levels.
             has_not_null = has_not_null & scol.isNotNull()
-            cond = F.when(scol.eqNullSafe(prev), cond).otherwise(
-                compare(scol, prev, spark.Column.__gt__)
-            )
+            cond = F.when(scol.eqNullSafe(prev), cond).otherwise(compare(scol, prev, Column.__gt__))
 
         cond = has_not_null & (prev.isNull() | cond)
 
@@ -510,20 +524,22 @@ class MultiIndex(Index):
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=self._internal.index_names,
-            index_dtypes=self._internal.index_dtypes,
+            index_fields=self._internal.index_fields,
         )
 
         return first_series(DataFrame(internal))
 
     @staticmethod
-    def _comparator_for_monotonic_decreasing(data_type):
+    def _comparator_for_monotonic_decreasing(
+        data_type: DataType,
+    ) -> Callable[[Column, Column, Callable[[Column, Column], Column]], Column]:
         return compare_disallow_null
 
-    def _is_monotonic_decreasing(self):
+    def _is_monotonic_decreasing(self) -> Series:
         window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(-1, -1)
 
-        cond = F.lit(True)
-        has_not_null = F.lit(True)
+        cond = SF.lit(True)
+        has_not_null = SF.lit(True)
         for scol in self._internal.index_spark_columns[::-1]:
             data_type = self._internal.spark_type_for(scol)
             prev = F.lag(scol, 1).over(window)
@@ -531,9 +547,7 @@ class MultiIndex(Index):
             # Since pandas 1.1.4, null value is not allowed at any levels of MultiIndex.
             # Therefore, we should check `has_not_null` over the all levels.
             has_not_null = has_not_null & scol.isNotNull()
-            cond = F.when(scol.eqNullSafe(prev), cond).otherwise(
-                compare(scol, prev, spark.Column.__lt__)
-            )
+            cond = F.when(scol.eqNullSafe(prev), cond).otherwise(compare(scol, prev, Column.__lt__))
 
         cond = has_not_null & (prev.isNull() | cond)
 
@@ -552,12 +566,14 @@ class MultiIndex(Index):
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=self._internal.index_names,
-            index_dtypes=self._internal.index_dtypes,
+            index_fields=self._internal.index_fields,
         )
 
         return first_series(DataFrame(internal))
 
-    def to_frame(self, index=True, name=None) -> DataFrame:
+    def to_frame(  # type: ignore[override]
+        self, index: bool = True, name: Optional[List[Name]] = None
+    ) -> DataFrame:
         """
         Create a DataFrame with the levels of the MultiIndex as columns.
         Column ordering is determined by the DataFrame constructor with data as
@@ -654,21 +670,11 @@ class MultiIndex(Index):
         # series-like operations. In that case, it creates new Index object instead of MultiIndex.
         return super().to_pandas()
 
-    def toPandas(self) -> pd.MultiIndex:
-        warnings.warn(
-            "MultiIndex.toPandas is deprecated as of MultiIndex.to_pandas. "
-            "Please use the API instead.",
-            FutureWarning,
-        )
-        return self.to_pandas()
-
-    toPandas.__doc__ = to_pandas.__doc__
-
-    def nunique(self, dropna=True) -> None:  # type: ignore
+    def nunique(self, dropna: bool = True, approx: bool = False, rsd: float = 0.05) -> int:
         raise NotImplementedError("nunique is not defined for MultiIndex")
 
     # TODO: add 'name' parameter after pd.MultiIndex.name is implemented
-    def copy(self, deep=None) -> "MultiIndex":  # type: ignore
+    def copy(self, deep: Optional[bool] = None) -> "MultiIndex":  # type: ignore[override]
         """
         Make a copy of this object.
 
@@ -700,7 +706,12 @@ class MultiIndex(Index):
         """
         return super().copy(deep=deep)  # type: ignore
 
-    def symmetric_difference(self, other, result_name=None, sort=None) -> "MultiIndex":
+    def symmetric_difference(  # type: ignore[override]
+        self,
+        other: Index,
+        result_name: Optional[List[Name]] = None,
+        sort: Optional[bool] = None,
+    ) -> "MultiIndex":
         """
         Compute the symmetric difference of two MultiIndex objects.
 
@@ -770,20 +781,21 @@ class MultiIndex(Index):
                 "Doesn't support symmetric_difference between Index & MultiIndex for now"
             )
 
-        sdf_self = self._kdf._internal.spark_frame.select(self._internal.index_spark_columns)
-        sdf_other = other._kdf._internal.spark_frame.select(other._internal.index_spark_columns)
+        sdf_self = self._psdf._internal.spark_frame.select(self._internal.index_spark_columns)
+        sdf_other = other._psdf._internal.spark_frame.select(other._internal.index_spark_columns)
 
         sdf_symdiff = sdf_self.union(sdf_other).subtract(sdf_self.intersect(sdf_other))
 
         if sort:
-            sdf_symdiff = sdf_symdiff.sort(self._internal.index_spark_columns)
+            sdf_symdiff = sdf_symdiff.sort(*self._internal.index_spark_columns)
 
-        internal = InternalFrame(  # TODO: dtypes?
+        internal = InternalFrame(
             spark_frame=sdf_symdiff,
             index_spark_columns=[
                 scol_for(sdf_symdiff, col) for col in self._internal.index_spark_column_names
             ],
             index_names=self._internal.index_names,
+            index_fields=self._internal.index_fields,
         )
         result = cast(MultiIndex, DataFrame(internal).index)
 
@@ -793,7 +805,7 @@ class MultiIndex(Index):
         return result
 
     # TODO: ADD error parameter
-    def drop(self, codes, level=None) -> "MultiIndex":
+    def drop(self, codes: List[Any], level: Optional[Union[int, Name]] = None) -> "MultiIndex":
         """
         Make new MultiIndex with passed list of labels deleted
 
@@ -855,10 +867,10 @@ class MultiIndex(Index):
             spark_frame=sdf,
             index_spark_columns=[scol_for(sdf, col) for col in internal.index_spark_column_names],
             index_names=internal.index_names,
-            index_dtypes=internal.index_dtypes,
+            index_fields=internal.index_fields,
             column_labels=[],
             data_spark_columns=[],
-            data_dtypes=[],
+            data_fields=[],
         )
         return cast(MultiIndex, DataFrame(internal).index)
 
@@ -868,7 +880,7 @@ class MultiIndex(Index):
     def argmin(self) -> None:
         raise TypeError("reduction operation 'argmin' not allowed for this dtype")
 
-    def asof(self, label) -> None:
+    def asof(self, label: Any) -> None:
         raise NotImplementedError(
             "only the default get_loc method is currently supported for MultiIndex"
         )
@@ -904,7 +916,7 @@ class MultiIndex(Index):
                 return partial(property_or_func, self)
         raise AttributeError("'MultiIndex' object has no attribute '{}'".format(item))
 
-    def _get_level_number(self, level) -> Optional[int]:
+    def _get_level_number(self, level: Union[int, Name]) -> int:
         """
         Return the level number if a valid level is given.
         """
@@ -929,11 +941,10 @@ class MultiIndex(Index):
                 level = level + nlevels
         else:
             raise KeyError("Level %s not found" % str(level))
-            return None
 
         return level
 
-    def get_level_values(self, level) -> Index:
+    def get_level_values(self, level: Union[int, Name]) -> Index:
         """
         Return vector of label values for requested level,
         equal to the length of the index.
@@ -969,18 +980,18 @@ class MultiIndex(Index):
         level = self._get_level_number(level)
         index_scol = self._internal.index_spark_columns[level]
         index_name = self._internal.index_names[level]
-        index_dtype = self._internal.index_dtypes[level]
+        index_field = self._internal.index_fields[level]
         internal = self._internal.copy(
             index_spark_columns=[index_scol],
             index_names=[index_name],
-            index_dtypes=[index_dtype],
+            index_fields=[index_field],
             column_labels=[],
             data_spark_columns=[],
-            data_dtypes=[],
+            data_fields=[],
         )
         return DataFrame(internal).index
 
-    def insert(self, loc: int, item) -> Index:
+    def insert(self, loc: int, item: Any) -> Index:
         """
         Make new MultiIndex inserting new item at location.
 
@@ -997,8 +1008,8 @@ class MultiIndex(Index):
 
         Examples
         --------
-        >>> kmidx = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
-        >>> kmidx.insert(3, ("h", "j"))  # doctest: +SKIP
+        >>> psmidx = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        >>> psmidx.insert(3, ("h", "j"))  # doctest: +SKIP
         MultiIndex([('a', 'x'),
                     ('b', 'y'),
                     ('c', 'z'),
@@ -1007,7 +1018,7 @@ class MultiIndex(Index):
 
         For negative values
 
-        >>> kmidx.insert(-2, ("h", "j"))  # doctest: +SKIP
+        >>> psmidx.insert(-2, ("h", "j"))  # doctest: +SKIP
         MultiIndex([('a', 'x'),
                     ('h', 'j'),
                     ('b', 'y'),
@@ -1029,18 +1040,21 @@ class MultiIndex(Index):
                     "index {} is out of bounds for axis 0 with size {}".format(loc, length)
                 )
 
-        index_name = self._internal.index_spark_column_names
+        index_name = [
+            (name,) for name in self._internal.index_spark_column_names
+        ]  # type: List[Label]
         sdf_before = self.to_frame(name=index_name)[:loc].to_spark()
         sdf_middle = Index([item]).to_frame(name=index_name).to_spark()
         sdf_after = self.to_frame(name=index_name)[loc:].to_spark()
         sdf = sdf_before.union(sdf_middle).union(sdf_after)
 
-        internal = InternalFrame(  # TODO: dtypes?
+        internal = InternalFrame(
             spark_frame=sdf,
             index_spark_columns=[
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=self._internal.index_names,
+            index_fields=[InternalField(field.dtype) for field in self._internal.index_fields],
         )
         return DataFrame(internal).index
 
@@ -1060,13 +1074,13 @@ class MultiIndex(Index):
 
         Examples
         --------
-        >>> kmidx = ps.MultiIndex.from_tuples([('a', 'x')])
-        >>> kmidx.item()
+        >>> psmidx = ps.MultiIndex.from_tuples([('a', 'x')])
+        >>> psmidx.item()
         ('a', 'x')
         """
-        return self._kdf.head(2)._to_internal_pandas().index.item()
+        return self._psdf.head(2)._to_internal_pandas().index.item()
 
-    def intersection(self, other) -> "MultiIndex":
+    def intersection(self, other: Union[DataFrame, Series, Index, List]) -> "MultiIndex":
         """
         Form the intersection of two Index objects.
 
@@ -1102,25 +1116,29 @@ class MultiIndex(Index):
             raise TypeError("other must be a MultiIndex or a list of tuples")
         else:
             other = MultiIndex.from_tuples(list(other))
-            spark_frame_other = other.to_frame().to_spark()
+            spark_frame_other = cast(MultiIndex, other).to_frame().to_spark()
             keep_name = True
 
-        default_name = [SPARK_INDEX_NAME_FORMAT(i) for i in range(self.nlevels)]
+        index_fields = self._index_fields_for_union_like(other, func_name="intersection")
+
+        default_name = [SPARK_INDEX_NAME_FORMAT(i) for i in range(self.nlevels)]  # type: List
         spark_frame_self = self.to_frame(name=default_name).to_spark()
         spark_frame_intersected = spark_frame_self.intersect(spark_frame_other)
         if keep_name:
             index_names = self._internal.index_names
         else:
             index_names = None
-        internal = InternalFrame(  # TODO: dtypes?
+
+        internal = InternalFrame(
             spark_frame=spark_frame_intersected,
             index_spark_columns=[scol_for(spark_frame_intersected, col) for col in default_name],
             index_names=index_names,
+            index_fields=index_fields,
         )
         return cast(MultiIndex, DataFrame(internal).index)
 
     @property
-    def hasnans(self):
+    def hasnans(self) -> bool:
         raise NotImplementedError("hasnans is not defined for MultiIndex")
 
     @property
@@ -1141,14 +1159,21 @@ class MultiIndex(Index):
 
     def factorize(
         self, sort: bool = True, na_sentinel: Optional[int] = -1
-    ) -> Tuple[Union["Series", "Index"], pd.Index]:
+    ) -> Tuple["MultiIndex", pd.Index]:
         return MissingPandasLikeMultiIndex.factorize(self, sort=sort, na_sentinel=na_sentinel)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator:
         return MissingPandasLikeMultiIndex.__iter__(self)
 
+    def map(
+        self,
+        mapper: Union[dict, Callable[[Any], Any], pd.Series] = None,
+        na_action: Optional[str] = None,
+    ) -> "Index":
+        return MissingPandasLikeMultiIndex.map(self, mapper, na_action)
 
-def _test():
+
+def _test() -> None:
     import os
     import doctest
     import sys

@@ -363,23 +363,32 @@ The following configurations are optional:
 <table class="table">
 <tr><th>Option</th><th>value</th><th>default</th><th>query type</th><th>meaning</th></tr>
 <tr>
+  <td>startingTimestamp</td>
+  <td>timestamp string e.g. "1000"</td>
+  <td>none (next preference is <code>startingOffsetsByTimestamp</code>)</td>
+  <td>streaming and batch</td>
+  <td>The start point of timestamp when a query is started, a string specifying a starting timestamp for
+  all partitions in topics being subscribed. Please refer the details on timestamp offset options below. If Kafka doesn't return the matched offset,
+  the behavior will follow to the value of the option <code>startingOffsetsByTimestampStrategy</code><p/>
+  <p/>
+  Note1: <code>startingTimestamp</code> takes precedence over <code>startingOffsetsByTimestamp</code> and <code>startingOffsets</code>.<p/>
+  Note2: For streaming queries, this only applies when a new query is started, and that resuming will
+  always pick up from where the query left off. Newly discovered partitions during a query will start at
+  earliest.</td>
+</tr>
+<tr>
   <td>startingOffsetsByTimestamp</td>
   <td>json string
   """ {"topicA":{"0": 1000, "1": 1000}, "topicB": {"0": 2000, "1": 2000}} """
   </td>
-  <td>none (the value of <code>startingOffsets</code> will apply)</td>
+  <td>none (next preference is <code>startingOffsets</code>)</td>
   <td>streaming and batch</td>
   <td>The start point of timestamp when a query is started, a json string specifying a starting timestamp for
-  each TopicPartition. The returned offset for each partition is the earliest offset whose timestamp is greater than or
-  equal to the given timestamp in the corresponding partition. If the matched offset doesn't exist,
-  the query will fail immediately to prevent unintended read from such partition. (This is a kind of limitation as of now, and will be addressed in near future.)<p/>
+  each TopicPartition. Please refer the details on timestamp offset options below. If Kafka doesn't return the matched offset,
+  the behavior will follow to the value of the option <code>startingOffsetsByTimestampStrategy</code><p/>
   <p/>
-  Spark simply passes the timestamp information to <code>KafkaConsumer.offsetsForTimes</code>, and doesn't interpret or reason about the value. <p/>
-  For more details on <code>KafkaConsumer.offsetsForTimes</code>, please refer <a href="https://kafka.apache.org/21/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html#offsetsForTimes-java.util.Map-">javadoc</a> for details.<p/>
-  Also the meaning of <code>timestamp</code> here can be vary according to Kafka configuration (<code>log.message.timestamp.type</code>): please refer <a href="https://kafka.apache.org/documentation/">Kafka documentation</a> for further details.<p/>
-  Note: This option requires Kafka 0.10.1.0 or higher.<p/>
-  Note2: <code>startingOffsetsByTimestamp</code> takes precedence over <code>startingOffsets</code>.<p/>
-  Note3: For streaming queries, this only applies when a new query is started, and that resuming will
+  Note1: <code>startingOffsetsByTimestamp</code> takes precedence over <code>startingOffsets</code>.<p/>
+  Note2: For streaming queries, this only applies when a new query is started, and that resuming will
   always pick up from where the query left off. Newly discovered partitions during a query will start at
   earliest.</td>
 </tr>
@@ -399,22 +408,27 @@ The following configurations are optional:
   earliest.</td>
 </tr>
 <tr>
+  <td>endingTimestamp</td>
+  <td>timestamp string e.g. "1000"</td>
+  <td>none (next preference is <code>endingOffsetsByTimestamp</code>)</td>
+  <td>batch query</td>
+  <td>The end point when a batch query is ended, a json string specifying an ending timestamp for
+  all partitions in topics being subscribed. Please refer the details on timestamp offset options below.
+  If Kafka doesn't return the matched offset, the offset will be set to latest.<p/>
+  Note: <code>endingTimestamp</code> takes precedence over <code>endingOffsetsByTimestamp</code> and <code>endingOffsets</code>.<p/>
+  </td>
+</tr>
+<tr>
   <td>endingOffsetsByTimestamp</td>
   <td>json string
   """ {"topicA":{"0": 1000, "1": 1000}, "topicB": {"0": 2000, "1": 2000}} """
   </td>
-  <td>latest</td>
+  <td>none (next preference is <code>endingOffsets</code>)</td>
   <td>batch query</td>
   <td>The end point when a batch query is ended, a json string specifying an ending timestamp for each TopicPartition.
-  The returned offset for each partition is the earliest offset whose timestamp is greater than or equal to
-  the given timestamp in the corresponding partition. If the matched offset doesn't exist, the offset will
-  be set to latest.<p/>
-  <p/>
-  Spark simply passes the timestamp information to <code>KafkaConsumer.offsetsForTimes</code>, and doesn't interpret or reason about the value. <p/>
-  For more details on <code>KafkaConsumer.offsetsForTimes</code>, please refer <a href="https://kafka.apache.org/21/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html#offsetsForTimes-java.util.Map-">javadoc</a> for details.<p/>
-  Also the meaning of <code>timestamp</code> here can be vary according to Kafka configuration (<code>log.message.timestamp.type</code>): please refer <a href="https://kafka.apache.org/documentation/">Kafka documentation</a> for further details.<p/>
-  Note: This option requires Kafka 0.10.1.0 or higher.<p/>
-  Note2: <code>endingOffsetsByTimestamp</code> takes precedence over <code>endingOffsets</code>.
+  Please refer the details on timestamp offset options below. If Kafka doesn't return the matched offset,
+  the offset will be set to latest.<p/>
+  Note: <code>endingOffsetsByTimestamp</code> takes precedence over <code>endingOffsets</code>.
   </td>
 </tr>
 <tr>
@@ -463,8 +477,26 @@ The following configurations are optional:
   <td>maxOffsetsPerTrigger</td>
   <td>long</td>
   <td>none</td>
-  <td>streaming and batch</td>
+  <td>streaming query</td>
   <td>Rate limit on maximum number of offsets processed per trigger interval. The specified total number of offsets will be proportionally split across topicPartitions of different volume.</td>
+</tr>
+<tr>
+  <td>minOffsetsPerTrigger</td>
+  <td>long</td>
+  <td>none</td>
+  <td>streaming query</td>
+  <td>Minimum number of offsets to be processed per trigger interval. The specified total number of
+  offsets will be proportionally split across topicPartitions of different volume. Note, if the
+  maxTriggerDelay is exceeded, a trigger will be fired even if the number of available offsets
+  doesn't reach minOffsetsPerTrigger.</td>
+</tr>
+<tr>
+  <td>maxTriggerDelay</td>
+  <td>time with units</td>
+  <td>15m</td>
+  <td>streaming query</td>
+  <td>Maximum amount of time for which trigger can be delayed between two triggers provided some
+  data is available from the source. This option is only applicable if minOffsetsPerTrigger is set.</td>
 </tr>
 <tr>
   <td>minPartitions</td>
@@ -510,7 +542,28 @@ The following configurations are optional:
   <td>streaming and batch</td>
   <td>Whether to include the Kafka headers in the row.</td>
 </tr>
+<tr>
+  <td>startingOffsetsByTimestampStrategy</td>
+  <td>"error" or "latest"</td>
+  <td>"error"</td>
+  <td>streaming and batch</td>
+  <td>The strategy will be used when the specified starting offset by timestamp (either global or per partition) doesn't match with the offset Kafka returned. Here's the strategy name and corresponding descriptions:<p/>
+  <p/>
+  "error": fail the query and end users have to deal with workarounds requiring manual steps.<p/>
+  "latest": assigns the latest offset for these partitions, so that Spark can read newer records from these partitions in further micro-batches.<p/></td>
+</tr>
 </table>
+
+### Details on timestamp offset options
+
+The returned offset for each partition is the earliest offset whose timestamp is greater than or equal to the given timestamp in the corresponding partition.
+The behavior varies across options if Kafka doesn't return the matched offset - check the description of each option.
+
+Spark simply passes the timestamp information to <code>KafkaConsumer.offsetsForTimes</code>, and doesn't interpret or reason about the value.
+For more details on <code>KafkaConsumer.offsetsForTimes</code>, please refer <a href="http://kafka.apache.org/0101/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html#offsetsForTimes(java.util.Map)">javadoc</a> for details.
+Also, the meaning of <code>timestamp</code> here can be vary according to Kafka configuration (<code>log.message.timestamp.type</code>): please refer <a href="https://kafka.apache.org/documentation/">Kafka documentation</a> for further details.
+
+Timestamp offset options require Kafka 0.10.1.0 or higher.
 
 ### Offset fetching
 

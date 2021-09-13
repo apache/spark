@@ -240,7 +240,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
         sched.decommissionExecutor(_, ExecutorDecommissionInfo(""), false)
       }
 
-      eventually(timeout(10.seconds), interval(1.seconds)) {
+      eventually(timeout(20.seconds), interval(1.seconds)) {
         shuffle0_files.foreach { file => assert(fallbackStorage.exists(0, file)) }
         shuffle1_files.foreach { file => assert(fallbackStorage.exists(1, file)) }
       }
@@ -265,7 +265,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
 
         // Make it sure that fallback storage are ready
         val fallbackStorage = new FallbackStorage(sc.getConf)
-        eventually(timeout(10.seconds), interval(1.seconds)) {
+        eventually(timeout(20.seconds), interval(1.seconds)) {
           Seq(
             "shuffle_0_0_0.index", "shuffle_0_0_0.data",
             "shuffle_0_1_0.index", "shuffle_0_1_0.data").foreach { file =>

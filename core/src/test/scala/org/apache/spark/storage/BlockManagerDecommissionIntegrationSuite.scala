@@ -48,6 +48,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
         .setMaster("local-cluster[2, 1, 1024]")
         .set(config.DECOMMISSION_ENABLED, true)
         .set(config.STORAGE_DECOMMISSION_ENABLED, isEnabled)
+        .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, isEnabled)
       sc = new SparkContext(conf)
       TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
       val executors = sc.getExecutorIds().toArray

@@ -29,7 +29,7 @@ import org.apache.spark.tags.DockerTest
 /**
  * To run this test suite for a specific version (e.g., postgres:13.0):
  * {{{
- *   POSTGRES_DOCKER_IMAGE_NAME=postgres:13.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:13.0
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.PostgresIntegrationSuite"
  * }}}
  */
@@ -64,7 +64,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTes
     val msg = intercept[AnalysisException] {
       sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER")
     }.getMessage
-    assert(msg.contains("Cannot update alt_table field ID: string cannot be cast to int"))
+    assert(msg.contains(
+      s"Cannot update $catalogName.alt_table field ID: string cannot be cast to int"))
   }
 
   override def testCreateTableWithProperty(tbl: String): Unit = {

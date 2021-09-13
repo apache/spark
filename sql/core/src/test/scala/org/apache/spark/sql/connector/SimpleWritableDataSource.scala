@@ -65,25 +65,29 @@ class SimpleWritableDataSource extends TestingV2Source {
 
   class MyWriteBuilder(path: String, info: LogicalWriteInfo)
       extends WriteBuilder with SupportsTruncate {
-    private val queryId: String = info.queryId()
-    private var needTruncate = false
+    protected val queryId: String = info.queryId()
+    protected var needTruncate = false
 
     override def truncate(): WriteBuilder = {
       this.needTruncate = true
       this
     }
 
-    override def buildForBatch(): BatchWrite = {
-      val hadoopPath = new Path(path)
-      val hadoopConf = SparkContext.getActive.get.hadoopConfiguration
-      val fs = hadoopPath.getFileSystem(hadoopConf)
+    override def build(): Write = {
+      new Write {
+        override def toBatch: BatchWrite = {
+          val hadoopPath = new Path(path)
+          val hadoopConf = SparkContext.getActive.get.hadoopConfiguration
+          val fs = hadoopPath.getFileSystem(hadoopConf)
 
-      if (needTruncate) {
-        fs.delete(hadoopPath, true)
+          if (needTruncate) {
+            fs.delete(hadoopPath, true)
+          }
+
+          val pathStr = hadoopPath.toUri.toString
+          new MyBatchWrite(queryId, pathStr, hadoopConf)
+        }
       }
-
-      val pathStr = hadoopPath.toUri.toString
-      new MyBatchWrite(queryId, pathStr, hadoopConf)
     }
   }
 
@@ -123,8 +127,8 @@ class SimpleWritableDataSource extends TestingV2Source {
   class MyTable(options: CaseInsensitiveStringMap)
     extends SimpleBatchTable with SupportsWrite {
 
-    private val path = options.get("path")
-    private val conf = SparkContext.getActive.get.hadoopConfiguration
+    protected val path = options.get("path")
+    protected val conf = SparkContext.getActive.get.hadoopConfiguration
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
       new MyScanBuilder(new Path(path).toUri.toString, conf)
@@ -135,7 +139,7 @@ class SimpleWritableDataSource extends TestingV2Source {
     }
 
     override def capabilities(): util.Set[TableCapability] =
-      Set(BATCH_READ, BATCH_WRITE, TRUNCATE).asJava
+      util.EnumSet.of(BATCH_READ, BATCH_WRITE, TRUNCATE)
   }
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {

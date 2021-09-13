@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, TypeCoercion, TypeCoercionBase}
+import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -69,6 +69,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
 
   final override val nodePatterns: Seq[TreePattern] = Seq(PROJECT)
 
@@ -126,6 +127,8 @@ case class Generate(
     child: LogicalPlan)
   extends UnaryNode {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(GENERATE)
+
   lazy val requiredChildOutput: Seq[Attribute] = {
     val unrequiredSet = unrequiredChildIndex.toSet
     child.output.zipWithIndex.filterNot(t => unrequiredSet.contains(t._2)).map(_._1)
@@ -163,6 +166,7 @@ case class Filter(condition: Expression, child: LogicalPlan)
   override def output: Seq[Attribute] = child.output
 
   override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
 
   final override val nodePatterns: Seq[TreePattern] = Seq(FILTER)
 
@@ -208,6 +212,8 @@ case class Intersect(
     isAll: Boolean) extends SetOperation(left, right) {
 
   override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(INTERSECT)
 
   override def output: Seq[Attribute] =
     left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
@@ -277,6 +283,8 @@ case class Union(
       Some(children.flatMap(_.maxRows).sum)
     }
   }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNION)
 
   /**
    * Note the definition has assumption about how union is implemented physically.
@@ -581,7 +589,18 @@ object View {
     if (activeConf.useCurrentSQLConfigsForView && !isTempView) return activeConf
 
     val sqlConf = new SQLConf()
-    for ((k, v) <- configs) {
+    // We retain below configs from current session because they are not captured by view
+    // as optimization configs but they are still needed during the view resolution.
+    // TODO: remove this `retainedConfigs` after the `RelationConversions` is moved to
+    // optimization phase.
+    val retainedConfigs = activeConf.getAllConfs.filterKeys(key =>
+      Seq(
+        "spark.sql.hive.convertMetastoreParquet",
+        "spark.sql.hive.convertMetastoreOrc",
+        "spark.sql.hive.convertInsertingPartitionedTable",
+        "spark.sql.hive.convertMetastoreCtas"
+      ).contains(key) || key.startsWith("spark.sql.catalog."))
+    for ((k, v) <- configs ++ retainedConfigs) {
       sqlConf.settings.put(k, v)
     }
     sqlConf
@@ -596,7 +615,9 @@ object View {
  * @param cteRelations A sequence of pair (alias, the CTE definition) that this CTE defined
  *                     Each CTE can see the base tables and the previously defined CTEs only.
  */
-case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
+case class UnresolvedWith(
+    child: LogicalPlan,
+    cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   override def simpleString(maxFields: Int): String = {
@@ -606,13 +627,85 @@ case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) 
 
   override def innerChildren: Seq[LogicalPlan] = cteRelations.map(_._2)
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): With = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedWith =
+    copy(child = newChild)
+}
+
+/**
+ * A wrapper for CTE definition plan with a unique ID.
+ * @param child The CTE definition query plan.
+ * @param id    The unique ID for this CTE definition.
+ */
+case class CTERelationDef(child: LogicalPlan, id: Long = CTERelationDef.newId) extends UnaryNode {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
+
+  override def output: Seq[Attribute] = if (resolved) child.output else Nil
+}
+
+object CTERelationDef {
+  private val curId = new java.util.concurrent.atomic.AtomicLong()
+  def newId: Long = curId.getAndIncrement()
+}
+
+/**
+ * Represents the relation of a CTE reference.
+ * @param cteId     The ID of the corresponding CTE definition.
+ * @param _resolved Whether this reference is resolved.
+ * @param output    The output attributes of this CTE reference, which can be different from
+ *                  the output of its corresponding CTE definition after attribute de-duplication.
+ * @param statsOpt  The optional statistics inferred from the corresponding CTE definition.
+ */
+case class CTERelationRef(
+    cteId: Long,
+    _resolved: Boolean,
+    override val output: Seq[Attribute],
+    statsOpt: Option[Statistics] = None) extends LeafNode with MultiInstanceRelation {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
+
+  override lazy val resolved: Boolean = _resolved
+
+  override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
+
+  def withNewStats(statsOpt: Option[Statistics]): CTERelationRef = copy(statsOpt = statsOpt)
+
+  override def computeStats(): Statistics = statsOpt.getOrElse(Statistics(conf.defaultSizeInBytes))
+}
+
+/**
+ * The resolved version of [[UnresolvedWith]] with CTE referrences linked to CTE definitions
+ * through unique IDs instead of relation aliases.
+ *
+ * @param plan    The query plan.
+ * @param cteDefs The CTE definitions.
+ */
+case class WithCTE(plan: LogicalPlan, cteDefs: Seq[CTERelationDef]) extends LogicalPlan {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
+
+  override def output: Seq[Attribute] = plan.output
+
+  override def children: Seq[LogicalPlan] = cteDefs :+ plan
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    copy(plan = newChildren.last, cteDefs = newChildren.init.asInstanceOf[Seq[CTERelationDef]])
+  }
+
+  def withNewPlan(newPlan: LogicalPlan): WithCTE = {
+    withNewChildren(children.init :+ newPlan).asInstanceOf[WithCTE]
+  }
 }
 
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+  final override val nodePatterns: Seq[TreePattern] = Seq(WITH_WINDOW_DEFINITION)
   override protected def withNewChildInternal(newChild: LogicalPlan): WithWindowDefinition =
     copy(child = newChild)
 }
@@ -630,6 +723,7 @@ case class Sort(
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
   override def outputOrdering: Seq[SortOrder] = order
+  final override val nodePatterns: Seq[TreePattern] = Seq(SORT)
   override protected def withNewChildInternal(newChild: LogicalPlan): Sort = copy(child = newChild)
 }
 
@@ -746,6 +840,16 @@ case class Range(
     }
   }
 
+  override def maxRowsPerPartition: Option[Long] = {
+    if (numSlices.isDefined) {
+      var m = numElements / numSlices.get
+      if (numElements % numSlices.get != 0) m += 1
+      if (m.isValidLong) Some(m.toLong) else maxRows
+    } else {
+      maxRows
+    }
+  }
+
   override def computeStats(): Statistics = {
     if (numElements == 0) {
       Statistics(sizeInBytes = 0, rowCount = Some(0))
@@ -755,18 +859,59 @@ case class Range(
       } else {
         (start + (numElements - 1) * step, start)
       }
+
+      val histogram = if (conf.histogramEnabled) {
+        Some(computeHistogramStatistics())
+      } else {
+        None
+      }
+
       val colStat = ColumnStat(
         distinctCount = Some(numElements),
         max = Some(maxVal),
         min = Some(minVal),
         nullCount = Some(0),
         avgLen = Some(LongType.defaultSize),
-        maxLen = Some(LongType.defaultSize))
+        maxLen = Some(LongType.defaultSize),
+        histogram = histogram)
 
       Statistics(
         sizeInBytes = LongType.defaultSize * numElements,
         rowCount = Some(numElements),
         attributeStats = AttributeMap(Seq(output.head -> colStat)))
+    }
+  }
+
+  private def computeHistogramStatistics(): Histogram = {
+    val numBins = conf.histogramNumBins
+    val height = numElements.toDouble / numBins
+    val percentileArray = (0 to numBins).map(i => i * height).toArray
+
+    val lowerIndexInitial: Double = percentileArray.head
+    val lowerBinValueInitial: Long = getRangeValue(0)
+    val (_, _, binArray) = percentileArray.tail
+      .foldLeft((lowerIndexInitial, lowerBinValueInitial, Seq.empty[HistogramBin])) {
+        case ((lowerIndex, lowerBinValue, binAr), upperIndex) =>
+          // Integer index for upper and lower values in the bin.
+          val upperIndexPos = math.ceil(upperIndex).toInt - 1
+          val lowerIndexPos = math.ceil(lowerIndex).toInt - 1
+
+          val upperBinValue = getRangeValue(math.max(upperIndexPos, 0))
+          val ndv = math.max(upperIndexPos - lowerIndexPos, 1)
+          // Update the lowerIndex and lowerBinValue with upper ones for the next iteration.
+          (upperIndex, upperBinValue, binAr :+ HistogramBin(lowerBinValue, upperBinValue, ndv))
+      }
+    Histogram(height, binArray.toArray)
+  }
+
+  // Utility method to compute histogram
+  private def getRangeValue(index: Int): Long = {
+    assert(index >= 0, "index must be greater than and equal to 0")
+    if (step < 0) {
+      // Reverse the range values for computing histogram, if the step size is negative.
+      start + (numElements.toLong - index - 1) * step
+    } else {
+      start + index * step
     }
   }
 
@@ -826,6 +971,11 @@ case class Aggregate(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
     copy(child = newChild)
+
+  // Whether this Aggregate operator is group only. For example: SELECT a, a FROM t GROUP BY a
+  private[sql] def groupOnly: Boolean = {
+    aggregateExpressions.forall(a => groupingExpressions.exists(g => a.semanticEquals(g)))
+  }
 }
 
 case class Window(
@@ -996,6 +1146,7 @@ case class Pivot(
     groupByExprsOpt.getOrElse(Seq.empty).map(_.toAttribute) ++ pivotAgg
   }
   override def metadataOutput: Seq[Attribute] = Nil
+  final override val nodePatterns: Seq[TreePattern] = Seq(PIVOT)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Pivot = copy(child = newChild)
 }
@@ -1125,6 +1276,8 @@ case class SubqueryAlias(
 
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(SUBQUERY_ALIAS)
+
   override protected def withNewChildInternal(newChild: LogicalPlan): SubqueryAlias =
     copy(child = newChild)
 }
@@ -1191,6 +1344,7 @@ case class Sample(
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+  final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Distinct =
     copy(child = newChild)
 }
@@ -1203,6 +1357,7 @@ abstract class RepartitionOperation extends UnaryNode {
   def numPartitions: Int
   override final def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+  final override val nodePatterns: Seq[TreePattern] = Seq(REPARTITION_OPERATION)
   def partitioning: Partitioning
 }
 
@@ -1281,6 +1436,31 @@ object RepartitionByExpression {
 }
 
 /**
+ * This operator is used to rebalance the output partitions of the given `child`, so that every
+ * partition is of a reasonable size (not too small and not too big). It also try its best to
+ * partition the child output by `partitionExpressions`. If there are skews, Spark will split the
+ * skewed partitions, to make these partitions not too big. This operator is useful when you need
+ * to write the result of `child` to a table, to avoid too small/big files.
+ *
+ * Note that, this operator only makes sense when AQE is enabled.
+ */
+case class RebalancePartitions(
+    partitionExpressions: Seq[Expression],
+    child: LogicalPlan) extends UnaryNode {
+  override def maxRows: Option[Long] = child.maxRows
+  override def output: Seq[Attribute] = child.output
+
+  def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
+    RoundRobinPartitioning(conf.numShufflePartitions)
+  } else {
+    HashPartitioning(partitionExpressions, conf.numShufflePartitions)
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): RebalancePartitions =
+    copy(child = newChild)
+}
+
+/**
  * A relation with one row. This is used in "SELECT ..." without a from clause.
  */
 case class OneRowRelation() extends LeafNode {
@@ -1302,6 +1482,7 @@ case class Deduplicate(
     child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+  final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Deduplicate =
     copy(child = newChild)
 }
@@ -1341,9 +1522,78 @@ case class CollectMetrics(
  * A placeholder for domain join that can be added when decorrelating subqueries.
  * It should be rewritten during the optimization phase.
  */
-case class DomainJoin(domainAttrs: Seq[Attribute], child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output ++ domainAttrs
+case class DomainJoin(
+    domainAttrs: Seq[Attribute],
+    child: LogicalPlan,
+    joinType: JoinType = Inner,
+    condition: Option[Expression] = None) extends UnaryNode {
+
+  require(Seq(Inner, LeftOuter).contains(joinType), s"Unsupported domain join type $joinType")
+
+  override def output: Seq[Attribute] = joinType match {
+    case LeftOuter => domainAttrs ++ child.output.map(_.withNullability(true))
+    case _ => domainAttrs ++ child.output
+  }
+
   override def producedAttributes: AttributeSet = AttributeSet(domainAttrs)
+
   override protected def withNewChildInternal(newChild: LogicalPlan): DomainJoin =
     copy(child = newChild)
+}
+
+/**
+ * A logical plan for lateral join.
+ */
+case class LateralJoin(
+    left: LogicalPlan,
+    right: LateralSubquery,
+    joinType: JoinType,
+    condition: Option[Expression]) extends UnaryNode {
+
+  require(Seq(Inner, LeftOuter, Cross).contains(joinType),
+    s"Unsupported lateral join type $joinType")
+
+  override def child: LogicalPlan = left
+
+  override def output: Seq[Attribute] = {
+    joinType match {
+      case LeftOuter => left.output ++ right.plan.output.map(_.withNullability(true))
+      case _ => left.output ++ right.plan.output
+    }
+  }
+
+  private[this] lazy val childAttributes = AttributeSeq(left.output ++ right.plan.output)
+
+  private[this] lazy val childMetadataAttributes =
+    AttributeSeq(left.metadataOutput ++ right.plan.metadataOutput)
+
+  /**
+   * Optionally resolves the given strings to a [[NamedExpression]] using the input from
+   * both the left plan and the lateral subquery's plan.
+   */
+  override def resolveChildren(
+      nameParts: Seq[String],
+      resolver: Resolver): Option[NamedExpression] = {
+    childAttributes.resolve(nameParts, resolver)
+      .orElse(childMetadataAttributes.resolve(nameParts, resolver))
+  }
+
+  override def childrenResolved: Boolean = left.resolved && right.resolved
+
+  def duplicateResolved: Boolean = left.outputSet.intersect(right.plan.outputSet).isEmpty
+
+  override lazy val resolved: Boolean = {
+    childrenResolved &&
+      expressions.forall(_.resolved) &&
+      duplicateResolved &&
+      condition.forall(_.dataType == BooleanType)
+  }
+
+  override def producedAttributes: AttributeSet = AttributeSet(right.plan.output)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(LATERAL_JOIN)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LateralJoin = {
+    copy(left = newChild)
+  }
 }

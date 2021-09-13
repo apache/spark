@@ -375,7 +375,7 @@ class KMeans(object):
         clusterInitialModel = []
         if initialModel is not None:
             if not isinstance(initialModel, KMeansModel):
-                raise Exception("initialModel is of "+str(type(initialModel))+". It needs "
+                raise TypeError("initialModel is of " + str(type(initialModel)) + ". It needs "
                                 "to be of <type 'KMeansModel'>")
             clusterInitialModel = [_convert_to_vector(c) for c in initialModel.clusterCenters]
         model = callMLlibFunc("trainKMeansModel", rdd.map(_convert_to_vector), k, maxIterations,
@@ -590,8 +590,8 @@ class GaussianMixture(object):
         initialModelSigma = None
         if initialModel is not None:
             if initialModel.k != k:
-                raise Exception("Mismatched cluster count, initialModel.k = %s, however k = %s"
-                                % (initialModel.k, k))
+                raise ValueError("Mismatched cluster count, initialModel.k = %s, however k = %s"
+                                 % (initialModel.k, k))
             initialModelWeights = list(initialModel.weights)
             initialModelMu = [initialModel.gaussians[i].mu for i in range(initialModel.k)]
             initialModelSigma = [initialModel.gaussians[i].sigma for i in range(initialModel.k)]

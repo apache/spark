@@ -117,8 +117,9 @@ case class HiveTableScanExec(
     // Specifies needed column IDs for those non-partitioning columns.
     val columnOrdinals = AttributeMap(relation.dataCols.zipWithIndex)
     val neededColumnIDs = output.flatMap(columnOrdinals.get).map(o => o: Integer)
+    val neededColumnNames = output.filter(columnOrdinals.contains).map(_.name)
 
-    HiveShim.appendReadColumns(hiveConf, neededColumnIDs, output.map(_.name))
+    HiveShim.appendReadColumns(hiveConf, neededColumnIDs, neededColumnNames)
 
     val deserializer = tableDesc.getDeserializerClass.getConstructor().newInstance()
     deserializer.initialize(hiveConf, tableDesc.getProperties)
@@ -202,11 +203,11 @@ case class HiveTableScanExec(
     // Using dummyCallSite, as getCallSite can turn out to be expensive with
     // multiple partitions.
     val rdd = if (!relation.isPartitioned) {
-      Utils.withDummyCallSite(sqlContext.sparkContext) {
+      Utils.withDummyCallSite(sparkContext) {
         hadoopReader.makeRDDForTable(hiveQlTable)
       }
     } else {
-      Utils.withDummyCallSite(sqlContext.sparkContext) {
+      Utils.withDummyCallSite(sparkContext) {
         hadoopReader.makeRDDForPartitionedTable(prunedPartitions)
       }
     }

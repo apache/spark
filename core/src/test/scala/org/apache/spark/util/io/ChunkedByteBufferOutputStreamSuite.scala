@@ -119,4 +119,14 @@ class ChunkedByteBufferOutputStreamSuite extends SparkFunSuite {
     assert(arrays(1).toSeq === ref.slice(10, 20))
     assert(arrays(2).toSeq === ref.slice(20, 30))
   }
+
+  test("SPARK-36464: size returns correct positive number even with over 2GB data") {
+    val ref = new Array[Byte](1024 * 1024 * 1024)
+    val o = new ChunkedByteBufferOutputStream(1024 * 1024, ByteBuffer.allocate)
+    o.write(ref)
+    o.write(ref)
+    o.close()
+    assert(o.size > 0L) // make sure it is not overflowing
+    assert(o.size == ref.length.toLong * 2)
+  }
 }

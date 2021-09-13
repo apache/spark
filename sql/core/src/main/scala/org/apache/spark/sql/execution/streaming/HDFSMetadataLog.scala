@@ -19,17 +19,17 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io._
 import java.nio.charset.StandardCharsets
-import java.util.ConcurrentModificationException
 
 import scala.reflect.ClassTag
 
-import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs._
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 
 /**
@@ -147,10 +147,10 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
           throw new IllegalStateException(
             s"Failed to read log file $batchMetadataFile. ${ise.getMessage}", ise)
       } finally {
-        IOUtils.closeQuietly(input)
+        JavaUtils.closeQuietly(input)
       }
     } else {
-      throw new FileNotFoundException(s"Unable to find batch $batchMetadataFile")
+      throw QueryExecutionErrors.batchMetadataFileNotFoundError(batchMetadataFile)
     }
   }
 
@@ -179,8 +179,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
           output.cancel()
           // If next batch file already exists, then another concurrently running query has
           // written it.
-          throw new ConcurrentModificationException(
-            s"Multiple streaming queries are concurrently using $path", e)
+          throw QueryExecutionErrors.multiStreamingQueriesUsingPathConcurrentlyError(path, e)
         case e: Throwable =>
           output.cancel()
           throw e

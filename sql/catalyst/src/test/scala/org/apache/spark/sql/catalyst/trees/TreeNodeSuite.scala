@@ -95,6 +95,8 @@ case class FakeLeafPlan(child: LogicalPlan)
   override def output: Seq[Attribute] = child.output
 }
 
+case class FakeCurryingProduct(x: Expression)(val y: Int)
+
 class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   test("top node changed") {
     val after = Literal(1) transform { case Literal(1, _) => Literal(2) }
@@ -601,6 +603,42 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
           "class" -> classOf[JsonTestTreeNode].getName,
           "num-children" -> 0,
           "arg" -> "1")))
+
+    // Convert Seq of Product contains TreeNode to JSON.
+    assertJSON(
+      Seq(("a", JsonTestTreeNode("0")), ("b", JsonTestTreeNode("1"))),
+      List(
+        JObject(
+          "product-class" -> "scala.Tuple2",
+          "_1" -> "a",
+          "_2" -> List(JObject(
+            "class" -> classOf[JsonTestTreeNode].getName,
+            "num-children" -> 0,
+            "arg" -> "0"
+          ))),
+        JObject(
+          "product-class" -> "scala.Tuple2",
+          "_1" -> "b",
+          "_2" -> List(JObject(
+            "class" -> classOf[JsonTestTreeNode].getName,
+            "num-children" -> 0,
+            "arg" -> "1"
+          )))))
+
+    // Convert currying product contains TreeNode to JSON.
+    assertJSON(
+      FakeCurryingProduct(Literal(1))(1),
+      JObject(
+        "product-class" -> classOf[FakeCurryingProduct].getName,
+        "x" -> List(
+          JObject(
+            "class" -> JString(classOf[Literal].getName),
+            "num-children" -> 0,
+            "value" -> "1",
+            "dataType" -> "integer")),
+        "y" -> 1
+      )
+    )
   }
 
   test("toJSON should not throws java.lang.StackOverflowError") {

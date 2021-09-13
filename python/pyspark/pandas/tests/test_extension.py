@@ -75,12 +75,12 @@ class ExtensionTest(PandasOnSparkTestCase):
         )
 
     @property
-    def kdf(self):
+    def psdf(self):
         return ps.from_pandas(self.pdf)
 
     @property
     def accessor(self):
-        return CustomAccessor(self.kdf)
+        return CustomAccessor(self.psdf)
 
     def test_setup(self):
         self.assertEqual("item", self.accessor.item)
@@ -88,23 +88,23 @@ class ExtensionTest(PandasOnSparkTestCase):
     def test_dataframe_register(self):
         with ensure_removed(ps.DataFrame, "test"):
             register_dataframe_accessor("test")(CustomAccessor)
-            assert self.kdf.test.prop == "item"
-            assert self.kdf.test.method() == "item"
-            assert len(self.kdf["a"]) == self.kdf.test.check_length("a")
+            assert self.psdf.test.prop == "item"
+            assert self.psdf.test.method() == "item"
+            assert len(self.psdf["a"]) == self.psdf.test.check_length("a")
 
     def test_series_register(self):
         with ensure_removed(ps.Series, "test"):
             register_series_accessor("test")(CustomAccessor)
-            assert self.kdf.a.test.prop == "item"
-            assert self.kdf.a.test.method() == "item"
-            assert self.kdf.a.test.check_length() == len(self.kdf["a"])
+            assert self.psdf.a.test.prop == "item"
+            assert self.psdf.a.test.method() == "item"
+            assert self.psdf.a.test.check_length() == len(self.psdf["a"])
 
     def test_index_register(self):
         with ensure_removed(ps.Index, "test"):
             register_index_accessor("test")(CustomAccessor)
-            assert self.kdf.index.test.prop == "item"
-            assert self.kdf.index.test.method() == "item"
-            assert self.kdf.index.test.check_length() == self.kdf.index.size
+            assert self.psdf.index.test.prop == "item"
+            assert self.psdf.index.test.method() == "item"
+            assert self.psdf.index.test.check_length() == self.psdf.index.size
 
     def test_accessor_works(self):
         register_series_accessor("test")(CustomAccessor)
@@ -145,7 +145,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

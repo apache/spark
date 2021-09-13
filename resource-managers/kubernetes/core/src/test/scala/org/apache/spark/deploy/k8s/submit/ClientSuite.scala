@@ -186,6 +186,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     val configMap = configMaps.head
     assert(configMap.getMetadata.getName ===
       KubernetesClientUtils.configMapNameDriver)
+    assert(configMap.getImmutable())
     assert(configMap.getData.containsKey(SPARK_CONF_FILE_NAME))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf1key=conf1value"))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf2key=conf2value"))

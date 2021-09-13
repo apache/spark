@@ -47,7 +47,7 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark with Logging {
 
   override def getSparkSession: SparkSession = {
     val conf = new SparkConf()
-      .setMaster("local[1]")
+      .setMaster(System.getProperty("spark.sql.test.master", "local[1]"))
       .setAppName("test-sql-context")
       .set("spark.sql.parquet.compression.codec", "snappy")
       .set("spark.sql.shuffle.partitions", "4")

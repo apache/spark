@@ -31,7 +31,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.read.streaming
-import org.apache.spark.sql.connector.read.streaming.{ReadAllAvailable, ReadLimit, ReadMaxFiles, SupportsAdmissionControl}
+import org.apache.spark.sql.connector.read.streaming.{ReadAllAvailable, ReadLimit, ReadMaxFiles, SupportsAdmissionControl, SupportsTriggerAvailableNow}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, LogicalRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -47,7 +48,11 @@ class FileStreamSource(
     override val schema: StructType,
     partitionColumns: Seq[String],
     metadataPath: String,
-    options: Map[String, String]) extends SupportsAdmissionControl with Source with Logging {
+    options: Map[String, String])
+  extends SupportsAdmissionControl
+  with SupportsTriggerAvailableNow
+  with Source
+  with Logging {
 
   import FileStreamSource._
 
@@ -104,6 +109,8 @@ class FileStreamSource(
   // Visible for testing and debugging in production.
   val seenFiles = new SeenFilesMap(maxFileAgeMs, fileNameOnly)
 
+  private var allFilesForTriggerAvailableNow: Seq[(String, Long)] = _
+
   metadataLog.restore().foreach { entry =>
     seenFiles.add(entry.path, entry.timestamp)
   }
@@ -125,7 +132,13 @@ class FileStreamSource(
       unreadFiles
     } else {
       // All the new files found - ignore aged files and files that we have seen.
-      fetchAllFiles().filter {
+      // Use the pre-fetched list of files when Trigger.AvailableNow is enabled.
+      val allFiles = if (allFilesForTriggerAvailableNow != null) {
+        allFilesForTriggerAvailableNow
+      } else {
+        fetchAllFiles()
+      }
+      allFiles.filter {
         case (path, timestamp) => seenFiles.isNewFile(path, timestamp)
       }
     }
@@ -191,6 +204,10 @@ class FileStreamSource(
     }
 
     FileStreamSourceOffset(metadataLogCurrentOffset)
+  }
+
+  override def prepareForTriggerAvailableNow(): Unit = {
+    allFilesForTriggerAvailableNow = fetchAllFiles()
   }
 
   override def getDefaultReadLimit: ReadLimit = {
@@ -259,8 +276,7 @@ class FileStreamSource(
   private def setSourceHasMetadata(newValue: Option[Boolean]): Unit = newValue match {
     case Some(true) =>
       if (sourceCleaner.isDefined) {
-        throw new UnsupportedOperationException("Clean up source files is not supported when" +
-          " reading from the output directory of FileStreamSink.")
+        throw QueryExecutionErrors.cleanUpSourceFilesUnsupportedError()
       }
       sourceHasMetadata = Some(true)
     case _ =>
@@ -317,8 +333,7 @@ class FileStreamSource(
   }
 
   override def getOffset: Option[Offset] = {
-    throw new UnsupportedOperationException(
-      "latestOffset(Offset, ReadLimit) should be called instead of this method")
+    throw QueryExecutionErrors.latestOffsetNotCalledError()
   }
 
   override def latestOffset(startOffset: streaming.Offset, limit: ReadLimit): streaming.Offset = {

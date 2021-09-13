@@ -35,6 +35,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.logging.{FileAppender, RollingFileAppender, SizeBasedRollingPolicy, TimeBasedRollingPolicy}
 
 class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
@@ -59,6 +60,15 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     inputStream.close()
     appender.awaitTermination()
     assert(Files.toString(testFile, StandardCharsets.UTF_8) === header + testString)
+  }
+
+  test("SPARK-35027: basic file appender - close stream") {
+    val inputStream = mock(classOf[InputStream])
+    val appender = new FileAppender(inputStream, testFile, closeStreams = true)
+    Thread.sleep(10)
+    appender.stop()
+    appender.awaitTermination()
+    verify(inputStream).close()
   }
 
   test("rolling file appender - time-based rolling") {
@@ -94,6 +104,32 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
 
     testRolling(
       appender, testOutputStream, textToAppend, rolloverIntervalMillis, isCompressed = true)
+  }
+
+  test("SPARK-35027: rolling file appender - time-based rolling close stream") {
+    val inputStream = mock(classOf[InputStream])
+    val sparkConf = new SparkConf()
+    sparkConf.set(config.EXECUTOR_LOGS_ROLLING_STRATEGY.key, "time")
+    val appender = FileAppender(inputStream, testFile, sparkConf, closeStreams = true)
+    assert(
+      appender.asInstanceOf[RollingFileAppender].rollingPolicy.isInstanceOf[TimeBasedRollingPolicy])
+    Thread.sleep(10)
+    appender.stop()
+    appender.awaitTermination()
+    verify(inputStream).close()
+  }
+
+  test("SPARK-35027: rolling file appender - size-based rolling close stream") {
+    val inputStream = mock(classOf[InputStream])
+    val sparkConf = new SparkConf()
+    sparkConf.set(config.EXECUTOR_LOGS_ROLLING_STRATEGY.key, "size")
+    val appender = FileAppender(inputStream, testFile, sparkConf, closeStreams = true)
+    assert(
+      appender.asInstanceOf[RollingFileAppender].rollingPolicy.isInstanceOf[SizeBasedRollingPolicy])
+    Thread.sleep(10)
+    appender.stop()
+    appender.awaitTermination()
+    verify(inputStream).close()
   }
 
   test("rolling file appender - size-based rolling") {
@@ -345,7 +381,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
         try {
           IOUtils.toString(inputStream, StandardCharsets.UTF_8)
         } finally {
-          IOUtils.closeQuietly(inputStream)
+          JavaUtils.closeQuietly(inputStream)
         }
       } else {
         Files.toString(file, StandardCharsets.UTF_8)

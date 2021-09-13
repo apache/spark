@@ -143,16 +143,16 @@ WHERE  t1b IN (SELECT Min(t2b)
                FROM   t2
                WHERE  t1b = t2b
                ORDER  BY Min(t2b))
-ORDER BY t1c DESC nulls first
+ORDER BY t1c DESC nulls first, t1a DESC, t1d DESC, t1h
 -- !query schema
 struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
 -- !query output
 val1e	10	NULL	25	17.0	25.0	2600	2014-08-04 01:01:00	2014-08-04
+val1e	10	NULL	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
 val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
 val1d	10	NULL	12	17.0	25.0	2600	2015-05-04 01:01:00	2015-05-04
-val1e	10	NULL	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
-val1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
 val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
+val1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
 val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:00:00	2014-04-04
 val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:02:00.001	2014-04-04
 

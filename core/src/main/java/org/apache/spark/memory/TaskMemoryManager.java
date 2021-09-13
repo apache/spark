@@ -202,14 +202,22 @@ public class TaskMemoryManager {
         }
       }
 
-      // call spill() on itself
-      if (got < required) {
+      // Attempt to free up memory by self-spilling.
+      //
+      // When our spill handler releases memory, `ExecutionMemoryPool#releaseMemory()` will
+      // immediately notify other tasks that memory has been freed, and they may acquire the
+      // newly-freed memory before we have a chance to do so (SPARK-35486). In that case, we will
+      // try again in the next loop iteration.
+      while (got < required) {
         try {
           long released = consumer.spill(required - got, consumer);
           if (released > 0) {
             logger.debug("Task {} released {} from itself ({})", taskAttemptId,
               Utils.bytesToString(released), consumer);
             got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId, mode);
+          } else {
+            // Self-spilling could not free up any more memory.
+            break;
           }
         } catch (ClosedByInterruptException e) {
           // This called by user to kill a task (e.g: speculative task).

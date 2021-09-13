@@ -176,26 +176,52 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     checkOwnerReferences(executor.pod, DRIVER_POD_UID)
   }
 
-  test("executor pod hostnames get truncated to 63 characters") {
-    val longPodNamePrefix = "loremipsumdolorsitametvimatelitrefficiendisuscipianturvixlegeresple"
+  def withPodNamePrefix(f: => Unit): Unit = {
+    val namePrefixOld = baseConf.get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
+    try {
+      f
+    } finally {
+      namePrefixOld.foreach(baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, _))
+    }
+  }
 
-    baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, longPodNamePrefix)
-    initDefaultProfile(baseConf)
-    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
-      defaultProfile)
-    assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length === 63)
+  test("executor pod hostnames get truncated to 63 characters") {
+    withPodNamePrefix {
+      val longPodNamePrefix = "loremipsumdolorsitametvimatelitrefficiendisuscipianturvixlegeresple"
+      baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
+      baseConf.set("spark.app.name", longPodNamePrefix)
+      initDefaultProfile(baseConf)
+      val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+        defaultProfile)
+      assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length ===
+        KUBERNETES_DNSNAME_MAX_LENGTH)
+    }
+  }
+
+  test("SPARK-35460: invalid PodNamePrefixes") {
+    withPodNamePrefix {
+      Seq("_123", "spark_exec", "spark@", "a" * 48).foreach { invalid =>
+        baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, invalid)
+        val e = intercept[IllegalArgumentException](newExecutorConf())
+        assert(e.getMessage === s"'$invalid' in spark.kubernetes.executor.podNamePrefix is" +
+          s" invalid. must conform https://kubernetes.io/docs/concepts/overview/" +
+          "working-with-objects/names/#dns-label-names and the value length <= 47")
+      }
+    }
   }
 
   test("hostname truncation generates valid host names") {
-    val invalidPrefix = "abcdef-*_/[]{}+==.,;'\"-----------------------------------------------"
-
-    baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, invalidPrefix)
-    initDefaultProfile(baseConf)
-    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
-      defaultProfile)
-    val hostname = step.configurePod(SparkPod.initialPod()).pod.getSpec().getHostname()
-    assert(hostname.length <= 63)
-    assert(InternetDomainName.isValid(hostname))
+    withPodNamePrefix {
+      val invalidPrefix = "abcdef-*_/[]{}+==.,;'\"-----------------------------------------------"
+      baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
+      baseConf.set("spark.app.name", invalidPrefix)
+      initDefaultProfile(baseConf)
+      val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+        defaultProfile)
+      val hostname = step.configurePod(SparkPod.initialPod()).pod.getSpec().getHostname()
+      assert(hostname.length <= KUBERNETES_DNSNAME_MAX_LENGTH)
+      assert(InternetDomainName.isValid(hostname))
+    }
   }
 
   test("classpath and extra java options get translated into environment variables") {
@@ -341,6 +367,75 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
   }
 
+  test("SPARK-35482: user correct block manager port for executor pods") {
+    try {
+      val initPod = SparkPod.initialPod()
+      val sm = new SecurityManager(baseConf)
+      val step1 =
+        new BasicExecutorFeatureStep(newExecutorConf(), sm, defaultProfile)
+      val containerPort1 = step1.configurePod(initPod).container.getPorts.get(0)
+      assert(containerPort1.getContainerPort === DEFAULT_BLOCKMANAGER_PORT,
+        s"should use port no. $DEFAULT_BLOCKMANAGER_PORT as default")
+
+      baseConf.set(BLOCK_MANAGER_PORT, 12345)
+      val step2 = new BasicExecutorFeatureStep(newExecutorConf(), sm, defaultProfile)
+      val containerPort2 = step2.configurePod(initPod).container.getPorts.get(0)
+      assert(containerPort2.getContainerPort === 12345)
+
+      baseConf.set(BLOCK_MANAGER_PORT, 1000)
+      val e = intercept[IllegalArgumentException] {
+        new BasicExecutorFeatureStep(newExecutorConf(), sm, defaultProfile)
+      }
+      assert(e.getMessage.contains("port number must be 0 or in [1024, 65535]"))
+
+      baseConf.set(BLOCK_MANAGER_PORT, 0)
+      val step3 = new BasicExecutorFeatureStep(newExecutorConf(), sm, defaultProfile)
+      assert(step3.configurePod(initPod).container.getPorts.isEmpty, "random port")
+    } finally {
+      baseConf.remove(BLOCK_MANAGER_PORT)
+    }
+  }
+
+  test("SPARK-35969: Make the pod prefix more readable and tallied with K8S DNS Label Names") {
+    baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
+    baseConf.set("spark.app.name", "xyz.abc _i_am_a_app_name_w/_some_abbrs")
+    val baseDriverPod = SparkPod.initialPod()
+    val step1 = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val podConfigured1 = step1.configurePod(baseDriverPod)
+    assert(podConfigured1.pod.getMetadata.getName
+      .startsWith("xyz-abc-i-am-a-app-name-w-some-abbrs"))
+
+    // scalastyle:off nonascii
+    baseConf.set("spark.app.name", "time.is the#most￥valuable_—thing。it's&about?time.")
+    // scalastyle:on
+
+    val step2 = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+
+    val podConfigured2 = step2.configurePod(baseDriverPod)
+    assert(podConfigured2.pod.getMetadata.getName
+      .startsWith("time-is-the-most-valuable-thing-it-s-about-time-"))
+
+  }
+
+  test("SPARK-36075: Check executor pod respects nodeSelector/executorNodeSelector") {
+    val initPod = SparkPod.initialPod()
+    val sparkConf = new SparkConf()
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(s"${KUBERNETES_NODE_SELECTOR_PREFIX}nodeLabelKey", "nodeLabelValue")
+      .set(s"${KUBERNETES_EXECUTOR_NODE_SELECTOR_PREFIX}execNodeLabelKey", "execNodeLabelValue")
+      .set(s"${KUBERNETES_DRIVER_NODE_SELECTOR_PREFIX}driverNodeLabelKey", "driverNodeLabelValue")
+
+    val executorConf = KubernetesTestConf.createExecutorConf(sparkConf)
+    val executor = new BasicExecutorFeatureStep(executorConf, new SecurityManager(baseConf),
+      defaultProfile).configurePod(initPod)
+    assert(executor.pod.getSpec.getNodeSelector.asScala === Map(
+      "nodeLabelKey" -> "nodeLabelValue",
+      "execNodeLabelKey" -> "execNodeLabelValue"
+    ))
+  }
+
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {
     assert(executor.getMetadata.getOwnerReferences.size() === 1)
@@ -360,9 +455,11 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       ENV_EXECUTOR_MEMORY -> "1024m",
       ENV_APPLICATION_ID -> KubernetesTestConf.APP_ID,
       ENV_SPARK_CONF_DIR -> SPARK_CONF_DIR_INTERNAL,
-      ENV_EXECUTOR_POD_IP -> null,
       ENV_SPARK_USER -> Utils.getCurrentUserName(),
-      ENV_RESOURCE_PROFILE_ID -> "0")
+      ENV_RESOURCE_PROFILE_ID -> "0",
+      // These are populated by K8s on scheduling
+      ENV_EXECUTOR_POD_IP -> null,
+      ENV_EXECUTOR_POD_NAME -> null)
 
     val extraJavaOptsStart = additionalEnvVars.keys.count(_.startsWith(ENV_JAVA_OPT_PREFIX))
     val extraJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)

@@ -91,38 +91,40 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
-      StringLiteralCoercion :: Nil) :: Nil
+      GetDateFieldOperations:: Nil) :: Nil
 
-  override def findTightestCommonType(t1: DataType, t2: DataType): Option[DataType] = {
-    (t1, t2) match {
-      case (t1, t2) if t1 == t2 => Some(t1)
-      case (NullType, t1) => Some(t1)
-      case (t1, NullType) => Some(t1)
+  val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
+    case (t1, t2) if t1 == t2 => Some(t1)
+    case (NullType, t1) => Some(t1)
+    case (t1, NullType) => Some(t1)
 
-      case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
-        Some(t2)
-      case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
-        Some(t1)
+    case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
+      Some(t2)
+    case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
+      Some(t1)
 
-      case (t1: NumericType, t2: NumericType)
-          if !t1.isInstanceOf[DecimalType] && !t2.isInstanceOf[DecimalType] =>
-        val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
-        val widerType = numericPrecedence(index)
-        if (widerType == FloatType) {
-          // If the input type is an Integral type and a Float type, simply return Double type as
-          // the tightest common type to avoid potential precision loss on converting the Integral
-          // type as Float type.
-          Some(DoubleType)
-        } else {
-          Some(widerType)
-        }
+    case (t1: NumericType, t2: NumericType)
+        if !t1.isInstanceOf[DecimalType] && !t2.isInstanceOf[DecimalType] =>
+      val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
+      val widerType = numericPrecedence(index)
+      if (widerType == FloatType) {
+        // If the input type is an Integral type and a Float type, simply return Double type as
+        // the tightest common type to avoid potential precision loss on converting the Integral
+        // type as Float type.
+        Some(DoubleType)
+      } else {
+        Some(widerType)
+      }
 
-      case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
-        Some(TimestampType)
+    case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
+      Some(TimestampType)
 
-      case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
-    }
+    case (t1: DayTimeIntervalType, t2: DayTimeIntervalType) =>
+      Some(DayTimeIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
+    case (t1: YearMonthIntervalType, t2: YearMonthIntervalType) =>
+      Some(YearMonthIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
 
+    case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
   }
 
   override def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = {
@@ -192,6 +194,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         }
 
       case (DateType, TimestampType) => Some(TimestampType)
+      case (DateType, AnyTimestampType) => Some(AnyTimestampType.defaultConcreteType)
 
       // When we reach here, input type is not acceptable for any types in this type collection,
       // first try to find the all the expected types we can implicitly cast:
@@ -256,7 +259,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   override def canCast(from: DataType, to: DataType): Boolean = AnsiCast.canCast(from, to)
 
   /**
-   * Promotes string literals that appear in arithmetic and comparison expressions.
+   * Promotes string literals that appear in arithmetic, comparison, and datetime expressions.
    */
   object PromoteStringLiterals extends TypeCoercionRule {
     private def castExpr(expr: Expression, targetType: DataType): Expression = {
@@ -267,14 +270,26 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       }
     }
 
+    // Return whether a string literal can be promoted as the give data type in a binary operation.
+    private def canPromoteAsInBinaryOperation(dt: DataType) = dt match {
+      // If a binary operation contains interval type and string literal, we can't decide which
+      // interval type the string literal should be promoted as. There are many possible interval
+      // types, such as year interval, month interval, day interval, hour interval, etc.
+      case _: AnsiIntervalType => false
+      case _: AtomicType => true
+      case _ => false
+    }
+
     override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case b @ BinaryOperator(left @ StringType(), right @ AtomicType()) if left.foldable =>
+      case b @ BinaryOperator(left @ StringType(), right)
+        if left.foldable && canPromoteAsInBinaryOperation(right.dataType) =>
         b.makeCopy(Array(castExpr(left, right.dataType), right))
 
-      case b @ BinaryOperator(left @ AtomicType(), right @ StringType()) if right.foldable =>
+      case b @ BinaryOperator(left, right @ StringType())
+        if right.foldable && canPromoteAsInBinaryOperation(left.dataType) =>
         b.makeCopy(Array(left, castExpr(right, left.dataType)))
 
       case Abs(e @ StringType(), failOnError) if e.foldable => Abs(Cast(e, DoubleType), failOnError)
@@ -290,6 +305,58 @@ object AnsiTypeCoercion extends TypeCoercionBase {
           case other => other
         }
         p.makeCopy(Array(a, newList))
+
+      case d @ DateAdd(left @ StringType(), _) if left.foldable =>
+        d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateAdd(_, right @ StringType()) if right.foldable =>
+        d.copy(days = Cast(right, IntegerType))
+      case d @ DateSub(left @ StringType(), _) if left.foldable =>
+        d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(_, right @ StringType()) if right.foldable =>
+        d.copy(days = Cast(right, IntegerType))
+
+      case s @ SubtractDates(left @ StringType(), _, _) if left.foldable =>
+        s.copy(left = Cast(s.left, DateType))
+      case s @ SubtractDates(_, right @ StringType(), _) if right.foldable =>
+        s.copy(right = Cast(s.right, DateType))
+      case t @ TimeAdd(left @ StringType(), _, _) if left.foldable =>
+        t.copy(start = Cast(t.start, TimestampType))
+      case t @ SubtractTimestamps(left @ StringType(), _, _, _) if left.foldable =>
+        t.copy(left = Cast(t.left, t.right.dataType))
+      case t @ SubtractTimestamps(_, right @ StringType(), _, _) if right.foldable =>
+        t.copy(right = Cast(right, t.left.dataType))
+    }
+  }
+
+  /**
+   * When getting a date field from a Timestamp column, cast the column as date type.
+   *
+   * This is Spark's hack to make the implementation simple. In the default type coercion rules,
+   * the implicit cast rule does the work. However, The ANSI implicit cast rule doesn't allow
+   * converting Timestamp type as Date type, so we need to have this additional rule
+   * to make sure the date field extraction from Timestamp columns works.
+   */
+  object GetDateFieldOperations extends TypeCoercionRule {
+    override def transform: PartialFunction[Expression, Expression] = {
+      case g: GetDateField if AnyTimestampType.unapply(g.child) =>
+        g.withNewChildren(Seq(Cast(g.child, DateType)))
+    }
+  }
+
+  object DateTimeOperations extends TypeCoercionRule {
+    override val transform: PartialFunction[Expression, Expression] = {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+
+      case s @ SubtractTimestamps(DateType(), AnyTimestampType(), _, _) =>
+        s.copy(left = Cast(s.left, s.right.dataType))
+      case s @ SubtractTimestamps(AnyTimestampType(), DateType(), _, _) =>
+        s.copy(right = Cast(s.right, s.left.dataType))
+      case s @ SubtractTimestamps(AnyTimestampType(), AnyTimestampType(), _, _)
+        if s.left.dataType != s.right.dataType =>
+        val newLeft = castIfNotSameType(s.left, TimestampNTZType)
+        val newRight = castIfNotSameType(s.right, TimestampNTZType)
+        s.copy(left = newLeft, right = newRight)
     }
   }
 }

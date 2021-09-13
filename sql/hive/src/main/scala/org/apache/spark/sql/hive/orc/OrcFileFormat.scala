@@ -194,6 +194,8 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
   }
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
+    case _: AnsiIntervalType => false
+
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }
@@ -314,6 +316,7 @@ private[orc] object OrcFileFormat extends HiveInspectors with Logging {
     "NONE" -> "",
     "SNAPPY" -> ".snappy",
     "ZLIB" -> ".zlib",
+    "LZ4" -> ".lz4",
     "LZO" -> ".lzo")
 
   def unwrapOrcStructs(

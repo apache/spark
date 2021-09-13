@@ -20,22 +20,27 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{AbstractDataType, DataType}
 
 case class ApplyFunctionExpression(
     function: ScalarFunction[_],
-    children: Seq[Expression]) extends Expression with UserDefinedExpression with CodegenFallback {
+    children: Seq[Expression])
+  extends Expression with UserDefinedExpression with CodegenFallback with ImplicitCastInputTypes {
+
   override def nullable: Boolean = function.isResultNullable
   override def name: String = function.name()
   override def dataType: DataType = function.resultType()
+  override def inputTypes: Seq[AbstractDataType] = function.inputTypes().toSeq
 
-  private lazy val reusedRow = new GenericInternalRow(children.size)
+  private lazy val reusedRow = new SpecificInternalRow(function.inputTypes())
 
   /** Returns the result of evaluating this expression on a given input Row */
   override def eval(input: InternalRow): Any = {
-    children.zipWithIndex.foreach {
-      case (expr, pos) =>
-        reusedRow.update(pos, expr.eval(input))
+    var i = 0
+    while (i < children.length) {
+      val expr = children(i)
+      reusedRow.update(i, expr.eval(input))
+      i += 1
     }
 
     function.produceResult(reusedRow)
