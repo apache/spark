@@ -79,6 +79,13 @@ class TriggererJob(BaseJob):
         """
         return session.query(func.count(Trigger.id)).scalar() > 0
 
+    def on_kill(self):
+        """
+        Called when there is an external kill command (via the heartbeat
+        mechanism, for example)
+        """
+        self.runner.stop = True
+
     def _exit_gracefully(self, signum, frame) -> None:  # pylint: disable=unused-argument
         """Helper method to clean up processor_agent to avoid leaving orphan processes."""
         # The first time, try to exit nicely
@@ -123,6 +130,8 @@ class TriggererJob(BaseJob):
             self.handle_events()
             # Handle failed triggers
             self.handle_failed_triggers()
+            # Handle heartbeat
+            self.heartbeat(only_if_necessary=True)
             # Idle sleep
             time.sleep(1)
 
