@@ -491,18 +491,14 @@ object SimplifyBinaryComparison
         case a LessThan b if canSimplifyComparison(a, b, notNullExpressions) => FalseLiteral
 
         // One side is Literal
-        case a EqualTo TrueLiteral if a.dataType.isInstanceOf[BooleanType] => a
-        case TrueLiteral EqualTo b if b.dataType.isInstanceOf[BooleanType] => b
-        case a EqualTo FalseLiteral if a.dataType.isInstanceOf[BooleanType] => Not(a)
-        case FalseLiteral EqualTo b if b.dataType.isInstanceOf[BooleanType] => Not(b)
-        case a EqualNullSafe TrueLiteral if a.dataType.isInstanceOf[BooleanType] =>
-          And(a, IsNotNull(a))
-        case TrueLiteral EqualNullSafe b if b.dataType.isInstanceOf[BooleanType] =>
-          And(b, IsNotNull(b))
-        case a EqualNullSafe FalseLiteral if a.dataType.isInstanceOf[BooleanType] =>
-          And(Not(a), IsNotNull(a))
-        case FalseLiteral EqualNullSafe b if b.dataType.isInstanceOf[BooleanType] =>
-          And(Not(b), IsNotNull(b))
+        case (a: Predicate) EqualTo TrueLiteral => a
+        case TrueLiteral EqualTo (b: Predicate) => b
+        case (a: Predicate) EqualTo FalseLiteral => Not(a)
+        case FalseLiteral EqualTo (b: Predicate) => Not(b)
+        case (a: Predicate) EqualNullSafe TrueLiteral => And(a, IsNotNull(a))
+        case TrueLiteral EqualNullSafe (b: Predicate) => And(b, IsNotNull(b))
+        case (a: Predicate) EqualNullSafe FalseLiteral => And(Not(a), IsNotNull(a))
+        case FalseLiteral EqualNullSafe (b: Predicate) => And(Not(b), IsNotNull(b))
       }
   }
 }

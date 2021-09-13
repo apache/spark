@@ -205,9 +205,13 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
     checkCondition(boolRelation, TrueLiteral === And('a, 'b), And('a, 'b))
     checkCondition(boolRelation, And('a, 'b) === FalseLiteral, Or(Not('a), Not('b)))
     checkCondition(boolRelation, FalseLiteral === And('a, 'b), Or(Not('a), Not('b)))
-    checkCondition(boolRelation, Not('a) <=> TrueLiteral, And(Not('a), IsNotNull('a)))
-    checkCondition(boolRelation, TrueLiteral <=> Not('a), And(Not('a), IsNotNull('a)))
-    checkCondition(boolRelation, Not('a) <=> FalseLiteral, And('a, IsNotNull('a)))
-    checkCondition(boolRelation, FalseLiteral <=> Not('a), And('a, IsNotNull('a)))
+    checkCondition(boolRelation, And('a, 'b) <=> TrueLiteral,
+      And(And('a, 'b), IsNotNull(And('a, 'b))))
+    checkCondition(boolRelation, TrueLiteral <=> And('a, 'b),
+      And(And('a, 'b), IsNotNull(And('a, 'b))))
+    checkCondition(boolRelation, And('a, 'b) <=> FalseLiteral,
+      And(Or(Not('a), Not('b)), IsNotNull(And('a, 'b))))
+    checkCondition(boolRelation, FalseLiteral <=> And('a, 'b),
+      And(Or(Not('a), Not('b)), IsNotNull(And('a, 'b))))
   }
 }
