@@ -175,12 +175,19 @@ class ExpressionSet protected(
       case a: Attribute => mapping(a)
     }))
 
-  def withNewConstraints(filters: ExpressionSet): ExpressionSet = ExpressionSet(filters)
+  def withNewConstraints(
+      filters: ExpressionSet,
+      attribEquiv: Seq[mutable.Buffer[Attribute]]): ExpressionSet =
+    ExpressionSet(filters)
 
   def rewriteUsingAlias(expr: Expression): Expression = expr
 
   def getConstraintsWithDecanonicalizedNullIntolerant: ExpressionSet = this
 
+  def getAttribEquivalenceList: Seq[mutable.Buffer[Attribute]] =
+    Seq.empty[mutable.Buffer[Attribute]]
+
+  def getCanonicalizedFilters: Set[Expression] = this.baseSet.toSet
   /**
    * Returns a string containing both the post [[Canonicalize]] expressions and the original
    * expressions in this set.

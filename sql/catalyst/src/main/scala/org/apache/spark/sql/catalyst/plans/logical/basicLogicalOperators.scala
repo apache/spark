@@ -360,9 +360,16 @@ case class Union(
   }
 
   override lazy val validConstraints: ExpressionSet = {
-    val unionConstraints = children.map(child => rewriteConstraints(children.head.output,
-      child.output, child.constraints)).reduce(merge(_, _))
-    children.head.constraints.withNewConstraints(unionConstraints)
+    if (SQLConf.get.useOptimizedConstraintPropagation) {
+         val head = children.head
+        val headOutput = head.output
+        val remaining = children.slice(1, children.length)
+        remaining.foldLeft(head.constraints.asInstanceOf[ConstraintSet])((constraint, node) =>
+          ConstraintSet.unionWith(constraint, node, headOutput))
+    } else {
+      children.map(child => rewriteConstraints(children.head.output,
+        child.output, child.constraints)).reduce(merge(_, _))
+    }
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): Union =
