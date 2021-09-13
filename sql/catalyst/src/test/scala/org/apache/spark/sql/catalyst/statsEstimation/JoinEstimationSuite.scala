@@ -573,6 +573,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
 
     assert(join.stats == Statistics(sizeInBytes = 100))
   }
+
   test("SPARK-36716: Join estimation support LeftExistence join type") {
     val join = Join(table2, table3, ExistenceJoin('val.boolean),
       Some(EqualTo(nameToAttr("key-2-4"), nameToAttr("key-2-3"))), JoinHint.NONE)
