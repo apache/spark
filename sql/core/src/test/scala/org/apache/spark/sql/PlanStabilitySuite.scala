@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec, Va
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.ExtendedSQLTest
 
+
 // scalastyle:off line.size.limit
 /**
  * Check that TPC-DS SparkPlans don't change.
@@ -110,10 +111,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
     } else baseFileName
     val file = new File(dir, goldenFileName)
     val expectedSimplified = FileUtils.readFileToString(file, StandardCharsets.UTF_8)
-    expected == actualSimplifiedPlan
-    val explainFile = new File(dir, "explain.txt")
-    lazy val expectedExplain = FileUtils.readFileToString(explainFile, StandardCharsets.UTF_8)
-    expectedSimplified == actualSimplifiedPlan && expectedExplain == actualExplain
+    expectedSimplified == actualSimplifiedPlan
   }
 
   /**
@@ -128,7 +126,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   private def generateGoldenFile(plan: SparkPlan, name: String, explain: String): Unit = {
     val dir = getDirForTest(name)
     val simplified = getSimplifiedPlan(plan)
-    val foundMatch = dir.exists() && isApproved(dir, simplified, explain)
+    val foundMatch = dir.exists() && isApproved(dir, simplified)
 
     if (!foundMatch) {
       FileUtils.deleteDirectory(dir)
@@ -146,7 +144,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
     val dir = getDirForTest(name)
     val tempDir = FileUtils.getTempDirectory
     val actualSimplified = getSimplifiedPlan(plan)
-    val foundMatch = isApproved(dir, actualSimplified, explain)
+    val foundMatch = isApproved(dir, actualSimplified)
 
     if (!foundMatch) {
       // show diff with last approved
