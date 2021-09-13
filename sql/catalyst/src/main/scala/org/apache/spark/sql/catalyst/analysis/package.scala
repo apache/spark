@@ -36,6 +36,15 @@ package object analysis {
   val caseInsensitiveResolution = (a: String, b: String) => a.equalsIgnoreCase(b)
   val caseSensitiveResolution = (a: String, b: String) => a == b
 
+  /**
+   * Comparator should return a negative integer, zero or a positive integer
+   * as the first string is less than, equal to, or greater than the second string.
+   */
+  private[sql] type Comparator = (String, String) => Int
+
+  private[sql] val caseInsensitiveComparator = (a: String, b: String) => a.compareToIgnoreCase(b)
+  private[sql] val caseSensitiveComparator = (a: String, b: String) => a.compareTo(b)
+
   implicit class AnalysisErrorAt(t: TreeNode[_]) {
     /** Fails the analysis at the point where a specific tree node was parsed. */
     def failAnalysis(msg: String): Nothing = {
