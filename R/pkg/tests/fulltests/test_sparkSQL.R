@@ -1995,6 +1995,10 @@ test_that("string operators", {
     collect(select(df6, octet_length(df6$"_1")))[,1],
     c(3,4)
   )
+  expect_equal(
+    collect(select(df6, bit_length(df6$"_1")))[,1],
+    c(24,32)
+  )
 })
 
 test_that("date functions on a DataFrame", {

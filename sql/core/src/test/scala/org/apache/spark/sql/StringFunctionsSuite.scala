@@ -486,27 +486,52 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("string / binary octet-length function") {
+  test("octet-length function") {
     val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123, 2.0f, 3.015, "\ud83d\udc08"))
       .toDF("a", "b", "c", "d", "e", "f")
+    // string and binary input
     checkAnswer(
       df.select(octet_length($"a"), octet_length($"b")),
       Row(3, 4))
-
+    // string and binary input
     checkAnswer(
       df.selectExpr("octet_length(a)", "octet_length(b)"),
       Row(3, 4))
-
+    // integer, float and double input
     checkAnswer(
       df.selectExpr("octet_length(c)", "octet_length(d)", "octet_length(e)"),
       Row(3, 3, 5)
     )
-
+    // multi-byte character input
     checkAnswer(
-      df.selectExpr("length(f)", "octet_length(f)"),
-      Row(1, 4)
+      df.selectExpr("octet_length(f)"),
+      Row(4)
     )
   }
+
+  test("bit-length function") {
+    val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123, 2.0f, 3.015, "\ud83d\udc08"))
+      .toDF("a", "b", "c", "d", "e", "f")
+    // string and binary input
+    checkAnswer(
+      df.select(bit_length($"a"), bit_length($"b")),
+      Row(24, 32))
+    // string and binary input
+    checkAnswer(
+      df.selectExpr("bit_length(a)", "bit_length(b)"),
+      Row(24, 32))
+    // integer, float and double input
+    checkAnswer(
+      df.selectExpr("bit_length(c)", "bit_length(d)", "bit_length(e)"),
+      Row(24, 24, 40)
+    )
+    // multi-byte character input
+    checkAnswer(
+      df.selectExpr("bit_length(f)"),
+      Row(32)
+    )
+  }
+
 
   test("initcap function") {
     val df = Seq(("ab", "a B", "sParK")).toDF("x", "y", "z")

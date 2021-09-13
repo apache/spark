@@ -677,6 +677,19 @@ setMethod("bitwiseNOT",
           })
 
 #' @details
+#' \code{bit_length}:  Calculates the bit length for the specified string column.
+#'
+#' @rdname column_string_functions
+#' @aliases bit_length bit_length,Column-method
+#' @note length since 3.3.0
+setMethod("bit_length",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "bit_length", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{cbrt}: Computes the cube-root of the given value.
 #'
 #' @rdname column_math_functions

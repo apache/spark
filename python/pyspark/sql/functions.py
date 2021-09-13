@@ -3118,6 +3118,26 @@ def octet_length(col):
     return _invoke_function_over_column("octet_length", col)
 
 
+def bit_length(col):
+    """
+    .. versionadded:: 3.3.0
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Source column or strings
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Bit length of the col
+    Examples
+    -------
+    >>> from pyspark.sql.functions import bit_length
+    >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']).select(bit_length('cat')).collect()
+        [Row(bit_length(cat)=24), Row(bit_length(cat)=32)]
+    """
+    return _invoke_function_over_column("bit_length", col)
+
+
 def translate(srcCol, matching, replace):
     """A function translate any character in the `srcCol` by a character in `matching`.
     The characters in `replace` is corresponding to the characters in `matching`.

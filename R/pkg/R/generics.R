@@ -892,6 +892,10 @@ setGeneric("bitwise_not", function(x) { standardGeneric("bitwise_not") })
 #' @name NULL
 setGeneric("bitwiseNOT", function(x) { standardGeneric("bitwiseNOT") })
 
+#' @rdname column_string_functions
+#' @name NULL
+setGeneric("bit_length", function(x, ...) { standardGeneric("bit_length") })
+
 #' @rdname column_math_functions
 #' @name NULL
 setGeneric("bround", function(x, ...) { standardGeneric("bround") })
