@@ -499,7 +499,11 @@ class InMemoryCatalog(
           newSpec, partitionColumnNames, tablePath)
         try {
           val fs = tablePath.getFileSystem(hadoopConfig)
-          fs.rename(oldPartPath, newPartPath)
+          fs.mkdirs(newPartPath)
+          if(!fs.rename(oldPartPath, newPartPath)) {
+            throw new IOException(s"Renaming partition path from $oldPartPath to " +
+              s"$newPartPath returned false")
+          }
         } catch {
           case e: IOException =>
             throw QueryExecutionErrors.unableToRenamePartitionPathError(oldPartPath, e)

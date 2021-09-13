@@ -58,36 +58,36 @@ class NumPyCompatTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
     @property
-    def kdf(self):
+    def psdf(self):
         return ps.from_pandas(self.pdf)
 
     def test_np_add_series(self):
-        kdf = self.kdf
+        psdf = self.psdf
         pdf = self.pdf
 
         if LooseVersion(pd.__version__) < LooseVersion("0.25"):
-            self.assert_eq(np.add(kdf.a, kdf.b), np.add(pdf.a, pdf.b).rename())
+            self.assert_eq(np.add(psdf.a, psdf.b), np.add(pdf.a, pdf.b).rename())
         else:
-            self.assert_eq(np.add(kdf.a, kdf.b), np.add(pdf.a, pdf.b))
+            self.assert_eq(np.add(psdf.a, psdf.b), np.add(pdf.a, pdf.b))
 
-        kdf = self.kdf
+        psdf = self.psdf
         pdf = self.pdf
-        self.assert_eq(np.add(kdf.a, 1), np.add(pdf.a, 1))
+        self.assert_eq(np.add(psdf.a, 1), np.add(pdf.a, 1))
 
     def test_np_add_index(self):
-        k_index = self.kdf.index
+        k_index = self.psdf.index
         p_index = self.pdf.index
         self.assert_eq(np.add(k_index, k_index), np.add(p_index, p_index))
 
     def test_np_unsupported_series(self):
-        kdf = self.kdf
+        psdf = self.psdf
         with self.assertRaisesRegex(NotImplementedError, "pandas.*not.*support.*sqrt.*"):
-            np.sqrt(kdf.a, kdf.b)
+            np.sqrt(psdf.a, psdf.b)
 
     def test_np_unsupported_frame(self):
-        kdf = self.kdf
+        psdf = self.psdf
         with self.assertRaisesRegex(NotImplementedError, "on-Spark.*not.*support.*sqrt.*"):
-            np.sqrt(kdf, kdf)
+            np.sqrt(psdf, psdf)
 
     def test_np_spark_compat_series(self):
         # Use randomly generated dataFrame
@@ -97,15 +97,15 @@ class NumPyCompatTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf2 = pd.DataFrame(
             np.random.randint(-100, 100, size=(len(pdf), len(pdf.columns))), columns=["a", "b"]
         )
-        kdf = ps.from_pandas(pdf)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf = ps.from_pandas(pdf)
+        psdf2 = ps.from_pandas(pdf2)
 
         for np_name, spark_func in unary_np_spark_mappings.items():
             np_func = getattr(np, np_name)
             if np_name not in self.blacklist:
                 try:
                     # unary ufunc
-                    self.assert_eq(np_func(pdf.a), np_func(kdf.a), almost=True)
+                    self.assert_eq(np_func(pdf.a), np_func(psdf.a), almost=True)
                 except Exception as e:
                     raise AssertionError("Test in '%s' function was failed." % np_name) from e
 
@@ -116,11 +116,11 @@ class NumPyCompatTest(PandasOnSparkTestCase, SQLTestUtils):
                     # binary ufunc
                     if LooseVersion(pd.__version__) < LooseVersion("0.25"):
                         self.assert_eq(
-                            np_func(pdf.a, pdf.b).rename(), np_func(kdf.a, kdf.b), almost=True
+                            np_func(pdf.a, pdf.b).rename(), np_func(psdf.a, psdf.b), almost=True
                         )
                     else:
-                        self.assert_eq(np_func(pdf.a, pdf.b), np_func(kdf.a, kdf.b), almost=True)
-                    self.assert_eq(np_func(pdf.a, 1), np_func(kdf.a, 1), almost=True)
+                        self.assert_eq(np_func(pdf.a, pdf.b), np_func(psdf.a, psdf.b), almost=True)
+                    self.assert_eq(np_func(pdf.a, 1), np_func(psdf.a, 1), almost=True)
                 except Exception as e:
                     raise AssertionError("Test in '%s' function was failed." % np_name) from e
 
@@ -135,13 +135,13 @@ class NumPyCompatTest(PandasOnSparkTestCase, SQLTestUtils):
                         if LooseVersion(pd.__version__) < LooseVersion("0.25"):
                             self.assert_eq(
                                 np_func(pdf.a, pdf2.b).sort_index().rename(),
-                                np_func(kdf.a, kdf2.b).sort_index(),
+                                np_func(psdf.a, psdf2.b).sort_index(),
                                 almost=True,
                             )
                         else:
                             self.assert_eq(
                                 np_func(pdf.a, pdf2.b).sort_index(),
-                                np_func(kdf.a, kdf2.b).sort_index(),
+                                np_func(psdf.a, psdf2.b).sort_index(),
                                 almost=True,
                             )
                     except Exception as e:
@@ -157,15 +157,15 @@ class NumPyCompatTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf2 = pd.DataFrame(
             np.random.randint(-100, 100, size=(len(pdf), len(pdf.columns))), columns=["a", "b"]
         )
-        kdf = ps.from_pandas(pdf)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf = ps.from_pandas(pdf)
+        psdf2 = ps.from_pandas(pdf2)
 
         for np_name, spark_func in unary_np_spark_mappings.items():
             np_func = getattr(np, np_name)
             if np_name not in self.blacklist:
                 try:
                     # unary ufunc
-                    self.assert_eq(np_func(pdf), np_func(kdf), almost=True)
+                    self.assert_eq(np_func(pdf), np_func(psdf), almost=True)
                 except Exception as e:
                     raise AssertionError("Test in '%s' function was failed." % np_name) from e
 
@@ -174,8 +174,8 @@ class NumPyCompatTest(PandasOnSparkTestCase, SQLTestUtils):
             if np_name not in self.blacklist:
                 try:
                     # binary ufunc
-                    self.assert_eq(np_func(pdf, pdf), np_func(kdf, kdf), almost=True)
-                    self.assert_eq(np_func(pdf, 1), np_func(kdf, 1), almost=True)
+                    self.assert_eq(np_func(pdf, pdf), np_func(psdf, psdf), almost=True)
+                    self.assert_eq(np_func(pdf, 1), np_func(psdf, 1), almost=True)
                 except Exception as e:
                     raise AssertionError("Test in '%s' function was failed." % np_name) from e
 
@@ -189,7 +189,7 @@ class NumPyCompatTest(PandasOnSparkTestCase, SQLTestUtils):
                         # binary ufunc
                         self.assert_eq(
                             np_func(pdf, pdf2).sort_index(),
-                            np_func(kdf, kdf2).sort_index(),
+                            np_func(psdf, psdf2).sort_index(),
                             almost=True,
                         )
 
@@ -205,7 +205,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

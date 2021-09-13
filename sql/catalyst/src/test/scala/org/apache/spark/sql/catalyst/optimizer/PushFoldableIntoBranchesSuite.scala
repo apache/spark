@@ -275,8 +275,8 @@ class PushFoldableIntoBranchesSuite
         Literal(new CalendarInterval(1, 2, 0)))),
       If(a, Literal(Date.valueOf("2021-02-02")), Literal(Date.valueOf("2021-02-03"))))
     assertEquivalent(DateAddYMInterval(Literal(d),
-      If(a, Literal.create(Period.ofMonths(1), YearMonthIntervalType),
-        Literal.create(Period.ofMonths(2), YearMonthIntervalType))),
+      If(a, Literal.create(Period.ofMonths(1), YearMonthIntervalType()),
+        Literal.create(Period.ofMonths(2), YearMonthIntervalType()))),
       If(a, Literal(Date.valueOf("2021-02-01")), Literal(Date.valueOf("2021-03-01"))))
     assertEquivalent(DateDiff(Literal(d),
       If(a, Literal(Date.valueOf("2021-02-01")), Literal(Date.valueOf("2021-03-01")))),
@@ -286,8 +286,8 @@ class PushFoldableIntoBranchesSuite
       If(a, Literal(Date.valueOf("2020-12-31")), Literal(Date.valueOf("2020-12-30"))))
     assertEquivalent(TimestampAddYMInterval(
       Literal.create(Timestamp.valueOf("2021-01-01 00:00:00.000"), TimestampType),
-      If(a, Literal.create(Period.ofMonths(1), YearMonthIntervalType),
-        Literal.create(Period.ofMonths(2), YearMonthIntervalType))),
+      If(a, Literal.create(Period.ofMonths(1), YearMonthIntervalType()),
+        Literal.create(Period.ofMonths(2), YearMonthIntervalType()))),
       If(a, Literal.create(Timestamp.valueOf("2021-02-01 00:00:00"), TimestampType),
         Literal.create(Timestamp.valueOf("2021-03-01 00:00:00"), TimestampType)))
     assertEquivalent(TimeAdd(
@@ -312,8 +312,8 @@ class PushFoldableIntoBranchesSuite
       CaseWhen(Seq((a, Literal(Date.valueOf("2021-02-02"))),
         (c, Literal(Date.valueOf("2021-02-03")))), None))
     assertEquivalent(DateAddYMInterval(Literal(d),
-      CaseWhen(Seq((a, Literal.create(Period.ofMonths(1), YearMonthIntervalType)),
-        (c, Literal.create(Period.ofMonths(2), YearMonthIntervalType))), None)),
+      CaseWhen(Seq((a, Literal.create(Period.ofMonths(1), YearMonthIntervalType())),
+        (c, Literal.create(Period.ofMonths(2), YearMonthIntervalType()))), None)),
       CaseWhen(Seq((a, Literal(Date.valueOf("2021-02-01"))),
         (c, Literal(Date.valueOf("2021-03-01")))), None))
     assertEquivalent(DateDiff(Literal(d),
@@ -326,8 +326,8 @@ class PushFoldableIntoBranchesSuite
         (c, Literal(Date.valueOf("2020-12-30")))), None))
     assertEquivalent(TimestampAddYMInterval(
       Literal.create(Timestamp.valueOf("2021-01-01 00:00:00.000"), TimestampType),
-      CaseWhen(Seq((a, Literal.create(Period.ofMonths(1), YearMonthIntervalType)),
-        (c, Literal.create(Period.ofMonths(2), YearMonthIntervalType))), None)),
+      CaseWhen(Seq((a, Literal.create(Period.ofMonths(1), YearMonthIntervalType())),
+        (c, Literal.create(Period.ofMonths(2), YearMonthIntervalType()))), None)),
       CaseWhen(Seq((a, Literal.create(Timestamp.valueOf("2021-02-01 00:00:00"), TimestampType)),
         (c, Literal.create(Timestamp.valueOf("2021-03-01 00:00:00"), TimestampType))), None))
     assertEquivalent(TimeAdd(

@@ -92,9 +92,9 @@ case class ApproximatePercentile(
   private lazy val accuracy: Long = accuracyExpression.eval().asInstanceOf[Number].longValue
 
   override def inputTypes: Seq[AbstractDataType] = {
-    // Support NumericType, DateType and TimestampType since their internal types are all numeric,
-    // and can be easily cast to double for processing.
-    Seq(TypeCollection(NumericType, DateType, TimestampType),
+    // Support NumericType, DateType, TimestampType and TimestampNTZType since their internal types
+    // are all numeric, and can be easily cast to double for processing.
+    Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType),
       TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)), IntegralType)
   }
 
@@ -139,7 +139,7 @@ case class ApproximatePercentile(
       // Convert the value to a double value
       val doubleValue = child.dataType match {
         case DateType => value.asInstanceOf[Int].toDouble
-        case TimestampType => value.asInstanceOf[Long].toDouble
+        case TimestampType | TimestampNTZType => value.asInstanceOf[Long].toDouble
         case n: NumericType => n.numeric.toDouble(value.asInstanceOf[n.InternalType])
         case other: DataType =>
           throw QueryExecutionErrors.dataTypeUnexpectedError(other)
@@ -158,7 +158,7 @@ case class ApproximatePercentile(
     val doubleResult = buffer.getPercentiles(percentages)
     val result = child.dataType match {
       case DateType => doubleResult.map(_.toInt)
-      case TimestampType => doubleResult.map(_.toLong)
+      case TimestampType | TimestampNTZType => doubleResult.map(_.toLong)
       case ByteType => doubleResult.map(_.toByte)
       case ShortType => doubleResult.map(_.toShort)
       case IntegerType => doubleResult.map(_.toInt)
@@ -261,19 +261,12 @@ object ApproximatePercentile {
      *   val Array(p25, median, p75) = percentileDigest.getPercentiles(Array(0.25, 0.5, 0.75))
      * }}}
      */
-    def getPercentiles(percentages: Array[Double]): Array[Double] = {
+    def getPercentiles(percentages: Array[Double]): Seq[Double] = {
       if (!isCompressed) compress()
       if (summaries.count == 0 || percentages.length == 0) {
         Array.emptyDoubleArray
       } else {
-        val result = new Array[Double](percentages.length)
-        var i = 0
-        while (i < percentages.length) {
-          // Since summaries.count != 0, the query here never return None.
-          result(i) = summaries.query(percentages(i)).get
-          i += 1
-        }
-        result
+        summaries.query(percentages).get
       }
     }
 

@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{FileNotFoundException, IOException, OutputStream}
+import java.io.{FileNotFoundException, OutputStream}
 import java.util.{EnumSet, UUID}
 
 import scala.util.control.NonFatal
@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.local.{LocalFs, RawLocalFs}
 import org.apache.hadoop.fs.permission.FsPermission
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.RenameHelperMethods
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -257,8 +258,7 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
 
   override def renameTempFile(srcPath: Path, dstPath: Path, overwriteIfPossible: Boolean): Unit = {
     if (!overwriteIfPossible && fs.exists(dstPath)) {
-      throw new FileAlreadyExistsException(
-        s"Failed to rename $srcPath to $dstPath as destination already exists")
+      throw QueryExecutionErrors.renamePathAsExistsPathError(srcPath, dstPath)
     }
 
     if (!fs.rename(srcPath, dstPath)) {
@@ -266,14 +266,14 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
       // This tries to make a best effort attempt to return the most appropriate exception.
       if (fs.exists(dstPath)) {
         if (!overwriteIfPossible) {
-          throw new FileAlreadyExistsException(s"Failed to rename as $dstPath already exists")
+          throw QueryExecutionErrors.renameAsExistsPathError(dstPath)
         }
       } else if (!fs.exists(srcPath)) {
-        throw new FileNotFoundException(s"Failed to rename as $srcPath was not found")
+        throw QueryExecutionErrors.renameSrcPathNotFoundError(srcPath)
       } else {
-        val msg = s"Failed to rename temp file $srcPath to $dstPath as rename returned false"
-        logWarning(msg)
-        throw new IOException(msg)
+        val e = QueryExecutionErrors.failedRenameTempFileError(srcPath, dstPath)
+        logWarning(e.getMessage)
+        throw e
       }
     }
   }

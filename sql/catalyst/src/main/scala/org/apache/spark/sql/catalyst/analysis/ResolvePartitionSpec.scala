@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, V2PartitionCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 import org.apache.spark.sql.types._
@@ -32,7 +33,8 @@ import org.apache.spark.sql.util.PartitioningUtils.{normalizePartitionSpec, requ
  */
 object ResolvePartitionSpec extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsPattern(COMMAND)) {
     case command: V2PartitionCommand if command.childrenResolved && !command.resolved =>
       command.table match {
         case r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _) =>

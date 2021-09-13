@@ -72,7 +72,7 @@ trait AliasHelper {
     // Use transformUp to prevent infinite recursion when the replacement expression
     // redefines the same ExprId,
     trimNonTopLevelAliases(expr.transformUp {
-      case a: Attribute => aliasMap.getOrElse(a, a)
+      case a: Attribute => aliasMap.get(a).map(_.withName(a.name)).getOrElse(a)
     }).asInstanceOf[NamedExpression]
   }
 

@@ -20,6 +20,9 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * Similar to [[SubqueryBroadcastExec]], this node is used to store the
@@ -32,12 +35,18 @@ import org.apache.spark.sql.catalyst.expressions._
 case class SubqueryAdaptiveBroadcastExec(
     name: String,
     index: Int,
+    onlyInBroadcast: Boolean,
+    @transient buildPlan: LogicalPlan,
     buildKeys: Seq[Expression],
     child: SparkPlan) extends BaseSubqueryExec with UnaryExecNode {
 
   protected override def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException(
-      "SubqueryAdaptiveBroadcastExec does not support the execute() code path.")
+    throw QueryExecutionErrors.executeCodePathUnsupportedError("SubqueryAdaptiveBroadcastExec")
+  }
+
+  protected override def doCanonicalize(): SparkPlan = {
+    val keys = buildKeys.map(k => QueryPlan.normalizeExpressions(k, child.output))
+    copy(name = "dpp", buildKeys = keys, child = child.canonicalized)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SubqueryAdaptiveBroadcastExec =

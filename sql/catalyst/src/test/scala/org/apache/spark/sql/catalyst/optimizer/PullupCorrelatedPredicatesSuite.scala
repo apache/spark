@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, DeleteFromTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, DeleteFromTable, InsertAction, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class PullupCorrelatedPredicatesSuite extends PlanTest {
@@ -97,6 +97,18 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     val optimized = Optimize.execute(scalarSubquery)
     val doubleOptimized = Optimize.execute(optimized)
     comparePlans(optimized, doubleOptimized, false)
+  }
+
+  test("PullupCorrelatedPredicates lateral join idempotency check") {
+    val right =
+      testRelation2
+        .where('b === 'd && 'd === 1)
+        .select('c)
+    val left = testRelation
+    val lateralJoin = LateralJoin(left, LateralSubquery(right), Inner, Some('a === 'c)).analyze
+    val optimized = Optimize.execute(lateralJoin)
+    val doubleOptimized = Optimize.execute(optimized)
+    comparePlans(optimized, doubleOptimized)
   }
 
   test("PullupCorrelatedPredicates should handle deletes") {

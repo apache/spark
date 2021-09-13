@@ -34,7 +34,7 @@ private[spark] class Py4JServer(sparkConf: SparkConf) extends Logging {
   // Java system properties and such
   private val localhost = InetAddress.getLoopbackAddress()
   private[spark] val server = if (sys.env.getOrElse(
-      "PYSPARK_PIN_THREAD", "false").toLowerCase(Locale.ROOT) == "true") {
+      "PYSPARK_PIN_THREAD", "true").toLowerCase(Locale.ROOT) == "true") {
     new py4j.ClientServer.ClientServerBuilder()
       .authToken(secret)
       .javaPort(0)

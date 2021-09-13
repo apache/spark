@@ -32,7 +32,9 @@ at `the Spark documentation <https://spark.apache.org/docs/latest/index.html#whe
 PySpark specific user guide is as follows:
 
 .. toctree::
-    :maxdepth: 2
+   :maxdepth: 2
 
-    python_packaging
-    arrow_pandas
+   python_packaging
+   sql/index
+   pandas_on_spark/index
+

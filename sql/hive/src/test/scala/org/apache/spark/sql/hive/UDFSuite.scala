@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -207,6 +208,15 @@ class UDFSuite
       }
 
       assert(e.getMessage.contains("Can not get an evaluator of the empty UDAF"))
+    }
+  }
+
+  test("check source for hive UDF") {
+    withUserDefinedFunction(functionName -> false) {
+      sql(s"CREATE FUNCTION $functionName AS '$functionClass'")
+      val info = spark.sessionState.catalog.lookupFunctionInfo(
+        FunctionIdentifier(functionName, Some("default")))
+      assert(info.getSource == "hive")
     }
   }
 }

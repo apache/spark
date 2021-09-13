@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{Cross, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 private[sql] case class GroupableData(data: Int) {
@@ -714,7 +715,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   test("SPARK-30811: CTE should not cause stack overflow when " +
     "it refers to non-existent table with same name") {
-    val plan = With(
+    val plan = UnresolvedWith(
       UnresolvedRelation(TableIdentifier("t")),
       Seq("t" -> SubqueryAlias("t",
         Project(
@@ -768,6 +769,11 @@ class AnalysisErrorSuite extends AnalysisTest {
       "which value you get." :: Nil)
   }
 
+  errorTest(
+    "SC-69611: error code to error message",
+    testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
+    "cannot resolve 'bad_column' given input columns: [a, b, c, d, e]" :: Nil)
+
   test("SPARK-35080: Unsupported correlated equality predicates in subquery") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
@@ -789,6 +795,83 @@ class AnalysisErrorSuite extends AnalysisTest {
         ).as("sub") :: Nil,
         t2)
       assertAnalysisError(plan, s"Correlated column is not allowed in predicate ($msg)" :: Nil)
+    }
+  }
+
+  test("SPARK-35673: fail if the plan still contains UnresolvedHint after analysis") {
+    val hintName = "some_random_hint_that_does_not_exist"
+    val plan = UnresolvedHint(hintName, Seq.empty,
+      Project(Alias(Literal(1), "x")() :: Nil, OneRowRelation())
+    )
+    assert(plan.resolved)
+
+    val error = intercept[AnalysisException] {
+      SimpleAnalyzer.checkAnalysis(plan)
+    }
+    assert(error.message.contains(s"Hint not found: ${hintName}"))
+
+    // UnresolvedHint be removed by batch `Remove Unresolved Hints`
+    assertAnalysisSuccess(plan, true)
+  }
+
+  test("SPARK-35618: Resolve star expressions in subqueries") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val t0 = OneRowRelation()
+    val t1 = LocalRelation(a, b).as("t1")
+
+    // t1.* in the subquery should be resolved into outer(t1.a) and outer(t1.b).
+    assertAnalysisError(
+      Project(ScalarSubquery(t0.select(star("t1"))).as("sub") :: Nil, t1),
+      "Scalar subquery must return only one column, but got 2" :: Nil)
+
+    // t2.* cannot be resolved and the error should be the initial analysis exception.
+    assertAnalysisError(
+      Project(ScalarSubquery(t0.select(star("t2"))).as("sub") :: Nil, t1),
+      "cannot resolve 't2.*' given input columns ''" :: Nil
+    )
+  }
+
+  test("SPARK-35618: Invalid star usage in subqueries") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val c = AttributeReference("c", IntegerType)()
+    val t1 = LocalRelation(a, b).as("t1")
+    val t2 = LocalRelation(b, c).as("t2")
+
+    // SELECT * FROM t1 WHERE a = (SELECT sum(c) FROM t2 WHERE t1.* = t2.b)
+    assertAnalysisError(
+      Filter(EqualTo(a, ScalarSubquery(t2.select(sum(c)).where(star("t1") === b))), t1),
+      "Invalid usage of '*' in Filter" :: Nil
+    )
+
+    // SELECT * FROM t1 JOIN t2 ON (EXISTS (SELECT 1 FROM t2 WHERE t1.* = b))
+    assertAnalysisError(
+      t1.join(t2, condition = Some(Exists(t2.select(1).where(star("t1") === b)))),
+      "Invalid usage of '*' in Filter" :: Nil
+    )
+  }
+
+  test("SPARK-36488: Regular expression expansion should fail with a meaningful message") {
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
+      assertAnalysisError(testRelation.select(Divide(UnresolvedRegex(".?", None, false), "a")),
+        s"Invalid usage of regular expression '.?' in" :: Nil)
+      assertAnalysisError(testRelation.select(
+        Divide(UnresolvedRegex(".?", None, false), UnresolvedRegex(".*", None, false))),
+        s"Invalid usage of regular expressions '.?', '.*' in" :: Nil)
+      assertAnalysisError(testRelation.select(
+        Divide(UnresolvedRegex(".?", None, false), UnresolvedRegex(".?", None, false))),
+        s"Invalid usage of regular expression '.?' in" :: Nil)
+      assertAnalysisError(testRelation.select(Divide(UnresolvedStar(None), "a")),
+        "Invalid usage of '*' in" :: Nil)
+      assertAnalysisError(testRelation.select(Divide(UnresolvedStar(None), UnresolvedStar(None))),
+        "Invalid usage of '*' in" :: Nil)
+      assertAnalysisError(testRelation.select(Divide(UnresolvedStar(None),
+        UnresolvedRegex(".?", None, false))),
+        "Invalid usage of '*' and regular expression '.?' in" :: Nil)
+      assertAnalysisError(testRelation.select(Least(Seq(UnresolvedStar(None),
+        UnresolvedRegex(".*", None, false), UnresolvedRegex(".?", None, false)))),
+        "Invalid usage of '*' and regular expressions '.*', '.?' in" :: Nil)
     }
   }
 }

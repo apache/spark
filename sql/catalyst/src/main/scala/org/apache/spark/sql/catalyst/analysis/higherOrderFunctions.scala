@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.AlwaysProcess
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
@@ -34,7 +34,8 @@ import org.apache.spark.sql.types.DataType
 case class ResolveHigherOrderFunctions(catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
+    _.containsPattern(LAMBDA_FUNCTION), ruleId) {
     case u @ UnresolvedFunction(AsFunctionIdentifier(ident), children, false, filter, ignoreNulls)
         if hasLambdaAndResolvedArguments(children) =>
       withPosition(u) {
@@ -91,7 +92,8 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperatorsWithPruning(AlwaysProcess.fn, ruleId) {
+    plan.resolveOperatorsWithPruning(
+      _.containsAnyPattern(HIGH_ORDER_FUNCTION, LAMBDA_FUNCTION, LAMBDA_VARIABLE), ruleId) {
       case q: LogicalPlan =>
         q.mapExpressions(resolve(_, Map.empty))
     }

@@ -331,11 +331,11 @@ class InMemoryTableWithV1Fallback(
     }
   }
 
-  override def capabilities: util.Set[TableCapability] = Set(
+  override def capabilities: util.Set[TableCapability] = util.EnumSet.of(
     TableCapability.BATCH_READ,
     TableCapability.V1_BATCH_WRITE,
     TableCapability.OVERWRITE_BY_FILTER,
-    TableCapability.TRUNCATE).asJava
+    TableCapability.TRUNCATE)
 
   @volatile private var dataMap: mutable.Map[Seq[Any], Seq[Row]] = mutable.Map.empty
   private val partFieldNames = partitioning.flatMap(_.references).toSeq.flatMap(_.fieldNames)

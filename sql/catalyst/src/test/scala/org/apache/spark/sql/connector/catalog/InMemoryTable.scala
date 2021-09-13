@@ -20,8 +20,8 @@ package org.apache.spark.sql.connector.catalog
 import java.time.{Instant, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util
+import java.util.OptionalLong
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.scalatest.Assertions._
@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
+import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
@@ -220,13 +221,13 @@ class InMemoryTable(
     this
   }
 
-  override def capabilities: util.Set[TableCapability] = Set(
+  override def capabilities: util.Set[TableCapability] = util.EnumSet.of(
     TableCapability.BATCH_READ,
     TableCapability.BATCH_WRITE,
     TableCapability.STREAMING_WRITE,
     TableCapability.OVERWRITE_BY_FILTER,
     TableCapability.OVERWRITE_DYNAMIC,
-    TableCapability.TRUNCATE).asJava
+    TableCapability.TRUNCATE)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new InMemoryScanBuilder(schema)
@@ -237,29 +238,65 @@ class InMemoryTable(
     private var schema: StructType = tableSchema
 
     override def build: Scan =
-      new InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema)
+      new InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema, tableSchema)
 
     override def pruneColumns(requiredSchema: StructType): Unit = {
-      // if metadata columns are projected, return the table schema and metadata columns
-      val hasMetadataColumns = requiredSchema.map(_.name).exists(metadataColumnNames.contains)
-      if (hasMetadataColumns) {
-        schema = StructType(tableSchema ++ metadataColumnNames
-            .flatMap(name => metadataColumns.find(_.name == name))
-            .map(col => StructField(col.name, col.dataType, col.isNullable)))
-      }
+      val schemaNames = metadataColumnNames ++ tableSchema.map(_.name)
+      schema = StructType(requiredSchema.filter(f => schemaNames.contains(f.name)))
     }
   }
 
-  class InMemoryBatchScan(data: Array[InputPartition], schema: StructType) extends Scan with Batch {
-    override def readSchema(): StructType = schema
+  case class InMemoryStats(sizeInBytes: OptionalLong, numRows: OptionalLong) extends Statistics
+
+  case class InMemoryBatchScan(
+      var data: Seq[InputPartition],
+      readSchema: StructType,
+      tableSchema: StructType)
+    extends Scan with Batch with SupportsRuntimeFiltering with SupportsReportStatistics {
 
     override def toBatch: Batch = this
 
-    override def planInputPartitions(): Array[InputPartition] = data
+    override def estimateStatistics(): Statistics = {
+      if (data.isEmpty) {
+        return InMemoryStats(OptionalLong.of(0L), OptionalLong.of(0L))
+      }
+
+      val inputPartitions = data.map(_.asInstanceOf[BufferedRows])
+      val numRows = inputPartitions.map(_.rows.size).sum
+      // we assume an average object header is 12 bytes
+      val objectHeaderSizeInBytes = 12L
+      val rowSizeInBytes = objectHeaderSizeInBytes + schema.defaultSize
+      val sizeInBytes = numRows * rowSizeInBytes
+      InMemoryStats(OptionalLong.of(sizeInBytes), OptionalLong.of(numRows))
+    }
+
+    override def planInputPartitions(): Array[InputPartition] = data.toArray
 
     override def createReaderFactory(): PartitionReaderFactory = {
-      val metadataColumns = schema.map(_.name).filter(metadataColumnNames.contains)
-      new BufferedRowsReaderFactory(metadataColumns)
+      val metadataColumns = readSchema.map(_.name).filter(metadataColumnNames.contains)
+      val nonMetadataColumns = readSchema.filterNot(f => metadataColumns.contains(f.name))
+      new BufferedRowsReaderFactory(metadataColumns, nonMetadataColumns, tableSchema)
+    }
+
+    override def filterAttributes(): Array[NamedReference] = {
+      val scanFields = readSchema.fields.map(_.name).toSet
+      partitioning.flatMap(_.references)
+        .filter(ref => scanFields.contains(ref.fieldNames.mkString(".")))
+    }
+
+    override def filter(filters: Array[Filter]): Unit = {
+      if (partitioning.length == 1) {
+        filters.foreach {
+          case In(attrName, values) if attrName == partitioning.head.name =>
+            val matchingKeys = values.map(_.toString).toSet
+            data = data.filter(partition => {
+              val key = partition.asInstanceOf[BufferedRows].key
+              matchingKeys.contains(key)
+            })
+
+          case _ => // skip
+        }
+      }
     }
   }
 
@@ -306,6 +343,10 @@ class InMemoryTable(
         override def toStreaming: StreamingWrite = streamingWriter match {
           case exc: StreamingNotSupportedOperation => exc.throwsException()
           case s => s
+        }
+
+        override def supportedCustomMetrics(): Array[CustomMetric] = {
+          Array(new InMemorySimpleCustomMetric)
         }
       }
     }
@@ -480,17 +521,22 @@ class BufferedRows(
 }
 
 private class BufferedRowsReaderFactory(
-    metadataColumns: Seq[String]) extends PartitionReaderFactory {
+    metadataColumnNames: Seq[String],
+    nonMetaDataColumns: Seq[StructField],
+    tableSchema: StructType) extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
-    new BufferedRowsReader(partition.asInstanceOf[BufferedRows], metadataColumns)
+    new BufferedRowsReader(partition.asInstanceOf[BufferedRows], metadataColumnNames,
+      nonMetaDataColumns, tableSchema)
   }
 }
 
 private class BufferedRowsReader(
     partition: BufferedRows,
-    metadataColumns: Seq[String]) extends PartitionReader[InternalRow] {
+    metadataColumnNames: Seq[String],
+    nonMetadataColumns: Seq[StructField],
+    tableSchema: StructType) extends PartitionReader[InternalRow] {
   private def addMetadata(row: InternalRow): InternalRow = {
-    val metadataRow = new GenericInternalRow(metadataColumns.map {
+    val metadataRow = new GenericInternalRow(metadataColumnNames.map {
       case "index" => index
       case "_partition" => UTF8String.fromString(partition.key)
     }.toArray)
@@ -504,9 +550,39 @@ private class BufferedRowsReader(
     index < partition.rows.length
   }
 
-  override def get(): InternalRow = addMetadata(partition.rows(index))
+  override def get(): InternalRow = {
+    val originalRow = partition.rows(index)
+    val values = new Array[Any](nonMetadataColumns.length)
+    nonMetadataColumns.zipWithIndex.foreach { case (col, idx) =>
+      values(idx) = extractFieldValue(col, tableSchema, originalRow)
+    }
+    addMetadata(new GenericInternalRow(values))
+  }
 
   override def close(): Unit = {}
+
+  private def extractFieldValue(
+      field: StructField,
+      schema: StructType,
+      row: InternalRow): Any = {
+    val index = schema.fieldIndex(field.name)
+    field.dataType match {
+      case StructType(fields) =>
+        if (row.isNullAt(index)) {
+          return null
+        }
+        val childRow = row.toSeq(schema)(index).asInstanceOf[InternalRow]
+        val childSchema = schema(index).dataType.asInstanceOf[StructType]
+        val resultValue = new Array[Any](fields.length)
+        fields.zipWithIndex.foreach { case (childField, idx) =>
+          val childValue = extractFieldValue(childField, childSchema, childRow)
+          resultValue(idx) = childValue
+        }
+        new GenericInternalRow(resultValue)
+      case dt =>
+        row.get(index, dt)
+    }
+  }
 }
 
 private object BufferedRowsWriterFactory extends DataWriterFactory with StreamingDataWriterFactory {
@@ -532,4 +608,21 @@ private class BufferWriter extends DataWriter[InternalRow] {
   override def abort(): Unit = {}
 
   override def close(): Unit = {}
+
+  override def currentMetricsValues(): Array[CustomTaskMetric] = {
+    val metric = new CustomTaskMetric {
+      override def name(): String = "in_memory_buffer_rows"
+
+      override def value(): Long = buffer.rows.size
+    }
+    Array(metric)
+  }
+}
+
+class InMemorySimpleCustomMetric extends CustomMetric {
+  override def name(): String = "in_memory_buffer_rows"
+  override def description(): String = "number of rows in buffer"
+  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
+    s"in-memory rows: ${taskMetrics.sum}"
+  }
 }

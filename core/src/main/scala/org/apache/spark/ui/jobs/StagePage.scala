@@ -355,7 +355,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
                |'content': '<div class="task-assignment-timeline-content"
                  |data-toggle="tooltip" data-placement="top"
                  |data-html="true" data-container="body"
-                 |data-title="${s"Task " + index + " (attempt " + attempt + ")"}<br>
+                 |data-title="${s"Task " + taskInfo.taskId + " (attempt " + attempt + ")"}<br>
                  |Status: ${taskInfo.status}<br>
                  |Launch Time: ${UIUtils.formatDate(new Date(launchTime))}
                  |${
@@ -398,8 +398,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       {
         if (MAX_TIMELINE_TASKS < tasks.size) {
           <strong>
-            This page has more than the maximum number of tasks that can be shown in the
-            visualization! Only the most recent {MAX_TIMELINE_TASKS} tasks
+            Only the most recent {MAX_TIMELINE_TASKS} tasks
             (of {tasks.size} total) are shown.
           </strong>
         } else {

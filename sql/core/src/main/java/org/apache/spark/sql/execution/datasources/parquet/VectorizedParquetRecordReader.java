@@ -332,8 +332,9 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       if (missingColumns[i]) continue;
       columnReaders[i] = new VectorizedColumnReader(
         columns.get(i),
-        types.get(i).getOriginalType(),
+        types.get(i).getLogicalTypeAnnotation(),
         pages.getPageReader(columns.get(i)),
+        pages.getRowIndexes().orElse(null),
         convertTz,
         datetimeRebaseMode,
         int96RebaseMode);

@@ -17,16 +17,53 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TIME_WINDOW, TreePattern}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.catalyst.util.IntervalUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
+// scalastyle:off line.size.limit line.contains.tab
+@ExpressionDescription(
+  usage = """
+    _FUNC_(time_column, window_duration[, slide_duration[, start_time]]) - Bucketize rows into one or more time windows given a timestamp specifying column.
+      Window starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window [12:05,12:10) but not in [12:00,12:05).
+      Windows can support microsecond precision. Windows in the order of months are not supported.
+      See <a href="https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html#window-operations-on-event-time">'Window Operations on Event Time'</a> in Structured Streaming guide doc for detailed explanation and examples.
+  """,
+  arguments = """
+    Arguments:
+      * time_column - The column or the expression to use as the timestamp for windowing by time. The time column must be of TimestampType.
+      * window_duration - A string specifying the width of the window represented as "interval value".
+        (See <a href="https://spark.apache.org/docs/latest/sql-ref-literals.html#interval-literal">Interval Literal</a> for more details.)
+        Note that the duration is a fixed length of time, and does not vary over time according to a calendar.
+      * slide_duration - A string specifying the sliding interval of the window represented as "interval value".
+        A new window will be generated every `slide_duration`. Must be less than or equal to the `window_duration`.
+        This duration is likewise absolute, and does not vary according to a calendar.
+      * start_time - The offset with respect to 1970-01-01 00:00:00 UTC with which to start window intervals.
+        For example, in order to have hourly tumbling windows that start 15 minutes past the hour,
+        e.g. 12:15-13:15, 13:15-14:15... provide `start_time` as `15 minutes`.
+  """,
+  examples = """
+    Examples:
+      > SELECT a, window.start, window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:06:00'), ('A2', '2021-01-01 00:01:00') AS tab(a, b) GROUP by a, _FUNC_(b, '5 minutes') ORDER BY a, start;
+        A1	2021-01-01 00:00:00	2021-01-01 00:05:00	2
+        A1	2021-01-01 00:05:00	2021-01-01 00:10:00	1
+        A2	2021-01-01 00:00:00	2021-01-01 00:05:00	1
+      > SELECT a, window.start, window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:06:00'), ('A2', '2021-01-01 00:01:00') AS tab(a, b) GROUP by a, _FUNC_(b, '10 minutes', '5 minutes') ORDER BY a, start;
+        A1	2020-12-31 23:55:00	2021-01-01 00:05:00	2
+        A1	2021-01-01 00:00:00	2021-01-01 00:10:00	3
+        A1	2021-01-01 00:05:00	2021-01-01 00:15:00	1
+        A2	2020-12-31 23:55:00	2021-01-01 00:05:00	1
+        A2	2021-01-01 00:00:00	2021-01-01 00:10:00	1
+  """,
+  group = "datetime_funcs",
+  since = "2.0.0")
+// scalastyle:on line.size.limit line.contains.tab
 case class TimeWindow(
     timeColumn: Expression,
     windowDuration: Long,
@@ -59,11 +96,12 @@ case class TimeWindow(
   }
 
   override def child: Expression = timeColumn
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampType)
   override def dataType: DataType = new StructType()
-    .add(StructField("start", TimestampType))
-    .add(StructField("end", TimestampType))
+    .add(StructField("start", child.dataType))
+    .add(StructField("end", child.dataType))
   override def prettyName: String = "window"
+  final override val nodePatterns: Seq[TreePattern] = Seq(TIME_WINDOW)
 
   // This expression is replaced in the analyzer.
   override lazy val resolved = false
@@ -107,25 +145,24 @@ object TimeWindow {
    * @return The interval duration in microseconds. SparkSQL casts TimestampType has microsecond
    *         precision.
    */
-  private def getIntervalInMicroSeconds(interval: String): Long = {
-    val cal = IntervalUtils.stringToInterval(UTF8String.fromString(interval))
+  def getIntervalInMicroSeconds(interval: String): Long = {
+    val cal = IntervalUtils.fromIntervalString(interval)
     if (cal.months != 0) {
       throw new IllegalArgumentException(
         s"Intervals greater than a month is not supported ($interval).")
     }
-    cal.days * MICROS_PER_DAY + cal.microseconds
+    Math.addExact(Math.multiplyExact(cal.days, MICROS_PER_DAY), cal.microseconds)
   }
 
   /**
    * Parses the duration expression to generate the long value for the original constructor so
    * that we can use `window` in SQL.
    */
-  private def parseExpression(expr: Expression): Long = expr match {
+  def parseExpression(expr: Expression): Long = expr match {
     case NonNullLiteral(s, StringType) => getIntervalInMicroSeconds(s.toString)
     case IntegerLiteral(i) => i.toLong
     case NonNullLiteral(l, LongType) => l.toString.toLong
-    case _ => throw new AnalysisException("The duration and time inputs to window must be " +
-      "an integer, long or string literal.")
+    case _ => throw QueryCompilationErrors.invalidLiteralForWindowDurationError()
   }
 
   def apply(

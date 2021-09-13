@@ -114,6 +114,22 @@ case class ReferenceValueClass(wrapped: ReferenceValueClass.Container) extends A
 object ReferenceValueClass {
   case class Container(data: Int)
 }
+case class IntAndString(i: Int, s: String)
+
+case class StringWrapper(s: String) extends AnyVal
+case class ValueContainer(
+                           a: Int,
+                           b: StringWrapper) // a string column
+case class IntWrapper(i: Int) extends AnyVal
+case class ComplexValueClassContainer(
+                                       a: Int,
+                                       b: ValueContainer,
+                                       c: IntWrapper)
+case class SeqOfValueClass(s: Seq[StringWrapper])
+case class MapOfValueClassKey(m: Map[IntWrapper, String])
+case class MapOfValueClassValue(m: Map[String, StringWrapper])
+case class OptionOfValueClassValue(o: Option[StringWrapper])
+case class CaseClassWithGeneric[T](generic: T, value: IntWrapper)
 
 class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest {
   OuterScopes.addOuterScope(this)
@@ -174,6 +190,10 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(Map(1 -> "a", 2 -> "b"), "map")
   encodeDecodeTest(Map(1 -> "a", 2 -> null), "map with null")
   encodeDecodeTest(Map(1 -> Map("a" -> 1), 2 -> Map("b" -> 2)), "map of map")
+  encodeDecodeTest(Map(1 -> IntAndString(1, "a")), "map with case class as value")
+  encodeDecodeTest(Map(IntAndString(1, "a") -> 1), "map with case class as key")
+  encodeDecodeTest(Map(IntAndString(1, "a") -> IntAndString(2, "b")),
+    "map with case class as key and value")
 
   encodeDecodeTest(Tuple1[Seq[Int]](null), "null seq in tuple")
   encodeDecodeTest(Tuple1[Map[String, String]](null), "null map in tuple")
@@ -386,11 +406,53 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     ExpressionEncoder.tuple(intEnc, ExpressionEncoder.tuple(intEnc, longEnc))
   }
 
+  // test for value classes
   encodeDecodeTest(
     PrimitiveValueClass(42), "primitive value class")
 
   encodeDecodeTest(
     ReferenceValueClass(ReferenceValueClass.Container(1)), "reference value class")
+
+  encodeDecodeTest(StringWrapper("a"), "string value class")
+  encodeDecodeTest(ValueContainer(1, StringWrapper("b")), "nested value class")
+  encodeDecodeTest(ValueContainer(1, StringWrapper(null)), "nested value class with null")
+  encodeDecodeTest(ComplexValueClassContainer(1, ValueContainer(2, StringWrapper("b")),
+    IntWrapper(3)), "complex value class")
+  encodeDecodeTest(
+    Array(IntWrapper(1), IntWrapper(2), IntWrapper(3)),
+    "array of value class")
+  encodeDecodeTest(Array.empty[IntWrapper], "empty array of value class")
+  encodeDecodeTest(
+    Seq(IntWrapper(1), IntWrapper(2), IntWrapper(3)),
+    "seq of value class")
+  encodeDecodeTest(Seq.empty[IntWrapper], "empty seq of value class")
+  encodeDecodeTest(
+    Map(IntWrapper(1) -> StringWrapper("a"), IntWrapper(2) -> StringWrapper("b")),
+    "map with value class")
+
+  // test for nested value class collections
+  encodeDecodeTest(
+    MapOfValueClassKey(Map(IntWrapper(1)-> "a")),
+    "case class with map of value class key")
+  encodeDecodeTest(
+    MapOfValueClassValue(Map("a"-> StringWrapper("b"))),
+    "case class with map of value class value")
+  encodeDecodeTest(
+    SeqOfValueClass(Seq(StringWrapper("a"))),
+    "case class with seq of class value")
+  encodeDecodeTest(
+    OptionOfValueClassValue(Some(StringWrapper("a"))),
+    "case class with option of class value")
+  encodeDecodeTest((StringWrapper("a_1"), StringWrapper("a_2")),
+    "tuple2 of class value")
+  encodeDecodeTest((StringWrapper("a_1"), StringWrapper("a_2"), StringWrapper("a_3")),
+    "tuple3 of class value")
+  encodeDecodeTest(((StringWrapper("a_1"), StringWrapper("a_2")), StringWrapper("b_2")),
+    "nested tuple._1 of class value")
+  encodeDecodeTest((StringWrapper("a_1"), (StringWrapper("b_1"), StringWrapper("b_2"))),
+    "nested tuple._2 of class value")
+  encodeDecodeTest(CaseClassWithGeneric(IntWrapper(1), IntWrapper(2)),
+    "case class with value class in generic parameter")
 
   encodeDecodeTest(Option(31), "option of int")
   encodeDecodeTest(Option.empty[Int], "empty option of int")

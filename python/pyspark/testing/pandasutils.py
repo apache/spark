@@ -25,6 +25,7 @@ from distutils.version import LooseVersion
 
 import pandas as pd
 from pandas.api.types import is_list_like
+from pandas.core.dtypes.common import is_numeric_dtype
 from pandas.testing import assert_frame_equal, assert_index_equal, assert_series_equal
 
 from pyspark import pandas as ps
@@ -70,7 +71,7 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
     def tearDownClass(cls):
         # We don't stop Spark session to reuse across all tests.
         # The Spark session will be started and stopped at PyTest session level.
-        # Please see databricks/koalas/conftest.py.
+        # Please see pyspark/pandas/conftest.py.
         pass
 
     def assertPandasEqual(self, left, right, check_exact=True):
@@ -80,6 +81,12 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
                     kwargs = dict(check_freq=False)
                 else:
                     kwargs = dict()
+
+                if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
+                    # Due to https://github.com/pandas-dev/pandas/issues/35446
+                    check_exact = check_exact \
+                        and all([is_numeric_dtype(dtype) for dtype in left.dtypes]) \
+                        and all([is_numeric_dtype(dtype) for dtype in right.dtypes])
 
                 assert_frame_equal(
                     left,
@@ -102,7 +109,11 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
                     kwargs = dict(check_freq=False)
                 else:
                     kwargs = dict()
-
+                if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
+                    # Due to https://github.com/pandas-dev/pandas/issues/35446
+                    check_exact = check_exact \
+                        and is_numeric_dtype(left.dtype) \
+                        and is_numeric_dtype(right.dtype)
                 assert_series_equal(
                     left,
                     right,
@@ -119,6 +130,11 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
                 raise AssertionError(msg) from e
         elif isinstance(left, pd.Index) and isinstance(right, pd.Index):
             try:
+                if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
+                    # Due to https://github.com/pandas-dev/pandas/issues/35446
+                    check_exact = check_exact \
+                        and is_numeric_dtype(left.dtype) \
+                        and is_numeric_dtype(right.dtype)
                 assert_index_equal(left, right, check_exact=check_exact)
             except AssertionError as e:
                 msg = (
@@ -242,12 +258,12 @@ class TestUtils(object):
 
 class ComparisonTestBase(PandasOnSparkTestCase):
     @property
-    def kdf(self):
+    def psdf(self):
         return ps.from_pandas(self.pdf)
 
     @property
     def pdf(self):
-        return self.kdf.to_pandas()
+        return self.psdf.to_pandas()
 
 
 def compare_both(f=None, almost=True):
@@ -264,7 +280,7 @@ def compare_both(f=None, almost=True):
         else:
             compare = self.assertPandasEqual
 
-        for result_pandas, result_spark in zip(f(self, self.pdf), f(self, self.kdf)):
+        for result_pandas, result_spark in zip(f(self, self.pdf), f(self, self.psdf)):
             compare(result_pandas, result_spark.to_pandas())
 
     return wrapped

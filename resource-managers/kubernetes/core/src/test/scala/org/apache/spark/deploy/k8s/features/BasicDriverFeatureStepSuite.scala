@@ -213,6 +213,40 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-35493: make spark.blockManager.port be able to be fallen back to in driver pod") {
+    val initPod = SparkPod.initialPod()
+    val sparkConf = new SparkConf()
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(BLOCK_MANAGER_PORT, 1234)
+    val driverConf1 = KubernetesTestConf.createDriverConf(sparkConf)
+    val pod1 = new BasicDriverFeatureStep(driverConf1).configurePod(initPod)
+    val portMap1 =
+      pod1.container.getPorts.asScala.map { cp => (cp.getName -> cp.getContainerPort) }.toMap
+    assert(portMap1(BLOCK_MANAGER_PORT_NAME) === 1234, s"fallback to $BLOCK_MANAGER_PORT.key")
+
+    val driverConf2 =
+      KubernetesTestConf.createDriverConf(sparkConf.set(DRIVER_BLOCK_MANAGER_PORT, 1235))
+    val pod2 = new BasicDriverFeatureStep(driverConf2).configurePod(initPod)
+    val portMap2 =
+      pod2.container.getPorts.asScala.map { cp => (cp.getName -> cp.getContainerPort) }.toMap
+    assert(portMap2(BLOCK_MANAGER_PORT_NAME) === 1235)
+  }
+
+  test("SPARK-36075: Check driver pod respects nodeSelector/driverNodeSelector") {
+    val initPod = SparkPod.initialPod()
+    val sparkConf = new SparkConf()
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(s"${KUBERNETES_NODE_SELECTOR_PREFIX}nodeLabelKey", "nodeLabelValue")
+      .set(s"${KUBERNETES_DRIVER_NODE_SELECTOR_PREFIX}driverNodeLabelKey", "driverNodeLabelValue")
+      .set(s"${KUBERNETES_EXECUTOR_NODE_SELECTOR_PREFIX}execNodeLabelKey", "execNodeLabelValue")
+    val driverConf = KubernetesTestConf.createDriverConf(sparkConf)
+    val driver = new BasicDriverFeatureStep(driverConf).configurePod(initPod)
+    assert(driver.pod.getSpec.getNodeSelector.asScala === Map(
+      "nodeLabelKey" -> "nodeLabelValue",
+      "driverNodeLabelKey" -> "driverNodeLabelValue"
+    ))
+  }
+
   def containerPort(name: String, portNumber: Int): ContainerPort =
     new ContainerPortBuilder()
       .withName(name)

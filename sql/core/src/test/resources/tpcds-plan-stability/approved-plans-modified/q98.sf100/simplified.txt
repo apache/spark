@@ -32,15 +32,15 @@ WholeStageCodegen (10)
                                                               InputAdapter
                                                                 Scan parquet default.store_sales [ss_item_sk,ss_ext_sales_price,ss_sold_date_sk]
                                                                   SubqueryBroadcast [d_date_sk] #1
-                                                                    ReusedExchange [d_date_sk] #5
+                                                                    BroadcastExchange #5
+                                                                      WholeStageCodegen (1)
+                                                                        Project [d_date_sk]
+                                                                          Filter [d_date,d_date_sk]
+                                                                            ColumnarToRow
+                                                                              InputAdapter
+                                                                                Scan parquet default.date_dim [d_date_sk,d_date]
                                                           InputAdapter
-                                                            BroadcastExchange #5
-                                                              WholeStageCodegen (1)
-                                                                Project [d_date_sk]
-                                                                  Filter [d_date,d_date_sk]
-                                                                    ColumnarToRow
-                                                                      InputAdapter
-                                                                        Scan parquet default.date_dim [d_date_sk,d_date]
+                                                            ReusedExchange [d_date_sk] #5
                                           InputAdapter
                                             WholeStageCodegen (5)
                                               Sort [i_item_sk]
