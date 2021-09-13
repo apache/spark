@@ -180,7 +180,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   /**
    * Calculates a heuristic overhead of a logical plan. Normally it returns the total
    * size in bytes of all scan relations. We don't count in-memory relation which uses
-   * memory.
+   * only memory.
    */
   private def calculatePlanOverhead(plan: LogicalPlan): Float = {
     val (cached, notCached) = plan.collectLeaves().partition(p => p match {
@@ -189,6 +189,9 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     })
     val scanOverhead = notCached.map(_.stats.sizeInBytes).sum.toFloat
     val cachedOverhead = cached.map {
+      case m: InMemoryRelation if m.cacheBuilder.storageLevel.useDisk &&
+          !m.cacheBuilder.storageLevel.useMemory =>
+        m.stats.sizeInBytes.toFloat * 0.5
       case m: InMemoryRelation if m.cacheBuilder.storageLevel.useDisk =>
         m.stats.sizeInBytes.toFloat * 0.2
       case m: InMemoryRelation if m.cacheBuilder.storageLevel.useMemory =>
