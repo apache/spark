@@ -136,7 +136,7 @@
     <kafka.version>2.6.0</kafka.version>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.1</parquet.version>
-    <orc.version>1.5.12</orc.version>
+    <orc.version>1.5.13</orc.version>
     <jetty.version>9.4.40.v20210413</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.9.5</chill.version>
@@ -290,6 +290,11 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
+    <repository>
+      <id>apache.staging</id>
+      <name>Apache Staging Repository</name>
+      <url>https://repository.apache.org/content/repositories/orgapacheorc-1050</url>
+     </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>
