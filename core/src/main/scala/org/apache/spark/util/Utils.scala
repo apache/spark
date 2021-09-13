@@ -31,6 +31,7 @@ import java.security.SecureRandom
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
+import java.util.concurrent.locks.ReentrantReadWriteLock
 import java.util.zip.{GZIPInputStream, ZipInputStream}
 
 import scala.annotation.tailrec
@@ -3268,41 +3269,67 @@ private[spark] class RedirectThread(
   }
 }
 
-/**
- * A utility class to redirect the child process's stdout or stderr and catch error message.
- */
-private[spark] class RedirectThreadAndCatchErrorMsg(
-  in: InputStream,
-  out: OutputStream,
-  name: String,
-  errorFlag: String,
-  propagateEof: Boolean = false)
-  extends Thread(name) {
+private[spark] class SparkProcess(
+    process: Process,
+    out: OutputStream,
+    name: String,
+    errorFlag: String,
+    propagateEof: Boolean = false) extends Thread(name) {
 
-  val stringBuilder = new StringBuilder
+  val lock = new ReentrantReadWriteLock()
+  val error = new CircularBuffer(1024 * 1024)
 
-  def errorMessage: String = stringBuilder.toString
+  def errorMessage: String = error.toString()
+
+  private class ProcessRedirectThread(
+    in: InputStream,
+    out: OutputStream,
+    name: String)
+    extends Thread(name) {
+
+    setDaemon(true)
+    override def run(): Unit = {
+      scala.util.control.Exception.ignoring(classOf[IOException]) {
+        Utils.tryWithSafeFinally {
+          val bufferedReader = new BufferedReader(new InputStreamReader(in))
+          var errorStart = false
+          var line = bufferedReader.readLine()
+          while (line != null) {
+            lock.writeLock().lock()
+            while (line != "" && line != null) {
+              if (errorStart) {
+                error.write((line + "\n").getBytes)
+                error.flush()
+              } else {
+                if (line.contains(errorFlag)) {
+                  errorStart = true
+                  error.write((line + "\n").getBytes)
+                  error.flush()
+                }
+              }
+              out.write((line + "\n").getBytes)
+              out.flush()
+              line = bufferedReader.readLine()
+            }
+            lock.writeLock().unlock()
+            if (line != null) {
+              line = bufferedReader.readLine()
+            }
+          }
+        } {}
+      }
+    }
+  }
 
   setDaemon(true)
   override def run(): Unit = {
     scala.util.control.Exception.ignoring(classOf[IOException]) {
       Utils.tryWithSafeFinally {
-        val bufferedReader = new BufferedReader(new InputStreamReader(in))
-        var errorStart = false
-        var line = bufferedReader.readLine()
-        while (line != null) {
-          if (errorStart) {
-            stringBuilder.append(line + "\n")
-          } else {
-            if (line.contains(errorFlag)) {
-              errorStart = true
-              stringBuilder.append(line + "\n")
-            }
-          }
-          out.write(line.getBytes)
-          out.flush()
-          line = bufferedReader.readLine()
-        }
+        val inputThread = new ProcessRedirectThread(process.getInputStream, out, "input stream")
+        val errorThread = new ProcessRedirectThread(process.getErrorStream, out, "error stream")
+
+        inputThread.start()
+        errorThread.start()
       } {
         if (propagateEof) {
           out.close()
@@ -3311,6 +3338,7 @@ private[spark] class RedirectThreadAndCatchErrorMsg(
     }
   }
 }
+
 
 /**
  * An [[OutputStream]] that will store the last 10 kilobytes (by default) written to it
