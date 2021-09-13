@@ -487,6 +487,8 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("octet-length function") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123, 2.0f, 3.015, "\ud83d\udc08"))
       .toDF("a", "b", "c", "d", "e", "f")
     // string and binary input
@@ -507,9 +509,12 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("octet_length(f)"),
       Row(4)
     )
+    // scalastyle:on
   }
 
   test("bit-length function") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123, 2.0f, 3.015, "\ud83d\udc08"))
       .toDF("a", "b", "c", "d", "e", "f")
     // string and binary input
@@ -530,6 +535,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("bit_length(f)"),
       Row(32)
     )
+    // scalastyle:on
   }
 
 
