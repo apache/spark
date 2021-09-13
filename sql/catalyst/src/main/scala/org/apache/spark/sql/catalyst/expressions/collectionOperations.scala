@@ -3706,18 +3706,18 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
           }
         }.getOrElse(body)
 
-        val processArray = withArrayNullAssignment(
-          s"$jt $value = ${genGetValue(array, i)};" ++
-            withNaNCheck(
-              s"""
-                 |if (!$hashSet.contains($hsValueCast$value)) {
-                 |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-                 |    break;
-                 |  }
-                 |  $hashSet.add$hsPostFix($hsValueCast$value);
-                 |  $builder.$$plus$$eq($value);
-                 |}
-               """.stripMargin))
+        val body =
+          s"""
+             |if (!$hashSet.contains($hsValueCast$value)) {
+             |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+             |    break;
+             |  }
+             |  $hashSet.add$hsPostFix($hsValueCast$value);
+             |  $builder.$$plus$$eq($value);
+             |}
+           """.stripMargin
+        val processArray =
+          withArrayNullAssignment(s"$jt $value = ${genGetValue(array, i)};" ++ withNaNCheck(body))
 
         // Only need to track null element index when result array's element is nullable.
         val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
