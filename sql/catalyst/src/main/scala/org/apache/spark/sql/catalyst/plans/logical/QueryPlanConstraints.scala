@@ -33,8 +33,7 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
         .union(inferAdditionalConstraints(validConstraints))
         .union(constructIsNotNullConstraints(validConstraints, output))
         .filter { c =>
-          (c.references.nonEmpty && c.references.subsetOf(outputSet) || c.references.isEmpty) &&
-            c.deterministic
+          c.references.nonEmpty && c.references.subsetOf(outputSet) && c.deterministic
         }
     } else {
       ExpressionSet()
