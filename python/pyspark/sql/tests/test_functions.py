@@ -203,6 +203,12 @@ class FunctionsTests(ReusedSQLTestCase):
         actual = df.select(octet_length('cat')).collect()
         self.assertEqual([Row(3), Row(4)], actual)
 
+    def test_bit_length_function(self):
+        from pyspark.sql.functions import bit_length
+        df = self.spark.createDataFrame([('cat',), ('\U0001F408',)], ['cat'])
+        actual = df.select(bit_length('cat')).collect()
+        self.assertEqual([Row(24), Row(32)], actual)
+
     def test_array_contains_function(self):
         from pyspark.sql.functions import array_contains
 
