@@ -458,11 +458,11 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         val basePath = dir.getCanonicalPath + "/" + fmt
         val pushFilterMaps = Map (
           "parquet" ->
-            "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
+            "|PushedFilters: \\[value IS NOT NULL, value > 2\\]",
           "orc" ->
-            "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
+            "|PushedFilters: \\[value IS NOT NULL, value > 2\\]",
           "csv" ->
-            "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
+            "|PushedFilters: \\[value IS NOT NULL, value > 2\\]",
           "json" ->
             "|remove_marker"
         )
