@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configurable
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
@@ -85,6 +85,13 @@ class HadoopMapReduceCommitProtocol(
    */
   private val hasValidPath = Try { new Path(path) }.isSuccess
 
+  @transient private val hiddenFilesPathFilter = new PathFilter() {
+    override def accept(p: Path): Boolean = {
+      val name = p.getName
+      !name.startsWith(".")
+    }
+  }
+
   /**
    * Tracks files staged by this task for absolute output paths. These outputs are not managed by
    * the Hadoop OutputCommitter, so we must move these to their final locations on job commit.
@@ -129,9 +136,7 @@ class HadoopMapReduceCommitProtocol(
       // For FileOutputCommitter it has its own staging path called "work path".
       case f: FileOutputCommitter =>
         if (dynamicPartitionOverwrite) {
-          assert(dir.isDefined,
-            "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
-          partitionPaths += dir.get
+          if (dir.isDefined) partitionPaths += dir.get
         }
         new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
       case _ => new Path(path)
@@ -232,6 +237,23 @@ class HadoopMapReduceCommitProtocol(
           if (!fs.rename(stagingPartPath, finalPartPath)) {
             throw new IOException(s"Failed to rename $stagingPartPath to $finalPartPath when " +
               s"committing files staged for overwriting dynamic partitions")
+          }
+        }
+
+        if ((filesToMove.size == 0) && (partitionPaths.size == 0)) {
+          val oldFs = fs.listStatus(new Path(path), hiddenFilesPathFilter)
+          logDebug(s"Clean up old files in table directory for overwriting: $path")
+          for (status <- oldFs) {
+            fs.delete(status.getPath, true)
+          }
+          val stageFs = fs.listStatus(stagingDir)
+          for (src <- stageFs) {
+            val stagingPartPath = src.getPath
+            val finalPartPath = new Path(path, src.getPath.getName)
+            if (!fs.rename(stagingPartPath, finalPartPath)) {
+              throw new IOException(s"Failed to rename $stagingPartPath to $finalPartPath when " +
+                s"committing files staged for overwriting non-partitioned table")
+            }
           }
         }
       }

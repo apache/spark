@@ -1063,6 +1063,32 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       checkAnswer(spark.table("t"), Row(1, 2, 3))
     }
   }
+
+  test("SPARK-36727: Support sql overwrite a path that is also being read from " +
+    "when partitionOverwriteMode is dynamic.") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      withTable("partTable") {
+        sql(
+          """
+            |CREATE TABLE partTable(col1 int, col2 int) USING PARQUET
+            |PARTITIONED BY (part1 int)
+          """.stripMargin)
+        sql("INSERT OVERWRITE TABLE partTable PARTITION(part1=10) SELECT 1, 1")
+        sql("INSERT OVERWRITE TABLE partTable PARTITION(part1=10) SELECT col1, col2 FROM partTable")
+        checkAnswer(spark.table("partTable"), Row(1, 1, 10))
+      }
+      withTable("nonPartTable") {
+        sql(
+          """
+            |CREATE TABLE nonPartTable (col1 int, col2 int) USING PARQUET
+          """.stripMargin)
+        sql("INSERT OVERWRITE TABLE nonPartTable SELECT 1, 1")
+        sql("INSERT OVERWRITE TABLE nonPartTable SELECT col1, col2 FROM nonPartTable")
+        checkAnswer(spark.table("nonPartTable"), Row(1, 1))
+      }
+    }
+  }
+
 }
 
 class FileExistingTestFileSystem extends RawLocalFileSystem {
