@@ -3553,10 +3553,14 @@ object ArrayBinaryLike {
   }
 
   def isNaN(value: Any): Boolean = {
-    (value.isInstanceOf[java.lang.Double] &&
-      java.lang.Double.isNaN(value.asInstanceOf[java.lang.Double])) ||
-      (value.isInstanceOf[java.lang.Float] &&
-        java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float]))
+    value match {
+      case double: java.lang.Double if java.lang.Double.isNaN(double) =>
+        true
+      case float: java.lang.Float if java.lang.Float.isNaN(float) =>
+        true
+      case _ =>
+        false
+    }
   }
 }
 

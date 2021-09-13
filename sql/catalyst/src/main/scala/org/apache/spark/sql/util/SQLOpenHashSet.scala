@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.util
 
+import java.lang
+
 import scala.reflect._
 
 import org.apache.spark.annotation.Private
@@ -52,12 +54,13 @@ class SQLOpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
   }
 
   def contains(k: T): Boolean = {
-    if (Double.NaN.equals(k)) {
-      containNaN
-    } else if (Float.NaN.equals(k)) {
-      containNaN
-    } else {
-      hashSet.contains(k)
+    k match {
+      case double: java.lang.Double if java.lang.Double.isNaN(double) =>
+        containNaN
+      case float: java.lang.Float if java.lang.Float.isNaN(float) =>
+        containNaN
+      case _ =>
+        hashSet.contains(k)
     }
   }
 
