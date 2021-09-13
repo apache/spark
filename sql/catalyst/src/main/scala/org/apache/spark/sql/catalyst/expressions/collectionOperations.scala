@@ -3707,9 +3707,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
         }.getOrElse(body)
 
         val processArray = withArrayNullAssignment(
-          s"""
-             |$jt $value = ${genGetValue(array, i)};
-           """.stripMargin ++
+          s"$jt $value = ${genGetValue(array, i)};" ++
             withNaNCheck(
               s"""
                  |if (!$hashSet.contains($hsValueCast$value)) {
