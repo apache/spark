@@ -35,7 +35,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 
 public class JavaColumnarDataSourceV2 implements TestingV2Source {
 
-  class MyScanBuilder extends JavaSimpleScanBuilder {
+  static class MyScanBuilder extends JavaSimpleScanBuilder {
 
     @Override
     public InputPartition[] planInputPartitions() {

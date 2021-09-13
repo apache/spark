@@ -17,8 +17,7 @@
 
 package org.apache.spark.util
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File,
-  FileOutputStream, PrintStream, SequenceInputStream}
+import java.io._
 import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
@@ -42,7 +41,8 @@ import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests.IS_TESTING
-import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.network.util.{ByteUnit, JavaUtils}
 import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.util.io.ChunkedByteBufferInputStream
 
@@ -245,8 +245,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         assert(mergedStream.read() === -1)
         assert(byteBufferInputStream.chunkedByteBuffer === null)
       } finally {
-        IOUtils.closeQuietly(mergedStream)
-        IOUtils.closeQuietly(in)
+        JavaUtils.closeQuietly(mergedStream)
+        JavaUtils.closeQuietly(in)
       }
     }
   }
@@ -475,6 +475,68 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     intercept[IllegalArgumentException] {
       Utils.getIteratorZipWithIndex(Iterator(0, 1, 2), -1L)
     }
+  }
+
+  test("SPARK-35907: createDirectory") {
+    val tmpDir = new File(System.getProperty("java.io.tmpdir"))
+    val testDir = new File(tmpDir, "createDirectory" + System.nanoTime())
+    val testDirPath = testDir.getCanonicalPath
+
+    // 1. Directory created successfully
+    val scenario1 = new File(testDir, "scenario1")
+    assert(Utils.createDirectory(scenario1))
+    assert(scenario1.exists())
+    assert(Utils.createDirectory(testDirPath, "scenario1").exists())
+
+    // 2. Illegal file path
+    val scenario2 = new File(testDir, "scenario2" * 256)
+    assert(!Utils.createDirectory(scenario2))
+    assert(!scenario2.exists())
+    assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario2" * 256))
+
+    // 3. The parent directory cannot read
+    val scenario3 = new File(testDir, "scenario3")
+    assert(testDir.canRead)
+    assert(testDir.setReadable(false))
+    assert(Utils.createDirectory(scenario3))
+    assert(scenario3.exists())
+    assert(Utils.createDirectory(testDirPath, "scenario3").exists())
+    assert(testDir.setReadable(true))
+
+    // 4. The parent directory cannot write
+    val scenario4 = new File(testDir, "scenario4")
+    assert(testDir.canWrite)
+    assert(testDir.setWritable(false))
+    assert(!Utils.createDirectory(scenario4))
+    assert(!scenario4.exists())
+    assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario4"))
+    assert(testDir.setWritable(true))
+
+    // 5. The parent directory cannot execute
+    val scenario5 = new File(testDir, "scenario5")
+    assert(testDir.canExecute)
+    assert(testDir.setExecutable(false))
+    assert(!Utils.createDirectory(scenario5))
+    assert(!scenario5.exists())
+    assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario5"))
+    assert(testDir.setExecutable(true))
+
+    // The following 3 scenarios are only for the method: createDirectory(File)
+    // 6. Symbolic link
+    val scenario6 = java.nio.file.Files.createSymbolicLink(new File(testDir, "scenario6")
+      .toPath, scenario1.toPath).toFile
+    assert(!Utils.createDirectory(scenario6))
+    assert(scenario6.exists())
+
+    // 7. Directory exists
+    assert(scenario1.exists())
+    assert(Utils.createDirectory(scenario1))
+    assert(scenario1.exists())
+
+    // 8. Not directory
+    val scenario8 = new File(testDir.getCanonicalPath + File.separator + "scenario8")
+    assert(scenario8.createNewFile())
+    assert(!Utils.createDirectory(scenario8))
   }
 
   test("doesDirectoryContainFilesNewerThan") {
@@ -1438,14 +1500,18 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(message.contains(expected))
   }
 
-  test("isPushBasedShuffleEnabled when both PUSH_BASED_SHUFFLE_ENABLED" +
-    " and SHUFFLE_SERVICE_ENABLED are true") {
+  test("isPushBasedShuffleEnabled when PUSH_BASED_SHUFFLE_ENABLED " +
+    "and SHUFFLE_SERVICE_ENABLED are both set to true in YARN mode with maxAttempts set to 1") {
     val conf = new SparkConf()
     assert(Utils.isPushBasedShuffleEnabled(conf) === false)
     conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
     conf.set(IS_TESTING, false)
     assert(Utils.isPushBasedShuffleEnabled(conf) === false)
     conf.set(SHUFFLE_SERVICE_ENABLED, true)
+    conf.set(SparkLauncher.SPARK_MASTER, "yarn")
+    conf.set("spark.yarn.maxAttempts", "1")
+    assert(Utils.isPushBasedShuffleEnabled(conf) === true)
+    conf.set("spark.yarn.maxAttempts", "2")
     assert(Utils.isPushBasedShuffleEnabled(conf) === true)
   }
 }

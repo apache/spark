@@ -18,7 +18,9 @@
 package org.apache.spark.shuffle
 
 import java.io.{Closeable, IOException, OutputStream}
+import java.util.zip.Checksum
 
+import org.apache.spark.io.MutableCheckedOutputStream
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.api.ShufflePartitionWriter
 import org.apache.spark.storage.{BlockId, TimeTrackingOutputStream}
@@ -34,7 +36,8 @@ private[spark] class ShufflePartitionPairsWriter(
     serializerManager: SerializerManager,
     serializerInstance: SerializerInstance,
     blockId: BlockId,
-    writeMetrics: ShuffleWriteMetricsReporter)
+    writeMetrics: ShuffleWriteMetricsReporter,
+    checksum: Checksum)
   extends PairsWriter with Closeable {
 
   private var isClosed = false
@@ -44,6 +47,9 @@ private[spark] class ShufflePartitionPairsWriter(
   private var objOut: SerializationStream = _
   private var numRecordsWritten = 0
   private var curNumBytesWritten = 0L
+  // this would be only initialized when checksum != null,
+  // which indicates shuffle checksum is enabled.
+  private var checksumOutputStream: MutableCheckedOutputStream = _
 
   override def write(key: Any, value: Any): Unit = {
     if (isClosed) {
@@ -61,7 +67,12 @@ private[spark] class ShufflePartitionPairsWriter(
     try {
       partitionStream = partitionWriter.openStream
       timeTrackingStream = new TimeTrackingOutputStream(writeMetrics, partitionStream)
-      wrappedStream = serializerManager.wrapStream(blockId, timeTrackingStream)
+      if (checksum != null) {
+        checksumOutputStream = new MutableCheckedOutputStream(timeTrackingStream)
+        checksumOutputStream.setChecksum(checksum)
+      }
+      wrappedStream = serializerManager.wrapStream(blockId,
+        if (checksumOutputStream != null) checksumOutputStream else timeTrackingStream)
       objOut = serializerInstance.serializeStream(wrappedStream)
     } catch {
       case e: Exception =>

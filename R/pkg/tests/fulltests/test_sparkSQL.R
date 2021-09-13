@@ -1435,6 +1435,7 @@ test_that("column functions", {
     desc_nulls_first(c1) + desc_nulls_last(c1)
   c29 <- acosh(c1) + asinh(c1) + atanh(c1)
   c30 <- product(c1) + product(c1 * 0.5)
+  c31 <- cot(c1)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1451,7 +1452,7 @@ test_that("column functions", {
   expect_equal(collect(df2)[[3, 2]], TRUE)
 
   # Test that input_file_name()
-  actual_names <- sort(collect(distinct(select(df, input_file_name()))))
+  actual_names <- collect(distinct(select(df, input_file_name())))
   expect_equal(length(actual_names), 1)
   expect_equal(basename(actual_names[1, 1]), basename(jsonPath))
 
@@ -2159,6 +2160,20 @@ test_that("higher order functions", {
   expect_true(all(unlist(result)))
 
   expect_error(array_transform("xs", function(...) 42))
+})
+
+test_that("SPARK-34794: lambda vars must be resolved properly in nested higher order functions", {
+  df <- sql("SELECT array(1, 2, 3) as numbers, array('a', 'b', 'c') as letters")
+  ret <- first(select(
+    df,
+    array_transform("numbers", function(number) {
+      array_transform("letters", function(latter) {
+        struct(alias(number, "n"), alias(latter, "l"))
+      })
+    })
+  ))
+
+  expect_equal(1, ret[[1]][[1]][[1]][[1]]$n)
 })
 
 test_that("group by, agg functions", {
@@ -3528,6 +3543,8 @@ test_that("repartition by columns on DataFrame", {
   conf <- callJMethod(sparkSession, "conf")
   shufflepartitionsvalue <- callJMethod(conf, "get", "spark.sql.shuffle.partitions")
   callJMethod(conf, "set", "spark.sql.shuffle.partitions", "5")
+  coalesceEnabled <- callJMethod(conf, "get", "spark.sql.adaptive.coalescePartitions.enabled")
+  callJMethod(conf, "set", "spark.sql.adaptive.coalescePartitions.enabled", "false")
   tryCatch({
     df <- createDataFrame(
       list(list(1L, 1, "1", 0.1), list(1L, 2, "2", 0.2), list(3L, 3, "3", 0.3)),
@@ -3569,6 +3586,7 @@ test_that("repartition by columns on DataFrame", {
   finally = {
     # Resetting the conf back to default value
     callJMethod(conf, "set", "spark.sql.shuffle.partitions", shufflepartitionsvalue)
+    callJMethod(conf, "set", "spark.sql.adaptive.coalescePartitions.enabled", coalesceEnabled)
   })
 })
 

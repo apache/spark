@@ -17,19 +17,19 @@
 
 package org.apache.spark.sql.streaming
 
-import java.util.{ConcurrentModificationException, UUID}
+import java.util.UUID
 import java.util.concurrent.{TimeoutException, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
@@ -81,7 +81,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     }
   } catch {
     case e: Exception =>
-      throw new SparkException("Exception when registering StreamingQueryListener", e)
+      throw QueryExecutionErrors.registeringStreamingQueryListenerError(e)
   }
 
   /**
@@ -371,8 +371,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       val oldActiveQuery = sparkSession.sharedState.activeStreamingQueries.put(
         query.id, query.streamingQuery) // we need to put the StreamExecution, not the wrapper
       if (oldActiveQuery != null) {
-        throw new ConcurrentModificationException(
-          "Another instance of this query was just started by a concurrent session.")
+        throw QueryExecutionErrors.concurrentQueryInstanceError()
       }
       activeQueries.put(query.id, query)
     }

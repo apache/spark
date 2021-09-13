@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{And, CaseWhen, Expression, If, Literal, Not, Or}
+import org.apache.spark.sql.catalyst.expressions.{And, CaseWhen, Coalesce, Expression, If, Literal, Not, Or}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -28,13 +28,13 @@ import org.apache.spark.sql.types.BooleanType
  * A rule that converts conditional expressions to predicate expressions, if possible, in the
  * search condition of the WHERE/HAVING/ON(JOIN) clauses, which contain an implicit Boolean operator
  * "(search condition) = TRUE". After this converting, we can potentially push the filter down to
- * the data source.
+ * the data source. This rule is null-safe.
  *
  * Supported cases are:
  * - IF(cond, trueVal, false)                   => AND(cond, trueVal)
  * - IF(cond, trueVal, true)                    => OR(NOT(cond), trueVal)
- * - IF(cond, false, falseVal)                  => AND(NOT(cond), elseVal)
- * - IF(cond, true, falseVal)                   => OR(cond, elseVal)
+ * - IF(cond, false, falseVal)                  => AND(NOT(cond), falseVal)
+ * - IF(cond, true, falseVal)                   => OR(cond, falseVal)
  * - CASE WHEN cond THEN trueVal ELSE false END => AND(cond, trueVal)
  * - CASE WHEN cond THEN trueVal END            => AND(cond, trueVal)
  * - CASE WHEN cond THEN trueVal ELSE null END  => AND(cond, trueVal)
@@ -56,16 +56,17 @@ object SimplifyConditionalsInPredicate extends Rule[LogicalPlan] {
     case And(left, right) => And(simplifyConditional(left), simplifyConditional(right))
     case Or(left, right) => Or(simplifyConditional(left), simplifyConditional(right))
     case If(cond, trueValue, FalseLiteral) => And(cond, trueValue)
-    case If(cond, trueValue, TrueLiteral) => Or(Not(cond), trueValue)
-    case If(cond, FalseLiteral, falseValue) => And(Not(cond), falseValue)
+    case If(cond, trueValue, TrueLiteral) => Or(Not(Coalesce(Seq(cond, FalseLiteral))), trueValue)
+    case If(cond, FalseLiteral, falseValue) =>
+      And(Not(Coalesce(Seq(cond, FalseLiteral))), falseValue)
     case If(cond, TrueLiteral, falseValue) => Or(cond, falseValue)
     case CaseWhen(Seq((cond, trueValue)),
         Some(FalseLiteral) | Some(Literal(null, BooleanType)) | None) =>
       And(cond, trueValue)
     case CaseWhen(Seq((cond, trueValue)), Some(TrueLiteral)) =>
-      Or(Not(cond), trueValue)
+      Or(Not(Coalesce(Seq(cond, FalseLiteral))), trueValue)
     case CaseWhen(Seq((cond, FalseLiteral)), Some(elseValue)) =>
-      And(Not(cond), elseValue)
+      And(Not(Coalesce(Seq(cond, FalseLiteral))), elseValue)
     case CaseWhen(Seq((cond, TrueLiteral)), Some(elseValue)) =>
       Or(cond, elseValue)
     case e if e.dataType == BooleanType => e

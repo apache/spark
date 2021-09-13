@@ -540,7 +540,7 @@ case class JsonToStructs(
 
   override def nullable: Boolean = true
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(JSON_TO_STRUCT)
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(JSON_TO_STRUCT)
 
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
@@ -561,7 +561,11 @@ case class JsonToStructs(
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
     case _: StructType | _: ArrayType | _: MapType =>
-      super.checkInputDataTypes()
+      ExprUtils.checkJsonSchema(nullableSchema).map { e =>
+        TypeCheckResult.TypeCheckFailure(e.getMessage)
+      } getOrElse {
+        super.checkInputDataTypes()
+      }
     case _ => TypeCheckResult.TypeCheckFailure(
       s"Input schema ${nullableSchema.catalogString} must be a struct, an array or a map.")
   }

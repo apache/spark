@@ -32,13 +32,17 @@
 # - SPARK_LOCAL_DIRS, storage directories to use on this node for shuffle and RDD data
 # - MESOS_NATIVE_JAVA_LIBRARY, to point to your libmesos.so if you use Mesos
 
-# Options read in YARN client/cluster mode
+# Options read in any mode
 # - SPARK_CONF_DIR, Alternate conf dir. (Default: ${SPARK_HOME}/conf)
-# - HADOOP_CONF_DIR, to point Spark towards Hadoop configuration files
-# - YARN_CONF_DIR, to point Spark towards YARN configuration files when you use YARN
 # - SPARK_EXECUTOR_CORES, Number of cores for the executors (Default: 1).
 # - SPARK_EXECUTOR_MEMORY, Memory per Executor (e.g. 1000M, 2G) (Default: 1G)
 # - SPARK_DRIVER_MEMORY, Memory for Driver (e.g. 1000M, 2G) (Default: 1G)
+
+# Options read in any cluster manager using HDFS
+# - HADOOP_CONF_DIR, to point Spark towards Hadoop configuration files
+
+# Options read in YARN client/cluster mode
+# - YARN_CONF_DIR, to point Spark towards YARN configuration files when you use YARN
 
 # Options for the daemons used in the standalone deploy mode
 # - SPARK_MASTER_HOST, to bind the master to a different IP address or hostname

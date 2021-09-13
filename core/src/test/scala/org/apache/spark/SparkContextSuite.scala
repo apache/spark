@@ -32,6 +32,7 @@ import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.json4s.{DefaultFormats, Extraction}
+import org.junit.Assert.{assertEquals, assertFalse}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.must.Matchers._
 
@@ -989,8 +990,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         """{"name": "gpu","addresses":["0", "1", "2"]}""")
 
       val conf = new SparkConf()
-        .setMaster("local-cluster[3, 1, 1024]")
+        .setMaster("local-cluster[3, 2, 1024]")
         .setAppName("test-cluster")
+        .set(CPUS_PER_TASK, 2)
         .set(WORKER_GPU_ID.amountConf, "3")
         .set(WORKER_GPU_ID.discoveryScriptConf, discoveryScript)
         .set(TASK_GPU_ID.amountConf, "3")
@@ -1001,11 +1003,18 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       // Ensure all executors has started
       TestUtils.waitUntilExecutorsUp(sc, 3, 60000)
 
-      val rdd = sc.makeRDD(1 to 10, 3).mapPartitions { it =>
+      val rdd1 = sc.makeRDD(1 to 10, 3).mapPartitions { it =>
+        val context = TaskContext.get()
+        Iterator(context.cpus())
+      }
+      val cpus = rdd1.collect()
+      assert(cpus === Array(2, 2, 2))
+
+      val rdd2 = sc.makeRDD(1 to 10, 3).mapPartitions { it =>
         val context = TaskContext.get()
         context.resources().get(GPU).get.addresses.iterator
       }
-      val gpus = rdd.collect()
+      val gpus = rdd2.collect()
       assert(gpus.sorted === Seq("0", "0", "0", "1", "1", "1", "2", "2", "2"))
 
       eventually(timeout(10.seconds)) {
@@ -1232,6 +1241,85 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
           }
           x
         }.collect()
+      } finally {
+        sc.stop()
+      }
+    }
+  }
+
+  test("SPARK-35383: Fill missing S3A magic committer configs if needed") {
+    val c1 = new SparkConf().setAppName("s3a-test").setMaster("local")
+    sc = new SparkContext(c1)
+    assertFalse(sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
+
+    resetSparkContext()
+    val c2 = c1.clone.set("spark.hadoop.fs.s3a.bucket.mybucket.committer.magic.enabled", "false")
+    sc = new SparkContext(c2)
+    assertFalse(sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
+
+    resetSparkContext()
+    val c3 = c1.clone.set("spark.hadoop.fs.s3a.bucket.mybucket.committer.magic.enabled", "true")
+    sc = new SparkContext(c3)
+    Seq(
+      "spark.hadoop.fs.s3a.committer.magic.enabled" -> "true",
+      "spark.hadoop.fs.s3a.committer.name" -> "magic",
+      "spark.hadoop.mapreduce.outputcommitter.factory.scheme.s3a" ->
+        "org.apache.hadoop.fs.s3a.commit.S3ACommitterFactory",
+      "spark.sql.parquet.output.committer.class" ->
+        "org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter",
+      "spark.sql.sources.commitProtocolClass" ->
+        "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol"
+    ).foreach { case (k, v) =>
+      assertEquals(v, sc.getConf.get(k))
+    }
+
+    // Respect a user configuration
+    resetSparkContext()
+    val c4 = c1.clone
+      .set("spark.hadoop.fs.s3a.committer.magic.enabled", "false")
+      .set("spark.hadoop.fs.s3a.bucket.mybucket.committer.magic.enabled", "true")
+    sc = new SparkContext(c4)
+    Seq(
+      "spark.hadoop.fs.s3a.committer.magic.enabled" -> "false",
+      "spark.hadoop.fs.s3a.committer.name" -> null,
+      "spark.hadoop.mapreduce.outputcommitter.factory.scheme.s3a" -> null,
+      "spark.sql.parquet.output.committer.class" -> null,
+      "spark.sql.sources.commitProtocolClass" -> null
+    ).foreach { case (k, v) =>
+      if (v == null) {
+        assertFalse(sc.getConf.contains(k))
+      } else {
+        assertEquals(v, sc.getConf.get(k))
+      }
+    }
+  }
+
+  test("SPARK-35691: addFile/addJar/addDirectory should put CanonicalFile") {
+    withTempDir { dir =>
+      try {
+        sc = new SparkContext(
+          new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+
+        val sep = File.separator
+        val tmpCanonicalDir = Utils.createTempDir(dir.getAbsolutePath + sep + "test space")
+        val tmpAbsoluteDir = new File(tmpCanonicalDir.getAbsolutePath + sep + '.' + sep)
+        val tmpJar = File.createTempFile("test", ".jar", tmpAbsoluteDir)
+        val tmpFile = File.createTempFile("test", ".txt", tmpAbsoluteDir)
+
+        // Check those files and directory are not canonical
+        assert(tmpAbsoluteDir.getAbsolutePath !== tmpAbsoluteDir.getCanonicalPath)
+        assert(tmpJar.getAbsolutePath !== tmpJar.getCanonicalPath)
+        assert(tmpFile.getAbsolutePath !== tmpFile.getCanonicalPath)
+
+        sc.addJar(tmpJar.getAbsolutePath)
+        sc.addFile(tmpFile.getAbsolutePath)
+
+        assert(sc.listJars().size === 1)
+        assert(sc.listFiles().size === 1)
+        assert(sc.listJars().head.contains(tmpJar.getName))
+        assert(sc.listFiles().head.contains(tmpFile.getName))
+        assert(!sc.listJars().head.contains("." + sep))
+        assert(!sc.listFiles().head.contains("." + sep))
       } finally {
         sc.stop()
       }

@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.QueryExecutionListener
 
@@ -171,20 +172,22 @@ class DataSourceV2DataFrameSuite
   }
 
   test("Cannot write data with intervals to v2") {
-    withTable("testcat.table_name") {
-      val testCatalog = spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
-      testCatalog.createTable(
-        Identifier.of(Array(), "table_name"),
-        new StructType().add("i", "interval"),
-        Array.empty, Collections.emptyMap[String, String])
-      val df = sql("select interval 1 day as i")
-      val v2Writer = df.writeTo("testcat.table_name")
-      val e1 = intercept[AnalysisException](v2Writer.append())
-      assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
-      val e2 = intercept[AnalysisException](v2Writer.overwrite(df("i")))
-      assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
-      val e3 = intercept[AnalysisException](v2Writer.overwritePartitions())
-      assert(e3.getMessage.contains(s"Cannot use interval type in the table schema."))
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      withTable("testcat.table_name") {
+        val testCatalog = spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
+        testCatalog.createTable(
+          Identifier.of(Array(), "table_name"),
+          new StructType().add("i", "interval"),
+          Array.empty, Collections.emptyMap[String, String])
+        val df = sql(s"select interval 1 millisecond as i")
+        val v2Writer = df.writeTo("testcat.table_name")
+        val e1 = intercept[AnalysisException](v2Writer.append())
+        assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
+        val e2 = intercept[AnalysisException](v2Writer.overwrite(df("i")))
+        assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
+        val e3 = intercept[AnalysisException](v2Writer.overwritePartitions())
+        assert(e3.getMessage.contains(s"Cannot use interval type in the table schema."))
+      }
     }
   }
 

@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.IntegerType
 
@@ -95,5 +97,12 @@ class LogicalPlanSuite extends SparkFunSuite {
       Alias(Literal(3), "b")(exprId = id2)),
       OneRowRelation())
     assert(result.sameResult(expected))
+  }
+
+  test("SPARK-35231: logical.Range override maxRowsPerPartition") {
+    assert(Range(0, 100, 1, 3).maxRowsPerPartition === Some(34))
+    assert(Range(0, 100, 1, 4).maxRowsPerPartition === Some(25))
+    assert(Range(0, 100, 1, 3).select('id).maxRowsPerPartition === Some(34))
+    assert(Range(0, 100, 1, 3).where('id % 2 === 1).maxRowsPerPartition === Some(34))
   }
 }

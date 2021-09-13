@@ -265,6 +265,9 @@ class SessionCatalog(
     if (dbName == DEFAULT_DATABASE) {
       throw QueryCompilationErrors.cannotDropDefaultDatabaseError
     }
+    if (!ignoreIfNotExists) {
+      requireDbExists(dbName)
+    }
     if (cascade && databaseExists(dbName)) {
       listTables(dbName).foreach { t =>
         invalidateCachedTable(QualifiedTableName(dbName, t.table))
@@ -843,6 +846,22 @@ class SessionCatalog(
     case None => fromCatalogTable(viewInfo.tableMeta, isTempView = true)
   }
 
+  private def buildViewDDL(metadata: CatalogTable, isTempView: Boolean): Option[String] = {
+    if (isTempView) {
+      None
+    } else {
+      val viewName = metadata.identifier.unquotedString
+      val viewText = metadata.viewText.get
+      val userSpecifiedColumns =
+        if (metadata.schema.fieldNames.toSeq == metadata.viewQueryColumnNames) {
+          ""
+        } else {
+          s"(${metadata.schema.fieldNames.mkString(", ")})"
+        }
+      Some(s"CREATE OR REPLACE VIEW $viewName $userSpecifiedColumns AS $viewText")
+    }
+  }
+
   private def fromCatalogTable(metadata: CatalogTable, isTempView: Boolean): View = {
     val viewText = metadata.viewText.getOrElse {
       throw new IllegalStateException("Invalid view without text.")
@@ -877,17 +896,15 @@ class SessionCatalog(
     }
     val nameToCounts = viewColumnNames.groupBy(normalizeColName).mapValues(_.length)
     val nameToCurrentOrdinal = scala.collection.mutable.HashMap.empty[String, Int]
+    val viewDDL = buildViewDDL(metadata, isTempView)
 
     val projectList = viewColumnNames.zip(metadata.schema).map { case (name, field) =>
       val normalizedName = normalizeColName(name)
       val count = nameToCounts(normalizedName)
-      val col = if (count > 1) {
-        val ordinal = nameToCurrentOrdinal.getOrElse(normalizedName, 0)
-        nameToCurrentOrdinal(normalizedName) = ordinal + 1
-        GetViewColumnByNameAndOrdinal(metadata.identifier.toString, name, ordinal, count)
-      } else {
-        UnresolvedAttribute.quoted(name)
-      }
+      val ordinal = nameToCurrentOrdinal.getOrElse(normalizedName, 0)
+      nameToCurrentOrdinal(normalizedName) = ordinal + 1
+      val col = GetViewColumnByNameAndOrdinal(
+        metadata.identifier.toString, name, ordinal, count, viewDDL)
       Alias(UpCast(col, field.dataType), field.name)(explicitMetadata = Some(field.metadata))
     }
     View(desc = metadata, isTempView = isTempView, child = Project(projectList, parsedPlan))
@@ -1461,7 +1478,18 @@ class SessionCatalog(
     if (functionRegistry.functionExists(func) && !overrideIfExists) {
       throw QueryCompilationErrors.functionAlreadyExistsError(func)
     }
-    val info = new ExpressionInfo(funcDefinition.className, func.database.orNull, func.funcName)
+    val info = new ExpressionInfo(
+      funcDefinition.className,
+      func.database.orNull,
+      func.funcName,
+      null,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "hive")
     val builder =
       functionBuilder.getOrElse {
         val className = funcDefinition.className
@@ -1552,7 +1580,15 @@ class SessionCatalog(
           new ExpressionInfo(
             metadata.className,
             qualifiedName.database.orNull,
-            qualifiedName.identifier)
+            qualifiedName.identifier,
+            null,
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "hive")
         } else {
           failFunctionLookup(name)
         }

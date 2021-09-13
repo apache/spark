@@ -444,7 +444,6 @@ org.antlr:ST4
 org.antlr:stringtemplate
 org.antlr:antlr4-runtime
 antlr:antlr
-com.github.fommil.netlib:core
 com.thoughtworks.paranamer:paranamer
 org.scala-lang:scala-compiler
 org.scala-lang:scala-library
@@ -485,6 +484,9 @@ org.slf4j:jul-to-slf4j
 org.slf4j:slf4j-api
 org.slf4j:slf4j-log4j12
 com.github.scopt:scopt_2.12
+dev.ludovic.netlib:blas
+dev.ludovic.netlib:arpack
+dev.ludovic.netlib:lapack
 
 core/src/main/resources/org/apache/spark/ui/static/dagre-d3.min.js
 core/src/main/resources/org/apache/spark/ui/static/*dataTables*

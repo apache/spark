@@ -360,7 +360,9 @@ case class DataSource(
         baseRelation
 
       // We are reading from the results of a streaming query. Load files from the metadata log
-      // instead of listing them using HDFS APIs.
+      // instead of listing them using HDFS APIs. Note that the config
+      // `spark.sql.streaming.fileStreamSink.metadata.ignored` can be enabled to ignore the
+      // metadata log.
       case (format: FileFormat, _)
           if FileStreamSink.hasMetadata(
             caseInsensitiveOptions.get("path").toSeq ++ paths,
@@ -525,7 +527,8 @@ case class DataSource(
           assert(unresolved.nameParts.length == 1)
           val name = unresolved.nameParts.head
           outputColumns.find(a => equality(a.name, name)).getOrElse {
-            throw QueryCompilationErrors.cannotResolveAttributeError(name, data)
+            throw QueryCompilationErrors.cannotResolveAttributeError(
+              name, data.output.map(_.name).mkString(", "))
           }
         }
         val resolved = cmd.copy(

@@ -111,6 +111,11 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
  *    when the group has new data, or the group has timed out. So the user has to set the timeout
  *    duration every time the function is called, otherwise, there will not be any timeout set.
  *
+ * `[map/flatMap]GroupsWithState` can take a user defined initial state as an additional argument.
+ * This state will be applied when the first batch of the streaming query is processed. If there
+ * are no matching rows in the data for the keys present in the initial state, the state is still
+ * applied and the function will be invoked with the values being an empty iterator.
+ *
  * Scala example of using GroupState in `mapGroupsWithState`:
  * {{{
  * // A mapping function that maintains an integer state for string keys and returns a string.

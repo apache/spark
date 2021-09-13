@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.DecimalPrecision
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
@@ -614,38 +614,58 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     Seq(true, false).foreach { failOnError =>
       checkExceptionInExpression[ArithmeticException](
         UnaryMinus(
-          Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType),
+          Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType()),
           failOnError),
         "overflow")
       checkExceptionInExpression[ArithmeticException](
         Subtract(
-          Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType),
-          Literal.create(Period.ofMonths(10), YearMonthIntervalType),
+          Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType()),
+          Literal.create(Period.ofMonths(10), YearMonthIntervalType()),
           failOnError
         ),
         "overflow")
       checkExceptionInExpression[ArithmeticException](
         Add(
-          Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
-          Literal.create(Period.ofMonths(10), YearMonthIntervalType),
+          Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType()),
+          Literal.create(Period.ofMonths(10), YearMonthIntervalType()),
           failOnError
         ),
         "overflow")
 
       checkExceptionInExpression[ArithmeticException](
         Subtract(
-          Literal.create(Duration.ofDays(-106751991), DayTimeIntervalType),
-          Literal.create(Duration.ofDays(10), DayTimeIntervalType),
+          Literal.create(Duration.ofDays(-106751991), DayTimeIntervalType()),
+          Literal.create(Duration.ofDays(10), DayTimeIntervalType()),
           failOnError
         ),
         "overflow")
       checkExceptionInExpression[ArithmeticException](
         Add(
-          Literal.create(Duration.ofDays(106751991), DayTimeIntervalType),
-          Literal.create(Duration.ofDays(10), DayTimeIntervalType),
+          Literal.create(Duration.ofDays(106751991), DayTimeIntervalType()),
+          Literal.create(Duration.ofDays(10), DayTimeIntervalType()),
           failOnError
         ),
         "overflow")
+    }
+  }
+
+  test("SPARK-34920: error class") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val operators: Seq[((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)] =
+        Seq((Divide(_, _), testDecimalAndDoubleType),
+          (IntegralDivide(_, _), testDecimalAndLongType),
+          (Remainder(_, _), testNumericDataTypes),
+          (Pmod(_, _), testNumericDataTypes))
+      operators.foreach { case (operator, testTypesFn) =>
+        testTypesFn { convert =>
+          val one = Literal(convert(1))
+          val zero = Literal(convert(0))
+          checkEvaluation(operator(Literal.create(null, one.dataType), zero), null)
+          checkEvaluation(operator(one, Literal.create(null, zero.dataType)), null)
+          checkExceptionInExpression[SparkArithmeticException](operator(one, zero),
+            "divide by zero")
+        }
+      }
     }
   }
 }

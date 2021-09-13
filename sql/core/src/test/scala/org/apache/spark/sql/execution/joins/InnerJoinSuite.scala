@@ -33,6 +33,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
   import testImplicits.newProductEncoder
   import testImplicits.localSeqToDatasetHolder
 
+  private val EnsureRequirements = new EnsureRequirements()
+
   private lazy val myUpperCaseData = spark.createDataFrame(
     sparkContext.parallelize(Seq(
       Row(1, "A"),

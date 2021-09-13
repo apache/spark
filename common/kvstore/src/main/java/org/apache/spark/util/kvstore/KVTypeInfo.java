@@ -130,7 +130,7 @@ public class KVTypeInfo {
     Class<?> getType();
   }
 
-  private class FieldAccessor implements Accessor {
+  private static class FieldAccessor implements Accessor {
 
     private final Field field;
 
@@ -149,7 +149,7 @@ public class KVTypeInfo {
     }
   }
 
-  private class MethodAccessor implements Accessor {
+  private static class MethodAccessor implements Accessor {
 
     private final Method method;
 

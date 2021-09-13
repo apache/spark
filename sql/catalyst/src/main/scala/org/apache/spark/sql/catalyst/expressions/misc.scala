@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -164,6 +165,7 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
   override def nullable: Boolean = false
   override def prettyName: String = "current_database"
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
 /**
@@ -182,6 +184,7 @@ case class CurrentCatalog() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
   override def nullable: Boolean = false
   override def prettyName: String = "current_catalog"
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
 // scalastyle:off line.size.limit
@@ -279,4 +282,22 @@ case class TypeOf(child: Expression) extends UnaryExpression {
   }
 
   override protected def withNewChildInternal(newChild: Expression): TypeOf = copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """_FUNC_() - user name of current execution context.""",
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       mockingjay
+  """,
+  since = "3.2.0",
+  group = "misc_funcs")
+// scalastyle:on line.size.limit
+case class CurrentUser() extends LeafExpression with Unevaluable {
+  override def nullable: Boolean = false
+  override def dataType: DataType = StringType
+  override def prettyName: String = "current_user"
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }

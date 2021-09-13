@@ -79,7 +79,7 @@ class TaskContextTests(PySparkTestCase):
             partition_id = tc.partitionId()
             attempt_id = tc.taskAttemptId()
             if attempt_number == 0 and partition_id == 0:
-                raise Exception("Failing on first attempt")
+                raise RuntimeError("Failing on first attempt")
             else:
                 return [x, partition_id, attempt_number, attempt_id]
         result = rdd.map(fail_on_first).collect()
@@ -309,9 +309,16 @@ class TaskContextTestsWithResources(unittest.TestCase):
         conf = SparkConf().set("spark.test.home", SPARK_HOME)
         conf = conf.set("spark.worker.resource.gpu.discoveryScript", self.tempFile.name)
         conf = conf.set("spark.worker.resource.gpu.amount", 1)
+        conf = conf.set("spark.task.cpus", 2)
         conf = conf.set("spark.task.resource.gpu.amount", "1")
         conf = conf.set("spark.executor.resource.gpu.amount", "1")
-        self.sc = SparkContext('local-cluster[2,1,1024]', class_name, conf=conf)
+        self.sc = SparkContext('local-cluster[2,2,1024]', class_name, conf=conf)
+
+    def test_cpus(self):
+        """Test the cpus are available."""
+        rdd = self.sc.parallelize(range(10))
+        cpus = rdd.map(lambda x: TaskContext.get().cpus()).take(1)[0]
+        self.assertEqual(cpus, 2)
 
     def test_resources(self):
         """Test the resources are available."""

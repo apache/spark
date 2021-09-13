@@ -466,7 +466,7 @@ class StreamingTests(ReusedSQLTestCase):
 
         class ForeachWriter:
             def process(self, row):
-                raise Exception("test error")
+                raise RuntimeError("test error")
 
             def close(self, error):
                 tester.write_close_event(error)
@@ -557,7 +557,7 @@ class StreamingTests(ReusedSQLTestCase):
         q = None
 
         def collectBatch(df, id):
-            raise Exception("this should fail the query")
+            raise RuntimeError("this should fail the query")
 
         try:
             df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
@@ -588,7 +588,7 @@ class StreamingTests(ReusedSQLTestCase):
             df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
             q = df.writeStream.toTable("output_table", format='parquet', checkpointLocation=tmpdir)
             self.assertTrue(q.isActive)
-            time.sleep(3)
+            time.sleep(10)
             q.stop()
             result = self.spark.sql("SELECT value FROM output_table").collect()
             self.assertTrue(len(result) > 0)

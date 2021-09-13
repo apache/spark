@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.worker
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 
@@ -26,7 +28,10 @@ import org.apache.spark.rpc._
  * Provides fate sharing between a worker and its associated child processes.
  */
 private[spark] class WorkerWatcher(
-    override val rpcEnv: RpcEnv, workerUrl: String, isTesting: Boolean = false)
+    override val rpcEnv: RpcEnv,
+    workerUrl: String,
+    isTesting: Boolean = false,
+    isChildProcessStopping: AtomicBoolean = new AtomicBoolean(false))
   extends RpcEndpoint with Logging {
 
   logInfo(s"Connecting to worker $workerUrl")
@@ -45,7 +50,13 @@ private[spark] class WorkerWatcher(
   private val expectedAddress = RpcAddress.fromURIString(workerUrl)
   private def isWorker(address: RpcAddress) = expectedAddress == address
 
-  private def exitNonZero() = if (isTesting) isShutDown = true else System.exit(-1)
+  private def exitNonZero() =
+    if (isTesting) {
+      isShutDown = true
+    } else if (isChildProcessStopping.compareAndSet(false, true)) {
+      // SPARK-35714: avoid the duplicate call of `System.exit` to avoid the dead lock
+      System.exit(-1)
+    }
 
   override def receive: PartialFunction[Any, Unit] = {
     case e => logWarning(s"Received unexpected message: $e")

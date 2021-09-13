@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.NoSuchElementException
-
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * An internal iterator interface which presents a more restrictive API than
@@ -71,7 +70,7 @@ private final class RowIteratorToScala(val rowIter: RowIterator) extends Iterato
     _hasNext
   }
   override def next(): InternalRow = {
-    if (!hasNext) throw new NoSuchElementException
+    if (!hasNext) throw QueryExecutionErrors.noSuchElementExceptionError()
     hasNextWasCalled = false
     rowIter.getRow
   }

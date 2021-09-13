@@ -33,7 +33,7 @@ class SeriesPlotTest(unittest.TestCase):
         )
 
     @property
-    def kdf1(self):
+    def psdf1(self):
         return ps.from_pandas(self.pdf1)
 
     @unittest.skipIf(not have_plotly, plotly_requirement_message)
@@ -56,10 +56,10 @@ class SeriesPlotTest(unittest.TestCase):
                 PandasOnSparkPlotAccessor._get_plot_backend(fake_plot_backend)
 
     def test_box_summary(self):
-        def check_box_summary(kdf, pdf):
+        def check_box_summary(psdf, pdf):
             k = 1.5
-            stats, fences = BoxPlotBase.compute_stats(kdf["a"], "a", whis=k, precision=0.01)
-            outliers = BoxPlotBase.outliers(kdf["a"], "a", *fences)
+            stats, fences = BoxPlotBase.compute_stats(psdf["a"], "a", whis=k, precision=0.01)
+            outliers = BoxPlotBase.outliers(psdf["a"], "a", *fences)
             whiskers = BoxPlotBase.calc_whiskers("a", outliers)
             fliers = BoxPlotBase.get_fliers("a", outliers, whiskers[0])
 
@@ -86,8 +86,8 @@ class SeriesPlotTest(unittest.TestCase):
             self.assertEqual(expected_whiskers[1], whiskers[1])
             self.assertEqual(expected_fliers, fliers)
 
-        check_box_summary(self.kdf1, self.pdf1)
-        check_box_summary(-self.kdf1, -self.pdf1)
+        check_box_summary(self.psdf1, self.pdf1)
+        check_box_summary(-self.psdf1, -self.pdf1)
 
 
 if __name__ == "__main__":
@@ -95,7 +95,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

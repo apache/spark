@@ -48,7 +48,7 @@ if hash virtualenv 2>/dev/null && [ ! -n "$USE_CONDA" ]; then
   fi
 elif hash conda 2>/dev/null; then
   echo "Using conda virtual environments"
-  PYTHON_EXECS=('3.6')
+  PYTHON_EXECS=('3.9')
   USE_CONDA=1
 else
   echo "Missing virtualenv & conda, skipping pip installability tests"
@@ -80,10 +80,6 @@ for python in "${PYTHON_EXECS[@]}"; do
     VIRTUALENV_PATH="$VIRTUALENV_BASE"/$python
     rm -rf "$VIRTUALENV_PATH"
     if [ -n "$USE_CONDA" ]; then
-      if [ -f "$CONDA_PREFIX/etc/profile.d/conda.sh" ]; then
-        # See also https://github.com/conda/conda/issues/7980
-        source "$CONDA_PREFIX/etc/profile.d/conda.sh"
-      fi
       conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip setuptools
       source activate "$VIRTUALENV_PATH" || conda activate "$VIRTUALENV_PATH"
     else

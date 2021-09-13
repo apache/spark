@@ -14,6 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+"""
+.. versionadded:: 3.2.0
+    pandas API on Spark
+"""
+
 import os
 import sys
 from distutils.version import LooseVersion
@@ -31,31 +37,6 @@ except ImportError as e:
     else:
         raise
 
-from pyspark.pandas.version import __version__  # noqa: F401
-
-
-def assert_python_version():
-    major = 3
-    minor = 5
-    deprecated_version = (major, minor)
-    min_supported_version = (major, minor + 1)
-
-    if sys.version_info[:2] <= deprecated_version:
-        warnings.warn(
-            "pandas-on-Spark support for Python {dep_ver} is deprecated and will be dropped in "
-            "the future release. At that point, existing Python {dep_ver} workflows "
-            "that use pandas-on-Spark will continue to work without modification, but "
-            "Python {dep_ver} users will no longer get access to the latest pandas-on-Spark "
-            "features and bugfixes. We recommend that you upgrade to Python {min_ver} or "
-            "newer.".format(
-                dep_ver=".".join(map(str, deprecated_version)),
-                min_ver=".".join(map(str, min_supported_version)),
-            ),
-            FutureWarning,
-        )
-
-
-assert_python_version()
 
 import pyarrow
 
@@ -114,7 +95,7 @@ __all__ = [  # noqa: F405
 ]
 
 
-def _auto_patch_spark():
+def _auto_patch_spark() -> None:
     import os
     import logging
 
@@ -133,21 +114,12 @@ def _auto_patch_spark():
                 )
             )
 
-    # Autopatching is on by default.
-    x = os.getenv("SPARK_KOALAS_AUTOPATCH", "true")
-    if x.lower() in ("true", "1", "enabled"):
-        logger = logging.getLogger("spark")
-        logger.info(
-            "Patching spark automatically. You can disable it by setting "
-            "SPARK_KOALAS_AUTOPATCH=false in your environment"
-        )
 
-        from pyspark.sql import dataframe as df
-
-        df.DataFrame.to_koalas = DataFrame.to_koalas
+_frame_has_class_getitem = False
+_series_has_class_getitem = False
 
 
-def _auto_patch_pandas():
+def _auto_patch_pandas() -> None:
     import pandas as pd
 
     # In order to use it in test cases.

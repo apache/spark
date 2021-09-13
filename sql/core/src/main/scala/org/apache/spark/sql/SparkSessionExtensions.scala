@@ -71,7 +71,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * {{{
  *   SparkSession.builder()
  *     .master("...")
- *     .config("spark.sql.extensions", "org.example.MyExtensions")
+ *     .config("spark.sql.extensions", "org.example.MyExtensions,org.example.YourExtensions")
  *     .getOrCreate()
  *
  *   class MyExtensions extends Function1[SparkSessionExtensions, Unit] {
@@ -82,6 +82,15 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  *       extensions.injectParser { (session, parser) =>
  *         ...
  *       }
+ *     }
+ *   }
+ *
+ *   class YourExtensions extends SparkSessionExtensionsProvider {
+ *     override def apply(extensions: SparkSessionExtensions): Unit = {
+ *       extensions.injectResolutionRule { session =>
+ *         ...
+ *       }
+ *       extensions.injectFunction(...)
  *     }
  *   }
  * }}}
@@ -127,7 +136,7 @@ class SparkSessionExtensions {
   }
 
   /**
-   * Inject a rule that can override the the query stage preparation phase of adaptive query
+   * Inject a rule that can override the query stage preparation phase of adaptive query
    * execution.
    */
   def injectQueryStagePrepRule(builder: QueryStagePrepRuleBuilder): Unit = {

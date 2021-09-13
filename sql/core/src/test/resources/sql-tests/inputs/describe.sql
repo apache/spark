@@ -43,6 +43,8 @@ DESC EXTENDED t PARTITION (c='Us', d=1);
 
 DESC FORMATTED t PARTITION (c='Us', d=1);
 
+DESC EXTENDED t PARTITION (C='Us', D=1);
+
 -- NoSuchPartitionException: Partition not found in table
 DESC t PARTITION (c='Us', d=2);
 

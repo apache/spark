@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EVENT_TIME_WATERMARK, TreePattern}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -40,6 +41,8 @@ case class EventTimeWatermark(
     eventTime: Attribute,
     delay: CalendarInterval,
     child: LogicalPlan) extends UnaryNode {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(EVENT_TIME_WATERMARK)
 
   // Update the metadata on the eventTime column to include the desired delay.
   override val output: Seq[Attribute] = child.output.map { a =>

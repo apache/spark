@@ -190,7 +190,7 @@ private[sql] object SQLUtils extends Logging {
     dataType match {
       case 's' =>
         // Read StructType for DataFrame
-        val fields = SerDe.readList(dis, jvmObjectTracker = null).asInstanceOf[Array[Object]]
+        val fields = SerDe.readList(dis, jvmObjectTracker = null)
         Row.fromSeq(fields)
       case _ => null
     }
