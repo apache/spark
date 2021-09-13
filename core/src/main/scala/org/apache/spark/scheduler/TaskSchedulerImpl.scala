@@ -801,7 +801,8 @@ private[spark] class TaskSchedulerImpl(
                 val errorMsg =
                   "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)"
                 taskSet.abort(errorMsg)
-                throw SparkCoreErrors.markExecutorAsFailedError()
+                throw new SparkException(
+                  "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)")
               })
               if (executorIdToRunningTaskIds.contains(execId)) {
                 reason = Some(

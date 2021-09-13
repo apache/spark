@@ -38,11 +38,8 @@ object SparkCoreErrors {
   def eofExceptionWhileReadPortNumberError(
       daemonModule: String,
       daemonExitValue: Option[Int] = null): Throwable = {
-    var msg = s"EOFException occurred while reading the port number from $daemonModule's" +
-      s" stdout"
-    if (daemonExitValue != null) {
-      msg = msg + s" and terminated with code: $daemonExitValue."
-    }
+    val msg = s"EOFException occurred while reading the port number from $daemonModule's" +
+      s" stdout" + daemonExitValue.map(v => s" and terminated with code: $v.").getOrElse("")
     new SparkException(msg)
   }
 
@@ -215,10 +212,6 @@ object SparkCoreErrors {
 
   def sparkError(errorMsg: String): Throwable = {
     new SparkException(errorMsg)
-  }
-
-  def markExecutorAsFailedError(): Throwable = {
-    new SparkException("taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)")
   }
 
   def clusterSchedulerError(message: String): Throwable = {
