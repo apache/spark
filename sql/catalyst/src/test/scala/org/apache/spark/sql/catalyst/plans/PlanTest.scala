@@ -94,6 +94,7 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
       case udf: PythonUDF =>
         udf.copy(resultId = ExprId(0))
     }
+  }
 
   protected def rewriteNameFromAttrNullability(plan: LogicalPlan): LogicalPlan = {
     plan.transformAllExpressions {

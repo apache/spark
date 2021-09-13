@@ -171,7 +171,7 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(FILTER)
 
-  override protected lazy val validConstraints: ExpressionSet = {
+  override lazy val validConstraints: ExpressionSet = {
     val predicates = splitConjunctivePredicates(condition)
           .filterNot(SubqueryExpression.hasCorrelatedSubquery)
     child.constraints.union(ExpressionSet(predicates))
@@ -221,7 +221,7 @@ case class Intersect(
 
   override def metadataOutput: Seq[Attribute] = Nil
 
-  override protected lazy val validConstraints: ExpressionSet =
+  override lazy val validConstraints: ExpressionSet =
     leftConstraints.union(rightConstraints)
 
   override def maxRows: Option[Long] = {
@@ -248,7 +248,7 @@ case class Except(
 
   final override val nodePatterns : Seq[TreePattern] = Seq(EXCEPT)
 
-  override protected lazy val validConstraints: ExpressionSet = leftConstraints
+  override lazy val validConstraints: ExpressionSet = leftConstraints
 
   override protected def withNewChildrenInternal(
     newLeft: LogicalPlan, newRight: LogicalPlan): Except = copy(left = newLeft, right = newRight)
@@ -431,7 +431,7 @@ case class Join(
     }
   }
 
-  override protected lazy val validConstraints: ExpressionSet = {
+  override lazy val validConstraints: ExpressionSet = {
     joinType match {
       case _: InnerLike if condition.isDefined =>
         left.constraints
