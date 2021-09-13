@@ -3686,34 +3686,40 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
             body
           }
 
-        val isNaN = elementType match {
-          case DoubleType =>
-            s"java.lang.Double.isNaN((double)$value)".stripMargin
-          case FloatType =>
-            s"java.lang.Float.isNaN((float)$value)".stripMargin
-          case _ =>
-            s"false".stripMargin
-        }
+        def withNaNCheck(body: String): String = {
+          (elementType match {
+            case DoubleType => Some(s"java.lang.Double.isNaN((double)$value)")
+            case FloatType => Some(s"java.lang.Float.isNaN((float)$value)")
+            case _ => None
+          }).map { isNaN =>
+            s"""
+               |if ($isNaN) {
+               |  if (!$hashSet.containsNaN()) {
+               |     $size++;
+               |     $hashSet.addNaN();
+               |     $builder.$$plus$$eq($value);
+               |  }
+               |} else {
+               |  $body
+               |}
+           """.stripMargin
+          }
+        }.getOrElse(body)
 
         val processArray = withArrayNullAssignment(
           s"""
              |$jt $value = ${genGetValue(array, i)};
-             |if ($isNaN) {
-             |  if (!$hashSet.containsNaN()) {
-             |     $size++;
-             |     $hashSet.addNaN();
-             |     $builder.$$plus$$eq($value);
-             |  }
-             |} else {
-             |  if (!$hashSet.contains($hsValueCast$value)) {
-             |    if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-             |      break;
-             |    }
-             |    $hashSet.add$hsPostFix($hsValueCast$value);
-             |    $builder.$$plus$$eq($value);
-             |  }
-             |}
-           """.stripMargin)
+             |""".stripMargin
+            ++ withNaNCheck(
+            s"""
+               |if (!$hashSet.contains($hsValueCast$value)) {
+               |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+               |    break;
+               |  }
+               |  $hashSet.add$hsPostFix($hsValueCast$value);
+               |  $builder.$$plus$$eq($value);
+               |}
+           """.stripMargin))
 
         // Only need to track null element index when result array's element is nullable.
         val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
