@@ -20,6 +20,7 @@ package org.apache.spark.sql.util
 import scala.reflect._
 
 import org.apache.spark.annotation.Private
+import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -52,21 +53,22 @@ class SQLOpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
   }
 
   def contains(k: T): Boolean = {
-    if (SQLOpenHashSet.isNaN(k)) {
-      containNaN
-    } else {
-      hashSet.contains(k)
-    }
+    hashSet.contains(k)
   }
 
   def containsNull(): Boolean = containNull
+
+  def containsNaN(): Boolean = containNaN
 }
 
 object SQLOpenHashSet {
-  def isNaN(value: Any): Boolean = {
-    (value.isInstanceOf[java.lang.Double] &&
-      java.lang.Double.isNaN(value.asInstanceOf[java.lang.Double])) ||
-      (value.isInstanceOf[java.lang.Float] &&
-        java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float]))
+  def isNaN(dataType: DataType): Any => Boolean = {
+    dataType match {
+      case DoubleType =>
+        (value: Any) => java.lang.Double.isNaN(value.asInstanceOf[java.lang.Double])
+      case FloatType =>
+        (value: Any) => java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float])
+      case _ => (_: Any) => false
+    }
   }
 }
