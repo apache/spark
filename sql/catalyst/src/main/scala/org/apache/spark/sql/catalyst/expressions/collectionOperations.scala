@@ -3551,13 +3551,6 @@ object ArrayBinaryLike {
   def throwUnionLengthOverflowException(length: Int): Unit = {
     throw QueryExecutionErrors.unionArrayWithElementsExceedLimitError(length)
   }
-
-  def isNaN(value: Any): Boolean = {
-    (value.isInstanceOf[java.lang.Double] &&
-      java.lang.Double.isNaN(value.asInstanceOf[java.lang.Double])) ||
-      (value.isInstanceOf[java.lang.Float] &&
-        java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float]))
-  }
 }
 
 
@@ -3600,7 +3593,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
                   ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
                 }
                 arrayBuffer += elem
-                if (ArrayBinaryLike.isNaN(elem)) {
+                if (SQLOpenHashSet.isNaN(elem)) {
                   hs.addNaN
                 } else {
                   hs.add(elem)
@@ -3697,7 +3690,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
              |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
              |    break;
              |  }
-             |  if (${ArrayBinaryLike.getClass.getName.stripSuffix("$")}.isNaN($value)) {
+             |  if (${SQLOpenHashSet.getClass.getName.stripSuffix("$")}.isNaN($value)) {
              |   $hashSet.addNaN();
              |  } else {
              |    $hashSet.add$hsPostFix($hsValueCast$value);

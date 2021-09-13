@@ -52,9 +52,7 @@ class SQLOpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
   }
 
   def contains(k: T): Boolean = {
-    if (Double.NaN.equals(k)) {
-      containNaN
-    } else if (Float.NaN.equals(k)) {
+    if (SQLOpenHashSet.isNaN(k)) {
       containNaN
     } else {
       hashSet.contains(k)
@@ -62,4 +60,13 @@ class SQLOpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
   }
 
   def containsNull(): Boolean = containNull
+}
+
+object SQLOpenHashSet {
+  def isNaN(value: Any): Boolean = {
+    (value.isInstanceOf[java.lang.Double] &&
+      java.lang.Double.isNaN(value.asInstanceOf[java.lang.Double])) ||
+      (value.isInstanceOf[java.lang.Float] &&
+        java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float]))
+  }
 }
