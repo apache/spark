@@ -647,6 +647,19 @@ setMethod("bin",
           })
 
 #' @details
+#' \code{bit_length}:  Calculates the bit length for the specified string column.
+#'
+#' @rdname column_string_functions
+#' @aliases bit_length bit_length,Column-method
+#' @note length since 3.3.0
+setMethod("bit_length",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "bit_length", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{bitwise_not}: Computes bitwise NOT.
 #'
 #' @rdname column_nonaggregate_functions
@@ -674,19 +687,6 @@ setMethod("bitwiseNOT",
           function(x) {
             .Deprecated("bitwise_not")
             bitwise_not(x)
-          })
-
-#' @details
-#' \code{bit_length}:  Calculates the bit length for the specified string column.
-#'
-#' @rdname column_string_functions
-#' @aliases bit_length bit_length,Column-method
-#' @note length since 3.3.0
-setMethod("bit_length",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "bit_length", x@jc)
-            column(jc)
           })
 
 #' @details
@@ -1579,6 +1579,19 @@ setMethod("negate",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "negate", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{octet_length}:  Calculates the byte length for the specified string column.
+#'
+#' @rdname column_string_functions
+#' @aliases octet_length octet_length,Column-method
+#' @note length since 3.3.0
+setMethod("octet_length",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "octet_length", x@jc)
             column(jc)
           })
 
@@ -3631,19 +3644,6 @@ setMethod("ntile",
           signature(x = "numeric"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "ntile", as.integer(x))
-            column(jc)
-          })
-
-#' @details
-#' \code{octet_length}:  Calculates the byte length for the specified string column.
-#'
-#' @rdname column_string_functions
-#' @aliases octet_length octet_length,Column-method
-#' @note length since 3.3.0
-setMethod("octet_length",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "octet_length", x@jc)
             column(jc)
           })
 

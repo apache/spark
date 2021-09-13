@@ -884,6 +884,10 @@ setGeneric("base64", function(x) { standardGeneric("base64") })
 #' @name NULL
 setGeneric("bin", function(x) { standardGeneric("bin") })
 
+#' @rdname column_string_functions
+#' @name NULL
+setGeneric("bit_length", function(x, ...) { standardGeneric("bit_length") })
+
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("bitwise_not", function(x) { standardGeneric("bitwise_not") })
@@ -891,10 +895,6 @@ setGeneric("bitwise_not", function(x) { standardGeneric("bitwise_not") })
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("bitwiseNOT", function(x) { standardGeneric("bitwiseNOT") })
-
-#' @rdname column_string_functions
-#' @name NULL
-setGeneric("bit_length", function(x, ...) { standardGeneric("bit_length") })
 
 #' @rdname column_math_functions
 #' @name NULL
