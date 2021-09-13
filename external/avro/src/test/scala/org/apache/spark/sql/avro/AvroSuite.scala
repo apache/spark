@@ -2329,7 +2329,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
            |Format: avro
            |Location: InMemoryFileIndex\\([0-9]+ paths\\)\\[.*\\]
            |PartitionFilters: \\[isnotnull\\(id#x\\), \\(id#x > 1\\)\\]
-           |PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]
+           |PushedFilters: \\[value IS NOT NULL, value > 2\\]
            |ReadSchema: struct\\<value:bigint\\>
            |""".stripMargin.trim
       spark.range(10)
