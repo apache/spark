@@ -3717,7 +3717,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
              |}
            """.stripMargin
         val processArray =
-          withArrayNullAssignment(s"$jt $value = ${genGetValue(array, i)};" ++ withNaNCheck(body))
+          withArrayNullAssignment(s"$jt $value = ${genGetValue(array, i)};" + withNaNCheck(body))
 
         // Only need to track null element index when result array's element is nullable.
         val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
