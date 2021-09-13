@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.sources
 
+import java.math.{BigDecimal => JavaBigDecimal, BigInteger => JavaBigInteger}
 import java.sql.{Date, Timestamp}
-import java.time.Instant
+import java.time.{Instant, LocalDate}
 
 import org.apache.spark.annotation.{Evolving, Stable}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse => V2AlwaysFalse, AlwaysTrue => V2AlwaysTrue, And => V2And, EqualNullSafe => V2EqualNullSafe, EqualTo => V2EqualTo, Filter => V2Filter, GreaterThan => V2GreaterThan, GreaterThanOrEqual => V2GreaterThanOrEqual, In => V2In, IsNotNull => V2IsNotNull, IsNull => V2IsNull, LessThan => V2LessThan, LessThanOrEqual => V2LessThanOrEqual, Not => V2Not, Or => V2Or, StringContains => V2StringContains, StringEndsWith => V2StringEndsWith, StringStartsWith => V2StringStartsWith}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, TimestampType}
+import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DateType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -54,20 +56,33 @@ sealed abstract class Filter {
   private[sql] def toV2: V2Filter
 
   private[sql] def getLiteralValue(value: Any): LiteralValue[_] = value match {
-    case _: java.math.BigDecimal => LiteralValue(value, DecimalType.SYSTEM_DEFAULT)
+    case _: JavaBigDecimal =>
+      LiteralValue(Decimal(value.asInstanceOf[JavaBigDecimal]), DecimalType.SYSTEM_DEFAULT)
+    case _: JavaBigInteger =>
+      LiteralValue(Decimal(value.asInstanceOf[JavaBigInteger]), DecimalType.SYSTEM_DEFAULT)
+    case _: BigDecimal =>
+      LiteralValue(Decimal(value.asInstanceOf[BigDecimal]), DecimalType.SYSTEM_DEFAULT)
     case _: Boolean => LiteralValue(value, BooleanType)
     case _: Byte => LiteralValue(value, ByteType)
     case _: Array[Byte] => LiteralValue(value, BinaryType)
-    case _: Date => LiteralValue(value, DateType)
-    case _: java.time.LocalDate => LiteralValue(value, DateType)
+    case _: Date =>
+      val date = DateTimeUtils.fromJavaDate(value.asInstanceOf[Date])
+      LiteralValue(date, DateType)
+    case _: LocalDate =>
+      val date = DateTimeUtils.localDateToDays(value.asInstanceOf[LocalDate])
+      LiteralValue(date, DateType)
     case _: Double => LiteralValue(value, DoubleType)
     case _: Float => LiteralValue(value, FloatType)
     case _: Integer => LiteralValue(value, IntegerType)
     case _: Long => LiteralValue(value, LongType)
     case _: Short => LiteralValue(value, ShortType)
     case _: String => LiteralValue(UTF8String.fromString(value.toString), StringType)
-    case _: Timestamp => LiteralValue(value, TimestampType)
-    case _: Instant => LiteralValue(value, TimestampType)
+    case _: Timestamp =>
+      val ts = DateTimeUtils.fromJavaTimestamp(value.asInstanceOf[Timestamp])
+      LiteralValue(ts, TimestampType)
+    case _: Instant =>
+      val ts = DateTimeUtils.instantToMicros(value.asInstanceOf[Instant])
+      LiteralValue(ts, TimestampType)
     case _ =>
       throw QueryCompilationErrors.invalidDataTypeForFilterValue(value)
   }

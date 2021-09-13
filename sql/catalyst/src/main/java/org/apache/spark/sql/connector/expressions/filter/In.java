@@ -26,8 +26,6 @@ import org.apache.spark.sql.catalyst.CatalystTypeConverters;
 import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
-import static org.apache.spark.sql.types.DataTypes.StringType;
-
 /**
  * A filter that evaluates to {@code true} iff the {@code column} evaluates to one of the
  * {@code values} in the array.
@@ -82,11 +80,7 @@ public final class In extends Filter {
     Object[] array = new Object[values.length];
     int index = 0;
     for (Literal value: values) {
-      if (value.dataType().sameType(StringType)) {
-        array[index] = value.value().toString();
-      } else {
-        array[index] = CatalystTypeConverters.convertToScala(value.value(), value.dataType());
-      }
+      array[index] = CatalystTypeConverters.convertToScala(value.value(), value.dataType());
       index++;
     }
     return new org.apache.spark.sql.sources.In(column.describe(), array);

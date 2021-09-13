@@ -63,7 +63,7 @@ case class ParquetScanBuilder(
       // The rebase mode doesn't matter here because the filters are used to determine
       // whether they is convertible.
       LegacyBehaviorPolicy.CORRECTED)
-    pushedDataFilters
+    parquetFilters.convertibleFilters(pushedDataFilters.map(_.toV1)).toArray
   }
 
   override protected val supportsNestedSchemaPruning: Boolean = true
@@ -73,10 +73,11 @@ case class ParquetScanBuilder(
   // Note: for Parquet, the actual filter push down happens in [[ParquetPartitionReaderFactory]].
   // It requires the Parquet physical schema to determine whether a filter is convertible.
   // All filters that can be converted to Parquet are pushed down.
-  override def pushedFilters(): Array[V2Filter] = pushedParquetFilters.toArray
+  override def pushedFilters(): Array[V2Filter] = pushedParquetFilters.map(_.toV2)
 
   override def build(): Scan = {
     ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, readDataSchema(),
-      readPartitionSchema(), pushedParquetFilters, options, partitionFilters, dataFilters)
+      readPartitionSchema(), pushedParquetFilters.map(_.toV2), options, partitionFilters,
+      dataFilters)
   }
 }

@@ -161,7 +161,7 @@ class ExtractPythonUDFsSuite extends SparkPlanTest with SharedSparkSession {
           // 'a is not null and 'a > 1
           val filters = scanNodes.head.scan.asInstanceOf[ParquetScan].pushedFilters
           assert(filters.length == 2)
-          assert(filters.flatMap(_.references).distinct === Array("a"))
+          assert(filters.flatMap(_.references.map(_.describe())).distinct === Array("a"))
         }
       }
     }
