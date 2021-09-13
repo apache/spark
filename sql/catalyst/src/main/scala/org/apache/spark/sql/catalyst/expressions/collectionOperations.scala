@@ -3688,17 +3688,11 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
 
         val isNaN = elementType match {
           case DoubleType =>
-            s"""
-               |java.lang.Double.isNaN((double)$value)
-               |""".stripMargin
+            s"java.lang.Double.isNaN((double)$value)".stripMargin
           case FloatType =>
-            s"""
-               |java.lang.Float.isNaN((float)$value)
-               |""".stripMargin
+            s"java.lang.Float.isNaN((float)$value)".stripMargin
           case _ =>
-            s"""
-               |false
-               |""".stripMargin
+            s"false".stripMargin
         }
 
         val processArray = withArrayNullAssignment(
