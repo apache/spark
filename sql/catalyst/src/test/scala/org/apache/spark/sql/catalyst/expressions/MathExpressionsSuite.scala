@@ -187,6 +187,20 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Sin, DoubleType)
   }
 
+  test("csc") {
+    def f: (Double) => Double = (x: Double) => 1 / math.sin(x)
+    testUnary(Csc, f)
+    checkConsistencyBetweenInterpretedAndCodegen(Csc, DoubleType)
+    val nullLit = Literal.create(null, NullType)
+    val intNullLit = Literal.create(null, IntegerType)
+    val intLit = Literal.create(1, IntegerType)
+    checkEvaluation(checkDataTypeAndCast(Csc(nullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Csc(intNullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Csc(intLit)), 1 / math.sin(1), EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Csc(-intLit)), 1 / math.sin(-1), EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Csc(0)), 1 / math.sin(0), EmptyRow)
+  }
+
   test("asin") {
     testUnary(Asin, math.asin, (-10 to 10).map(_ * 0.1))
     testUnary(Asin, math.asin, (11 to 20).map(_ * 0.1), expectNaN = true)
@@ -213,6 +227,20 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("cos") {
     testUnary(Cos, math.cos)
     checkConsistencyBetweenInterpretedAndCodegen(Cos, DoubleType)
+  }
+
+  test("sec") {
+    def f: (Double) => Double = (x: Double) => 1 / math.cos(x)
+    testUnary(Sec, f)
+    checkConsistencyBetweenInterpretedAndCodegen(Sec, DoubleType)
+    val nullLit = Literal.create(null, NullType)
+    val intNullLit = Literal.create(null, IntegerType)
+    val intLit = Literal.create(1, IntegerType)
+    checkEvaluation(checkDataTypeAndCast(Sec(nullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Sec(intNullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Sec(intLit)), 1 / math.cos(1), EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Sec(-intLit)), 1 / math.cos(-1), EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Sec(0)), 1 / math.cos(0), EmptyRow)
   }
 
   test("acos") {
