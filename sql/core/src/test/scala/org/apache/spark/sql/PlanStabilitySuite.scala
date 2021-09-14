@@ -99,8 +99,16 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
     } else baseFileName
     val file = new File(dir, goldenFileName)
     val expectedSimplified = FileUtils.readFileToString(file, StandardCharsets.UTF_8)
-    val explainFile = new File(dir, "explain.txt")
-    lazy val expectedExplain = FileUtils.readFileToString(explainFile, StandardCharsets.UTF_8)
+
+    val baseExplainFileName = "explain.txt"
+    val goldenExplainFileName = if (SQLConf.get.useOptimizedConstraintPropagation) {
+      if (new File(dir, prefix + baseExplainFileName).exists()) {
+        prefix + baseExplainFileName
+      } else baseExplainFileName
+    } else baseExplainFileName
+    val explainFile = new File(dir, goldenExplainFileName)
+    val expectedExplain = FileUtils.readFileToString(explainFile, StandardCharsets.UTF_8)
+    
     expectedSimplified == actualSimplifiedPlan && expectedExplain == actualExplain
   }
 
