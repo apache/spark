@@ -1992,12 +1992,12 @@ test_that("string operators", {
   l6 <- list(list("cat"), list("\ud83d\udc08"))
   df6 <- createDataFrame(l6)
   expect_equal(
-    collect(select(df6, octet_length(df6$"_1")))[,1],
-    c(3,4)
+    collect(select(df6, octet_length(df6$"_1")))[, 1],
+    c(3, 4)
   )
   expect_equal(
-    collect(select(df6, bit_length(df6$"_1")))[,1],
-    c(24,32)
+    collect(select(df6, bit_length(df6$"_1")))[, 1],
+    c(24, 32)
   )
 })
 
