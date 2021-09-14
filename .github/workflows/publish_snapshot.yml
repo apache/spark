@@ -38,6 +38,7 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@61b9e3751b92087fd0b06925ba6dd6314e06f089 # pin@master
+
       with:
         ref: ${{ matrix.branch }}
     - name: Cache Maven local repository
@@ -57,4 +58,5 @@ jobs:
         ASF_PASSWORD: ${{ secrets.NEXUS_PW }}
         GPG_KEY: "not_used"
         GPG_PASSPHRASE: "not_used"
+        GIT_REF: ${{ matrix.branch }}
       run: ./dev/create-release/release-build.sh publish-snapshot

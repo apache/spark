@@ -99,7 +99,8 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
     new File(goldenFilePath, goldenFileName)
   }
 
-  private def isApproved(dir: File, actualSimplifiedPlan: String): Boolean = {
+  private def isApproved(dir: File, actualSimplifiedPlan: String, actualExplain: String): Boolean =
+  {
     val baseFileName = "simplified.txt"
     val prefix = if (SQLConf.get.useOptimizedConstraintPropagation) {
       "SPARK-33152_"
@@ -111,7 +112,9 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
     } else baseFileName
     val file = new File(dir, goldenFileName)
     val expectedSimplified = FileUtils.readFileToString(file, StandardCharsets.UTF_8)
-    expectedSimplified == actualSimplifiedPlan
+    val explainFile = new File(dir, "explain.txt")
+    lazy val expectedExplain = FileUtils.readFileToString(explainFile, StandardCharsets.UTF_8)
+    expectedSimplified == actualSimplifiedPlan && expectedExplain == actualExplain
   }
 
   /**
@@ -126,7 +129,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   private def generateGoldenFile(plan: SparkPlan, name: String, explain: String): Unit = {
     val dir = getDirForTest(name)
     val simplified = getSimplifiedPlan(plan)
-    val foundMatch = dir.exists() && isApproved(dir, simplified)
+    val foundMatch = dir.exists() && isApproved(dir, simplified, explain)
 
     if (!foundMatch) {
       FileUtils.deleteDirectory(dir)
@@ -144,7 +147,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
     val dir = getDirForTest(name)
     val tempDir = FileUtils.getTempDirectory
     val actualSimplified = getSimplifiedPlan(plan)
-    val foundMatch = isApproved(dir, actualSimplified)
+    val foundMatch = isApproved(dir, actualSimplified, explain)
 
     if (!foundMatch) {
       // show diff with last approved
