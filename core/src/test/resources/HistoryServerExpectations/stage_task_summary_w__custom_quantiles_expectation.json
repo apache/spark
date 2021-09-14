@@ -29,11 +29,28 @@
     "fetchWaitTime" : [ 0.0, 0.0, 0.0 ],
     "remoteBytesRead" : [ 0.0, 0.0, 0.0 ],
     "remoteBytesReadToDisk" : [ 0.0, 0.0, 0.0 ],
-    "totalBlocksFetched" : [ 0.0, 0.0, 0.0 ]
+    "totalBlocksFetched" : [ 0.0, 0.0, 0.0 ],
+    "remoteReqsDuration" : [ 0.0, 0.0, 0.0],
+    "pushBased" : {
+      "corruptMergedBlockChunks": [ 0.0, 0.0, 0.0 ],
+      "fallbackCount": [ 0.0, 0.0, 0.0 ],
+      "remoteMergedBlocksFetched" : [ 0.0, 0.0, 0.0 ],
+      "localMergedBlocksFetched" : [ 0.0, 0.0, 0.0 ],
+      "remoteMergedChunksFetched" : [ 0.0, 0.0, 0.0 ],
+      "localMergedChunksFetched" : [ 0.0, 0.0, 0.0 ],
+      "remoteMergedBlocksBytesRead" : [ 0.0, 0.0, 0.0 ],
+      "localMergedBlocksBytesRead" : [ 0.0, 0.0, 0.0 ],
+      "remoteMergedReqsDuration" : [ 0.0, 0.0, 0.0]
+    }
   },
   "shuffleWriteMetrics" : {
     "writeBytes" : [ 1710.0, 1710.0, 1710.0 ],
     "writeRecords" : [ 10.0, 10.0, 10.0 ],
-    "writeTime" : [ 89437.0, 102159.0, 4016617.0 ]
+    "writeTime" : [ 89437.0, 102159.0, 4016617.0 ],
+    "pushBased" : {
+      "blocksNotPushed" : [ 0.0, 0.0, 0.0 ],
+      "blocksCollided" : [ 0.0, 0.0, 0.0 ],
+      "blocksTooLate" : [ 0.0, 0.0, 0.0 ]
+    }
   }
 }

@@ -275,9 +275,22 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           shuffleLocalBytesRead = 0L,
           shuffleReadBytes = 0L,
           shuffleReadRecords = 0L,
+          shuffleCorruptMergedBlockChunks = 0L,
+          shuffleFallbackCount = 0L,
+          shuffleMergedRemoteBlocksFetched = 0L,
+          shuffleMergedLocalBlocksFetched = 0L,
+          shuffleMergedRemoteChunksFetched = 0L,
+          shuffleMergedLocalChunksFetched = 0L,
+          shuffleMergedRemoteBytesRead = 0L,
+          shuffleMergedLocalBytesRead = 0L,
+          shuffleRemoteReqsDuration = 0L,
+          shuffleMergedRemoteReqsDuration = 0L,
           shuffleWriteBytes = 0L,
           shuffleWriteTime = 0L,
           shuffleWriteRecords = 0L,
+          shuffleBlocksNotPushed = 0L,
+          shuffleBlocksCollided = 0L,
+          shuffleBlocksTooLate = 0L,
 
           name = "Unknown",
           description = None,
@@ -292,7 +305,9 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID,
           peakExecutorMetrics = None,
           taskMetricsDistributions = None,
-          executorMetricsDistributions = None)
+          executorMetricsDistributions = None,
+          isPushBasedShuffleEnabled = false,
+          shuffleMergersCount = 0)
       }
     }
 

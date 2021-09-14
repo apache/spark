@@ -28,6 +28,8 @@ private[spark] object InternalAccumulator {
   val SHUFFLE_WRITE_METRICS_PREFIX = METRICS_PREFIX + "shuffle.write."
   val OUTPUT_METRICS_PREFIX = METRICS_PREFIX + "output."
   val INPUT_METRICS_PREFIX = METRICS_PREFIX + "input."
+  val SHUFFLE_PUSH_READ_METRICS_PREFIX = METRICS_PREFIX + "shuffle.push.read."
+  val SHUFFLE_PUSH_WRITE_METRICS_PREFIX = METRICS_PREFIX + "shuffle.push.write."
 
   // Names of internal task level metrics
   val EXECUTOR_DESERIALIZE_TIME = METRICS_PREFIX + "executorDeserializeTime"
@@ -54,6 +56,16 @@ private[spark] object InternalAccumulator {
     val LOCAL_BYTES_READ = SHUFFLE_READ_METRICS_PREFIX + "localBytesRead"
     val FETCH_WAIT_TIME = SHUFFLE_READ_METRICS_PREFIX + "fetchWaitTime"
     val RECORDS_READ = SHUFFLE_READ_METRICS_PREFIX + "recordsRead"
+    val CORRUPT_MERGED_BLOCK_CHUNKS = SHUFFLE_PUSH_READ_METRICS_PREFIX + "corruptMergedBlockChunks"
+    val FALLBACK_COUNT = SHUFFLE_PUSH_READ_METRICS_PREFIX + "fallbackCount"
+    val REMOTE_MERGED_BLOCKS_FETCHED = SHUFFLE_PUSH_READ_METRICS_PREFIX + "remoteMergedBlocksFetched"
+    val LOCAL_MERGED_BLOCKS_FETCHED = SHUFFLE_PUSH_READ_METRICS_PREFIX + "localMergedBlocksFetched"
+    val REMOTE_MERGED_CHUNKS_FETCHED = SHUFFLE_PUSH_READ_METRICS_PREFIX + "remoteMergedChunksFetched"
+    val LOCAL_MERGED_CHUNKS_FETCHED = SHUFFLE_PUSH_READ_METRICS_PREFIX + "localMergedChunksFetched"
+    val REMOTE_MERGED_BLOCKS_READ = SHUFFLE_PUSH_READ_METRICS_PREFIX + "remoteMergedBytesRead"
+    val LOCAL_MERGED_BLOCKS_READ = SHUFFLE_PUSH_READ_METRICS_PREFIX + "localMergedBytesRead"
+    val REMOTE_REQS_DURATION = SHUFFLE_READ_METRICS_PREFIX + "remoteReqsDuration"
+    val REMOTE_MERGED_REQS_DURATION = SHUFFLE_PUSH_READ_METRICS_PREFIX + "remoteMergedReqsDuration"
   }
 
   // Names of shuffle write metrics
@@ -61,6 +73,9 @@ private[spark] object InternalAccumulator {
     val BYTES_WRITTEN = SHUFFLE_WRITE_METRICS_PREFIX + "bytesWritten"
     val RECORDS_WRITTEN = SHUFFLE_WRITE_METRICS_PREFIX + "recordsWritten"
     val WRITE_TIME = SHUFFLE_WRITE_METRICS_PREFIX + "writeTime"
+    val BLOCKS_NOT_PUSHED = SHUFFLE_PUSH_WRITE_METRICS_PREFIX + "blocksNotPushed"
+    val BLOCKS_TOO_LATE = SHUFFLE_PUSH_WRITE_METRICS_PREFIX + "blocksTooLate"
+    val BLOCKS_COLLIDED = SHUFFLE_PUSH_WRITE_METRICS_PREFIX + "blocksCollided"
   }
 
   // Names of output metrics

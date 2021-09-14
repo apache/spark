@@ -36,6 +36,11 @@ object MimaExcludes {
 
   // Exclude rules for 3.3.x from 3.2.0 after 3.2.0 release
   lazy val v33excludes = v32excludes ++ Seq(
+    // [SPARK-36620] [SHUFFLE] Expose push based shuffle metrics
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ShuffleReadMetricDistributions.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ShuffleReadMetrics.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ShuffleWriteMetricDistributions.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ShuffleWriteMetrics.this")
   )
 
   // Exclude rules for 3.2.x from 3.1.1

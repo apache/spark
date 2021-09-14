@@ -78,9 +78,22 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         shuffleLocalBytesRead = 1L,
         shuffleReadBytes = 1L,
         shuffleReadRecords = 1L,
+        shuffleCorruptMergedBlockChunks = 2L,
+        shuffleFallbackCount = 2L,
+        shuffleMergedRemoteBlocksFetched = 1L,
+        shuffleMergedLocalBlocksFetched = 1L,
+        shuffleMergedRemoteChunksFetched = 1L,
+        shuffleMergedLocalChunksFetched = 1L,
+        shuffleMergedRemoteBytesRead = 1L,
+        shuffleMergedLocalBytesRead = 1L,
+        shuffleRemoteReqsDuration = 1L,
+        shuffleMergedRemoteReqsDuration = 1L,
         shuffleWriteBytes = 1L,
         shuffleWriteTime = 1L,
         shuffleWriteRecords = 1L,
+        shuffleBlocksNotPushed = 1L,
+        shuffleBlocksCollided = 1L,
+        shuffleBlocksTooLate = 1L,
 
         name = "stage1",
         description = Some("description"),
@@ -95,7 +108,9 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
         peakExecutorMetrics = None,
         taskMetricsDistributions = None,
-        executorMetricsDistributions = None
+        executorMetricsDistributions = None,
+        isPushBasedShuffleEnabled = false,
+        shuffleMergersCount = 0
       )
       val taskTable = new TaskPagedTable(
         stageData,

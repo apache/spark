@@ -596,6 +596,12 @@ private[spark] class Executor(
           .inc(task.metrics.shuffleWriteMetrics.bytesWritten)
         executorSource.METRIC_SHUFFLE_RECORDS_WRITTEN
           .inc(task.metrics.shuffleWriteMetrics.recordsWritten)
+        executorSource.METRIC_SHUFFLE_BLOCKS_NOT_PUSHED
+          .inc(task.metrics.shuffleWriteMetrics.blocksNotPushed)
+        executorSource.METRIC_SHUFFLE_BLOCKS_COLLIDED
+          .inc(task.metrics.shuffleWriteMetrics.blocksCollided)
+        executorSource.METRIC_SHUFFLE_BLOCKS_TOO_LATE
+          .inc(task.metrics.shuffleWriteMetrics.blocksTooLate)
         executorSource.METRIC_INPUT_BYTES_READ
           .inc(task.metrics.inputMetrics.bytesRead)
         executorSource.METRIC_INPUT_RECORDS_READ
@@ -607,6 +613,26 @@ private[spark] class Executor(
         executorSource.METRIC_RESULT_SIZE.inc(task.metrics.resultSize)
         executorSource.METRIC_DISK_BYTES_SPILLED.inc(task.metrics.diskBytesSpilled)
         executorSource.METRIC_MEMORY_BYTES_SPILLED.inc(task.metrics.memoryBytesSpilled)
+        executorSource.METRIC_SHUFFLE_CORRUPT_MERGED_BLOCK_CHUNKS
+          .inc(task.metrics.shuffleReadMetrics.corruptMergedBlockChunks)
+        executorSource.METRIC_SHUFFLE_FALLBACK_COUNT
+          .inc(task.metrics.shuffleReadMetrics.fallbackCount)
+        executorSource.METRIC_SHUFFLE_MERGED_REMOTE_BLOCKS_FETCHED
+          .inc(task.metrics.shuffleReadMetrics.remoteMergedBlocksFetched)
+        executorSource.METRIC_SHUFFLE_MERGED_LOCAL_BLOCKS_FETCHED
+          .inc(task.metrics.shuffleReadMetrics.localMergedBlocksFetched)
+        executorSource.METRIC_SHUFFLE_MERGED_REMOTE_CHUNKS_FETCHED
+          .inc(task.metrics.shuffleReadMetrics.remoteMergedChunksFetched)
+        executorSource.METRIC_SHUFFLE_MERGED_LOCAL_CHUNKS_FETCHED
+          .inc(task.metrics.shuffleReadMetrics.localMergedChunksFetched)
+        executorSource.METRIC_SHUFFLE_MERGED_REMOTE_BYTES_READ
+          .inc(task.metrics.shuffleReadMetrics.remoteMergedBlocksBytesRead)
+        executorSource.METRIC_SHUFFLE_MERGED_LOCAL_BLOCKS_FETCHED
+          .inc(task.metrics.shuffleReadMetrics.localMergedBlocksBytesRead)
+        executorSource.METRIC_SHUFFLE_REMOTE_REQS_DURATION
+          .inc(task.metrics.shuffleReadMetrics.remoteReqsDuration)
+        executorSource.METRIC_SHUFFLE_MERGED_REMOTE_REQS_DURATION
+          .inc(task.metrics.shuffleReadMetrics.remoteMergedReqsDuration)
 
         // Note: accumulator updates must be collected after TaskMetrics is updated
         val accumUpdates = task.collectAccumulatorUpdates()

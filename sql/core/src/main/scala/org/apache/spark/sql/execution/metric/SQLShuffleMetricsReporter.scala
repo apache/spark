@@ -111,6 +111,12 @@ class SQLShuffleWriteMetricsReporter(
     metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_RECORDS_WRITTEN)
   private[this] val _writeTime =
     metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_WRITE_TIME)
+  private[this] val _blocksNotPushed =
+    metrics(SQLShuffleWriteMetricsReporter.BLOCKS_NOT_PUSHED)
+  private[this] val _blocksTooLate =
+    metrics(SQLShuffleWriteMetricsReporter.BLOCKS_TOO_LATE)
+  private[this] val _blocksCollided =
+    metrics(SQLShuffleWriteMetricsReporter.BLOCKS_COLLIDED)
 
   override def incBytesWritten(v: Long): Unit = {
     metricsReporter.incBytesWritten(v)
@@ -132,12 +138,30 @@ class SQLShuffleWriteMetricsReporter(
     metricsReporter.decBytesWritten(v)
     _bytesWritten.set(_bytesWritten.value - v)
   }
+
+  override def incBlocksNotPushed(v: Long): Unit = {
+    metricsReporter.incBlocksNotPushed(v)
+    _blocksNotPushed.add(v)
+  }
+
+  override def incBlocksTooLate(v: Long): Unit = {
+    metricsReporter.incBlocksTooLate(v)
+    _blocksTooLate.add(v)
+  }
+
+  override def incBlocksCollided(v: Long): Unit = {
+    metricsReporter.incBlocksCollided(v)
+    _blocksCollided.add(v)
+  }
 }
 
 object SQLShuffleWriteMetricsReporter {
   val SHUFFLE_BYTES_WRITTEN = "shuffleBytesWritten"
   val SHUFFLE_RECORDS_WRITTEN = "shuffleRecordsWritten"
   val SHUFFLE_WRITE_TIME = "shuffleWriteTime"
+  val BLOCKS_NOT_PUSHED = "blocksNotPushed"
+  val BLOCKS_TOO_LATE = "blocksTooLate"
+  val BLOCKS_COLLIDED = "blocksCollided"
 
   /**
    * Create all shuffle write relative metrics and return the Map.
@@ -148,5 +172,11 @@ object SQLShuffleWriteMetricsReporter {
     SHUFFLE_RECORDS_WRITTEN ->
       SQLMetrics.createMetric(sc, "shuffle records written"),
     SHUFFLE_WRITE_TIME ->
-      SQLMetrics.createNanoTimingMetric(sc, "shuffle write time"))
+      SQLMetrics.createNanoTimingMetric(sc, "shuffle write time"),
+    BLOCKS_NOT_PUSHED ->
+      SQLMetrics.createMetric(sc, "blocks not pushed"),
+    BLOCKS_TOO_LATE ->
+      SQLMetrics.createMetric(sc, "blocks too late"),
+    BLOCKS_COLLIDED ->
+      SQLMetrics.createMetric(sc, "blocks collided"))
 }

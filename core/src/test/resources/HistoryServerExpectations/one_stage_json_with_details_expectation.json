@@ -32,7 +32,22 @@
   "shuffleRemoteBytesReadToDisk" : 0,
   "shuffleLocalBytesRead" : 0,
   "shuffleReadBytes" : 0,
+  "shuffleCorruptMergedBlockChunks" : 0,
+  "shuffleFallbackCount" : 0,
+  "shuffleMergedRemoteBlocksFetched" : 0,
+  "shuffleMergedLocalBlocksFetched" : 0,
+  "shuffleMergedRemoteChunksFetched" : 0,
+  "shuffleMergedLocalChunksFetched" : 0,
+  "shuffleMergedRemoteBytesRead" : 0,
+  "shuffleMergedLocalBytesRead" : 0,
+  "shuffleRemoteReqsDuration" : 0,
+  "shuffleMergedRemoteReqsDuration" : 0,
+  "shuffleBlocksNotPushed" : 0,
+  "shuffleBlocksCollided" : 0,
+  "shuffleBlocksTooLate" : 0,
   "shuffleReadRecords" : 0,
+  "isPushBasedShuffleEnabled" : false,
+  "shuffleMergersCount" : 0,
   "shuffleWriteBytes" : 13180,
   "shuffleWriteTime" : 692000,
   "shuffleWriteRecords" : 0,
@@ -80,10 +95,27 @@
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
+          "remoteReqsDuration" : 0,
+          "pushBased" : {
+            "corruptMergedBlockChunks" : 0,
+            "fallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBlocksBytesRead" : 0,
+            "localMergedBlocksBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          },
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 1648,
+          "pushBased" : {
+            "blocksNotPushed" : 0,
+            "blocksCollided" : 0,
+            "blocksTooLate" : 0
+          },
           "writeTime" : 76000,
           "recordsWritten" : 0
         }
@@ -130,10 +162,27 @@
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
+          "remoteReqsDuration" : 0,
+          "pushBased" : {
+            "corruptMergedBlockChunks" : 0,
+            "fallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBlocksBytesRead" : 0,
+            "localMergedBlocksBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          },
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 1648,
+          "pushBased" : {
+            "blocksNotPushed" : 0,
+            "blocksCollided" : 0,
+            "blocksTooLate" : 0
+          },
           "writeTime" : 88000,
           "recordsWritten" : 0
         }
@@ -180,10 +229,27 @@
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
+          "remoteReqsDuration" : 0,
+          "pushBased" : {
+            "corruptMergedBlockChunks" : 0,
+            "fallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBlocksBytesRead" : 0,
+            "localMergedBlocksBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          },
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 1648,
+          "pushBased" : {
+            "blocksNotPushed" : 0,
+            "blocksCollided" : 0,
+            "blocksTooLate" : 0
+          },
           "writeTime" : 98000,
           "recordsWritten" : 0
         }
@@ -230,10 +296,27 @@
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
+          "remoteReqsDuration" : 0,
+          "pushBased" : {
+            "corruptMergedBlockChunks" : 0,
+            "fallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBlocksBytesRead" : 0,
+            "localMergedBlocksBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          },
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 1648,
+          "pushBased" : {
+            "blocksNotPushed" : 0,
+            "blocksCollided" : 0,
+            "blocksTooLate" : 0
+          },
           "writeTime" : 73000,
           "recordsWritten" : 0
         }
@@ -280,10 +363,27 @@
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
+          "remoteReqsDuration" : 0,
+          "pushBased" : {
+            "corruptMergedBlockChunks" : 0,
+            "fallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBlocksBytesRead" : 0,
+            "localMergedBlocksBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          },
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 1645,
+          "pushBased" : {
+            "blocksNotPushed" : 0,
+            "blocksCollided" : 0,
+            "blocksTooLate" : 0
+          },
           "writeTime" : 101000,
           "recordsWritten" : 0
         }
@@ -330,10 +430,27 @@
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
+          "remoteReqsDuration" : 0,
+          "pushBased" : {
+            "corruptMergedBlockChunks" : 0,
+            "fallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBlocksBytesRead" : 0,
+            "localMergedBlocksBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          },
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 1647,
+          "pushBased" : {
+            "blocksNotPushed" : 0,
+            "blocksCollided" : 0,
+            "blocksTooLate" : 0
+          },
           "writeTime" : 83000,
           "recordsWritten" : 0
         }
@@ -380,10 +497,27 @@
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
+          "remoteReqsDuration" : 0,
+          "pushBased" : {
+            "corruptMergedBlockChunks" : 0,
+            "fallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBlocksBytesRead" : 0,
+            "localMergedBlocksBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          },
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 1648,
+          "pushBased" : {
+            "blocksNotPushed" : 0,
+            "blocksCollided" : 0,
+            "blocksTooLate" : 0
+          },
           "writeTime" : 94000,
           "recordsWritten" : 0
         }
@@ -430,10 +564,27 @@
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
+          "remoteReqsDuration" : 0,
+          "pushBased" : {
+            "corruptMergedBlockChunks" : 0,
+            "fallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "localMergedBlocksFetched" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "localMergedChunksFetched" : 0,
+            "remoteMergedBlocksBytesRead" : 0,
+            "localMergedBlocksBytesRead" : 0,
+            "remoteMergedReqsDuration" : 0
+          },
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
           "bytesWritten" : 1648,
+          "pushBased" : {
+            "blocksNotPushed" : 0,
+            "blocksCollided" : 0,
+            "blocksTooLate" : 0
+          },
           "writeTime" : 79000,
           "recordsWritten" : 0
         }

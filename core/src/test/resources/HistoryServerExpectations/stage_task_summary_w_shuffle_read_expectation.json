@@ -29,11 +29,28 @@
     "fetchWaitTime" : [ 0.0, 0.0, 0.0, 1.0, 1.0 ],
     "remoteBytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
     "remoteBytesReadToDisk" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
-    "totalBlocksFetched" : [ 100.0, 100.0, 100.0, 100.0, 100.0 ]
+    "totalBlocksFetched" : [ 100.0, 100.0, 100.0, 100.0, 100.0 ],
+    "remoteReqsDuration" : [ 0.0, 0.0, 0.0, 0.0, 0.0],
+    "pushBased" : {
+      "corruptMergedBlockChunks": [ 100.0, 100.0, 100.0, 100.0, 100.0 ],
+      "fallbackCount": [ 100.0, 100.0, 100.0, 100.0, 100.0 ],
+      "remoteMergedBlocksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "localMergedBlocksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "remoteMergedChunksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "localMergedChunksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "remoteMergedBlocksBytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "localMergedBlocksBytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "remoteMergedReqsDuration" : [ 0.0, 0.0, 0.0, 0.0, 0.0]
+    }
   },
   "shuffleWriteMetrics" : {
     "writeBytes" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
     "writeRecords" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
-    "writeTime" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ]
+    "writeTime" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    "pushBased" : {
+      "blocksNotPushed" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "blocksCollided" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "blocksTooLate" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ]
+    }
   }
 }
