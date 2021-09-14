@@ -35,6 +35,7 @@ from pyspark.sql.types import (  # noqa: F401
     StructType,
     StringType,
 )
+from pyspark.sql.utils import is_timestamp_ntz_preferred
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps
@@ -1451,13 +1452,15 @@ class InternalFrame(object):
             name if name is None or isinstance(name, tuple) else (name,) for name in columns.names
         ]  # type: List[Optional[Label]]
 
+        prefer_timestamp_ntz = is_timestamp_ntz_preferred()  # type: ignore
+
         (
             pdf,
             index_columns,
             index_fields,
             data_columns,
             data_fields,
-        ) = InternalFrame.prepare_pandas_frame(pdf)
+        ) = InternalFrame.prepare_pandas_frame(pdf, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
         schema = StructType([field.struct_field for field in index_fields + data_fields])
 
@@ -1475,7 +1478,7 @@ class InternalFrame(object):
 
     @staticmethod
     def prepare_pandas_frame(
-        pdf: pd.DataFrame, *, retain_index: bool = True
+        pdf: pd.DataFrame, *, retain_index: bool = True, prefer_timestamp_ntz: bool = False
     ) -> Tuple[pd.DataFrame, List[str], List[InternalField], List[str], List[InternalField]]:
         """
         Prepare pandas DataFrame for creating Spark DataFrame.
@@ -1510,6 +1513,18 @@ class InternalFrame(object):
         >>> data_fields  # doctest: +NORMALIZE_WHITESPACE
         [InternalField(dtype=object,struct_field=StructField((x, a),StringType,false)),
          InternalField(dtype=category,struct_field=StructField((y, b),ByteType,false))]
+
+        >>> import datetime
+        >>> pdf = pd.DataFrame({
+        ...     "dt": [datetime.datetime(1970, 1, 1)], "dt_obj": [datetime.datetime(1970, 1, 1)]
+        ... })
+        >>> pdf.dt_obj = pdf.dt_obj.astype("object")
+        >>> _, _, _, _, data_fields = (
+        ...     InternalFrame.prepare_pandas_frame(pdf, prefer_timestamp_ntz=True)
+        ... )
+        >>> data_fields
+        [InternalField(dtype=datetime64[ns],struct_field=StructField(dt,TimestampNTZType,false)),
+         InternalField(dtype=object,struct_field=StructField(dt_obj,TimestampNTZType,false))]
         """
         pdf = pdf.copy()
 
@@ -1530,7 +1545,7 @@ class InternalFrame(object):
         data_dtypes = list(reset_index.dtypes)[index_nlevels:]
 
         for col, dtype in zip(reset_index.columns, reset_index.dtypes):
-            spark_type = infer_pd_series_spark_type(reset_index[col], dtype)
+            spark_type = infer_pd_series_spark_type(reset_index[col], dtype, prefer_timestamp_ntz)
             reset_index[col] = DataTypeOps(dtype, spark_type).prepare(reset_index[col])
 
         fields = [
@@ -1538,7 +1553,7 @@ class InternalFrame(object):
                 dtype=dtype,
                 struct_field=StructField(
                     name=name,
-                    dataType=infer_pd_series_spark_type(col, dtype),
+                    dataType=infer_pd_series_spark_type(col, dtype, prefer_timestamp_ntz),
                     nullable=bool(col.isnull().any()),
                 ),
             )

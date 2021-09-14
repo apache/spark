@@ -158,7 +158,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
       ComputeCurrentTime,
-      ReplaceCurrentLike(catalogManager)) ::
+      ReplaceCurrentLike(catalogManager),
+      SpecialDatetimeValues) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -266,6 +267,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView.ruleName ::
       ReplaceExpressions.ruleName ::
       ComputeCurrentTime.ruleName ::
+      SpecialDatetimeValues.ruleName ::
       ReplaceCurrentLike(catalogManager).ruleName ::
       RewriteDistinctAggregates.ruleName ::
       ReplaceDeduplicateWithAggregate.ruleName ::
@@ -800,6 +802,11 @@ object ColumnPruning extends Rule[LogicalPlan] {
       }
       a.copy(child = Expand(newProjects, newOutput, grandChild))
 
+    // Prune and drop AttachDistributedSequence if the produced attribute is not referred.
+    case p @ Project(_, a @ AttachDistributedSequence(_, grandChild))
+        if !p.references.contains(a.sequenceAttr) =>
+      p.copy(child = prunedChild(grandChild, p.references))
+
     // Prunes the unused columns from child of `DeserializeToObject`
     case d @ DeserializeToObject(_, _, child) if !child.outputSet.subsetOf(d.references) =>
       d.copy(child = prunedChild(child, d.references))
@@ -1092,7 +1099,8 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
     // like 'size([1, 2, 3]) > 0'. These do not show up in child's constraints and
     // then the idempotence will break.
     case generate @ Generate(e, _, _, _, _, _)
-      if !e.deterministic || e.children.forall(_.foldable) => generate
+      if !e.deterministic || e.children.forall(_.foldable) ||
+        e.children.exists(_.isInstanceOf[UserDefinedExpression]) => generate
 
     case generate @ Generate(g, _, false, _, _, _) if canInferFilters(g) =>
       // Exclude child's constraints to guarantee idempotency

@@ -136,8 +136,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-14415: All functions should have own descriptions") {
     for (f <- spark.sessionState.functionRegistry.listFunction()) {
-      if (!Seq("cube", "grouping", "grouping_id", "rollup", "window",
-          "session_window").contains(f.unquotedString)) {
+      if (!Seq("cube", "grouping", "grouping_id", "rollup").contains(f.unquotedString)) {
         checkKeywordsNotExist(sql(s"describe function $f"), "N/A.")
       }
     }

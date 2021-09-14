@@ -1801,6 +1801,15 @@ object functions {
   def cosh(columnName: String): Column = cosh(Column(columnName))
 
   /**
+   * @param e angle in radians
+   * @return cotangent of the angle
+   *
+   * @group math_funcs
+   * @since 3.3.0
+   */
+  def cot(e: Column): Column = withExpr { Cot(e.expr) }
+
+  /**
    * Computes the exponential of the given value.
    *
    * @group math_funcs

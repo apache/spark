@@ -15,25 +15,37 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions;
+package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
- * An aggregate function that returns the minimum value in a group.
+ * An aggregate function that returns the summation of all the values in a group.
  *
  * @since 3.2.0
  */
 @Evolving
-public final class Min implements AggregateFunc {
-  private final FieldReference column;
+public final class Sum implements AggregateFunc {
+  private final NamedReference column;
+  private final boolean isDistinct;
 
-  public Min(FieldReference column) { this.column = column; }
+  public Sum(NamedReference column, boolean isDistinct) {
+    this.column = column;
+    this.isDistinct = isDistinct;
+  }
 
-  public FieldReference column() { return column; }
+  public NamedReference column() { return column; }
+  public boolean isDistinct() { return isDistinct; }
 
   @Override
-  public String toString() { return "MIN(" + column.describe() + ")"; }
+  public String toString() {
+    if (isDistinct) {
+      return "SUM(DISTINCT " + column.describe() + ")";
+    } else {
+      return "SUM(" + column.describe() + ")";
+    }
+  }
 
   @Override
   public String describe() { return this.toString(); }

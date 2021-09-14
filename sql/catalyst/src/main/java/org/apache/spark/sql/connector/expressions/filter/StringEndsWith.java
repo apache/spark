@@ -15,26 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions;
+package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * An aggregate function that returns the maximum value in a group.
+ * A filter that evaluates to {@code true} iff the {@code column} evaluates to
+ * a string that ends with {@code value}.
  *
- * @since 3.2.0
+ * @since 3.3.0
  */
 @Evolving
-public final class Max implements AggregateFunc {
-  private final FieldReference column;
+public final class StringEndsWith extends StringPredicate {
 
-  public Max(FieldReference column) { this.column = column; }
-
-  public FieldReference column() { return column; }
-
-  @Override
-  public String toString() { return "MAX(" + column.describe() + ")"; }
+  public StringEndsWith(NamedReference column, UTF8String value) {
+    super(column, value);
+  }
 
   @Override
-  public String describe() { return this.toString(); }
+  public String toString() { return "STRING_ENDS_WITH(" + column.describe() + ", " + value + ")"; }
 }

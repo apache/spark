@@ -15,37 +15,44 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions;
+package org.apache.spark.sql.connector.expressions.filter;
+
+import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
- * An aggregate function that returns the number of the specific row in a group.
+ * A filter that evaluates to {@code true} iff the {@code column} evaluates to null.
  *
- * @since 3.2.0
+ * @since 3.3.0
  */
 @Evolving
-public final class Count implements AggregateFunc {
-  private final FieldReference column;
-  private final boolean isDistinct;
+public final class IsNull extends Filter {
+  private final NamedReference column;
 
-  public Count(FieldReference column, boolean isDistinct) {
+  public IsNull(NamedReference column) {
     this.column = column;
-    this.isDistinct = isDistinct;
   }
 
-  public FieldReference column() { return column; }
-  public boolean isDistinct() { return isDistinct; }
+  public NamedReference column() { return column; }
 
   @Override
-  public String toString() {
-    if (isDistinct) {
-      return "COUNT(DISTINCT " + column.describe() + ")";
-    } else {
-      return "COUNT(" + column.describe() + ")";
-    }
+  public String toString() { return column.describe() + " IS NULL"; }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    IsNull isNull = (IsNull) o;
+    return Objects.equals(column, isNull.column);
   }
 
   @Override
-  public String describe() { return this.toString(); }
+  public int hashCode() {
+    return Objects.hash(column);
+  }
+
+  @Override
+  public NamedReference[] references() { return new NamedReference[] { column }; }
 }

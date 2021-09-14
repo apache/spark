@@ -24,9 +24,11 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{DDLUtils, LeafRunnableCommand}
 import org.apache.spark.sql.execution.command.ViewHelper.createTemporaryViewRelation
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.types._
 
@@ -87,15 +89,21 @@ case class CreateTempViewUsing(
       throw QueryCompilationErrors.cannotCreateTempViewUsingHiveDataSourceError()
     }
 
-    val dataSource = DataSource(
-      sparkSession,
-      userSpecifiedSchema = userSpecifiedSchema,
-      className = provider,
-      options = options)
-
     val catalog = sparkSession.sessionState.catalog
-    val analyzedPlan = Dataset.ofRows(
-      sparkSession, LogicalRelation(dataSource.resolveRelation())).logicalPlan
+    val analyzedPlan = DataSource.lookupDataSourceV2(provider, sparkSession.sessionState.conf)
+      .flatMap { tblProvider =>
+        DataSourceV2Utils.loadV2Source(sparkSession, tblProvider, userSpecifiedSchema,
+          CaseInsensitiveMap(options), provider)
+      }.getOrElse {
+        val dataSource = DataSource(
+          sparkSession,
+          userSpecifiedSchema = userSpecifiedSchema,
+          className = provider,
+          options = options)
+
+        Dataset.ofRows(
+          sparkSession, LogicalRelation(dataSource.resolveRelation()))
+      }.logicalPlan
 
     if (global) {
       val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
