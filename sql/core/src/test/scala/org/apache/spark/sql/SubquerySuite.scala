@@ -1902,4 +1902,19 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       assert(exchanges.size === 1)
     }
   }
+
+  test("SPARK-36747: should not combine Project with Aggregate") {
+    checkAnswer(
+      sql("""
+        |SELECT m, (SELECT SUM(b) FROM l WHERE l.a = m)
+        |FROM (SELECT MIN(c) m FROM t)
+        |""".stripMargin),
+      Row(2, 2.0) :: Nil)
+    checkAnswer(
+      sql("""
+        |SELECT c, (SELECT SUM(b) FROM l WHERE l.a = c)
+        |FROM (SELECT c FROM t GROUP BY c)
+        |""".stripMargin),
+      Row(2, 2.0) :: Row(3, 3.0) :: Row(4, null) :: Nil)
+  }
 }
