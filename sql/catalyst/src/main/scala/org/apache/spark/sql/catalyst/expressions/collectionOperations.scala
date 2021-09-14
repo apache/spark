@@ -4073,14 +4073,20 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
     if (TypeUtils.typeWithProperEquals(elementType)) {
       (array1, array2) =>
         val hs = new OpenHashSet[Any]
+        val isNaN = SQLOpenHashSet.isNaN(elementType)
         var notFoundNullElement = true
+        var notFoundNaNElement = true
         var i = 0
         while (i < array2.numElements()) {
           if (array2.isNullAt(i)) {
             notFoundNullElement = false
           } else {
             val elem = array2.get(i, elementType)
-            hs.add(elem)
+            if (isNaN(elem)) {
+              notFoundNaNElement = false
+            } else {
+              hs.add(elem)
+            }
           }
           i += 1
         }
@@ -4094,9 +4100,16 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
             }
           } else {
             val elem = array1.get(i, elementType)
-            if (!hs.contains(elem)) {
-              arrayBuffer += elem
-              hs.add(elem)
+            if (isNaN(elem)) {
+              if (notFoundNaNElement) {
+                arrayBuffer += elem
+                notFoundNaNElement = false
+              }
+            } else {
+              if (!hs.contains(elem)) {
+                arrayBuffer += elem
+                hs.add(elem)
+              }
             }
           }
           i += 1
@@ -4168,6 +4181,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
       nullSafeCodeGen(ctx, ev, (array1, array2) => {
         val notFoundNullElement = ctx.freshName("notFoundNullElement")
         val nullElementIndex = ctx.freshName("nullElementIndex")
+        val notFoundNaNElement = ctx.freshName("notFoundNaNElement")
         val builder = ctx.freshName("builder")
         val openHashSet = classOf[OpenHashSet[_]].getName
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
@@ -4197,11 +4211,25 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
             body
           }
 
+        def withArray2NaNCheck(body: String): String = {
+          (elementType match {
+            case DoubleType => Some(s"java.lang.Double.isNaN((double)$value)")
+            case FloatType => Some(s"java.lang.Float.isNaN((float)$value)")
+            case _ => None
+          }).map { isNaN =>
+            s"""
+               |if ($isNaN) {
+               |  $notFoundNaNElement = false;
+               |} else {
+               |  $body
+               |}
+             """.stripMargin
+          }
+        }.getOrElse(body)
+
+        val bodyArray2 = s"$hashSet.add$hsPostFix($hsValueCast$value);"
         val writeArray2ToHashSet = withArray2NullCheck(
-          s"""
-             |$jt $value = ${genGetValue(array2, i)};
-             |$hashSet.add$hsPostFix($hsValueCast$value);
-           """.stripMargin)
+          s"$jt $value = ${genGetValue(array2, i)};" + withArray2NaNCheck(bodyArray2))
 
         def withArray1NullAssignment(body: String) =
           if (left.dataType.asInstanceOf[ArrayType].containsNull) {
@@ -4221,9 +4249,28 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
             body
           }
 
-        val processArray1 = withArray1NullAssignment(
+        def withArray1NaNCheck(body: String): String = {
+          (elementType match {
+            case DoubleType => Some(s"java.lang.Double.isNaN((double)$value)")
+            case FloatType => Some(s"java.lang.Float.isNaN((float)$value)")
+            case _ => None
+          }).map { isNaN =>
+            s"""
+               |if ($isNaN) {
+               |  if ($notFoundNaNElement) {
+               |    $notFoundNaNElement = false;
+               |    $size++;
+               |    $builder.$$plus$$eq($value);
+               |  }
+               |} else {
+               |  $body
+               |}
+             """.stripMargin
+          }
+        }.getOrElse(body)
+
+        val bodyArray1 =
           s"""
-             |$jt $value = ${genGetValue(array1, i)};
              |if (!$hashSet.contains($hsValueCast$value)) {
              |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
              |    break;
@@ -4231,7 +4278,10 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
              |  $hashSet.add$hsPostFix($hsValueCast$value);
              |  $builder.$$plus$$eq($value);
              |}
-           """.stripMargin)
+           """.stripMargin
+
+        val processArray1 = withArray1NullAssignment(
+          s"$jt $value = ${genGetValue(array1, i)};" + withArray1NaNCheck(bodyArray1))
 
         // Only need to track null element index when array1's element is nullable.
         val declareNullTrackVariables = if (left.dataType.asInstanceOf[ArrayType].containsNull) {
@@ -4243,9 +4293,16 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
           ""
         }
 
+        // Only need to track NaN element index when array1's element is DoubleType or FloatType.
+        val declareNaNTrackVariables = elementType match {
+          case DoubleType | FloatType => s"boolean $notFoundNaNElement = true;"
+          case _ => ""
+        }
+
         s"""
            |$openHashSet $hashSet = new $openHashSet$hsPostFix($classTag);
            |$declareNullTrackVariables
+           |$declareNaNTrackVariables
            |for (int $i = 0; $i < $array2.numElements(); $i++) {
            |  $writeArray2ToHashSet
            |}
