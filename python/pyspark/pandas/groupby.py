@@ -1439,7 +1439,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         the same pandas DataFrame as if the pandas-on-Spark DataFrame is collected to driver side.
         The index, column labels, etc. are re-constructed within the function.
         """
+        from pyspark.sql.utils import is_timestamp_ntz_preferred
+
         arguments_for_restore_index = psdf._internal.arguments_for_restore_index
+        prefer_timestamp_ntz = is_timestamp_ntz_preferred()  # type: ignore
 
         def rename_output(pdf: pd.DataFrame) -> pd.DataFrame:
             pdf = InternalFrame.restore_index(pdf.copy(), **arguments_for_restore_index)
@@ -1451,7 +1454,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             # When Spark output type is specified, without executing it, we don't know
             # if we should restore the index or not. For instance, see the example in
             # https://github.com/pyspark.pandas/issues/628.
-            pdf, _, _, _, _ = InternalFrame.prepare_pandas_frame(pdf, retain_index=retain_index)
+            pdf, _, _, _, _ = InternalFrame.prepare_pandas_frame(
+                pdf, retain_index=retain_index, prefer_timestamp_ntz=prefer_timestamp_ntz
+            )
 
             # Just positionally map the column names to given schema's.
             pdf.columns = return_schema.names

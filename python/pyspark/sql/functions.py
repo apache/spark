@@ -377,6 +377,23 @@ def cosh(col):
     return _invoke_function_over_column("cosh", col)
 
 
+def cot(col):
+    """
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Angle in radians
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Cotangent of the angle.
+    """
+    return _invoke_function_over_column("cot", col)
+
+
 @since(1.4)
 def exp(col):
     """

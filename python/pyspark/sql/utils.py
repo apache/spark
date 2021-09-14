@@ -210,3 +210,14 @@ def to_str(value):
         return value
     else:
         return str(value)
+
+
+def is_timestamp_ntz_preferred():
+    """
+    Return a bool if TimestampNTZType is preferred according to the SQL configuration set.
+    """
+    jvm = SparkContext._jvm
+    return jvm is not None and getattr(
+        getattr(jvm.org.apache.spark.sql.internal, "SQLConf$"),
+        "MODULE$"
+    ).get().timestampType().typeName() == "timestamp_ntz"

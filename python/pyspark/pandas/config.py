@@ -195,6 +195,20 @@ _options = [
         types=bool,
     ),
     Option(
+        key="compute.isin_limit",
+        doc=(
+            "'compute.isin_limit' sets the limit for filtering by 'Column.isin(list)'. "
+            "If the length of the ‘list’ is above the limit, broadcast join is used instead "
+            "for better performance."
+        ),
+        default=80,
+        types=int,
+        check_func=(
+            lambda v: v >= 0,
+            "'compute.isin_limit' should be greater than or equal to 0.",
+        ),
+    ),
+    Option(
         key="plotting.max_rows",
         doc=(
             "'plotting.max_rows' sets the visual limit on top-n-based plots such as `plot.bar` "
