@@ -3100,6 +3100,8 @@ def length(col):
 
 def octet_length(col):
     """
+    Calculates the byte length for the specified string column.
+
     .. versionadded:: 3.3.0
     Parameters
     ----------
@@ -3121,6 +3123,8 @@ def octet_length(col):
 
 def bit_length(col):
     """
+    Calculates the bit length for the specified string column.
+
     .. versionadded:: 3.3.0
     Parameters
     ----------
