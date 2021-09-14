@@ -793,7 +793,7 @@ class ConstraintSet private(
           refs.nonEmpty && expr.deterministic) {
           expr -> true
         } else expr -> false
-    }.filter(_._2).map(_._1.transformUp {
+    }.filter(_._2).toSeq.map(_._1.transformUp {
       case x => canonicalAttribsMapping.getOrElse(x, x)
     })
   }
@@ -1117,17 +1117,17 @@ object ConstraintSet extends ConstraintHelper {
     // identify the  attribute equivalence lists for the Union node
     // this has the alias relationships which is same across both the legs
     val commonAttribListMapping = mergeEquivalenceList(
-      preparedConstraint1.attribRefBasedEquivalenceList ++ standAloneRefsOfLeg1,
-      preparedConstraint2.attribRefBasedEquivalenceList ++ standAloneRefsOfLeg2)
+      preparedConstraint1.attribRefBasedEquivalenceList.map(_.toSeq) ++ standAloneRefsOfLeg1,
+      preparedConstraint2.attribRefBasedEquivalenceList.map(_.toSeq) ++ standAloneRefsOfLeg2)
 
     // group structurally similar constraints on each side
     // for this create a new exprID which replaces all attributes
     val templateAttributeGenerator = new TemplateAttributeGenerator()
 
     val templatizedConstraintsMapLeg1 = templatizedConstraints(templateAttributeGenerator,
-      preparedConstraint1.originals)
+      preparedConstraint1.originals.toSeq)
     val templatizedConstraintsMapLeg2 = templatizedConstraints(templateAttributeGenerator,
-      preparedConstraint2.originals)
+      preparedConstraint2.originals.toSeq)
 
     val netCommonSols = generateCommonSolutions(templatizedConstraintsMapLeg1,
       templatizedConstraintsMapLeg2, commonAttribListMapping)
