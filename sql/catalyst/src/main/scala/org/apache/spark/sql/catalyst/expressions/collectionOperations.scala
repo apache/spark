@@ -4189,6 +4189,12 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
 
+        val isNaNMethod = elementType match {
+          case DoubleType => Some(s"java.lang.Double.isNaN((double)$value)")
+          case FloatType => Some(s"java.lang.Float.isNaN((float)$value)")
+          case _ => None
+        }
+
         def withArray2NullCheck(body: String): String =
           if (right.dataType.asInstanceOf[ArrayType].containsNull) {
             if (left.dataType.asInstanceOf[ArrayType].containsNull) {
@@ -4212,11 +4218,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
           }
 
         def withArray2NaNCheck(body: String): String = {
-          (elementType match {
-            case DoubleType => Some(s"java.lang.Double.isNaN((double)$value)")
-            case FloatType => Some(s"java.lang.Float.isNaN((float)$value)")
-            case _ => None
-          }).map { isNaN =>
+          isNaNMethod.map { isNaN =>
             s"""
                |if ($isNaN) {
                |  $notFoundNaNElement = false;
@@ -4227,9 +4229,9 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
           }
         }.getOrElse(body)
 
-        val bodyArray2 = s"$hashSet.add$hsPostFix($hsValueCast$value);"
         val writeArray2ToHashSet = withArray2NullCheck(
-          s"$jt $value = ${genGetValue(array2, i)};" + withArray2NaNCheck(bodyArray2))
+          s"$jt $value = ${genGetValue(array2, i)};" +
+            withArray2NaNCheck(s"$hashSet.add$hsPostFix($hsValueCast$value);"))
 
         def withArray1NullAssignment(body: String) =
           if (left.dataType.asInstanceOf[ArrayType].containsNull) {
@@ -4250,11 +4252,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
           }
 
         def withArray1NaNCheck(body: String): String = {
-          (elementType match {
-            case DoubleType => Some(s"java.lang.Double.isNaN((double)$value)")
-            case FloatType => Some(s"java.lang.Float.isNaN((float)$value)")
-            case _ => None
-          }).map { isNaN =>
+          isNaNMethod.map { isNaN =>
             s"""
                |if ($isNaN) {
                |  if ($notFoundNaNElement) {
@@ -4269,7 +4267,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
           }
         }.getOrElse(body)
 
-        val bodyArray1 =
+        val body =
           s"""
              |if (!$hashSet.contains($hsValueCast$value)) {
              |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
@@ -4281,7 +4279,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
            """.stripMargin
 
         val processArray1 = withArray1NullAssignment(
-          s"$jt $value = ${genGetValue(array1, i)};" + withArray1NaNCheck(bodyArray1))
+          s"$jt $value = ${genGetValue(array1, i)};" + withArray1NaNCheck(body))
 
         // Only need to track null element index when array1's element is nullable.
         val declareNullTrackVariables = if (left.dataType.asInstanceOf[ArrayType].containsNull) {

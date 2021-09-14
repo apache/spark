@@ -2332,14 +2332,14 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Literal.apply(Array(Double.NaN, 1d)), Literal.apply(Array(Double.NaN))),
       Seq(1d))
     checkEvaluation(ArrayExcept(
-      Literal.create(Seq(Double.NaN, null, 1d), ArrayType(DoubleType)),
+      Literal.create(Seq(null, Double.NaN, null, 1d), ArrayType(DoubleType)),
       Literal.create(Seq(Double.NaN, null), ArrayType(DoubleType))),
       Seq(1d))
     checkEvaluation(ArrayExcept(
       Literal.apply(Array(Float.NaN, 1f)), Literal.apply(Array(Float.NaN))),
       Seq(1f))
     checkEvaluation(ArrayExcept(
-      Literal.create(Seq(Float.NaN, null, 1f), ArrayType(FloatType)),
+      Literal.create(Seq(null, Float.NaN, null, 1f), ArrayType(FloatType)),
       Literal.create(Seq(Float.NaN, null), ArrayType(FloatType))),
       Seq(1f))
   }
