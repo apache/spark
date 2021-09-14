@@ -1904,17 +1904,20 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-36747: should not combine Project with Aggregate") {
-    checkAnswer(
-      sql("""
-        |SELECT m, (SELECT SUM(b) FROM l WHERE l.a = m)
-        |FROM (SELECT MIN(c) m FROM t)
-        |""".stripMargin),
-      Row(2, 2.0) :: Nil)
-    checkAnswer(
-      sql("""
-        |SELECT c, (SELECT SUM(b) FROM l WHERE l.a = c)
-        |FROM (SELECT c FROM t GROUP BY c)
-        |""".stripMargin),
-      Row(2, 2.0) :: Row(3, 3.0) :: Row(4, null) :: Nil)
+    withTempView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      checkAnswer(
+        sql("""
+              |SELECT m, (SELECT SUM(c2) FROM t WHERE c1 = m)
+              |FROM (SELECT MIN(c2) AS m FROM t)
+              |""".stripMargin),
+        Row(1, 2) :: Nil)
+      checkAnswer(
+        sql("""
+              |SELECT c, (SELECT SUM(c2) FROM t WHERE c1 = c)
+              |FROM (SELECT c1 AS c FROM t GROUP BY c1)
+              |""".stripMargin),
+        Row(0, 1) :: Row(1, 2) :: Nil)
+    }
   }
 }
