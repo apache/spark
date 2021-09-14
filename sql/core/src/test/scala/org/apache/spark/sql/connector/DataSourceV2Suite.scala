@@ -21,8 +21,6 @@ import java.io.File
 import java.util
 import java.util.OptionalLong
 
-import scala.collection.JavaConverters._
-
 import test.org.apache.spark.sql.connector._
 
 import org.apache.spark.SparkException
@@ -437,6 +435,18 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       }
     }
   }
+
+  test("SPARK-35803: Support datasorce V2 in CREATE VIEW USING") {
+    Seq(classOf[SimpleDataSourceV2], classOf[JavaSimpleDataSourceV2]).foreach { cls =>
+      withClue(cls.getName) {
+        sql(s"CREATE or REPLACE TEMPORARY VIEW s1 USING ${cls.getName}")
+        checkAnswer(sql("select * from s1"), (0 until 10).map(i => Row(i, -i)))
+        checkAnswer(sql("select j from s1"), (0 until 10).map(i => Row(-i)))
+        checkAnswer(sql("select * from s1 where i > 5"),
+          (6 until 10).map(i => Row(i, -i)))
+      }
+    }
+  }
 }
 
 
@@ -466,7 +476,7 @@ abstract class SimpleBatchTable extends Table with SupportsRead  {
 
   override def name(): String = this.getClass.toString
 
-  override def capabilities(): util.Set[TableCapability] = Set(BATCH_READ).asJava
+  override def capabilities(): util.Set[TableCapability] = util.EnumSet.of(BATCH_READ)
 }
 
 abstract class SimpleScanBuilder extends ScanBuilder

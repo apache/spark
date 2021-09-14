@@ -30,7 +30,7 @@ from pyspark.pandas.missing.groupby import (
     MissingPandasLikeDataFrameGroupBy,
     MissingPandasLikeSeriesGroupBy,
 )
-from pyspark.pandas.groupby import is_multi_agg_with_relabel
+from pyspark.pandas.groupby import is_multi_agg_with_relabel, SeriesGroupBy
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
@@ -2135,6 +2135,18 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             psdf.a.rename().groupby(psdf.b.rename()).transform(lambda x: x + x.min()).sort_index(),
             pdf.a.rename().groupby(pdf.b.rename()).transform(lambda x: x + x.min()).sort_index(),
         )
+        with self.assertRaisesRegex(TypeError, "str object is not callable"):
+            psdf.groupby("a").transform("sum")
+
+        def udf(col) -> int:
+            return col + 10
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "Expected the return type of this function to be of Series type, "
+            "but found type ScalarType\\[LongType\\]",
+        ):
+            psdf.groupby("a").transform(udf)
 
         # multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "c")])
@@ -2853,6 +2865,18 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
                 psdf.groupby("a")["b"].var(ddof=ddof).sort_index(),
                 check_exact=False,
             )
+
+    def test_getitem(self):
+        psdf = ps.DataFrame(
+            {
+                "a": [1, 1, 1, 1, 2, 2, 2, 3, 3, 3] * 3,
+                "b": [2, 3, 1, 4, 6, 9, 8, 10, 7, 5] * 3,
+                "c": [3, 5, 2, 5, 1, 2, 6, 4, 3, 6] * 3,
+            },
+            index=np.random.rand(10 * 3),
+        )
+
+        self.assertTrue(isinstance(psdf.groupby("a")["b"], SeriesGroupBy))
 
 
 if __name__ == "__main__":

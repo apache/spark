@@ -6726,14 +6726,17 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
             if len(drop_column_labels) == 0:
                 raise KeyError(columns)
-            cols, labels = zip(
-                *(
-                    (column, label)
-                    for column, label in zip(
-                        self._internal.data_spark_column_names, self._internal.column_labels
-                    )
-                    if label not in drop_column_labels
+
+            keep_columns_and_labels = [
+                (column, label)
+                for column, label in zip(
+                    self._internal.data_spark_column_names, self._internal.column_labels
                 )
+                if label not in drop_column_labels
+            ]
+
+            cols, labels = (
+                zip(*keep_columns_and_labels) if len(keep_columns_and_labels) > 0 else ([], [])
             )
             internal = self._internal.with_new_columns([self._psser_for(label) for label in labels])
             return DataFrame(internal)
@@ -7904,6 +7907,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Combine two DataFrame objects by filling null values in one DataFrame
         with non-null values from other DataFrame. The row and column indexes
         of the resulting DataFrame will be the union of the two.
+
+        .. versionadded:: 3.3.0
 
         Parameters
         ----------

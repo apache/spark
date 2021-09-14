@@ -38,18 +38,23 @@ import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoin
  *                               but can be false in AQE when AQE optimization may change the plan
  *                               output partitioning and need to retain the user-specified
  *                               repartition shuffles in the plan.
+ * @param requiredDistribution The root required distribution we should ensure. This value is used
+ *                             in AQE in case we change final stage output partitioning.
  */
-case class EnsureRequirements(optimizeOutRepartition: Boolean = true) extends Rule[SparkPlan] {
+case class EnsureRequirements(
+    optimizeOutRepartition: Boolean = true,
+    requiredDistribution: Option[Distribution] = None)
+  extends Rule[SparkPlan] {
 
-  private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
-    val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution
-    val requiredChildOrderings: Seq[Seq[SortOrder]] = operator.requiredChildOrdering
-    var children: Seq[SparkPlan] = operator.children
-    assert(requiredChildDistributions.length == children.length)
-    assert(requiredChildOrderings.length == children.length)
-
+  private def ensureDistributionAndOrdering(
+      originalChildren: Seq[SparkPlan],
+      requiredChildDistributions: Seq[Distribution],
+      requiredChildOrderings: Seq[Seq[SortOrder]],
+      shuffleOrigin: ShuffleOrigin): Seq[SparkPlan] = {
+    assert(requiredChildDistributions.length == originalChildren.length)
+    assert(requiredChildOrderings.length == originalChildren.length)
     // Ensure that the operator's children satisfy their output distribution requirements.
-    children = children.zip(requiredChildDistributions).map {
+    var newChildren = originalChildren.zip(requiredChildDistributions).map {
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
         child
       case (child, BroadcastDistribution(mode)) =>
@@ -57,7 +62,7 @@ case class EnsureRequirements(optimizeOutRepartition: Boolean = true) extends Ru
       case (child, distribution) =>
         val numPartitions = distribution.requiredNumPartitions
           .getOrElse(conf.numShufflePartitions)
-        ShuffleExchangeExec(distribution.createPartitioning(numPartitions), child)
+        ShuffleExchangeExec(distribution.createPartitioning(numPartitions), child, shuffleOrigin)
     }
 
     // Get the indexes of children which have specified distribution requirements and need to have
@@ -69,7 +74,7 @@ case class EnsureRequirements(optimizeOutRepartition: Boolean = true) extends Ru
     }.map(_._2)
 
     val childrenNumPartitions =
-      childrenIndexes.map(children(_).outputPartitioning.numPartitions).toSet
+      childrenIndexes.map(newChildren(_).outputPartitioning.numPartitions).toSet
 
     if (childrenNumPartitions.size > 1) {
       // Get the number of partitions which is explicitly required by the distributions.
@@ -78,7 +83,7 @@ case class EnsureRequirements(optimizeOutRepartition: Boolean = true) extends Ru
           index => requiredChildDistributions(index).requiredNumPartitions
         }.toSet
         assert(numPartitionsSet.size <= 1,
-          s"$operator have incompatible requirements of the number of partitions for its children")
+          s"$requiredChildDistributions have incompatible requirements of the number of partitions")
         numPartitionsSet.headOption
       }
 
@@ -87,7 +92,7 @@ case class EnsureRequirements(optimizeOutRepartition: Boolean = true) extends Ru
       // 1. We should avoid shuffling these children.
       // 2. We should have a reasonable parallelism.
       val nonShuffleChildrenNumPartitions =
-        childrenIndexes.map(children).filterNot(_.isInstanceOf[ShuffleExchangeExec])
+        childrenIndexes.map(newChildren).filterNot(_.isInstanceOf[ShuffleExchangeExec])
           .map(_.outputPartitioning.numPartitions)
       val expectedChildrenNumPartitions = if (nonShuffleChildrenNumPartitions.nonEmpty) {
         if (nonShuffleChildrenNumPartitions.length == childrenIndexes.length) {
@@ -106,7 +111,7 @@ case class EnsureRequirements(optimizeOutRepartition: Boolean = true) extends Ru
 
       val targetNumPartitions = requiredNumPartitions.getOrElse(expectedChildrenNumPartitions)
 
-      children = children.zip(requiredChildDistributions).zipWithIndex.map {
+      newChildren = newChildren.zip(requiredChildDistributions).zipWithIndex.map {
         case ((child, distribution), index) if childrenIndexes.contains(index) =>
           if (child.outputPartitioning.numPartitions == targetNumPartitions) {
             child
@@ -124,7 +129,7 @@ case class EnsureRequirements(optimizeOutRepartition: Boolean = true) extends Ru
     }
 
     // Now that we've performed any necessary shuffles, add sorts to guarantee output orderings:
-    children = children.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>
+    newChildren = newChildren.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>
       // If child.outputOrdering already satisfies the requiredOrdering, we do not need to sort.
       if (SortOrder.orderingSatisfies(child.outputOrdering, requiredOrdering)) {
         child
@@ -133,7 +138,7 @@ case class EnsureRequirements(optimizeOutRepartition: Boolean = true) extends Ru
       }
     }
 
-    operator.withNewChildren(children)
+    newChildren
   }
 
   private def reorder(
@@ -254,25 +259,50 @@ case class EnsureRequirements(optimizeOutRepartition: Boolean = true) extends Ru
     }
   }
 
-  def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
-    case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, shuffleOrigin)
-        if optimizeOutRepartition &&
-          (shuffleOrigin == REPARTITION_BY_COL || shuffleOrigin == REPARTITION_BY_NUM) =>
-      def hasSemanticEqualPartitioning(partitioning: Partitioning): Boolean = {
-        partitioning match {
-          case lower: HashPartitioning if upper.semanticEquals(lower) => true
-          case lower: PartitioningCollection =>
-            lower.partitionings.exists(hasSemanticEqualPartitioning)
-          case _ => false
+  def apply(plan: SparkPlan): SparkPlan = {
+    val newPlan = plan.transformUp {
+      case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, shuffleOrigin)
+          if optimizeOutRepartition &&
+            (shuffleOrigin == REPARTITION_BY_COL || shuffleOrigin == REPARTITION_BY_NUM) =>
+        def hasSemanticEqualPartitioning(partitioning: Partitioning): Boolean = {
+          partitioning match {
+            case lower: HashPartitioning if upper.semanticEquals(lower) => true
+            case lower: PartitioningCollection =>
+              lower.partitionings.exists(hasSemanticEqualPartitioning)
+            case _ => false
+          }
         }
-      }
-      if (hasSemanticEqualPartitioning(child.outputPartitioning)) {
-        child
-      } else {
-        operator
-      }
+        if (hasSemanticEqualPartitioning(child.outputPartitioning)) {
+          child
+        } else {
+          operator
+        }
 
-    case operator: SparkPlan =>
-      ensureDistributionAndOrdering(reorderJoinPredicates(operator))
+      case operator: SparkPlan =>
+        val reordered = reorderJoinPredicates(operator)
+        val newChildren = ensureDistributionAndOrdering(
+          reordered.children,
+          reordered.requiredChildDistribution,
+          reordered.requiredChildOrdering,
+          ENSURE_REQUIREMENTS)
+        reordered.withNewChildren(newChildren)
+    }
+
+    if (requiredDistribution.isDefined) {
+      val shuffleOrigin = if (requiredDistribution.get.requiredNumPartitions.isDefined) {
+        REPARTITION_BY_NUM
+      } else {
+        REPARTITION_BY_COL
+      }
+      val finalPlan = ensureDistributionAndOrdering(
+        newPlan :: Nil,
+        requiredDistribution.get :: Nil,
+        Seq(Nil),
+        shuffleOrigin)
+      assert(finalPlan.size == 1)
+      finalPlan.head
+    } else {
+      newPlan
+    }
   }
 }

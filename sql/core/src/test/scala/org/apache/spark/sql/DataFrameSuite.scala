@@ -702,6 +702,18 @@ class DataFrameSuite extends QueryTest
       "The size of column names: 2 isn't equal to the size of metadata elements: 1"))
   }
 
+  test("SPARK-36642: withMetadata: replace metadata of a column") {
+    val metadata = new MetadataBuilder().putLong("key", 1L).build()
+    val df1 = sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
+    val df2 = df1.withMetadata("x", metadata)
+    assert(df2.schema(0).metadata === metadata)
+
+    val err = intercept[AnalysisException] {
+      df1.withMetadata("x1", metadata)
+    }
+    assert(err.getMessage.contains("Cannot resolve column name"))
+  }
+
   test("replace column using withColumn") {
     val df2 = sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
     val df3 = df2.withColumn("x", df2("x") + 1)
