@@ -3549,7 +3549,7 @@ case class ArrayDistinct(child: Expression)
              |  $hashSet.add$hsPostFix($hsValueCast$value);
              |  $builder.$$plus$$eq($value);
              |}
-          """.stripMargin
+           """.stripMargin
 
         val processArray = withArrayNullAssignment(
           s"$jt $value = ${genGetValue(array, i)};" + withNaNCheck(body))
