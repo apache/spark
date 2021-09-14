@@ -20,8 +20,8 @@ import scala.collection.mutable
 
 object ExpressionMap {
   /** Constructs a new [[ExpressionMap]] by applying [[Canonicalize]] to `expressions`. */
-  def apply[T](map: mutable.Map[Expression, T]): ExpressionMap[T] = {
-    val newMap = new ExpressionMap[T](map)
+  def apply[T](map: Iterable[(Expression, T)]): ExpressionMap[T] = {
+    val newMap = new ExpressionMap[T]()
     map.foreach(newMap.addOne)
     newMap
   }

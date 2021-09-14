@@ -432,7 +432,7 @@ class ConstraintSet private(
       canonicalized.foreach(canon => {
         val tempExprs = updatedFilterExprs.filter(_.canonicalized fastEquals canon)
         if (tempExprs.size > 1) {
-          duplicateFilters += tempExprs
+          duplicateFilters += tempExprs.toSeq
         }
       })
       val errorMessage = s"Found following duplicate filters." +
@@ -448,8 +448,8 @@ class ConstraintSet private(
         })
       })
     }
-    new ConstraintSet(canonicalized, updatedFilterExprs, newAttribBasedEquivalenceList,
-      newExprBasedEquivalenceList)
+    new ConstraintSet(canonicalized, updatedFilterExprs, newAttribBasedEquivalenceList.toSeq,
+      newExprBasedEquivalenceList.toSeq)
   }
 
   private def getUpdatedExpressionEquivalenceListWithSideEffects(
