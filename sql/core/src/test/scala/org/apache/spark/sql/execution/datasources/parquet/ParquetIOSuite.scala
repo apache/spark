@@ -856,7 +856,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("SPARK-36726: test incorrect Parquet row group file offset") {
-    readParquetFile("test-data/malformed-file-offset.parquet") { df =>
+    readParquetFile(testFile("test-data/malformed-file-offset.parquet")) { df =>
       assert(df.count() == 3650)
     }
   }
