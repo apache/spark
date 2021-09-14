@@ -332,7 +332,7 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
   }
 
   test("SPARK-36665: Add more Not operator simplifications") {
-    // Using IsNull(e(inputs)) == IsNull(input1) or IsNull(input2) ... rules
+    // Using IsNull(UnaryExpression(input)) == IsNull(input) rules
     checkCondition(IsNull(Not('e)), IsNull('e))
     checkCondition(IsNotNull(Not('e)), IsNotNull('e))
 
