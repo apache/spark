@@ -1316,11 +1316,19 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf.drop(labels=["A", "B", "C"], axis=0), pdf.drop(labels=["A", "B", "C"], axis=0)
         )
 
+        with ps.option_context("compute.isin_limit", 2):
+            self.assert_eq(
+                psdf.drop(labels=["A", "B", "C"], axis=0), pdf.drop(labels=["A", "B", "C"], axis=0)
+            )
+
         # Given index
         self.assert_eq(psdf.drop(index="A"), pdf.drop(index="A"))
         self.assert_eq(psdf.drop(index=["A", "C"]), pdf.drop(index=["A", "C"]))
         self.assert_eq(psdf.drop(index=["A", "B", "C"]), pdf.drop(index=["A", "B", "C"]))
         self.assert_eq(psdf.drop(index=[]), pdf.drop(index=[]))
+
+        with ps.option_context("compute.isin_limit", 2):
+            self.assert_eq(psdf.drop(index=["A", "B", "C"]), pdf.drop(index=["A", "B", "C"]))
 
         # Non-string names
         pdf.index = [10, 20, 30]
@@ -1330,6 +1338,11 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(
             psdf.drop(labels=[10, 20, 30], axis=0), pdf.drop(labels=[10, 20, 30], axis=0)
         )
+
+        with ps.option_context("compute.isin_limit", 2):
+            self.assert_eq(
+                psdf.drop(labels=[10, 20, 30], axis=0), pdf.drop(labels=[10, 20, 30], axis=0)
+            )
 
         # MultiIndex
         pdf.index = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
@@ -1350,6 +1363,11 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf.drop(index=["A", "B", "C"], columns=["X", "Z"]),
             pdf.drop(index=["A", "B", "C"], columns=["X", "Z"]),
         )
+        with ps.option_context("compute.isin_limit", 2):
+            self.assert_eq(
+                psdf.drop(index=["A", "B", "C"], columns=["X", "Z"]),
+                pdf.drop(index=["A", "B", "C"], columns=["X", "Z"]),
+            )
         self.assert_eq(
             psdf.drop(index=[], columns=["X", "Z"]),
             pdf.drop(index=[], columns=["X", "Z"]),

@@ -6737,7 +6737,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     if internal.index_level == 1:
                         internal = internal.resolved_copy
 
-                        if len(index) <= 80:
+                        if len(index) <= ps.get_option("compute.isin_limit"):
                             self_index_type = self.index.to_series().spark.data_type
                             cond = ~internal.index_spark_columns[0].isin(
                                 [SF.lit(label).cast(self_index_type) for label in index]
