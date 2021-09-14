@@ -60,7 +60,7 @@ for f in $(find "$BASEDIR" -name 'pom.xml' -not -path '*target*'); do
   sed_i 's/\(artifactId.*\)_'$FROM_VERSION'/\1_'$TO_VERSION'/g' $f
   sed_i 's/^\([[:space:]]*<!-- #if scala-'$TO_VERSION' -->\)<!--/\1/' $f
   sed_i 's/^\([[:space:]]*\)-->\(<!-- #endif scala-'$TO_VERSION' -->\)/\1\2/' $f
-  sed_i 's/^\([[:space:]]*<!-- #if scala-'$FROM_VERSION' -->\)/\1<!--/' $f
+  sed_i 's/^\([[:space:]]*<!-- #if scala-'$FROM_VERSION' -->\)$/\1<!--/' $f
   sed_i 's/^\([[:space:]]*\)\(<!-- #endif scala-'$FROM_VERSION' -->\)/\1-->\2/' $f
 done
 
