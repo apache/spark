@@ -37,7 +37,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.analysis.{Comparator, HintErrorLogger, Resolver}
+import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
@@ -3765,24 +3765,6 @@ class SQLConf extends Serializable with Logging {
       org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
     } else {
       org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
-    }
-  }
-
-  /**
-   * Returns the [[Comparator]] for the current configuration,
-   * which can be used to compare two identifiers.
-   */
-  private[sql] def comparator: Comparator = {
-    if (caseSensitiveAnalysis) {
-      org.apache.spark.sql.catalyst.analysis.caseSensitiveComparator
-    } else {
-      org.apache.spark.sql.catalyst.analysis.caseInsensitiveComparator
-    }
-  }
-
-  private[sql] val fieldNameOrdering = new Ordering[String] {
-    def compare(s1: String, s2: String): Int = {
-      comparator(s1, s2)
     }
   }
 

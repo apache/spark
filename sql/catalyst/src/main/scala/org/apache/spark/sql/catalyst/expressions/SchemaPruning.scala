@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.immutable.TreeMap
+import java.util.Locale
+
+import scala.collection.immutable.HashMap
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.types._
@@ -56,6 +58,7 @@ object SchemaPruning extends SQLConfHelper {
    */
   private def sortLeftFieldsByRight(left: DataType, right: DataType): DataType =
     (left, right) match {
+      case _ if left == right => left
       case (ArrayType(leftElementType, containsNull), ArrayType(rightElementType, _)) =>
         ArrayType(
           sortLeftFieldsByRight(leftElementType, rightElementType),
@@ -67,11 +70,15 @@ object SchemaPruning extends SQLConfHelper {
           sortLeftFieldsByRight(leftValueType, rightValueType),
           containsNull)
       case (leftStruct: StructType, rightStruct: StructType) =>
-        val leftStructTreeMap =
-          TreeMap(leftStruct.map(_.name).zip(leftStruct): _*)(conf.fieldNameOrdering)
+        val formatFieldName: String => String =
+          if (conf.caseSensitiveAnalysis) identity else _.toLowerCase(Locale.ROOT)
+
+        val leftStructHashMap =
+          HashMap(leftStruct.map(f => formatFieldName(f.name)).zip(leftStruct): _*)
         val sortedLeftFields = rightStruct.fieldNames.flatMap { fieldName =>
-          if (leftStructTreeMap.contains(fieldName)) {
-            val resolvedLeftStruct = leftStructTreeMap(fieldName)
+          val formattedFieldName = formatFieldName(fieldName)
+          if (leftStructHashMap.contains(formattedFieldName)) {
+            val resolvedLeftStruct = leftStructHashMap(formattedFieldName)
             val leftFieldType = resolvedLeftStruct.dataType
             val rightFieldType = rightStruct(fieldName).dataType
             val sortedLeftFieldType = sortLeftFieldsByRight(leftFieldType, rightFieldType)
