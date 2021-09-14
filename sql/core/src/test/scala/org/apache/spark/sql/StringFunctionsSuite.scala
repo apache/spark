@@ -538,7 +538,6 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     // scalastyle:on
   }
 
-
   test("initcap function") {
     val df = Seq(("ab", "a B", "sParK")).toDF("x", "y", "z")
     checkAnswer(
