@@ -18,6 +18,7 @@
 package org.apache.spark.network.server;
 
 import java.nio.ByteBuffer;
+import java.util.Objects;
 
 import com.google.common.base.Preconditions;
 
@@ -101,13 +102,13 @@ public class BlockPushNonFatalFailure extends RuntimeException {
 
   public ByteBuffer getResponse() {
     // Ensure we do not invoke this method if response is not set
-    Preconditions.checkNotNull(response);
+    Objects.requireNonNull(response);
     return response;
   }
 
   public ReturnCode getReturnCode() {
     // Ensure we do not invoke this method if returnCode is not set
-    Preconditions.checkNotNull(returnCode);
+    Objects.requireNonNull(returnCode);
     return returnCode;
   }
 

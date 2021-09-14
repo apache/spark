@@ -24,6 +24,7 @@ import java.util.Iterator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.BiConsumer;
@@ -31,7 +32,6 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 
 import org.apache.spark.annotation.Private;
@@ -70,7 +70,7 @@ public class InMemoryStore implements KVStore {
     Object comparable = asKey(indexedValue);
     KVTypeInfo.Accessor accessor = list.getIndexAccessor(index);
     for (Object o : view(type)) {
-      if (Objects.equal(comparable, asKey(accessor.get(o)))) {
+      if (Objects.equals(comparable, asKey(accessor.get(o)))) {
         count++;
       }
     }

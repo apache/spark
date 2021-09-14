@@ -22,6 +22,7 @@ import java.io.Closeable;
 import java.security.GeneralSecurityException;
 import java.util.Arrays;
 import java.util.Properties;
+import java.util.Objects;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -56,8 +57,8 @@ class AuthEngine implements Closeable {
   private TransportCipher sessionCipher;
 
   AuthEngine(String appId, String preSharedSecret, TransportConf conf) {
-    Preconditions.checkNotNull(appId);
-    Preconditions.checkNotNull(preSharedSecret);
+    Objects.requireNonNull(appId);
+    Objects.requireNonNull(preSharedSecret);
     this.appId = appId;
     this.preSharedSecret = preSharedSecret.getBytes(UTF_8);
     this.conf = conf;

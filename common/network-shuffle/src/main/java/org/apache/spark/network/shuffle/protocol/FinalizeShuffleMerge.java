@@ -17,7 +17,8 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
@@ -54,7 +55,7 @@ public class FinalizeShuffleMerge extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(appId, appAttemptId, shuffleId, shuffleMergeId);
+    return Objects.hash(appId, appAttemptId, shuffleId, shuffleMergeId);
   }
 
   @Override
@@ -71,7 +72,7 @@ public class FinalizeShuffleMerge extends BlockTransferMessage {
   public boolean equals(Object other) {
     if (other != null && other instanceof FinalizeShuffleMerge) {
       FinalizeShuffleMerge o = (FinalizeShuffleMerge) other;
-      return Objects.equal(appId, o.appId)
+      return Objects.equals(appId, o.appId)
         && appAttemptId == o.appAttemptId
         && shuffleId == o.shuffleId
         && shuffleMergeId == o.shuffleMergeId;

@@ -18,8 +18,8 @@
 package org.apache.spark.network.shuffle.protocol;
 
 import java.util.Arrays;
+import java.util.Objects;
 
-import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
@@ -78,8 +78,8 @@ public class MergeStatuses extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    int objectHashCode = Objects.hashCode(shuffleId) * 41 +
-        Objects.hashCode(shuffleMergeId);
+    int objectHashCode = Objects.hash(shuffleId) * 41 +
+        Objects.hash(shuffleMergeId);
     return (objectHashCode * 41 + Arrays.hashCode(reduceIds) * 41
       + Arrays.hashCode(bitmaps) * 41 + Arrays.hashCode(sizes));
   }
@@ -97,8 +97,8 @@ public class MergeStatuses extends BlockTransferMessage {
   public boolean equals(Object other) {
     if (other != null && other instanceof MergeStatuses) {
       MergeStatuses o = (MergeStatuses) other;
-      return Objects.equal(shuffleId, o.shuffleId)
-        && Objects.equal(shuffleMergeId, o.shuffleMergeId)
+      return Objects.equals(shuffleId, o.shuffleId)
+        && Objects.equals(shuffleMergeId, o.shuffleMergeId)
         && Arrays.equals(bitmaps, o.bitmaps)
         && Arrays.equals(reduceIds, o.reduceIds)
         && Arrays.equals(sizes, o.sizes);

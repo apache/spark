@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.shuffle.protocol.mesos;
 
-import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.protocol.Encoders;
@@ -25,6 +24,8 @@ import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 
 // Needed by ScalaDoc. See SPARK-7726
 import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
+
+import java.util.Objects;
 
 /**
  * A message sent from the driver to register with the MesosExternalShuffleService.
@@ -58,7 +59,7 @@ public class RegisterDriver extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(appId, heartbeatTimeoutMs);
+    return Objects.hash(appId, heartbeatTimeoutMs);
   }
 
   @Override
@@ -66,7 +67,7 @@ public class RegisterDriver extends BlockTransferMessage {
     if (!(o instanceof RegisterDriver)) {
       return false;
     }
-    return Objects.equal(appId, ((RegisterDriver) o).appId);
+    return Objects.equals(appId, ((RegisterDriver) o).appId);
   }
 
   public static RegisterDriver decode(ByteBuf buf) {

@@ -22,11 +22,11 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.lang3.SystemUtils;
@@ -185,7 +185,7 @@ public class JavaUtils {
   }
 
   private static boolean isSymlink(File file) throws IOException {
-    Preconditions.checkNotNull(file);
+    Objects.requireNonNull(file);
     File fileInCanonicalDir = null;
     if (file.getParent() == null) {
       fileInCanonicalDir = file;

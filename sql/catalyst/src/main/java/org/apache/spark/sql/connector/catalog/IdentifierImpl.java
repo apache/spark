@@ -22,8 +22,6 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.google.common.base.Preconditions;
-
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.util.package$;
 
@@ -37,8 +35,8 @@ class IdentifierImpl implements Identifier {
   private String name;
 
   IdentifierImpl(String[] namespace, String name) {
-    Preconditions.checkNotNull(namespace, "Identifier namespace cannot be null");
-    Preconditions.checkNotNull(name, "Identifier name cannot be null");
+    Objects.requireNonNull(namespace, "Identifier namespace cannot be null");
+    Objects.requireNonNull(name, "Identifier name cannot be null");
     this.namespace = namespace;
     this.name = name;
   }

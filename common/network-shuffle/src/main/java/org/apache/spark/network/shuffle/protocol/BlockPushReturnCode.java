@@ -19,7 +19,6 @@ package org.apache.spark.network.shuffle.protocol;
 
 import java.util.Objects;
 
-import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
@@ -43,7 +42,7 @@ public class BlockPushReturnCode extends BlockTransferMessage {
   public final String failureBlockId;
 
   public BlockPushReturnCode(byte returnCode, String failureBlockId) {
-    Preconditions.checkNotNull(BlockPushNonFatalFailure.getReturnCode(returnCode));
+    Objects.requireNonNull(BlockPushNonFatalFailure.getReturnCode(returnCode));
     this.returnCode = returnCode;
     this.failureBlockId = failureBlockId;
   }

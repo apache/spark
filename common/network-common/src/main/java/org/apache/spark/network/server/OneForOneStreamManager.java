@@ -19,6 +19,7 @@ package org.apache.spark.network.server;
 
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -61,7 +62,7 @@ public class OneForOneStreamManager extends StreamManager {
 
     StreamState(String appId, Iterator<ManagedBuffer> buffers, Channel channel) {
       this.appId = appId;
-      this.buffers = Preconditions.checkNotNull(buffers);
+      this.buffers = Objects.requireNonNull(buffers);
       this.associatedChannel = channel;
     }
   }

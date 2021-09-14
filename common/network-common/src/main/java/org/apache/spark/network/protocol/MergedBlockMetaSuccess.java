@@ -17,7 +17,8 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
@@ -51,7 +52,7 @@ public class MergedBlockMetaSuccess extends AbstractResponseMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(requestId, numChunks);
+    return Objects.hash(requestId, numChunks);
   }
 
   @Override
