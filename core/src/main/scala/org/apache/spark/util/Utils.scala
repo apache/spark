@@ -2609,11 +2609,11 @@ private[spark] object Utils extends Logging {
       val serializer = Utils.classForName(conf.get(SERIALIZER)).getConstructor(classOf[SparkConf])
         .newInstance(conf).asInstanceOf[Serializer]
       val canDoPushBasedShuffle = conf.get(IS_TESTING).getOrElse(false) ||
-          (conf.get(SHUFFLE_SERVICE_ENABLED) &&
-            conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn" &&
-            // TODO: [SPARK-36744] needs to support IO encryption for push-based shuffle
-            !conf.get(IO_ENCRYPTION_ENABLED) &&
-            serializer.supportsRelocationOfSerializedObjects)
+        (conf.get(SHUFFLE_SERVICE_ENABLED) &&
+          conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn" &&
+          // TODO: [SPARK-36744] needs to support IO encryption for push-based shuffle
+          !conf.get(IO_ENCRYPTION_ENABLED) &&
+          serializer.supportsRelocationOfSerializedObjects)
 
       if (!canDoPushBasedShuffle) {
         logWarning("Push-based shuffle can only be enabled when the application is submitted " +
