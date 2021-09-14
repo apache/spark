@@ -2327,7 +2327,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Seq(Float.NaN, null, 1f))
   }
 
-  test("SPARK-36740: ArrayDistinct should handle duplicated Double.NaN and Float.Nan") {
+  test("SPARK-36741: ArrayDistinct should handle duplicated Double.NaN and Float.Nan") {
     checkEvaluation(ArrayDistinct(
       Literal.create(Seq(Double.NaN, Double.NaN, null, null, 1d, 1d), ArrayType(DoubleType))),
       Seq(Double.NaN, null, 1d))
