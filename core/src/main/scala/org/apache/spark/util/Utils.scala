@@ -2604,24 +2604,27 @@ private[spark] object Utils extends Logging {
    *   - serializer(such as KryoSerializer) supports relocation of serialized objects
    */
   def isPushBasedShuffleEnabled(conf: SparkConf): Boolean = {
-    val shouldDoPushBasedShuffle = conf.get(PUSH_BASED_SHUFFLE_ENABLED)
-    val serializer = Utils.classForName(conf.get(SERIALIZER)).getConstructor(classOf[SparkConf])
-      .newInstance(conf).asInstanceOf[Serializer]
-    val canDoPushBasedShuffle =
-      shouldDoPushBasedShuffle &&
-        (conf.get(IS_TESTING).getOrElse(false) ||
+    val pushBasedShuffleEnabled = conf.get(PUSH_BASED_SHUFFLE_ENABLED)
+    if (pushBasedShuffleEnabled) {
+      val serializer = Utils.classForName(conf.get(SERIALIZER)).getConstructor(classOf[SparkConf])
+        .newInstance(conf).asInstanceOf[Serializer]
+      val canDoPushBasedShuffle = conf.get(IS_TESTING).getOrElse(false) ||
           (conf.get(SHUFFLE_SERVICE_ENABLED) &&
             conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn" &&
             // TODO: [SPARK-36744] needs to support IO encryption for push-based shuffle
             !conf.get(IO_ENCRYPTION_ENABLED) &&
-            serializer.supportsRelocationOfSerializedObjects))
+            serializer.supportsRelocationOfSerializedObjects)
 
-    if (shouldDoPushBasedShuffle && !canDoPushBasedShuffle) {
-      logWarning("Push-based shuffle can only be enabled when the application is submitted" +
-        "to run in YARN mode, with external shuffle service enabled, IO encryption disabled, and" +
-        "relocation of serialized objects supported.")
+      if (!canDoPushBasedShuffle) {
+        logWarning("Push-based shuffle can only be enabled when the application is submitted " +
+          "to run in YARN mode, with external shuffle service enabled, IO encryption disabled, " +
+          "and relocation of serialized objects supported.")
+      }
+
+      canDoPushBasedShuffle
+    } else {
+      false
     }
-    canDoPushBasedShuffle
   }
 
   /**
