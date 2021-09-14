@@ -4587,9 +4587,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         def wrapped_func(x: pd.Series, y: pd.Series) -> pd.Series:
             return x.combine(y, func)
 
+        scol = wrapped_func(*combined._internal.data_spark_columns)
         combined_sdf = combined._internal.spark_frame.select(
             *combined._internal.index_spark_columns,
-            wrapped_func(*combined._internal.data_spark_columns),
+            scol.alias(self._internal.spark_column_name_for(self.spark.column)),
             NATURAL_ORDER_COLUMN_NAME
         )
         internal = InternalFrame(
