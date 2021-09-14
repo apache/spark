@@ -486,7 +486,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("SPARK-36751: add octet/bit length api for scala") {
+  test("SPARK-36751: add octet length api for scala") {
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123, 2.0f, 3.015, "\ud83d\udc08"))
@@ -512,7 +512,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     // scalastyle:on
   }
 
-  test("SPARK-36751: add octet/bit length api for scala") {
+  test("SPARK-36751: add bit length api for scala") {
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123, 2.0f, 3.015, "\ud83d\udc08"))
