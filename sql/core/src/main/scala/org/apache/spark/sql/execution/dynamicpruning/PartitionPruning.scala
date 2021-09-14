@@ -233,7 +233,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
 
         // extract the left and right keys of the join condition
         val (leftKeys, rightKeys) = j match {
-          case ExtractEquiJoinKeys(_, lkeys, rkeys, _, _, _, _) => (lkeys, rkeys)
+          case ExtractEquiJoinKeys(_, lkeys, rkeys, _, _, _, _, _) => (lkeys, rkeys)
           case _ => (Nil, Nil)
         }
 
