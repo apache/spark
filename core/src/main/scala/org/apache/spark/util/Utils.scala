@@ -2615,7 +2615,7 @@ private[spark] object Utils extends Logging {
             !conf.get(IO_ENCRYPTION_ENABLED) &&
             serializer.supportsRelocationOfSerializedObjects))
 
-    if (!canDoPushBasedShuffle) {
+    if (conf.get(PUSH_BASED_SHUFFLE_ENABLED) && !canDoPushBasedShuffle) {
       logWarning("Push-based shuffle can only be enabled when the application is submitted" +
         "to run in YARN mode, with external shuffle service enabled, IO encryption disabled, and" +
         "relocation of serialized objects supported.")
