@@ -9974,7 +9974,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 raise ValueError("items should be a list-like object.")
             if axis == 0:
                 if len(index_scols) == 1:
-                    if len(items) <= ps.option("compute.isin_limit"):
+                    if len(items) <= ps.get_option("compute.isin_limit"):
                         col = index_scols[0].isin([SF.lit(item) for item in items])
                         return DataFrame(self._internal.with_filter(col))
                     else:
@@ -9988,7 +9988,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         )
                         return DataFrame(self._internal.with_new_sdf(joined_sdf))
 
-                elif len(index_scols) > 1:
+                else:
                     # for multi-index
                     col = None
                     for item in items:
