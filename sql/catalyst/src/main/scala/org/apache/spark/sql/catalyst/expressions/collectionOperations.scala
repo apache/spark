@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SQLOpenHashSet
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
@@ -3367,24 +3368,31 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
     if (TypeUtils.typeWithProperEquals(elementType)) {
       (array1, array2) =>
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-        val hs = new OpenHashSet[Any]
-        var foundNullElement = false
+        val hs = new SQLOpenHashSet[Any]()
+        val isNaN = SQLOpenHashSet.isNaN(elementType)
         Seq(array1, array2).foreach { array =>
           var i = 0
           while (i < array.numElements()) {
             if (array.isNullAt(i)) {
-              if (!foundNullElement) {
+              if (!hs.containsNull) {
+                hs.addNull
                 arrayBuffer += null
-                foundNullElement = true
               }
             } else {
               val elem = array.get(i, elementType)
-              if (!hs.contains(elem)) {
-                if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-                  ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
+              if (isNaN(elem)) {
+                if (!hs.containsNaN) {
+                  arrayBuffer += elem
+                  hs.addNaN
                 }
-                arrayBuffer += elem
-                hs.add(elem)
+              } else {
+                if (!hs.contains(elem)) {
+                  if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+                    ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
+                  }
+                  arrayBuffer += elem
+                  hs.add(elem)
+                }
               }
             }
             i += 1
@@ -3441,13 +3449,12 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
       val ptName = CodeGenerator.primitiveTypeName(jt)
 
       nullSafeCodeGen(ctx, ev, (array1, array2) => {
-        val foundNullElement = ctx.freshName("foundNullElement")
         val nullElementIndex = ctx.freshName("nullElementIndex")
         val builder = ctx.freshName("builder")
         val array = ctx.freshName("array")
         val arrays = ctx.freshName("arrays")
         val arrayDataIdx = ctx.freshName("arrayDataIdx")
-        val openHashSet = classOf[OpenHashSet[_]].getName
+        val openHashSet = classOf[SQLOpenHashSet[_]].getName
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
         val hashSet = ctx.freshName("hashSet")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
@@ -3457,9 +3464,9 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
           if (dataType.asInstanceOf[ArrayType].containsNull) {
             s"""
                |if ($array.isNullAt($i)) {
-               |  if (!$foundNullElement) {
+               |  if (!$hashSet.containsNull()) {
                |    $nullElementIndex = $size;
-               |    $foundNullElement = true;
+               |    $hashSet.addNull();
                |    $size++;
                |    $builder.$$plus$$eq($nullValueHolder);
                |  }
@@ -3471,9 +3478,28 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
             body
           }
 
-        val processArray = withArrayNullAssignment(
+        def withNaNCheck(body: String): String = {
+          (elementType match {
+            case DoubleType => Some(s"java.lang.Double.isNaN((double)$value)")
+            case FloatType => Some(s"java.lang.Float.isNaN((float)$value)")
+            case _ => None
+          }).map { isNaN =>
+            s"""
+               |if ($isNaN) {
+               |  if (!$hashSet.containsNaN()) {
+               |     $size++;
+               |     $hashSet.addNaN();
+               |     $builder.$$plus$$eq($value);
+               |  }
+               |} else {
+               |  $body
+               |}
+             """.stripMargin
+          }
+        }.getOrElse(body)
+
+        val body =
           s"""
-             |$jt $value = ${genGetValue(array, i)};
              |if (!$hashSet.contains($hsValueCast$value)) {
              |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
              |    break;
@@ -3481,12 +3507,13 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
              |  $hashSet.add$hsPostFix($hsValueCast$value);
              |  $builder.$$plus$$eq($value);
              |}
-           """.stripMargin)
+           """.stripMargin
+        val processArray =
+          withArrayNullAssignment(s"$jt $value = ${genGetValue(array, i)};" + withNaNCheck(body))
 
         // Only need to track null element index when result array's element is nullable.
         val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
           s"""
-             |boolean $foundNullElement = false;
              |int $nullElementIndex = -1;
            """.stripMargin
         } else {
