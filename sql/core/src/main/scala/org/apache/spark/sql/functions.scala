@@ -1810,6 +1810,15 @@ object functions {
   def cot(e: Column): Column = withExpr { Cot(e.expr) }
 
   /**
+   * @param e angle in radians
+   * @return cosecant of the angle
+   *
+   * @group math_funcs
+   * @since 3.3.0
+   */
+  def csc(e: Column): Column = withExpr { Csc(e.expr) }
+
+  /**
    * Computes the exponential of the given value.
    *
    * @group math_funcs
@@ -2196,6 +2205,15 @@ object functions {
    * @since 2.0.0
    */
   def bround(e: Column, scale: Int): Column = withExpr { BRound(e.expr, Literal(scale)) }
+
+  /**
+   * @param e angle in radians
+   * @return secant of the angle
+   *
+   * @group math_funcs
+   * @since 3.3.0
+   */
+  def sec(e: Column): Column = withExpr { Sec(e.expr) }
 
   /**
    * Shift the given value numBits left. If the given value is a long value, this function

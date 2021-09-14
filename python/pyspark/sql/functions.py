@@ -394,6 +394,23 @@ def cot(col):
     return _invoke_function_over_column("cot", col)
 
 
+def csc(col):
+    """
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Angle in radians
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Cosecant of the angle.
+    """
+    return _invoke_function_over_column("csc", col)
+
+
 @since(1.4)
 def exp(col):
     """
@@ -449,6 +466,23 @@ def rint(col):
     is equal to a mathematical integer.
     """
     return _invoke_function_over_column("rint", col)
+
+
+def sec(col):
+    """
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Angle in radians
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Secant of the angle.
+    """
+    return _invoke_function_over_column("sec", col)
 
 
 @since(1.4)
