@@ -220,7 +220,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
   }
 
-  test("Overwrite: overwrite by expression: more than one filters") {
+  test("SPARK-36706 Overwrite: overwrite by expression: more than one filters") {
     val df = spark.createDataFrame(Seq((1L, 1L, "a"), (2L, 2L, "b"), (3L, 3L, "c")))
       .toDF("id1", "id2", "data")
     df.createOrReplaceTempView("source_t")
