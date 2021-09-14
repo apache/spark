@@ -35,6 +35,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
+import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED, LEGACY_CTE_PRECEDENCE_POLICY}
 import org.apache.spark.sql.sources.Filter
@@ -1132,6 +1133,11 @@ object QueryCompilationErrors {
   }
 
   def failedToRebuildExpressionError(filter: Filter): Throwable = {
+    new AnalysisException(
+      s"Fail to rebuild expression: missing key $filter in `translatedFilterToExpr`")
+  }
+
+  def failedToRebuildExpressionError(filter: V2Filter): Throwable = {
     new AnalysisException(
       s"Fail to rebuild expression: missing key $filter in `translatedFilterToExpr`")
   }
@@ -2391,5 +2397,9 @@ object QueryCompilationErrors {
     new AnalysisException(
       errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
       messageParameters = Array(schema.toString))
+  }
+
+  def invalidDataTypeForFilterValue(value: Any): Throwable = {
+    new AnalysisException(s"Filter value $value has invalid data type")
   }
 }
