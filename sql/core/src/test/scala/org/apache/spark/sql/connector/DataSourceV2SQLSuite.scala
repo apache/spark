@@ -2923,13 +2923,6 @@ class DataSourceV2SQLSuite
     assert(e.message.contains(s"$sqlCommand is not supported for v2 tables"))
   }
 
-  private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
-    val e = intercept[AnalysisException] {
-      sql(s"$sqlCommand $sqlParams")
-    }
-    assert(e.message.contains(s"$sqlCommand is only supported with v1 tables"))
-  }
-
   private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {
     val errMsg = intercept[AnalysisException] {
       sql(sqlStatement)
