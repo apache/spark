@@ -23,10 +23,6 @@ import org.apache.spark.annotation.Private
 import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 import org.apache.spark.util.collection.OpenHashSet
 
-/**
- * A wrap of [[OpenHashSet]] that can handle null, Double.NaN and Float.NaN
- * w.r.t. the SQL semantic.
- */
 @Private
 class SQLOpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
     initialCapacity: Int,
