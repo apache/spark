@@ -220,6 +220,33 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
   }
 
+  test("Overwrite: overwrite by expression: more than one filters") {
+    val df = spark.createDataFrame(Seq((1L, 1L, "a"), (2L, 2L, "b"), (3L, 3L, "c")))
+      .toDF("id1", "id2", "data")
+    df.createOrReplaceTempView("source_t")
+    val df2 = spark.createDataFrame(Seq((4L, 4L, "d"), (5L, 5L, "e"), (6L, 6L, "f")))
+      .toDF("id1", "id2", "data")
+    df2.createOrReplaceTempView("source2_t")
+
+    spark.sql(
+      "CREATE TABLE testcat.table_name (id1 bigint, id2 bigint, data string)" +
+        " USING foo PARTITIONED BY (id1, id2)")
+
+    checkAnswer(spark.table("testcat.table_name"), Seq.empty)
+
+    spark.table("source_t").writeTo("testcat.table_name").append()
+
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, 1L, "a"), Row(2L, 2L, "b"), Row(3L, 3L, "c")))
+
+    spark.table("source2_t").writeTo("testcat.table_name").overwrite($"id1" === 3 && $"id2" === 3)
+
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, 1L, "a"), Row(2L, 2L, "b"), Row(3L, 3L, "c"), Row(5L, 5L, "e"), Row(6L, 6L, "f")))
+  }
+
   test("Overwrite: write to a temp view of v2 relation") {
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
     spark.table("source").writeTo("testcat.table_name").append()
