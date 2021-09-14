@@ -136,18 +136,18 @@
                   </excludes>
                 </filter>
               </filters>
-              <relocations>
+              <relocations combine.self="override">
                 <relocation>
                   <pattern>com.google.common</pattern>
-                  <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
+                  <shadedPattern>${spark.shade.packageName}.hive.guava</shadedPattern>
                 </relocation>
                 <relocation>
                   <pattern>com.google.protobuf</pattern>
-                  <shadedPattern>${spark.shade.packageName}.com.google.protobuf</shadedPattern>
+                  <shadedPattern>${spark.shade.packageName}.hive.com.google.protobuf</shadedPattern>
                 </relocation>
                 <relocation>
                   <pattern>org.apache.commons</pattern>
-                  <shadedPattern>${spark.shade.packageName}.org.apache.commons</shadedPattern>
+                  <shadedPattern>${spark.shade.packageName}.hive.org.apache.commons</shadedPattern>
                 </relocation>
               </relocations>
               <transformers>
