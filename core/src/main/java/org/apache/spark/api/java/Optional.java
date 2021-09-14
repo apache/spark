@@ -69,7 +69,8 @@ public final class Optional<T> implements Serializable {
   }
 
   private Optional(T value) {
-    this.value = Objects.requireNonNull(value);
+    Objects.requireNonNull(value);
+    this.value = value;
   }
 
   // java.util.Optional API (subset)
@@ -109,7 +110,8 @@ public final class Optional<T> implements Serializable {
    * @throws NullPointerException if this is empty (contains no value)
    */
   public T get() {
-    return Objects.requireNonNull(value);
+    Objects.requireNonNull(value);
+    return value;
   }
 
   /**
