@@ -6750,8 +6750,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                             )
                             joined_sdf = internal.spark_frame.join(
                                 other=F.broadcast(index_sdf),
-                                on=internal.index_spark_columns[0]
-                                == scol_for(index_sdf, index_sdf_col),
+                                on=(
+                                    internal.index_spark_columns[0]
+                                    == scol_for(index_sdf, index_sdf_col)
+                                ),
                                 how="anti",
                             )
                             internal = internal.with_new_sdf(joined_sdf)
