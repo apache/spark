@@ -18,6 +18,7 @@
 import sys
 import random
 import warnings
+from collections.abc import Iterable
 from functools import reduce
 from html import escape as html_escape
 
@@ -116,7 +117,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
     def registerTempTable(self, name):
-        """Registers this DataFrame as a temporary table using the given name.
+        """Registers this :class:`DataFrame` as a temporary table using the given name.
 
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
@@ -301,7 +302,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
-        parameters
+        Parameters
         ----------
         extended : bool, optional
             default ``False``. If ``False``, prints only the physical plan.
@@ -424,12 +425,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     @property
     def isStreaming(self):
-        """Returns ``True`` if this :class:`Dataset` contains one or more sources that continuously
-        return data as it arrives. A :class:`Dataset` that reads data from a streaming source
-        must be executed as a :class:`StreamingQuery` using the :func:`start` method in
-        :class:`DataStreamWriter`.  Methods that return a single answer, (e.g., :func:`count` or
-        :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
-        source present.
+        """Returns ``True`` if this :class:`DataFrame` contains one or more sources that
+        continuously return data as it arrives. A :class:`DataFrame` that reads data from a
+        streaming source must be executed as a :class:`StreamingQuery` using the :func:`start`
+        method in :class:`DataStreamWriter`.  Methods that return a single answer, (e.g.,
+        :func:`count` or :func:`collect`) will throw an :class:`AnalysisException` when there
+        is a streaming source present.
 
         .. versionadded:: 2.0.0
 
@@ -542,10 +543,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             return None
 
     def checkpoint(self, eager=True):
-        """Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
-        logical plan of this :class:`DataFrame`, which is especially useful in iterative algorithms
-        where the plan may grow exponentially. It will be saved to files inside the checkpoint
-        directory set with :meth:`SparkContext.setCheckpointDir`.
+        """Returns a checkpointed version of this :class:`DataFrame`. Checkpointing can be used to
+        truncate the logical plan of this :class:`DataFrame`, which is especially useful in
+        iterative algorithms where the plan may grow exponentially. It will be saved to files
+        inside the checkpoint directory set with :meth:`SparkContext.setCheckpointDir`.
 
         .. versionadded:: 2.1.0
 
@@ -562,8 +563,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(jdf, self.sql_ctx)
 
     def localCheckpoint(self, eager=True):
-        """Returns a locally checkpointed version of this Dataset. Checkpointing can be used to
-        truncate the logical plan of this :class:`DataFrame`, which is especially useful in
+        """Returns a locally checkpointed version of this :class:`DataFrame`. Checkpointing can be
+        used to truncate the logical plan of this :class:`DataFrame`, which is especially useful in
         iterative algorithms where the plan may grow exponentially. Local checkpoints are
         stored in the executors using the caching subsystem and therefore they are not reliable.
 
@@ -918,10 +919,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+-----+
         |age| name|
         +---+-----+
-        |  5|  Bob|
+        |  2|Alice|
         |  5|  Bob|
         |  2|Alice|
-        |  2|Alice|
+        |  5|  Bob|
         +---+-----+
         >>> data = data.repartition(7, "age")
         >>> data.show()
@@ -935,7 +936,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+-----+
         >>> data.rdd.getNumPartitions()
         7
-        >>> data = data.repartition("name", "age")
+        >>> data = data.repartition(3, "name", "age")
         >>> data.show()
         +---+-----+
         |age| name|
@@ -1830,6 +1831,45 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return self.groupBy().agg(*exprs)
 
+    @since(3.3)
+    def observe(self, observation, *exprs):
+        """Observe (named) metrics through an :class:`Observation` instance.
+
+        A user can retrieve the metrics by accessing `Observation.get`.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        observation : :class:`Observation`
+            an :class:`Observation` instance to obtain the metric.
+        exprs : list of :class:`Column`
+            column expressions (:class:`Column`).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            the observed :class:`DataFrame`.
+
+        Notes
+        -----
+        This method does not support streaming datasets.
+
+        Examples
+        --------
+        >>> from pyspark.sql.functions import col, count, lit, max
+        >>> from pyspark.sql import Observation
+        >>> observation = Observation("my metrics")
+        >>> observed_df = df.observe(observation, count(lit(1)).alias("count"), max(col("age")))
+        >>> observed_df.count()
+        2
+        >>> observation.get
+        {'count': 2, 'max(age)': 5}
+        """
+        from pyspark.sql import Observation
+        assert isinstance(observation, Observation), "observation should be Observation"
+        return observation._on(self, *exprs)
+
     @since(2.0)
     def union(self, other):
         """ Return a new :class:`DataFrame` containing union of rows in this and another
@@ -1980,6 +2020,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |Alice|  5|    80|
         +-----+---+------+
         """
+        if subset is not None and (
+                not isinstance(subset, Iterable) or isinstance(subset, str)):
+            raise TypeError("Parameter 'subset' must be a list of columns")
+
         if subset is None:
             jdf = self._jdf.dropDuplicates()
         else:

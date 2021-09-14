@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{SQLFeatureNotSupportedException, Types}
+import java.sql.Types
 import java.util.Locale
 
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types.{BooleanType, DataType, FloatType, LongType, MetadataBuilder}
 
@@ -72,8 +73,7 @@ private case object MySQLDialect extends JdbcDialect {
       s"ALTER TABLE $tableName RENAME COLUMN ${quoteIdentifier(columnName)} TO" +
         s" ${quoteIdentifier(newName)}"
     } else {
-      throw new SQLFeatureNotSupportedException(
-        s"Rename column is only supported for MySQL version 8.0 and above.")
+      throw QueryExecutionErrors.renameColumnUnsupportedForOlderMySQLError()
     }
   }
 
@@ -88,7 +88,7 @@ private case object MySQLDialect extends JdbcDialect {
       tableName: String,
       columnName: String,
       isNullable: Boolean): String = {
-    throw new SQLFeatureNotSupportedException(s"UpdateColumnNullability is not supported")
+    throw QueryExecutionErrors.unsupportedUpdateColumnNullabilityError()
   }
 
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html

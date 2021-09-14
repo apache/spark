@@ -23,11 +23,12 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StringType, StructType}
@@ -44,8 +45,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   private def verifySchema(schema: StructType): Unit = {
     if (schema.size != 1) {
-      throw new AnalysisException(
-        s"Text data source supports only a single column, and you have ${schema.size} columns.")
+      throw QueryCompilationErrors.textDataSourceWithMultiColumnsError(schema)
     }
   }
 

@@ -226,11 +226,5 @@ function init_maven_sbt {
   MVN="build/mvn -B"
   MVN_EXTRA_OPTS=
   SBT_OPTS=
-  if [[ $JAVA_VERSION < "1.8." ]]; then
-    # Needed for maven central when using Java 7.
-    SBT_OPTS="-Dhttps.protocols=TLSv1.1,TLSv1.2"
-    MVN_EXTRA_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g -Dhttps.protocols=TLSv1.1,TLSv1.2"
-    MVN="$MVN $MVN_EXTRA_OPTS"
-  fi
   export MVN MVN_EXTRA_OPTS SBT_OPTS
 }

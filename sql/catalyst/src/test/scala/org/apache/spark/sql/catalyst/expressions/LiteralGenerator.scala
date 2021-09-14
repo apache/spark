@@ -139,10 +139,10 @@ object LiteralGenerator {
       yield Literal.create(new Timestamp(millis), TimestampType)
   }
 
-  lazy val timestampWithoutTZLiteralGen: Gen[Literal] = {
+  lazy val timestampNTZLiteralGen: Gen[Literal] = {
     for { millis <- millisGen }
       yield Literal.create(
-        DateTimeUtils.microsToLocalDateTime(millis * MICROS_PER_MILLIS), TimestampWithoutTZType)
+        DateTimeUtils.microsToLocalDateTime(millis * MICROS_PER_MILLIS), TimestampNTZType)
   }
 
   // Valid range for DateType and TimestampType is [0001-01-01, 9999-12-31]
@@ -197,7 +197,7 @@ object LiteralGenerator {
       case FloatType => floatLiteralGen
       case DateType => dateLiteralGen
       case TimestampType => timestampLiteralGen
-      case TimestampWithoutTZType => timestampWithoutTZLiteralGen
+      case TimestampNTZType => timestampNTZLiteralGen
       case BooleanType => booleanLiteralGen
       case StringType => stringLiteralGen
       case BinaryType => binaryLiteralGen

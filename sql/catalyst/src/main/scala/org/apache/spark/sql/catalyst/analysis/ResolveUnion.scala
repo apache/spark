@@ -40,7 +40,8 @@ object ResolveUnion extends Rule[LogicalPlan] {
    * already contain them. Currently we don't support merging structs nested inside of arrays
    * or maps.
    */
-  private def addFields(col: Expression, targetType: StructType): Expression = {
+  private def addFields(col: Expression,
+     targetType: StructType, allowMissing: Boolean): Expression = {
     assert(col.dataType.isInstanceOf[StructType], "Only support StructType.")
 
     val resolver = conf.resolver
@@ -54,11 +55,18 @@ object ResolveUnion extends Rule[LogicalPlan] {
       val newExpression = (currentField, expectedField.dataType) match {
         case (Some(cf), expectedType: StructType) if cf.dataType.isInstanceOf[StructType] =>
           val extractedValue = ExtractValue(col, Literal(cf.name), resolver)
-          addFields(extractedValue, expectedType)
+          addFields(extractedValue, expectedType, allowMissing)
         case (Some(cf), _) =>
           ExtractValue(col, Literal(cf.name), resolver)
         case (None, expectedType) =>
-          Literal(null, expectedType)
+          if (allowMissing) {
+            // for allowMissingCol allow the null values
+            Literal(null, expectedType)
+          } else {
+            // for allowMissingCol as false throw exception for missing col
+            throw QueryCompilationErrors.noSuchStructFieldInGivenFieldsError(
+              expectedField.name, colType.fields)
+          }
       }
       newStructFields ++= Literal(expectedField.name) :: newExpression :: Nil
     }
@@ -76,7 +84,6 @@ object ResolveUnion extends Rule[LogicalPlan] {
       newStruct
     }
   }
-
 
   /**
    * This method will compare right to left plan's outputs. If there is one struct attribute
@@ -101,12 +108,12 @@ object ResolveUnion extends Rule[LogicalPlan] {
         val foundDt = foundAttr.dataType
         (foundDt, lattr.dataType) match {
           case (source: StructType, target: StructType)
-              if allowMissingCol && !source.sameType(target) =>
+              if !source.sameType(target) =>
             // We have two structs with different types, so make sure the two structs have their
-            // fields in the same order by using `target`'s fields and then inluding any remaining
-            // in `foundAttr`.
+            // fields in the same order by using `target`'s fields and then including any remaining
+            // in `foundAttr` in case of allowMissingCol is true.
             aliased += foundAttr
-            Alias(addFields(foundAttr, target), foundAttr.name)()
+            Alias(addFields(foundAttr, target, allowMissingCol), foundAttr.name)()
           case _ =>
             // We don't need/try to add missing fields if:
             // 1. The attributes of left and right side are the same struct type
@@ -121,7 +128,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
           Alias(Literal(null, lattr.dataType), lattr.name)()
         } else {
           throw QueryCompilationErrors.cannotResolveColumnNameAmongAttributesError(
-            lattr, rightOutputAttrs)
+            lattr.name, rightOutputAttrs.map(_.name).mkString(", "))
         }
       }
     }

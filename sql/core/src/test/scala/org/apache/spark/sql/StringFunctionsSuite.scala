@@ -598,4 +598,11 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
   }
+
+  test("SPARK-36148: check input data types of regexp_replace") {
+    val m = intercept[AnalysisException] {
+      sql("select regexp_replace(collect_list(1), '1', '2')")
+    }.getMessage
+    assert(m.contains("data type mismatch: argument 1 requires string type"))
+  }
 }

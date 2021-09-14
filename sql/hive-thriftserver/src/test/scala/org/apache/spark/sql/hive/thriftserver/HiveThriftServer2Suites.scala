@@ -50,7 +50,7 @@ import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{ShutdownHookManager, ThreadUtils, Utils}
 
 object TestData {
   def getTestDataFilePath(name: String): URL = {
@@ -663,11 +663,34 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
 
   test("Support interval type") {
     withJdbcStatement() { statement =>
-      val rs = statement.executeQuery("SELECT interval 3 months 1 hours")
+      val rs = statement.executeQuery("SELECT interval 5 years 7 months")
       assert(rs.next())
-      assert(rs.getString(1) === "3 months 1 hours")
+      assert(rs.getString(1) === "5-7")
     }
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT interval 8 days 10 hours 5 minutes 10 seconds")
+      assert(rs.next())
+      assert(rs.getString(1) === "8 10:05:10.000000000")
+    }
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT interval 3 days 1 hours")
+      assert(rs.next())
+      assert(rs.getString(1) === "3 01:00:00.000000000")
+    }
+
     // Invalid interval value
+    withJdbcStatement() { statement =>
+      val e = intercept[SQLException] {
+        statement.executeQuery("SELECT interval 5 yea 7 months")
+      }
+      assert(e.getMessage.contains("org.apache.spark.sql.catalyst.parser.ParseException"))
+    }
+    withJdbcStatement() { statement =>
+      val e = intercept[SQLException] {
+        statement.executeQuery("SELECT interval 8 days 10 hours 5 minutes 10 secon")
+      }
+      assert(e.getMessage.contains("org.apache.spark.sql.catalyst.parser.ParseException"))
+    }
     withJdbcStatement() { statement =>
       val e = intercept[SQLException] {
         statement.executeQuery("SELECT interval 3 months 1 hou")
@@ -715,8 +738,8 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
            |  AND v1.c = v2.c
            |""".stripMargin)
       while (rs.next()) {
-        assert(rs.getString("a1") === "1 days")
-        assert(rs.getString("a2") === "1 days")
+        assert(rs.getString("a1") === "1 00:00:00.000000000")
+        assert(rs.getString("a2") === "1 00:00:00.000000000")
         assert(rs.getString("b1") === "2-1")
         assert(rs.getString("b2") === "2-1")
         assert(rs.getString("c1") === "3 01:01:01.000000000")
@@ -1315,33 +1338,36 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
       process
     }
 
+    ShutdownHookManager.addShutdownHook(stopThriftServer _)
     ThreadUtils.awaitResult(serverStarted.future, SERVER_STARTUP_TIMEOUT)
   }
 
   private def stopThriftServer(): Unit = {
-    // The `spark-daemon.sh' script uses kill, which is not synchronous, have to wait for a while.
-    Utils.executeAndGetOutput(
-      command = Seq(stopScript),
-      extraEnvironment = Map("SPARK_PID_DIR" -> pidDir.getCanonicalPath))
-    Thread.sleep(3.seconds.toMillis)
+    if (pidDir.list.nonEmpty) {
+      // The `spark-daemon.sh' script uses kill, which is not synchronous, have to wait for a while.
+      Utils.executeAndGetOutput(
+        command = Seq(stopScript),
+        extraEnvironment = Map("SPARK_PID_DIR" -> pidDir.getCanonicalPath))
+      Thread.sleep(3.seconds.toMillis)
 
-    warehousePath.delete()
-    warehousePath = null
+      warehousePath.delete()
+      warehousePath = null
 
-    metastorePath.delete()
-    metastorePath = null
+      metastorePath.delete()
+      metastorePath = null
 
-    operationLogPath.delete()
-    operationLogPath = null
+      operationLogPath.delete()
+      operationLogPath = null
 
-    lScratchDir.delete()
-    lScratchDir = null
+      lScratchDir.delete()
+      lScratchDir = null
 
-    Option(logPath).foreach(_.delete())
-    logPath = null
+      Option(logPath).foreach(_.delete())
+      logPath = null
 
-    Option(logTailingProcess).foreach(_.destroy())
-    logTailingProcess = null
+      Option(logTailingProcess).foreach(_.destroy())
+      logTailingProcess = null
+    }
   }
 
   private def dumpLogs(): Unit = {

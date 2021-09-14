@@ -27,6 +27,7 @@ from pandas.core.dtypes.inference import is_integer
 
 from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.utils import name_like_string
 
 
@@ -184,12 +185,12 @@ class HistogramPlotBase:
 
             if output_df is None:
                 output_df = bucket_df.select(
-                    F.lit(group_id).alias("__group_id"), F.col(bucket_name).alias("__bucket")
+                    SF.lit(group_id).alias("__group_id"), F.col(bucket_name).alias("__bucket")
                 )
             else:
                 output_df = output_df.union(
                     bucket_df.select(
-                        F.lit(group_id).alias("__group_id"), F.col(bucket_name).alias("__bucket")
+                        SF.lit(group_id).alias("__group_id"), F.col(bucket_name).alias("__bucket")
                     )
                 )
 

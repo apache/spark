@@ -199,9 +199,9 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
     val row6 = createRow("a", 2, 115, 125, 20, 1.2)
     val rows3 = List(row5, row6)
 
+    // This is to test the edge case that the last input row creates a new session.
     val row7 = createRow("a", 2, 127, 137, 30, 1.3)
-    val row8 = createRow("a", 2, 135, 145, 40, 1.4)
-    val rows4 = List(row7, row8)
+    val rows4 = List(row7)
 
     val rowsAll = rows1 ++ rows2 ++ rows3 ++ rows4
 
@@ -244,8 +244,8 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
     }
 
     retRows4.zip(rows4).foreach { case (retRow, expectedRow) =>
-      // session being expanded to (127 ~ 145)
-      assertRowsEqualsWithNewSession(expectedRow, retRow, 127, 145)
+      // session being expanded to (127 ~ 137)
+      assertRowsEqualsWithNewSession(expectedRow, retRow, 127, 137)
     }
 
     assert(iterator.hasNext === false)

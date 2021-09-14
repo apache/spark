@@ -553,7 +553,7 @@ private class LiveRDDDistribution(exec: LiveExecutor) {
   def toApi(): v1.RDDDataDistribution = {
     if (lastUpdate == null) {
       lastUpdate = new v1.RDDDataDistribution(
-        weakIntern(exec.hostPort),
+        weakIntern(if (exec.hostPort != null) exec.hostPort else exec.host),
         memoryUsed,
         exec.maxMemory - exec.memoryUsed,
         diskUsed,

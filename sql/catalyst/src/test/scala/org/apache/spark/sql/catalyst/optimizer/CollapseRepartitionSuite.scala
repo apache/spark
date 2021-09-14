@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, RebalancePartitions}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class CollapseRepartitionSuite extends PlanTest {
@@ -194,14 +194,5 @@ class CollapseRepartitionSuite extends PlanTest {
 
     comparePlans(optimized1, correctAnswer)
     comparePlans(optimized2, correctAnswer)
-  }
-
-  test("SPARK-35904: Collapse above RebalancePartitions") {
-    comparePlans(
-      Optimize.execute(RebalancePartitions(Seq('b), testRelation.distribute('b)(10)).analyze),
-      RebalancePartitions(Seq('b), testRelation).analyze)
-    comparePlans(
-      Optimize.execute(RebalancePartitions(Seq('b), testRelation).distribute('a)(10).analyze),
-      testRelation.distribute('a)(10).analyze)
   }
 }

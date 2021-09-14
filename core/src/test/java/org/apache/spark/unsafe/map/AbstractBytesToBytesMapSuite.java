@@ -217,19 +217,6 @@ public abstract class AbstractBytesToBytesMapSuite {
       Assert.assertArrayEquals(valueData,
         getByteArray(loc.getValueBase(), loc.getValueOffset(), recordLengthBytes));
 
-      try {
-        Assert.assertTrue(loc.append(
-          keyData,
-          Platform.BYTE_ARRAY_OFFSET,
-          recordLengthBytes,
-          valueData,
-          Platform.BYTE_ARRAY_OFFSET,
-          recordLengthBytes
-        ));
-        Assert.fail("Should not be able to set a new value for a key");
-      } catch (AssertionError e) {
-        // Expected exception; do nothing.
-      }
     } finally {
       map.free();
     }
@@ -283,7 +270,7 @@ public abstract class AbstractBytesToBytesMapSuite {
         final long value = Platform.getLong(loc.getValueBase(), loc.getValueOffset());
         final long keyLength = loc.getKeyLength();
         if (keyLength == 0) {
-          Assert.assertTrue("value " + value + " was not divisible by 5", value % 5 == 0);
+          assertEquals("value " + value + " was not divisible by 5", 0, value % 5);
         } else {
           final long key = Platform.getLong(loc.getKeyBase(), loc.getKeyOffset());
           Assert.assertEquals(value, key);

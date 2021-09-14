@@ -256,10 +256,13 @@ SELECT '' AS `54`, d1 as `timestamp`,
     date_part( 'minute', d1) AS `minute`, date_part( 'second', d1) AS `second`
     FROM TIMESTAMP_TBL WHERE d1 BETWEEN '1902-01-01' AND '2038-01-01'
 -- !query schema
-struct<>
+struct<54:string,timestamp:timestamp,year:int,month:int,day:int,hour:int,minute:int,second:decimal(8,6)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'year(spark_catalog.default.timestamp_tbl.d1)' due to data type mismatch: argument 1 requires date type, however, 'spark_catalog.default.timestamp_tbl.d1' is of timestamp type.; line 2 pos 4
+	1969-12-31 16:00:00	1969	12	31	16	0	0.000000
+	1997-01-02 00:00:00	1997	1	2	0	0	0.000000
+	1997-01-02 03:04:05	1997	1	2	3	4	5.000000
+	1997-02-10 17:32:01	1997	2	10	17	32	1.000000
+	2001-09-22 18:19:20	2001	9	22	18	19	20.000000
 
 
 -- !query

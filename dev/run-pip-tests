@@ -48,7 +48,7 @@ if hash virtualenv 2>/dev/null && [ ! -n "$USE_CONDA" ]; then
   fi
 elif hash conda 2>/dev/null; then
   echo "Using conda virtual environments"
-  PYTHON_EXECS=('3.6')
+  PYTHON_EXECS=('3.9')
   USE_CONDA=1
 else
   echo "Missing virtualenv & conda, skipping pip installability tests"

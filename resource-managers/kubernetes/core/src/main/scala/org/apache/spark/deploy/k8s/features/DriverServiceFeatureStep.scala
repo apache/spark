@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model.{HasMetadata, ServiceBuilder}
 
 import org.apache.spark.deploy.k8s.{KubernetesDriverConf, KubernetesUtils, SparkPod}
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_DNSNAME_MAX_LENGTH
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.util.{Clock, SystemClock}
@@ -100,5 +101,5 @@ private[spark] object DriverServiceFeatureStep {
   val DRIVER_BIND_ADDRESS_KEY = config.DRIVER_BIND_ADDRESS.key
   val DRIVER_HOST_KEY = config.DRIVER_HOST_ADDRESS.key
   val DRIVER_SVC_POSTFIX = "-driver-svc"
-  val MAX_SERVICE_NAME_LENGTH = 63
+  val MAX_SERVICE_NAME_LENGTH = KUBERNETES_DNSNAME_MAX_LENGTH
 }

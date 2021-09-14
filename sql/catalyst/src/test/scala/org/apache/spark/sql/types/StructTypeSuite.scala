@@ -18,6 +18,8 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
@@ -272,5 +274,112 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     for (start <- DT.dayTimeFields; end <- DT.dayTimeFields) {
       checkIntervalDDL(start, end, DT.fieldToString)
     }
+  }
+
+  test("findNestedField") {
+    val innerStruct = new StructType()
+      .add("s11", "int")
+      .add("s12", "int")
+    val input = new StructType()
+      .add("s1", innerStruct)
+      .add("s2", new StructType().add("x", "int").add("X", "int"))
+      .add("m1", MapType(IntegerType, IntegerType))
+      .add("m2", MapType(
+        new StructType().add("a", "int"),
+        new StructType().add("b", "int")
+      ))
+      .add("a1", ArrayType(IntegerType))
+      .add("a2", ArrayType(new StructType().add("c", "int")))
+
+    def check(field: Seq[String], expect: Option[(Seq[String], StructField)]): Unit = {
+      val res = input.findNestedField(field, resolver = caseInsensitiveResolution)
+      assert(res == expect)
+    }
+
+    def caseSensitiveCheck(field: Seq[String], expect: Option[(Seq[String], StructField)]): Unit = {
+      val res = input.findNestedField(field, resolver = caseSensitiveResolution)
+      assert(res == expect)
+    }
+
+    def checkCollection(field: Seq[String], expect: Option[(Seq[String], StructField)]): Unit = {
+      val res = input.findNestedField(field,
+        includeCollections = true, resolver = caseInsensitiveResolution)
+      assert(res == expect)
+    }
+
+    // struct type
+    check(Seq("non_exist"), None)
+    check(Seq("S1"), Some(Nil -> StructField("s1", innerStruct)))
+    caseSensitiveCheck(Seq("S1"), None)
+    check(Seq("s1", "S12"), Some(Seq("s1") -> StructField("s12", IntegerType)))
+    caseSensitiveCheck(Seq("s1", "S12"), None)
+    check(Seq("S1.non_exist"), None)
+    var e = intercept[AnalysisException] {
+      check(Seq("S1", "S12", "S123"), None)
+    }
+    assert(e.getMessage.contains("Field name S1.S12.S123 is invalid: s1.s12 is not a struct"))
+
+    // ambiguous name
+    e = intercept[AnalysisException] {
+      check(Seq("S2", "x"), None)
+    }
+    assert(e.getMessage.contains(
+      "Field name S2.x is ambiguous and has 2 matching fields in the struct"))
+    caseSensitiveCheck(Seq("s2", "x"), Some(Seq("s2") -> StructField("x", IntegerType)))
+
+    // simple map type
+    e = intercept[AnalysisException] {
+      check(Seq("m1", "key"), None)
+    }
+    assert(e.getMessage.contains("Field name m1.key is invalid: m1 is not a struct"))
+    checkCollection(Seq("m1", "key"), Some(Seq("m1") -> StructField("key", IntegerType, false)))
+    checkCollection(Seq("M1", "value"), Some(Seq("m1") -> StructField("value", IntegerType)))
+    e = intercept[AnalysisException] {
+      checkCollection(Seq("M1", "key", "name"), None)
+    }
+    assert(e.getMessage.contains("Field name M1.key.name is invalid: m1.key is not a struct"))
+    e = intercept[AnalysisException] {
+      checkCollection(Seq("M1", "value", "name"), None)
+    }
+    assert(e.getMessage.contains("Field name M1.value.name is invalid: m1.value is not a struct"))
+
+    // map of struct
+    checkCollection(Seq("M2", "key", "A"),
+      Some(Seq("m2", "key") -> StructField("a", IntegerType)))
+    checkCollection(Seq("M2", "key", "non_exist"), None)
+    checkCollection(Seq("M2", "value", "b"),
+      Some(Seq("m2", "value") -> StructField("b", IntegerType)))
+    checkCollection(Seq("M2", "value", "non_exist"), None)
+    e = intercept[AnalysisException] {
+      checkCollection(Seq("m2", "key", "A", "name"), None)
+    }
+    assert(e.getMessage.contains("Field name m2.key.A.name is invalid: m2.key.a is not a struct"))
+    e = intercept[AnalysisException] {
+      checkCollection(Seq("M2", "value", "b", "name"), None)
+    }
+    assert(e.getMessage.contains(
+      "Field name M2.value.b.name is invalid: m2.value.b is not a struct"))
+
+    // simple array type
+    e = intercept[AnalysisException] {
+      check(Seq("A1", "element"), None)
+    }
+    assert(e.getMessage.contains("Field name A1.element is invalid: a1 is not a struct"))
+    checkCollection(Seq("A1", "element"), Some(Seq("a1") -> StructField("element", IntegerType)))
+    e = intercept[AnalysisException] {
+      checkCollection(Seq("A1", "element", "name"), None)
+    }
+    assert(e.getMessage.contains(
+      "Field name A1.element.name is invalid: a1.element is not a struct"))
+
+    // array of struct
+    checkCollection(Seq("A2", "element", "C"),
+      Some(Seq("a2", "element") -> StructField("c", IntegerType)))
+    checkCollection(Seq("A2", "element", "non_exist"), None)
+    e = intercept[AnalysisException] {
+      checkCollection(Seq("a2", "element", "C", "name"), None)
+    }
+    assert(e.getMessage.contains(
+      "Field name a2.element.C.name is invalid: a2.element.c is not a struct"))
   }
 }

@@ -57,8 +57,6 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pser = self.pser
         psser = self.psser
 
-        self.assert_eq(psser + 1, pser + 1)
-        self.assert_eq(1 + psser, 1 + pser)
         self.assert_eq(psser + 1 + 10 * psser, pser + 1 + 10 * pser)
         self.assert_eq(psser + 1 + 10 * psser.index, pser + 1 + 10 * pser.index)
         self.assert_eq(psser.index + 1 + 10 * psser, pser.index + 1 + 10 * pser)
@@ -91,51 +89,6 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assertTrue(isinstance(psser.dtype, extension_dtypes))
         else:
             self.assert_eq(psser, pser)
-
-    @unittest.skipIf(not extension_dtypes_available, "pandas extension dtypes are not available")
-    def test_extension_dtypes(self):
-        for pser in [
-            pd.Series([1, 2, None, 4], dtype="Int8"),
-            pd.Series([1, 2, None, 4], dtype="Int16"),
-            pd.Series([1, 2, None, 4], dtype="Int32"),
-            pd.Series([1, 2, None, 4], dtype="Int64"),
-        ]:
-            psser = ps.from_pandas(pser)
-
-            self._check_extension(psser, pser)
-            self._check_extension(psser + psser, pser + pser)
-
-    @unittest.skipIf(
-        not extension_object_dtypes_available, "pandas extension object dtypes are not available"
-    )
-    def test_extension_object_dtypes(self):
-        # string
-        pser = pd.Series(["a", None, "c", "d"], dtype="string")
-        psser = ps.from_pandas(pser)
-
-        self._check_extension(psser, pser)
-
-        # boolean
-        pser = pd.Series([True, False, True, None], dtype="boolean")
-        psser = ps.from_pandas(pser)
-
-        self._check_extension(psser, pser)
-        self._check_extension(psser & psser, pser & pser)
-        self._check_extension(psser | psser, pser | pser)
-
-    @unittest.skipIf(
-        not extension_float_dtypes_available, "pandas extension float dtypes are not available"
-    )
-    def test_extension_float_dtypes(self):
-        for pser in [
-            pd.Series([1.0, 2.0, None, 4.0], dtype="Float32"),
-            pd.Series([1.0, 2.0, None, 4.0], dtype="Float64"),
-        ]:
-            psser = ps.from_pandas(pser)
-
-            self._check_extension(psser, pser)
-            self._check_extension(psser + 1, pser + 1)
-            self._check_extension(psser + psser, pser + pser)
 
     def test_empty_series(self):
         pser_a = pd.Series([], dtype="i1")
@@ -432,6 +385,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.isin(["cow", "lama"]), pser.isin(["cow", "lama"]))
         self.assert_eq(psser.isin(np.array(["cow", "lama"])), pser.isin(np.array(["cow", "lama"])))
         self.assert_eq(psser.isin({"cow"}), pser.isin({"cow"}))
+
+        pser = pd.Series([np.int64(1), np.int32(1), 1])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.isin([np.int64(1)]), pser.isin([np.int64(1)]))
 
         msg = "only list-like objects are allowed to be passed to isin()"
         with self.assertRaisesRegex(TypeError, msg):
@@ -868,18 +825,16 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.nlargest(), pser.nlargest())
         self.assert_eq((psser + 1).nlargest(), (pser + 1).nlargest())
 
-    def test_isnull(self):
+    def test_notnull(self):
         pser = pd.Series([1, 2, 3, 4, np.nan, 6], name="x")
         psser = ps.from_pandas(pser)
 
         self.assert_eq(psser.notnull(), pser.notnull())
-        self.assert_eq(psser.isnull(), pser.isnull())
 
         pser = self.pser
         psser = self.psser
 
         self.assert_eq(psser.notnull(), pser.notnull())
-        self.assert_eq(psser.isnull(), pser.isnull())
 
     def test_all(self):
         for pser in [
@@ -1601,12 +1556,18 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         if extension_object_dtypes_available:
             from pandas import StringDtype
 
-            self._check_extension(
-                psser.astype("M").astype("string"), pser.astype("M").astype("string")
-            )
-            self._check_extension(
-                psser.astype("M").astype(StringDtype()), pser.astype("M").astype(StringDtype())
-            )
+            # The behavior of casting datetime to nullable string is changed from pandas 1.3.
+            if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+                self._check_extension(
+                    psser.astype("M").astype("string"), pser.astype("M").astype("string")
+                )
+                self._check_extension(
+                    psser.astype("M").astype(StringDtype()), pser.astype("M").astype(StringDtype())
+                )
+            else:
+                expected = ps.Series(["2020-10-27 00:00:01", None], name="x", dtype="string")
+                self._check_extension(psser.astype("M").astype("string"), expected)
+                self._check_extension(psser.astype("M").astype(StringDtype()), expected)
 
         with self.assertRaisesRegex(TypeError, "not understood"):
             psser.astype("int63")
@@ -2466,7 +2427,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
             ps.Series(["a", "b", "c"]).prod()
         with self.assertRaisesRegex(
-            TypeError, "Could not convert datetime64\\[ns\\] \\(timestamp\\) to numeric"
+            TypeError, "Could not convert datetime64\\[ns\\] \\(timestamp.*\\) to numeric"
         ):
             ps.Series([pd.Timestamp("2016-01-01") for _ in range(3)]).prod()
 
@@ -2486,6 +2447,11 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser.hasnans, psser.hasnans)
 
         pser = pd.Series([pd.Timestamp("2020-07-30"), np.nan, pd.Timestamp("2020-07-30")])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.hasnans, psser.hasnans)
+
+        # empty
+        pser = pd.Series([])
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.hasnans, psser.hasnans)
 
@@ -2920,6 +2886,69 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             pser.at_time("0:20").sort_index(),
             psser.at_time("0:20").sort_index(),
         )
+
+    def test_combine_first(self):
+        pdf = pd.DataFrame(
+            {
+                "A": {"falcon": 330.0, "eagle": 160.0},
+                "B": {"falcon": 345.0, "eagle": 200.0, "duck": 30.0},
+            }
+        )
+        pser1, pser2 = pdf.A, pdf.B
+        psdf = ps.from_pandas(pdf)
+        psser1, psser2 = psdf.A, psdf.B
+
+        self.assert_eq(psser1.combine_first(psser2), pser1.combine_first(pser2))
+
+        psser1.name = pser1.name = ("X", "A")
+        psser2.name = pser2.name = ("Y", "B")
+
+        self.assert_eq(psser1.combine_first(psser2), pser1.combine_first(pser2))
+
+    def test_cov(self):
+        pdf = pd.DataFrame(
+            {
+                "s1": ["a", "b", "c"],
+                "s2": [0.12528585, 0.26962463, 0.51111198],
+            },
+            index=[0, 1, 2],
+        )
+        psdf = ps.from_pandas(pdf)
+        with self.assertRaisesRegex(TypeError, "unsupported dtype: object"):
+            psdf["s1"].cov(psdf["s2"])
+
+        pdf = pd.DataFrame(
+            {
+                "s1": [0.90010907, 0.13484424, 0.62036035],
+                "s2": [0.12528585, 0.26962463, 0.51111198],
+            },
+            index=[0, 1, 2],
+        )
+        self._test_cov(pdf)
+
+        pdf = pd.DataFrame(
+            {
+                "s1": [0.90010907, np.nan, 0.13484424, 0.62036035],
+                "s2": [0.12528585, 0.81131178, 0.26962463, 0.51111198],
+            },
+            index=[0, 1, 2, 3],
+        )
+        self._test_cov(pdf)
+
+    def _test_cov(self, pdf):
+        psdf = ps.from_pandas(pdf)
+
+        pcov = pdf["s1"].cov(pdf["s2"])
+        pscov = psdf["s1"].cov(psdf["s2"])
+        self.assert_eq(pcov, pscov, almost=True)
+
+        pcov = pdf["s1"].cov(pdf["s2"], min_periods=3)
+        pscov = psdf["s1"].cov(psdf["s2"], min_periods=3)
+        self.assert_eq(pcov, pscov, almost=True)
+
+        pcov = pdf["s1"].cov(pdf["s2"], min_periods=4)
+        pscov = psdf["s1"].cov(psdf["s2"], min_periods=4)
+        self.assert_eq(pcov, pscov, almost=True)
 
 
 if __name__ == "__main__":

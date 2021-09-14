@@ -28,6 +28,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import DataType, LongType, StructField, StructType
 
+from pyspark.pandas._typing import DataFrameOrSeries, Name
 from pyspark.pandas.internal import (
     InternalField,
     InternalFrame,
@@ -55,7 +56,7 @@ class PandasOnSparkFrameMethods(object):
     def __init__(self, frame: "DataFrame"):
         self._psdf = frame
 
-    def attach_id_column(self, id_type: str, column: Union[Any, Tuple]) -> "DataFrame":
+    def attach_id_column(self, id_type: str, column: Name) -> "DataFrame":
         """
         Attach a column to be used as identifier of rows similar to the default index.
 
@@ -168,7 +169,7 @@ class PandasOnSparkFrameMethods(object):
                 for scol, label in zip(internal.data_spark_columns, internal.column_labels)
             ]
         )
-        sdf, force_nullable = attach_func(sdf, name_like_string(column))
+        sdf = attach_func(sdf, name_like_string(column))
 
         return DataFrame(
             InternalFrame(
@@ -177,28 +178,18 @@ class PandasOnSparkFrameMethods(object):
                     scol_for(sdf, SPARK_INDEX_NAME_FORMAT(i)) for i in range(internal.index_level)
                 ],
                 index_names=internal.index_names,
-                index_fields=(
-                    [field.copy(nullable=True) for field in internal.index_fields]
-                    if force_nullable
-                    else internal.index_fields
-                ),
+                index_fields=internal.index_fields,
                 column_labels=internal.column_labels + [column],
                 data_spark_columns=(
                     [scol_for(sdf, name_like_string(label)) for label in internal.column_labels]
                     + [scol_for(sdf, name_like_string(column))]
                 ),
-                data_fields=(
-                    (
-                        [field.copy(nullable=True) for field in internal.data_fields]
-                        if force_nullable
-                        else internal.data_fields
+                data_fields=internal.data_fields
+                + [
+                    InternalField.from_struct_field(
+                        StructField(name_like_string(column), LongType(), nullable=False)
                     )
-                    + [
-                        InternalField.from_struct_field(
-                            StructField(name_like_string(column), LongType(), nullable=False)
-                        )
-                    ]
-                ),
+                ],
                 column_label_names=internal.column_label_names,
             ).resolved_copy
         )
@@ -415,7 +406,7 @@ class PandasOnSparkFrameMethods(object):
 
     def transform_batch(
         self, func: Callable[..., Union[pd.DataFrame, pd.Series]], *args: Any, **kwargs: Any
-    ) -> Union["DataFrame", "Series"]:
+    ) -> DataFrameOrSeries:
         """
         Transform chunks with a function that takes pandas DataFrame and outputs pandas DataFrame.
         The pandas DataFrame given to the function is of a batch used internally. The length of

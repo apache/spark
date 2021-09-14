@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
-import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DayTimeIntervalType
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -203,8 +202,6 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
 
       failFuncWithInvalidInput("5 30:12:20", "hour 30 outside range", fromDayTimeString)
       failFuncWithInvalidInput("5 30-12", "must match day-time format", fromDayTimeString)
-      failFuncWithInvalidInput("5 1:12:20", "Cannot support (interval",
-        s => fromDayTimeString(s, HOUR, MICROSECOND))
     }
   }
 
@@ -314,54 +311,55 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("from day-time string") {
-    def check(input: String, from: IntervalUnit, to: IntervalUnit, expected: String): Unit = {
+    import org.apache.spark.sql.types.DayTimeIntervalType._
+    def check(input: String, from: Byte, to: Byte, expected: String): Unit = {
       withClue(s"from = $from, to = $to") {
         val expectedUtf8 = UTF8String.fromString(expected)
         assert(fromDayTimeString(input, from, to) === safeStringToInterval(expectedUtf8))
       }
     }
-    def checkFail(input: String, from: IntervalUnit, to: IntervalUnit, errMsg: String): Unit = {
+    def checkFail(input: String, from: Byte, to: Byte, errMsg: String): Unit = {
       failFuncWithInvalidInput(input, errMsg, s => fromDayTimeString(s, from, to))
     }
 
     check("12:40", HOUR, MINUTE, "12 hours 40 minutes")
     check("+12:40", HOUR, MINUTE, "12 hours 40 minutes")
     check("-12:40", HOUR, MINUTE, "-12 hours -40 minutes")
-    checkFail("5 12:40", HOUR, MINUTE, "must match day-time format")
+    checkFail("5 12:40", HOUR, MINUTE, "Interval string does not match day-time format")
 
     check("12:40:30.999999999", HOUR, SECOND, "12 hours 40 minutes 30.999999 seconds")
     check("+12:40:30.123456789", HOUR, SECOND, "12 hours 40 minutes 30.123456 seconds")
     check("-12:40:30.123456789", HOUR, SECOND, "-12 hours -40 minutes -30.123456 seconds")
-    checkFail("5 12:40:30", HOUR, SECOND, "must match day-time format")
-    checkFail("12:40:30.0123456789", HOUR, SECOND, "must match day-time format")
+    checkFail("5 12:40:30", HOUR, SECOND, "Interval string does not match day-time format")
+    checkFail("12:40:30.0123456789", HOUR, SECOND,
+      "Interval string does not match day-time format")
 
     check("40:30.123456789", MINUTE, SECOND, "40 minutes 30.123456 seconds")
     check("+40:30.123456789", MINUTE, SECOND, "40 minutes 30.123456 seconds")
     check("-40:30.123456789", MINUTE, SECOND, "-40 minutes -30.123456 seconds")
-    checkFail("12:40:30", MINUTE, SECOND, "must match day-time format")
+    checkFail("12:40:30", MINUTE, SECOND, "Interval string does not match day-time format")
 
     check("5 12", DAY, HOUR, "5 days 12 hours")
     check("+5 12", DAY, HOUR, "5 days 12 hours")
     check("-5 12", DAY, HOUR, "-5 days -12 hours")
-    checkFail("5 12:30", DAY, HOUR, "must match day-time format")
+    checkFail("5 12:30", DAY, HOUR, "Interval string does not match day-time format")
 
     check("5 12:40", DAY, MINUTE, "5 days 12 hours 40 minutes")
     check("+5 12:40", DAY, MINUTE, "5 days 12 hours 40 minutes")
     check("-5 12:40", DAY, MINUTE, "-5 days -12 hours -40 minutes")
-    checkFail("5 12", DAY, MINUTE, "must match day-time format")
+    checkFail("5 12", DAY, MINUTE, "Interval string does not match day-time format")
 
     check("5 12:40:30.123", DAY, SECOND, "5 days 12 hours 40 minutes 30.123 seconds")
     check("+5 12:40:30.123456", DAY, SECOND, "5 days 12 hours 40 minutes 30.123456 seconds")
     check("-5 12:40:30.123456789", DAY, SECOND, "-5 days -12 hours -40 minutes -30.123456 seconds")
-    checkFail("5 12", DAY, SECOND, "must match day-time format")
+    checkFail("5 12", DAY, SECOND, "Interval string does not match day-time format")
 
     checkFail("5 30:12:20", DAY, SECOND, "hour 30 outside range")
-    checkFail("5 30-12", DAY, SECOND, "must match day-time format")
-    checkFail("5 1:12:20", HOUR, MICROSECOND, "Cannot support (interval")
+    checkFail("5 30-12", DAY, SECOND, "Interval string does not match day-time format")
 
     // whitespaces
     check("\t +5 12:40\t ", DAY, MINUTE, "5 days 12 hours 40 minutes")
-    checkFail("+5\t 12:40", DAY, MINUTE, "must match day-time format")
+    checkFail("+5\t 12:40", DAY, MINUTE, "Interval string does not match day-time format")
 
   }
 

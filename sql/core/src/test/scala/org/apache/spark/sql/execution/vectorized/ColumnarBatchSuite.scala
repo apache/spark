@@ -1387,6 +1387,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
             Nil
         )) ::
         StructField("int_to_int", MapType(IntegerType, IntegerType)) ::
+        StructField("binary", BinaryType) ::
         Nil)
     var mapBuilder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
     mapBuilder.put(1, 10)
@@ -1406,7 +1407,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       new CalendarInterval(1, 0, 0),
       new GenericArrayData(Array(1, 2, 3, 4, null)),
       new GenericInternalRow(Array[Any](5.asInstanceOf[Any], 10)),
-      mapBuilder.build()
+      mapBuilder.build(),
+      "Spark SQL".getBytes()
     ))
 
     mapBuilder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
@@ -1427,10 +1429,12 @@ class ColumnarBatchSuite extends SparkFunSuite {
       new CalendarInterval(-10, -50, -100),
       new GenericArrayData(Array(5, 10, -100)),
       new GenericInternalRow(Array[Any](20.asInstanceOf[Any], null)),
-      mapBuilder.build()
+      mapBuilder.build(),
+      "Parquet".getBytes()
     ))
 
     val row3 = new GenericInternalRow(Array[Any](
+      null,
       null,
       null,
       null,
@@ -1564,8 +1568,12 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(map2.valueArray().isNullAt(0))
       assert(map2.keyArray().getInt(1) == 40)
       assert(map2.valueArray().getInt(1) == 50)
-
       assert(columns(14).isNullAt(2))
+
+      assert(columns(15).dataType() == BinaryType)
+      assert(new String(columns(15).getBinary(0)) == "Spark SQL")
+      assert(new String(columns(15).getBinary(1)) == "Parquet")
+      assert(columns(15).isNullAt(2))
     } finally {
       batch.close()
     }

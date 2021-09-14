@@ -30,7 +30,7 @@ from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.types import DataType, StructType, \
     _make_type_verifier, _infer_schema, _has_nulltype, _merge_type, _create_converter, \
     _parse_datatype_string
-from pyspark.sql.utils import install_exception_handler
+from pyspark.sql.utils import install_exception_handler, is_timestamp_ntz_preferred
 
 __all__ = ["SparkSession"]
 
@@ -73,7 +73,7 @@ class SparkSession(SparkConversionMixin):
 
     A SparkSession can be used create :class:`DataFrame`, register :class:`DataFrame` as
     tables, execute SQL over tables, cache tables, and read parquet files.
-    To create a SparkSession, use the following builder pattern:
+    To create a :class:`SparkSession`, use the following builder pattern:
 
     .. autoattribute:: builder
        :annotation:
@@ -280,8 +280,8 @@ class SparkSession(SparkConversionMixin):
     @since(2.0)
     def newSession(self):
         """
-        Returns a new SparkSession as new session, that has separate SQLConf,
-        registered temporary views and UDFs, but shared SparkContext and
+        Returns a new :class:`SparkSession` as new session, that has separate SQLConf,
+        registered temporary views and UDFs, but shared :class:`SparkContext` and
         table cache.
         """
         return self.__class__(self._sc, self._jsparkSession.newSession())
@@ -289,7 +289,7 @@ class SparkSession(SparkConversionMixin):
     @classmethod
     def getActiveSession(cls):
         """
-        Returns the active SparkSession for the current thread, returned by the builder
+        Returns the active :class:`SparkSession` for the current thread, returned by the builder
 
         .. versionadded:: 3.0.0
 
@@ -436,7 +436,11 @@ class SparkSession(SparkConversionMixin):
         """
         if not data:
             raise ValueError("can not infer schema from empty dataset")
-        schema = reduce(_merge_type, (_infer_schema(row, names) for row in data))
+        infer_dict_as_struct = self._wrapped._conf.inferDictAsStruct()
+        prefer_timestamp_ntz = is_timestamp_ntz_preferred()
+        schema = reduce(_merge_type, (
+            _infer_schema(row, names, infer_dict_as_struct, prefer_timestamp_ntz)
+                        for row in data))
         if _has_nulltype(schema):
             raise ValueError("Some of types cannot be determined after inferring")
         return schema
@@ -462,11 +466,19 @@ class SparkSession(SparkConversionMixin):
             raise ValueError("The first row in RDD is empty, "
                              "can not infer schema")
 
+        infer_dict_as_struct = self._wrapped._conf.inferDictAsStruct()
+        prefer_timestamp_ntz = is_timestamp_ntz_preferred()
         if samplingRatio is None:
-            schema = _infer_schema(first, names=names)
+            schema = _infer_schema(
+                first,
+                names=names,
+                infer_dict_as_struct=infer_dict_as_struct,
+                prefer_timestamp_ntz=prefer_timestamp_ntz)
             if _has_nulltype(schema):
                 for row in rdd.take(100)[1:]:
-                    schema = _merge_type(schema, _infer_schema(row, names=names))
+                    schema = _merge_type(schema, _infer_schema(
+                        row, names=names, infer_dict_as_struct=infer_dict_as_struct,
+                        prefer_timestamp_ntz=prefer_timestamp_ntz))
                     if not _has_nulltype(schema):
                         break
                 else:
@@ -475,7 +487,9 @@ class SparkSession(SparkConversionMixin):
         else:
             if samplingRatio < 0.99:
                 rdd = rdd.sample(False, float(samplingRatio))
-            schema = rdd.map(lambda row: _infer_schema(row, names)).reduce(_merge_type)
+            schema = rdd.map(lambda row: _infer_schema(
+                row, names, infer_dict_as_struct=infer_dict_as_struct,
+                prefer_timestamp_ntz=prefer_timestamp_ntz)).reduce(_merge_type)
         return schema
 
     def _createFromRDD(self, rdd, schema, samplingRatio):
@@ -528,9 +542,9 @@ class SparkSession(SparkConversionMixin):
     @staticmethod
     def _create_shell_session():
         """
-        Initialize a SparkSession for a pyspark shell session. This is called from shell.py
-        to make error handling simpler without needing to declare local variables in that
-        script, which would expose those to users.
+        Initialize a :class:`SparkSession` for a pyspark shell session. This is called from
+        shell.py to make error handling simpler without needing to declare local variables in
+        that script, which would expose those to users.
         """
         import py4j
         from pyspark.conf import SparkConf

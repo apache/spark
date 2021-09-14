@@ -191,7 +191,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("SPARK-35664: converting java.time.LocalDateTime to TimestampWithoutTZType") {
+  test("SPARK-35664: converting java.time.LocalDateTime to TimestampNTZType") {
     Seq(
       "0101-02-16T10:11:32",
       "1582-10-02T01:02:03.04",
@@ -207,7 +207,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("SPARK-35664: converting TimestampWithoutTZType to java.time.LocalDateTime") {
+  test("SPARK-35664: converting TimestampNTZType to java.time.LocalDateTime") {
     Seq(
       -9463427405253013L,
       -244000001L,
@@ -215,7 +215,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       99628200102030L,
       1543749753123456L).foreach { us =>
       val localDateTime = DateTimeUtils.microsToLocalDateTime(us)
-      assert(CatalystTypeConverters.createToScalaConverter(TimestampWithoutTZType)(us) ===
+      assert(CatalystTypeConverters.createToScalaConverter(TimestampNTZType)(us) ===
         localDateTime)
     }
   }

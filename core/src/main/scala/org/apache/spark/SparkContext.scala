@@ -583,6 +583,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _applicationId = _taskScheduler.applicationId()
     _applicationAttemptId = _taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
+    _applicationAttemptId.foreach(attemptId => _conf.set(APP_ATTEMPT_ID, attemptId))
     if (_conf.get(UI_REVERSE_PROXY)) {
       val proxyUrl = _conf.get(UI_REVERSE_PROXY_URL.key, "").stripSuffix("/") +
         "/proxy/" + _applicationId
@@ -595,8 +596,6 @@ class SparkContext(config: SparkConf) extends Logging {
     // The metrics system for Driver need to be set spark.app.id to app ID.
     // So it should start after we get app ID from the task scheduler and set spark.app.id.
     _env.metricsSystem.start(_conf.get(METRICS_STATIC_SOURCES_ENABLED))
-    // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
-    _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
     _eventLogger =
       if (isEventLogEnabled) {
@@ -637,6 +636,11 @@ class SparkContext(config: SparkConf) extends Logging {
     setupAndStartListenerBus()
     postEnvironmentUpdate()
     postApplicationStart()
+
+    // After application started, attach handlers to started server and start handler.
+    _ui.foreach(_.attachAllHandler())
+    // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
+    _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
     // Post init
     _taskScheduler.postStartHook()
@@ -690,8 +694,14 @@ class SparkContext(config: SparkConf) extends Logging {
       if (executorId == SparkContext.DRIVER_IDENTIFIER) {
         Some(Utils.getThreadDump())
       } else {
-        val endpointRef = env.blockManager.master.getExecutorEndpointRef(executorId).get
-        Some(endpointRef.askSync[Array[ThreadStackTrace]](TriggerThreadDump))
+        env.blockManager.master.getExecutorEndpointRef(executorId) match {
+          case Some(endpointRef) =>
+            Some(endpointRef.askSync[Array[ThreadStackTrace]](TriggerThreadDump))
+          case None =>
+            logWarning(s"Executor $executorId might already have stopped and " +
+              "can not request thread dump from it.")
+            None
+        }
       }
     } catch {
       case e: Exception =>

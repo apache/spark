@@ -140,7 +140,8 @@ case class InsertAdaptiveSparkPlan(
 
         val name = s"dynamicpruning#${exprId.id}"
         val subquery = SubqueryAdaptiveBroadcastExec(
-          name, broadcastKeyIndex, buildKeys, executedPlan)
+          name, broadcastKeyIndex, onlyInBroadcast,
+          buildPlan, buildKeys, executedPlan)
         subqueryMap.put(exprId.id, subquery)
       case _ =>
     }))

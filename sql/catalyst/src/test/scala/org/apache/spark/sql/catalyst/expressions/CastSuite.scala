@@ -573,7 +573,11 @@ class CastSuite extends CastSuiteBase {
       "a2021-06-17",
       "2021-06-17abc",
       "2021-06-17 00:00:00ABC").foreach { invalidInput =>
-      checkEvaluation(cast(invalidInput, TimestampWithoutTZType), null)
+      checkEvaluation(cast(invalidInput, TimestampNTZType), null)
     }
+  }
+
+  test("SPARK-36286: invalid string cast to timestamp") {
+    checkEvaluation(cast(Literal("2015-03-18T"), TimestampType), null)
   }
 }

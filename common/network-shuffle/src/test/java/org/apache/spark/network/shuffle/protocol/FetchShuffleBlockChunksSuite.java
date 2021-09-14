@@ -29,10 +29,10 @@ public class FetchShuffleBlockChunksSuite {
   @Test
   public void testFetchShuffleBlockChunksEncodeDecode() {
     FetchShuffleBlockChunks shuffleBlockChunks =
-      new FetchShuffleBlockChunks("app0", "exec1", 0, new int[] {0}, new int[][] {{0, 1}});
+      new FetchShuffleBlockChunks("app0", "exec1", 0, 0, new int[] {0}, new int[][] {{0, 1}});
     Assert.assertEquals(2, shuffleBlockChunks.getNumBlocks());
     int len = shuffleBlockChunks.encodedLength();
-    Assert.assertEquals(45, len);
+    Assert.assertEquals(49, len);
     ByteBuf buf = Unpooled.buffer(len);
     shuffleBlockChunks.encode(buf);
 

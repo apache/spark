@@ -243,6 +243,93 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(testVector.getArray(3).toIntArray() === Array(3, 4, 5))
   }
 
+  testVectors("SPARK-35898: array append", 1, arrayType) { testVector =>
+    // Populate it with arrays [0], [1, 2], [], [3, 4, 5]
+    val data = testVector.arrayData()
+    testVector.appendArray(1)
+    data.appendInt(0)
+    testVector.appendArray(2)
+    data.appendInt(1)
+    data.appendInt(2)
+    testVector.appendArray(0)
+    testVector.appendArray(3)
+    data.appendInt(3)
+    data.appendInt(4)
+    data.appendInt(5)
+
+    assert(testVector.getArray(0).toIntArray === Array(0))
+    assert(testVector.getArray(1).toIntArray === Array(1, 2))
+    assert(testVector.getArray(2).toIntArray === Array.empty[Int])
+    assert(testVector.getArray(3).toIntArray === Array(3, 4, 5))
+  }
+
+  val mapType: MapType = MapType(IntegerType, StringType)
+  testVectors("SPARK-35898: map", 5, mapType) { testVector =>
+    val keys = testVector.getChild(0)
+    val values = testVector.getChild(1)
+    var i = 0
+    while (i < 6) {
+      keys.appendInt(i)
+      val utf8 = s"str$i".getBytes("utf8")
+      values.appendByteArray(utf8, 0, utf8.length)
+      i += 1
+    }
+
+    testVector.putArray(0, 0, 1)
+    testVector.putArray(1, 1, 2)
+    testVector.putArray(2, 3, 0)
+    testVector.putArray(3, 3, 3)
+
+    assert(testVector.getMap(0).keyArray().toIntArray === Array(0))
+    assert(testVector.getMap(0).valueArray().toArray[UTF8String](StringType) ===
+      Array(UTF8String.fromString(s"str0")))
+    assert(testVector.getMap(1).keyArray().toIntArray === Array(1, 2))
+    assert(testVector.getMap(1).valueArray().toArray[UTF8String](StringType) ===
+      (1 to 2).map(i => UTF8String.fromString(s"str$i")).toArray)
+    assert(testVector.getMap(2).keyArray().toIntArray === Array.empty[Int])
+    assert(testVector.getMap(2).valueArray().toArray[UTF8String](StringType) ===
+      Array.empty[UTF8String])
+    assert(testVector.getMap(3).keyArray().toIntArray === Array(3, 4, 5))
+    assert(testVector.getMap(3).valueArray().toArray[UTF8String](StringType) ===
+      (3 to 5).map(i => UTF8String.fromString(s"str$i")).toArray)
+  }
+
+  testVectors("SPARK-35898: map append", 1, mapType) { testVector =>
+    val keys = testVector.getChild(0)
+    val values = testVector.getChild(1)
+    def appendPair(i: Int): Unit = {
+      keys.appendInt(i)
+      val utf8 = s"str$i".getBytes("utf8")
+      values.appendByteArray(utf8, 0, utf8.length)
+    }
+
+    // Populate it with the maps [0 -> str0], [1 -> str1, 2 -> str2], [],
+    // [3 -> str3, 4 -> str4, 5 -> str5]
+    testVector.appendArray(1)
+    appendPair(0)
+    testVector.appendArray(2)
+    appendPair(1)
+    appendPair(2)
+    testVector.appendArray(0)
+    testVector.appendArray(3)
+    appendPair(3)
+    appendPair(4)
+    appendPair(5)
+
+    assert(testVector.getMap(0).keyArray().toIntArray === Array(0))
+    assert(testVector.getMap(0).valueArray().toArray[UTF8String](StringType) ===
+      Array(UTF8String.fromString(s"str0")))
+    assert(testVector.getMap(1).keyArray().toIntArray === Array(1, 2))
+    assert(testVector.getMap(1).valueArray().toArray[UTF8String](StringType) ===
+      (1 to 2).map(i => UTF8String.fromString(s"str$i")).toArray)
+    assert(testVector.getMap(2).keyArray().toIntArray === Array.empty[Int])
+    assert(testVector.getMap(2).valueArray().toArray[UTF8String](StringType) ===
+      Array.empty[UTF8String])
+    assert(testVector.getMap(3).keyArray().toIntArray === Array(3, 4, 5))
+    assert(testVector.getMap(3).valueArray().toArray[UTF8String](StringType) ===
+      (3 to 5).map(i => UTF8String.fromString(s"str$i")).toArray)
+  }
+
   val structType: StructType = new StructType().add("int", IntegerType).add("double", DoubleType)
   testVectors("struct", 10, structType) { testVector =>
     val c1 = testVector.getChild(0)

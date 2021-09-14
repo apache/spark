@@ -238,7 +238,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   test("aggregate") {
     val pairs = sc.makeRDD(Seq(("a", 1), ("b", 2), ("a", 2), ("c", 5), ("a", 3)))
     type StringMap = scala.collection.mutable.Map[String, Int]
-    val emptyMap = HashMap[String, Int]().withDefaultValue(0).asInstanceOf[StringMap]
+    val emptyMap = HashMap[String, Int]().withDefaultValue(0)
     val mergeElement: (StringMap, (String, Int)) => StringMap = (map, pair) => {
       map(pair._1) += pair._2
       map
@@ -272,6 +272,16 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     for (depth <- 1 until 10) {
       val sum = rdd.treeAggregate(Array(0))(op, op, depth)
       assert(sum(0) === -1000)
+    }
+  }
+
+  test("SPARK-36419: treeAggregate with finalAggregateOnExecutor set to true") {
+    val rdd = sc.makeRDD(-1000 until 1000, 10)
+    def seqOp: (Long, Int) => Long = (c: Long, x: Int) => c + x
+    def combOp: (Long, Long) => Long = (c1: Long, c2: Long) => c1 + c2
+    for (depth <- 1 until 10) {
+      val sum = rdd.treeAggregate(0L, seqOp, combOp, depth, finalAggregateOnExecutor = true)
+      assert(sum === -1000)
     }
   }
 

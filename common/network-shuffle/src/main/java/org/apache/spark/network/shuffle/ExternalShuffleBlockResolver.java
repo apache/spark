@@ -45,6 +45,8 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.shuffle.checksum.Cause;
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.LevelDBProvider;
 import org.apache.spark.network.util.LevelDBProvider.StoreVersion;
@@ -107,7 +109,7 @@ public class ExternalShuffleBlockResolver {
       Executor directoryCleaner) throws IOException {
     this.conf = conf;
     this.rddFetchEnabled =
-      Boolean.valueOf(conf.get(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "false"));
+      Boolean.parseBoolean(conf.get(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "false"));
     this.registeredExecutorFile = registeredExecutorFile;
     String indexCacheSize = conf.get("spark.shuffle.service.index.cache.size", "100m");
     CacheLoader<File, ShuffleIndexInformation> indexCacheLoader =
@@ -118,11 +120,7 @@ public class ExternalShuffleBlockResolver {
         };
     shuffleIndexCache = CacheBuilder.newBuilder()
       .maximumWeight(JavaUtils.byteStringAsBytes(indexCacheSize))
-      .weigher(new Weigher<File, ShuffleIndexInformation>() {
-        public int weigh(File file, ShuffleIndexInformation indexInfo) {
-          return indexInfo.getSize();
-        }
-      })
+      .weigher((Weigher<File, ShuffleIndexInformation>) (file, indexInfo) -> indexInfo.getSize())
       .build(indexCacheLoader);
     db = LevelDBProvider.initLevelDB(this.registeredExecutorFile, CURRENT_VERSION, mapper);
     if (db != null) {
@@ -372,6 +370,29 @@ public class ExternalShuffleBlockResolver {
         return Pair.of(exec, info.localDirs);
       })
       .collect(Collectors.toMap(Pair::getKey, Pair::getValue));
+  }
+
+  /**
+   * Diagnose the possible cause of the shuffle data corruption by verifying the shuffle checksums
+   */
+  public Cause diagnoseShuffleBlockCorruption(
+      String appId,
+      String execId,
+      int shuffleId,
+      long mapId,
+      int reduceId,
+      long checksumByReader,
+      String algorithm) {
+    ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
+    // This should be in sync with IndexShuffleBlockResolver.getChecksumFile
+    String fileName = "shuffle_" + shuffleId + "_" + mapId + "_0.checksum." + algorithm;
+    File checksumFile = ExecutorDiskUtils.getFile(
+      executor.localDirs,
+      executor.subDirsPerLocalDir,
+      fileName);
+    ManagedBuffer data = getBlockData(appId, execId, shuffleId, mapId, reduceId);
+    return ShuffleChecksumHelper.diagnoseCorruption(
+      algorithm, checksumFile, reduceId, data, checksumByReader);
   }
 
   /** Simply encodes an executor's full ID, which is appId + execId. */

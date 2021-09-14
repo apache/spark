@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TimestampFormatter}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
@@ -44,7 +45,8 @@ import org.apache.spark.util.Utils
  * Spark also includes more built-in functions that are less common and are not defined here.
  * You can still access them (and all the functions defined here) using the `functions.expr()` API
  * and calling them through a SQL expression string. You can find the entire list of functions
- * at SQL API documentation.
+ * at SQL API documentation of your Spark version, see also
+ * <a href="https://spark.apache.org/docs/latest/api/sql/index.html">the latest list</a>
  *
  * As an example, `isnan` is a function that is defined here. You can use `isnan(col("myCol"))`
  * to invoke the `isnan` function. This way the programming language's compiler ensures `isnan`
@@ -1799,6 +1801,15 @@ object functions {
   def cosh(columnName: String): Column = cosh(Column(columnName))
 
   /**
+   * @param e angle in radians
+   * @return cotangent of the angle
+   *
+   * @group math_funcs
+   * @since 3.3.0
+   */
+  def cot(e: Column): Column = withExpr { Cot(e.expr) }
+
+  /**
    * Computes the exponential of the given value.
    *
    * @group math_funcs
@@ -2929,31 +2940,6 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * (Scala-specific) Creates a datetime interval
-   *
-   * @param years Number of years
-   * @param months Number of months
-   * @param weeks Number of weeks
-   * @param days Number of days
-   * @param hours Number of hours
-   * @param mins Number of mins
-   * @param secs Number of secs
-   * @return A datetime interval
-   * @group datetime_funcs
-   * @since 3.2.0
-   */
-  def make_interval(
-      years: Column = lit(0),
-      months: Column = lit(0),
-      weeks: Column = lit(0),
-      days: Column = lit(0),
-      hours: Column = lit(0),
-      mins: Column = lit(0),
-      secs: Column = lit(0)): Column = withExpr {
-    MakeInterval(years.expr, months.expr, weeks.expr, days.expr, hours.expr, mins.expr, secs.expr)
-  }
-
-  /**
    * Returns the date that is `numMonths` after `startDate`.
    *
    * @param startDate A date, timestamp or string. If a string, the data must be in a format that
@@ -2997,6 +2983,16 @@ object functions {
    * @since 1.5.0
    */
   def current_timestamp(): Column = withExpr { CurrentTimestamp() }
+
+  /**
+   * Returns the current timestamp without time zone at the start of query evaluation
+   * as a timestamp without time zone column.
+   * All calls of localtimestamp within the same query return the same value.
+   *
+   * @group datetime_funcs
+   * @since 3.3.0
+   */
+  def localtimestamp(): Column = withExpr { LocalTimestamp() }
 
   /**
    * Converts a date/timestamp/string to a value of string in the format specified by the date
@@ -3642,6 +3638,73 @@ object functions {
    */
   def window(timeColumn: Column, windowDuration: String): Column = {
     window(timeColumn, windowDuration, windowDuration, "0 second")
+  }
+
+  /**
+   * Generates session window given a timestamp specifying column.
+   *
+   * Session window is one of dynamic windows, which means the length of window is varying
+   * according to the given inputs. The length of session window is defined as "the timestamp
+   * of latest input of the session + gap duration", so when the new inputs are bound to the
+   * current session window, the end time of session window can be expanded according to the new
+   * inputs.
+   *
+   * Windows can support microsecond precision. gapDuration in the order of months are not
+   * supported.
+   *
+   * For a streaming query, you may use the function `current_timestamp` to generate windows on
+   * processing time.
+   *
+   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
+   *                   The time column must be of TimestampType.
+   * @param gapDuration A string specifying the timeout of the session, e.g. `10 minutes`,
+   *                    `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
+   *                    valid duration identifiers.
+   *
+   * @group datetime_funcs
+   * @since 3.2.0
+   */
+  def session_window(timeColumn: Column, gapDuration: String): Column = {
+    withExpr {
+      SessionWindow(timeColumn.expr, gapDuration)
+    }.as("session_window")
+  }
+
+  /**
+   * Generates session window given a timestamp specifying column.
+   *
+   * Session window is one of dynamic windows, which means the length of window is varying
+   * according to the given inputs. For static gap duration, the length of session window
+   * is defined as "the timestamp of latest input of the session + gap duration", so when
+   * the new inputs are bound to the current session window, the end time of session window
+   * can be expanded according to the new inputs.
+   *
+   * Besides a static gap duration value, users can also provide an expression to specify
+   * gap duration dynamically based on the input row. With dynamic gap duration, the closing
+   * of a session window does not depend on the latest input anymore. A session window's range
+   * is the union of all events' ranges which are determined by event start time and evaluated
+   * gap duration during the query execution. Note that the rows with negative or zero gap
+   * duration will be filtered out from the aggregation.
+   *
+   * Windows can support microsecond precision. gapDuration in the order of months are not
+   * supported.
+   *
+   * For a streaming query, you may use the function `current_timestamp` to generate windows on
+   * processing time.
+   *
+   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
+   *                   The time column must be of TimestampType.
+   * @param gapDuration A column specifying the timeout of the session. It could be static value,
+   *                    e.g. `10 minutes`, `1 second`, or an expression/UDF that specifies gap
+   *                    duration dynamically based on the input row.
+   *
+   * @group datetime_funcs
+   * @since 3.2.0
+   */
+  def session_window(timeColumn: Column, gapDuration: Column): Column = {
+    withExpr {
+      SessionWindow(timeColumn.expr, gapDuration.expr)
+    }.as("session_window")
   }
 
   /**
@@ -4768,7 +4831,7 @@ object functions {
       case lit @ Literal(_, IntegerType) =>
         Bucket(lit, e.expr)
       case _ =>
-        throw new AnalysisException(s"Invalid number of buckets: bucket($numBuckets, $e)")
+        throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
     }
   }
 
@@ -5270,18 +5333,7 @@ object functions {
     "Please use Scala `udf` method without return type parameter.", "3.0.0")
   def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
     if (!SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF)) {
-      val errorMsg = "You're using untyped Scala UDF, which does not have the input type " +
-        "information. Spark may blindly pass null to the Scala closure with primitive-type " +
-        "argument, and the closure will see the default value of the Java type for the null " +
-        "argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. " +
-        "To get rid of this error, you could:\n" +
-        "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`\n" +
-        "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { " +
-        "override def call(s: String): Integer = s.length() }, IntegerType)`, " +
-        "if input types are all non primitive\n" +
-        s"3. set ${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and " +
-        s"use this API with caution"
-      throw new AnalysisException(errorMsg)
+      throw QueryCompilationErrors.usingUntypedScalaUDFError()
     }
     SparkUserDefinedFunction(f, dataType, inputEncoders = Nil)
   }

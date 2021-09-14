@@ -49,10 +49,10 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
               s"""
                  |CREATE $viewMode view1
                  |AS SELECT
-                 |$permanentFuncName(str),
-                 |$builtInFuncNameInLowerCase(id),
-                 |$builtInFuncNameInMixedCase(id) as aBs,
-                 |$hiveFuncName(id, 5) over()
+                 |$permanentFuncName(str) as myUpper,
+                 |$builtInFuncNameInLowerCase(id) as abs_lower,
+                 |$builtInFuncNameInMixedCase(id) as abs_mixed,
+                 |$hiveFuncName(id, 5) over() as func
                  |FROM tab1
                """.stripMargin)
             checkAnswer(sql("select count(*) FROM view1"), Row(10))

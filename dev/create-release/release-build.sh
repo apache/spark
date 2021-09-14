@@ -177,10 +177,7 @@ fi
 
 # Depending on the version being built, certain extra profiles need to be activated, and
 # different versions of Scala are supported.
-BASE_PROFILES="-Pmesos -Pyarn"
-if [[ $SPARK_VERSION > "2.3" ]]; then
-  BASE_PROFILES="$BASE_PROFILES -Pkubernetes"
-fi
+BASE_PROFILES="-Pmesos -Pyarn -Pkubernetes"
 
 PUBLISH_SCALA_2_13=1
 SCALA_2_13_PROFILES="-Pscala-2.13"
@@ -188,14 +185,8 @@ if [[ $SPARK_VERSION < "3.2" ]]; then
   PUBLISH_SCALA_2_13=0
 fi
 
-PUBLISH_SCALA_2_12=0
+PUBLISH_SCALA_2_12=1
 SCALA_2_12_PROFILES="-Pscala-2.12"
-if [[ $SPARK_VERSION < "3.0." ]]; then
-  SCALA_2_12_PROFILES="-Pscala-2.12 -Pflume"
-fi
-if [[ $SPARK_VERSION > "2.4" ]]; then
-  PUBLISH_SCALA_2_12=1
-fi
 
 # Hive-specific profiles for some builds
 HIVE_PROFILES="-Phive -Phive-thriftserver"
@@ -229,19 +220,16 @@ git clean -d -f -x
 rm -f .gitignore
 cd ..
 
-export MAVEN_OPTS="-Xmx12g"
+export MAVEN_OPTS="-Xss128m -Xmx12g"
 
 if [[ "$1" == "package" ]]; then
   # Source and binary tarballs
   echo "Packaging release source tarballs"
   cp -r spark spark-$SPARK_VERSION
 
-  # For source release in v2.4+, exclude copy of binary license/notice
-  if [[ $SPARK_VERSION > "2.4" ]]; then
-    rm -f spark-$SPARK_VERSION/LICENSE-binary
-    rm -f spark-$SPARK_VERSION/NOTICE-binary
-    rm -rf spark-$SPARK_VERSION/licenses-binary
-  fi
+  rm -f spark-$SPARK_VERSION/LICENSE-binary
+  rm -f spark-$SPARK_VERSION/NOTICE-binary
+  rm -rf spark-$SPARK_VERSION/licenses-binary
 
   tar cvzf spark-$SPARK_VERSION.tgz --exclude spark-$SPARK_VERSION/.git spark-$SPARK_VERSION
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour --output spark-$SPARK_VERSION.tgz.asc \
@@ -337,11 +325,7 @@ if [[ "$1" == "package" ]]; then
   BINARY_PKGS_ARGS["hadoop3.2"]="-Phadoop-3.2 $HIVE_PROFILES"
   if ! is_dry_run; then
     BINARY_PKGS_ARGS["without-hadoop"]="-Phadoop-provided"
-    if [[ $SPARK_VERSION < "3.0." ]]; then
-      BINARY_PKGS_ARGS["hadoop2.6"]="-Phadoop-2.6 $HIVE_PROFILES"
-    else
-      BINARY_PKGS_ARGS["hadoop2.7"]="-Phadoop-2.7 $HIVE_PROFILES"
-    fi
+    BINARY_PKGS_ARGS["hadoop2.7"]="-Phadoop-2.7 $HIVE_PROFILES"
   fi
 
   declare -A BINARY_PKGS_EXTRA

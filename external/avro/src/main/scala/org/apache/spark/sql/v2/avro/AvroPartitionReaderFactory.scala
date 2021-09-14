@@ -104,6 +104,7 @@ case class AvroPartitionReaderFactory(
         override val deserializer = new AvroDeserializer(
           userProvidedSchema.getOrElse(reader.getSchema),
           readDataSchema,
+          parsedOptions.positionalFieldMatching,
           datetimeRebaseMode,
           avroFilters)
         override val stopPosition = partitionedFile.start + partitionedFile.length

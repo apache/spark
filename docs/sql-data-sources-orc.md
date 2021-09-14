@@ -37,6 +37,8 @@ For example, historically, `native` implementation handles `CHAR/VARCHAR` with S
 
 `native` implementation supports a vectorized ORC reader and has been the default ORC implementaion since Spark 2.3.
 The vectorized reader is used for the native ORC tables (e.g., the ones created using the clause `USING ORC`) when `spark.sql.orc.impl` is set to `native` and `spark.sql.orc.enableVectorizedReader` is set to `true`.
+For nested data types (array, map and struct), vectorized reader is disabled by default. Set `spark.sql.orc.enableNestedColumnVectorizedReader` to `true` to enable vectorized reader for these types.
+
 For the Hive ORC serde tables (e.g., the ones created using the clause `USING HIVE OPTIONS (fileFormat 'ORC')`),
 the vectorized reader is used when `spark.sql.hive.convertMetastoreOrc` is also set to `true`, and is turned on by default.
 
@@ -150,6 +152,16 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
       For <code>hive</code> implementation, this is ignored.
     </td>
     <td>2.3.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.orc.enableNestedColumnVectorizedReader</code></td>
+    <td><code>false</code></td>
+    <td>
+      Enables vectorized orc decoding in <code>native</code> implementation for nested data types
+      (array, map and struct). If <code>spark.sql.orc.enableVectorizedReader</code> is set to
+      <code>false</code>, this is ignored.
+    </td>
+    <td>3.2.0</td>
   </tr>
   <tr>
   <td><code>spark.sql.orc.mergeSchema</code></td>

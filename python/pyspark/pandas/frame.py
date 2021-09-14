@@ -43,7 +43,6 @@ from typing import (
     Sequence,
     Tuple,
     Type,
-    TypeVar,
     Union,
     cast,
     no_type_check,
@@ -84,8 +83,10 @@ from pyspark.sql.types import (  # noqa: F401 (SPARK-34943)
 from pyspark.sql.window import Window
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark.pandas._typing import Axis, DataFrameOrSeries, Dtype, Label, Name, Scalar, T
 from pyspark.pandas.accessors import PandasOnSparkFrameMethods
 from pyspark.pandas.config import option_context, get_option
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.accessors import SparkFrameMethods, CachedSparkFrameMethods
 from pyspark.pandas.utils import (
     align_diff_frames,
@@ -102,6 +103,7 @@ from pyspark.pandas.utils import (
     validate_axis,
     validate_bool_kwarg,
     validate_how,
+    validate_mode,
     verify_temp_column_name,
 )
 from pyspark.pandas.generic import Frame
@@ -116,14 +118,13 @@ from pyspark.pandas.internal import (
 )
 from pyspark.pandas.missing.frame import _MissingPandasLikeDataFrame
 from pyspark.pandas.ml import corr
-from pyspark.pandas.typedef import (
+from pyspark.pandas.typedef.typehints import (
     as_spark_type,
     infer_return_type,
+    pandas_on_spark_type,
     spark_type_to_pandas_dtype,
     DataFrameType,
-    Dtype,
     SeriesType,
-    Scalar,
     ScalarType,
 )
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
@@ -341,8 +342,6 @@ triangle      8.0   1.532496e+54
 rectangle    16.0  2.348543e+108
 """
 
-T = TypeVar("T")
-
 
 def _create_tuple_for_frame_type(params: Any) -> object:
     """
@@ -354,7 +353,7 @@ def _create_tuple_for_frame_type(params: Any) -> object:
     from pyspark.pandas.typedef import NameTypeHolder
 
     if isinstance(params, zip):  # type: ignore
-        params = [slice(name, tpe) for name, tpe in params]
+        params = [slice(name, tpe) for name, tpe in params]  # type: ignore
 
     if isinstance(params, slice):
         params = (params,)
@@ -523,7 +522,7 @@ class DataFrame(Frame, Generic[T]):
         object.__setattr__(self, "_internal_frame", internal)
 
     @property
-    def _pssers(self) -> Dict[Tuple, "Series"]:
+    def _pssers(self) -> Dict[Label, "Series"]:
         """Return a dict of column label -> Series which anchors `self`."""
         from pyspark.pandas.series import Series
 
@@ -643,9 +642,9 @@ class DataFrame(Frame, Generic[T]):
 
     def _reduce_for_stat_function(
         self,
-        sfun: Union[Callable[[Column], Column], Callable[[Column, DataType], Column]],
+        sfun: Callable[["Series"], Column],
         name: str,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         numeric_only: bool = True,
         **kwargs: Any
     ) -> "Series":
@@ -665,38 +664,27 @@ class DataFrame(Frame, Generic[T]):
             is mainly for pandas compatibility. Only 'DataFrame.count' uses this parameter
             currently.
         """
-        from inspect import signature
         from pyspark.pandas.series import Series, first_series
 
         axis = validate_axis(axis)
         if axis == 0:
             min_count = kwargs.get("min_count", 0)
 
-            exprs = [F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
+            exprs = [SF.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
             new_column_labels = []
-            num_args = len(signature(sfun).parameters)
             for label in self._internal.column_labels:
-                spark_column = self._internal.spark_column_for(label)
-                spark_type = self._internal.spark_type_for(label)
+                psser = self._psser_for(label)
 
-                is_numeric_or_boolean = isinstance(spark_type, (NumericType, BooleanType))
+                is_numeric_or_boolean = isinstance(
+                    psser.spark.data_type, (NumericType, BooleanType)
+                )
                 keep_column = not numeric_only or is_numeric_or_boolean
 
                 if keep_column:
-                    if num_args == 1:
-                        # Only pass in the column if sfun accepts only one arg
-                        scol = cast(Callable[[Column], Column], sfun)(spark_column)
-                    else:  # must be 2
-                        assert num_args == 2
-                        # Pass in both the column and its data type if sfun accepts two args
-                        scol = cast(Callable[[Column, DataType], Column], sfun)(
-                            spark_column, spark_type
-                        )
+                    scol = sfun(psser)
 
                     if min_count > 0:
-                        scol = F.when(
-                            Frame._count_expr(spark_column, spark_type) >= min_count, scol
-                        )
+                        scol = F.when(Frame._count_expr(psser) >= min_count, scol)
 
                     exprs.append(scol.alias(name_like_string(label)))
                     new_column_labels.append(label)
@@ -749,7 +737,7 @@ class DataFrame(Frame, Generic[T]):
             )
             return first_series(DataFrame(internal)).rename(pser.name)
 
-    def _psser_for(self, label: Tuple) -> "Series":
+    def _psser_for(self, label: Label) -> "Series":
         """
         Create Series with a proper column label.
 
@@ -809,9 +797,9 @@ class DataFrame(Frame, Generic[T]):
                 # Different DataFrames
                 def apply_op(
                     psdf: DataFrame,
-                    this_column_labels: List[Tuple],
-                    that_column_labels: List[Tuple],
-                ) -> Iterator[Tuple["Series", Tuple]]:
+                    this_column_labels: List[Label],
+                    that_column_labels: List[Label],
+                ) -> Iterator[Tuple["Series", Label]]:
                     for this_label, that_label in zip(this_column_labels, that_column_labels):
                         yield (
                             getattr(psdf._psser_for(this_label), op)(
@@ -829,7 +817,7 @@ class DataFrame(Frame, Generic[T]):
                         applied.append(getattr(self._psser_for(label), op)(other._psser_for(label)))
                     else:
                         applied.append(
-                            F.lit(None)
+                            SF.lit(None)
                             .cast(self._internal.spark_type_for(label))
                             .alias(name_like_string(label))
                         )
@@ -837,7 +825,7 @@ class DataFrame(Frame, Generic[T]):
                 for label in other._internal.column_labels:
                     if label not in column_labels:
                         applied.append(
-                            F.lit(None)
+                            SF.lit(None)
                             .cast(other._internal.spark_type_for(label))
                             .alias(name_like_string(label))
                         )
@@ -852,12 +840,6 @@ class DataFrame(Frame, Generic[T]):
 
     def __radd__(self, other: Any) -> "DataFrame":
         return self._map_series_op("radd", other)
-
-    def __div__(self, other: Any) -> "DataFrame":
-        return self._map_series_op("div", other)
-
-    def __rdiv__(self, other: Any) -> "DataFrame":
-        return self._map_series_op("rdiv", other)
 
     def __truediv__(self, other: Any) -> "DataFrame":
         return self._map_series_op("truediv", other)
@@ -1229,7 +1211,7 @@ class DataFrame(Frame, Generic[T]):
         return self._apply_series_op(lambda psser: psser.apply(func))
 
     # TODO: not all arguments are implemented comparing to pandas' for now.
-    def aggregate(self, func: Union[List[str], Dict[Any, List[str]]]) -> "DataFrame":
+    def aggregate(self, func: Union[List[str], Dict[Name, List[str]]]) -> "DataFrame":
         """Aggregate using one or more operations over the specified axis.
 
         Parameters
@@ -1391,7 +1373,7 @@ class DataFrame(Frame, Generic[T]):
         """
         return cast(DataFrame, ps.from_pandas(corr(self, method)))
 
-    def iteritems(self) -> Iterator[Tuple[Union[Any, Tuple], "Series"]]:
+    def iteritems(self) -> Iterator[Tuple[Name, "Series"]]:
         """
         Iterator over (column name, Series) pairs.
 
@@ -1435,7 +1417,7 @@ class DataFrame(Frame, Generic[T]):
             for label in self._internal.column_labels
         )
 
-    def iterrows(self) -> Iterator[Tuple[Union[Any, Tuple], pd.Series]]:
+    def iterrows(self) -> Iterator[Tuple[Name, pd.Series]]:
         """
         Iterate over DataFrame rows as (index, Series) pairs.
 
@@ -1481,7 +1463,7 @@ class DataFrame(Frame, Generic[T]):
         internal_index_columns = self._internal.index_spark_column_names
         internal_data_columns = self._internal.data_spark_column_names
 
-        def extract_kv_from_spark_row(row: Row) -> Tuple[Union[Any, Tuple], Any]:
+        def extract_kv_from_spark_row(row: Row) -> Tuple[Name, Any]:
             k = (
                 row[internal_index_columns[0]]
                 if len(internal_index_columns) == 1
@@ -1570,7 +1552,7 @@ class DataFrame(Frame, Generic[T]):
         index_spark_column_names = self._internal.index_spark_column_names
         data_spark_column_names = self._internal.data_spark_column_names
 
-        def extract_kv_from_spark_row(row: Row) -> Tuple[Union[Any, Tuple], Any]:
+        def extract_kv_from_spark_row(row: Row) -> Tuple[Name, Any]:
             k = (
                 row[index_spark_column_names[0]]
                 if len(index_spark_column_names) == 1
@@ -1595,7 +1577,7 @@ class DataFrame(Frame, Generic[T]):
             ):
                 yield tuple(([k] if index else []) + list(v))
 
-    def items(self) -> Iterator[Tuple[Union[Any, Tuple], "Series"]]:
+    def items(self) -> Iterator[Tuple[Name, "Series"]]:
         """This is an alias of ``iteritems``."""
         return self.iteritems()
 
@@ -1677,13 +1659,13 @@ class DataFrame(Frame, Generic[T]):
     def to_html(
         self,
         buf: Optional[IO[str]] = None,
-        columns: Optional[Sequence[Union[Any, Tuple]]] = None,
-        col_space: Optional[Union[str, int, Dict[Union[Any, Tuple], Union[str, int]]]] = None,
+        columns: Optional[Sequence[Name]] = None,
+        col_space: Optional[Union[str, int, Dict[Name, Union[str, int]]]] = None,
         header: bool = True,
         index: bool = True,
         na_rep: str = "NaN",
         formatters: Optional[
-            Union[List[Callable[[Any], str]], Dict[Union[Any, Tuple], Callable[[Any], str]]]
+            Union[List[Callable[[Any], str]], Dict[Name, Callable[[Any], str]]]
         ] = None,
         float_format: Optional[Callable[[float], str]] = None,
         sparsify: Optional[bool] = None,
@@ -1799,13 +1781,13 @@ class DataFrame(Frame, Generic[T]):
     def to_string(
         self,
         buf: Optional[IO[str]] = None,
-        columns: Optional[Sequence[Union[Any, Tuple]]] = None,
-        col_space: Optional[Union[str, int, Dict[Union[Any, Tuple], Union[str, int]]]] = None,
+        columns: Optional[Sequence[Name]] = None,
+        col_space: Optional[Union[str, int, Dict[Name, Union[str, int]]]] = None,
         header: bool = True,
         index: bool = True,
         na_rep: str = "NaN",
         formatters: Optional[
-            Union[List[Callable[[Any], str]], Dict[Union[Any, Tuple], Callable[[Any], str]]]
+            Union[List[Callable[[Any], str]], Dict[Name, Callable[[Any], str]]]
         ] = None,
         float_format: Optional[Callable[[float], str]] = None,
         sparsify: Optional[bool] = None,
@@ -2013,13 +1995,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def to_latex(
         self,
         buf: Optional[IO[str]] = None,
-        columns: Optional[List[Union[Any, Tuple]]] = None,
+        columns: Optional[List[Name]] = None,
         col_space: Optional[int] = None,
         header: bool = True,
         index: bool = True,
         na_rep: str = "NaN",
         formatters: Optional[
-            Union[List[Callable[[Any], str]], Dict[Union[Any, Tuple], Callable[[Any], str]]]
+            Union[List[Callable[[Any], str]], Dict[Name, Callable[[Any], str]]]
         ] = None,
         float_format: Optional[Callable[[float], str]] = None,
         sparsify: Optional[bool] = None,
@@ -2285,7 +2267,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 *[
                     F.struct(
                         *[
-                            F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i))
+                            SF.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i))
                             for i, col in enumerate(label)
                         ],
                         *[self._internal.spark_column_for(label).alias("value")],
@@ -2339,7 +2321,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     T = property(transpose)
 
     def apply(
-        self, func: Callable, axis: Union[int, str] = 0, args: Sequence[Any] = (), **kwds: Any
+        self, func: Callable, axis: Axis = 0, args: Sequence[Any] = (), **kwds: Any
     ) -> Union["Series", "DataFrame", "Index"]:
         """
         Apply a function along an axis of the DataFrame.
@@ -2548,7 +2530,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         self_applied = DataFrame(self._internal.resolved_copy)  # type: "DataFrame"
 
-        column_labels = None  # type: Optional[List[Tuple]]
+        column_labels = None  # type: Optional[List[Label]]
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
@@ -2648,7 +2630,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return result
 
     def transform(
-        self, func: Callable[..., "Series"], axis: Union[int, str] = 0, *args: Any, **kwargs: Any
+        self, func: Callable[..., "Series"], axis: Axis = 0, *args: Any, **kwargs: Any
     ) -> "DataFrame":
         """
         Call ``func`` on self producing a Series with transformed values
@@ -2805,7 +2787,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 lambda psser: psser.pandas_on_spark.transform_batch(func, *args, **kwargs)
             )
 
-    def pop(self, item: Union[Any, Tuple]) -> "DataFrame":
+    def pop(self, item: Name) -> "DataFrame":
         """
         Return item and drop from frame. Raise KeyError if not found.
 
@@ -2884,9 +2866,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return result
 
     # TODO: add axis parameter can work when '1' or 'columns'
-    def xs(
-        self, key: Union[Any, Tuple], axis: Union[int, str] = 0, level: Optional[int] = None
-    ) -> Union["DataFrame", "Series"]:
+    def xs(self, key: Name, axis: Axis = 0, level: Optional[int] = None) -> DataFrameOrSeries:
         """
         Return cross-section from the DataFrame.
 
@@ -3020,7 +3000,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         end_time: Union[datetime.time, str],
         include_start: bool = True,
         include_end: bool = True,
-        axis: Union[int, str] = 0,
+        axis: Axis = 0,
     ) -> "DataFrame":
         """
         Select values between particular times of the day (example: 9:00-9:30 AM).
@@ -3116,7 +3096,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     # TODO: implement axis=1
     def at_time(
-        self, time: Union[datetime.time, str], asof: bool = False, axis: Union[int, str] = 0
+        self, time: Union[datetime.time, str], asof: bool = False, axis: Axis = 0
     ) -> "DataFrame":
         """
         Select values at particular time of day (example: 9:30AM).
@@ -3199,7 +3179,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
 
     def where(
-        self, cond: Union["DataFrame", "Series"], other: Union["DataFrame", "Series", Any] = np.nan
+        self,
+        cond: DataFrameOrSeries,
+        other: Union[DataFrameOrSeries, Any] = np.nan,
+        axis: Axis = None,
     ) -> "DataFrame":
         """
         Replace values where the condition is False.
@@ -3211,6 +3194,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             replace with corresponding value from other.
         other : scalar, DataFrame
             Entries where cond is False are replaced with corresponding value from other.
+        axis : int, default None
+            Can only be set to 0 at the moment for compatibility with pandas.
 
         Returns
         -------
@@ -3309,6 +3294,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         from pyspark.pandas.series import Series
 
+        axis = validate_axis(axis)
+        if axis != 0:
+            raise NotImplementedError('axis should be either 0 or "index" currently.')
+
         tmp_cond_col_name = "__tmp_cond_col_{}__".format
         tmp_other_col_name = "__tmp_other_col_{}__".format
 
@@ -3323,7 +3312,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     (
                         cond._internal.spark_column_for(label)
                         if label in cond._internal.column_labels
-                        else F.lit(False)
+                        else SF.lit(False)
                     ).alias(name)
                     for label, name in zip(self._internal.column_labels, tmp_cond_col_names)
                 ]
@@ -3347,7 +3336,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     (
                         other._internal.spark_column_for(label)
                         if label in other._internal.column_labels
-                        else F.lit(np.nan)
+                        else SF.lit(np.nan)
                     ).alias(name)
                     for label, name in zip(self._internal.column_labels, tmp_other_col_names)
                 ]
@@ -3392,7 +3381,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
 
     def mask(
-        self, cond: Union["DataFrame", "Series"], other: Union["DataFrame", "Series", Any] = np.nan
+        self, cond: DataFrameOrSeries, other: Union[DataFrameOrSeries, Any] = np.nan
     ) -> "DataFrame":
         """
         Replace values where the condition is True.
@@ -3530,7 +3519,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def set_index(
         self,
-        keys: Union[Any, Tuple, List[Union[Any, Tuple]]],
+        keys: Union[Name, List[Name]],
         drop: bool = True,
         append: bool = False,
         inplace: bool = False,
@@ -3599,7 +3588,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         inplace = validate_bool_kwarg(inplace, "inplace")
         if is_name_like_tuple(keys):
-            key_list = [cast(Tuple, keys)]  # type: List[Tuple]
+            key_list = [cast(Label, keys)]  # type: List[Label]
         elif is_name_like_value(keys):
             key_list = [(keys,)]
         else:
@@ -3645,7 +3634,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def reset_index(
         self,
-        level: Optional[Union[int, Any, Tuple, Sequence[Union[int, Any, Tuple]]]] = None,
+        level: Optional[Union[int, Name, Sequence[Union[int, Name]]]] = None,
         drop: bool = False,
         inplace: bool = False,
         col_level: int = 0,
@@ -3796,7 +3785,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         inplace = validate_bool_kwarg(inplace, "inplace")
         multi_index = self._internal.index_level > 1
 
-        def rename(index: int) -> Tuple:
+        def rename(index: int) -> Label:
             if multi_index:
                 return ("level_{}".format(index),)
             else:
@@ -3821,9 +3810,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             index_fields = []
         else:
             if is_list_like(level):
-                level = list(cast(Sequence[Union[int, Any, Tuple]], level))
+                level = list(cast(Sequence[Union[int, Name]], level))
             if isinstance(level, int) or is_name_like_tuple(level):
-                level_list = [cast(Union[int, Tuple], level)]
+                level_list = [cast(Union[int, Label], level)]
             elif is_name_like_value(level):
                 level_list = [(level,)]
             else:
@@ -3844,7 +3833,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 idx = int_level_list
             elif all(is_name_like_tuple(lev) for lev in level_list):
                 idx = []
-                for l in cast(List[Tuple], level_list):
+                for l in cast(List[Label], level_list):
                     try:
                         i = self._internal.index_names.index(l)
                         idx.append(i)
@@ -3988,7 +3977,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def insert(
         self,
         loc: int,
-        column: Union[Any, Tuple],
+        column: Name,
         value: Union[Scalar, "Series", Iterable],
         allow_duplicates: bool = False,
     ) -> None:
@@ -4117,7 +4106,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
 
     # TODO: axis should support 1 or 'columns' either at this moment
-    def diff(self, periods: int = 1, axis: Union[int, str] = 0) -> "DataFrame":
+    def diff(self, periods: int = 1, axis: Axis = 0) -> "DataFrame":
         """
         First discrete difference of element.
 
@@ -4194,7 +4183,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     # TODO: axis should support 1 or 'columns' either at this moment
     def nunique(
         self,
-        axis: Union[int, str] = 0,
+        axis: Axis = 0,
         dropna: bool = True,
         approx: bool = False,
         rsd: float = 0.05,
@@ -4250,7 +4239,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if axis != 0:
             raise NotImplementedError('axis should be either 0 or "index" currently.')
         sdf = self._internal.spark_frame.select(
-            [F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
+            [SF.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
             + [
                 self._psser_for(label)._nunique(dropna, approx, rsd)
                 for label in self._internal.column_labels
@@ -4271,9 +4260,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
             return first_series(DataFrame(internal).transpose())
 
-    def round(
-        self, decimals: Union[int, Dict[Union[Any, Tuple], int], "Series"] = 0
-    ) -> "DataFrame":
+    def round(self, decimals: Union[int, Dict[Name, int], "Series"] = 0) -> "DataFrame":
         """
         Round a DataFrame to a variable number of decimal places.
 
@@ -4355,14 +4342,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def _mark_duplicates(
         self,
-        subset: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
+        subset: Optional[Union[Name, List[Name]]] = None,
         keep: str = "first",
     ) -> Tuple[SparkDataFrame, str]:
         if subset is None:
             subset_list = self._internal.column_labels
         else:
             if is_name_like_tuple(subset):
-                subset_list = [cast(Tuple, subset)]
+                subset_list = [cast(Label, subset)]
             elif is_name_like_value(subset):
                 subset_list = [(subset,)]
             else:
@@ -4398,7 +4385,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def duplicated(
         self,
-        subset: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
+        subset: Optional[Union[Name, List[Name]]] = None,
         keep: str = "first",
     ) -> "Series":
         """
@@ -4569,11 +4556,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         self,
         name: str,
         format: Optional[str] = None,
-        mode: str = "overwrite",
+        mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
         **options: Any
     ) -> None:
+        mode = validate_mode(mode)
         return self.spark.to_table(name, format, mode, partition_cols, index_col, **options)
 
     to_table.__doc__ = SparkFrameMethods.to_table.__doc__
@@ -4581,7 +4569,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def to_delta(
         self,
         path: str,
-        mode: str = "overwrite",
+        mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
         **options: "OptionalPrimitiveType"
@@ -4593,14 +4581,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         path : str, required
             Path to write to.
-        mode : str {'append', 'overwrite', 'ignore', 'error', 'errorifexists'}, default
-            'overwrite'. Specifies the behavior of the save operation when the destination
-            exists already.
+        mode : str
+            Python write mode, default 'w'.
 
-            - 'append': Append the new data to existing data.
-            - 'overwrite': Overwrite existing data.
-            - 'ignore': Silently ignore this operation if data already exists.
-            - 'error' or 'errorifexists': Throw an exception if data already exists.
+            .. note:: mode can accept the strings for Spark writing mode.
+                Such as 'append', 'overwrite', 'ignore', 'error', 'errorifexists'.
+
+                - 'append' (equivalent to 'a'): Append the new data to existing data.
+                - 'overwrite' (equivalent to 'w'): Overwrite existing data.
+                - 'ignore': Silently ignore this operation if data already exists.
+                - 'error' or 'errorifexists': Throw an exception if data already exists.
 
         partition_cols : str or list of str, optional, default None
             Names of partitioning columns
@@ -4647,6 +4637,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore
 
+        mode = validate_mode(mode)
         self.spark.to_spark_io(
             path=path,
             mode=mode,
@@ -4659,7 +4650,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def to_parquet(
         self,
         path: str,
-        mode: str = "overwrite",
+        mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         compression: Optional[str] = None,
         index_col: Optional[Union[str, List[str]]] = None,
@@ -4672,14 +4663,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         path : str, required
             Path to write to.
-        mode : str {'append', 'overwrite', 'ignore', 'error', 'errorifexists'},
-            default 'overwrite'. Specifies the behavior of the save operation when the
-            destination exists already.
+        mode : str
+            Python write mode, default 'w'.
 
-            - 'append': Append the new data to existing data.
-            - 'overwrite': Overwrite existing data.
-            - 'ignore': Silently ignore this operation if data already exists.
-            - 'error' or 'errorifexists': Throw an exception if data already exists.
+            .. note:: mode can accept the strings for Spark writing mode.
+                Such as 'append', 'overwrite', 'ignore', 'error', 'errorifexists'.
+
+                - 'append' (equivalent to 'a'): Append the new data to existing data.
+                - 'overwrite' (equivalent to 'w'): Overwrite existing data.
+                - 'ignore': Silently ignore this operation if data already exists.
+                - 'error' or 'errorifexists': Throw an exception if data already exists.
 
         partition_cols : str or list of str, optional, default None
             Names of partitioning columns
@@ -4721,6 +4714,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore
 
+        mode = validate_mode(mode)
         builder = self.to_spark(index_col=index_col).write.mode(mode)
         if partition_cols is not None:
             builder.partitionBy(partition_cols)
@@ -4731,7 +4725,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def to_orc(
         self,
         path: str,
-        mode: str = "overwrite",
+        mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
         **options: "OptionalPrimitiveType"
@@ -4743,14 +4737,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         path : str, required
             Path to write to.
-        mode : str {'append', 'overwrite', 'ignore', 'error', 'errorifexists'},
-            default 'overwrite'. Specifies the behavior of the save operation when the
-            destination exists already.
+        mode : str
+            Python write mode, default 'w'.
 
-            - 'append': Append the new data to existing data.
-            - 'overwrite': Overwrite existing data.
-            - 'ignore': Silently ignore this operation if data already exists.
-            - 'error' or 'errorifexists': Throw an exception if data already exists.
+            .. note:: mode can accept the strings for Spark writing mode.
+                Such as 'append', 'overwrite', 'ignore', 'error', 'errorifexists'.
+
+                - 'append' (equivalent to 'a'): Append the new data to existing data.
+                - 'overwrite' (equivalent to 'w'): Overwrite existing data.
+                - 'ignore': Silently ignore this operation if data already exists.
+                - 'error' or 'errorifexists': Throw an exception if data already exists.
 
         partition_cols : str or list of str, optional, default None
             Names of partitioning columns
@@ -4790,6 +4786,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore
 
+        mode = validate_mode(mode)
         self.spark.to_spark_io(
             path=path,
             mode=mode,
@@ -4814,7 +4811,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         .. deprecated:: 3.2.0
             Use :func:`DataFrame.spark.to_spark_io` instead.
         """
-        warnings.warn("Deprecated in 3.2, Use spark.to_spark_io instead.", FutureWarning)
+        warnings.warn("Deprecated in 3.2, Use DataFrame.spark.to_spark_io instead.", FutureWarning)
         return self.spark.to_spark_io(path, format, mode, partition_cols, index_col, **options)
 
     to_spark_io.__doc__ = SparkFrameMethods.to_spark_io.__doc__
@@ -4927,7 +4924,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 if isinstance(v, IndexOpsMixin) and not isinstance(v, MultiIndex)
                 else (v, None)
                 if isinstance(v, Column)
-                else (F.lit(v), None)
+                else (SF.lit(v), None)
             )
             for k, v in kwargs.items()
         }
@@ -4973,8 +4970,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     @staticmethod
     def from_records(
-        data: Union[np.array, List[tuple], dict, pd.DataFrame],
-        index: Union[str, list, np.array] = None,
+        data: Union[np.ndarray, List[tuple], dict, pd.DataFrame],
+        index: Union[str, list, np.ndarray] = None,
         exclude: list = None,
         columns: list = None,
         coerce_float: bool = False,
@@ -5036,12 +5033,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def to_records(
         self,
         index: bool = True,
-        column_dtypes: Optional[
-            Union[str, Dtype, Dict[Union[Any, Tuple], Union[str, Dtype]]]
-        ] = None,
-        index_dtypes: Optional[
-            Union[str, Dtype, Dict[Union[Any, Tuple], Union[str, Dtype]]]
-        ] = None,
+        column_dtypes: Optional[Union[str, Dtype, Dict[Name, Union[str, Dtype]]]] = None,
+        index_dtypes: Optional[Union[str, Dtype, Dict[Name, Union[str, Dtype]]]] = None,
     ) -> np.recarray:
         """
         Convert DataFrame to a NumPy record array.
@@ -5152,10 +5145,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def dropna(
         self,
-        axis: Union[int, str] = 0,
+        axis: Axis = 0,
         how: str = "any",
         thresh: Optional[int] = None,
-        subset: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
+        subset: Optional[Union[Name, List[Name]]] = None,
         inplace: bool = False,
     ) -> Optional["DataFrame"]:
         """
@@ -5259,7 +5252,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         if subset is not None:
             if isinstance(subset, str):
-                labels = [(subset,)]  # type: Optional[List[Tuple]]
+                labels = [(subset,)]  # type: Optional[List[Label]]
             elif isinstance(subset, tuple):
                 labels = [subset]
             else:
@@ -5281,14 +5274,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     F.when(self._psser_for(label).notna().spark.column, 1).otherwise(0)
                     for label in labels
                 ],
-                F.lit(0),
+                SF.lit(0),
             )
             if thresh is not None:
-                pred = cnt >= F.lit(int(thresh))
+                pred = cnt >= SF.lit(int(thresh))
             elif how == "any":
-                pred = cnt == F.lit(len(labels))
+                pred = cnt == SF.lit(len(labels))
             elif how == "all":
-                pred = cnt > F.lit(0)
+                pred = cnt > SF.lit(0)
 
             internal = self._internal.with_filter(pred)
             if inplace:
@@ -5313,7 +5306,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         reduce(
                             lambda x, y: x & y,
                             [
-                                scol == F.lit(l)
+                                scol == SF.lit(l)
                                 for l, scol in zip(lbl, internal.index_spark_columns)
                             ],
                         )
@@ -5323,13 +5316,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
                 internal = internal.with_filter(cond)
 
+            psdf = DataFrame(internal)
+
             null_counts = []
             for label in internal.column_labels:
-                scol = internal.spark_column_for(label)
-                if isinstance(internal.spark_type_for(label), (FloatType, DoubleType)):
-                    cond = scol.isNull() | F.isnan(scol)
-                else:
-                    cond = scol.isNull()
+                psser = psdf._psser_for(label)
+                cond = psser.isnull().spark.column
                 null_counts.append(
                     F.sum(F.when(~cond, 1).otherwise(0)).alias(name_like_string(label))
                 )
@@ -5363,9 +5355,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     # TODO: add 'limit' when value parameter exists
     def fillna(
         self,
-        value: Optional[Union[Any, Dict[Union[Any, Tuple], Any]]] = None,
+        value: Optional[Union[Any, Dict[Name, Any]]] = None,
         method: Optional[str] = None,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         inplace: bool = False,
         limit: Optional[int] = None,
     ) -> Optional["DataFrame"]:
@@ -5719,7 +5711,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if n < 0:
             n = len(self) + n
         if n <= 0:
-            return DataFrame(self._internal.with_filter(F.lit(False)))
+            return DataFrame(self._internal.with_filter(SF.lit(False)))
         else:
             sdf = self._internal.resolved_copy.spark_frame
             if get_option("compute.ordered_head"):
@@ -5838,10 +5830,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def pivot_table(
         self,
-        values: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
-        index: Optional[List[Union[Any, Tuple]]] = None,
-        columns: Optional[Union[Any, Tuple]] = None,
-        aggfunc: Union[str, Dict[Union[Any, Tuple], str]] = "mean",
+        values: Optional[Union[Name, List[Name]]] = None,
+        index: Optional[List[Name]] = None,
+        columns: Optional[Name] = None,
+        aggfunc: Union[str, Dict[Name, str]] = "mean",
         fill_value: Optional[Any] = None,
     ) -> "DataFrame":
         """
@@ -6063,7 +6055,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         for name in data_columns
                     ]
                     column_label_names = (
-                        [cast(Optional[Union[Any, Tuple]], None)] * column_labels_level(values)
+                        [cast(Optional[Name], None)] * column_labels_level(values)
                     ) + [columns]
                     internal = InternalFrame(
                         spark_frame=sdf,
@@ -6077,9 +6069,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     psdf = DataFrame(internal)  # type: "DataFrame"
                 else:
                     column_labels = [tuple(list(values[0]) + [column]) for column in data_columns]
-                    column_label_names = (
-                        [cast(Optional[Union[Any, Tuple]], None)] * len(values[0])
-                    ) + [columns]
+                    column_label_names = ([cast(Optional[Name], None)] * len(values[0])) + [columns]
                     internal = InternalFrame(
                         spark_frame=sdf,
                         index_spark_columns=[scol_for(sdf, col) for col in index_columns],
@@ -6104,10 +6094,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 index_values = values[-1]
             else:
                 index_values = values
-            index_map = OrderedDict()  # type: Dict[str, Optional[Tuple]]
+            index_map = OrderedDict()  # type: Dict[str, Optional[Label]]
             for i, index_value in enumerate(index_values):
                 colname = SPARK_INDEX_NAME_FORMAT(i)
-                sdf = sdf.withColumn(colname, F.lit(index_value))
+                sdf = sdf.withColumn(colname, SF.lit(index_value))
                 index_map[colname] = None
             internal = InternalFrame(
                 spark_frame=sdf,
@@ -6134,9 +6124,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def pivot(
         self,
-        index: Optional[Union[Any, Tuple]] = None,
-        columns: Optional[Union[Any, Tuple]] = None,
-        values: Optional[Union[Any, Tuple]] = None,
+        index: Optional[Name] = None,
+        columns: Optional[Name] = None,
+        values: Optional[Name] = None,
     ) -> "DataFrame":
         """
         Return reshaped DataFrame organized by given index / column values.
@@ -6283,7 +6273,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return columns
 
     @columns.setter
-    def columns(self, columns: Union[pd.Index, List[Union[Any, Tuple]]]) -> None:
+    def columns(self, columns: Union[pd.Index, List[Name]]) -> None:
         if isinstance(columns, pd.MultiIndex):
             column_labels = columns.tolist()
         else:
@@ -6526,7 +6516,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
 
     def droplevel(
-        self, level: Union[int, Any, Tuple, List[Union[int, Any, Tuple]]], axis: Union[int, str] = 0
+        self, level: Union[int, Name, List[Union[int, Name]]], axis: Axis = 0
     ) -> "DataFrame":
         """
         Return DataFrame with requested index / column level(s) removed.
@@ -6582,7 +6572,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if not isinstance(level, (tuple, list)):  # huh?
                 level = [level]
 
-            index_names = self.index.names
+            names = self.index.names
             nlevels = self._internal.index_level
 
             int_level = set()
@@ -6602,9 +6592,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                             )
                         )
                 else:
-                    if n not in index_names:
+                    if n not in names:
                         raise KeyError("Level {} not found".format(n))
-                    n = index_names.index(n)
+                    n = names.index(n)
                 int_level.add(n)
 
             if len(level) >= nlevels:
@@ -6640,9 +6630,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def drop(
         self,
-        labels: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
-        axis: Union[int, str] = 1,
-        columns: Union[Any, Tuple, List[Any], List[Tuple]] = None,
+        labels: Optional[Union[Name, List[Name]]] = None,
+        axis: Axis = 1,
+        columns: Union[Name, List[Name]] = None,
     ) -> "DataFrame":
         """
         Drop specified labels from columns.
@@ -6736,14 +6726,17 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
             if len(drop_column_labels) == 0:
                 raise KeyError(columns)
-            cols, labels = zip(
-                *(
-                    (column, label)
-                    for column, label in zip(
-                        self._internal.data_spark_column_names, self._internal.column_labels
-                    )
-                    if label not in drop_column_labels
+
+            keep_columns_and_labels = [
+                (column, label)
+                for column, label in zip(
+                    self._internal.data_spark_column_names, self._internal.column_labels
                 )
+                if label not in drop_column_labels
+            ]
+
+            cols, labels = (
+                zip(*keep_columns_and_labels) if len(keep_columns_and_labels) > 0 else ([], [])
             )
             internal = self._internal.with_new_columns([self._psser_for(label) for label in labels])
             return DataFrame(internal)
@@ -6763,12 +6756,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             raise ValueError("invalid na_position: '{}'".format(na_position))
 
         # Mapper: Get a spark column function for (ascending, na_position) combination
-        # Note that 'asc_nulls_first' and friends were added as of Spark 2.4, see SPARK-23847.
         mapper = {
-            (True, "first"): lambda x: Column(getattr(x._jc, "asc_nulls_first")()),
-            (True, "last"): lambda x: Column(getattr(x._jc, "asc_nulls_last")()),
-            (False, "first"): lambda x: Column(getattr(x._jc, "desc_nulls_first")()),
-            (False, "last"): lambda x: Column(getattr(x._jc, "desc_nulls_last")()),
+            (True, "first"): Column.asc_nulls_first,
+            (True, "last"): Column.asc_nulls_last,
+            (False, "first"): Column.desc_nulls_first,
+            (False, "last"): Column.desc_nulls_last,
         }
         by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]
         sdf = self._internal.resolved_copy.spark_frame.sort(*by, NATURAL_ORDER_COLUMN_NAME)
@@ -6776,7 +6768,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def sort_values(
         self,
-        by: Union[Any, List[Any], Tuple, List[Tuple]],
+        by: Union[Name, List[Name]],
         ascending: Union[bool, List[bool]] = True,
         inplace: bool = False,
         na_position: str = "last",
@@ -6878,7 +6870,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def sort_index(
         self,
-        axis: int = 0,
+        axis: Axis = 0,
         level: Optional[Union[int, List[int]]] = None,
         ascending: bool = True,
         inplace: bool = False,
@@ -6986,10 +6978,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return psdf
 
     def swaplevel(
-        self,
-        i: Union[int, Any, Tuple] = -2,
-        j: Union[int, Any, Tuple] = -1,
-        axis: Union[int, str] = 0,
+        self, i: Union[int, Name] = -2, j: Union[int, Name] = -1, axis: Axis = 0
     ) -> "DataFrame":
         """
         Swap levels i and j in a MultiIndex on a particular axis.
@@ -7091,7 +7080,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return DataFrame(internal)
 
-    def swapaxes(self, i: Union[str, int], j: Union[str, int], copy: bool = True) -> "DataFrame":
+    def swapaxes(self, i: Axis, j: Axis, copy: bool = True) -> "DataFrame":
         """
         Interchange axes and swap values axes appropriately.
 
@@ -7148,9 +7137,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return self.copy() if i == j else self.transpose()
 
-    def _swaplevel_columns(
-        self, i: Union[int, Any, Tuple], j: Union[int, Any, Tuple]
-    ) -> InternalFrame:
+    def _swaplevel_columns(self, i: Union[int, Name], j: Union[int, Name]) -> InternalFrame:
         assert isinstance(self.columns, pd.MultiIndex)
         for index in (i, j):
             if not isinstance(index, int) and index not in self.columns.names:
@@ -7180,9 +7167,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
         return internal
 
-    def _swaplevel_index(
-        self, i: Union[int, Any, Tuple], j: Union[int, Any, Tuple]
-    ) -> InternalFrame:
+    def _swaplevel_index(self, i: Union[int, Name], j: Union[int, Name]) -> InternalFrame:
         assert isinstance(self.index, ps.MultiIndex)
         for index in (i, j):
             if not isinstance(index, int) and index not in self.index.names:
@@ -7214,7 +7199,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return internal
 
     # TODO:  add keep = First
-    def nlargest(self, n: int, columns: "Any") -> "DataFrame":
+    def nlargest(self, n: int, columns: Union[Name, List[Name]]) -> "DataFrame":
         """
         Return the first `n` rows ordered by `columns` in descending order.
 
@@ -7288,7 +7273,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return self.sort_values(by=columns, ascending=False).head(n=n)
 
     # TODO: add keep = First
-    def nsmallest(self, n: int, columns: "Any") -> "DataFrame":
+    def nsmallest(self, n: int, columns: Union[Name, List[Name]]) -> "DataFrame":
         """
         Return the first `n` rows ordered by `columns` in ascending order.
 
@@ -7416,10 +7401,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     )
                 else:
                     data_spark_columns.append(
-                        F.lit(False).alias(self._internal.data_spark_column_names[i])
+                        SF.lit(False).alias(self._internal.data_spark_column_names[i])
                     )
         elif is_list_like(values):
-            values = values.tolist() if isinstance(values, np.ndarray) else list(values)
+            values = (
+                cast(np.ndarray, values).tolist()
+                if isinstance(values, np.ndarray)
+                else list(values)
+            )
             data_spark_columns += [
                 self._internal.spark_column_for(label)
                 .isin(values)
@@ -7453,9 +7442,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         self,
         right: "DataFrame",
         how: str = "inner",
-        on: Optional[Union[Any, List[Any], Tuple, List[Tuple]]] = None,
-        left_on: Optional[Union[Any, List[Any], Tuple, List[Tuple]]] = None,
-        right_on: Optional[Union[Any, List[Any], Tuple, List[Tuple]]] = None,
+        on: Optional[Union[Name, List[Name]]] = None,
+        left_on: Optional[Union[Name, List[Name]]] = None,
+        right_on: Optional[Union[Name, List[Name]]] = None,
         left_index: bool = False,
         right_index: bool = False,
         suffixes: Tuple[str, str] = ("_x", "_y"),
@@ -7577,7 +7566,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             instead of NaN.
         """
 
-        def to_list(os: Optional[Union[Any, List[Any], Tuple, List[Tuple]]]) -> List[Tuple]:
+        def to_list(os: Optional[Union[Name, List[Name]]]) -> List[Label]:
             if os is None:
                 return []
             elif is_name_like_tuple(os):
@@ -7785,7 +7774,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def join(
         self,
         right: "DataFrame",
-        on: Optional[Union[Any, List[Any], Tuple, List[Tuple]]] = None,
+        on: Optional[Union[Name, List[Name]]] = None,
         how: str = "left",
         lsuffix: str = "",
         rsuffix: str = "",
@@ -7910,6 +7899,91 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             right, left_index=True, right_index=True, how=how, suffixes=(lsuffix, rsuffix)
         )
         return join_psdf.reset_index() if need_set_index else join_psdf
+
+    def combine_first(self, other: "DataFrame") -> "DataFrame":
+        """
+        Update null elements with value in the same location in `other`.
+
+        Combine two DataFrame objects by filling null values in one DataFrame
+        with non-null values from other DataFrame. The row and column indexes
+        of the resulting DataFrame will be the union of the two.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        other : DataFrame
+            Provided DataFrame to use to fill null values.
+
+        Returns
+        -------
+        DataFrame
+
+        Examples
+        --------
+        >>> ps.set_option("compute.ops_on_diff_frames", True)
+        >>> df1 = ps.DataFrame({'A': [None, 0], 'B': [None, 4]})
+        >>> df2 = ps.DataFrame({'A': [1, 1], 'B': [3, 3]})
+
+        >>> df1.combine_first(df2).sort_index()
+             A    B
+        0  1.0  3.0
+        1  0.0  4.0
+
+        Null values still persist if the location of that null value does not exist in other
+
+        >>> df1 = ps.DataFrame({'A': [None, 0], 'B': [4, None]})
+        >>> df2 = ps.DataFrame({'B': [3, 3], 'C': [1, 1]}, index=[1, 2])
+
+        >>> df1.combine_first(df2).sort_index()
+             A    B    C
+        0  NaN  4.0  NaN
+        1  0.0  3.0  1.0
+        2  NaN  3.0  1.0
+        >>> ps.reset_option("compute.ops_on_diff_frames")
+        """
+        if not isinstance(other, DataFrame):
+            raise TypeError("`combine_first` only allows `DataFrame` for parameter `other`")
+        if same_anchor(self, other):
+            combined = self
+            this = self
+            that = other
+        else:
+            combined = combine_frames(self, other)
+            this = combined["this"]
+            that = combined["that"]
+
+        intersect_column_labels = set(self._internal.column_labels).intersection(
+            set(other._internal.column_labels)
+        )
+
+        column_labels, data_spark_columns = [], []
+        for column_label in this._internal.column_labels:
+            this_scol = this._internal.spark_column_for(column_label)
+            if column_label in intersect_column_labels:
+                that_scol = that._internal.spark_column_for(column_label)
+                this_scol_name = this._internal.spark_column_name_for(column_label)
+                combined_scol = (
+                    F.when(this_scol.isNull(), that_scol).otherwise(this_scol).alias(this_scol_name)
+                )
+                data_spark_columns.append(combined_scol)
+            else:
+                data_spark_columns.append(this_scol)
+            column_labels.append(column_label)
+
+        for column_label in that._internal.column_labels:
+            if column_label not in intersect_column_labels:
+                that_scol = that._internal.spark_column_for(column_label)
+                data_spark_columns.append(that_scol)
+                column_labels.append(column_label)
+
+        internal = combined._internal.copy(
+            column_labels=column_labels,
+            data_spark_columns=data_spark_columns,
+            data_fields=None,  # TODO: dtype?
+            column_label_names=self._internal.column_label_names,
+        )
+        return DataFrame(internal)
 
     def append(
         self,
@@ -8085,7 +8159,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 update_sdf = update_sdf.withColumn(
                     column_name, F.when(old_col.isNull(), new_col).otherwise(old_col)
                 )
-            data_fields[self._internal.column_labels.index(column_labels)] = None  # TODO: dtype?
+            data_fields[self._internal.column_labels.index(column_labels)] = None
         sdf = update_sdf.select(
             *[scol_for(update_sdf, col) for col in self._internal.spark_column_names],
             *HIDDEN_COLUMNS,
@@ -8182,9 +8256,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
         return DataFrame(self._internal.with_new_sdf(sdf))
 
-    def astype(
-        self, dtype: Union[str, Dtype, Dict[Union[Any, Tuple], Union[str, Dtype]]]
-    ) -> "DataFrame":
+    def astype(self, dtype: Union[str, Dtype, Dict[Name, Union[str, Dtype]]]) -> "DataFrame":
         """
         Cast a pandas-on-Spark object to a specified dtype ``dtype``.
 
@@ -8240,7 +8312,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         applied = []
         if is_dict_like(dtype):
-            dtype_dict = cast(Dict[Union[Any, Tuple], Union[str, Dtype]], dtype)
+            dtype_dict = cast(Dict[Name, Union[str, Dtype]], dtype)
             for col_name in dtype_dict.keys():
                 if col_name not in self.columns:
                     raise KeyError(
@@ -8492,15 +8564,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         exprs = []
         column_labels = []
         for label in self._internal.column_labels:
-            scol = self._internal.spark_column_for(label)
-            spark_type = self._internal.spark_type_for(label)
-            if isinstance(spark_type, DoubleType) or isinstance(spark_type, FloatType):
-                exprs.append(
-                    F.nanvl(scol, F.lit(None)).alias(self._internal.spark_column_name_for(label))
-                )
-                column_labels.append(label)
-            elif isinstance(spark_type, NumericType):
-                exprs.append(scol)
+            psser = self._psser_for(label)
+            if isinstance(psser.spark.data_type, NumericType):
+                exprs.append(psser._dtype_op.nan_to_null(psser).spark.column)
                 column_labels.append(label)
 
         if len(exprs) == 0:
@@ -8533,7 +8599,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def drop_duplicates(
         self,
-        subset: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
+        subset: Optional[Union[Name, List[Name]]] = None,
         keep: str = "first",
         inplace: bool = False,
     ) -> Optional["DataFrame"]:
@@ -8619,7 +8685,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         labels: Optional[Sequence[Any]] = None,
         index: Optional[Union["Index", Sequence[Any]]] = None,
         columns: Optional[Union[pd.Index, Sequence[Any]]] = None,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         copy: Optional[bool] = True,
         fill_value: Optional[Any] = None,
     ) -> "DataFrame":
@@ -8769,10 +8835,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 index = labels
             elif axis == 1:
                 columns = labels
-            else:
-                raise ValueError(
-                    "No axis named %s for object type %s." % (axis, type(axis).__name__)
-                )
 
         if index is not None and not is_list_like(index):
             raise TypeError(
@@ -8824,8 +8886,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 [scol.alias(index_column) for scol, index_column in zip(scols, index_columns)]
             )
         else:
-            psser = ps.Series(list(index))
-            labels = psser._internal.spark_frame.select(psser.spark.column.alias(index_columns[0]))
+            index = ps.Index(list(index))
+            labels = index._internal.spark_frame.select(index.spark.column.alias(index_columns[0]))
             index_names = self._internal.index_names
 
         if fill_value is not None:
@@ -8841,7 +8903,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             frame = frame.select(index_scols + scols)
 
             temp_fill_value = verify_temp_column_name(frame, "__fill_value__")
-            labels = labels.withColumn(temp_fill_value, F.lit(fill_value))
+            labels = labels.withColumn(temp_fill_value, SF.lit(fill_value))
 
             frame_index_scols = [scol_for(frame, col) for col in frame_index_columns]
             labels_index_scols = [scol_for(labels, col) for col in index_columns]
@@ -8870,8 +8932,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     for col in self._internal.data_spark_column_names
                 ],
             )
+            data_fields = None
         else:
             joined_df = frame.join(labels, on=index_columns, how="right")
+            data_fields = [field.copy(nullable=True) for field in self._internal.data_fields]
 
         sdf = joined_df.drop(NATURAL_ORDER_COLUMN_NAME)
         internal = self._internal.copy(
@@ -8880,11 +8944,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=index_names,
-            index_fields=None,  # TODO: dtypes?
+            index_fields=[
+                field.copy(name=name)
+                for field, name in zip(
+                    index._internal.index_fields, self._internal.index_spark_column_names
+                )
+            ],
             data_spark_columns=[
                 scol_for(sdf, col) for col in self._internal.data_spark_column_names
             ],
-            data_fields=[InternalField(dtype=field.dtype) for field in self._internal.data_fields],
+            data_fields=data_fields,
         )
         return DataFrame(internal)
 
@@ -8911,7 +8980,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if label in self._internal.column_labels:
                 scols_or_pssers.append(self._psser_for(label))
             else:
-                scols_or_pssers.append(F.lit(fill_value).alias(name_like_string(label)))
+                scols_or_pssers.append(SF.lit(fill_value).alias(name_like_string(label)))
             labels.append(label)
 
         if isinstance(columns, pd.Index):
@@ -9003,8 +9072,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def melt(
         self,
-        id_vars: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
-        value_vars: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
+        id_vars: Optional[Union[Name, List[Name]]] = None,
+        value_vars: Optional[Union[Name, List[Name]]] = None,
         var_name: Optional[Union[str, List[str]]] = None,
         value_name: str = "value",
     ) -> "DataFrame":
@@ -9188,7 +9257,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             F.array(
                 *[
                     F.struct(
-                        *[F.lit(c).alias(name) for c, name in zip(label, var_name)],
+                        *[SF.lit(c).alias(name) for c, name in zip(label, var_name)],
                         *[self._internal.spark_column_for(label).alias(value_name)],
                     )
                     for label in column_labels
@@ -9219,7 +9288,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
         )
 
-    def stack(self) -> Union["DataFrame", "Series"]:
+    def stack(self) -> DataFrameOrSeries:
         """
         Stack the prescribed level(s) from columns to index.
 
@@ -9331,7 +9400,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return DataFrame(
                 self._internal.copy(
                     column_label_names=self._internal.column_label_names[:-1]
-                ).with_filter(F.lit(False))
+                ).with_filter(SF.lit(False))
             )
 
         column_labels = defaultdict(dict)  # type: Union[defaultdict, OrderedDict]
@@ -9361,12 +9430,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         structs = [
             F.struct(
-                *[F.lit(value).alias(index_column)],
+                *[SF.lit(value).alias(index_column)],
                 *[
                     (
                         column_labels[label][value]
                         if value in column_labels[label]
-                        else F.lit(None)
+                        else SF.lit(None)
                     ).alias(name)
                     for label, name in zip(column_labels, data_columns)
                 ],
@@ -9383,7 +9452,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             + [sdf["pairs"][name].alias(name) for name in data_columns]
         )
 
-        internal = InternalFrame(  # TODO: dtypes?
+        internal = InternalFrame(
             spark_frame=sdf,
             index_spark_columns=[
                 scol_for(sdf, col)
@@ -9393,7 +9462,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             index_fields=self._internal.index_fields + [None],
             column_labels=list(column_labels),
             data_spark_columns=[scol_for(sdf, col) for col in data_columns],
-            column_label_names=column_label_names,  # type: ignore
+            column_label_names=column_label_names,
         )
         psdf = DataFrame(internal)  # type: "DataFrame"
 
@@ -9402,7 +9471,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return psdf
 
-    def unstack(self) -> Union["DataFrame", "Series"]:
+    def unstack(self) -> DataFrameOrSeries:
         """
         Pivot the (necessarily hierarchical) index labels.
 
@@ -9514,13 +9583,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             SPARK_INDEX_NAME_FORMAT(i) for i in range(self._internal.column_labels_level)
         ]
 
-        new_index_map = list(zip(new_index_columns, self._internal.column_label_names))
+        new_index_map = list(zip_longest(new_index_columns, self._internal.column_label_names, []))
 
         pairs = F.explode(
             F.array(
                 *[
                     F.struct(
-                        *[F.lit(c).alias(name) for c, name in zip(idx, new_index_columns)],
+                        *[SF.lit(c).alias(name) for c, name in zip(idx, new_index_columns)],
                         *[self._internal.spark_column_for(idx).alias(ser_name)],
                     )
                     for idx in column_labels
@@ -9535,32 +9604,32 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         new_index_len = len(new_index_columns)
         existing_index_columns = []
-        for i, index_name in enumerate(self._internal.index_names):
-            new_index_map.append((SPARK_INDEX_NAME_FORMAT(i + new_index_len), index_name))
-            existing_index_columns.append(
-                self._internal.index_spark_columns[i].alias(
-                    SPARK_INDEX_NAME_FORMAT(i + new_index_len)
-                )
-            )
+        for i, (index_name, index_field) in enumerate(
+            zip(self._internal.index_names, self._internal.index_fields)
+        ):
+            name = SPARK_INDEX_NAME_FORMAT(i + new_index_len)
+            new_index_map.append((name, index_name, index_field.copy(name=name)))
+            existing_index_columns.append(self._internal.index_spark_columns[i].alias(name))
 
         exploded_df = sdf.withColumn("pairs", pairs).select(existing_index_columns + columns)
 
-        index_spark_column_names, index_names = zip(*new_index_map)
+        index_spark_column_names, index_names, index_fields = zip(*new_index_map)
         return first_series(
             DataFrame(
-                InternalFrame(  # TODO: dtypes?
+                InternalFrame(
                     exploded_df,
                     index_spark_columns=[
                         scol_for(exploded_df, col) for col in index_spark_column_names
                     ],
                     index_names=list(index_names),
+                    index_fields=list(index_fields),
                     column_labels=[None],
                 )
             )
         )
 
     # TODO: axis, skipna, and many arguments should be implemented.
-    def all(self, axis: Union[int, str] = 0) -> "Series":
+    def all(self, axis: Axis = 0) -> "Series":
         """
         Return whether all elements are True.
 
@@ -9613,7 +9682,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         column_labels = self._internal.column_labels
         for label in column_labels:
             scol = self._internal.spark_column_for(label)
-            all_col = F.min(F.coalesce(scol.cast("boolean"), F.lit(True)))
+            all_col = F.min(F.coalesce(scol.cast("boolean"), SF.lit(True)))
             applied.append(F.when(all_col.isNull(), True).otherwise(all_col))
 
         # TODO: there is a similar logic to transpose in, for instance,
@@ -9623,7 +9692,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for label, applied_col in zip(column_labels, applied):
             cols.append(
                 F.struct(
-                    *[F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
+                    *[SF.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
                     *[applied_col.alias(value_column)],
                 )
             )
@@ -9647,7 +9716,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return first_series(DataFrame(internal))
 
     # TODO: axis, skipna, and many arguments should be implemented.
-    def any(self, axis: Union[int, str] = 0) -> "Series":
+    def any(self, axis: Axis = 0) -> "Series":
         """
         Return whether any element is True.
 
@@ -9700,7 +9769,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         column_labels = self._internal.column_labels
         for label in column_labels:
             scol = self._internal.spark_column_for(label)
-            all_col = F.max(F.coalesce(scol.cast("boolean"), F.lit(False)))
+            all_col = F.max(F.coalesce(scol.cast("boolean"), SF.lit(False)))
             applied.append(F.when(all_col.isNull(), False).otherwise(all_col))
 
         # TODO: there is a similar logic to transpose in, for instance,
@@ -9710,7 +9779,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for label, applied_col in zip(column_labels, applied):
             cols.append(
                 F.struct(
-                    *[F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
+                    *[SF.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
                     *[applied_col.alias(value_column)],
                 )
             )
@@ -9812,7 +9881,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         items: Optional[Sequence[Any]] = None,
         like: Optional[str] = None,
         regex: Optional[str] = None,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
     ) -> "DataFrame":
         """
         Subset rows or columns of dataframe according to labels in
@@ -9908,9 +9977,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     col = None
                     for item in items:
                         if col is None:
-                            col = index_scols[0] == F.lit(item)
+                            col = index_scols[0] == SF.lit(item)
                         else:
-                            col = col | (index_scols[0] == F.lit(item))
+                            col = col | (index_scols[0] == SF.lit(item))
                 elif len(index_scols) > 1:
                     # for multi-index
                     col = None
@@ -9922,15 +9991,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         midx_col = None
                         for i, element in enumerate(item):
                             if midx_col is None:
-                                midx_col = index_scols[i] == F.lit(element)
+                                midx_col = index_scols[i] == SF.lit(element)
                             else:
-                                midx_col = midx_col & (index_scols[i] == F.lit(element))
+                                midx_col = midx_col & (index_scols[i] == SF.lit(element))
                         if col is None:
                             col = midx_col
                         else:
                             col = col | midx_col
-                else:
-                    raise ValueError("Single or multi index must be specified.")
                 return DataFrame(self._internal.with_filter(col))
             else:
                 return self[items]
@@ -9973,7 +10040,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         mapper: Optional[Union[Dict, Callable[[Any], Any]]] = None,
         index: Optional[Union[Dict, Callable[[Any], Any]]] = None,
         columns: Optional[Union[Dict, Callable[[Any], Any]]] = None,
-        axis: Union[int, str] = "index",
+        axis: Axis = "index",
         inplace: bool = False,
         level: Optional[int] = None,
         errors: str = "ignore",
@@ -10065,7 +10132,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         def gen_mapper_fn(
             mapper: Union[Dict, Callable[[Any], Any]]
-        ) -> Tuple[Callable[[Any], Any], DataType]:
+        ) -> Tuple[Callable[[Any], Any], Dtype, DataType]:
             if isinstance(mapper, dict):
                 mapper_dict = cast(dict, mapper)
                 if len(mapper_dict) == 0:
@@ -10077,7 +10144,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 type_set = set(map(lambda x: type(x), mapper_dict.values()))
                 if len(type_set) > 1:
                     raise ValueError("Mapper dict should have the same value type.")
-                spark_return_type = as_spark_type(list(type_set)[0])
+                dtype, spark_return_type = pandas_on_spark_type(list(type_set)[0])
 
                 def mapper_fn(x: Any) -> Any:
                     if x in mapper_dict:
@@ -10089,7 +10156,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             elif callable(mapper):
                 mapper_callable = cast(Callable, mapper)
-                spark_return_type = cast(ScalarType, infer_return_type(mapper)).spark_type
+                return_type = cast(ScalarType, infer_return_type(mapper))
+                dtype = return_type.dtype
+                spark_return_type = return_type.spark_type
 
                 def mapper_fn(x: Any) -> Any:
                     return mapper_callable(x)
@@ -10099,7 +10168,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     "`mapper` or `index` or `columns` should be "
                     "either dict-like or function type."
                 )
-            return mapper_fn, spark_return_type
+            return mapper_fn, dtype, spark_return_type
 
         index_mapper_fn = None
         index_mapper_ret_stype = None
@@ -10109,19 +10178,18 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if mapper:
             axis = validate_axis(axis)
             if axis == 0:
-                index_mapper_fn, index_mapper_ret_stype = gen_mapper_fn(mapper)
-            elif axis == 1:
-                columns_mapper_fn, columns_mapper_ret_stype = gen_mapper_fn(mapper)
-            else:
-                raise ValueError(
-                    "argument axis should be either the axis name "
-                    "(‘index’, ‘columns’) or number (0, 1)"
+                index_mapper_fn, index_mapper_ret_dtype, index_mapper_ret_stype = gen_mapper_fn(
+                    mapper
                 )
+            elif axis == 1:
+                columns_mapper_fn, _, _ = gen_mapper_fn(mapper)
         else:
             if index:
-                index_mapper_fn, index_mapper_ret_stype = gen_mapper_fn(index)
+                index_mapper_fn, index_mapper_ret_dtype, index_mapper_ret_stype = gen_mapper_fn(
+                    index
+                )
             if columns:
-                columns_mapper_fn, _ = gen_mapper_fn(columns)
+                columns_mapper_fn, _, _ = gen_mapper_fn(columns)
 
             if not index and not columns:
                 raise ValueError("Either `index` or `columns` should be provided.")
@@ -10147,25 +10215,36 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 if level < 0 or level >= num_indices:
                     raise ValueError("level should be an integer between [0, num_indices)")
 
-            def gen_new_index_column(level: int) -> Column:
-                index_col_name = index_columns[level]
+            @pandas_udf(returnType=index_mapper_ret_stype)  # type: ignore
+            def index_mapper_udf(s: pd.Series) -> pd.Series:
+                return s.map(index_mapper_fn)
 
-                @pandas_udf(returnType=index_mapper_ret_stype)  # type: ignore
-                def index_mapper_udf(s: pd.Series) -> pd.Series:
-                    return s.map(index_mapper_fn)
-
-                return index_mapper_udf(scol_for(psdf._internal.spark_frame, index_col_name))
-
-            sdf = psdf._internal.resolved_copy.spark_frame
-            index_fields = self._internal.index_fields.copy()
+            index_spark_columns = psdf._internal.index_spark_columns.copy()
+            index_fields = psdf._internal.index_fields.copy()
             if level is None:
                 for i in range(num_indices):
-                    sdf = sdf.withColumn(index_columns[i], gen_new_index_column(i))
-                    index_fields[i] = None  # TODO: dtype?
+                    index_spark_columns[i] = index_mapper_udf(index_spark_columns[i]).alias(
+                        index_columns[i]
+                    )
+                    index_fields[i] = index_fields[i].copy(
+                        dtype=index_mapper_ret_dtype,
+                        spark_type=index_mapper_ret_stype,
+                        nullable=True,
+                    )
             else:
-                sdf = sdf.withColumn(index_columns[level], gen_new_index_column(level))
-                index_fields[level] = None  # TODO: dtype?
-            psdf = DataFrame(psdf._internal.with_new_sdf(sdf, index_fields=index_fields))
+                index_spark_columns[level] = index_mapper_udf(index_spark_columns[level]).alias(
+                    index_columns[level]
+                )
+                index_fields[level] = index_fields[level].copy(
+                    dtype=index_mapper_ret_dtype,
+                    spark_type=index_mapper_ret_stype,
+                    nullable=True,
+                )
+            psdf = DataFrame(
+                psdf._internal.copy(
+                    index_spark_columns=index_spark_columns, index_fields=index_fields
+                )
+            )
         if columns_mapper_fn:
             # rename column name.
             # Will modify the `_internal._column_labels` and transform underlying spark dataframe
@@ -10174,7 +10253,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 if level < 0 or level >= psdf._internal.column_labels_level:
                     raise ValueError("level should be an integer between [0, column_labels_level)")
 
-            def gen_new_column_labels_entry(column_labels_entry: Tuple) -> Tuple:
+            def gen_new_column_labels_entry(column_labels_entry: Label) -> Label:
                 if level is None:
                     # rename all level columns
                     return tuple(map(columns_mapper_fn, column_labels_entry))
@@ -10186,11 +10265,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             new_column_labels = list(map(gen_new_column_labels_entry, psdf._internal.column_labels))
 
-            new_data_scols = [
+            new_data_pssers = [
                 psdf._psser_for(old_label).rename(new_label)
                 for old_label, new_label in zip(psdf._internal.column_labels, new_column_labels)
             ]
-            psdf = DataFrame(psdf._internal.with_new_columns(new_data_scols))
+            psdf = DataFrame(psdf._internal.with_new_columns(new_data_pssers))
         if inplace:
             self._update_internal_frame(psdf._internal)
             return None
@@ -10199,16 +10278,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def rename_axis(
         self,
-        mapper: Union[
-            Any, Sequence[Any], Dict[Union[Any, Tuple], Any], Callable[[Union[Any, Tuple]], Any]
-        ] = None,
-        index: Union[
-            Any, Sequence[Any], Dict[Union[Any, Tuple], Any], Callable[[Union[Any, Tuple]], Any]
-        ] = None,
-        columns: Union[
-            Any, Sequence[Any], Dict[Union[Any, Tuple], Any], Callable[[Union[Any, Tuple]], Any]
-        ] = None,
-        axis: Optional[Union[int, str]] = 0,
+        mapper: Union[Any, Sequence[Any], Dict[Name, Any], Callable[[Name], Any]] = None,
+        index: Union[Any, Sequence[Any], Dict[Name, Any], Callable[[Name], Any]] = None,
+        columns: Union[Any, Sequence[Any], Dict[Name, Any], Callable[[Name], Any]] = None,
+        axis: Optional[Axis] = 0,
         inplace: Optional[bool] = False,
     ) -> Optional["DataFrame"]:
         """
@@ -10317,20 +10390,18 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
 
         def gen_names(
-            v: Union[
-                Any, Sequence[Any], Dict[Union[Any, Tuple], Any], Callable[[Union[Any, Tuple]], Any]
-            ],
-            curnames: List[Union[Any, Tuple]],
-        ) -> List[Tuple]:
+            v: Union[Any, Sequence[Any], Dict[Name, Any], Callable[[Name], Any]],
+            curnames: List[Name],
+        ) -> List[Label]:
             if is_scalar(v):
-                newnames = [cast(Any, v)]  # type: List[Union[Any, Tuple]]
+                newnames = [cast(Any, v)]  # type: List[Name]
             elif is_list_like(v) and not is_dict_like(v):
                 newnames = list(cast(Sequence[Any], v))
             elif is_dict_like(v):
-                v_dict = cast(Dict[Union[Any, Tuple], Any], v)
+                v_dict = cast(Dict[Name, Any], v)
                 newnames = [v_dict[name] if name in v_dict else name for name in curnames]
             elif callable(v):
-                v_callable = cast(Callable[[Union[Any, Tuple]], Any], v)
+                v_callable = cast(Callable[[Name], Any], v)
                 newnames = [v_callable(name) for name in curnames]
             else:
                 raise ValueError(
@@ -10457,7 +10528,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return self._apply_series_op(op, should_resolve=True)
 
     # TODO: axis = 1
-    def idxmax(self, axis: Union[int, str] = 0) -> "Series":
+    def idxmax(self, axis: Axis = 0) -> "Series":
         """
         Return index of first occurrence of maximum over requested axis.
         NA/null values are excluded.
@@ -10535,7 +10606,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return cast(ps.Series, ps.from_pandas(psdf._to_internal_pandas().idxmax()))
 
     # TODO: axis = 1
-    def idxmin(self, axis: Union[int, str] = 0) -> "Series":
+    def idxmin(self, axis: Axis = 0) -> "Series":
         """
         Return index of first occurrence of minimum over requested axis.
         NA/null values are excluded.
@@ -10730,10 +10801,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def quantile(
         self,
         q: Union[float, Iterable[float]] = 0.5,
-        axis: Union[int, str] = 0,
+        axis: Axis = 0,
         numeric_only: bool = True,
         accuracy: int = 10000,
-    ) -> Union["DataFrame", "Series"]:
+    ) -> DataFrameOrSeries:
         """
         Return value at the given quantile.
 
@@ -10803,7 +10874,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if v < 0.0 or v > 1.0:
                 raise ValueError("percentiles should all be in the interval [0, 1].")
 
-        def quantile(spark_column: Column, spark_type: DataType) -> Column:
+        def quantile(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, (BooleanType, NumericType)):
                 return F.percentile_approx(spark_column.cast(DoubleType()), qq, accuracy)
             else:
@@ -10829,13 +10902,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             for label, column in zip(
                 self._internal.column_labels, self._internal.data_spark_column_names
             ):
-                spark_type = self._internal.spark_type_for(label)
+                psser = self._psser_for(label)
 
-                is_numeric_or_boolean = isinstance(spark_type, (NumericType, BooleanType))
+                is_numeric_or_boolean = isinstance(
+                    psser.spark.data_type, (NumericType, BooleanType)
+                )
                 keep_column = not numeric_only or is_numeric_or_boolean
 
                 if keep_column:
-                    percentile_col = quantile(self._internal.spark_column_for(label), spark_type)
+                    percentile_col = quantile(psser)
                     percentile_cols.append(percentile_col.alias(column))
                     percentile_col_names.append(column)
                     column_labels.append(label)
@@ -10855,12 +10930,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             for column in percentile_col_names:
                 cols_dict[column] = list()
                 for i in range(len(qq)):
-                    cols_dict[column].append(scol_for(sdf, column).getItem(i).alias(column))
+                    cols_dict[column].append(scol_for(sdf, column)[i].alias(column))
 
             internal_index_column = SPARK_DEFAULT_INDEX_NAME
             cols = []
             for i, col in enumerate(zip(*cols_dict.values())):
-                cols.append(F.struct(F.lit(qq[i]).alias(internal_index_column), *col))
+                cols.append(F.struct(SF.lit(qq[i]).alias(internal_index_column), *col))
             sdf = sdf.select(F.array(*cols).alias("arrays"))
 
             # And then, explode it and manually set the index.
@@ -10989,7 +11064,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return DataFrame(internal)
 
-    def take(self, indices: List[int], axis: Union[int, str] = 0, **kwargs: Any) -> "DataFrame":
+    def take(self, indices: List[int], axis: Axis = 0, **kwargs: Any) -> "DataFrame":
         """
         Return the elements in the given *positional* indices along an axis.
 
@@ -11070,7 +11145,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return cast(DataFrame, self.iloc[:, indices])
 
-    def eval(self, expr: str, inplace: bool = False) -> Optional[Union["DataFrame", "Series"]]:
+    def eval(self, expr: str, inplace: bool = False) -> Optional[DataFrameOrSeries]:
         """
         Evaluate a string describing operations on DataFrame columns.
 
@@ -11190,7 +11265,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # Returns a frame
             return result
 
-    def explode(self, column: Union[Any, Tuple]) -> "DataFrame":
+    def explode(self, column: Name) -> "DataFrame":
         """
         Transform each element of a list-like to a row, replicating index values.
 
@@ -11249,12 +11324,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
 
         data_fields = psdf._internal.data_fields.copy()
-        data_fields[psdf._internal.column_labels.index(psser._column_label)] = None  # TODO: dtype?
+        idx = psdf._internal.column_labels.index(psser._column_label)
+        field = data_fields[idx]
+        spark_type = cast(ArrayType, field.spark_type).elementType
+        dtype = spark_type_to_pandas_dtype(spark_type)
+        data_fields[idx] = field.copy(dtype=dtype, spark_type=spark_type, nullable=True)
 
         internal = psdf._internal.with_new_sdf(sdf, data_fields=data_fields)
         return DataFrame(internal)
 
-    def mad(self, axis: int = 0) -> "Series":
+    def mad(self, axis: Axis = 0) -> "Series":
         """
         Return the mean absolute deviation of values.
 
@@ -11286,7 +11365,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         if axis == 0:
 
-            def get_spark_column(psdf: DataFrame, label: Tuple) -> Column:
+            def get_spark_column(psdf: DataFrame, label: Label) -> Column:
                 scol = psdf._internal.spark_column_for(label)
                 col_type = psdf._internal.spark_type_for(label)
 
@@ -11295,7 +11374,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
                 return scol
 
-            new_column_labels = []  # type: List[Tuple]
+            new_column_labels = []  # type: List[Label]
             for label in self._internal.column_labels:
                 # Filtering out only columns of numeric and boolean type column.
                 dtype = self._psser_for(label).spark.data_type
@@ -11317,7 +11396,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             ]
 
             sdf = self._internal.spark_frame.select(
-                *[F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)], *new_columns
+                *[SF.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)], *new_columns
             )
 
             # The data is expected to be small so it's fine to transpose/use default index.
@@ -11423,7 +11502,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if n < 0:
             n = len(self) + n
         if n <= 0:
-            return ps.DataFrame(self._internal.with_filter(F.lit(False)))
+            return ps.DataFrame(self._internal.with_filter(SF.lit(False)))
         # Should use `resolved_copy` here for the case like `(psdf + 1).tail()`
         sdf = self._internal.resolved_copy.spark_frame
         rows = sdf.tail(n)
@@ -11433,11 +11512,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def align(
         self,
-        other: Union["DataFrame", "Series"],
+        other: DataFrameOrSeries,
         join: str = "outer",
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         copy: bool = True,
-    ) -> Tuple["DataFrame", Union["DataFrame", "Series"]]:
+    ) -> Tuple["DataFrame", DataFrameOrSeries]:
         """
         Align two objects on their axes with the specified join method.
 
@@ -11598,21 +11677,21 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             for label in column_labels:
                 if label not in left._internal.column_labels:
-                    left[label] = F.lit(None).cast(DoubleType())
+                    left[label] = SF.lit(None).cast(DoubleType())
             left = left[column_labels]
             for label in column_labels:
                 if label not in right._internal.column_labels:
-                    right[label] = F.lit(None).cast(DoubleType())
+                    right[label] = SF.lit(None).cast(DoubleType())
             right = right[column_labels]
 
         return (left.copy(), right.copy()) if copy else (left, right)
 
     @staticmethod
     def from_dict(
-        data: Dict[Union[Any, Tuple], Sequence[Any]],
+        data: Dict[Name, Sequence[Any]],
         orient: str = "columns",
         dtype: Union[str, Dtype] = None,
-        columns: Optional[List[Union[Any, Tuple]]] = None,
+        columns: Optional[List[Name]] = None,
     ) -> "DataFrame":
         """
         Construct DataFrame from dict of array-like or dicts.
@@ -11679,8 +11758,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     # Override the `groupby` to specify the actual return type annotation.
     def groupby(
         self,
-        by: Union[Any, Tuple, "Series", List[Union[Any, Tuple, "Series"]]],
-        axis: Union[int, str] = 0,
+        by: Union[Name, "Series", List[Union[Name, "Series"]]],
+        axis: Axis = 0,
         as_index: bool = True,
         dropna: bool = True,
     ) -> "DataFrameGroupBy":
@@ -11691,7 +11770,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     groupby.__doc__ = Frame.groupby.__doc__
 
     def _build_groupby(
-        self, by: List[Union["Series", Tuple]], as_index: bool, dropna: bool
+        self, by: List[Union["Series", Label]], as_index: bool, dropna: bool
     ) -> "DataFrameGroupBy":
         from pyspark.pandas.groupby import DataFrameGroupBy
 
@@ -11786,8 +11865,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             value = DataFrame._index_normalized_frame(level, value)
 
             def assign_columns(
-                psdf: DataFrame, this_column_labels: List[Tuple], that_column_labels: List[Tuple]
-            ) -> Iterator[Tuple["Series", Tuple]]:
+                psdf: DataFrame, this_column_labels: List[Label], that_column_labels: List[Label]
+            ) -> Iterator[Tuple["Series", Label]]:
                 assert len(key) == len(that_column_labels)
                 # Note that here intentionally uses `zip_longest` that combine
                 # that_columns.
@@ -11827,9 +11906,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         self._update_internal_frame(psdf._internal)
 
     @staticmethod
-    def _index_normalized_label(
-        level: int, labels: Union[Any, Tuple, Sequence[Union[Any, Tuple]]]
-    ) -> List[Tuple]:
+    def _index_normalized_label(level: int, labels: Union[Name, Sequence[Name]]) -> List[Label]:
         """
         Returns a label that is normalized against the current column index level.
         For example, the key "abc" can be ("abc", "", "") if the current Frame has
@@ -11851,9 +11928,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return [tuple(list(label) + ([""] * (level - len(label)))) for label in labels]
 
     @staticmethod
-    def _index_normalized_frame(
-        level: int, psser_or_psdf: Union["DataFrame", "Series"]
-    ) -> "DataFrame":
+    def _index_normalized_frame(level: int, psser_or_psdf: DataFrameOrSeries) -> "DataFrame":
         """
         Returns a frame that is normalized against the current column index level.
         For example, the name in `pd.Series([...], name="abc")` can be can be
@@ -11918,7 +11993,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ]
         return list(super().__dir__()) + fields
 
-    def __iter__(self) -> Iterator[Union[Any, Tuple]]:
+    def __iter__(self) -> Iterator[Name]:
         return iter(self.columns)
 
     # NDArray Compat
@@ -11938,8 +12013,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             # Different DataFrames
             def apply_op(
-                psdf: DataFrame, this_column_labels: List[Tuple], that_column_labels: List[Tuple]
-            ) -> Iterator[Tuple["Series", Tuple]]:
+                psdf: DataFrame, this_column_labels: List[Label], that_column_labels: List[Label]
+            ) -> Iterator[Tuple["Series", Label]]:
                 for this_label, that_label in zip(this_column_labels, that_column_labels):
                     yield (
                         ufunc(

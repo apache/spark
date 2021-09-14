@@ -19,13 +19,12 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.UUID
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, WriteBuilder}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
 
@@ -48,7 +47,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       val filters = splitConjunctivePredicates(deleteExpr).flatMap { pred =>
         val filter = DataSourceStrategy.translateFilter(pred, supportNestedPredicatePushdown = true)
         if (filter.isEmpty) {
-          throw new AnalysisException(s"Cannot translate expression to source filter: $pred")
+          throw QueryCompilationErrors.cannotTranslateExpressionToSourceFilterError(pred)
         }
         filter
       }.toArray
@@ -61,7 +60,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
         case builder: SupportsOverwrite =>
           builder.overwrite(filters).build()
         case _ =>
-          throw new SparkException(s"Table does not support overwrite by expression: $table")
+          throw QueryExecutionErrors.overwriteTableByUnsupportedExpressionError(table)
       }
 
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, conf)
@@ -74,7 +73,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
         case builder: SupportsDynamicOverwrite =>
           builder.overwriteDynamicPartitions().build()
         case _ =>
-          throw new SparkException(s"Table does not support dynamic partition overwrite: $table")
+          throw QueryExecutionErrors.dynamicPartitionOverwriteUnsupportedByTableError(table)
       }
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, conf)
       o.copy(write = Some(write), query = newQuery)

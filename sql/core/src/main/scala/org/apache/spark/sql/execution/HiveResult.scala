@@ -101,7 +101,7 @@ object HiveResult {
     case (ld: LocalDate, DateType) => formatters.date.format(ld)
     case (t: Timestamp, TimestampType) => formatters.timestamp.format(t)
     case (i: Instant, TimestampType) => formatters.timestamp.format(i)
-    case (l: LocalDateTime, TimestampWithoutTZType) => formatters.timestamp.format(l)
+    case (l: LocalDateTime, TimestampNTZType) => formatters.timestamp.format(l)
     case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
     case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
     case (n, _: NumericType) => n.toString

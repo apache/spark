@@ -23,6 +23,7 @@ from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import DoubleType, LongType, BooleanType
 
 from pyspark.pandas.base import IndexOpsMixin
+from pyspark.pandas.spark import functions as SF
 
 
 unary_np_spark_mappings = OrderedDict(
@@ -214,7 +215,7 @@ def maybe_dispatch_ufunc_to_spark_func(
         @no_type_check
         def convert_arguments(*args):
             args = [  # type: ignore
-                F.lit(inp) if not isinstance(inp, Column) else inp for inp in args
+                SF.lit(inp) if not isinstance(inp, Column) else inp for inp in args
             ]  # type: ignore
             return np_spark_map_func(*args)
 

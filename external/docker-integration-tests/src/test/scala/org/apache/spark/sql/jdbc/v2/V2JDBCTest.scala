@@ -50,7 +50,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val msg = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN bad_column DROP NOT NULL")
     }.getMessage
-    assert(msg.contains("Cannot update missing field bad_column"))
+    assert(msg.contains("Missing field bad_column"))
   }
 
   def testRenameColumn(tbl: String): Unit = {
@@ -103,8 +103,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       val msg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN bad_column")
       }.getMessage
-      assert(
-        msg.contains(s"Cannot delete missing field bad_column in $catalogName.alt_table schema"))
+      assert(msg.contains(s"Missing field bad_column in table $catalogName.alt_table"))
     }
     // Drop a column from a not existing table
     val msg = intercept[AnalysisException] {
@@ -120,7 +119,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       val msg2 = intercept[AnalysisException] {
         sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN bad_column TYPE DOUBLE")
       }.getMessage
-      assert(msg2.contains("Cannot update missing field bad_column"))
+      assert(msg2.contains("Missing field bad_column"))
     }
     // Update column type in not existing table
     val msg = intercept[AnalysisException] {

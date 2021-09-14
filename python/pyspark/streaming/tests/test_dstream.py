@@ -31,8 +31,7 @@ from pyspark.testing.streamingutils import PySparkStreamingTestCase
 
 @unittest.skipIf(
     "pypy" in platform.python_implementation().lower(),
-    "The tests fail in PyPy3 implementation for an unknown reason. "
-    "With PyPy, it causes to hang DStream tests forever when Coverage report is used.")
+    "The tests fail in PyPy3 implementation for an unknown reason.")
 class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_map(self):
@@ -396,8 +395,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
 @unittest.skipIf(
     "pypy" in platform.python_implementation().lower(),
-    "The tests fail in PyPy3 implementation for an unknown reason. "
-    "With PyPy, it causes to hang DStream tests forever when Coverage report is used.")
+    "The tests fail in PyPy3 implementation for an unknown reason.")
 class WindowFunctionTests(PySparkStreamingTestCase):
 
     timeout = 15
@@ -477,8 +475,7 @@ class WindowFunctionTests(PySparkStreamingTestCase):
 
 @unittest.skipIf(
     "pypy" in platform.python_implementation().lower(),
-    "The tests fail in PyPy3 implementation for an unknown reason. "
-    "With PyPy, it causes to hang DStream tests forever when Coverage report is used.")
+    "The tests fail in PyPy3 implementation for an unknown reason.")
 class CheckpointTests(unittest.TestCase):
 
     setupCalled = False

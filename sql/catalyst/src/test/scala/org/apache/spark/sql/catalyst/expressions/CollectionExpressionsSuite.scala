@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Period}
+import java.time.{Duration, LocalDateTime, Period}
 import java.util.TimeZone
 
 import scala.language.implicitConversions
@@ -919,6 +919,16 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Date.valueOf("2020-11-01"),
           Date.valueOf("2022-04-01")))
 
+      checkEvaluation(new Sequence(
+        Literal(Date.valueOf("2021-07-01")),
+        Literal(Date.valueOf("2021-07-10")),
+        Literal(fromDayTimeString("3 0:0:0"))),
+        Seq(
+          Date.valueOf("2021-07-01"),
+          Date.valueOf("2021-07-04"),
+          Date.valueOf("2021-07-07"),
+          Date.valueOf("2021-07-10")))
+
       checkExceptionInExpression[IllegalArgumentException](
         new Sequence(
           Literal(Date.valueOf("1970-01-02")),
@@ -1092,6 +1102,52 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Date.valueOf("2020-11-01"),
           Date.valueOf("2022-04-01")))
 
+      checkEvaluation(new Sequence(
+        Literal(Date.valueOf("2021-07-01")),
+        Literal(Date.valueOf("2021-07-10")),
+        Literal(Duration.ofDays(3))),
+        Seq(
+          Date.valueOf("2021-07-01"),
+          Date.valueOf("2021-07-04"),
+          Date.valueOf("2021-07-07"),
+          Date.valueOf("2021-07-10")))
+
+      checkExceptionInExpression[IllegalArgumentException](
+        new Sequence(
+          Literal(Date.valueOf("2021-07-01")),
+          Literal(Date.valueOf("2021-07-10")),
+          Literal(Duration.ofHours(3))),
+        EmptyRow,
+        "sequence step must be an interval day to second of day granularity" +
+          " if start and end values are dates")
+
+      checkExceptionInExpression[IllegalArgumentException](
+        new Sequence(
+          Literal(Date.valueOf("2021-07-01")),
+          Literal(Date.valueOf("2021-07-10")),
+          Literal(Duration.ofMinutes(3))),
+        EmptyRow,
+        "sequence step must be an interval day to second of day granularity" +
+          " if start and end values are dates")
+
+      checkExceptionInExpression[IllegalArgumentException](
+        new Sequence(
+          Literal(Date.valueOf("2021-07-01")),
+          Literal(Date.valueOf("2021-07-10")),
+          Literal(Duration.ofSeconds(3))),
+        EmptyRow,
+        "sequence step must be an interval day to second of day granularity" +
+          " if start and end values are dates")
+
+      checkExceptionInExpression[IllegalArgumentException](
+        new Sequence(
+          Literal(Date.valueOf("2021-07-01")),
+          Literal(Date.valueOf("2021-07-10")),
+          Literal(Duration.ofMillis(3))),
+        EmptyRow,
+        "sequence step must be an interval day to second of day granularity" +
+          " if start and end values are dates")
+
       checkExceptionInExpression[IllegalArgumentException](
         new Sequence(
           Literal(Date.valueOf("2018-01-01")),
@@ -1108,12 +1164,127 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Literal(Period.ofMonths(-1))),
         EmptyRow,
         s"sequence boundaries: 0 to 2678400000000 by -1")
-
-      assert(Sequence(
-        Cast(Literal("2011-03-01"), DateType),
-        Cast(Literal("2011-04-01"), DateType),
-        Option(Literal(Duration.ofHours(1)))).checkInputDataTypes().isFailure)
     }
+  }
+
+  test("SPARK-36090: Support TimestampNTZType in expression Sequence") {
+    checkEvaluation(new Sequence(
+      Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+      Literal(LocalDateTime.parse("2018-01-02T00:00:00")),
+      Literal(Duration.ofHours(12))),
+      Seq(
+        LocalDateTime.parse("2018-01-01T00:00:00"),
+        LocalDateTime.parse("2018-01-01T12:00:00"),
+        LocalDateTime.parse("2018-01-02T00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+      Literal(LocalDateTime.parse("2018-01-02T00:00:01")),
+      Literal(Duration.ofHours(12))),
+      Seq(
+        LocalDateTime.parse("2018-01-01T00:00:00"),
+        LocalDateTime.parse("2018-01-01T12:00:00"),
+        LocalDateTime.parse("2018-01-02T00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(LocalDateTime.parse("2018-01-02T00:00:00")),
+      Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+      Literal(Duration.ofHours(-12))),
+      Seq(
+        LocalDateTime.parse("2018-01-02T00:00:00"),
+        LocalDateTime.parse("2018-01-01T12:00:00"),
+        LocalDateTime.parse("2018-01-01T00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(LocalDateTime.parse("2018-01-02T00:00:00")),
+      Literal(LocalDateTime.parse("2017-12-31T23:59:59")),
+      Literal(Duration.ofHours(-12))),
+      Seq(
+        LocalDateTime.parse("2018-01-02T00:00:00"),
+        LocalDateTime.parse("2018-01-01T12:00:00"),
+        LocalDateTime.parse("2018-01-01T00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+      Literal(LocalDateTime.parse("2018-03-01T00:00:00")),
+      Literal(Period.ofMonths(1))),
+      Seq(
+        LocalDateTime.parse("2018-01-01T00:00:00"),
+        LocalDateTime.parse("2018-02-01T00:00:00"),
+        LocalDateTime.parse("2018-03-01T00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(LocalDateTime.parse("2018-03-01T00:00:00")),
+      Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+      Literal(Period.ofMonths(-1))),
+      Seq(
+        LocalDateTime.parse("2018-03-01T00:00:00"),
+        LocalDateTime.parse("2018-02-01T00:00:00"),
+        LocalDateTime.parse("2018-01-01T00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(LocalDateTime.parse("2018-01-31T00:00:00")),
+      Literal(LocalDateTime.parse("2018-04-30T00:00:00")),
+      Literal(Period.ofMonths(1))),
+      Seq(
+        LocalDateTime.parse("2018-01-31T00:00:00"),
+        LocalDateTime.parse("2018-02-28T00:00:00"),
+        LocalDateTime.parse("2018-03-31T00:00:00"),
+        LocalDateTime.parse("2018-04-30T00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+      Literal(LocalDateTime.parse("2023-01-01T00:00:00")),
+      Literal(Period.of(1, 5, 0))),
+      Seq(
+        LocalDateTime.parse("2018-01-01T00:00:00.000"),
+        LocalDateTime.parse("2019-06-01T00:00:00.000"),
+        LocalDateTime.parse("2020-11-01T00:00:00.000"),
+        LocalDateTime.parse("2022-04-01T00:00:00.000")))
+
+    checkEvaluation(new Sequence(
+      Literal(LocalDateTime.parse("2022-04-01T00:00:00")),
+      Literal(LocalDateTime.parse("2017-01-01T00:00:00")),
+      Literal(Period.of(-1, -5, 0))),
+      Seq(
+        LocalDateTime.parse("2022-04-01T00:00:00.000"),
+        LocalDateTime.parse("2020-11-01T00:00:00.000"),
+        LocalDateTime.parse("2019-06-01T00:00:00.000"),
+        LocalDateTime.parse("2018-01-01T00:00:00.000")))
+
+    checkEvaluation(new Sequence(
+      Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+      Literal(LocalDateTime.parse("2018-01-04T00:00:00")),
+      Literal(Duration.ofDays(1))),
+      Seq(
+        LocalDateTime.parse("2018-01-01T00:00:00.000"),
+        LocalDateTime.parse("2018-01-02T00:00:00.000"),
+        LocalDateTime.parse("2018-01-03T00:00:00.000"),
+        LocalDateTime.parse("2018-01-04T00:00:00.000")))
+
+    checkEvaluation(new Sequence(
+      Literal(LocalDateTime.parse("2018-01-04T00:00:00")),
+      Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+      Literal(Duration.ofDays(-1))),
+      Seq(
+        LocalDateTime.parse("2018-01-04T00:00:00.000"),
+        LocalDateTime.parse("2018-01-03T00:00:00.000"),
+        LocalDateTime.parse("2018-01-02T00:00:00.000"),
+        LocalDateTime.parse("2018-01-01T00:00:00.000")))
+
+    checkExceptionInExpression[IllegalArgumentException](
+      new Sequence(
+        Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+        Literal(LocalDateTime.parse("2018-01-04T00:00:00")),
+        Literal(Period.ofDays(1))),
+      EmptyRow, s"sequence boundaries: 1514764800000000 to 1515024000000000 by 0")
+
+    checkExceptionInExpression[IllegalArgumentException](
+      new Sequence(
+        Literal(LocalDateTime.parse("2018-01-04T00:00:00")),
+        Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+        Literal(Period.ofDays(-1))),
+      EmptyRow, s"sequence boundaries: 1515024000000000 to 1514764800000000 by 0")
   }
 
   test("Sequence with default step") {
@@ -1154,6 +1325,23 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         Date.valueOf("2018-01-03"),
         Date.valueOf("2018-01-02"),
         Date.valueOf("2018-01-01")))
+
+    // +/- 1 day for LocalDateTimes
+    checkEvaluation(new Sequence(
+      Literal(LocalDateTime.parse("2018-01-01T00:00:00")),
+      Literal(LocalDateTime.parse("2018-01-03T00:00:00"))),
+      Seq(
+        LocalDateTime.parse("2018-01-01T00:00:00"),
+        LocalDateTime.parse("2018-01-02T00:00:00"),
+        LocalDateTime.parse("2018-01-03T00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(LocalDateTime.parse("2018-01-03T00:00:00")),
+      Literal(LocalDateTime.parse("2018-01-01T00:00:00"))),
+      Seq(
+        LocalDateTime.parse("2018-01-03T00:00:00"),
+        LocalDateTime.parse("2018-01-02T00:00:00"),
+        LocalDateTime.parse("2018-01-01T00:00:00")))
   }
 
   test("Reverse") {
@@ -2061,6 +2249,24 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Seq(Date.valueOf("2018-01-01")))
   }
 
+  test("SPARK-36639: Start and end equal in month range with a negative step") {
+    checkEvaluation(new Sequence(
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(stringToInterval("interval -1 day"))),
+      Seq(Date.valueOf("2018-01-01")))
+    checkEvaluation(new Sequence(
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(stringToInterval("interval -1 month"))),
+      Seq(Date.valueOf("2018-01-01")))
+    checkEvaluation(new Sequence(
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(stringToInterval("interval -1 year"))),
+      Seq(Date.valueOf("2018-01-01")))
+  }
+
   test("SPARK-33386: element_at ArrayIndexOutOfBoundsException") {
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
@@ -2102,5 +2308,22 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         }
       }
     }
+  }
+
+  test("SPARK-36702: ArrayUnion should handle duplicated Double.NaN and Float.Nan") {
+    checkEvaluation(ArrayUnion(
+      Literal.apply(Array(Double.NaN, Double.NaN)), Literal.apply(Array(1d))),
+      Seq(Double.NaN, 1d))
+    checkEvaluation(ArrayUnion(
+      Literal.create(Seq(Double.NaN, null), ArrayType(DoubleType)),
+      Literal.create(Seq(Double.NaN, null, 1d), ArrayType(DoubleType))),
+      Seq(Double.NaN, null, 1d))
+    checkEvaluation(ArrayUnion(
+      Literal.apply(Array(Float.NaN, Float.NaN)), Literal.apply(Array(1f))),
+      Seq(Float.NaN, 1f))
+    checkEvaluation(ArrayUnion(
+      Literal.create(Seq(Float.NaN, null), ArrayType(FloatType)),
+      Literal.create(Seq(Float.NaN, null, 1f), ArrayType(FloatType))),
+      Seq(Float.NaN, null, 1f))
   }
 }

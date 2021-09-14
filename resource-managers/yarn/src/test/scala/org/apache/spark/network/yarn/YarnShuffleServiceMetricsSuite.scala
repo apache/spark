@@ -75,23 +75,19 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
         metrics.getMetrics.get(testname))
 
       assert(counterNames === Seq(s"${testname}_count"))
+      val rates = Seq("rate1", "rate5", "rate15", "rateMean")
+      val percentiles =
+        "1stPercentile" +: Seq(5, 25, 50, 75, 95, 98, 99, 999).map(_ + "thPercentile")
       val (expectLong, expectDouble) =
         if (testname.matches("blockTransfer(Message)?Rate(Bytes)?$")) {
           // blockTransfer(Message)?Rate(Bytes)? metrics are Meter so just have rate information
-          (Seq(), Seq("1", "5", "15", "Mean").map(suffix => s"${testname}_rate$suffix"))
+          (Seq(), rates)
         } else {
           // other metrics are Timer so have rate and timing information
-          (
-              Seq(s"${testname}_nanos_max", s"${testname}_nanos_min"),
-              Seq("rate1", "rate5", "rate15", "rateMean", "nanos_mean", "nanos_stdDev",
-                "nanos_1stPercentile", "nanos_5thPercentile", "nanos_25thPercentile",
-                "nanos_50thPercentile", "nanos_75thPercentile", "nanos_95thPercentile",
-                "nanos_98thPercentile", "nanos_99thPercentile", "nanos_999thPercentile")
-                  .map(suffix => s"${testname}_$suffix")
-          )
+          (Seq("max", "min"), rates ++ Seq("mean", "stdDev") ++ percentiles)
         }
-      assert(gaugeLongNames.sorted === expectLong.sorted)
-      assert(gaugeDoubleNames.sorted === expectDouble.sorted)
+      assert(gaugeLongNames.sorted === expectLong.map(testname + "_" + _).sorted)
+      assert(gaugeDoubleNames.sorted === expectDouble.map(testname + "_" + _).sorted)
     }
   }
 

@@ -1435,6 +1435,7 @@ test_that("column functions", {
     desc_nulls_first(c1) + desc_nulls_last(c1)
   c29 <- acosh(c1) + asinh(c1) + atanh(c1)
   c30 <- product(c1) + product(c1 * 0.5)
+  c31 <- cot(c1)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -3542,6 +3543,8 @@ test_that("repartition by columns on DataFrame", {
   conf <- callJMethod(sparkSession, "conf")
   shufflepartitionsvalue <- callJMethod(conf, "get", "spark.sql.shuffle.partitions")
   callJMethod(conf, "set", "spark.sql.shuffle.partitions", "5")
+  coalesceEnabled <- callJMethod(conf, "get", "spark.sql.adaptive.coalescePartitions.enabled")
+  callJMethod(conf, "set", "spark.sql.adaptive.coalescePartitions.enabled", "false")
   tryCatch({
     df <- createDataFrame(
       list(list(1L, 1, "1", 0.1), list(1L, 2, "2", 0.2), list(3L, 3, "3", 0.3)),
@@ -3583,6 +3586,7 @@ test_that("repartition by columns on DataFrame", {
   finally = {
     # Resetting the conf back to default value
     callJMethod(conf, "set", "spark.sql.shuffle.partitions", shufflepartitionsvalue)
+    callJMethod(conf, "set", "spark.sql.adaptive.coalescePartitions.enabled", coalesceEnabled)
   })
 })
 

@@ -207,6 +207,8 @@ case class StreamingSymmetricHashJoinExec(
     case _ => throwBadJoinTypeException()
   }
 
+  override def shortName: String = "symmetricHashJoin"
+
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
     val watermarkUsedForStateCleanup =
       stateWatermarkPredicates.left.nonEmpty || stateWatermarkPredicates.right.nonEmpty
@@ -221,6 +223,7 @@ case class StreamingSymmetricHashJoinExec(
   protected override def doExecute(): RDD[InternalRow] = {
     val stateStoreCoord = session.sessionState.streamingQueryManager.stateStoreCoordinator
     val stateStoreNames = SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
+    metrics // initialize metrics
     left.execute().stateStoreAwareZipPartitions(
       right.execute(), stateInfo.get, stateStoreNames, stateStoreCoord)(processPartitions)
   }
@@ -237,6 +240,7 @@ case class StreamingSymmetricHashJoinExec(
     val numUpdatedStateRows = longMetric("numUpdatedStateRows")
     val numTotalStateRows = longMetric("numTotalStateRows")
     val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
+    val numRemovedStateRows = longMetric("numRemovedStateRows")
     val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
     val commitTimeMs = longMetric("commitTimeMs")
     val stateMemory = longMetric("stateMemory")
@@ -407,6 +411,7 @@ case class StreamingSymmetricHashJoinExec(
         }
         while (cleanupIter.hasNext) {
           cleanupIter.next()
+          numRemovedStateRows += 1
         }
       }
 
@@ -425,6 +430,9 @@ case class StreamingSymmetricHashJoinExec(
           longMetric(metric.name) += value
         }
       }
+
+      val stateStoreNames = SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide);
+      setOperatorMetrics(numStateStoreInstances = stateStoreNames.length)
     }
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](

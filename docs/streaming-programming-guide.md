@@ -221,7 +221,7 @@ The complete code can be found in the Spark Streaming example
 
 </div>
 <div data-lang="python"  markdown="1" >
-First, we import [StreamingContext](api/python/pyspark.streaming.html#pyspark.streaming.StreamingContext), which is the main entry point for all streaming functionality. We create a local StreamingContext with two execution threads, and batch interval of 1 second.
+First, we import [StreamingContext](api/python/reference/api/pyspark.streaming.StreamingContext.html#pyspark.streaming.StreamingContext), which is the main entry point for all streaming functionality. We create a local StreamingContext with two execution threads, and batch interval of 1 second.
 
 {% highlight python %}
 from pyspark import SparkContext
@@ -503,7 +503,7 @@ JavaStreamingContext ssc = new JavaStreamingContext(sc, Durations.seconds(1));
 </div>
 <div data-lang="python" markdown="1">
 
-A [StreamingContext](api/python/pyspark.streaming.html#pyspark.streaming.StreamingContext) object can be created from a [SparkContext](api/python/pyspark.html#pyspark.SparkContext) object.
+A [StreamingContext](api/python/reference/api/pyspark.streaming.StreamingContext.html#pyspark.streaming.StreamingContext) object can be created from a [SparkContext](api/python/reference/api/pyspark.SparkContext.html#pyspark.SparkContext) object.
 
 {% highlight python %}
 from pyspark import SparkContext
@@ -741,7 +741,7 @@ For testing a Spark Streaming application with test data, one can also create a 
 For more details on streams from sockets and files, see the API documentations of the relevant functions in
 [StreamingContext](api/scala/org/apache/spark/streaming/StreamingContext.html) for
 Scala, [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html)
-for Java, and [StreamingContext](api/python/pyspark.streaming.html#pyspark.streaming.StreamingContext) for Python.
+for Java, and [StreamingContext](api/python/reference/api/pyspark.streaming.StreamingContext.html#pyspark.streaming.StreamingContext) for Python.
 
 ### Advanced Sources
 {:.no_toc}
@@ -1223,7 +1223,7 @@ see [DStream](api/scala/org/apache/spark/streaming/dstream/DStream.html)
 and [PairDStreamFunctions](api/scala/org/apache/spark/streaming/dstream/PairDStreamFunctions.html).
 For the Java API, see [JavaDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaDStream.html)
 and [JavaPairDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaPairDStream.html).
-For the Python API, see [DStream](api/python/pyspark.streaming.html#pyspark.streaming.DStream).
+For the Python API, see [DStream](api/python/reference/api/pyspark.streaming.DStream.html#pyspark.streaming.DStream).
 
 ***
 
@@ -2496,8 +2496,7 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
     * [KafkaUtils](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html),
     [KinesisUtils](api/java/index.html?org/apache/spark/streaming/kinesis/KinesisInputDStream.html)
   - Python docs
-    * [StreamingContext](api/python/pyspark.streaming.html#pyspark.streaming.StreamingContext) and [DStream](api/python/pyspark.streaming.html#pyspark.streaming.DStream)
-    * [KafkaUtils](api/python/pyspark.streaming.html#pyspark.streaming.kafka.KafkaUtils)
+    * [StreamingContext](api/python/reference/api/pyspark.streaming.StreamingContext.html#pyspark.streaming.StreamingContext) and [DStream](api/python/reference/api/pyspark.streaming.DStream.html#pyspark.streaming.DStream)
 
 * More examples in [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming)
   and [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming)
