@@ -1099,7 +1099,8 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
     // like 'size([1, 2, 3]) > 0'. These do not show up in child's constraints and
     // then the idempotence will break.
     case generate @ Generate(e, _, _, _, _, _)
-      if !e.deterministic || e.children.forall(_.foldable) => generate
+      if !e.deterministic || e.children.forall(_.foldable) ||
+        e.children.exists(_.isInstanceOf[UserDefinedExpression]) => generate
 
     case generate @ Generate(g, _, false, _, _, _) if canInferFilters(g) =>
       // Exclude child's constraints to guarantee idempotency

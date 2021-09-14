@@ -428,6 +428,12 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     def __ror__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.ror(self, other)
 
+    def __xor__(self, other: Any) -> SeriesOrIndex:
+        return self._dtype_op.xor(self, other)
+
+    def __rxor__(self, other: Any) -> SeriesOrIndex:
+        return self._dtype_op.rxor(self, other)
+
     def __len__(self) -> int:
         return len(self._psdf)
 

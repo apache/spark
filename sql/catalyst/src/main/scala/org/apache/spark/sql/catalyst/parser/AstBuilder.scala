@@ -1557,7 +1557,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Add a predicate to the given expression. Supported expressions are:
    * - (NOT) BETWEEN
    * - (NOT) IN
-   * - (NOT) LIKE (ANY | SOME | ALL)
+   * - (NOT) (LIKE | ILIKE) (ANY | SOME | ALL)
    * - (NOT) RLIKE
    * - IS (NOT) NULL.
    * - IS (NOT) (TRUE | FALSE | UNKNOWN)
@@ -1573,6 +1573,20 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     def getValueExpressions(e: Expression): Seq[Expression] = e match {
       case c: CreateNamedStruct => c.valExprs
       case other => Seq(other)
+    }
+
+    def lowerLikeArgsIfNeeded(
+        expr: Expression,
+        patterns: Seq[UTF8String]): (Expression, Seq[UTF8String]) = ctx.kind.getType match {
+      // scalastyle:off caselocale
+      case SqlBaseParser.ILIKE => (Lower(expr), patterns.map(_.toLowerCase))
+      // scalastyle:on caselocale
+      case _ => (expr, patterns)
+    }
+
+    def getLike(expr: Expression, pattern: Expression): Expression = ctx.kind.getType match {
+      case SqlBaseParser.ILIKE => new ILike(expr, pattern)
+      case _ => new Like(expr, pattern)
     }
 
     // Create the predicate.
@@ -1595,13 +1609,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
               // If there are many pattern expressions, will throw StackOverflowError.
               // So we use LikeAny or NotLikeAny instead.
               val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])
+              val (expr, pat) = lowerLikeArgsIfNeeded(e, patterns)
               ctx.NOT match {
-                case null => LikeAny(e, patterns)
-                case _ => NotLikeAny(e, patterns)
+                case null => LikeAny(expr, pat)
+                case _ => NotLikeAny(expr, pat)
               }
             } else {
               ctx.expression.asScala.map(expression)
-                .map(p => invertIfNotDefined(new Like(e, p))).toSeq.reduceLeft(Or)
+                .map(p => invertIfNotDefined(getLike(e, p))).toSeq.reduceLeft(Or)
             }
           case Some(SqlBaseParser.ALL) =>
             validate(!ctx.expression.isEmpty, "Expected something between '(' and ')'.", ctx)
@@ -1610,13 +1625,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
               // If there are many pattern expressions, will throw StackOverflowError.
               // So we use LikeAll or NotLikeAll instead.
               val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])
+              val (expr, pat) = lowerLikeArgsIfNeeded(e, patterns)
               ctx.NOT match {
-                case null => LikeAll(e, patterns)
-                case _ => NotLikeAll(e, patterns)
+                case null => LikeAll(expr, pat)
+                case _ => NotLikeAll(expr, pat)
               }
             } else {
               ctx.expression.asScala.map(expression)
-                .map(p => invertIfNotDefined(new Like(e, p))).toSeq.reduceLeft(And)
+                .map(p => invertIfNotDefined(getLike(e, p))).toSeq.reduceLeft(And)
             }
           case _ =>
             val escapeChar = Option(ctx.escapeChar).map(string).map { str =>
@@ -1625,9 +1641,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
               }
               str.charAt(0)
             }.getOrElse('\\')
-            val likeExpr = if (ctx.kind.getType == SqlBaseParser.ILIKE) {
-              new ILike(e, expression(ctx.pattern), escapeChar)
-            } else Like(e, expression(ctx.pattern), escapeChar)
+            val likeExpr = ctx.kind.getType match {
+              case SqlBaseParser.ILIKE => new ILike(e, expression(ctx.pattern), escapeChar)
+              case _ => Like(e, expression(ctx.pattern), escapeChar)
+            }
             invertIfNotDefined(likeExpr)
         }
       case SqlBaseParser.RLIKE =>
