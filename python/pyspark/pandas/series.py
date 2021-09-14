@@ -4549,13 +4549,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise TypeError("'other' must be a Series")
 
         if same_anchor(self, other):
-            scol = F.when(other.spark.column.isNotNull(), other.spark.column).otherwise(
-                self.spark.column
+            scol = (
+                F.when(other.spark.column.isNotNull(), other.spark.column)
+                .otherwise(self.spark.column)
+                .alias(self._psdf._internal.spark_column_name_for(self._column_label))
             )
             internal = self._psdf._internal.with_new_spark_column(
                 self._column_label, scol  # TODO: dtype?
             )
-            self._psdf._update_internal_frame(internal.resolved_copy)
+            self._psdf._update_internal_frame(internal)
         else:
             combined = combine_frames(self._psdf, other._psdf, how="leftouter")
 
