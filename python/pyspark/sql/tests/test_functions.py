@@ -23,7 +23,7 @@ from py4j.protocol import Py4JJavaError
 from pyspark.sql import Row, Window
 from pyspark.sql.functions import udf, input_file_name, col, percentile_approx, \
     lit, assert_true, sum_distinct, sumDistinct, shiftleft, shiftLeft, shiftRight, \
-    shiftright, shiftrightunsigned, shiftRightUnsigned
+    shiftright, shiftrightunsigned, shiftRightUnsigned, octet_length, bit_length
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -199,14 +199,12 @@ class FunctionsTests(ReusedSQLTestCase):
 
     def test_octet_length_function(self):
         # SPARK-36751: add octet/bit length api for python
-        from pyspark.sql.functions import octet_length
         df = self.spark.createDataFrame([('cat',), ('\U0001F408',)], ['cat'])
         actual = df.select(octet_length('cat')).collect()
         self.assertEqual([Row(3), Row(4)], actual)
 
     def test_bit_length_function(self):
         # SPARK-36751: add octet/bit length api for python
-        from pyspark.sql.functions import bit_length
         df = self.spark.createDataFrame([('cat',), ('\U0001F408',)], ['cat'])
         actual = df.select(bit_length('cat')).collect()
         self.assertEqual([Row(24), Row(32)], actual)
