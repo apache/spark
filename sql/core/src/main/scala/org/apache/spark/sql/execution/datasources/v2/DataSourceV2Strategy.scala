@@ -213,7 +213,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, writeOptions, _) =>
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
       val filters = splitConjunctivePredicates(deleteExpr).map {
-        filter => DataSourceStrategy.translateFilter(deleteExpr,
+        filter => DataSourceStrategy.translateFilter(filter,
           supportNestedPredicatePushdown = true).getOrElse(
             throw new AnalysisException(s"Cannot translate expression to source filter: $filter"))
       }.toArray
