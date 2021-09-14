@@ -1130,7 +1130,8 @@ object ConstraintSet extends ConstraintHelper {
       preparedConstraint2.originals.toSeq)
 
     val netCommonSols = generateCommonSolutions(templatizedConstraintsMapLeg1,
-      templatizedConstraintsMapLeg2, commonAttribListMapping)
+      templatizedConstraintsMapLeg2, commonAttribListMapping.map{case (attrs, attribBuff) =>
+        attrs -> attribBuff.toSeq})
     val commonAttribList = commonAttribListMapping.values
     val decomposedAttribEquivListsOfLeg1 = calculateDecomposedAttribEquivLists(leg1RefsOfInterest,
       preparedConstraint1.attribRefBasedEquivalenceList, commonAttribList)
