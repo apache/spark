@@ -1,3 +1,21 @@
+..  Licensed to the Apache Software Foundation (ASF) under one
+    or more contributor license agreements.  See the NOTICE file
+    distributed with this work for additional information
+    regarding copyright ownership.  The ASF licenses this file
+    to you under the Apache License, Version 2.0 (the
+    "License"); you may not use this file except in compliance
+    with the License.  You may obtain a copy of the License at
+
+..    http://www.apache.org/licenses/LICENSE-2.0
+
+..  Unless required by applicable law or agreed to in writing,
+    software distributed under the License is distributed on an
+    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, either express or implied.  See the License for the
+    specific language governing permissions and limitations
+    under the License.
+
+
 .. _api.dataframe:
 
 =========
@@ -100,6 +118,7 @@ Binary operator functions
    DataFrame.ne
    DataFrame.eq
    DataFrame.dot
+   DataFrame.combine_first
 
 Function application, GroupBy & Window
 --------------------------------------
@@ -276,20 +295,15 @@ in Spark. These can be accessed by ``DataFrame.spark.<function/property>``.
 .. autosummary::
    :toctree: api/
 
-   DataFrame.spark.schema
-   DataFrame.spark.print_schema
    DataFrame.spark.frame
    DataFrame.spark.cache
    DataFrame.spark.persist
    DataFrame.spark.hint
    DataFrame.spark.to_table
    DataFrame.spark.to_spark_io
-   DataFrame.spark.explain
    DataFrame.spark.apply
    DataFrame.spark.repartition
    DataFrame.spark.coalesce
-   DataFrame.spark.checkpoint
-   DataFrame.spark.local_checkpoint
 
 .. _api.dataframe.plot:
 
@@ -321,6 +335,5 @@ These can be accessed by ``DataFrame.pandas_on_spark.<function/property>``.
 .. autosummary::
    :toctree: api/
 
-   DataFrame.pandas_on_spark.attach_id_column
    DataFrame.pandas_on_spark.apply_batch
    DataFrame.pandas_on_spark.transform_batch

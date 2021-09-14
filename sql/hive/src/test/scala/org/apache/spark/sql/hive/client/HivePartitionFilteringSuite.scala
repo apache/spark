@@ -31,13 +31,16 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DateType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.util.Utils
 
 class HivePartitionFilteringSuite(version: String)
-    extends HiveVersionSuite(version) with BeforeAndAfterAll {
+    extends HiveVersionSuite(version) with BeforeAndAfterAll with SQLHelper {
 
   private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
+  private val fallbackKey = SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key
 
   // Support default partition in metastoredirectsql since HIVE-11898(Hive 2.0.0).
   private val defaultPartition = if (version >= "2.0") Some(DEFAULT_PARTITION_NAME) else None
@@ -110,12 +113,24 @@ class HivePartitionFilteringSuite(version: String)
     client = init(true)
   }
 
-  test(s"getPartitionsByFilter returns all partitions when $tryDirectSqlKey=false") {
-    val client = init(false)
-    val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test"),
-      Seq(attr("ds") === 20170101))
+  test(s"getPartitionsByFilter returns all partitions when $fallbackKey=true") {
+    withSQLConf(fallbackKey -> "true") {
+      val client = init(false)
+      val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test"),
+        Seq(attr("ds") === 20170101))
 
-    assert(filteredPartitions.size == testPartitionCount)
+      assert(filteredPartitions.size == testPartitionCount)
+    }
+  }
+
+  test(s"getPartitionsByFilter should fail when $fallbackKey=false") {
+    withSQLConf(fallbackKey -> "false") {
+      val client = init(false)
+      val e = intercept[RuntimeException](
+        client.getPartitionsByFilter(client.getTable("default", "test"),
+          Seq(attr("ds") === 20170101)))
+      assert(e.getMessage.contains("Caught Hive MetaException"))
+    }
   }
 
   test("getPartitionsByFilter: ds<=>20170101") {

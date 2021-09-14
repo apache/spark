@@ -14,6 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+"""
+.. versionadded:: 3.2.0
+    pandas API on Spark
+"""
+
 import os
 import sys
 from distutils.version import LooseVersion

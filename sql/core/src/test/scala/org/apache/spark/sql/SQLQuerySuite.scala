@@ -33,12 +33,12 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.execution.UnionExec
+import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.execution.command.FunctionsCommand
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.command.{DataWritingCommandExec, FunctionsCommand}
+import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -136,7 +136,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-14415: All functions should have own descriptions") {
     for (f <- spark.sessionState.functionRegistry.listFunction()) {
-      if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f.unquotedString)) {
+      if (!Seq("cube", "grouping", "grouping_id", "rollup").contains(f.unquotedString)) {
         checkKeywordsNotExist(sql(s"describe function $f"), "N/A.")
       }
     }
@@ -3377,7 +3377,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         s"VALUES(${(0 until 65).map { _ => 1 }.mkString(", ")}, 3) AS " +
         s"t(${(0 until 65).map { i => s"k$i" }.mkString(", ")}, v)")
 
-      def testGropingIDs(numGroupingSet: Int, expectedIds: Seq[Any] = Nil): Unit = {
+      def testGroupingIDs(numGroupingSet: Int, expectedIds: Seq[Any] = Nil): Unit = {
         val groupingCols = (0 until numGroupingSet).map { i => s"k$i" }
         val df = sql("SELECT GROUPING_ID(), SUM(v) FROM t GROUP BY " +
           s"GROUPING SETS ((${groupingCols.mkString(",")}), (${groupingCols.init.mkString(",")}))")
@@ -3385,20 +3385,35 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
 
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "true") {
-        testGropingIDs(32, Seq(0, 1))
-        val errMsg = intercept[AnalysisException] {
-          testGropingIDs(33)
-        }.getMessage
-        assert(errMsg.contains("Grouping sets size cannot be greater than 32"))
+        testGroupingIDs(32, Seq(0, 1))
+        val ex = intercept[AnalysisException] {
+          testGroupingIDs(33)
+        }
+        assert(ex.getMessage.contains("Grouping sets size cannot be greater than 32"))
+        assert(ex.getErrorClass == "GROUPING_SIZE_LIMIT_EXCEEDED")
       }
 
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "false") {
-        testGropingIDs(64, Seq(0L, 1L))
-        val errMsg = intercept[AnalysisException] {
-          testGropingIDs(65)
-        }.getMessage
-        assert(errMsg.contains("Grouping sets size cannot be greater than 64"))
+        testGroupingIDs(64, Seq(0L, 1L))
+        val ex = intercept[AnalysisException] {
+          testGroupingIDs(65)
+        }
+        assert(ex.getMessage.contains("Grouping sets size cannot be greater than 64"))
+        assert(ex.getErrorClass == "GROUPING_SIZE_LIMIT_EXCEEDED")
       }
+    }
+  }
+
+  test("SPARK-36339: References to grouping attributes should be replaced") {
+    withTempView("t") {
+      Seq("a", "a", "b").toDF("x").createOrReplaceTempView("t")
+      checkAnswer(
+        sql(
+          """
+            |select count(x) c, x from t
+            |group by x grouping sets(x)
+          """.stripMargin),
+        Seq(Row(2, "a"), Row(1, "b")))
     }
   }
 
@@ -4165,6 +4180,48 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
            |""".stripMargin),
         Row(1, 2, 1, 2) :: Nil)
     }
+  }
+
+  test("SPARK-36093: RemoveRedundantAliases should not change expression's name") {
+    withTable("t1", "t2") {
+      withView("t1_v") {
+        sql("CREATE TABLE t1(cal_dt DATE) USING PARQUET")
+        sql(
+          """
+            |INSERT INTO t1 VALUES
+            |(date'2021-06-27'),
+            |(date'2021-06-28'),
+            |(date'2021-06-29'),
+            |(date'2021-06-30')""".stripMargin)
+        sql("CREATE VIEW t1_v AS SELECT * FROM t1")
+        sql(
+          """
+            |CREATE TABLE t2(FLAG INT, CAL_DT DATE)
+            |USING PARQUET
+            |PARTITIONED BY (CAL_DT)""".stripMargin)
+        val insert = sql(
+          """
+            |INSERT INTO t2 SELECT 2 AS FLAG,CAL_DT FROM t1_v
+            |WHERE CAL_DT BETWEEN '2021-06-29' AND '2021-06-30'""".stripMargin)
+        insert.queryExecution.executedPlan.collectFirst {
+          case CommandResultExec(_, DataWritingCommandExec(
+            i: InsertIntoHadoopFsRelationCommand, _), _) => i
+        }.get.partitionColumns.map(_.name).foreach(name => assert(name == "CAL_DT"))
+        checkAnswer(sql("SELECT FLAG, CAST(CAL_DT as STRING) FROM t2 "),
+            Row(2, "2021-06-29") :: Row(2, "2021-06-30") :: Nil)
+        checkAnswer(sql("SHOW PARTITIONS t2"),
+            Row("CAL_DT=2021-06-29") :: Row("CAL_DT=2021-06-30") :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-36371: Support raw string literal") {
+    checkAnswer(sql("""SELECT r'a\tb\nc'"""), Row("""a\tb\nc"""))
+    checkAnswer(sql("""SELECT R'a\tb\nc'"""), Row("""a\tb\nc"""))
+    checkAnswer(sql("""SELECT r"a\tb\nc""""), Row("""a\tb\nc"""))
+    checkAnswer(sql("""SELECT R"a\tb\nc""""), Row("""a\tb\nc"""))
+    checkAnswer(sql("""SELECT from_json(r'{"a": "\\"}', 'a string')"""), Row(Row("\\")))
+    checkAnswer(sql("""SELECT from_json(R'{"a": "\\"}', 'a string')"""), Row(Row("\\")))
   }
 }
 

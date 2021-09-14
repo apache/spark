@@ -754,6 +754,34 @@ def validate_how(how: str) -> str:
     return how
 
 
+def validate_mode(mode: str) -> str:
+    """Check the given mode for writing is valid."""
+    if mode in ("w", "w+"):
+        # 'w' in pandas equals 'overwrite' in Spark
+        # '+' is meaningless for writing methods, but pandas just pass it as 'w'.
+        mode = "overwrite"
+    if mode in ("a", "a+"):
+        # 'a' in pandas equals 'append' in Spark
+        # '+' is meaningless for writing methods, but pandas just pass it as 'a'.
+        mode = "append"
+    if mode not in (
+        "w",
+        "a",
+        "w+",
+        "a+",
+        "overwrite",
+        "append",
+        "ignore",
+        "error",
+        "errorifexists",
+    ):
+        raise ValueError(
+            "The 'mode' parameter has to be amongst the following values: ",
+            "['w', 'a', 'w+', 'a+', 'overwrite', 'append', 'ignore', 'error', 'errorifexists']",
+        )
+    return mode
+
+
 @overload
 def verify_temp_column_name(df: SparkDataFrame, column_name_or_label: str) -> str:
     ...

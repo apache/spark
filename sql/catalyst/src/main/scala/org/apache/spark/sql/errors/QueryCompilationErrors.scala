@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
@@ -46,60 +46,61 @@ import org.apache.spark.sql.types._
  * As commands are executed eagerly, this also includes errors thrown during the execution of
  * commands, which users can see immediately.
  */
-private[spark] object QueryCompilationErrors {
+object QueryCompilationErrors {
 
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
-      s"Columns of grouping_id (${groupingID.groupByExprs.mkString(",")}) " +
-        s"does not match grouping columns (${groupByExprs.mkString(",")})")
+      errorClass = "GROUPING_ID_COLUMN_MISMATCH",
+      messageParameters = Array(groupingID.groupByExprs.mkString(","), groupByExprs.mkString(",")))
   }
 
   def groupingColInvalidError(groupingCol: Expression, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
-      s"Column of grouping ($groupingCol) can't be found " +
-        s"in grouping columns ${groupByExprs.mkString(",")}")
+      errorClass = "GROUPING_COLUMN_MISMATCH",
+      messageParameters = Array(groupingCol.toString, groupByExprs.mkString(",")))
   }
 
   def groupingSizeTooLargeError(sizeLimit: Int): Throwable = {
     new AnalysisException(
-      s"Grouping sets size cannot be greater than $sizeLimit")
+      errorClass = "GROUPING_SIZE_LIMIT_EXCEEDED",
+      messageParameters = Array(sizeLimit.toString))
   }
 
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
-      s"Invalid pivot column '$pivotCol'. Pivot columns must be comparable."
-    )
+      errorClass = "INCOMPARABLE_PIVOT_COLUMN",
+      messageParameters = Array(pivotCol.toString))
   }
 
   def nonLiteralPivotValError(pivotVal: Expression): Throwable = {
     new AnalysisException(
-      s"Literal expressions required for pivot values, found '$pivotVal'")
+      errorClass = "NON_LITERAL_PIVOT_VALUES",
+      messageParameters = Array(pivotVal.toString))
   }
 
   def pivotValDataTypeMismatchError(pivotVal: Expression, pivotCol: Expression): Throwable = {
     new AnalysisException(
-      s"Invalid pivot value '$pivotVal': " +
-        s"value data type ${pivotVal.dataType.simpleString} does not match " +
-        s"pivot column data type ${pivotCol.dataType.catalogString}")
+      errorClass = "PIVOT_VALUE_DATA_TYPE_MISMATCH",
+      messageParameters = Array(
+        pivotVal.toString, pivotVal.dataType.simpleString, pivotCol.dataType.catalogString))
   }
 
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
     new AnalysisException(
-      s"Cannot write, IF NOT EXISTS is not supported for table: $tableName")
+      errorClass = "IF_PARTITION_NOT_EXISTS_UNSUPPORTED",
+      messageParameters = Array(tableName))
   }
 
   def nonPartitionColError(partitionName: String): Throwable = {
     new AnalysisException(
-      s"PARTITION clause cannot contain a non-partition column name: $partitionName")
+      errorClass = "NON_PARTITION_COLUMN",
+      messageParameters = Array(partitionName))
   }
 
-  def addStaticValToUnknownColError(staticName: String): Throwable = {
+  def missingStaticPartitionColumn(staticName: String): Throwable = {
     new AnalysisException(
-      s"Cannot add static value for unknown column: $staticName")
-  }
-
-  def unknownStaticPartitionColError(name: String): Throwable = {
-    new AnalysisException(s"Unknown static partition column: $name")
+      errorClass = "MISSING_STATIC_PARTITION_COLUMN",
+      messageParameters = Array(staticName))
   }
 
   def nestedGeneratorError(trimmedNestedGenerator: Expression): Throwable = {
@@ -261,8 +262,19 @@ private[spark] object QueryCompilationErrors {
       "Star (*) is not allowed in select list when GROUP BY ordinal position is used")
   }
 
-  def invalidStarUsageError(prettyName: String): Throwable = {
-    new AnalysisException(s"Invalid usage of '*' in $prettyName")
+  def invalidStarUsageError(prettyName: String, stars: Seq[Star]): Throwable = {
+    val regExpr = stars.collect{ case UnresolvedRegex(pattern, _, _) => s"'$pattern'" }
+    val resExprMsg = Option(regExpr.distinct).filter(_.nonEmpty).map {
+      case Seq(p) => s"regular expression $p"
+      case patterns => s"regular expressions ${patterns.mkString(", ")}"
+    }
+    val starMsg = if (stars.length - regExpr.length > 0) {
+      Some("'*'")
+    } else {
+      None
+    }
+    val elem = Seq(starMsg, resExprMsg).flatten.mkString(" and ")
+    new AnalysisException(s"Invalid usage of $elem in $prettyName")
   }
 
   def singleTableStarInCountNotAllowedError(targetString: String): Throwable = {
@@ -365,8 +377,14 @@ private[spark] object QueryCompilationErrors {
   }
 
   def multiTimeWindowExpressionsNotSupportedError(t: TreeNode[_]): Throwable = {
-    new AnalysisException("Multiple time window expressions would result in a cartesian product " +
-      "of rows, therefore they are currently not supported.", t.origin.line, t.origin.startPosition)
+    new AnalysisException("Multiple time/session window expressions would result in a cartesian " +
+      "product of rows, therefore they are currently not supported.", t.origin.line,
+      t.origin.startPosition)
+  }
+
+  def sessionWindowGapDurationDataTypeError(dt: DataType): Throwable = {
+    new AnalysisException("Gap duration expression used in session window must be " +
+      s"CalendarIntervalType, but got ${dt}")
   }
 
   def viewOutputNumberMismatchQueryColumnNamesError(
@@ -1391,10 +1409,6 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("multi-part identifier cannot be empty.")
   }
 
-  def cannotCreateTablesWithNullTypeError(): Throwable = {
-    new AnalysisException(s"Cannot create tables with ${NullType.simpleString} type.")
-  }
-
   def functionUnsupportedInV2CatalogError(): Throwable = {
     new AnalysisException("function is only supported in v1 catalog")
   }
@@ -2263,8 +2277,8 @@ private[spark] object QueryCompilationErrors {
       s"""Cannot resolve column name "$colName" among (${fieldsStr})${extraMsg}""")
   }
 
-  def cannotParseTimeDelayError(delayThreshold: String, e: IllegalArgumentException): Throwable = {
-    new AnalysisException(s"Unable to parse time delay '$delayThreshold'", cause = Some(e))
+  def cannotParseIntervalError(delayThreshold: String, e: Throwable): Throwable = {
+    new AnalysisException(s"Unable to parse '$delayThreshold'", cause = Some(e))
   }
 
   def invalidJoinTypeInJoinWithError(joinType: JoinType): Throwable = {
@@ -2319,7 +2333,11 @@ private[spark] object QueryCompilationErrors {
   }
 
   def cannotModifyValueOfSparkConfigError(key: String): Throwable = {
-    new AnalysisException(s"Cannot modify the value of a Spark config: $key")
+    new AnalysisException(
+      s"""
+         |Cannot modify the value of a Spark config: $key.
+         |See also 'https://spark.apache.org/docs/latest/sql-migration-guide.html#ddl-statements'
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   def commandExecutionInRunnerUnsupportedError(runner: String): Throwable = {
@@ -2354,12 +2372,12 @@ private[spark] object QueryCompilationErrors {
   }
 
   def missingFieldError(
-      fieldName: Seq[String], table: ResolvedTable, context: Expression): Throwable = {
+      fieldName: Seq[String], table: ResolvedTable, context: Origin): Throwable = {
     throw new AnalysisException(
       s"Missing field ${fieldName.quoted} in table ${table.name} with schema:\n" +
         table.schema.treeString,
-      context.origin.line,
-      context.origin.startPosition)
+      context.line,
+      context.startPosition)
   }
 
   def invalidFieldName(fieldName: Seq[String], path: Seq[String], context: Origin): Throwable = {
@@ -2367,5 +2385,11 @@ private[spark] object QueryCompilationErrors {
       errorClass = "INVALID_FIELD_NAME",
       messageParameters = Array(fieldName.quoted, path.quoted),
       origin = context)
+  }
+
+  def invalidJsonSchema(schema: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
+      messageParameters = Array(schema.toString))
   }
 }

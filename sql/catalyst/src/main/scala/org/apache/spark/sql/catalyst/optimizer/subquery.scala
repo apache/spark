@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.ScalarSubquery._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
@@ -709,5 +710,49 @@ object RewriteLateralSubquery extends Rule[LogicalPlan] {
       val newRight = DecorrelateInnerQuery.rewriteDomainJoins(left, sub, joinCond)
       val newCond = (condition ++ joinCond).reduceOption(And)
       Join(left, newRight, joinType, newCond, JoinHint.NONE)
+  }
+}
+
+/**
+ * This rule optimizes subqueries with OneRowRelation as leaf nodes.
+ */
+object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
+
+  object OneRowSubquery {
+    def unapply(plan: LogicalPlan): Option[Seq[NamedExpression]] = {
+      CollapseProject(EliminateSubqueryAliases(plan)) match {
+        case Project(projectList, _: OneRowRelation) => Some(stripOuterReferences(projectList))
+        case _ => None
+      }
+    }
+  }
+
+  private def hasCorrelatedSubquery(plan: LogicalPlan): Boolean = {
+    plan.find(_.expressions.exists(SubqueryExpression.hasCorrelatedSubquery)).isDefined
+  }
+
+  /**
+   * Rewrite a subquery expression into one or more expressions. The rewrite can only be done
+   * if there is no nested subqueries in the subquery plan.
+   */
+  private def rewrite(plan: LogicalPlan): LogicalPlan = plan.transformUpWithSubqueries {
+    case LateralJoin(left, right @ LateralSubquery(OneRowSubquery(projectList), _, _, _), _, None)
+        if !hasCorrelatedSubquery(right.plan) && right.joinCond.isEmpty =>
+      Project(left.output ++ projectList, left)
+    case p: LogicalPlan => p.transformExpressionsUpWithPruning(
+      _.containsPattern(SCALAR_SUBQUERY)) {
+      case s @ ScalarSubquery(OneRowSubquery(projectList), _, _, _)
+          if !hasCorrelatedSubquery(s.plan) && s.joinCond.isEmpty =>
+        assert(projectList.size == 1)
+        projectList.head
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!conf.getConf(SQLConf.OPTIMIZE_ONE_ROW_RELATION_SUBQUERY)) {
+      plan
+    } else {
+      rewrite(plan)
+    }
   }
 }

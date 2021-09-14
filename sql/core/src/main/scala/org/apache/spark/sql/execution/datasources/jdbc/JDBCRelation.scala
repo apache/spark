@@ -278,6 +278,27 @@ private[sql] case class JDBCRelation(
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
+    // When pushDownPredicate is false, all Filters that need to be pushed down should be ignored
+    val pushedFilters = if (jdbcOptions.pushDownPredicate) {
+      filters
+    } else {
+      Array.empty[Filter]
+    }
+    // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
+    JDBCRDD.scanTable(
+      sparkSession.sparkContext,
+      schema,
+      requiredColumns,
+      pushedFilters,
+      parts,
+      jdbcOptions).asInstanceOf[RDD[Row]]
+  }
+
+  def buildScan(
+      requiredColumns: Array[String],
+      finalSchema: StructType,
+      filters: Array[Filter],
+      groupByColumns: Option[Array[String]]): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sparkSession.sparkContext,
@@ -285,7 +306,9 @@ private[sql] case class JDBCRelation(
       requiredColumns,
       filters,
       parts,
-      jdbcOptions).asInstanceOf[RDD[Row]]
+      jdbcOptions,
+      Some(finalSchema),
+      groupByColumns).asInstanceOf[RDD[Row]]
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {

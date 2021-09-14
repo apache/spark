@@ -74,31 +74,30 @@ TakeOrderedAndProject [customer_id,customer_first_name,customer_last_name,custom
                     InputAdapter
                       BroadcastExchange #8
                         WholeStageCodegen (11)
-                          Project [customer_id,year_total]
-                            Filter [year_total]
-                              HashAggregate [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year,sum,isEmpty] [sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(cs_ext_list_price as decimal(8,2))) - promote_precision(cast(cs_ext_wholesale_cost as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(cs_ext_discount_amt as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(cs_ext_sales_price as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true)),customer_id,year_total,sum,isEmpty]
-                                InputAdapter
-                                  Exchange [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year] #9
-                                    WholeStageCodegen (10)
-                                      HashAggregate [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year,cs_ext_list_price,cs_ext_wholesale_cost,cs_ext_discount_amt,cs_ext_sales_price] [sum,isEmpty,sum,isEmpty]
-                                        Project [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,cs_ext_discount_amt,cs_ext_sales_price,cs_ext_wholesale_cost,cs_ext_list_price,d_year]
-                                          BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                                            Project [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,cs_ext_discount_amt,cs_ext_sales_price,cs_ext_wholesale_cost,cs_ext_list_price,cs_sold_date_sk]
-                                              BroadcastHashJoin [c_customer_sk,cs_bill_customer_sk]
-                                                Filter [c_customer_sk,c_customer_id]
-                                                  ColumnarToRow
-                                                    InputAdapter
-                                                      Scan parquet default.customer [c_customer_sk,c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address]
-                                                InputAdapter
-                                                  BroadcastExchange #10
-                                                    WholeStageCodegen (8)
-                                                      Filter [cs_bill_customer_sk]
-                                                        ColumnarToRow
-                                                          InputAdapter
-                                                            Scan parquet default.catalog_sales [cs_bill_customer_sk,cs_ext_discount_amt,cs_ext_sales_price,cs_ext_wholesale_cost,cs_ext_list_price,cs_sold_date_sk]
-                                                              ReusedSubquery [d_date_sk] #1
-                                            InputAdapter
-                                              ReusedExchange [d_date_sk,d_year] #3
+                          Filter [year_total]
+                            HashAggregate [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year,sum,isEmpty] [sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(cs_ext_list_price as decimal(8,2))) - promote_precision(cast(cs_ext_wholesale_cost as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(cs_ext_discount_amt as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(cs_ext_sales_price as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true)),customer_id,year_total,sum,isEmpty]
+                              InputAdapter
+                                Exchange [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year] #9
+                                  WholeStageCodegen (10)
+                                    HashAggregate [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year,cs_ext_list_price,cs_ext_wholesale_cost,cs_ext_discount_amt,cs_ext_sales_price] [sum,isEmpty,sum,isEmpty]
+                                      Project [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,cs_ext_discount_amt,cs_ext_sales_price,cs_ext_wholesale_cost,cs_ext_list_price,d_year]
+                                        BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
+                                          Project [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,cs_ext_discount_amt,cs_ext_sales_price,cs_ext_wholesale_cost,cs_ext_list_price,cs_sold_date_sk]
+                                            BroadcastHashJoin [c_customer_sk,cs_bill_customer_sk]
+                                              Filter [c_customer_sk,c_customer_id]
+                                                ColumnarToRow
+                                                  InputAdapter
+                                                    Scan parquet default.customer [c_customer_sk,c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address]
+                                              InputAdapter
+                                                BroadcastExchange #10
+                                                  WholeStageCodegen (8)
+                                                    Filter [cs_bill_customer_sk]
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet default.catalog_sales [cs_bill_customer_sk,cs_ext_discount_amt,cs_ext_sales_price,cs_ext_wholesale_cost,cs_ext_list_price,cs_sold_date_sk]
+                                                            ReusedSubquery [d_date_sk] #1
+                                          InputAdapter
+                                            ReusedExchange [d_date_sk,d_year] #3
                 InputAdapter
                   BroadcastExchange #11
                     WholeStageCodegen (15)
@@ -128,31 +127,30 @@ TakeOrderedAndProject [customer_id,customer_first_name,customer_last_name,custom
             InputAdapter
               BroadcastExchange #14
                 WholeStageCodegen (19)
-                  Project [customer_id,year_total]
-                    Filter [year_total]
-                      HashAggregate [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year,sum,isEmpty] [sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ws_ext_list_price as decimal(8,2))) - promote_precision(cast(ws_ext_wholesale_cost as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(ws_ext_discount_amt as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(ws_ext_sales_price as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true)),customer_id,year_total,sum,isEmpty]
-                        InputAdapter
-                          Exchange [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year] #15
-                            WholeStageCodegen (18)
-                              HashAggregate [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year,ws_ext_list_price,ws_ext_wholesale_cost,ws_ext_discount_amt,ws_ext_sales_price] [sum,isEmpty,sum,isEmpty]
-                                Project [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,ws_ext_discount_amt,ws_ext_sales_price,ws_ext_wholesale_cost,ws_ext_list_price,d_year]
-                                  BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
-                                    Project [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,ws_ext_discount_amt,ws_ext_sales_price,ws_ext_wholesale_cost,ws_ext_list_price,ws_sold_date_sk]
-                                      BroadcastHashJoin [c_customer_sk,ws_bill_customer_sk]
-                                        Filter [c_customer_sk,c_customer_id]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.customer [c_customer_sk,c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address]
-                                        InputAdapter
-                                          BroadcastExchange #16
-                                            WholeStageCodegen (16)
-                                              Filter [ws_bill_customer_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.web_sales [ws_bill_customer_sk,ws_ext_discount_amt,ws_ext_sales_price,ws_ext_wholesale_cost,ws_ext_list_price,ws_sold_date_sk]
-                                                      ReusedSubquery [d_date_sk] #1
-                                    InputAdapter
-                                      ReusedExchange [d_date_sk,d_year] #3
+                  Filter [year_total]
+                    HashAggregate [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year,sum,isEmpty] [sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ws_ext_list_price as decimal(8,2))) - promote_precision(cast(ws_ext_wholesale_cost as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) - promote_precision(cast(ws_ext_discount_amt as decimal(9,2)))), DecimalType(9,2), true) as decimal(10,2))) + promote_precision(cast(ws_ext_sales_price as decimal(10,2)))), DecimalType(10,2), true)) / 2.00), DecimalType(14,6), true)),customer_id,year_total,sum,isEmpty]
+                      InputAdapter
+                        Exchange [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year] #15
+                          WholeStageCodegen (18)
+                            HashAggregate [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year,ws_ext_list_price,ws_ext_wholesale_cost,ws_ext_discount_amt,ws_ext_sales_price] [sum,isEmpty,sum,isEmpty]
+                              Project [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,ws_ext_discount_amt,ws_ext_sales_price,ws_ext_wholesale_cost,ws_ext_list_price,d_year]
+                                BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
+                                  Project [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,ws_ext_discount_amt,ws_ext_sales_price,ws_ext_wholesale_cost,ws_ext_list_price,ws_sold_date_sk]
+                                    BroadcastHashJoin [c_customer_sk,ws_bill_customer_sk]
+                                      Filter [c_customer_sk,c_customer_id]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.customer [c_customer_sk,c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address]
+                                      InputAdapter
+                                        BroadcastExchange #16
+                                          WholeStageCodegen (16)
+                                            Filter [ws_bill_customer_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.web_sales [ws_bill_customer_sk,ws_ext_discount_amt,ws_ext_sales_price,ws_ext_wholesale_cost,ws_ext_list_price,ws_sold_date_sk]
+                                                    ReusedSubquery [d_date_sk] #1
+                                  InputAdapter
+                                    ReusedExchange [d_date_sk,d_year] #3
         InputAdapter
           BroadcastExchange #17
             WholeStageCodegen (23)

@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
-import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, Offset => OffsetV2, PartitionOffset, ReadLimit}
+import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, PartitionOffset, ReadLimit}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
@@ -85,9 +85,9 @@ class ContinuousExecution(
     uniqueSources = sources.distinct.map(s => s -> ReadLimit.allAvailable()).toMap
 
     // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
-    WriteToContinuousDataSource(
-      createStreamingWrite(
-        plan.sink.asInstanceOf[SupportsWrite], extraOptions, _logicalPlan), _logicalPlan)
+    val (streamingWrite, customMetrics) = createStreamingWrite(
+      plan.sink.asInstanceOf[SupportsWrite], extraOptions, _logicalPlan)
+    WriteToContinuousDataSource(streamingWrite, _logicalPlan, customMetrics)
   }
 
   private val triggerExecutor = trigger match {
@@ -335,7 +335,7 @@ class ContinuousExecution(
         val offset =
           sources(0).deserializeOffset(offsetLog.get(epoch).get.offsets(0).get.json)
         committedOffsets ++= Seq(sources(0) -> offset)
-        sources(0).commit(offset.asInstanceOf[OffsetV2])
+        sources(0).commit(offset)
       } else {
         return
       }

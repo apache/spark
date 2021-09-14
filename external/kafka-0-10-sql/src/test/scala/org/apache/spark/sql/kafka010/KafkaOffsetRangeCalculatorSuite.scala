@@ -106,7 +106,7 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
           KafkaOffsetRange(tp1, 4, 5, None))) // location pref not set when minPartition is set
   }
 
-  testWithMinPartitions("N skewed TopicPartitions to M offset ranges", 3) { calc =>
+  testWithMinPartitions("N skewed TopicPartitions to M offset ranges", 4) { calc =>
     assert(
       calc.getRanges(
         Seq(
@@ -134,7 +134,7 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
 
   testWithMinPartitions(
       "SPARK-30656: N very skewed TopicPartitions to M offset ranges",
-      3) { calc =>
+      4) { calc =>
     assert(
       calc.getRanges(
         Seq(
@@ -170,7 +170,7 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
           KafkaOffsetRange(tp1, 7, 11, None)))
   }
 
-  testWithMinPartitions("empty ranges ignored", 3) { calc =>
+  testWithMinPartitions("empty ranges ignored", 4) { calc =>
     assert(
       calc.getRanges(
         Seq(
@@ -199,6 +199,58 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
           KafkaOffsetRange(tp2, 3, 6, None),
           KafkaOffsetRange(tp2, 6, 10, None),
           KafkaOffsetRange(tp3, 0, 1, None)))
+  }
+
+  testWithMinPartitions(
+    "SPARK-36576: 0 small unsplit ranges and 3 large split ranges", 9) { calc =>
+    assert(
+      calc.getRanges(
+        Seq(
+          KafkaOffsetRange(tp1, 0, 10000),
+          KafkaOffsetRange(tp2, 0, 15000),
+          KafkaOffsetRange(tp3, 0, 20000))) ===
+        Seq(
+          KafkaOffsetRange(tp1, 0, 5000, None),
+          KafkaOffsetRange(tp1, 5000, 10000, None),
+          KafkaOffsetRange(tp2, 0, 5000, None),
+          KafkaOffsetRange(tp2, 5000, 10000, None),
+          KafkaOffsetRange(tp2, 10000, 15000, None),
+          KafkaOffsetRange(tp3, 0, 5000, None),
+          KafkaOffsetRange(tp3, 5000, 10000, None),
+          KafkaOffsetRange(tp3, 10000, 15000, None),
+          KafkaOffsetRange(tp3, 15000, 20000, None)))
+  }
+
+  testWithMinPartitions("SPARK-36576: 1 small unsplit range and 2 large split ranges", 6) { calc =>
+    assert(
+      calc.getRanges(
+        Seq(
+          KafkaOffsetRange(tp1, 0, 500),
+          KafkaOffsetRange(tp2, 0, 12000),
+          KafkaOffsetRange(tp3, 0, 15001))) ===
+        Seq(
+          KafkaOffsetRange(tp1, 0, 500, None),
+          KafkaOffsetRange(tp2, 0, 6000, None),
+          KafkaOffsetRange(tp2, 6000, 12000, None),
+          KafkaOffsetRange(tp3, 0, 5000, None),
+          KafkaOffsetRange(tp3, 5000, 10000, None),
+          KafkaOffsetRange(tp3, 10000, 15001, None)))
+  }
+
+  testWithMinPartitions("SPARK-36576: 2 small unsplit ranges and 1 large split range", 6) { calc =>
+    assert(
+      calc.getRanges(
+        Seq(
+          KafkaOffsetRange(tp1, 0, 1),
+          KafkaOffsetRange(tp2, 0, 1),
+          KafkaOffsetRange(tp3, 0, 10000))) ===
+        Seq(
+          KafkaOffsetRange(tp1, 0, 1, None),
+          KafkaOffsetRange(tp2, 0, 1, None),
+          KafkaOffsetRange(tp3, 0, 2500, None),
+          KafkaOffsetRange(tp3, 2500, 5000, None),
+          KafkaOffsetRange(tp3, 5000, 7500, None),
+          KafkaOffsetRange(tp3, 7500, 10000, None)))
   }
 
   private val tp1 = new TopicPartition("t1", 1)

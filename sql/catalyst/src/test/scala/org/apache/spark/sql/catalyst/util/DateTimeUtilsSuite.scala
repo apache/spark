@@ -147,6 +147,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(toDate("1999 08 01").isEmpty)
     assert(toDate("1999-08 01").isEmpty)
     assert(toDate("1999 08").isEmpty)
+    assert(toDate("1999-08-").isEmpty)
     assert(toDate("").isEmpty)
     assert(toDate("   ").isEmpty)
   }
@@ -182,7 +183,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("1969-12-31 16:00:00", Option(date(1969, 12, 31, 16, zid = zid)))
       checkStringToTimestamp("0001", Option(date(1, 1, 1, 0, zid = zid)))
       checkStringToTimestamp("2015-03", Option(date(2015, 3, 1, zid = zid)))
-      Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18T").foreach { s =>
+      Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ").foreach { s =>
         checkStringToTimestamp(s, Option(date(2015, 3, 18, zid = zid)))
       }
 
@@ -289,6 +290,11 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("", None)
       checkStringToTimestamp("    ", None)
       checkStringToTimestamp("+", None)
+      checkStringToTimestamp("T", None)
+      checkStringToTimestamp("2015-03-18T", None)
+      checkStringToTimestamp("12::", None)
+      checkStringToTimestamp("2015-03-18T12:03:17-8:", None)
+      checkStringToTimestamp("2015-03-18T12:03:17-8:30:", None)
 
       // Truncating the fractional seconds
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123456, zid = UTC))
@@ -787,16 +793,18 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   test("SPARK-35979: special timestamp without time zone values") {
     val tolerance = TimeUnit.SECONDS.toMicros(30)
 
-    assert(convertSpecialTimestampNTZ("Epoch").get === 0)
-    val now = DateTimeUtils.localDateTimeToMicros(LocalDateTime.now())
-    convertSpecialTimestampNTZ("NOW").get should be(now +- tolerance)
-    val localToday = LocalDateTime.now().`with`(LocalTime.MIDNIGHT)
-    val yesterday = DateTimeUtils.localDateTimeToMicros(localToday.minusDays(1))
-    convertSpecialTimestampNTZ(" Yesterday").get should be(yesterday)
-    val today = DateTimeUtils.localDateTimeToMicros(localToday)
-    convertSpecialTimestampNTZ("Today ").get should be(today)
-    val tomorrow = DateTimeUtils.localDateTimeToMicros(localToday.plusDays(1))
-    convertSpecialTimestampNTZ(" tomorrow ").get should be(tomorrow)
+    testSpecialDatetimeValues { zoneId =>
+      assert(convertSpecialTimestampNTZ("Epoch", zoneId).get === 0)
+      val now = DateTimeUtils.localDateTimeToMicros(LocalDateTime.now(zoneId))
+      convertSpecialTimestampNTZ("NOW", zoneId).get should be(now +- tolerance)
+      val localToday = LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT)
+      val yesterday = DateTimeUtils.localDateTimeToMicros(localToday.minusDays(1))
+      convertSpecialTimestampNTZ(" Yesterday", zoneId).get should be(yesterday)
+      val today = DateTimeUtils.localDateTimeToMicros(localToday)
+      convertSpecialTimestampNTZ("Today ", zoneId).get should be(today)
+      val tomorrow = DateTimeUtils.localDateTimeToMicros(localToday.plusDays(1))
+      convertSpecialTimestampNTZ(" tomorrow ", zoneId).get should be(tomorrow)
+    }
   }
 
   test("SPARK-28141: special date values") {

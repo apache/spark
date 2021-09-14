@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s
 
-import java.util.Locale
+import java.util.{Locale, UUID}
 
 import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferenceBuilder, Pod}
 
@@ -82,6 +82,9 @@ private[spark] class KubernetesDriverConf(
     val proxyUser: Option[String])
   extends KubernetesConf(sparkConf) {
 
+  def driverNodeSelector: Map[String, String] =
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_DRIVER_NODE_SELECTOR_PREFIX)
+
   override val resourceNamePrefix: String = {
     val custom = if (Utils.isTesting) get(KUBERNETES_DRIVER_POD_NAME_PREFIX) else None
     custom.getOrElse(KubernetesConf.getResourceNamePrefix(appName))
@@ -136,6 +139,9 @@ private[spark] class KubernetesExecutorConf(
     val driverPod: Option[Pod],
     val resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID)
   extends KubernetesConf(sparkConf) with Logging {
+
+  def executorNodeSelector: Map[String, String] =
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_EXECUTOR_NODE_SELECTOR_PREFIX)
 
   override val resourceNamePrefix: String = {
     get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX).getOrElse(
@@ -224,6 +230,9 @@ private[spark] object KubernetesConf {
       resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID): KubernetesExecutorConf = {
     new KubernetesExecutorConf(sparkConf.clone(), appId, executorId, driverPod, resourceProfileId)
   }
+
+  def getKubernetesAppId(): String =
+    s"spark-${UUID.randomUUID().toString.replaceAll("-", "")}"
 
   def getResourceNamePrefix(appName: String): String = {
     val id = KubernetesUtils.uniqueID()

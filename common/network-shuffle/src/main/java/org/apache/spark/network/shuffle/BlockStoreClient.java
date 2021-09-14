@@ -33,9 +33,9 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
-import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
-import org.apache.spark.network.shuffle.protocol.GetLocalDirsForExecutors;
-import org.apache.spark.network.shuffle.protocol.LocalDirsForExecutors;
+import org.apache.spark.network.shuffle.checksum.Cause;
+import org.apache.spark.network.shuffle.protocol.*;
+import org.apache.spark.network.util.TransportConf;
 
 /**
  * Provides an interface for reading both shuffle files and RDD blocks, either from an Executor
@@ -46,6 +46,45 @@ public abstract class BlockStoreClient implements Closeable {
 
   protected volatile TransportClientFactory clientFactory;
   protected String appId;
+  protected TransportConf transportConf;
+
+  /**
+   * Send the diagnosis request for the corrupted shuffle block to the server.
+   *
+   * @param host the host of the remote node.
+   * @param port the port of the remote node.
+   * @param execId the executor id.
+   * @param shuffleId the shuffleId of the corrupted shuffle block
+   * @param mapId the mapId of the corrupted shuffle block
+   * @param reduceId the reduceId of the corrupted shuffle block
+   * @param checksum the shuffle checksum which calculated at client side for the corrupted
+   *                 shuffle block
+   * @return The cause of the shuffle block corruption
+   */
+  public Cause diagnoseCorruption(
+      String host,
+      int port,
+      String execId,
+      int shuffleId,
+      long mapId,
+      int reduceId,
+      long checksum,
+      String algorithm) {
+    try {
+      TransportClient client = clientFactory.createClient(host, port);
+      ByteBuffer response = client.sendRpcSync(
+        new DiagnoseCorruption(appId, execId, shuffleId, mapId, reduceId, checksum, algorithm)
+          .toByteBuffer(),
+        transportConf.connectionTimeoutMs()
+      );
+      CorruptionCause cause =
+        (CorruptionCause) BlockTransferMessage.Decoder.fromByteBuffer(response);
+      return cause.cause;
+    } catch (Exception e) {
+      logger.warn("Failed to get the corruption cause.");
+      return Cause.UNKNOWN_ISSUE;
+    }
+  }
 
   /**
    * Fetch a sequence of blocks from a remote node asynchronously,
@@ -155,7 +194,7 @@ public abstract class BlockStoreClient implements Closeable {
       int port,
       String[] blockIds,
       ManagedBuffer[] buffers,
-      BlockFetchingListener listener) {
+      BlockPushingListener listener) {
     throw new UnsupportedOperationException();
   }
 
@@ -167,6 +206,8 @@ public abstract class BlockStoreClient implements Closeable {
    * @param host host of shuffle server
    * @param port port of shuffle server.
    * @param shuffleId shuffle ID of the shuffle to be finalized
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify merging process
+   *                       of shuffle by an indeterminate stage attempt.
    * @param listener the listener to receive MergeStatuses
    *
    * @since 3.1.0
@@ -175,6 +216,7 @@ public abstract class BlockStoreClient implements Closeable {
       String host,
       int port,
       int shuffleId,
+      int shuffleMergeId,
       MergeFinalizerListener listener) {
     throw new UnsupportedOperationException();
   }
@@ -185,6 +227,8 @@ public abstract class BlockStoreClient implements Closeable {
    * @param host the host of the remote node.
    * @param port the port of the remote node.
    * @param shuffleId shuffle id.
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify merging process
+   *                       of shuffle by an indeterminate stage attempt.
    * @param reduceId reduce id.
    * @param listener the listener to receive chunk counts.
    *
@@ -194,6 +238,7 @@ public abstract class BlockStoreClient implements Closeable {
       String host,
       int port,
       int shuffleId,
+      int shuffleMergeId,
       int reduceId,
       MergedBlocksMetaListener listener) {
     throw new UnsupportedOperationException();

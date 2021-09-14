@@ -210,7 +210,7 @@ object QueryParsingErrors {
     new ParseException(s"Intervals FROM $from TO $to are not supported.", ctx)
   }
 
-  def mixedIntervalUnitsError(literal: String, ctx: IntervalContext): Throwable = {
+  def mixedIntervalUnitsError(literal: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"Cannot mix year-month and day-time fields: $literal", ctx)
   }
 

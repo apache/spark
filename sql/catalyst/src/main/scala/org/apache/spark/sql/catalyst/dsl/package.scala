@@ -102,6 +102,8 @@ package object dsl {
 
     def like(other: Expression, escapeChar: Char = '\\'): Expression =
       Like(expr, other, escapeChar)
+    def ilike(other: Expression, escapeChar: Char = '\\'): Expression =
+      new ILike(expr, other, escapeChar)
     def rlike(other: Expression): Expression = RLike(expr, other)
     def likeAll(others: Expression*): Expression =
       LikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
@@ -389,6 +391,13 @@ package object dsl {
         joinType: JoinType = Inner,
         condition: Option[Expression] = None): LogicalPlan =
         Join(logicalPlan, otherPlan, joinType, condition, JoinHint.NONE)
+
+      def lateralJoin(
+          otherPlan: LogicalPlan,
+          joinType: JoinType = Inner,
+          condition: Option[Expression] = None): LogicalPlan = {
+        LateralJoin(logicalPlan, LateralSubquery(otherPlan), joinType, condition)
+      }
 
       def cogroup[Key: Encoder, Left: Encoder, Right: Encoder, Result: Encoder](
           otherPlan: LogicalPlan,

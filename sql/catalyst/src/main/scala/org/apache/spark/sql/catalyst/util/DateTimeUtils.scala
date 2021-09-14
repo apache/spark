@@ -254,7 +254,9 @@ object DateTimeUtils {
       val maxDigitsYear = 6
       // For the nanosecond part, more than 6 digits is allowed, but will be truncated.
       segment == 6 || (segment == 0 && digits >= 4 && digits <= maxDigitsYear) ||
-        (segment != 0 && segment != 6 && digits <= 2)
+        // For the zoneId segment(7), it's could be zero digits when it's a region-based zone ID
+        (segment == 7 && digits <= 2) ||
+        (segment != 0 && segment != 6 && segment != 7 && digits > 0 && digits <= 2)
     }
     if (s == null || s.trimAll().numBytes() == 0) {
       return (Array.empty, None, false)
@@ -527,7 +529,8 @@ object DateTimeUtils {
     def isValidDigits(segment: Int, digits: Int): Boolean = {
       // An integer is able to represent a date within [+-]5 million years.
       var maxDigitsYear = 7
-      (segment == 0 && digits >= 4 && digits <= maxDigitsYear) || (segment != 0 && digits <= 2)
+      (segment == 0 && digits >= 4 && digits <= maxDigitsYear) ||
+        (segment != 0 && digits > 0 && digits <= 2)
     }
     if (s == null || s.trimAll().numBytes() == 0) {
       return None
@@ -728,7 +731,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Adds a full interval (months, days, microseconds) a timestamp represented as the number of
+   * Adds a full interval (months, days, microseconds) to a timestamp represented as the number of
    * microseconds since 1970-01-01 00:00:00Z.
    * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
    */
@@ -744,6 +747,25 @@ object DateTimeUtils {
       .plusDays(days)
       .plus(microseconds, ChronoUnit.MICROS)
     instantToMicros(resultTimestamp.toInstant)
+  }
+
+  /**
+   * Adds a full interval (months, days, microseconds) to a timestamp without time zone
+   * represented as a local time in microsecond precision, which is independent of time zone.
+   * @return A timestamp without time zone value, expressed in range
+   *         [0001-01-01T00:00:00.000000, 9999-12-31T23:59:59.999999].
+   */
+  def timestampNTZAddInterval(
+      start: Long,
+      months: Int,
+      days: Int,
+      microseconds: Long,
+      zoneId: ZoneId): Long = {
+    val localDateTime = microsToLocalDateTime(start)
+      .plusMonths(months)
+      .plusDays(days)
+      .plus(microseconds, ChronoUnit.MICROS)
+    localDateTimeToMicros(localDateTime)
   }
 
   /**
@@ -1021,7 +1043,7 @@ object DateTimeUtils {
    * Converts notational shorthands that are converted to ordinary timestamps.
    *
    * @param input A string to parse. It can contain trailing or leading whitespaces.
-   * @param zoneId Zone identifier used to get the current date.
+   * @param zoneId Zone identifier used to get the current timestamp.
    * @return Some of microseconds since the epoch if the conversion completed
    *         successfully otherwise None.
    */
@@ -1041,18 +1063,19 @@ object DateTimeUtils {
    * Converts notational shorthands that are converted to ordinary timestamps without time zone.
    *
    * @param input A string to parse. It can contain trailing or leading whitespaces.
+   * @param zoneId Zone identifier used to get the current local timestamp.
    * @return Some of microseconds since the epoch if the conversion completed
    *         successfully otherwise None.
    */
-  def convertSpecialTimestampNTZ(input: String): Option[Long] = {
+  def convertSpecialTimestampNTZ(input: String, zoneId: ZoneId): Option[Long] = {
     val localDateTime = extractSpecialValue(input.trim).flatMap {
       case "epoch" => Some(LocalDateTime.of(1970, 1, 1, 0, 0))
-      case "now" => Some(LocalDateTime.now())
-      case "today" => Some(LocalDateTime.now().`with`(LocalTime.MIDNIGHT))
+      case "now" => Some(LocalDateTime.now(zoneId))
+      case "today" => Some(LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT))
       case "tomorrow" =>
-        Some(LocalDateTime.now().`with`(LocalTime.MIDNIGHT).plusDays(1))
+        Some(LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT).plusDays(1))
       case "yesterday" =>
-        Some(LocalDateTime.now().`with`(LocalTime.MIDNIGHT).minusDays(1))
+        Some(LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT).minusDays(1))
       case _ => None
     }
     localDateTime.map(localDateTimeToMicros)

@@ -68,8 +68,11 @@ sealed trait StreamingSessionWindowStateManager extends Serializable {
    *            {@code extractKeyWithoutSession}.
    * @param sessions The all sessions including existing sessions if it's active.
    *                 Existing sessions which aren't included in this parameter will be removed.
+   * @return A tuple having two elements
+   *         1. number of added/updated rows
+   *         2. number of deleted rows
    */
-  def updateSessions(store: StateStore, key: UnsafeRow, sessions: Seq[UnsafeRow]): Unit
+  def updateSessions(store: StateStore, key: UnsafeRow, sessions: Seq[UnsafeRow]): (Long, Long)
 
   /**
    * Removes using a predicate on values, with returning removed values via iterator.
@@ -168,7 +171,7 @@ class StreamingSessionWindowStateManagerImplV1(
   override def updateSessions(
       store: StateStore,
       key: UnsafeRow,
-      sessions: Seq[UnsafeRow]): Unit = {
+      sessions: Seq[UnsafeRow]): (Long, Long) = {
     // Below two will be used multiple times - need to make sure this is not a stream or iterator.
     val newValues = sessions.toList
     val savedStates = getSessionsWithKeys(store, key)
@@ -225,7 +228,7 @@ class StreamingSessionWindowStateManagerImplV1(
       store: StateStore,
       key: UnsafeRow,
       oldValues: List[(UnsafeRow, UnsafeRow)],
-      values: List[UnsafeRow]): Unit = {
+      values: List[UnsafeRow]): (Long, Long) = {
     // Here the key doesn't represent the state key - we need to construct the key for state
     val keyAndValues = values.map { row =>
       val sessionStart = helper.extractTimePair(row)._1
@@ -236,16 +239,24 @@ class StreamingSessionWindowStateManagerImplV1(
     val keysForValues = keyAndValues.map(_._1)
     val keysForOldValues = oldValues.map(_._1)
 
+    var upsertedRows = 0L
+    var deletedRows = 0L
+
     // We should "replace" the value instead of "delete" and "put" if the start time
     // equals to. This will remove unnecessary tombstone being written to the delta, which is
     // implementation details on state store implementations.
+
     keysForOldValues.filterNot(keysForValues.contains).foreach { oldKey =>
       store.remove(oldKey)
+      deletedRows += 1
     }
 
     keyAndValues.foreach { case (key, value) =>
       store.put(key, value)
+      upsertedRows += 1
     }
+
+    (upsertedRows, deletedRows)
   }
 
   override def abortIfNeeded(store: StateStore): Unit = {

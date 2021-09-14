@@ -29,8 +29,10 @@ Core Classes
     :toctree: api/
 
     SparkSession
+    Catalog
     DataFrame
     Column
+    Observation
     Row
     GroupedData
     PandasCogroupedOps
@@ -176,6 +178,7 @@ DataFrame APIs
     DataFrame.localCheckpoint
     DataFrame.mapInPandas
     DataFrame.na
+    DataFrame.observe
     DataFrame.orderBy
     DataFrame.persist
     DataFrame.printSchema
@@ -295,7 +298,19 @@ Data Types
     StringType
     StructField
     StructType
+    TimestampNTZType
     TimestampType
+
+
+Observation
+-----------
+
+.. currentmodule:: pyspark.sql
+
+.. autosummary::
+    :toctree: api/
+
+    Observation.get
 
 
 Row
@@ -603,3 +618,33 @@ Grouping
     GroupedData.pivot
     GroupedData.sum
     PandasCogroupedOps.applyInPandas
+
+Catalog APIs
+------------
+
+.. currentmodule:: pyspark.sql
+
+.. autosummary::
+    :toctree: api/
+
+    Catalog.cacheTable
+    Catalog.clearCache
+    Catalog.createExternalTable
+    Catalog.createTable
+    Catalog.currentDatabase
+    Catalog.databaseExists
+    Catalog.dropGlobalTempView
+    Catalog.dropTempView
+    Catalog.functionExists
+    Catalog.isCached
+    Catalog.listColumns
+    Catalog.listDatabases
+    Catalog.listFunctions
+    Catalog.listTables
+    Catalog.recoverPartitions
+    Catalog.refreshByPath
+    Catalog.refreshTable
+    Catalog.registerFunction
+    Catalog.setCurrentDatabase
+    Catalog.tableExists
+    Catalog.uncacheTable

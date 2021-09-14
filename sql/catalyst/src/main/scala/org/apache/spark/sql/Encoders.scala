@@ -118,7 +118,7 @@ object Encoders {
    * Creates an encoder that serializes instances of the `java.time.LocalDateTime` class
    * to the internal representation of nullable Catalyst's TimestampNTZType.
    *
-   * @since 3.2.0
+   * @since 3.3.0
    */
   def LOCALDATETIME: Encoder[java.time.LocalDateTime] = ExpressionEncoder()
 

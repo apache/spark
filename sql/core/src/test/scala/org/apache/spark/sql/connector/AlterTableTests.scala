@@ -356,8 +356,7 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t ADD COLUMN point.z double")
       }
 
-      assert(exc.getMessage.contains("point"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field point"))
     }
   }
 
@@ -382,6 +381,29 @@ trait AlterTableTests extends SharedSparkSession {
         assert(e.getMessage.contains("add"))
         assert(e.getMessage.contains(s"$field already exists"))
       }
+    }
+  }
+
+  test("SPARK-36372: Adding duplicate columns should not be allowed") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING $v2Format")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ADD COLUMNS (data string, data1 string, data string)")
+      }
+      assert(e.message.contains("Found duplicate column(s) in the user specified columns: `data`"))
+    }
+  }
+
+  test("SPARK-36372: Adding duplicate nested columns should not be allowed") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING $v2Format")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ADD COLUMNS (point.z double, point.z double, point.xx double)")
+      }
+      assert(e.message.contains(
+        "Found duplicate column(s) in the user specified columns: `point.z`"))
     }
   }
 
@@ -1151,6 +1173,17 @@ trait AlterTableTests extends SharedSparkSession {
       assert(table.schema === StructType(Seq(
         StructField("col2", StringType),
         StructField("col3", IntegerType).withComment("c3"))))
+    }
+  }
+
+  test("SPARK-36449: Replacing columns with duplicate name should not be allowed") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (data string) USING $v2Format")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t REPLACE COLUMNS (data string, data1 string, data string)")
+      }
+      assert(e.message.contains("Found duplicate column(s) in the user specified columns: `data`"))
     }
   }
 }

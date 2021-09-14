@@ -37,6 +37,32 @@ class SQLTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaises(ParseException):
             ps.sql("this is not valid sql")
 
+    def test_sql_with_index_col(self):
+        import pandas as pd
+
+        # Index
+        psdf = ps.DataFrame(
+            {"A": [1, 2, 3], "B": [4, 5, 6]}, index=pd.Index(["a", "b", "c"], name="index")
+        )
+        psdf_reset_index = psdf.reset_index()
+        actual = ps.sql("select * from {psdf_reset_index} where A > 1", index_col="index")
+        expected = psdf.iloc[[1, 2]]
+        self.assert_eq(actual, expected)
+
+        # MultiIndex
+        psdf = ps.DataFrame(
+            {"A": [1, 2, 3], "B": [4, 5, 6]},
+            index=pd.MultiIndex.from_tuples(
+                [("a", "b"), ("c", "d"), ("e", "f")], names=["index1", "index2"]
+            ),
+        )
+        psdf_reset_index = psdf.reset_index()
+        actual = ps.sql(
+            "select * from {psdf_reset_index} where A > 1", index_col=["index1", "index2"]
+        )
+        expected = psdf.iloc[[1, 2]]
+        self.assert_eq(actual, expected)
+
 
 if __name__ == "__main__":
     import unittest

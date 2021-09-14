@@ -30,6 +30,10 @@ import org.apache.spark.sql.execution._
  */
 object ValidateRequirements extends Logging {
 
+  def validate(plan: SparkPlan, requiredDistribution: Distribution): Boolean = {
+    validate(plan) && plan.outputPartitioning.satisfies(requiredDistribution)
+  }
+
   def validate(plan: SparkPlan): Boolean = {
     plan.children.forall(validate) && validateInternal(plan)
   }

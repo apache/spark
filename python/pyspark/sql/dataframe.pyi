@@ -41,6 +41,7 @@ from pyspark.sql.types import (  # noqa: F401
 )  # noqa: F401
 from pyspark.sql.context import SQLContext
 from pyspark.sql.group import GroupedData
+from pyspark.sql.observation import Observation
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.column import Column
@@ -188,6 +189,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     @overload
     def cube(self, __cols: Union[List[Column], List[str]]) -> GroupedData: ...
     def agg(self, *exprs: Union[Column, Dict[str, str]]) -> DataFrame: ...
+    def observe(self, observation: Observation, *exprs: Column) -> DataFrame: ...
     def union(self, other: DataFrame) -> DataFrame: ...
     def unionAll(self, other: DataFrame) -> DataFrame: ...
     def unionByName(
@@ -238,12 +240,20 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         value: OptionalPrimitiveType,
         subset: Optional[List[str]] = ...,
     ) -> DataFrame: ...
+    @overload
     def approxQuantile(
         self,
-        col: Union[str, Tuple[str, ...], List[str]],
-        probabilities: Union[List[float], Tuple[float, ...]],
-        relativeError: float
+        col: str,
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
     ) -> List[float]: ...
+    @overload
+    def approxQuantile(
+        self,
+        col: Union[List[str], Tuple[str]],
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
+    ) -> List[List[float]]: ...
     def corr(self, col1: str, col2: str, method: Optional[str] = ...) -> float: ...
     def cov(self, col1: str, col2: str) -> float: ...
     def crosstab(self, col1: str, col2: str) -> DataFrame: ...
@@ -316,9 +326,20 @@ class DataFrameNaFunctions:
 class DataFrameStatFunctions:
     df: DataFrame
     def __init__(self, df: DataFrame) -> None: ...
+    @overload
     def approxQuantile(
-        self, col: str, probabilities: List[float], relativeError: float
+        self,
+        col: str,
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
     ) -> List[float]: ...
+    @overload
+    def approxQuantile(
+        self,
+        col: Union[List[str], Tuple[str]],
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
+    ) -> List[List[float]]: ...
     def corr(self, col1: str, col2: str, method: Optional[str] = ...) -> float: ...
     def cov(self, col1: str, col2: str) -> float: ...
     def crosstab(self, col1: str, col2: str) -> DataFrame: ...

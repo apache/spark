@@ -39,6 +39,7 @@ from distutils.version import LooseVersion
 from functools import reduce
 from io import BytesIO
 import json
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -57,6 +58,7 @@ from pyspark.sql.types import (
     DoubleType,
     BooleanType,
     TimestampType,
+    TimestampNTZType,
     DecimalType,
     StringType,
     DateType,
@@ -2020,11 +2022,11 @@ def get_dummies(
         if drop_first:
             values = values[1:]
 
-        def column_name(value: str) -> str:
+        def column_name(v: Any) -> Name:
             if prefix is None or cast(List[str], prefix)[i] == "":
-                return value
+                return v
             else:
-                return "{}{}{}".format(cast(List[str], prefix)[i], prefix_sep, value)
+                return "{}{}{}".format(cast(List[str], prefix)[i], prefix_sep, v)
 
         for value in values:
             remaining_columns.append(
@@ -2746,13 +2748,20 @@ def merge(
 
 
 @no_type_check
-def to_numeric(arg):
+def to_numeric(arg, errors="raise"):
     """
     Convert argument to a numeric type.
 
     Parameters
     ----------
     arg : scalar, list, tuple, 1-d array, or Series
+        Argument to be converted.
+    errors : {'raise', 'coerce'}, default 'raise'
+        * If 'coerce', then invalid parsing will be set as NaN.
+        * If 'raise', then invalid parsing will raise an exception.
+        * If 'ignore', then invalid parsing will return the input.
+
+        .. note:: 'ignore' doesn't work yet when `arg` is pandas-on-Spark Series.
 
     Returns
     -------
@@ -2782,6 +2791,7 @@ def to_numeric(arg):
     dtype: float32
 
     If given Series contains invalid value to cast float, just cast it to `np.nan`
+    when `errors` is set to "coerce".
 
     >>> psser = ps.Series(['apple', '1.0', '2', '-3'])
     >>> psser
@@ -2791,7 +2801,7 @@ def to_numeric(arg):
     3       -3
     dtype: object
 
-    >>> ps.to_numeric(psser)
+    >>> ps.to_numeric(psser, errors="coerce")
     0    NaN
     1    1.0
     2    2.0
@@ -2813,14 +2823,29 @@ def to_numeric(arg):
     1.0
     """
     if isinstance(arg, Series):
-        return arg._with_new_scol(arg.spark.column.cast("float"))
+        if errors == "coerce":
+            return arg._with_new_scol(arg.spark.column.cast("float"))
+        elif errors == "raise":
+            scol = arg.spark.column
+            scol_casted = scol.cast("float")
+            cond = F.when(
+                F.assert_true(scol.isNull() | scol_casted.isNotNull()).isNull(), scol_casted
+            )
+            return arg._with_new_scol(cond)
+        elif errors == "ignore":
+            raise NotImplementedError("'ignore' is not implemented yet, when the `arg` is Series.")
+        else:
+            raise ValueError("invalid error value specified")
     else:
-        return pd.to_numeric(arg)
+        return pd.to_numeric(arg, errors=errors)
 
 
 def broadcast(obj: DataFrame) -> DataFrame:
     """
     Marks a DataFrame as small enough for use in broadcast joins.
+
+    .. deprecated:: 3.2.0
+        Use :func:`DataFrame.spark.hint` instead.
 
     Parameters
     ----------
@@ -2852,6 +2877,11 @@ def broadcast(obj: DataFrame) -> DataFrame:
     ...BroadcastHashJoin...
     ...
     """
+    warnings.warn(
+        "`broadcast` has been deprecated and might be removed in a future version. "
+        "Use `DataFrame.spark.hint` with 'broadcast' for `name` parameter instead.",
+        FutureWarning,
+    )
     if not isinstance(obj, DataFrame):
         raise TypeError("Invalid type : expected DataFrame got {}".format(type(obj).__name__))
     return DataFrame(
@@ -2948,6 +2978,7 @@ _get_dummies_acceptable_types = _get_dummies_default_accept_types + (
     DoubleType,
     BooleanType,
     TimestampType,
+    TimestampNTZType,
 )
 
 
