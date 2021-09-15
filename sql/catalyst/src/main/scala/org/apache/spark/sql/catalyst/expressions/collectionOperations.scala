@@ -3419,6 +3419,7 @@ case class ArrayDistinct(child: Expression)
       val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
       val hs = new SQLOpenHashSet[Any]()
       val isNaN = SQLOpenHashSet.isNaN(elementType)
+      val valueNaN = SQLOpenHashSet.valueNaN(elementType)
       var i = 0
       while (i < array.numElements()) {
         if (array.isNullAt(i)) {
@@ -3430,7 +3431,7 @@ case class ArrayDistinct(child: Expression)
           val elem = array.get(i, elementType)
           if (isNaN(elem)) {
             if (!hs.containsNaN) {
-              arrayBuffer += elem
+              arrayBuffer += valueNaN
               hs.addNaN
             }
           } else {
@@ -3522,16 +3523,18 @@ case class ArrayDistinct(child: Expression)
 
         def withNaNCheck(body: String): String = {
           (elementType match {
-            case DoubleType => Some(s"java.lang.Double.isNaN((double)$value)")
-            case FloatType => Some(s"java.lang.Float.isNaN((float)$value)")
+            case DoubleType =>
+              Some((s"java.lang.Double.isNaN((double)$value)", "java.lang.Double.NaN"))
+            case FloatType =>
+              Some((s"java.lang.Float.isNaN((float)$value)", "java.lang.Float.NaN"))
             case _ => None
-          }).map { isNaN =>
+          }).map { case (isNaN, valueNaN) =>
             s"""
                |if ($isNaN) {
                |  if (!$hashSet.containsNaN()) {
                |     $size++;
                |     $hashSet.addNaN();
-               |     $builder.$$plus$$eq($value);
+               |     $builder.$$plus$$eq($valueNaN);
                |  }
                |} else {
                |  $body
