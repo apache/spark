@@ -77,12 +77,12 @@ class SparkThrowableSuite extends SparkFunSuite {
     val errorClassReadMe = Utils.getSparkClassLoader.getResource("error/README.md")
     val errorClassReadMeContents = IOUtils.toString(errorClassReadMe.openStream())
     val sqlStateTableRegex =
-      "(?s)\\[//]: # \\(SQLSTATE table start\\)(.+)\\[//]: # \\(SQLSTATE table end\\)".r
+      "(?s)<!-- SQLSTATE table start -->(.+)<!-- SQLSTATE table stop -->".r
     val sqlTable = sqlStateTableRegex.findFirstIn(errorClassReadMeContents).get
     val sqlTableRows = sqlTable.split("\n").filter(_.startsWith("|")).drop(2)
     val validSqlStates = sqlTableRows.map(_.slice(1, 6)).toSet
     // Sanity check
-    assert(Set("07000", "42000", "HZ000").subsetOf(validSqlStates), validSqlStates)
+    assert(Set("07000", "42000", "HZ000").subsetOf(validSqlStates))
     assert(validSqlStates.forall(_.length == 5), validSqlStates)
     checkCondition(sqlStates, s => validSqlStates.contains(s))
   }
