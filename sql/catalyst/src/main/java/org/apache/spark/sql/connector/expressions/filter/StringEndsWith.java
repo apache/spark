@@ -36,9 +36,4 @@ public final class StringEndsWith extends StringPredicate {
 
   @Override
   public String toString() { return "STRING_ENDS_WITH(" + column.describe() + ", " + value + ")"; }
-
-  @Override
-  public org.apache.spark.sql.sources.Filter toV1() {
-    return new org.apache.spark.sql.sources.StringEndsWith(column.describe(), value.toString());
-  }
 }

@@ -74,15 +74,4 @@ public final class In extends Filter {
 
   @Override
   public NamedReference[] references() { return new NamedReference[] { column }; }
-
-  @Override
-  public org.apache.spark.sql.sources.Filter toV1() {
-    Object[] array = new Object[values.length];
-    int index = 0;
-    for (Literal value: values) {
-      array[index] = CatalystTypeConverters.convertToScala(value.value(), value.dataType());
-      index++;
-    }
-    return new org.apache.spark.sql.sources.In(column.describe(), array);
-  }
 }

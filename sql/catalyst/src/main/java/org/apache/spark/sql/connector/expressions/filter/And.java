@@ -36,9 +36,4 @@ public final class And extends BinaryFilter {
   public String toString() {
     return String.format("(%s) AND (%s)", left.describe(), right.describe());
   }
-
-  @Override
-  public org.apache.spark.sql.sources.Filter toV1() {
-    return new org.apache.spark.sql.sources.And(left.toV1(), right.toV1());
-  }
 }

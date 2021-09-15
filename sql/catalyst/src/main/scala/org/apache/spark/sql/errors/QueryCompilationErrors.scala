@@ -2402,4 +2402,8 @@ object QueryCompilationErrors {
   def invalidDataTypeForFilterValue(value: Any): Throwable = {
     new AnalysisException(s"Filter value $value has invalid data type")
   }
+
+  def invalidFilter(filter: Any): Throwable = {
+    new AnalysisException(s"Invalid VFilter $filter")
+  }
 }

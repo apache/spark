@@ -40,9 +40,4 @@ public abstract class Filter implements Expression, Serializable {
 
   @Override
   public String describe() { return this.toString(); }
-
-  /**
-   * Returns a V1 Filter.
-   */
-  public abstract org.apache.spark.sql.sources.Filter toV1();
 }

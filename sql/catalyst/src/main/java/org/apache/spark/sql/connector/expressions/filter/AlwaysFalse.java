@@ -47,9 +47,4 @@ public final class AlwaysFalse extends Filter {
 
   @Override
   public NamedReference[] references() { return EMPTY_REFERENCE; }
-
-  @Override
-  public org.apache.spark.sql.sources.Filter toV1() {
-    return new org.apache.spark.sql.sources.AlwaysFalse();
-  }
 }

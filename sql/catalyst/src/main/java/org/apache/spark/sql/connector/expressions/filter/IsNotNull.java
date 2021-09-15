@@ -55,9 +55,4 @@ public final class IsNotNull extends Filter {
 
   @Override
   public NamedReference[] references() { return new NamedReference[] { column }; }
-
-  @Override
-  public org.apache.spark.sql.sources.Filter toV1() {
-    return new org.apache.spark.sql.sources.IsNotNull(column.describe());
-  }
 }

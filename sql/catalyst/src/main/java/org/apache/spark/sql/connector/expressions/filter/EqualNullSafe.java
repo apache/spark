@@ -38,10 +38,4 @@ public final class EqualNullSafe extends BinaryComparison {
 
   @Override
   public String toString() { return this.column.describe() + " <=> " + value.describe(); }
-
-  @Override
-  public org.apache.spark.sql.sources.Filter toV1() {
-    return new org.apache.spark.sql.sources.EqualNullSafe(
-      column.describe(), CatalystTypeConverters.convertToScala(value.value(), value.dataType()));
-  }
 }

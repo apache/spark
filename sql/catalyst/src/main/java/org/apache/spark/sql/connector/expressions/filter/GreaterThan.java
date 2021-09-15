@@ -37,11 +37,4 @@ public final class GreaterThan extends BinaryComparison {
 
   @Override
   public String toString() { return column.describe() + " > " + value.describe(); }
-
-  @Override
-  public org.apache.spark.sql.sources.Filter toV1() {
-    return new org.apache.spark.sql.sources.GreaterThan(
-      column.describe(), CatalystTypeConverters.convertToScala(value.value(), value.dataType()));
-  }
-
 }
