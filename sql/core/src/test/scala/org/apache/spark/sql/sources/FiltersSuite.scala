@@ -40,7 +40,6 @@ class FiltersSuite extends SparkFunSuite {
     }
   }
 
-
   test("EqualTo references") { withFieldNames { (name, fieldNames) =>
     assert(EqualTo(name, "1").references.toSeq == Seq(name))
     assert(EqualTo(name, "1").v2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
