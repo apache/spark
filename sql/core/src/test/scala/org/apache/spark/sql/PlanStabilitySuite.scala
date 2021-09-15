@@ -107,14 +107,18 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
     } else baseExplainFileName
     val explainFile = new File(dir, goldenExplainFileName)
     val expectedExplain = FileUtils.readFileToString(explainFile, StandardCharsets.UTF_8)
-    val fullBool = expectedSimplified == actualSimplifiedPlan && expectedExplain == actualExplain
-    if (!fullBool && expectedSimplified == actualSimplifiedPlan) {
-      logError("actual explain found=" + actualExplain)
-      logError("expected explain found=" + expectedExplain)
-      return true
-    } else {
-      fullBool
+    val matched = expectedSimplified == actualSimplifiedPlan && expectedExplain == actualExplain
+    if (!matched) {
+      if (expectedSimplified != actualSimplifiedPlan) {
+        logError("actual simplified found=" + actualSimplifiedPlan)
+        logError("expected simplified found=" + expectedSimplified)
+      }
+      if (expectedExplain != actualExplain) {
+        logError("actual explain found=" + actualExplain)
+        logError("expected explain found=" + expectedExplain)
+      }
     }
+    matched
   }
 
   /**
