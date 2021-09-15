@@ -1652,6 +1652,14 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(KeyError, msg):
             psser.pop(("lama", "speed", "x"))
 
+        pser = pd.Series(["a", "b", "c", "a"], dtype="category")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.pop(0), pser.pop(0))
+        self.assert_eq(psser, pser)
+
+        self.assert_eq(psser.pop(3), pser.pop(3))
+        self.assert_eq(psser, pser)
+
     def test_replace(self):
         pser = pd.Series([10, 20, 15, 30, np.nan], name="x")
         psser = ps.Series(pser)
