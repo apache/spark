@@ -176,12 +176,12 @@ object ScanOperation extends OperationHelper with PredicateHelper {
  * value).
  */
 object ExtractEquiJoinKeys extends Logging with PredicateHelper {
-  /** (joinType, leftKeys, rightKeys, condition_on_non_keys, condition_on_keys, leftChild,
+  /** (joinType, leftKeys, rightKeys, otherCondition, conditionOnJoinKeys, leftChild,
    * rightChild, joinHint).
    */
-  // Note that `condition_on_non_keys` is NOT the original Join condition and it contains only
+  // Note that `otherCondition` is NOT the original Join condition and it contains only
   // the subset that is not handled by the 'leftKeys' to 'rightKeys' equijoin.
-  // 'condition_on_keys' is the subset of the original Join condition that corresponds to the
+  // 'conditionOnJoinKeys' is the subset of the original Join condition that corresponds to the
   // 'leftKeys' to 'rightKeys' equijoin.
   type ReturnType =
     (JoinType, Seq[Expression], Seq[Expression],
@@ -211,7 +211,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
           )  // Same as above with left/right reversed.
         case _ => None
       }
-      val (keyed_predicates, non_keyed_predicates) = predicates.partition {
+      val (predicatesOfJoinKeys, otherPredicates) = predicates.partition {
         case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => false
         case Equality(l, r) =>
           canEvaluate(l, left) && canEvaluate(r, right) ||
@@ -222,8 +222,8 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       if (joinKeys.nonEmpty) {
         val (leftKeys, rightKeys) = joinKeys.unzip
         logDebug(s"leftKeys:$leftKeys | rightKeys:$rightKeys")
-        Some((joinType, leftKeys, rightKeys, non_keyed_predicates.reduceOption(And),
-          keyed_predicates.reduceOption(And), left, right, hint))
+        Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And),
+          predicatesOfJoinKeys.reduceOption(And), left, right, hint))
       } else {
         None
       }
