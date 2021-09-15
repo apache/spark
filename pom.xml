@@ -173,7 +173,7 @@
     <netlib.ludovic.dev.version>2.2.0</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
     <commons-compress.version>1.21</commons-compress.version>
-    <commons-io.version>2.8.0</commons-io.version>
+    <commons-io.version>2.11.0</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
@@ -399,6 +399,13 @@
         <version>${project.version}</version>
         <type>test-jar</type>
       </dependency>
+      <!-- #if scala-2.13 --><!--
+      <dependency>
+        <groupId>org.scala-lang.modules</groupId>
+        <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+        <version>1.0.3</version>
+      </dependency>
+      --><!-- #endif scala-2.13 -->
       <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill_${scala.binary.version}</artifactId>
@@ -3370,15 +3377,6 @@
         <scala.version>2.13.5</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
       </properties>
-      <dependencyManagement>
-        <dependencies>
-          <dependency>
-            <groupId>org.scala-lang.modules</groupId>
-            <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
-            <version>0.2.0</version>
-          </dependency>
-        </dependencies>
-      </dependencyManagement>
       <build>
         <pluginManagement>
           <plugins>

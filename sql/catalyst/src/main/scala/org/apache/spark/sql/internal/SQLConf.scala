@@ -666,6 +666,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN =
+    buildConf("spark.sql.adaptive.forceOptimizeSkewedJoin")
+      .doc("When true, force enable OptimizeSkewedJoin even if it introduces extra shuffle.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS =
     buildConf("spark.sql.adaptive.customCostEvaluatorClass")
       .doc("The custom cost evaluator class to be used for adaptive execution. If not being set," +

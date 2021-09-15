@@ -53,7 +53,6 @@ import datetime
 import numpy as np
 import pandas as pd
 from pandas.api.types import is_list_like, is_dict_like, is_scalar
-from pandas.api.extensions import ExtensionDtype
 from pandas.tseries.frequencies import DateOffset, to_offset
 
 if TYPE_CHECKING:
@@ -126,6 +125,7 @@ from pyspark.pandas.typedef.typehints import (
     DataFrameType,
     SeriesType,
     ScalarType,
+    create_tuple_for_frame_type,
 )
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
 
@@ -343,57 +343,6 @@ rectangle    16.0  2.348543e+108
 """
 
 
-def _create_tuple_for_frame_type(params: Any) -> object:
-    """
-    This is a workaround to support variadic generic in DataFrame.
-
-    See https://github.com/python/typing/issues/193
-    we always wraps the given type hints by a tuple to mimic the variadic generic.
-    """
-    from pyspark.pandas.typedef import NameTypeHolder
-
-    if isinstance(params, zip):  # type: ignore
-        params = [slice(name, tpe) for name, tpe in params]  # type: ignore
-
-    if isinstance(params, slice):
-        params = (params,)
-
-    if (
-        hasattr(params, "__len__")
-        and isinstance(params, Iterable)
-        and all(isinstance(param, slice) for param in params)
-    ):
-        for param in params:
-            if isinstance(param.start, str) and param.step is not None:
-                raise TypeError(
-                    "Type hints should be specified as "
-                    "DataFrame['name': type]; however, got %s" % param
-                )
-
-        name_classes = []
-        for param in params:
-            new_class = type("NameType", (NameTypeHolder,), {})  # type: Type[NameTypeHolder]
-            new_class.name = param.start
-            # When the given argument is a numpy's dtype instance.
-            new_class.tpe = param.stop.type if isinstance(param.stop, np.dtype) else param.stop
-            name_classes.append(new_class)
-
-        return Tuple[tuple(name_classes)]
-
-    if not isinstance(params, Iterable):
-        params = [params]
-
-    new_params = []
-    for param in params:
-        if isinstance(param, ExtensionDtype):
-            new_class = type("NameType", (NameTypeHolder,), {})
-            new_class.tpe = param
-            new_params.append(new_class)
-        else:
-            new_params.append(param.type if isinstance(param, np.dtype) else param)
-    return Tuple[tuple(new_params)]
-
-
 if (3, 5) <= sys.version_info < (3, 7) and __name__ != "__main__":
     from typing import GenericMeta  # type: ignore
 
@@ -405,7 +354,7 @@ if (3, 5) <= sys.version_info < (3, 7) and __name__ != "__main__":
     @no_type_check
     def new_getitem(self, params):
         if hasattr(self, "is_dataframe"):
-            return old_getitem(self, _create_tuple_for_frame_type(params))
+            return old_getitem(self, create_tuple_for_frame_type(params))
         else:
             return old_getitem(self, params)
 
@@ -12046,7 +11995,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # This is a workaround to support variadic generic in DataFrame in Python 3.7.
             # See https://github.com/python/typing/issues/193
             # we always wraps the given type hints by a tuple to mimic the variadic generic.
-            return _create_tuple_for_frame_type(params)
+            return create_tuple_for_frame_type(params)
 
     elif (3, 5) <= sys.version_info < (3, 7):
         # This is a workaround to support variadic generic in DataFrame in Python 3.5+

@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, StringType, StructField, StructType}
 
 class InferFiltersFromGenerateSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -111,4 +113,24 @@ class InferFiltersFromGenerateSuite extends PlanTest {
        comparePlans(optimized, originalQuery)
      }
    }
+
+  test("SPARK-36715: Don't infer filters from udf") {
+    Seq(Explode(_), PosExplode(_), Inline(_)).foreach { f =>
+      val returnSchema = ArrayType(StructType(Seq(
+        StructField("x", IntegerType),
+        StructField("y", StringType)
+      )))
+      val fakeUDF = ScalaUDF(
+        (i: Int) => Array(Row.fromSeq(Seq(1, "a")), Row.fromSeq(Seq(2, "b"))),
+        returnSchema, Literal(8) :: Nil,
+        Option(ExpressionEncoder[Int]().resolveAndBind()) :: Nil)
+      val generator = f(fakeUDF)
+      val originalQuery = OneRowRelation().generate(generator).analyze
+      val optimized = OptimizeInferAndConstantFold.execute(originalQuery)
+      val correctAnswer = OneRowRelation()
+        .generate(generator)
+        .analyze
+      comparePlans(optimized, correctAnswer)
+    }
+  }
 }

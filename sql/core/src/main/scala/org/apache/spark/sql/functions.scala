@@ -2560,6 +2560,14 @@ object functions {
   def base64(e: Column): Column = withExpr { Base64(e.expr) }
 
   /**
+   * Calculates the bit length for the specified string column.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def bit_length(e: Column): Column = withExpr { BitLength(e.expr) }
+
+  /**
    * Concatenates multiple input string columns together into a single string column,
    * using the given separator.
    *
@@ -2723,6 +2731,14 @@ object functions {
   def ltrim(e: Column, trimString: String): Column = withExpr {
     StringTrimLeft(e.expr, Literal(trimString))
   }
+
+  /**
+   * Calculates the byte length for the specified string column.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def octet_length(e: Column): Column = withExpr { OctetLength(e.expr) }
 
   /**
    * Extract a specific group matched by a Java regex, from the specified string column.
