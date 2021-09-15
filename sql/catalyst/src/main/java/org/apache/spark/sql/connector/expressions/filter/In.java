@@ -22,7 +22,6 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.catalyst.CatalystTypeConverters;
 import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
