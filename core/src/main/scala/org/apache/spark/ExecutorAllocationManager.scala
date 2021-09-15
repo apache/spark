@@ -299,10 +299,12 @@ private[spark] class ExecutorAllocationManager(
     val numRunningOrPendingTasks = pendingTask + pendingSpeculative + running
     val rp = resourceProfileManager.resourceProfileFromId(rpId)
     val tasksPerExecutor = rp.maxTasksPerExecutor(conf)
-    logDebug(s"max needed for rpId: $rpId numpending: $numRunningOrPendingTasks," +
-      s" tasksperexecutor: $tasksPerExecutor")
+
     val maxNeeded = math.ceil(numRunningOrPendingTasks * executorAllocationRatio /
       tasksPerExecutor).toInt
+
+    logDebug(s"max needed for rpId: $rpId numpending: $numRunningOrPendingTasks," +
+      s" tasksperexecutor: $tasksPerExecutor = $maxNeeded")
 
     val maxNeededWithSpeculationLocalityOffset =
       if (tasksPerExecutor > 1 && maxNeeded == 1 && pendingSpeculative > 0) {
@@ -520,14 +522,27 @@ private[spark] class ExecutorAllocationManager(
    */
   private def addExecutors(maxNumExecutorsNeeded: Int, rpId: Int): Int = {
     val oldNumExecutorsTarget = numExecutorsTargetPerResourceProfileId(rpId)
-    // Do not request more executors if it would put our target over the upper bound
-    // this is doing a max check per ResourceProfile
-    if (oldNumExecutorsTarget >= maxNumExecutors) {
-      logDebug("Not adding executors because our current target total " +
-        s"is already ${oldNumExecutorsTarget} (limit $maxNumExecutors)")
-      numExecutorsToAddPerResourceProfileId(rpId) = 1
-      return 0
+
+    if (!reuseExecutors) {
+      // Do not request more executors if it would put our target over the upper bound
+      // this is doing a max check per ResourceProfile
+      if (oldNumExecutorsTarget >= maxNumExecutors) {
+        logDebug("Not adding executors because our current target total " +
+          s"is already ${oldNumExecutorsTarget} (limit $maxNumExecutors)")
+        numExecutorsToAddPerResourceProfileId(rpId) = 1
+        return 0
+      }
+    } else {
+      val numCompatibleExecutors = numExecutorsTargetsCompatibleProfiles(rpId)
+      if (oldNumExecutorsTarget +  numCompatibleExecutors >= maxNumExecutors) {
+        logDebug("Not adding executors because our current target total is already " +
+          s"${oldNumExecutorsTarget} (limit: max $maxNumExecutors - " +
+          s"reused $numCompatibleExecutors)")
+        numExecutorsToAddPerResourceProfileId(rpId) = 1
+        return 0
+      }
     }
+
     // There's no point in wasting time ramping up to the number of executors we already have, so
     // make sure our target is at least as much as our current allocation:
     var numExecutorsTarget = math.max(numExecutorsTargetPerResourceProfileId(rpId),
@@ -536,21 +551,25 @@ private[spark] class ExecutorAllocationManager(
     numExecutorsTarget += numExecutorsToAddPerResourceProfileId(rpId)
     // Ensure that our target doesn't exceed what we need at the present moment:
     numExecutorsTarget = math.min(numExecutorsTarget, maxNumExecutorsNeeded)
-    // Adjust min and max num of executors due to the compatible executors
-    val adjustedMaxNumExecutors = if (reuseExecutors) {
-      math.max(1, maxNumExecutors - numExecutorsTargetsCompatibleProfiles(rpId))
+    numExecutorsTarget = if (!reuseExecutors) {
+      // Ensure that our target fits within configured bounds:
+      math.max(math.min(numExecutorsTarget, maxNumExecutors), minNumExecutors)
     } else {
-      maxNumExecutors
-    }
-    val adjustedMinNumExecutors = if (reuseExecutors) {
-      math.max(1, minNumExecutors - numExecutorsTargetsCompatibleProfiles(rpId))
-    } else {
-      minNumExecutors
-    }
+      // Ensure that our target fits within adjusted bounds:
+      val numCompatibleExecutors = numExecutorsTargetsCompatibleProfiles(rpId)
+      val adjustedMinNumExecutors = math.max(0, minNumExecutors - numCompatibleExecutors)
+      val adjustedMaxNumExecutors = math.max(1, maxNumExecutors - numCompatibleExecutors)
 
-    // Ensure that our target fits within adjusted bounds:
-    numExecutorsTarget = math.max(math.min(numExecutorsTarget, adjustedMaxNumExecutors),
-      adjustedMinNumExecutors)
+      // scalastyle:off println
+      println(rpId, minNumExecutors, maxNumExecutors, numCompatibleExecutors)
+      // scalastyle:on println
+
+      // assert(adjustedMinNumExecutors >= 0, s"$adjustedMinNumExecutors")
+      // assert(adjustedMaxNumExecutors > 0, s"$adjustedMaxNumExecutors")
+
+      math.max(math.min(numExecutorsTarget, adjustedMaxNumExecutors),
+        adjustedMinNumExecutors)
+    }
 
     val delta = numExecutorsTarget - oldNumExecutorsTarget
     numExecutorsTargetPerResourceProfileId(rpId) = numExecutorsTarget

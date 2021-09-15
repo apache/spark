@@ -119,7 +119,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   }
 
   test("add executors default profile") {
-    val manager = createManager(createConfReuseExecutors(1, 10, 1))
+    val manager = createManager(createConf(1, 10, 1))
     post(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
 
     val updatesNeeded =
