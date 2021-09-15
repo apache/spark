@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 
 import org.apache.spark.sql.{SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedDBObjectName, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
@@ -513,23 +512,6 @@ private[sql] object DataSourceV2Strategy {
     protected[sql] def translateFilterV2(
         predicate: Expression,
         supportNestedPredicatePushdown: Boolean): Option[V2Filter] = {
-      translateFilterV2WithMapping(predicate, None, supportNestedPredicatePushdown)
-    }
-
-  /**
-   * Tries to translate a Catalyst [[Expression]] into data source [[Filter]].
-   *
-   * @param predicate The input [[Expression]] to be translated as [[Filter]]
-   * @param translatedFilterToExpr An optional map from leaf node filter expressions to its
-   *                               translated [[Filter]]. The map is used for rebuilding
-   *                               [[Expression]] from [[Filter]].
-   * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
-   */
-  protected[sql] def translateFilterV2WithMapping(
-      predicate: Expression,
-      translatedFilterToExpr: Option[mutable.HashMap[V2Filter, Expression]],
-      nestedPredicatePushdownEnabled: Boolean)
-  : Option[V2Filter] = {
     predicate match {
       case expressions.And(left, right) =>
         // See SPARK-12218 for detailed discussion
@@ -542,49 +524,28 @@ private[sql] object DataSourceV2Strategy {
         // Pushing one leg of AND down is only safe to do at the top level.
         // You can see ParquetFilters' createFilter for more details.
         for {
-          leftFilter <- translateFilterV2WithMapping(
-            left, translatedFilterToExpr, nestedPredicatePushdownEnabled)
-          rightFilter <- translateFilterV2WithMapping(
-            right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+          leftFilter <- translateFilterV2(
+            left, supportNestedPredicatePushdown)
+          rightFilter <- translateFilterV2(
+            right, supportNestedPredicatePushdown)
         } yield new V2And(leftFilter, rightFilter)
 
       case expressions.Or(left, right) =>
         for {
-          leftFilter <- translateFilterV2WithMapping(
-            left, translatedFilterToExpr, nestedPredicatePushdownEnabled)
-          rightFilter <- translateFilterV2WithMapping(
-            right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+          leftFilter <- translateFilterV2(
+            left, supportNestedPredicatePushdown)
+          rightFilter <- translateFilterV2(
+            right, supportNestedPredicatePushdown)
         } yield new V2Or(leftFilter, rightFilter)
 
       case expressions.Not(child) =>
-        translateFilterV2WithMapping(child, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+        translateFilterV2(child, supportNestedPredicatePushdown)
           .map(new V2Not(_))
 
       case other =>
         val filter = translateLeafNodeFilterV2(
-          other, PushableColumn(nestedPredicatePushdownEnabled))
-        if (filter.isDefined && translatedFilterToExpr.isDefined) {
-          translatedFilterToExpr.get(filter.get) = predicate
-        }
+          other, PushableColumn(supportNestedPredicatePushdown))
         filter
-    }
-  }
-
-  protected[sql] def rebuildExpressionFromFilter(
-      filter: V2Filter,
-      translatedFilterToExpr: mutable.HashMap[V2Filter, Expression]): Expression = {
-    filter match {
-      case and: V2And =>
-        expressions.And(rebuildExpressionFromFilter(and.left, translatedFilterToExpr),
-          rebuildExpressionFromFilter(and.right, translatedFilterToExpr))
-      case or: V2Or =>
-        expressions.Or(rebuildExpressionFromFilter(or.left, translatedFilterToExpr),
-          rebuildExpressionFromFilter(or.right, translatedFilterToExpr))
-      case not: V2Not =>
-        expressions.Not(rebuildExpressionFromFilter(not.child, translatedFilterToExpr))
-      case other =>
-        translatedFilterToExpr.getOrElse(other,
-          throw QueryCompilationErrors.failedToRebuildExpressionError(filter))
     }
   }
 }

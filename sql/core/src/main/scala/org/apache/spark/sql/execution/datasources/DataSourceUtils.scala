@@ -307,7 +307,7 @@ object DataSourceUtils extends PredicateHelper {
         new V2Or(convertV1FilterToV2(or.left), convertV1FilterToV2(or.right))
       case not: sources.Not =>
         new V2Not(convertV1FilterToV2(not.child))
-      case _ => throw QueryCompilationErrors.invalidFilter(v1Filter)
+      case _ => throw new IllegalStateException("Invalid v1Filter: " + v1Filter)
     }
   }
 
@@ -340,7 +340,7 @@ object DataSourceUtils extends PredicateHelper {
       val ts = DateTimeUtils.instantToMicros(value.asInstanceOf[Instant])
       LiteralValue(ts, TimestampType)
     case _ =>
-      throw QueryCompilationErrors.invalidDataTypeForFilterValue(value)
+      throw new IllegalStateException(s"The value $value in v1Filter has invalid data type.")
   }
 
   def convertV2FilterToV1(v2Filter: V2Filter): sources.Filter = {
@@ -376,7 +376,7 @@ object DataSourceUtils extends PredicateHelper {
       case and: V2And => sources.And(convertV2FilterToV1(and.left), convertV2FilterToV1(and.right))
       case or: V2Or => sources.Or(convertV2FilterToV1(or.left), convertV2FilterToV1(or.right))
       case not: V2Not => sources.Not(convertV2FilterToV1(not.child))
-      case _ => throw QueryCompilationErrors.invalidFilter(v2Filter)
+      case _ => throw new IllegalStateException("Invalid v2Filter: " + v2Filter)
     }
   }
 }
