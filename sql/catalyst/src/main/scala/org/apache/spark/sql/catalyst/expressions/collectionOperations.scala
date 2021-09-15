@@ -3832,6 +3832,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
           val hs = new SQLOpenHashSet[Any]
           val hsResult = new SQLOpenHashSet[Any]
           val isNaN = SQLOpenHashSet.isNaN(elementType)
+          val valueNaN = SQLOpenHashSet.valueNaN(elementType)
           var i = 0
           while (i < array2.numElements()) {
             if (array2.isNullAt(i)) {
@@ -3858,7 +3859,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
               val elem = array1.get(i, elementType)
               if (isNaN(elem)) {
                 if (hs.containsNaN() && !hsResult.containsNaN()) {
-                  arrayBuffer += elem
+                  arrayBuffer += valueNaN
                   hsResult.addNaN()
                 }
               } else {
@@ -3950,9 +3951,11 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
 
-        val isNaNMethod = elementType match {
-          case DoubleType => Some(s"java.lang.Double.isNaN((double)$value)")
-          case FloatType => Some(s"java.lang.Float.isNaN((float)$value)")
+        val isNaNMethodAndValue = elementType match {
+          case DoubleType =>
+            Some((s"java.lang.Double.isNaN((double)$value)", "java.lang.Double.NaN"))
+          case FloatType =>
+            Some((s"java.lang.Float.isNaN((float)$value)", "java.lang.Float.NaN"))
           case _ => None
         }
 
@@ -3979,7 +3982,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
           }
 
         def withArray2NaNCheck(body: String): String = {
-          isNaNMethod.map { isNaN =>
+          isNaNMethodAndValue.map { case (isNaN, _) =>
             s"""
                |if ($isNaN) {
                |  $hashSet.addNaN();
@@ -4021,13 +4024,13 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
           }
 
         def withArray1NaNCheck(body: String): String = {
-          isNaNMethod.map { isNaN =>
+          isNaNMethodAndValue.map { case (isNaN, valueNaN) =>
             s"""
                |if ($isNaN) {
                |  if ($hashSet.containsNaN() && !$hashSetResult.containsNaN()) {
                |    ++$size;
                |    $hashSetResult.addNaN();
-               |    $builder.$$plus$$eq($value);
+               |    $builder.$$plus$$eq($valueNaN);
                |  }
                |} else {
                |  $body
