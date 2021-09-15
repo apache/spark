@@ -3578,7 +3578,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
         val hs = new SQLOpenHashSet[Any]()
         val isNaN = SQLOpenHashSet.isNaN(elementType)
-        val NaN = SQLOpenHashSet.valueNaN(elementType)
+        val valueNaN = SQLOpenHashSet.valueNaN(elementType)
         Seq(array1, array2).foreach { array =>
           var i = 0
           while (i < array.numElements()) {
@@ -3591,7 +3591,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
               val elem = array.get(i, elementType)
               if (isNaN(elem)) {
                 if (!hs.containsNaN) {
-                  arrayBuffer += NaN
+                  arrayBuffer += valueNaN
                   hs.addNaN
                 }
               } else {
