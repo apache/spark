@@ -3694,13 +3694,13 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
             case FloatType =>
               Some((s"java.lang.Float.isNaN((float)$value)", "java.lang.Float.NaN"))
             case _ => None
-          }).map { case (isNaN: String, NaN: String) =>
+          }).map { case (isNaN, valueNaN) =>
             s"""
                |if ($isNaN) {
                |  if (!$hashSet.containsNaN()) {
                |     $size++;
                |     $hashSet.addNaN();
-               |     $builder.$$plus$$eq($NaN);
+               |     $builder.$$plus$$eq($valueNaN);
                |  }
                |} else {
                |  $body
