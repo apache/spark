@@ -2335,4 +2335,17 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Literal.create(Seq(Float.NaN, Float.NaN, null, null, 1f, 1f), ArrayType(FloatType))),
       Seq(Float.NaN, null, 1f))
   }
+
+  test("SPARK-36755: ArraysOverlap hould handle duplicated Double.NaN and Float.Nan") {
+    checkEvaluation(ArraysOverlap(
+      Literal.apply(Array(Double.NaN, 1d)), Literal.apply(Array(Double.NaN))), true)
+    checkEvaluation(ArraysOverlap(
+      Literal.create(Seq(Double.NaN, null), ArrayType(DoubleType)),
+      Literal.create(Seq(Double.NaN, null, 1d), ArrayType(DoubleType))), true)
+    checkEvaluation(ArraysOverlap(
+      Literal.apply(Array(Float.NaN)), Literal.apply(Array(Float.NaN, 1f))), true)
+    checkEvaluation(ArraysOverlap(
+      Literal.create(Seq(Float.NaN, null), ArrayType(FloatType)),
+      Literal.create(Seq(Float.NaN, null, 1f), ArrayType(FloatType))), true)
+  }
 }
