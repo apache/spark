@@ -4077,6 +4077,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
       (array1, array2) =>
         val hs = new OpenHashSet[Any]
         val isNaN = SQLOpenHashSet.isNaN(elementType)
+        val valueNan = SQLOpenHashSet.valueNaN(elementType)
         var notFoundNullElement = true
         var notFoundNaNElement = true
         var i = 0
@@ -4105,7 +4106,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
             val elem = array1.get(i, elementType)
             if (isNaN(elem)) {
               if (notFoundNaNElement) {
-                arrayBuffer += elem
+                arrayBuffer += valueNan
                 notFoundNaNElement = false
               }
             } else {
@@ -4192,9 +4193,11 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
 
-        val isNaNMethod = elementType match {
-          case DoubleType => Some(s"java.lang.Double.isNaN((double)$value)")
-          case FloatType => Some(s"java.lang.Float.isNaN((float)$value)")
+        val isNaNMethodAndValue = elementType match {
+          case DoubleType =>
+            Some((s"java.lang.Double.isNaN((double)$value)", "java.lang.Double.NaN"))
+          case FloatType =>
+            Some((s"java.lang.Float.isNaN((float)$value)", "java.lang.Float.NaN"))
           case _ => None
         }
 
@@ -4221,7 +4224,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
           }
 
         def withArray2NaNCheck(body: String): String = {
-          isNaNMethod.map { isNaN =>
+          isNaNMethodAndValue.map { case (isNaN, _) =>
             s"""
                |if ($isNaN) {
                |  $notFoundNaNElement = false;
@@ -4255,13 +4258,13 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
           }
 
         def withArray1NaNCheck(body: String): String = {
-          isNaNMethod.map { isNaN =>
+          isNaNMethodAndValue.map { case (isNaN, valueNaN) =>
             s"""
                |if ($isNaN) {
                |  if ($notFoundNaNElement) {
                |    $notFoundNaNElement = false;
                |    $size++;
-               |    $builder.$$plus$$eq($value);
+               |    $builder.$$plus$$eq($valueNaN);
                |  }
                |} else {
                |  $body
