@@ -323,19 +323,11 @@ struct<CSC(-1):double>
 
 
 -- !query
-:
 select cot(1)
 -- !query schema
-struct<>
+struct<COT(1):double>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-extraneous input ':' expecting {'(', 'ADD', 'ALTER', 'ANALYZE', 'CACHE', 'CLEAR', 'COMMENT', 'COMMIT', 'CREATE', 'DELETE', 'DESC', 'DESCRIBE', 'DFS', 'DROP', 'EXPLAIN', 'EXPORT', 'FROM', 'GRANT', 'IMPORT', 'INSERT', 'LIST', 'LOAD', 'LOCK', 'MAP', 'MERGE', 'MSCK', 'REDUCE', 'REFRESH', 'REPLACE', 'RESET', 'REVOKE', 'ROLLBACK', 'SELECT', 'SET', 'SHOW', 'START', 'TABLE', 'TRUNCATE', 'UNCACHE', 'UNLOCK', 'UPDATE', 'USE', 'VALUES', 'WITH'}(line 1, pos 0)
-
-== SQL ==
-:
-^^^
-select cot(1)
+0.6420926159343306
 
 
 -- !query
