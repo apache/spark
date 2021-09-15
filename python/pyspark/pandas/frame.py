@@ -9987,7 +9987,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         joined_sdf = self._internal.spark_frame.join(
                             other=F.broadcast(item_sdf),
                             on=(index_scols[0] == scol_for(item_sdf, item_sdf_col)),
-                        ).drop(item_sdf_col)
+                            how="semi",
+                        )
 
                         return DataFrame(self._internal.with_new_sdf(joined_sdf))
 
