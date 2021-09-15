@@ -1711,6 +1711,38 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, msg):
             psser.update(10)
 
+        def _get_data():
+            pdf = pd.DataFrame(
+                {
+                    "a": [None, 2, 3, 4, 5, 6, 7, 8, None],
+                    "b": [None, 5, None, 3, 2, 1, None, 0, 0],
+                    "c": [1, 5, 1, 3, 2, 1, 1, 0, 0],
+                },
+            )
+            psdf = ps.from_pandas(pdf)
+            return pdf, psdf
+
+        pdf, psdf = _get_data()
+
+        psdf.a.update(psdf.a)
+        pdf.a.update(pdf.a)
+        self.assert_eq(psdf, pdf)
+
+        pdf, psdf = _get_data()
+
+        psdf.a.update(psdf.b)
+        pdf.a.update(pdf.b)
+        self.assert_eq(psdf, pdf)
+
+        pdf, psdf = _get_data()
+        pser = pdf.a
+        psser = psdf.a
+
+        pser.update(pdf.b)
+        psser.update(psdf.b)
+        self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
+
     def test_where(self):
         pser1 = pd.Series([0, 1, 2, 3, 4])
         psser1 = ps.from_pandas(pser1)
