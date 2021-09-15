@@ -385,6 +385,7 @@ Functions
     corr
     cos
     cosh
+    cot
     count
     count_distinct
     countDistinct
