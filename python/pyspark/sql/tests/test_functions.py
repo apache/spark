@@ -198,13 +198,13 @@ class FunctionsTests(ReusedSQLTestCase):
                 df.select(getattr(functions, name)(col("name"))).first()[0])
 
     def test_octet_length_function(self):
-        # SPARK-36751: add octet/bit length api for python
+        # SPARK-36751: add octet length api for python
         df = self.spark.createDataFrame([('cat',), ('\U0001F408',)], ['cat'])
         actual = df.select(octet_length('cat')).collect()
         self.assertEqual([Row(3), Row(4)], actual)
 
     def test_bit_length_function(self):
-        # SPARK-36751: add octet/bit length api for python
+        # SPARK-36751: add bit length api for python
         df = self.spark.createDataFrame([('cat',), ('\U0001F408',)], ['cat'])
         actual = df.select(bit_length('cat')).collect()
         self.assertEqual([Row(24), Row(32)], actual)
