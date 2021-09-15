@@ -60,13 +60,19 @@ class JacksonParser(
   private val factory = options.buildJsonFactory()
 
   private lazy val timestampFormatter = TimestampFormatter(
-    options.timestampFormat,
+    options.timestampFormatInRead,
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+  private lazy val timestampNTZFormatter = TimestampFormatter(
+    options.timestampFormatInRead,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
   private lazy val dateFormatter = DateFormatter(
-    options.dateFormat,
+    options.dateFormatInRead,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
@@ -251,6 +257,12 @@ class JacksonParser(
 
         case VALUE_NUMBER_INT =>
           parser.getLongValue * 1000000L
+      }
+
+    case TimestampNTZType =>
+      (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
+        case VALUE_STRING if parser.getTextLength >= 1 =>
+          timestampNTZFormatter.parseWithoutTimeZone(parser.getText)
       }
 
     case DateType =>

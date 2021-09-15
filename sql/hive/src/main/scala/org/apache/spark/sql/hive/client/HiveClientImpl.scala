@@ -999,8 +999,11 @@ private[hive] object HiveClientImpl extends Logging {
     // For Hive Serde, we still need to to restore the raw type for char and varchar type.
     // When reading data in parquet, orc, or avro file format with string type for char,
     // the tailing spaces may lost if we are not going to pad it.
-    val typeString = CharVarcharUtils.getRawTypeString(c.metadata)
-      .getOrElse(c.dataType.catalogString)
+    val typeString = if (SQLConf.get.charVarcharAsString) {
+      c.dataType.catalogString
+    } else {
+      CharVarcharUtils.getRawTypeString(c.metadata).getOrElse(c.dataType.catalogString)
+    }
     new FieldSchema(c.name, typeString, c.getComment().orNull)
   }
 

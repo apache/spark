@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning
 import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.aggregate.AggUtils
@@ -168,7 +169,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     private def checkHintNonEquiJoin(hint: JoinHint): Unit = {
-      if (hintToShuffleHashJoin(hint) || hintToSortMergeJoin(hint)) {
+      if (hintToShuffleHashJoin(hint) || hintToPreferShuffleHashJoin(hint) ||
+          hintToSortMergeJoin(hint)) {
         assert(hint.leftHint.orElse(hint.rightHint).isDefined)
         hintErrorHandler.joinHintNotSupported(hint.leftHint.orElse(hint.rightHint).get,
           "no equi-join keys")
@@ -662,6 +664,36 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  /**
+   * Strategy to plan CTE relations left not inlined.
+   */
+  object WithCTEStrategy extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case WithCTE(plan, cteDefs) =>
+        val cteMap = QueryExecution.cteMap
+        cteDefs.foreach { cteDef =>
+          cteMap.put(cteDef.id, cteDef)
+        }
+        planLater(plan) :: Nil
+
+      case r: CTERelationRef =>
+        val ctePlan = QueryExecution.cteMap(r.cteId).child
+        val projectList = r.output.zip(ctePlan.output).map { case (tgtAttr, srcAttr) =>
+          Alias(srcAttr, tgtAttr.name)(exprId = tgtAttr.exprId)
+        }
+        val newPlan = Project(projectList, ctePlan)
+        // Plan CTE ref as a repartition shuffle so that all refs of the same CTE def will share
+        // an Exchange reuse at runtime.
+        // TODO create a new identity partitioning instead of using RoundRobinPartitioning.
+        exchange.ShuffleExchangeExec(
+          RoundRobinPartitioning(conf.numShufflePartitions),
+          planLater(newPlan),
+          REPARTITION_BY_COL) :: Nil
+
+      case _ => Nil
+    }
+  }
+
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case d: DataWritingCommand => DataWritingCommandExec(d, planLater(d.query)) :: Nil
@@ -723,6 +755,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           func, output, planLater(left), planLater(right)) :: Nil
       case logical.MapInPandas(func, output, child) =>
         execution.python.MapInPandasExec(func, output, planLater(child)) :: Nil
+      case logical.AttachDistributedSequence(attr, child) =>
+        execution.python.AttachDistributedSequenceExec(attr, planLater(child)) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>
         execution.MapElementsExec(f, objAttr, planLater(child)) :: Nil
       case logical.AppendColumns(f, _, _, in, out, child) =>

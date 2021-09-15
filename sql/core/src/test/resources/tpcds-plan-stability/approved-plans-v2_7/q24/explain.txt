@@ -303,125 +303,125 @@ Subquery:1 Hosting operator id = 46 Hosting Expression = Subquery scalar-subquer
 
 
 (49) ReusedExchange [Reuses operator id: 5]
-Output [5]: [ss_item_sk#51, ss_customer_sk#52, ss_store_sk#53, ss_ticket_number#54, ss_net_paid#55]
+Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5]
 
 (50) Sort [codegen id : 2]
-Input [5]: [ss_item_sk#51, ss_customer_sk#52, ss_store_sk#53, ss_ticket_number#54, ss_net_paid#55]
-Arguments: [ss_ticket_number#54 ASC NULLS FIRST, ss_item_sk#51 ASC NULLS FIRST], false, 0
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5]
+Arguments: [ss_ticket_number#4 ASC NULLS FIRST, ss_item_sk#1 ASC NULLS FIRST], false, 0
 
 (51) ReusedExchange [Reuses operator id: 11]
-Output [2]: [sr_item_sk#56, sr_ticket_number#57]
+Output [2]: [sr_item_sk#8, sr_ticket_number#9]
 
 (52) Sort [codegen id : 4]
-Input [2]: [sr_item_sk#56, sr_ticket_number#57]
-Arguments: [sr_ticket_number#57 ASC NULLS FIRST, sr_item_sk#56 ASC NULLS FIRST], false, 0
+Input [2]: [sr_item_sk#8, sr_ticket_number#9]
+Arguments: [sr_ticket_number#9 ASC NULLS FIRST, sr_item_sk#8 ASC NULLS FIRST], false, 0
 
 (53) SortMergeJoin [codegen id : 9]
-Left keys [2]: [ss_ticket_number#54, ss_item_sk#51]
-Right keys [2]: [sr_ticket_number#57, sr_item_sk#56]
+Left keys [2]: [ss_ticket_number#4, ss_item_sk#1]
+Right keys [2]: [sr_ticket_number#9, sr_item_sk#8]
 Join condition: None
 
 (54) Project [codegen id : 9]
-Output [4]: [ss_item_sk#51, ss_customer_sk#52, ss_store_sk#53, ss_net_paid#55]
-Input [7]: [ss_item_sk#51, ss_customer_sk#52, ss_store_sk#53, ss_ticket_number#54, ss_net_paid#55, sr_item_sk#56, sr_ticket_number#57]
+Output [4]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_net_paid#5]
+Input [7]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5, sr_item_sk#8, sr_ticket_number#9]
 
 (55) ReusedExchange [Reuses operator id: 19]
-Output [4]: [s_store_sk#58, s_store_name#59, s_state#60, s_zip#61]
+Output [4]: [s_store_sk#12, s_store_name#13, s_state#15, s_zip#16]
 
 (56) BroadcastHashJoin [codegen id : 9]
-Left keys [1]: [ss_store_sk#53]
-Right keys [1]: [s_store_sk#58]
+Left keys [1]: [ss_store_sk#3]
+Right keys [1]: [s_store_sk#12]
 Join condition: None
 
 (57) Project [codegen id : 9]
-Output [6]: [ss_item_sk#51, ss_customer_sk#52, ss_net_paid#55, s_store_name#59, s_state#60, s_zip#61]
-Input [8]: [ss_item_sk#51, ss_customer_sk#52, ss_store_sk#53, ss_net_paid#55, s_store_sk#58, s_store_name#59, s_state#60, s_zip#61]
+Output [6]: [ss_item_sk#1, ss_customer_sk#2, ss_net_paid#5, s_store_name#13, s_state#15, s_zip#16]
+Input [8]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_net_paid#5, s_store_sk#12, s_store_name#13, s_state#15, s_zip#16]
 
 (58) Scan parquet default.item
-Output [6]: [i_item_sk#62, i_current_price#63, i_size#64, i_color#65, i_units#66, i_manager_id#67]
+Output [6]: [i_item_sk#18, i_current_price#19, i_size#20, i_color#21, i_units#22, i_manager_id#23]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_size:string,i_color:string,i_units:string,i_manager_id:int>
 
 (59) ColumnarToRow [codegen id : 6]
-Input [6]: [i_item_sk#62, i_current_price#63, i_size#64, i_color#65, i_units#66, i_manager_id#67]
+Input [6]: [i_item_sk#18, i_current_price#19, i_size#20, i_color#21, i_units#22, i_manager_id#23]
 
 (60) Filter [codegen id : 6]
-Input [6]: [i_item_sk#62, i_current_price#63, i_size#64, i_color#65, i_units#66, i_manager_id#67]
-Condition : isnotnull(i_item_sk#62)
+Input [6]: [i_item_sk#18, i_current_price#19, i_size#20, i_color#21, i_units#22, i_manager_id#23]
+Condition : isnotnull(i_item_sk#18)
 
 (61) BroadcastExchange
-Input [6]: [i_item_sk#62, i_current_price#63, i_size#64, i_color#65, i_units#66, i_manager_id#67]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#68]
+Input [6]: [i_item_sk#18, i_current_price#19, i_size#20, i_color#21, i_units#22, i_manager_id#23]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#51]
 
 (62) BroadcastHashJoin [codegen id : 9]
-Left keys [1]: [ss_item_sk#51]
-Right keys [1]: [i_item_sk#62]
+Left keys [1]: [ss_item_sk#1]
+Right keys [1]: [i_item_sk#18]
 Join condition: None
 
 (63) Project [codegen id : 9]
-Output [10]: [ss_customer_sk#52, ss_net_paid#55, s_store_name#59, s_state#60, s_zip#61, i_current_price#63, i_size#64, i_color#65, i_units#66, i_manager_id#67]
-Input [12]: [ss_item_sk#51, ss_customer_sk#52, ss_net_paid#55, s_store_name#59, s_state#60, s_zip#61, i_item_sk#62, i_current_price#63, i_size#64, i_color#65, i_units#66, i_manager_id#67]
+Output [10]: [ss_customer_sk#2, ss_net_paid#5, s_store_name#13, s_state#15, s_zip#16, i_current_price#19, i_size#20, i_color#21, i_units#22, i_manager_id#23]
+Input [12]: [ss_item_sk#1, ss_customer_sk#2, ss_net_paid#5, s_store_name#13, s_state#15, s_zip#16, i_item_sk#18, i_current_price#19, i_size#20, i_color#21, i_units#22, i_manager_id#23]
 
 (64) ReusedExchange [Reuses operator id: 31]
-Output [5]: [c_customer_sk#69, c_current_addr_sk#70, c_first_name#71, c_last_name#72, c_birth_country#73]
+Output [5]: [c_customer_sk#25, c_current_addr_sk#26, c_first_name#27, c_last_name#28, c_birth_country#29]
 
 (65) BroadcastHashJoin [codegen id : 9]
-Left keys [1]: [ss_customer_sk#52]
-Right keys [1]: [c_customer_sk#69]
+Left keys [1]: [ss_customer_sk#2]
+Right keys [1]: [c_customer_sk#25]
 Join condition: None
 
 (66) Project [codegen id : 9]
-Output [13]: [ss_net_paid#55, s_store_name#59, s_state#60, s_zip#61, i_current_price#63, i_size#64, i_color#65, i_units#66, i_manager_id#67, c_current_addr_sk#70, c_first_name#71, c_last_name#72, c_birth_country#73]
-Input [15]: [ss_customer_sk#52, ss_net_paid#55, s_store_name#59, s_state#60, s_zip#61, i_current_price#63, i_size#64, i_color#65, i_units#66, i_manager_id#67, c_customer_sk#69, c_current_addr_sk#70, c_first_name#71, c_last_name#72, c_birth_country#73]
+Output [13]: [ss_net_paid#5, s_store_name#13, s_state#15, s_zip#16, i_current_price#19, i_size#20, i_color#21, i_units#22, i_manager_id#23, c_current_addr_sk#26, c_first_name#27, c_last_name#28, c_birth_country#29]
+Input [15]: [ss_customer_sk#2, ss_net_paid#5, s_store_name#13, s_state#15, s_zip#16, i_current_price#19, i_size#20, i_color#21, i_units#22, i_manager_id#23, c_customer_sk#25, c_current_addr_sk#26, c_first_name#27, c_last_name#28, c_birth_country#29]
 
 (67) ReusedExchange [Reuses operator id: 37]
-Output [4]: [ca_address_sk#74, ca_state#75, ca_zip#76, ca_country#77]
+Output [4]: [ca_address_sk#31, ca_state#32, ca_zip#33, ca_country#34]
 
 (68) BroadcastHashJoin [codegen id : 9]
-Left keys [3]: [c_current_addr_sk#70, c_birth_country#73, s_zip#61]
-Right keys [3]: [ca_address_sk#74, upper(ca_country#77), ca_zip#76]
+Left keys [3]: [c_current_addr_sk#26, c_birth_country#29, s_zip#16]
+Right keys [3]: [ca_address_sk#31, upper(ca_country#34), ca_zip#33]
 Join condition: None
 
 (69) Project [codegen id : 9]
-Output [11]: [ss_net_paid#55, s_store_name#59, s_state#60, i_current_price#63, i_size#64, i_color#65, i_units#66, i_manager_id#67, c_first_name#71, c_last_name#72, ca_state#75]
-Input [17]: [ss_net_paid#55, s_store_name#59, s_state#60, s_zip#61, i_current_price#63, i_size#64, i_color#65, i_units#66, i_manager_id#67, c_current_addr_sk#70, c_first_name#71, c_last_name#72, c_birth_country#73, ca_address_sk#74, ca_state#75, ca_zip#76, ca_country#77]
+Output [11]: [ss_net_paid#5, s_store_name#13, s_state#15, i_current_price#19, i_size#20, i_color#21, i_units#22, i_manager_id#23, c_first_name#27, c_last_name#28, ca_state#32]
+Input [17]: [ss_net_paid#5, s_store_name#13, s_state#15, s_zip#16, i_current_price#19, i_size#20, i_color#21, i_units#22, i_manager_id#23, c_current_addr_sk#26, c_first_name#27, c_last_name#28, c_birth_country#29, ca_address_sk#31, ca_state#32, ca_zip#33, ca_country#34]
 
 (70) HashAggregate [codegen id : 9]
-Input [11]: [ss_net_paid#55, s_store_name#59, s_state#60, i_current_price#63, i_size#64, i_color#65, i_units#66, i_manager_id#67, c_first_name#71, c_last_name#72, ca_state#75]
-Keys [10]: [c_last_name#72, c_first_name#71, s_store_name#59, ca_state#75, s_state#60, i_color#65, i_current_price#63, i_manager_id#67, i_units#66, i_size#64]
-Functions [1]: [partial_sum(UnscaledValue(ss_net_paid#55))]
-Aggregate Attributes [1]: [sum#78]
-Results [11]: [c_last_name#72, c_first_name#71, s_store_name#59, ca_state#75, s_state#60, i_color#65, i_current_price#63, i_manager_id#67, i_units#66, i_size#64, sum#79]
+Input [11]: [ss_net_paid#5, s_store_name#13, s_state#15, i_current_price#19, i_size#20, i_color#21, i_units#22, i_manager_id#23, c_first_name#27, c_last_name#28, ca_state#32]
+Keys [10]: [c_last_name#28, c_first_name#27, s_store_name#13, ca_state#32, s_state#15, i_color#21, i_current_price#19, i_manager_id#23, i_units#22, i_size#20]
+Functions [1]: [partial_sum(UnscaledValue(ss_net_paid#5))]
+Aggregate Attributes [1]: [sum#52]
+Results [11]: [c_last_name#28, c_first_name#27, s_store_name#13, ca_state#32, s_state#15, i_color#21, i_current_price#19, i_manager_id#23, i_units#22, i_size#20, sum#53]
 
 (71) Exchange
-Input [11]: [c_last_name#72, c_first_name#71, s_store_name#59, ca_state#75, s_state#60, i_color#65, i_current_price#63, i_manager_id#67, i_units#66, i_size#64, sum#79]
-Arguments: hashpartitioning(c_last_name#72, c_first_name#71, s_store_name#59, ca_state#75, s_state#60, i_color#65, i_current_price#63, i_manager_id#67, i_units#66, i_size#64, 5), ENSURE_REQUIREMENTS, [id=#80]
+Input [11]: [c_last_name#28, c_first_name#27, s_store_name#13, ca_state#32, s_state#15, i_color#21, i_current_price#19, i_manager_id#23, i_units#22, i_size#20, sum#53]
+Arguments: hashpartitioning(c_last_name#28, c_first_name#27, s_store_name#13, ca_state#32, s_state#15, i_color#21, i_current_price#19, i_manager_id#23, i_units#22, i_size#20, 5), ENSURE_REQUIREMENTS, [id=#54]
 
 (72) HashAggregate [codegen id : 10]
-Input [11]: [c_last_name#72, c_first_name#71, s_store_name#59, ca_state#75, s_state#60, i_color#65, i_current_price#63, i_manager_id#67, i_units#66, i_size#64, sum#79]
-Keys [10]: [c_last_name#72, c_first_name#71, s_store_name#59, ca_state#75, s_state#60, i_color#65, i_current_price#63, i_manager_id#67, i_units#66, i_size#64]
-Functions [1]: [sum(UnscaledValue(ss_net_paid#55))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#55))#81]
-Results [1]: [MakeDecimal(sum(UnscaledValue(ss_net_paid#55))#81,17,2) AS netpaid#40]
+Input [11]: [c_last_name#28, c_first_name#27, s_store_name#13, ca_state#32, s_state#15, i_color#21, i_current_price#19, i_manager_id#23, i_units#22, i_size#20, sum#53]
+Keys [10]: [c_last_name#28, c_first_name#27, s_store_name#13, ca_state#32, s_state#15, i_color#21, i_current_price#19, i_manager_id#23, i_units#22, i_size#20]
+Functions [1]: [sum(UnscaledValue(ss_net_paid#5))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#5))#39]
+Results [1]: [MakeDecimal(sum(UnscaledValue(ss_net_paid#5))#39,17,2) AS netpaid#40]
 
 (73) HashAggregate [codegen id : 10]
 Input [1]: [netpaid#40]
 Keys: []
 Functions [1]: [partial_avg(netpaid#40)]
-Aggregate Attributes [2]: [sum#82, count#83]
-Results [2]: [sum#84, count#85]
+Aggregate Attributes [2]: [sum#55, count#56]
+Results [2]: [sum#57, count#58]
 
 (74) Exchange
-Input [2]: [sum#84, count#85]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#86]
+Input [2]: [sum#57, count#58]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#59]
 
 (75) HashAggregate [codegen id : 11]
-Input [2]: [sum#84, count#85]
+Input [2]: [sum#57, count#58]
 Keys: []
 Functions [1]: [avg(netpaid#40)]
-Aggregate Attributes [1]: [avg(netpaid#40)#87]
-Results [1]: [CheckOverflow((0.050000 * promote_precision(avg(netpaid#40)#87)), DecimalType(24,8), true) AS (0.05 * avg(netpaid))#88]
+Aggregate Attributes [1]: [avg(netpaid#40)#60]
+Results [1]: [CheckOverflow((0.050000 * promote_precision(avg(netpaid#40)#60)), DecimalType(24,8), true) AS (0.05 * avg(netpaid))#61]
 
 

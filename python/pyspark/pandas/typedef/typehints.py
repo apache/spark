@@ -136,7 +136,9 @@ class NameTypeHolder(object):
     tpe = None
 
 
-def as_spark_type(tpe: Union[str, type, Dtype], *, raise_error: bool = True) -> types.DataType:
+def as_spark_type(
+    tpe: Union[str, type, Dtype], *, raise_error: bool = True, prefer_timestamp_ntz: bool = False
+) -> types.DataType:
     """
     Given a Python type, returns the equivalent spark type.
     Accepts:
@@ -184,9 +186,9 @@ def as_spark_type(tpe: Union[str, type, Dtype], *, raise_error: bool = True) -> 
     # StringType
     elif tpe in (str, np.unicode_, "str", "U"):
         return types.StringType()
-    # TimestampType
+    # TimestampType or TimestampNTZType if timezone is not specified.
     elif tpe in (datetime.datetime, np.datetime64, "datetime64[ns]", "M"):
-        return types.TimestampType()
+        return types.TimestampNTZType() if prefer_timestamp_ntz else types.TimestampType()
 
     # categorical types
     elif isinstance(tpe, CategoricalDtype) or (isinstance(tpe, str) and type == "category"):
@@ -313,11 +315,15 @@ def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.Dat
     return dtype, spark_type
 
 
-def infer_pd_series_spark_type(pser: pd.Series, dtype: Dtype) -> types.DataType:
+def infer_pd_series_spark_type(
+    pser: pd.Series, dtype: Dtype, prefer_timestamp_ntz: bool = False
+) -> types.DataType:
     """Infer Spark DataType from pandas Series dtype.
 
     :param pser: :class:`pandas.Series` to be inferred
     :param dtype: the Series' dtype
+    :param prefer_timestamp_ntz: if true, infers datetime without timezone as
+        TimestampNTZType type. If false, infers it as TimestampType.
     :return: the inferred Spark data type
     """
     if dtype == np.dtype("object"):
@@ -326,15 +332,15 @@ def infer_pd_series_spark_type(pser: pd.Series, dtype: Dtype) -> types.DataType:
         elif hasattr(pser.iloc[0], "__UDT__"):
             return pser.iloc[0].__UDT__
         else:
-            return from_arrow_type(pa.Array.from_pandas(pser).type)
+            return from_arrow_type(pa.Array.from_pandas(pser).type, prefer_timestamp_ntz)
     elif isinstance(dtype, CategoricalDtype):
         if isinstance(pser.dtype, CategoricalDtype):
-            return as_spark_type(pser.cat.codes.dtype)
+            return as_spark_type(pser.cat.codes.dtype, prefer_timestamp_ntz=prefer_timestamp_ntz)
         else:
             # `pser` must already be converted to codes.
-            return as_spark_type(pser.dtype)
+            return as_spark_type(pser.dtype, prefer_timestamp_ntz=prefer_timestamp_ntz)
     else:
-        return as_spark_type(dtype)
+        return as_spark_type(dtype, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
 
 def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarType, UnknownType]:

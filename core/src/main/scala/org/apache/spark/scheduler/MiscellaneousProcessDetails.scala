@@ -16,7 +16,7 @@
  */
 package org.apache.spark.scheduler
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 /**
  * :: DeveloperApi ::
@@ -24,6 +24,7 @@ import org.apache.spark.annotation.DeveloperApi
  */
 
 @DeveloperApi
+@Since("3.2.0")
 class MiscellaneousProcessDetails(
     val hostPort: String,
     val cores: Int,

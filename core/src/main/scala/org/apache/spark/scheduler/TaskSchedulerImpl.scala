@@ -28,6 +28,7 @@ import scala.util.Random
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
@@ -171,7 +172,8 @@ private[spark] class TaskSchedulerImpl(
       SchedulingMode.withName(schedulingModeConf)
     } catch {
       case e: java.util.NoSuchElementException =>
-        throw new SparkException(s"Unrecognized $SCHEDULER_MODE_PROPERTY: $schedulingModeConf")
+        throw SparkCoreErrors.unrecognizedSchedulerModePropertyError(SCHEDULER_MODE_PROPERTY,
+          schedulingModeConf)
     }
 
   val rootPool: Pool = new Pool("", schedulingMode, 0, 0)
@@ -684,7 +686,7 @@ private[spark] class TaskSchedulerImpl(
                 s"${LEGACY_LOCALITY_WAIT_RESET.key} to false to get rid of this error."
               logWarning(errorMsg)
               taskSet.abort(errorMsg)
-              throw new SparkException(errorMsg)
+              throw SparkCoreErrors.failResourceOffersForBarrierStageError(errorMsg)
             } else {
               val curTime = clock.getTimeMillis()
               if (curTime - taskSet.lastResourceOfferFailLogTime >
@@ -799,7 +801,7 @@ private[spark] class TaskSchedulerImpl(
                 val errorMsg =
                   "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)"
                 taskSet.abort(errorMsg)
-                throw new SparkException(errorMsg)
+                throw SparkCoreErrors.markExecutorAsFailedError(errorMsg)
               })
               if (executorIdToRunningTaskIds.contains(execId)) {
                 reason = Some(
@@ -917,7 +919,7 @@ private[spark] class TaskSchedulerImpl(
         // No task sets are active but we still got an error. Just exit since this
         // must mean the error is during registration.
         // It might be good to do something smarter here in the future.
-        throw new SparkException(s"Exiting due to error from cluster scheduler: $message")
+        throw SparkCoreErrors.clusterSchedulerError(message)
       }
     }
   }

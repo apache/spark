@@ -20,7 +20,6 @@ A wrapper for GroupedData to behave similar to pandas GroupBy.
 """
 
 from abc import ABCMeta, abstractmethod
-import builtins
 import sys
 import inspect
 from collections import OrderedDict, namedtuple
@@ -44,9 +43,15 @@ from typing import (
     TYPE_CHECKING,
 )
 
-import numpy as np
 import pandas as pd
 from pandas.api.types import is_hashable, is_list_like
+
+if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
+    from pandas.core.common import _builtin_table
+else:
+    from pandas.core.base import SelectionMixin
+
+    _builtin_table = SelectionMixin._builtin_table
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
 from pyspark.sql.types import (  # noqa: F401
@@ -96,12 +101,6 @@ if TYPE_CHECKING:
 
 # to keep it the same as pandas
 NamedAgg = namedtuple("NamedAgg", ["column", "aggfunc"])
-
-_builtin_table = {
-    builtins.sum: np.sum,
-    builtins.max: np.max,
-    builtins.min: np.min,
-}  # type: Dict[Callable, Callable]
 
 
 class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
@@ -1440,7 +1439,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         the same pandas DataFrame as if the pandas-on-Spark DataFrame is collected to driver side.
         The index, column labels, etc. are re-constructed within the function.
         """
+        from pyspark.sql.utils import is_timestamp_ntz_preferred
+
         arguments_for_restore_index = psdf._internal.arguments_for_restore_index
+        prefer_timestamp_ntz = is_timestamp_ntz_preferred()  # type: ignore
 
         def rename_output(pdf: pd.DataFrame) -> pd.DataFrame:
             pdf = InternalFrame.restore_index(pdf.copy(), **arguments_for_restore_index)
@@ -1452,7 +1454,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             # When Spark output type is specified, without executing it, we don't know
             # if we should restore the index or not. For instance, see the example in
             # https://github.com/pyspark.pandas/issues/628.
-            pdf, _, _, _, _ = InternalFrame.prepare_pandas_frame(pdf, retain_index=retain_index)
+            pdf, _, _, _, _ = InternalFrame.prepare_pandas_frame(
+                pdf, retain_index=retain_index, prefer_timestamp_ntz=prefer_timestamp_ntz
+            )
 
             # Just positionally map the column names to given schema's.
             pdf.columns = return_schema.names
@@ -2257,6 +2261,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 for c in psdf._internal.data_spark_column_names
                 if c not in groupkey_names
             ]
+
             return_schema = StructType([field.struct_field for field in data_fields])
 
             sdf = GroupBy._spark_group_map_apply(

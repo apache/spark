@@ -40,6 +40,7 @@ from pyspark.sql.types import (
     StringType,
     StructType,
     TimestampType,
+    TimestampNTZType,
     UserDefinedType,
 )
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
@@ -155,7 +156,7 @@ def _as_string_type(
     index_ops: IndexOpsLike, dtype: Union[str, type, Dtype], *, null_str: str = str(None)
 ) -> IndexOpsLike:
     """Cast `index_ops` to StringType Spark type, given `dtype` and `null_str`,
-    representing null Spark column.
+    representing null Spark column. Note that `null_str` is for non-extension dtypes only.
     """
     spark_type = StringType()
     if isinstance(dtype, extension_dtypes):
@@ -194,6 +195,26 @@ def _sanitize_list_like(operand: Any) -> None:
         raise TypeError("The operation can not be applied to %s." % type(operand).__name__)
 
 
+def _is_valid_for_logical_operator(right: Any) -> bool:
+    from pyspark.pandas.base import IndexOpsMixin
+
+    return isinstance(right, (int, bool)) or (
+        isinstance(right, IndexOpsMixin)
+        and (
+            isinstance(right.spark.data_type, BooleanType)
+            or isinstance(right.spark.data_type, IntegralType)
+        )
+    )
+
+
+def _is_boolean_type(right: Any) -> bool:
+    from pyspark.pandas.base import IndexOpsMixin
+
+    return isinstance(right, bool) or (
+        isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, BooleanType)
+    )
+
+
 class DataTypeOps(object, metaclass=ABCMeta):
     """The base class for binary operations of pandas-on-Spark objects (of different data types)."""
 
@@ -203,7 +224,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
         from pyspark.pandas.data_type_ops.categorical_ops import CategoricalOps
         from pyspark.pandas.data_type_ops.complex_ops import ArrayOps, MapOps, StructOps
         from pyspark.pandas.data_type_ops.date_ops import DateOps
-        from pyspark.pandas.data_type_ops.datetime_ops import DatetimeOps
+        from pyspark.pandas.data_type_ops.datetime_ops import DatetimeOps, DatetimeNTZOps
         from pyspark.pandas.data_type_ops.null_ops import NullOps
         from pyspark.pandas.data_type_ops.num_ops import (
             DecimalOps,
@@ -246,6 +267,8 @@ class DataTypeOps(object, metaclass=ABCMeta):
                 return object.__new__(BooleanOps)
         elif isinstance(spark_type, TimestampType):
             return object.__new__(DatetimeOps)
+        elif isinstance(spark_type, TimestampNTZType):
+            return object.__new__(DatetimeNTZOps)
         elif isinstance(spark_type, DateType):
             return object.__new__(DateOps)
         elif isinstance(spark_type, BinaryType):
@@ -316,12 +339,19 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def __and__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("Bitwise and can not be applied to %s." % self.pretty_name)
 
+    def xor(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise TypeError("Bitwise xor can not be applied to %s." % self.pretty_name)
+
     def __or__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("Bitwise or can not be applied to %s." % self.pretty_name)
 
     def rand(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
         return left.__and__(right)
+
+    def rxor(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+        return left ^ right
 
     def ror(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)

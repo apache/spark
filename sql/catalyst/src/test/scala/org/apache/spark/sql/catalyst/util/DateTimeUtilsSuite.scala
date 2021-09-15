@@ -793,16 +793,18 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   test("SPARK-35979: special timestamp without time zone values") {
     val tolerance = TimeUnit.SECONDS.toMicros(30)
 
-    assert(convertSpecialTimestampNTZ("Epoch").get === 0)
-    val now = DateTimeUtils.localDateTimeToMicros(LocalDateTime.now())
-    convertSpecialTimestampNTZ("NOW").get should be(now +- tolerance)
-    val localToday = LocalDateTime.now().`with`(LocalTime.MIDNIGHT)
-    val yesterday = DateTimeUtils.localDateTimeToMicros(localToday.minusDays(1))
-    convertSpecialTimestampNTZ(" Yesterday").get should be(yesterday)
-    val today = DateTimeUtils.localDateTimeToMicros(localToday)
-    convertSpecialTimestampNTZ("Today ").get should be(today)
-    val tomorrow = DateTimeUtils.localDateTimeToMicros(localToday.plusDays(1))
-    convertSpecialTimestampNTZ(" tomorrow ").get should be(tomorrow)
+    testSpecialDatetimeValues { zoneId =>
+      assert(convertSpecialTimestampNTZ("Epoch", zoneId).get === 0)
+      val now = DateTimeUtils.localDateTimeToMicros(LocalDateTime.now(zoneId))
+      convertSpecialTimestampNTZ("NOW", zoneId).get should be(now +- tolerance)
+      val localToday = LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT)
+      val yesterday = DateTimeUtils.localDateTimeToMicros(localToday.minusDays(1))
+      convertSpecialTimestampNTZ(" Yesterday", zoneId).get should be(yesterday)
+      val today = DateTimeUtils.localDateTimeToMicros(localToday)
+      convertSpecialTimestampNTZ("Today ", zoneId).get should be(today)
+      val tomorrow = DateTimeUtils.localDateTimeToMicros(localToday.plusDays(1))
+      convertSpecialTimestampNTZ(" tomorrow ", zoneId).get should be(tomorrow)
+    }
   }
 
   test("SPARK-28141: special date values") {

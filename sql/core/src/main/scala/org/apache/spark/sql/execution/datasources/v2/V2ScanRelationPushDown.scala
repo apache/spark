@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.expressions.Aggregation
+import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
@@ -93,8 +93,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                     agg
                 }
               }
-              val pushedAggregates = PushDownUtils
-                .pushAggregates(sHolder.builder, aggregates, groupingExpressions)
+              val normalizedAggregates = DataSourceStrategy.normalizeExprs(
+                aggregates, sHolder.relation.output).asInstanceOf[Seq[AggregateExpression]]
+              val normalizedGroupingExpressions = DataSourceStrategy.normalizeExprs(
+                groupingExpressions, sHolder.relation.output)
+              val pushedAggregates = PushDownUtils.pushAggregates(
+                sHolder.builder, normalizedAggregates, normalizedGroupingExpressions)
               if (pushedAggregates.isEmpty) {
                 aggNode // return original plan node
               } else {
@@ -115,7 +119,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 // scalastyle:on
                 val newOutput = scan.readSchema().toAttributes
                 assert(newOutput.length == groupingExpressions.length + aggregates.length)
-                val groupAttrs = groupingExpressions.zip(newOutput).map {
+                val groupAttrs = normalizedGroupingExpressions.zip(newOutput).map {
                   case (a: Attribute, b: Attribute) => b.withExprId(a.exprId)
                   case (_, b) => b
                 }

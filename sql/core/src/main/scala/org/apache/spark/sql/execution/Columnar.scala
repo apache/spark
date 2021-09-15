@@ -256,6 +256,7 @@ private object RowToColumnConverter {
 
   private def getConverterForType(dataType: DataType, nullable: Boolean): TypeConverter = {
     val core = dataType match {
+      case BinaryType => BinaryConverter
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
       case ShortType => ShortConverter
@@ -282,6 +283,13 @@ private object RowToColumnConverter {
       }
     } else {
       core
+    }
+  }
+
+  private object BinaryConverter extends TypeConverter {
+    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
+      val bytes = row.getBinary(column)
+      cv.appendByteArray(bytes, 0, bytes.length)
     }
   }
 

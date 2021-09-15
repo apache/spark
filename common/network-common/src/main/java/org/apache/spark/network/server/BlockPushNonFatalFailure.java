@@ -40,6 +40,14 @@ public class BlockPushNonFatalFailure extends RuntimeException {
     " is received after merged shuffle is finalized";
 
   /**
+   * String constant used for generating exception messages indicating the application attempt is
+   * not the latest attempt on the server side. When we get a block push failure because of the too
+   * old attempt, we will not retry pushing the block nor log the exception on the client side.
+   */
+  public static final String TOO_OLD_ATTEMPT_SUFFIX =
+    " is from an older app attempt";
+
+  /**
    * String constant used for generating exception messages indicating a block to be merged
    * is a stale block push in the case of indeterminate stage retries on the server side.
    * When we get a block push failure because of the block push being stale, we will not
@@ -124,7 +132,12 @@ public class BlockPushNonFatalFailure extends RuntimeException {
      * indeterminate stage retries. When the client receives this code, it will not retry
      * pushing the block.
      */
-    STALE_BLOCK_PUSH(3, STALE_BLOCK_PUSH_MESSAGE_SUFFIX);
+    STALE_BLOCK_PUSH(3, STALE_BLOCK_PUSH_MESSAGE_SUFFIX),
+    /**
+     * Indicate the application attempt is not the latest attempt on the server side.
+     * When the client gets this code, it will not retry pushing the block.
+     */
+    TOO_OLD_ATTEMPT_PUSH(4, TOO_OLD_ATTEMPT_SUFFIX);
 
     private final byte id;
     // Error message suffix used to generate an error message for a given ReturnCode and
@@ -146,8 +159,15 @@ public class BlockPushNonFatalFailure extends RuntimeException {
       case 1: return ReturnCode.TOO_LATE_BLOCK_PUSH;
       case 2: return ReturnCode.BLOCK_APPEND_COLLISION_DETECTED;
       case 3: return ReturnCode.STALE_BLOCK_PUSH;
+      case 4: return ReturnCode.TOO_OLD_ATTEMPT_PUSH;
       default: throw new IllegalArgumentException("Unknown block push return code: " + id);
     }
+  }
+
+  public static boolean shouldNotRetryErrorCode(ReturnCode returnCode) {
+    return returnCode == ReturnCode.TOO_LATE_BLOCK_PUSH ||
+      returnCode == ReturnCode.STALE_BLOCK_PUSH ||
+      returnCode == ReturnCode.TOO_OLD_ATTEMPT_PUSH;
   }
 
   public static String getErrorMsg(String blockId, ReturnCode errorCode) {

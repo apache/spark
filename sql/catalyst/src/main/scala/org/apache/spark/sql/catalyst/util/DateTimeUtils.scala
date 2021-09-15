@@ -1043,7 +1043,7 @@ object DateTimeUtils {
    * Converts notational shorthands that are converted to ordinary timestamps.
    *
    * @param input A string to parse. It can contain trailing or leading whitespaces.
-   * @param zoneId Zone identifier used to get the current date.
+   * @param zoneId Zone identifier used to get the current timestamp.
    * @return Some of microseconds since the epoch if the conversion completed
    *         successfully otherwise None.
    */
@@ -1063,18 +1063,19 @@ object DateTimeUtils {
    * Converts notational shorthands that are converted to ordinary timestamps without time zone.
    *
    * @param input A string to parse. It can contain trailing or leading whitespaces.
+   * @param zoneId Zone identifier used to get the current local timestamp.
    * @return Some of microseconds since the epoch if the conversion completed
    *         successfully otherwise None.
    */
-  def convertSpecialTimestampNTZ(input: String): Option[Long] = {
+  def convertSpecialTimestampNTZ(input: String, zoneId: ZoneId): Option[Long] = {
     val localDateTime = extractSpecialValue(input.trim).flatMap {
       case "epoch" => Some(LocalDateTime.of(1970, 1, 1, 0, 0))
-      case "now" => Some(LocalDateTime.now())
-      case "today" => Some(LocalDateTime.now().`with`(LocalTime.MIDNIGHT))
+      case "now" => Some(LocalDateTime.now(zoneId))
+      case "today" => Some(LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT))
       case "tomorrow" =>
-        Some(LocalDateTime.now().`with`(LocalTime.MIDNIGHT).plusDays(1))
+        Some(LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT).plusDays(1))
       case "yesterday" =>
-        Some(LocalDateTime.now().`with`(LocalTime.MIDNIGHT).minusDays(1))
+        Some(LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT).minusDays(1))
       case _ => None
     }
     localDateTime.map(localDateTimeToMicros)

@@ -36,23 +36,34 @@ import org.apache.spark.util.Utils
 class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvider]
   with BeforeAndAfter {
 
+  before {
+    StateStore.stop()
+    require(!StateStore.isMaintenanceRunning)
+  }
+
+  after {
+    StateStore.stop()
+    require(!StateStore.isMaintenanceRunning)
+  }
+
   import StateStoreTestsHelper._
 
   test("version encoding") {
     import RocksDBStateStoreProvider._
 
-    val provider = newStoreProvider()
-    val store = provider.getStore(0)
-    val keyRow = dataToKeyRow("a", 0)
-    val valueRow = dataToValueRow(1)
-    store.put(keyRow, valueRow)
-    val iter = provider.rocksDB.iterator()
-    assert(iter.hasNext)
-    val kv = iter.next()
+    tryWithProviderResource(newStoreProvider()) { provider =>
+      val store = provider.getStore(0)
+      val keyRow = dataToKeyRow("a", 0)
+      val valueRow = dataToValueRow(1)
+      store.put(keyRow, valueRow)
+      val iter = provider.rocksDB.iterator()
+      assert(iter.hasNext)
+      val kv = iter.next()
 
-    // Verify the version encoded in first byte of the key and value byte arrays
-    assert(Platform.getByte(kv.key, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
-    assert(Platform.getByte(kv.value, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
+      // Verify the version encoded in first byte of the key and value byte arrays
+      assert(Platform.getByte(kv.key, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
+      assert(Platform.getByte(kv.value, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
+    }
   }
 
   test("RocksDB confs are passed correctly from SparkSession to db instance") {
@@ -63,7 +74,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         ("spark.sql.streaming.stateStore.providerClass",
           classOf[RocksDBStateStoreProvider].getName),
         (RocksDBConf.ROCKSDB_CONF_NAME_PREFIX + ".compactOnCommit", "true"),
-        (RocksDBConf.ROCKSDB_CONF_NAME_PREFIX + ".lockAcquireTimeoutMs", "10")
+        (RocksDBConf.ROCKSDB_CONF_NAME_PREFIX + ".lockAcquireTimeoutMs", "10"),
+        (SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION.key, "4")
       )
       testConfs.foreach { case (k, v) => spark.conf.set(k, v) }
 
@@ -87,6 +99,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       // Verify the confs are same as those configured in the session conf
       assert(rocksDBConfInTask.compactOnCommit == true)
       assert(rocksDBConfInTask.lockAcquireTimeoutMs == 10L)
+      assert(rocksDBConfInTask.formatVersion == 4)
     }
   }
 
@@ -98,19 +111,20 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       metricPair.get._2
     }
 
-    val provider = newStoreProvider()
-    val store = provider.getStore(0)
-    // Verify state after updating
-    put(store, "a", 0, 1)
-    assert(get(store, "a", 0) === Some(1))
-    assert(store.commit() === 1)
-    assert(store.hasCommitted)
-    val storeMetrics = store.metrics
-    assert(storeMetrics.numKeys === 1)
-    assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_COPIED) > 0L)
-    assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_REUSED) == 0L)
-    assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_BYTES_COPIED) > 0L)
-    assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED) > 0L)
+    tryWithProviderResource(newStoreProvider()) { provider =>
+      val store = provider.getStore(0)
+      // Verify state after updating
+      put(store, "a", 0, 1)
+      assert(get(store, "a", 0) === Some(1))
+      assert(store.commit() === 1)
+      assert(store.hasCommitted)
+      val storeMetrics = store.metrics
+      assert(storeMetrics.numKeys === 1)
+      assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_COPIED) > 0L)
+      assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_REUSED) == 0L)
+      assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_BYTES_COPIED) > 0L)
+      assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED) > 0L)
+    }
   }
 
   override def newStoreProvider(): RocksDBStateStoreProvider = {
@@ -143,9 +157,10 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   override def getData(
       provider: RocksDBStateStoreProvider,
       version: Int = -1): Set[((String, Int), Int)] = {
-    val reloadedProvider = newStoreProvider(provider.stateStoreId)
-    val versionToRead = if (version < 0) reloadedProvider.latestVersion else version
-    reloadedProvider.getStore(versionToRead).iterator().map(rowPairToDataPair).toSet
+    tryWithProviderResource(newStoreProvider(provider.stateStoreId)) { reloadedProvider =>
+      val versionToRead = if (version < 0) reloadedProvider.latestVersion else version
+      reloadedProvider.getStore(versionToRead).iterator().map(rowPairToDataPair).toSet
+    }
   }
 
   override def newStoreProvider(
