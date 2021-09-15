@@ -2003,7 +2003,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           Project(child.output, newFilter)
         }
 
-      case r @ RepartitionByExpression(partitionExprs, child, _)
+      case r @ RepartitionByExpression(partitionExprs, child, _, _)
           if (!r.resolved || r.missingInput.nonEmpty) && child.resolved =>
         val (newPartitionExprs, newChild) = resolveExprsAndAddMissingAttrs(partitionExprs, child)
         if (child.output == newChild.output) {

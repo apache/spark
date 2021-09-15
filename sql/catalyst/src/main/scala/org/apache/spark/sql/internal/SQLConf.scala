@@ -353,6 +353,23 @@ object SQLConf {
       .checkValue(ratio => ratio > 0.0 && ratio <= 1.0, "The ratio value must be in (0.0, 1.0].")
       .createWithDefault(0.04)
 
+  val DYNAMIC_BLOOM_FILTER_JOIN_PRUNING_ENABLED =
+    buildConf("spark.sql.optimizer.dynamicBloomFilterJoinPruning.enabled")
+      .doc("When true, we will generates a bloom filter predicate for a join key column. " +
+        "Note that, dynamic bloom filter join pruning only works with exchange reuse enabled.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val DYNAMIC_BLOOM_FILTER_JOIN_PRUNING_MAX_BLOOM_FILTER_ENTRIES =
+    buildConf("spark.sql.optimizer.dynamicBloomFilterJoinPruning.maxBloomFilterEntries")
+      .doc("The maximum number of bloom filter entries allowed when building dynamic bloom " +
+        "filter join pruning.")
+      .version("3.3.0")
+      .longConf
+      .checkValue(_ > 0, "the value of max bloom filter entries must be greater than 0")
+      .createWithDefault(100000000L)
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
@@ -3544,6 +3561,15 @@ class SQLConf extends Serializable with Logging {
 
   def dynamicPartitionPruningPruningSideExtraFilterRatio: Double =
     getConf(DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO)
+
+  def dynamicBloomFilterJoinPruningEnabled: Boolean =
+    getConf(DYNAMIC_BLOOM_FILTER_JOIN_PRUNING_ENABLED) && exchangeReuseEnabled
+
+  def dynamicBloomFilterJoinPruningMaxBloomFilterEntries: Long =
+    getConf(DYNAMIC_BLOOM_FILTER_JOIN_PRUNING_MAX_BLOOM_FILTER_ENTRIES)
+
+  def dynamicPruningEnabled: Boolean = dynamicPartitionPruningEnabled ||
+    dynamicBloomFilterJoinPruningEnabled
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 

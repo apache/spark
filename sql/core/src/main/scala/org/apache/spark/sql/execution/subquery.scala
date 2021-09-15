@@ -17,16 +17,19 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.ByteArrayInputStream
+
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InBloomFilter, InSet, ListQuery, Literal, PlanExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType}
+import org.apache.spark.util.sketch.BloomFilter
 
 /**
  * The base class for subquery that is used in SparkPlan.
@@ -161,6 +164,59 @@ case class InSubqueryExec(
   }
 
   override protected def withNewChildInternal(newChild: Expression): InSubqueryExec =
+    copy(child = newChild)
+}
+
+case class InBloomFilterSubqueryExec(
+     child: Expression,
+     plan: BaseSubqueryExec,
+     exprId: ExprId,
+     private var resultBroadcast: Broadcast[BloomFilter] = null)
+  extends ExecSubqueryExpression with UnaryLike[Expression] {
+
+  @transient private var result: BloomFilter = _
+  @transient private lazy val inBloomFilter = InBloomFilter(child, result)
+
+  override def dataType: DataType = BooleanType
+  override def nullable: Boolean = true
+  override def toString: String = s"$child IN BLOOM FILTER ${plan.name}"
+  override def withNewPlan(plan: BaseSubqueryExec): InBloomFilterSubqueryExec = copy(plan = plan)
+  final override def nodePatternsInternal: Seq[TreePattern] = Seq(IN_SUBQUERY_EXEC)
+
+  def updateResult(): Unit = {
+    val rows = plan.executeCollect()
+    result = BloomFilter.readFrom(new ByteArrayInputStream(rows.head.getBinary(0)))
+    resultBroadcast = plan.session.sparkContext.broadcast(result)
+  }
+
+  def values(): Option[BloomFilter] = Option(resultBroadcast).map(_.value)
+
+  private def prepareResult(): Unit = {
+    require(resultBroadcast != null, s"$this has not finished")
+    if (result == null) {
+      result = resultBroadcast.value
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    prepareResult()
+    inBloomFilter.eval(input)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    prepareResult()
+    inBloomFilter.doGenCode(ctx, ev)
+  }
+
+  override lazy val canonicalized: InBloomFilterSubqueryExec = {
+    copy(
+      child = child.canonicalized,
+      plan = plan.canonicalized.asInstanceOf[BaseSubqueryExec],
+      exprId = ExprId(0),
+      resultBroadcast = null)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): InBloomFilterSubqueryExec =
     copy(child = newChild)
 }
 

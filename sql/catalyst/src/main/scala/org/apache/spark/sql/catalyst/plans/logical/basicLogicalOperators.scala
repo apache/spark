@@ -1392,7 +1392,8 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    optNumPartitions: Option[Int]) extends RepartitionOperation {
+    optNumPartitions: Option[Int],
+    withEnsureRequirementsShuffleOrigin: Boolean = false) extends RepartitionOperation {
 
   val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
