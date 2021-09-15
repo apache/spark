@@ -647,7 +647,7 @@ setMethod("bin",
           })
 
 #' @details
-#' \code{bit_length}:  Calculates the bit length for the specified string column.
+#' \code{bit_length}: Calculates the bit length for the specified string column.
 #'
 #' @rdname column_string_functions
 #' @aliases bit_length bit_length,Column-method
@@ -1583,7 +1583,7 @@ setMethod("negate",
           })
 
 #' @details
-#' \code{octet_length}:  Calculates the byte length for the specified string column.
+#' \code{octet_length}: Calculates the byte length for the specified string column.
 #'
 #' @rdname column_string_functions
 #' @aliases octet_length octet_length,Column-method

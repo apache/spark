@@ -3103,14 +3103,17 @@ def octet_length(col):
     Calculates the byte length for the specified string column.
 
     .. versionadded:: 3.3.0
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
         Source column or strings
+
     Returns
     -------
     :class:`~pyspark.sql.Column`
         Byte length of the col
+
     Examples
     -------
     >>> from pyspark.sql.functions import octet_length
@@ -3126,14 +3129,17 @@ def bit_length(col):
     Calculates the bit length for the specified string column.
 
     .. versionadded:: 3.3.0
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
         Source column or strings
+
     Returns
     -------
     :class:`~pyspark.sql.Column`
         Bit length of the col
+
     Examples
     -------
     >>> from pyspark.sql.functions import bit_length
