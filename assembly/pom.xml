@@ -74,6 +74,17 @@
       <artifactId>spark-repl_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
+
+    <!--
+      Because we don't shade dependencies anymore, we need to restore Guava to compile scope so
+      that the libraries Spark depend on have it available. We'll package the version that Spark
+      uses which is not the same as Hadoop dependencies, but works.
+    -->
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
   </dependencies>
 
   <build>
