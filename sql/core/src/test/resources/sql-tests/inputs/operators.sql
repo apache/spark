@@ -47,7 +47,7 @@ select sec(-1);
 select csc(1);
 select csc(null);
 select csc(0);
-select csc(-1);:
+select csc(-1);
 select cot(1);
 select cot(null);
 select cot(0);
