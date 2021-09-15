@@ -241,7 +241,7 @@ class PandasOnSparkFrameMethods(object):
             To specify the column names, you can assign them in a NumPy compound type style
             as below:
 
-            >>> def plus_one(x) -> ps.DataFrame[("index", int), [("a", float), ("b", float)]:
+            >>> def plus_one(x) -> ps.DataFrame[("index", int), [("a", float), ("b", float)]]:
             ...     return x + 1
 
             >>> pdf = pd.DataFrame({'a': [1, 2, 3], 'b': [3, 4, 5]})
