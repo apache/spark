@@ -873,7 +873,11 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             )
 
         values = values.tolist() if isinstance(values, np.ndarray) else list(values)
-        return self._with_new_scol(self.spark.column.isin([SF.lit(v) for v in values]))
+
+        other = [SF.lit(v) for v in values]
+        scol = self.spark.column.isin(other)
+
+        return self._with_new_scol(F.when(scol.isNull(), False).otherwise(scol))
 
     def isnull(self: IndexOpsLike) -> IndexOpsLike:
         """

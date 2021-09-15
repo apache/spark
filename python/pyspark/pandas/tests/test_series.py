@@ -394,6 +394,17 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, msg):
             psser.isin(1)
 
+        # when Series have NaN
+        pser = pd.Series(["lama", "cow", None, "lama", "beetle", "lama", "hippo", None], name="a")
+        psser = ps.from_pandas(pser)
+
+        self.assert_eq(psser.isin(["cow", "lama"]), pser.isin(["cow", "lama"]))
+
+        pser = pd.Series([None, 5, None, 3, 2, 1, None, 0, 0], name="a")
+        psser = ps.from_pandas(pser)
+
+        self.assert_eq(psser.isin([1, 5, 0, None]), pser.isin([1, 5, 0, None]))
+
     def test_drop_duplicates(self):
         pdf = pd.DataFrame({"animal": ["lama", "cow", "lama", "beetle", "lama", "hippo"]})
         psdf = ps.from_pandas(pdf)
