@@ -994,7 +994,7 @@ class IndexingTest(PandasOnSparkTestCase):
                     psdf.iloc[rows_sel, :1].sort_index(), pdf.iloc[rows_sel, :1].sort_index()
                 )
 
-            with self.subTest(rows_sel=rows_sel) and ps.option_context("compute.isin_limit", 0):
+            with self.subTest(rows_sel=rows_sel), ps.option_context("compute.isin_limit", 0):
                 self.assert_eq(psdf.iloc[rows_sel].sort_index(), pdf.iloc[rows_sel].sort_index())
                 self.assert_eq(
                     psdf.A.iloc[rows_sel].sort_index(), pdf.A.iloc[rows_sel].sort_index()
@@ -1004,12 +1004,12 @@ class IndexingTest(PandasOnSparkTestCase):
                     (pdf.A + 1).iloc[rows_sel].sort_index(),
                 )
 
-            with self.subTest(rows_sel=rows_sel) and ps.option_context("compute.isin_limit", 0):
+            with self.subTest(rows_sel=rows_sel), ps.option_context("compute.isin_limit", 0):
                 self.assert_eq(
                     psdf.iloc[rows_sel, :].sort_index(), pdf.iloc[rows_sel, :].sort_index()
                 )
 
-            with self.subTest(rows_sel=rows_sel) and ps.option_context("compute.isin_limit", 0):
+            with self.subTest(rows_sel=rows_sel), ps.option_context("compute.isin_limit", 0):
                 self.assert_eq(
                     psdf.iloc[rows_sel, :1].sort_index(), pdf.iloc[rows_sel, :1].sort_index()
                 )
