@@ -486,6 +486,7 @@ private[sql] object DataSourceV2Strategy {
       Some(new V2IsNull(FieldReference(name)))
     case expressions.IsNotNull(pushableColumn(name)) =>
       Some(new V2IsNotNull(FieldReference(name)))
+
     case expressions.StartsWith(pushableColumn(name), Literal(v: UTF8String, StringType)) =>
       Some(new V2StringStartsWith(FieldReference(name), v))
 

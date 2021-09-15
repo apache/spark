@@ -2404,6 +2404,6 @@ object QueryCompilationErrors {
   }
 
   def invalidFilter(filter: Any): Throwable = {
-    new AnalysisException(s"Invalid VFilter $filter")
+    new AnalysisException(s"Invalid Filter $filter")
   }
 }
