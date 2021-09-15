@@ -1987,6 +1987,35 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         with option_context("compute.shortcut_limit", 0):
             self.test_apply()
 
+    def test_apply_with_type_hint(self):
+        pdf = pd.DataFrame(
+            {"a": [1, 2, 3, 4, 5, 6], "b": [1, 1, 2, 3, 5, 8], "c": [1, 4, 9, 16, 25, 36]},
+            columns=["a", "b", "c"],
+        )
+        psdf = ps.from_pandas(pdf)
+
+        def add_max1(x) -> ps.DataFrame[int, int, int]:
+            return x + x.min()
+
+        # Type hints set the default column names, and we use default index for
+        # pandas API on Spark. Here we ignore both diff.
+        actual = psdf.groupby("b").apply(add_max1).sort_index()
+        expected = pdf.groupby("b").apply(add_max1).sort_index()
+        self.assert_eq(sorted(actual["c0"].to_numpy()), sorted(expected["a"].to_numpy()))
+        self.assert_eq(sorted(actual["c1"].to_numpy()), sorted(expected["b"].to_numpy()))
+        self.assert_eq(sorted(actual["c2"].to_numpy()), sorted(expected["c"].to_numpy()))
+
+        def add_max2(
+            x,
+        ) -> ps.DataFrame[slice("a", int), slice("b", int), slice("c", int)]:  # noqa: F405
+            return x + x.min()
+
+        actual = psdf.groupby("b").apply(add_max2).sort_index()
+        expected = pdf.groupby("b").apply(add_max2).sort_index()
+        self.assert_eq(sorted(actual["a"].to_numpy()), sorted(expected["a"].to_numpy()))
+        self.assert_eq(sorted(actual["c"].to_numpy()), sorted(expected["c"].to_numpy()))
+        self.assert_eq(sorted(actual["c"].to_numpy()), sorted(expected["c"].to_numpy()))
+
     def test_apply_negative(self):
         def func(_) -> ps.Series[int]:
             return pd.Series([1])

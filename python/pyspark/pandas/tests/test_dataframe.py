@@ -4428,6 +4428,28 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
                 pdf.apply(lambda x: len(x), axis=1).sort_index(),
             )
 
+    def test_apply_with_type(self):
+        pdf = self.pdf
+        psdf = ps.from_pandas(pdf)
+
+        def identify1(x) -> ps.DataFrame[int, int]:
+            return x
+
+        # Type hints set the default column names, and we use default index for
+        # pandas API on Spark. Here we ignore both diff.
+        actual = psdf.apply(identify1, axis=1)
+        expected = pdf.apply(identify1, axis=1)
+        self.assert_eq(sorted(actual["c0"].to_numpy()), sorted(expected["a"].to_numpy()))
+        self.assert_eq(sorted(actual["c1"].to_numpy()), sorted(expected["b"].to_numpy()))
+
+        def identify2(x) -> ps.DataFrame[slice("a", int), slice("b", int)]:  # noqa: F405
+            return x
+
+        actual = psdf.apply(identify2, axis=1)
+        expected = pdf.apply(identify2, axis=1)
+        self.assert_eq(sorted(actual["a"].to_numpy()), sorted(expected["a"].to_numpy()))
+        self.assert_eq(sorted(actual["b"].to_numpy()), sorted(expected["b"].to_numpy()))
+
     def test_apply_batch(self):
         pdf = pd.DataFrame(
             {
@@ -4480,6 +4502,28 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
                 psdf.pandas_on_spark.apply_batch(lambda x: x + 1).sort_index(),
                 (pdf + 1).sort_index(),
             )
+
+    def test_apply_batch_with_type(self):
+        pdf = self.pdf
+        psdf = ps.from_pandas(pdf)
+
+        def identify1(x) -> ps.DataFrame[int, int]:
+            return x
+
+        # Type hints set the default column names, and we use default index for
+        # pandas API on Spark. Here we ignore both diff.
+        actual = psdf.pandas_on_spark.apply_batch(identify1)
+        expected = pdf
+        self.assert_eq(sorted(actual["c0"].to_numpy()), sorted(expected["a"].to_numpy()))
+        self.assert_eq(sorted(actual["c1"].to_numpy()), sorted(expected["b"].to_numpy()))
+
+        def identify2(x) -> ps.DataFrame[slice("a", int), slice("b", int)]:  # noqa: F405
+            return x
+
+        actual = psdf.pandas_on_spark.apply_batch(identify2)
+        expected = pdf
+        self.assert_eq(sorted(actual["a"].to_numpy()), sorted(expected["a"].to_numpy()))
+        self.assert_eq(sorted(actual["b"].to_numpy()), sorted(expected["b"].to_numpy()))
 
     def test_transform_batch(self):
         pdf = pd.DataFrame(
@@ -4549,6 +4593,28 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
                 psdf.pandas_on_spark.transform_batch(lambda x: x + 1).sort_index(),
                 (pdf + 1).sort_index(),
             )
+
+    def test_transform_batch_with_type(self):
+        pdf = self.pdf
+        psdf = ps.from_pandas(pdf)
+
+        def identify1(x) -> ps.DataFrame[int, int]:
+            return x
+
+        # Type hints set the default column names, and we use default index for
+        # pandas API on Spark. Here we ignore both diff.
+        actual = psdf.pandas_on_spark.transform_batch(identify1)
+        expected = pdf
+        self.assert_eq(sorted(actual["c0"].to_numpy()), sorted(expected["a"].to_numpy()))
+        self.assert_eq(sorted(actual["c1"].to_numpy()), sorted(expected["b"].to_numpy()))
+
+        def identify2(x) -> ps.DataFrame[slice("a", int), slice("b", int)]:  # noqa: F405
+            return x
+
+        actual = psdf.pandas_on_spark.transform_batch(identify2)
+        expected = pdf
+        self.assert_eq(sorted(actual["a"].to_numpy()), sorted(expected["a"].to_numpy()))
+        self.assert_eq(sorted(actual["b"].to_numpy()), sorted(expected["b"].to_numpy()))
 
     def test_transform_batch_same_anchor(self):
         psdf = ps.range(10)
