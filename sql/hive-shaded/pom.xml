@@ -76,6 +76,13 @@
       <scope>${hive.llap.scope}</scope>
       <optional>true</optional>
     </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>14.0.1</version>
+      <scope>compile</scope>
+      <optional>true</optional>
+    </dependency>
   </dependencies>
 
   <profiles>
@@ -121,7 +128,7 @@
             </goals>
             <configuration>
               <shadedArtifactAttached>false</shadedArtifactAttached>
-              <artifactSet>
+              <artifactSet combine.self="override">
                 <includes>
                   <include>*:*</include>
                 </includes>
