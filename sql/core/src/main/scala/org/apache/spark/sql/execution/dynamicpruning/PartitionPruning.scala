@@ -191,7 +191,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     val cachedOverhead = cached.map {
       case m: InMemoryRelation if m.cacheBuilder.storageLevel.useDisk &&
           !m.cacheBuilder.storageLevel.useMemory =>
-        m.stats.sizeInBytes.toFloat * 0.5
+        m.stats.sizeInBytes.toFloat
       case m: InMemoryRelation if m.cacheBuilder.storageLevel.useDisk =>
         m.stats.sizeInBytes.toFloat * 0.2
       case m: InMemoryRelation if m.cacheBuilder.storageLevel.useMemory =>
