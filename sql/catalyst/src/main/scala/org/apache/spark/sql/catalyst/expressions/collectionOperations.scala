@@ -1253,12 +1253,12 @@ case class ArraysOverlap(left: Expression, right: Expression)
       (arr2, arr1)
     }
     if (smaller.numElements() > 0) {
-      val smallestSet = new mutable.HashSet[Any]
+      val smallestSet = new java.util.HashSet[Any]()
       smaller.foreach(elementType, (_, v) =>
         if (v == null) {
           hasNull = true
         } else {
-          smallestSet += v
+          smallestSet.add(v)
         })
       bigger.foreach(elementType, (_, v1) =>
         if (v1 == null) {
