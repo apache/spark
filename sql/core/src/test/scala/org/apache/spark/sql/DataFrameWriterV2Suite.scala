@@ -244,7 +244,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     checkAnswer(
       spark.table("testcat.table_name"),
-      Seq(Row(1L, 1L, "a"), Row(2L, 2L, "b"), Row(3L, 3L, "c"), Row(5L, 5L, "e"), Row(6L, 6L, "f")))
+      Seq(Row(1L, 1L, "a"), Row(2L, 2L, "b"), Row(4L, 4L, "d"), Row(5L, 5L, "e"), Row(6L, 6L, "f")))
   }
 
   test("Overwrite: write to a temp view of v2 relation") {
