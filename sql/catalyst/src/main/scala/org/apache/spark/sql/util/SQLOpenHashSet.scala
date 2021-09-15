@@ -69,4 +69,12 @@ object SQLOpenHashSet {
       case _ => (_: Any) => false
     }
   }
+
+  def valueNaN(dataType: DataType): Any = {
+    dataType match {
+      case DoubleType => java.lang.Double.NaN
+      case FloatType => java.lang.Float.NaN
+      case _ => null
+    }
+  }
 }

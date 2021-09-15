@@ -3578,6 +3578,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
         val hs = new SQLOpenHashSet[Any]()
         val isNaN = SQLOpenHashSet.isNaN(elementType)
+        val NaN = SQLOpenHashSet.valueNaN(elementType)
         Seq(array1, array2).foreach { array =>
           var i = 0
           while (i < array.numElements()) {
@@ -3590,7 +3591,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
               val elem = array.get(i, elementType)
               if (isNaN(elem)) {
                 if (!hs.containsNaN) {
-                  arrayBuffer += elem
+                  arrayBuffer += NaN
                   hs.addNaN
                 }
               } else {
@@ -3688,16 +3689,18 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
 
         def withNaNCheck(body: String): String = {
           (elementType match {
-            case DoubleType => Some(s"java.lang.Double.isNaN((double)$value)")
-            case FloatType => Some(s"java.lang.Float.isNaN((float)$value)")
+            case DoubleType =>
+              Some((s"java.lang.Double.isNaN((double)$value)", "java.lang.Double.NaN"))
+            case FloatType =>
+              Some((s"java.lang.Float.isNaN((float)$value)", "java.lang.Float.NaN"))
             case _ => None
-          }).map { isNaN =>
+          }).map { case (isNaN, naN) =>
             s"""
                |if ($isNaN) {
                |  if (!$hashSet.containsNaN()) {
                |     $size++;
                |     $hashSet.addNaN();
-               |     $builder.$$plus$$eq($value);
+               |     $builder.$$plus$$eq($naN);
                |  }
                |} else {
                |  $body
