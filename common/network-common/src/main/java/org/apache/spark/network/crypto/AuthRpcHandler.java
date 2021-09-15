@@ -84,9 +84,9 @@ class AuthRpcHandler extends AbstractAuthRpcHandler {
     int position = message.position();
     int limit = message.limit();
 
-    ClientChallenge challenge;
+    AuthMessage challenge;
     try {
-      challenge = ClientChallenge.decodeMessage(message);
+      challenge = AuthMessage.decodeMessage(message);
       LOG.debug("Received new auth challenge for client {}.", channel.remoteAddress());
     } catch (RuntimeException e) {
       if (conf.saslFallback()) {
@@ -113,7 +113,7 @@ class AuthRpcHandler extends AbstractAuthRpcHandler {
         "Trying to authenticate non-registered app %s.", challenge.appId);
       LOG.debug("Authenticating challenge for app {}.", challenge.appId);
       engine = new AuthEngine(challenge.appId, secret, conf);
-      ServerResponse response = engine.respond(challenge);
+      AuthMessage response = engine.response(challenge);
       ByteBuf responseData = Unpooled.buffer(response.encodedLength());
       response.encode(responseData);
       callback.onSuccess(responseData.nioBuffer());

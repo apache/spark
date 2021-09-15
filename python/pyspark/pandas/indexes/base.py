@@ -16,7 +16,7 @@
 #
 
 from functools import partial
-from typing import Any, Iterator, List, Optional, Tuple, Union, cast, no_type_check
+from typing import Any, Callable, Iterator, List, Optional, Tuple, Union, cast, no_type_check
 import warnings
 
 import pandas as pd
@@ -37,7 +37,7 @@ from pandas.api.types import CategoricalDtype, is_hashable
 from pandas._libs import lib
 
 from pyspark.sql import functions as F, Column
-from pyspark.sql.types import FractionalType, IntegralType, TimestampType
+from pyspark.sql.types import FractionalType, IntegralType, TimestampType, TimestampNTZType
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Dtype, Label, Name, Scalar
@@ -191,7 +191,8 @@ class Index(IndexOpsMixin):
         ):
             instance = object.__new__(Float64Index)
         elif isinstance(
-            anchor._internal.spark_type_for(anchor._internal.index_spark_columns[0]), TimestampType
+            anchor._internal.spark_type_for(anchor._internal.index_spark_columns[0]),
+            (TimestampType, TimestampNTZType),
         ):
             instance = object.__new__(DatetimeIndex)
         else:
@@ -521,6 +522,50 @@ class Index(IndexOpsMixin):
             result = result.copy()
         return result
 
+    def map(
+        self, mapper: Union[dict, Callable[[Any], Any], pd.Series], na_action: Optional[str] = None
+    ) -> "Index":
+        """
+        Map values using input correspondence (a dict, Series, or function).
+
+        Parameters
+        ----------
+        mapper : function, dict, or pd.Series
+            Mapping correspondence.
+        na_action : {None, 'ignore'}
+            If ‘ignore’, propagate NA values, without passing them to the mapping correspondence.
+
+        Returns
+        -------
+        applied : Index, inferred
+            The output of the mapping function applied to the index.
+
+        Examples
+        --------
+        >>> psidx = ps.Index([1, 2, 3])
+
+        >>> psidx.map({1: "one", 2: "two", 3: "three"})
+        Index(['one', 'two', 'three'], dtype='object')
+
+        >>> psidx.map(lambda id: "{id} + 1".format(id=id))
+        Index(['1 + 1', '2 + 1', '3 + 1'], dtype='object')
+
+        >>> pser = pd.Series(["one", "two", "three"], index=[1, 2, 3])
+        >>> psidx.map(pser)
+        Index(['one', 'two', 'three'], dtype='object')
+        """
+        if isinstance(mapper, dict):
+            if len(set(type(k) for k in mapper.values())) > 1:
+                raise TypeError(
+                    "If the mapper is a dictionary, its values must be of the same type"
+                )
+
+        return Index(
+            self.to_series().pandas_on_spark.transform_batch(
+                lambda pser: pser.map(mapper, na_action)
+            )
+        ).rename(self.name)
+
     @property
     def values(self) -> np.ndarray:
         """
@@ -573,7 +618,7 @@ class Index(IndexOpsMixin):
         warnings.warn("We recommend using `{}.to_numpy()` instead.".format(type(self).__name__))
         if isinstance(self.spark.data_type, IntegralType):
             return self.to_numpy()
-        elif isinstance(self.spark.data_type, TimestampType):
+        elif isinstance(self.spark.data_type, (TimestampType, TimestampNTZType)):
             return np.array(list(map(lambda x: x.astype(np.int64), self.to_numpy())))
         else:
             return None
@@ -2079,7 +2124,7 @@ class Index(IndexOpsMixin):
         >>> idx.is_all_dates
         False
         """
-        return isinstance(self.spark.data_type, TimestampType)
+        return isinstance(self.spark.data_type, (TimestampType, TimestampNTZType))
 
     def repeat(self, repeats: int) -> "Index":
         """
@@ -2558,6 +2603,9 @@ class Index(IndexOpsMixin):
 
     def __xor__(self, other: "Index") -> "Index":
         return self.symmetric_difference(other)
+
+    def __rxor__(self, other: Any) -> "Index":
+        return NotImplemented
 
     def __bool__(self) -> bool:
         raise ValueError(

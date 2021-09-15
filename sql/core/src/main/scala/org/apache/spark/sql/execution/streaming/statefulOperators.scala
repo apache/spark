@@ -585,7 +585,12 @@ case class SessionWindowStateStoreRestoreExec(
 }
 
 /**
- * For each input tuple, the key is calculated and the tuple is `put` into the [[StateStore]].
+ * This class replaces existing sessions for the grouping key with new sessions in state store.
+ * All inputs are valid on storing into state store; don't filter out via watermark while storing.
+ * Refer the method doc of [[StreamingSessionWindowStateManager.updateSessions]] for more details.
+ *
+ * This class will provide the output according to the output mode.
+ * Update mode is not supported as the semantic is not feasible for session window.
  */
 case class SessionWindowStateStoreSaveExec(
     keyWithoutSessionExpressions: Seq[Attribute],
@@ -642,9 +647,7 @@ case class SessionWindowStateStoreSaveExec(
         // Assumption: watermark predicates must be non-empty if append mode is allowed
         case Some(Append) =>
           allUpdatesTimeMs += timeTakenMs {
-            val filteredIter = applyRemovingRowsOlderThanWatermark(iter,
-              watermarkPredicateForData.get)
-            putToStore(filteredIter, store)
+            putToStore(iter, store)
           }
 
           val removalStartTimeNs = System.nanoTime

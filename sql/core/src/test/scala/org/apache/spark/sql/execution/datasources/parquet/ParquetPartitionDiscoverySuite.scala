@@ -1067,7 +1067,7 @@ abstract class ParquetPartitionDiscoverySuite
 
   test("SPARK-23436: invalid Dates should be inferred as String in partition inference") {
     withTempPath { path =>
-      val data = Seq(("1", "2018-01", "2018-01-01-04", "test"))
+      val data = Seq(("1", "2018-41", "2018-01-01-04", "test"))
         .toDF("id", "date_month", "date_hour", "data")
 
       data.write.partitionBy("date_month", "date_hour").parquet(path.getAbsolutePath)

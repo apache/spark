@@ -1,5 +1,7 @@
 -- date literals, functions and operations
 
+create temporary view date_view as select '2011-11-11' date_str, '1' int_str;
+
 select date '2019-01-01\t';
 select date '2020-01-01中文';
 
@@ -58,9 +60,10 @@ select next_day(null, "Mon");
 select next_day(null, "xx");
 
 -- date add
+select date_add(date'2011-11-11', 1);
+select date_add('2011-11-11', 1);
 select date_add('2011-11-11', 1Y);
 select date_add('2011-11-11', 1S);
-select date_add('2011-11-11', 1);
 -- invalid cases: the second parameter can only be byte/short/int
 select date_add('2011-11-11', 1L);
 select date_add('2011-11-11', 1.0);
@@ -71,47 +74,67 @@ select date_add('2011-11-11', '1.2');
 -- null input leads to null result.
 select date_add(null, 1);
 select date_add(date'2011-11-11', null);
--- `date_add` accepts both date and timestamp ltz/ntz inputs.
-select date_add(date'2011-11-11', 1);
+-- `date_add` accepts both date and timestamp ltz/ntz inputs (non-ANSI mode).
 select date_add(timestamp_ltz'2011-11-11 12:12:12', 1);
 select date_add(timestamp_ntz'2011-11-11 12:12:12', 1);
 
 -- date sub
 select date_sub(date'2011-11-11', 1);
+select date_sub('2011-11-11', 1);
+select date_sub('2011-11-11', 1Y);
+select date_sub('2011-11-11', 1S);
+-- invalid cases: the second parameter can only be byte/short/int
+select date_sub('2011-11-11', 1L);
+select date_sub('2011-11-11', 1.0);
+select date_sub('2011-11-11', 1E1);
 -- the second parameter can be a string literal if it can be parsed to int
 select date_sub(date'2011-11-11', '1');
 select date_sub(date'2011-11-11', '1.2');
--- `date_sub` accepts both date and timestamp ltz/ntz inputs.
-select date_sub(timestamp_ltz'2011-11-11 12:12:12', 1), date_sub(timestamp_ntz'2011-11-11 12:12:12', 1);
 -- null input leads to null result.
 select date_sub(null, 1);
 select date_sub(date'2011-11-11', null);
+-- `date_sub` accepts both date and timestamp ltz/ntz inputs (non-ANSI mode).
+select date_sub(timestamp_ltz'2011-11-11 12:12:12', 1);
+select date_sub(timestamp_ntz'2011-11-11 12:12:12', 1);
 
 -- date add/sub with non-literal string column
-create temp view v as select '1' str;
-select date_add('2011-11-11', str) from v;
-select date_sub('2011-11-11', str) from v;
+select date_add('2011-11-11', int_str) from date_view;
+select date_sub('2011-11-11', int_str) from date_view;
+select date_add(date_str, 1) from date_view;
+select date_sub(date_str, 1) from date_view;
 
--- non-literal string column add/sub with integer
-create temp view v2 as select '2011-11-11' str;
-select date_add(str, 1) from v2;
-select date_sub(str, 1) from v2;
-
--- date add/sub operations
-select date'2011-11-11' + 1E1;
-select date'2011-11-11' + '1';
-select null + date '2001-09-28';
+-- date +/- number
+select date '2011-11-11' + 1E1;
 select date '2001-09-28' + 7Y;
 select 7S + date '2001-09-28';
 select date '2001-10-01' - 7;
-select date '2001-10-01' - '7';
-select date '2001-09-28' + null;
-select date '2001-09-28' - null;
-select '2011-11-11' - interval '2' day;
-select null - date '2019-10-06';
+
+-- date - date
 select date '2001-10-01' - date '2001-09-28';
-select '2011-11-11 11:11:11' - date'2011-11-11';
-select str - date'2011-11-11' from v2;
+-- if one side is string/null literal, promote it to date type.
+select date '2001-10-01' - '2001-09-28';
+select '2001-10-01' - date '2001-09-28';
+select date '2001-09-28' - null;
+select null - date '2019-10-06';
+-- invalid: non-literal string column
+select date_str - date '2001-09-28' from date_view;
+select date '2001-09-28' - date_str from date_view;
+
+-- invalid: date + string literal
+select date'2011-11-11' + '1';
+select '1' + date'2011-11-11';
+
+-- null result: date + null
+select date'2011-11-11' + null;
+select null + date'2011-11-11';
+
+-- date +/- interval and interval + date
+select date '2012-01-01' - interval '2-2' year to month,
+       date '2011-11-11' - interval '2' day,
+       date '2012-01-01' + interval '-2-2' year to month,
+       date '2011-11-11' + interval '-2' month,
+       - interval '2-2' year to month + date '2012-01-01',
+       interval '-2' day + date '2011-11-11';
 
 -- Unsupported narrow text style
 select to_date('26/October/2015', 'dd/MMMMM/yyyy');

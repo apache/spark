@@ -102,6 +102,8 @@ package object dsl {
 
     def like(other: Expression, escapeChar: Char = '\\'): Expression =
       Like(expr, other, escapeChar)
+    def ilike(other: Expression, escapeChar: Char = '\\'): Expression =
+      new ILike(expr, other, escapeChar)
     def rlike(other: Expression): Expression = RLike(expr, other)
     def likeAll(others: Expression*): Expression =
       LikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))

@@ -30,6 +30,7 @@ import org.apache.orc.mapreduce.OrcInputFormat
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.execution.datasources.orc.{OrcColumnarBatchReader, OrcDeserializer, OrcFilters, OrcUtils}
 import org.apache.spark.sql.execution.datasources.v2._
@@ -63,7 +64,7 @@ case class OrcPartitionReaderFactory(
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.orcVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
-      resultSchema.length <= sqlConf.wholeStageMaxNumFields &&
+      !WholeStageCodegenExec.isTooManyFields(sqlConf, resultSchema) &&
       resultSchema.forall(s => OrcUtils.supportColumnarReads(
         s.dataType, sqlConf.orcVectorizedReaderNestedColumnEnabled))
   }

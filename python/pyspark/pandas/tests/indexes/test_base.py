@@ -26,7 +26,6 @@ import pandas as pd
 import pyspark.pandas as ps
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.indexes import (
-    MissingPandasLikeCategoricalIndex,
     MissingPandasLikeDatetimeIndex,
     MissingPandasLikeIndex,
     MissingPandasLikeMultiIndex,
@@ -515,29 +514,6 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             ):
                 getattr(psdf.set_index("c").index, name)()
 
-        # CategoricalIndex functions
-        missing_functions = inspect.getmembers(
-            MissingPandasLikeCategoricalIndex, inspect.isfunction
-        )
-        unsupported_functions = [
-            name for (name, type_) in missing_functions if type_.__name__ == "unsupported_function"
-        ]
-        for name in unsupported_functions:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError,
-                "method.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
-            ):
-                getattr(psdf.set_index("d").index, name)()
-
-        deprecated_functions = [
-            name for (name, type_) in missing_functions if type_.__name__ == "deprecated_function"
-        ]
-        for name in deprecated_functions:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError, "method.*Index.*{}.*is deprecated".format(name)
-            ):
-                getattr(psdf.set_index("d").index, name)()
-
         # Index properties
         missing_properties = inspect.getmembers(
             MissingPandasLikeIndex, lambda o: isinstance(o, property)
@@ -607,22 +583,6 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
                 "property.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
                 getattr(psdf.set_index("c").index, name)
-
-        # CategoricalIndex properties
-        missing_properties = inspect.getmembers(
-            MissingPandasLikeCategoricalIndex, lambda o: isinstance(o, property)
-        )
-        unsupported_properties = [
-            name
-            for (name, type_) in missing_properties
-            if type_.fget.__name__ == "unsupported_property"
-        ]
-        for name in unsupported_properties:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError,
-                "property.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
-            ):
-                getattr(psdf.set_index("d").index, name)
 
     def test_index_has_duplicates(self):
         indexes = [("a", "b", "c"), ("a", "a", "c"), (1, 3, 3), (1, 2, 3)]
@@ -2334,6 +2294,80 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         psmidx = ps.from_pandas(pmidx)
 
         self.assertRaises(PandasNotImplementedError, lambda: psmidx.factorize())
+
+    def test_map(self):
+        pidx = pd.Index([1, 2, 3])
+        psidx = ps.from_pandas(pidx)
+
+        # Apply dict
+        self.assert_eq(
+            pidx.map({1: "one", 2: "two", 3: "three"}),
+            psidx.map({1: "one", 2: "two", 3: "three"}),
+        )
+        self.assert_eq(
+            pidx.map({1: "one", 2: "two"}),
+            psidx.map({1: "one", 2: "two"}),
+        )
+        self.assert_eq(
+            pidx.map({1: "one", 2: "two"}, na_action="ignore"),
+            psidx.map({1: "one", 2: "two"}, na_action="ignore"),
+        )
+        self.assert_eq(
+            pidx.map({1: 10, 2: 20}),
+            psidx.map({1: 10, 2: 20}),
+        )
+        self.assert_eq(
+            (pidx + 1).map({1: 10, 2: 20}),
+            (psidx + 1).map({1: 10, 2: 20}),
+        )
+
+        # Apply lambda
+        self.assert_eq(
+            pidx.map(lambda id: id + 1),
+            psidx.map(lambda id: id + 1),
+        )
+        self.assert_eq(
+            pidx.map(lambda id: id + 1.1),
+            psidx.map(lambda id: id + 1.1),
+        )
+        self.assert_eq(
+            pidx.map(lambda id: "{id} + 1".format(id=id)),
+            psidx.map(lambda id: "{id} + 1".format(id=id)),
+        )
+        self.assert_eq(
+            (pidx + 1).map(lambda id: "{id} + 1".format(id=id)),
+            (psidx + 1).map(lambda id: "{id} + 1".format(id=id)),
+        )
+
+        # Apply series
+        pser = pd.Series(["one", "two", "three"], index=[1, 2, 3])
+        self.assert_eq(
+            pidx.map(pser),
+            psidx.map(pser),
+        )
+        pser = pd.Series(["one", "two", "three"])
+        self.assert_eq(
+            pidx.map(pser),
+            psidx.map(pser),
+        )
+        self.assert_eq(
+            pidx.map(pser, na_action="ignore"),
+            psidx.map(pser, na_action="ignore"),
+        )
+        pser = pd.Series([1, 2, 3])
+        self.assert_eq(
+            pidx.map(pser),
+            psidx.map(pser),
+        )
+        self.assert_eq(
+            (pidx + 1).map(pser),
+            (psidx + 1).map(pser),
+        )
+
+        self.assertRaises(
+            TypeError,
+            lambda: psidx.map({1: 1, 2: 2.0, 3: "three"}),
+        )
 
 
 if __name__ == "__main__":
