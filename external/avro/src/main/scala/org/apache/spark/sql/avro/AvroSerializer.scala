@@ -262,7 +262,7 @@ private[sql] class AvroSerializer(
       avroStruct, catalystStruct, avroPath, catalystPath, positionalFieldMatch)
 
     avroSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = false)
-    avroSchemaHelper.validateNoExtraAvroFields()
+    avroSchemaHelper.validateNoExtraRequiredAvroFields()
 
     val (avroIndices, fieldConverters) = avroSchemaHelper.matchedFields.map {
       case AvroMatchedField(catalystField, _, avroField) =>
