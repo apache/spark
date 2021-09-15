@@ -2340,8 +2340,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Literal.create(Seq(Float.NaN, null, 1f), ArrayType(FloatType))), true)
   }
 
-  test("SPARK-36740: ArrayMin/ArrayMax/SortArray add comment and unit test for " +
-    "Double.NaN and Float.NaN") {
+  test("SPARK-36740: ArrayMin/ArrayMax/SortArray should handle NaN greater then non-NaN value") {
     // ArrayMin
     checkEvaluation(ArrayMin(
       Literal.create(Seq(Double.NaN, 1d, 2d), ArrayType(DoubleType))), 1d)
