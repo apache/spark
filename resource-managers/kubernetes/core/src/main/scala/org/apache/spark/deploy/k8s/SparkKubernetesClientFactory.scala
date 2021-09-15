@@ -55,20 +55,18 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       .map(new File(_))
       .orElse(defaultServiceAccountToken)
     val oauthTokenValue = sparkConf.getOption(oauthTokenConf)
-    KubernetesUtils.requireNandDefined(
-      oauthTokenFile,
-      oauthTokenValue,
-      s"Cannot specify OAuth token through both a file $oauthTokenFileConf and a " +
-        s"value $oauthTokenConf.")
+    val oauthTokenProviderConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_PROVIDER_CONF_SUFFIX"
+    val oauthTokenProviderInstance = sparkConf.getOption(oauthTokenProviderConf)
+      .map(Utils.classForName(_)
+        .getDeclaredConstructor()
+        .newInstance()
+        .asInstanceOf[OAuthTokenProvider])
 
-    val oauthTokenProviderInstance = {
-      val oauthTokenProviderConf = sparkConf.get(KUBERNETES_CLIENT_OAUTH_TOKEN_PROVIDER)
-      oauthTokenProviderConf
-        .map(Utils.classForName(_)
-          .getDeclaredConstructor()
-          .newInstance()
-          .asInstanceOf[OAuthTokenProvider])
-    }
+    require(
+      Seq(oauthTokenFile, oauthTokenValue, oauthTokenProviderInstance).count(_.isDefined) <= 1,
+      s"OAuth token should be specified via only one of $oauthTokenFileConf, $oauthTokenConf " +
+        s"or $oauthTokenProviderConf."
+    )
 
     val caCertFile = sparkConf
       .getOption(s"$kubernetesAuthConfPrefix.$CA_CERT_FILE_CONF_SUFFIX")
