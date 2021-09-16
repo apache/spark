@@ -160,6 +160,7 @@ class FunctionsTests(ReusedSQLTestCase):
                 self.assertIn(f"{alias}(a)", repr(f(c)))
 
     def test_reciprocal_trig_functions(self):
+        # SPARK-36683: Add new built-in SQL functions: SEC and CSC
         list = [0.0, math.pi/6, math.pi/4, math.pi/3, math.pi/2,
                 math.pi, 3 * math.pi / 2, 2 * math.pi]
 
