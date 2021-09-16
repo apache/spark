@@ -49,7 +49,6 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
       sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!")))
     val history = ArrayBuffer.empty[String]
     val sparkSubmit = if (Utils.isWindows) {
-      // On Windows, `ProcessBuilder.directory` does not change the current working directory.
       new File(new File(sparkHome, "bin"), "spark-submit.cmd")
     } else {
       new File(new File(sparkHome, "bin"), "spark-submit")
