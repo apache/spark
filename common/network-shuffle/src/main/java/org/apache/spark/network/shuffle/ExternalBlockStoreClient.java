@@ -83,6 +83,11 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     clientFactory = context.createClientFactory(bootstraps);
   }
 
+  // Set the application attemptId
+  public void setAppAttemptId(int appAttemptId) {
+    this.appAttemptId = appAttemptId;
+  }
+
   @Override
   public void fetchBlocks(
       String host,
@@ -146,7 +151,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
               assert inputListener instanceof BlockPushingListener :
                 "Expecting a BlockPushingListener, but got " + inputListener.getClass();
               TransportClient client = clientFactory.createClient(host, port);
-              new OneForOneBlockPusher(client, appId, transportConf.appAttemptId(), inputBlockId,
+              new OneForOneBlockPusher(client, appId, appAttemptId, inputBlockId,
                 (BlockPushingListener) inputListener, buffersWithId).start();
             } else {
               logger.info("This clientFactory was closed. Skipping further block push retries.");
@@ -178,8 +183,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     try {
       TransportClient client = clientFactory.createClient(host, port);
       ByteBuffer finalizeShuffleMerge =
-        new FinalizeShuffleMerge(appId, transportConf.appAttemptId(), shuffleId,
-          shuffleMergeId).toByteBuffer();
+        new FinalizeShuffleMerge(appId, appAttemptId, shuffleId, shuffleMergeId).toByteBuffer();
       client.sendRpc(finalizeShuffleMerge, new RpcResponseCallback() {
         @Override
         public void onSuccess(ByteBuffer response) {

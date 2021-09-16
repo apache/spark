@@ -355,6 +355,11 @@ object SparkEnv extends Logging {
       None
     }
 
+    // Set the application attemptId in the ExternalShuffleClient is applicable.
+    // If there is no attemptId assigned, set the attemptId to -1.
+    externalShuffleClient.foreach(
+      shuffleClient => shuffleClient.setAppAttemptId(conf.getInt(config.APP_ATTEMPT_ID.key, -1)))
+
     // Mapping from block manager id to the block manager's information.
     val blockManagerInfo = new concurrent.TrieMap[BlockManagerId, BlockManagerInfo]()
     val blockManagerMaster = new BlockManagerMaster(

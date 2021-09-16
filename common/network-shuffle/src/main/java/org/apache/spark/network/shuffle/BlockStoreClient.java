@@ -46,6 +46,8 @@ public abstract class BlockStoreClient implements Closeable {
 
   protected volatile TransportClientFactory clientFactory;
   protected String appId;
+  // Store the application attemptId
+  protected int appAttemptId;
   protected TransportConf transportConf;
 
   /**
