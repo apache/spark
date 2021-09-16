@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.test
+package org.apache.spark
 
 import java.io.{InputStream, IOException}
 
