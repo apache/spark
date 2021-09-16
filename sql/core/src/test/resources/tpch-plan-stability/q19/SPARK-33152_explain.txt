@@ -1,4 +1,4 @@
-=== Physical Plan ==
+== Physical Plan ==
 * HashAggregate (13)
 +- Exchange (12)
    +- * HashAggregate (11)
