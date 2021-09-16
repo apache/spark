@@ -30,7 +30,6 @@ import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.internal.SQLConf
@@ -173,7 +172,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val bucketSpec = relation.tableMeta.bucketSpec
     val (hiveOptions, hiveBucketSpec) =
       if (isWrite) {
-        (options.updated(DDLUtils.HIVE_PROVIDER, "true"), bucketSpec)
+        (options.updated(BucketingUtils.optionForHiveCompatibleBucketWrite, "true"),
+          bucketSpec)
       } else {
         (options, None)
       }

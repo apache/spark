@@ -272,12 +272,10 @@ abstract class BaseDynamicPartitionDataWriter(
 
     val bucketIdStr = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
 
-    // The prefix and suffix must be in a form that matches our bucketing format.
-    // See BucketingUtils.
-    val prefix = bucketId match {
-      case Some(id) => description.bucketSpec.get.bucketFileNamePrefix(id)
-      case _ => ""
-    }
+    // The prefix and suffix must be in a form that matches our bucketing format. See BucketingUtils
+    // for details. The prefix is required to represent bucket id when writing Hive-compatible
+    // bucketed table.
+    val prefix = bucketId.map(description.bucketSpec.get.bucketFileNamePrefix).getOrElse("")
     val suffix = f"$bucketIdStr.c$fileCounter%03d" +
       description.outputWriterFactory.getFileExtension(taskAttemptContext)
     val fileNameSpec = FileNameSpec(prefix, suffix)

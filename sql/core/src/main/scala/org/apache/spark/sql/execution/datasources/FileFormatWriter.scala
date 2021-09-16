@@ -40,7 +40,6 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
-import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
@@ -126,7 +125,8 @@ object FileFormatWriter extends Logging {
     val writerBucketSpec = bucketSpec.map { spec =>
       val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
 
-      if (options.getOrElse(DDLUtils.HIVE_PROVIDER, "false") == "true") {
+      if (options.getOrElse(BucketingUtils.optionForHiveCompatibleBucketWrite, "false") ==
+        "true") {
         // Hive bucketed table: use `HiveHash` and bitwise-and as bucket id expression.
         // Without the extra bitwise-and operation, we can get wrong bucket id when hash value of
         // columns is negative. See Hive implementation in
