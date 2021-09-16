@@ -129,6 +129,18 @@
       <artifactId>datanucleus-core</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.datanucleus</groupId>
+      <artifactId>datanucleus-api-jdo</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.datanucleus</groupId>
+      <artifactId>datanucleus-rdbms</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.datanucleus</groupId>
+      <artifactId>javax.jdo</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>${hadoop-client-runtime.artifact}</artifactId>
       <scope>${hadoop.deps.scope}</scope>
@@ -144,6 +156,10 @@
     <dependency>
       <groupId>org.apache.derby</groupId>
       <artifactId>derby</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>jline</groupId>
+      <artifactId>jline</artifactId>
     </dependency>
     <dependency>
       <groupId>org.scala-lang</groupId>

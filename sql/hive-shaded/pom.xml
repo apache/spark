@@ -153,8 +153,44 @@
                   <shadedPattern>${spark.shade.packageName}.hive.com.google.protobuf</shadedPattern>
                 </relocation>
                 <relocation>
+                  <pattern>com.google.gson</pattern>
+                  <shadedPattern>${spark.shade.packageName}.hive.com.google.gson</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.github.joshelser</pattern>
+                  <shadedPattern>${spark.shade.packageName}.hive.com.github.joshelser</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.jolbox.bonecp</pattern>
+                  <shadedPattern>${spark.shade.packageName}.hive.com.jolbox.bonecp</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.zaxxer.hikari</pattern>
+                  <shadedPattern>${spark.shade.packageName}.hive.com.zaxxer.hikari</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>au.com.bytecode</pattern>
+                  <shadedPattern>${spark.shade.packageName}.hive.au.com.bytecode</shadedPattern>
+                </relocation>
+                <relocation>
                   <pattern>org.apache.commons</pattern>
                   <shadedPattern>${spark.shade.packageName}.hive.org.apache.commons</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.antlr.runtime</pattern>
+                  <shadedPattern>${spark.shade.packageName}.hive.org.antlr.runtime</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.velocity</pattern>
+                  <shadedPattern>${spark.shade.packageName}.hive.org.apache.velocity</shadedPattern>
+                </relocation>
+                <relocation> <!-- from org.antlr:ST4 -->
+                  <pattern>org.stringtemplate.v4</pattern>
+                  <shadedPattern>${spark.shade.packageName}.hive.org.stringtemplate.v4</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javolution</pattern>
+                  <shadedPattern>${spark.shade.packageName}.hive.javolution</shadedPattern>
                 </relocation>
               </relocations>
               <transformers>
