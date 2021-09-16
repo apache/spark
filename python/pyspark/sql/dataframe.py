@@ -2556,6 +2556,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not isinstance(metadata, dict):
             raise TypeError("metadata should be a dict")
+        sc = SparkContext._active_spark_context
         jmeta = sc._jvm.org.apache.spark.sql.types.Metadata.fromJson(
             json.dumps(metadata))
         return DataFrame(self._jdf.withMetadata(columnName, jmeta), self.sql_ctx)
