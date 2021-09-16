@@ -29,8 +29,8 @@ import scala.concurrent.duration._
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils._
 import org.apache.spark.sql.hive.test.HiveTestJars

@@ -43,8 +43,8 @@ import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.HiveTestJars
