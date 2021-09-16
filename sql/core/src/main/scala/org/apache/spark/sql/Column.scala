@@ -853,8 +853,8 @@ class Column(val expr: Expression) extends Logging {
    * @since 3.3.0
    */
   def ilike(literal: String, escapeChar: Char = '\\'): Column = withExpr {
-    ILike(expr, lit(literal).expr, escapeChar, Like(Lower(expr), Lower(lit(literal).expr),
-      escapeChar))
+    ILike(expr, lit(literal).expr, escapeChar,
+      Like(Lower(expr), Lower(lit(literal).expr), escapeChar))
   }
 
   /**
