@@ -1,4 +1,4 @@
-=== Physical Plan ==
+== Physical Plan ==
 * Sort (9)
 +- Exchange (8)
    +- * HashAggregate (7)
