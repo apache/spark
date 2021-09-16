@@ -81,4 +81,31 @@ object SQLOpenHashSet {
       case _ => None
     }
   }
+
+  def withNaNCheckCode(
+      dataType: DataType,
+      valueName: String,
+      hashSet: String,
+      handleNotNaN: String,
+      handleNaN: String => String): String = {
+    val ret = dataType match {
+      case DoubleType =>
+        Some((s"java.lang.Double.isNaN((double)$valueName)", "java.lang.Double.NaN"))
+      case FloatType =>
+        Some((s"java.lang.Float.isNaN((float)$valueName)", "java.lang.Float.NaN"))
+      case _ => None
+    }
+    ret.map { case (isNaN, valueNaN) =>
+      s"""
+         |if ($isNaN) {
+         |  if (!$hashSet.containsNaN()) {
+         |     $hashSet.addNaN();
+         |     ${handleNaN(valueNaN)}
+         |  }
+         |} else {
+         |  $handleNotNaN
+         |}
+       """.stripMargin
+    }.getOrElse(handleNotNaN)
+  }
 }

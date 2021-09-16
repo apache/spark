@@ -3520,22 +3520,6 @@ case class ArrayDistinct(child: Expression)
             body
           }
 
-        def withNaNCheck(body: String): String = {
-          SQLOpenHashSet.isNaNFuncAndValueNaN(elementType, value).map { case (isNaN, valueNaN) =>
-            s"""
-               |if ($isNaN) {
-               |  if (!$hashSet.containsNaN()) {
-               |     $size++;
-               |     $hashSet.addNaN();
-               |     $builder.$$plus$$eq($valueNaN);
-               |  }
-               |} else {
-               |  $body
-               |}
-             """.stripMargin
-          }
-        }.getOrElse(body)
-
         val body =
           s"""
              |if (!$hashSet.contains($hsValueCast$value)) {
@@ -3548,7 +3532,13 @@ case class ArrayDistinct(child: Expression)
            """.stripMargin
 
         val processArray = withArrayNullAssignment(
-          s"$jt $value = ${genGetValue(array, i)};" + withNaNCheck(body))
+          s"$jt $value = ${genGetValue(array, i)};" +
+            SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
+              (valueNaN: String) =>
+                s"""
+                   |$size++;
+                   |$builder.$$plus$$eq($valueNaN);
+                   |""".stripMargin))
 
         s"""
            |$openHashSet $hashSet = new $openHashSet$hsPostFix($classTag);
@@ -3733,22 +3723,6 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
             body
           }
 
-        def withNaNCheck(body: String): String = {
-          SQLOpenHashSet.isNaNFuncAndValueNaN(elementType, value).map { case (isNaN, valueNaN) =>
-            s"""
-               |if ($isNaN) {
-               |  if (!$hashSet.containsNaN()) {
-               |     $size++;
-               |     $hashSet.addNaN();
-               |     $builder.$$plus$$eq($valueNaN);
-               |  }
-               |} else {
-               |  $body
-               |}
-             """.stripMargin
-          }
-        }.getOrElse(body)
-
         val body =
           s"""
              |if (!$hashSet.contains($hsValueCast$value)) {
@@ -3759,8 +3733,14 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
              |  $builder.$$plus$$eq($value);
              |}
            """.stripMargin
-        val processArray =
-          withArrayNullAssignment(s"$jt $value = ${genGetValue(array, i)};" + withNaNCheck(body))
+        val processArray = withArrayNullAssignment(
+          s"$jt $value = ${genGetValue(array, i)};" +
+            SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
+              (valueNaN: String) =>
+                s"""
+                   |$size++;
+                   |$builder.$$plus$$eq($valueNaN);
+                 """.stripMargin))
 
         // Only need to track null element index when result array's element is nullable.
         val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
