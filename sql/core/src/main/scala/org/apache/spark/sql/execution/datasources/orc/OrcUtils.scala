@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -99,11 +100,13 @@ object OrcUtils extends Logging {
     def toStructType(orcType: TypeDescription): StructType = {
       val fieldNames = orcType.getFieldNames.asScala
       val fieldTypes = orcType.getChildren.asScala
-      fieldNames.zip(fieldTypes).foldLeft(new StructType) {
-        case (resultType, (fieldName, fieldType)) =>
+      val fields = new ArrayBuffer[StructField]()
+      fieldNames.zip(fieldTypes).foreach {
+        case (fieldName, fieldType) =>
           val catalystType = toCatalystType(fieldType)
-          resultType.add(StructField(fieldName, catalystType))
+          fields += StructField(fieldName, catalystType)
       }
+      StructType(fields.toSeq)
     }
 
     def toArrayType(orcType: TypeDescription): ArrayType = {
