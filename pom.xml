@@ -3356,7 +3356,7 @@
          SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
          property correctly. 
         -->
-        <scala.version>2.12.14</scala.version>
+        <scala.version>2.12.15</scala.version>
       </properties>
       <build>
         <pluginManagement>
