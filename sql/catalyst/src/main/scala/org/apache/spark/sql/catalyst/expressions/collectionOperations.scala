@@ -3419,6 +3419,16 @@ case class ArrayDistinct(child: Expression)
       val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
       val hs = new SQLOpenHashSet[Any]()
       val (isNaN, valueNaN) = SQLOpenHashSet.isNaNFuncAndValueNaN(elementType)
+      val withNaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(isNaN, valueNaN, hs,
+        (value: Any) =>
+          if (!hs.contains(value)) {
+            if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+              ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
+            }
+            arrayBuffer += value
+            hs.add(value)
+          },
+        (valueNaN: Any) => arrayBuffer += valueNaN)
       var i = 0
       while (i < array.numElements()) {
         if (array.isNullAt(i)) {
@@ -3428,15 +3438,7 @@ case class ArrayDistinct(child: Expression)
           }
         } else {
           val elem = array.get(i, elementType)
-          SQLOpenHashSet.withNaNCheckFunc(isNaN, valueNaN, elem, hs,
-            () => if (!hs.contains(elem)) {
-              if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-                ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
-              }
-              arrayBuffer += elem
-              hs.add(elem)
-            },
-            (valueNaN: Any) => arrayBuffer += valueNaN)
+          withNaNCheckFunc(elem)
         }
         i += 1
       }
@@ -3610,6 +3612,16 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
         val hs = new SQLOpenHashSet[Any]()
         val (isNaN, valueNaN) = SQLOpenHashSet.isNaNFuncAndValueNaN(elementType)
+        val withNaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(isNaN, valueNaN, hs,
+          (value: Any) =>
+            if (!hs.contains(value)) {
+              if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+                ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
+              }
+              arrayBuffer += value
+              hs.add(value)
+            },
+          (valueNaN: Any) => arrayBuffer += valueNaN)
         Seq(array1, array2).foreach { array =>
           var i = 0
           while (i < array.numElements()) {
@@ -3620,15 +3632,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
               }
             } else {
               val elem = array.get(i, elementType)
-              SQLOpenHashSet.withNaNCheckFunc(isNaN, valueNaN, elem, hs,
-                () => if (!hs.contains(elem)) {
-                  if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-                    ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
-                  }
-                  arrayBuffer += elem
-                  hs.add(elem)
-                },
-                (valueNaN: Any) => arrayBuffer += valueNaN)
+              withNaNCheckFunc(elem)
             }
             i += 1
           }
