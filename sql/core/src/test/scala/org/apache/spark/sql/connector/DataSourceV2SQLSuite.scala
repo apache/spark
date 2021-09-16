@@ -2916,6 +2916,50 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-36790: Unsupport api in SparkSession.catalog for user define catalog") {
+    spark.sql("use testcat")
+    val current = spark.sessionState.catalogManager.currentCatalog.name
+    assert(current == "testcat")
+    var e = intercept[AnalysisException] {
+      spark.catalog.currentDatabase
+    }
+    assert(e.message.contains(
+      s"The catalog 'testcat' does not support action 'Get currentDatabase'."))
+    e = intercept[AnalysisException] {
+      spark.catalog.setCurrentDatabase("")
+    }
+    assert(e.message.contains(
+      s"The catalog 'testcat' does not support action 'setCurrentDatabase'."))
+    e = intercept[AnalysisException] {
+      spark.catalog.listDatabases()
+    }
+    assert(e.message.contains(s"The catalog 'testcat' does not support action 'listDatabases'."))
+    e = intercept[AnalysisException] {
+      spark.catalog.listTables("")
+    }
+    assert(e.message.contains(s"The catalog 'testcat' does not support action 'listTables'."))
+    e = intercept[AnalysisException] {
+      spark.catalog.listFunctions("")
+    }
+    assert(e.message.contains(
+      s"The catalog 'testcat' does not support action 'listFunctions'."))
+    e = intercept[AnalysisException] {
+      spark.catalog.databaseExists("")
+    }
+    assert(e.message.contains(
+      s"The catalog 'testcat' does not support action 'databaseExists'."))
+    e = intercept[AnalysisException] {
+      spark.catalog.tableExists("", "")
+    }
+    assert(e.message.contains(
+      s"The catalog 'testcat' does not support action 'tableExists'."))
+    e = intercept[AnalysisException] {
+      spark.catalog.functionExists("", "")
+    }
+    assert(e.message.contains(
+      s"The catalog 'testcat' does not support action 'functionExists'."))
+  }
+
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")

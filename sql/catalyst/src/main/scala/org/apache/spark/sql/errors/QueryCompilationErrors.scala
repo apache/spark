@@ -2392,4 +2392,7 @@ object QueryCompilationErrors {
       errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
       messageParameters = Array(schema.toString))
   }
+  def unsupportedActionForCurrentCatalogError(catalog: String, action: String): Throwable = {
+    new AnalysisException(s"The catalog '$catalog' does not support action '$action'.")
+  }
 }

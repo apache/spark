@@ -28,6 +28,8 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, RecoverPartitions, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.connector.catalog.CatalogPlugin
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
@@ -40,12 +42,8 @@ import org.apache.spark.storage.StorageLevel
 class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   private def sessionCatalog: SessionCatalog = sparkSession.sessionState.catalog
-
-  private def requireDatabaseExists(dbName: String): Unit = {
-    if (!sessionCatalog.databaseExists(dbName)) {
-      throw QueryCompilationErrors.databaseDoesNotExistError(dbName)
-    }
-  }
+  private def currentCatalog: CatalogPlugin =
+    sparkSession.sessionState.catalogManager.currentCatalog
 
   private def requireTableExists(dbName: String, tableName: String): Unit = {
     if (!sessionCatalog.tableExists(TableIdentifier(tableName, Some(dbName)))) {
@@ -56,23 +54,37 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   /**
    * Returns the current default database in this session.
    */
-  override def currentDatabase: String = sessionCatalog.getCurrentDatabase
+  override def currentDatabase: String = {
+    currentCatalog.name match {
+      case SESSION_CATALOG_NAME => sessionCatalog.getCurrentDatabase
+      case _ => throw QueryCompilationErrors.
+        unsupportedActionForCurrentCatalogError(currentCatalog.name, "Get currentDatabase")
+    }
+  }
 
   /**
    * Sets the current default database in this session.
    */
   @throws[AnalysisException]("database does not exist")
   override def setCurrentDatabase(dbName: String): Unit = {
-    requireDatabaseExists(dbName)
-    sessionCatalog.setCurrentDatabase(dbName)
+    currentCatalog.name match {
+      case SESSION_CATALOG_NAME => sessionCatalog.setCurrentDatabase(dbName)
+      case _ => throw QueryCompilationErrors.
+        unsupportedActionForCurrentCatalogError(currentCatalog.name, "setCurrentDatabase")
+    }
   }
 
   /**
    * Returns a list of databases available across all sessions.
    */
   override def listDatabases(): Dataset[Database] = {
-    val databases = sessionCatalog.listDatabases().map(makeDatabase)
-    CatalogImpl.makeDataset(databases, sparkSession)
+    currentCatalog.name match {
+      case SESSION_CATALOG_NAME =>
+        val databases = sessionCatalog.listDatabases().map(makeDatabase)
+        CatalogImpl.makeDataset(databases, sparkSession)
+      case _ => throw QueryCompilationErrors.
+        unsupportedActionForCurrentCatalogError(currentCatalog.name, "listDatabases")
+    }
   }
 
   private def makeDatabase(dbName: String): Database = {
@@ -97,8 +109,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def listTables(dbName: String): Dataset[Table] = {
-    val tables = sessionCatalog.listTables(dbName).map(makeTable)
-    CatalogImpl.makeDataset(tables, sparkSession)
+    currentCatalog.name match {
+      case SESSION_CATALOG_NAME =>
+        val tables = sessionCatalog.listTables(dbName).map(makeTable)
+        CatalogImpl.makeDataset(tables, sparkSession)
+      case _ => throw QueryCompilationErrors.
+        unsupportedActionForCurrentCatalogError(currentCatalog.name, "listTables")
+    }
   }
 
   /**
@@ -139,11 +156,15 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def listFunctions(dbName: String): Dataset[Function] = {
-    requireDatabaseExists(dbName)
-    val functions = sessionCatalog.listFunctions(dbName).map { case (functIdent, _) =>
-      makeFunction(functIdent)
+    currentCatalog.name match {
+      case SESSION_CATALOG_NAME =>
+        val functions = sessionCatalog.listFunctions(dbName).map { case (functIdent, _) =>
+          makeFunction(functIdent)
+        }
+        CatalogImpl.makeDataset(functions, sparkSession)
+      case _ => throw QueryCompilationErrors.
+        unsupportedActionForCurrentCatalogError(currentCatalog.name, "listFunctions")
     }
-    CatalogImpl.makeDataset(functions, sparkSession)
   }
 
   private def makeFunction(funcIdent: FunctionIdentifier): Function = {
@@ -241,7 +262,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Checks if the database with the specified name exists.
    */
   override def databaseExists(dbName: String): Boolean = {
-    sessionCatalog.databaseExists(dbName)
+    currentCatalog.name match {
+      case SESSION_CATALOG_NAME => sessionCatalog.databaseExists(dbName)
+      case _ => throw QueryCompilationErrors.
+        unsupportedActionForCurrentCatalogError(currentCatalog.name, "databaseExists")
+    }
   }
 
   /**
@@ -257,8 +282,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Checks if the table or view with the specified name exists in the specified database.
    */
   override def tableExists(dbName: String, tableName: String): Boolean = {
-    val tableIdent = TableIdentifier(tableName, Option(dbName))
-    sessionCatalog.isTempView(tableIdent) || sessionCatalog.tableExists(tableIdent)
+    currentCatalog.name match {
+      case SESSION_CATALOG_NAME =>
+        val tableIdent = TableIdentifier(tableName, Option(dbName))
+        sessionCatalog.isTempView(tableIdent) || sessionCatalog.tableExists(tableIdent)
+      case _ => throw QueryCompilationErrors.
+        unsupportedActionForCurrentCatalogError(currentCatalog.name, "tableExists")
+    }
   }
 
   /**
@@ -274,7 +304,12 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Checks if the function with the specified name exists in the specified database.
    */
   override def functionExists(dbName: String, functionName: String): Boolean = {
-    sessionCatalog.functionExists(FunctionIdentifier(functionName, Option(dbName)))
+    currentCatalog.name match {
+      case SESSION_CATALOG_NAME =>
+        sessionCatalog.functionExists(FunctionIdentifier(functionName, Option(dbName)))
+      case _ => throw QueryCompilationErrors.
+        unsupportedActionForCurrentCatalogError(currentCatalog.name, "functionExists")
+    }
   }
 
   /**
@@ -396,7 +431,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def dropTempView(viewName: String): Boolean = {
-    sparkSession.sessionState.catalog.getTempView(viewName).exists { viewDef =>
+    sessionCatalog.getTempView(viewName).exists { viewDef =>
       uncacheView(viewDef)
       sessionCatalog.dropTempView(viewName)
     }
@@ -411,7 +446,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.1.0
    */
   override def dropGlobalTempView(viewName: String): Boolean = {
-    sparkSession.sessionState.catalog.getGlobalTempView(viewName).exists { viewDef =>
+    sessionCatalog.getGlobalTempView(viewName).exists { viewDef =>
       uncacheView(viewDef)
       sessionCatalog.dropGlobalTempView(viewName)
     }
