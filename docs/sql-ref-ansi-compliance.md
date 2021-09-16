@@ -78,7 +78,7 @@ The `CAST` clause of Spark ANSI mode follows the syntax rules of section 6.13 "c
 * MapType => String
 * StructType => String
 
- The valid combinations of target data type and source data type in a `CAST` expression are given by the following table.
+ The valid combinations of source and target data type in a `CAST` expression are given by the following table.
 “Y” indicates that the combination is syntactically valid without restriction and “N” indicates that the combination is not valid.
 
 | Source\Target | Numeric | String | Date | Timestamp | Interval | Boolean | Binary | Array | Map | Struct |
@@ -156,7 +156,32 @@ SELECT * FROM t;
 ```
 
 ### Store assignment
-As mentioned at the beginning, when `spark.sql.storeAssignmentPolicy` is set to `ANSI`(which is the default value), Spark SQL complies with the ANSI store assignment rules. During table insertion, Spark will throw exception on numeric value overflow or the source value can't be stored as the target type. 
+As mentioned at the beginning, when `spark.sql.storeAssignmentPolicy` is set to `ANSI`(which is the default value), Spark SQL complies with the ANSI store assignment rules on table insertions. The valid combinations of source and target data type in table insertions are given by the following table.
+
+| Source\Target | Numeric | String | Date | Timestamp | Interval | Boolean | Binary | Array | Map | Struct |
+|:-------------:|:-------:|:------:|:----:|:---------:|:--------:|:-------:|:------:|:-----:|:---:|:------:|
+| Numeric       | Y       | Y      | N    | N         | N        | N       | N      | N     | N   | N      |
+| String        | N       | Y      | N    | N         | N        | N       | N      | N     | N   | N      |
+| Date          | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Timestamp     | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Interval      | N       | Y      | N    | N         | N*        | N       | N      | N     | N   | N      |
+| Boolean       | N       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| Binary        | N       | Y      | N    | N         | N        | N       | Y      | N     | N   | N      |
+| Array         | N       | N      | N    | N         | N        | N       | N      | Y**     | N   | N      |
+| Map           | N       | N      | N    | N         | N        | N       | N      | N     | Y**   | N      |
+| Struct        | N       | N      | N    | N         | N        | N       | N      | N     | N   | Y**      |
+
+\* Spark doesn't support interval type table column.
+
+\*\* For Array/Map/Struct types, the data type check rule applies recursively to its component elements.
+
+During table insertion, Spark will throw exception on numeric value overflow.
+```sql
+CREATE TABLE test(i INT);
+
+INSERT INTO test VALUES (2147483648L);
+java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
+```
 
 ### Type coercion
 #### Type Promotion and Precedence
