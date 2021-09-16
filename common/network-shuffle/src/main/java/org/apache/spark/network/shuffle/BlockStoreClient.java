@@ -126,6 +126,11 @@ public abstract class BlockStoreClient implements Closeable {
     assert appId != null : "Called before init()";
   }
 
+  // Set the application attemptId
+  public void setAppAttemptId(int appAttemptId) {
+    this.appAttemptId = appAttemptId;
+  }
+
   /**
    * Request the local disk directories for executors which are located at the same host with
    * the current BlockStoreClient(it can be ExternalBlockStoreClient or NettyBlockTransferService).

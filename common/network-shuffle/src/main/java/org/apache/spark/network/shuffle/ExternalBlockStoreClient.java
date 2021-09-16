@@ -83,11 +83,6 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     clientFactory = context.createClientFactory(bootstraps);
   }
 
-  // Set the application attemptId
-  public void setAppAttemptId(int appAttemptId) {
-    this.appAttemptId = appAttemptId;
-  }
-
   @Override
   public void fetchBlocks(
       String host,
