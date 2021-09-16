@@ -60,21 +60,25 @@ class SQLOpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
 }
 
 object SQLOpenHashSet {
-  def isNaN(dataType: DataType): Any => Boolean = {
+  def isNaNFuncAndValueNaN(dataType: DataType): (Any => Boolean, Any) = {
     dataType match {
       case DoubleType =>
-        (value: Any) => java.lang.Double.isNaN(value.asInstanceOf[java.lang.Double])
+        ((value: Any) => java.lang.Double.isNaN(value.asInstanceOf[java.lang.Double]),
+          java.lang.Double.NaN)
       case FloatType =>
-        (value: Any) => java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float])
-      case _ => (_: Any) => false
+        ((value: Any) => java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float]),
+          java.lang.Float.NaN)
+      case _ => ((_: Any) => false, null)
     }
   }
 
-  def valueNaN(dataType: DataType): Any = {
+  def isNaNFuncAndValueNaN(dataType: DataType, valueName: String): Option[(String, String)] = {
     dataType match {
-      case DoubleType => java.lang.Double.NaN
-      case FloatType => java.lang.Float.NaN
-      case _ => null
+      case DoubleType =>
+        Some((s"java.lang.Double.isNaN((double)$valueName)", "java.lang.Double.NaN"))
+      case FloatType =>
+        Some((s"java.lang.Float.isNaN((float)$valueName)", "java.lang.Float.NaN"))
+      case _ => None
     }
   }
 }
