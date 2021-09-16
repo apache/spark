@@ -99,7 +99,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     runDecomTest(true, true, JobEnded)
   }
 
-  test(s"SPARK-XXX not deadlock if MapOutput uses broadcast") {
+  test(s"SPARK-36782 not deadlock if MapOutput uses broadcast") {
     runDecomTest(false, true, JobEnded, forceMapOutputBroadcast = true)
   }
 
