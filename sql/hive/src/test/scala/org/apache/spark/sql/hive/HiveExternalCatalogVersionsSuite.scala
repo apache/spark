@@ -26,6 +26,8 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
+import org.scalatest.time.Span
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.deploy.SparkSubmitTestUtils
@@ -53,6 +55,7 @@ import org.apache.spark.util.Utils
 @ExtendedHiveTest
 class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   import HiveExternalCatalogVersionsSuite._
+  override protected val defaultSparkSubmitTimeout: Span = 5.minutes
   private val wareHousePath = Utils.createTempDir(namePrefix = "warehouse")
   private val tmpDataDir = Utils.createTempDir(namePrefix = "test-data")
   // For local test, you can set `spark.test.cache-dir` to a static value like `/tmp/test-spark`, to
