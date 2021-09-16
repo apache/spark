@@ -104,36 +104,48 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("A batch of blocks is limited by maxBlocksBatchSize") {
+    interceptPushedBlocksForSuccess()
     conf.set("spark.shuffle.push.maxBlockBatchSize", "1m")
     conf.set("spark.shuffle.push.maxBlockSizeToPush", "2048k")
     val blockPusher = new TestShuffleBlockPusher(conf)
     val mergerLocs = dependency.getMergerLocs.map(loc => BlockManagerId("", loc.host, loc.port))
     val largeBlockSize = 2 * 1024 * 1024
+    blockPusher.initiateBlockPush(mock(classOf[File]),
+      Array.fill(dependency.partitioner.numPartitions) { 5 }, dependency, 0)
     val pushRequests = blockPusher.prepareBlockPushRequests(5, 0, 0, 0,
       mock(classOf[File]), Array(2, 2, 2, largeBlockSize, largeBlockSize), mergerLocs,
       mock(classOf[TransportConf]))
+    blockPusher.runPendingTasks()
     assert(pushRequests.length == 3)
     verifyBlockPushCompleted(blockPusher)
     verifyPushRequests(pushRequests, Seq(6, largeBlockSize, largeBlockSize))
   }
 
   test("Large blocks are excluded in the preparation") {
+    interceptPushedBlocksForSuccess()
     conf.set("spark.shuffle.push.maxBlockSizeToPush", "1k")
     val blockPusher = new TestShuffleBlockPusher(conf)
     val mergerLocs = dependency.getMergerLocs.map(loc => BlockManagerId("", loc.host, loc.port))
+    blockPusher.initiateBlockPush(mock(classOf[File]),
+      Array.fill(dependency.partitioner.numPartitions) { 5 }, dependency, 0)
     val pushRequests = blockPusher.prepareBlockPushRequests(5, 0, 0, 0,
       mock(classOf[File]), Array(2, 2, 2, 1028, 1024), mergerLocs, mock(classOf[TransportConf]))
+    blockPusher.runPendingTasks()
     assert(pushRequests.length == 2)
     verifyPushRequests(pushRequests, Seq(6, 1024))
     verifyBlockPushCompleted(blockPusher)
   }
 
   test("Number of blocks in a push request are limited by maxBlocksInFlightPerAddress ") {
+    interceptPushedBlocksForSuccess()
     conf.set("spark.reducer.maxBlocksInFlightPerAddress", "1")
     val blockPusher = new TestShuffleBlockPusher(conf)
     val mergerLocs = dependency.getMergerLocs.map(loc => BlockManagerId("", loc.host, loc.port))
+    blockPusher.initiateBlockPush(mock(classOf[File]),
+      Array.fill(dependency.partitioner.numPartitions) { 5 }, dependency, 0)
     val pushRequests = blockPusher.prepareBlockPushRequests(5, 0, 0, 0,
       mock(classOf[File]), Array(2, 2, 2, 2, 2), mergerLocs, mock(classOf[TransportConf]))
+    blockPusher.runPendingTasks()
     assert(pushRequests.length == 5)
     verifyPushRequests(pushRequests, Seq(2, 2, 2, 2, 2))
     verifyBlockPushCompleted(blockPusher)
@@ -329,7 +341,6 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     verify(shuffleClient, times(1))
       .pushBlocks(any(), any(), any(), any(), any())
     assert(pushedBlocks.isEmpty)
-    verifyBlockPushCompleted(pusher)
   }
 
   test("Connect exceptions remove all the push requests for that host") {
