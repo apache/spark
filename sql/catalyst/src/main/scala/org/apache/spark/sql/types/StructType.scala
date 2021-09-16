@@ -568,14 +568,14 @@ object StructType extends AbstractDataType {
       case (ArrayType(leftElementType, leftContainsNull),
           ArrayType(rightElementType, rightContainsNull)) =>
         ArrayType(
-          merge(leftElementType, rightElementType),
+          mergeNullability(leftElementType, rightElementType),
           leftContainsNull || rightContainsNull)
 
       case (MapType(leftKeyType, leftValueType, leftContainsNull),
           MapType(rightKeyType, rightValueType, rightContainsNull)) =>
         MapType(
-          merge(leftKeyType, rightKeyType),
-          merge(leftValueType, rightValueType),
+          mergeNullability(leftKeyType, rightKeyType),
+          mergeNullability(leftValueType, rightValueType),
           leftContainsNull || rightContainsNull)
 
       case (StructType(leftFields), StructType(rightFields)) =>
