@@ -114,6 +114,7 @@ from pyspark.pandas.internal import (
     SPARK_INDEX_NAME_FORMAT,
     SPARK_DEFAULT_INDEX_NAME,
     SPARK_DEFAULT_SERIES_NAME,
+    SPARK_INDEX_NAME_PATTERN,
 )
 from pyspark.pandas.missing.frame import _MissingPandasLikeDataFrame
 from pyspark.pandas.ml import corr
@@ -2511,7 +2512,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return_type = infer_return_type(func)
             require_index_axis = isinstance(return_type, SeriesType)
             require_column_axis = isinstance(return_type, DataFrameType)
-            index_field = None
+            index_fields = None
 
             if require_index_axis:
                 if axis != 0:
@@ -2536,8 +2537,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         "hints when axis is 1 or 'column'; however, the return type "
                         "was %s" % return_sig
                     )
-                index_field = cast(DataFrameType, return_type).index_field
-                should_retain_index = index_field is not None
+                index_fields = cast(DataFrameType, return_type).index_fields
+                should_retain_index = index_fields is not None
                 data_fields = cast(DataFrameType, return_type).data_fields
                 return_schema = cast(DataFrameType, return_type).spark_type
             else:
@@ -2565,12 +2566,19 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             index_spark_columns = None
             index_names: Optional[List[Optional[Tuple[Any, ...]]]] = None
-            index_fields = None
+
             if should_retain_index:
-                index_spark_columns = [scol_for(sdf, index_field.struct_field.name)]
-                index_fields = [index_field]
-                if index_field.struct_field.name != SPARK_DEFAULT_INDEX_NAME:
-                    index_names = [(index_field.struct_field.name,)]
+                index_spark_columns = [
+                    scol_for(sdf, index_field.struct_field.name) for index_field in index_fields
+                ]
+
+                if not any(
+                    [
+                        SPARK_INDEX_NAME_PATTERN.match(index_field.struct_field.name)
+                        for index_field in index_fields
+                    ]
+                ):
+                    index_names = [(index_field.struct_field.name,) for index_field in index_fields]
             internal = InternalFrame(
                 spark_frame=sdf,
                 index_names=index_names,
