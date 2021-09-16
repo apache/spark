@@ -3428,20 +3428,15 @@ case class ArrayDistinct(child: Expression)
           }
         } else {
           val elem = array.get(i, elementType)
-          if (isNaN(elem)) {
-            if (!hs.containsNaN) {
-              arrayBuffer += valueNaN
-              hs.addNaN
-            }
-          } else {
-            if (!hs.contains(elem)) {
+          SQLOpenHashSet.withNaNCheckFunc(isNaN, valueNaN, elem, hs,
+            () => if (!hs.contains(elem)) {
               if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
                 ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
               }
               arrayBuffer += elem
               hs.add(elem)
-            }
-          }
+            },
+            (valueNaN: Any) => arrayBuffer += valueNaN)
         }
         i += 1
       }
@@ -3625,20 +3620,15 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
               }
             } else {
               val elem = array.get(i, elementType)
-              if (isNaN(elem)) {
-                if (!hs.containsNaN) {
-                  arrayBuffer += valueNaN
-                  hs.addNaN
-                }
-              } else {
-                if (!hs.contains(elem)) {
+              SQLOpenHashSet.withNaNCheckFunc(isNaN, valueNaN, elem, hs,
+                () => if (!hs.contains(elem)) {
                   if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
                     ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
                   }
                   arrayBuffer += elem
                   hs.add(elem)
-                }
-              }
+                },
+                (valueNaN: Any) => arrayBuffer += valueNaN)
             }
             i += 1
           }

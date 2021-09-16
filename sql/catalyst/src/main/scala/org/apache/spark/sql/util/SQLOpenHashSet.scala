@@ -72,6 +72,23 @@ object SQLOpenHashSet {
     }
   }
 
+  def withNaNCheckFunc(
+      isNaN: Any => Boolean,
+      valueNaN: Any,
+      value: Any,
+      hashSet: SQLOpenHashSet[Any],
+      handleNotNaN: () => Unit,
+      handleNaN: Any => Unit): Unit = {
+    if (isNaN(value)) {
+      if (!hashSet.containsNaN) {
+        hashSet.addNaN
+        handleNaN(valueNaN)
+      }
+    } else {
+      handleNotNaN()
+    }
+  }
+
   def withNaNCheckCode(
       dataType: DataType,
       valueName: String,
