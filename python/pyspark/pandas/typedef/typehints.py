@@ -746,7 +746,7 @@ def extract_types(params: Any) -> Tuple:
         data_types = params[1]
         if (
             isinstance(data_types, list)
-            and len(data_types) > 1
+            and len(data_types) >= 1
             and isinstance(data_types[0], tuple)
         ):  # type: ignore
             # Example:
