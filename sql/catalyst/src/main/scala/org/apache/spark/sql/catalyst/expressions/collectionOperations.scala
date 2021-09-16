@@ -915,7 +915,7 @@ object ArraySortLike {
   usage = """
     _FUNC_(array[, ascendingOrder]) - Sorts the input array in ascending or descending order
       according to the natural ordering of the array elements. NaN is greater than any non-NaN
-      value for double/float type. Null elements will be placed at the beginning of the returned
+      elements for double/float type. Null elements will be placed at the beginning of the returned
       array in ascending order or at the end of the returned array in descending order.
   """,
   examples = """
