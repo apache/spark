@@ -579,12 +579,12 @@ object StructType extends AbstractDataType {
           leftContainsNull || rightContainsNull)
 
       case (StructType(leftFields), StructType(rightFields)) =>
-        require(leftFields.size == rightFields.size, "To merge nullability," +
+        require(leftFields.size == rightFields.size, "To merge nullability, " +
           "two structs must have same number of fields.")
 
         val newFields = leftFields.zip(rightFields).map {
-          case (leftField@StructField(_, leftType, leftNullable, _),
-              _@StructField(_, rightType, rightNullable, _)) =>
+          case (leftField @ StructField(_, leftType, leftNullable, _),
+              _ @ StructField(_, rightType, rightNullable, _)) =>
             leftField.copy(
               dataType = mergeNullability(leftType, rightType),
               nullable = leftNullable || rightNullable)
