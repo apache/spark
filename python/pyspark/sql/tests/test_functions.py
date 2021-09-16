@@ -18,12 +18,14 @@
 import datetime
 from itertools import chain
 import re
+import math
 
 from py4j.protocol import Py4JJavaError
-from pyspark.sql import Row, Window
+from pyspark.sql import Row, Window, types
 from pyspark.sql.functions import udf, input_file_name, col, percentile_approx, \
     lit, assert_true, sum_distinct, sumDistinct, shiftleft, shiftLeft, shiftRight, \
-    shiftright, shiftrightunsigned, shiftRightUnsigned, octet_length, bit_length
+    shiftright, shiftrightunsigned, shiftRightUnsigned, octet_length, bit_length, \
+    sec, csc, cot
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -156,6 +158,31 @@ class FunctionsTests(ReusedSQLTestCase):
         for f, alias in funs:
             for c in cols:
                 self.assertIn(f"{alias}(a)", repr(f(c)))
+
+    def test_reciprocal_trig_functions(self):
+        list = [0.0, math.pi/6, math.pi/4, math.pi/3, math.pi/2,
+                math.pi, 3 * math.pi / 2, 2 * math.pi]
+
+        df = self.spark.createDataFrame(list, types.DoubleType())
+
+        def to_reciprocal_trig(func):
+            return [1.0 / func(i) if func(i) != 0 else math.inf for i in list]
+
+        def get_values(l):
+            return [j[0] for j in l]
+
+        def assert_close(a, b):
+            c = get_values(b)
+            diff = [abs(v - c[k]) < 1e-6 if v != math.inf else v == c[k]
+                    for k, v in enumerate(a)]
+            return sum(diff) == len(a)
+
+        assert_close(to_reciprocal_trig(math.cos),
+                     df.select(sec(df.value)).collect())
+        assert_close(to_reciprocal_trig(math.sin),
+                     df.select(csc(df.value)).collect())
+        assert_close(to_reciprocal_trig(math.tan),
+                     df.select(cot(df.value)).collect())
 
     def test_rand_functions(self):
         df = self.df
