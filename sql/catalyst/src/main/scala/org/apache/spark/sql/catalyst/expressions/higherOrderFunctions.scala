@@ -352,7 +352,7 @@ case class ArrayTransform(
 @ExpressionDescription(
   usage = """_FUNC_(expr, func) - Sorts the input array. If func is omitted, sort
     in ascending order. The elements of the input array must be orderable.
-    NaN is greater than any non-NaN value for double/float type.
+    NaN is greater than any non-NaN elements for double/float type.
     Null elements will be placed at the end of the returned array.
     Since 3.0.0 this function also sorts and returns the array based on the
     given comparator function. The comparator will take two arguments representing
