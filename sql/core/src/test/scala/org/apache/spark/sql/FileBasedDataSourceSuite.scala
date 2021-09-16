@@ -693,9 +693,9 @@ class FileBasedDataSourceSuite extends QueryTest
   }
 
   test("SPARK-22790,SPARK-27668: spark.sql.sources.compressionFactor takes effect") {
-    Seq(1.0, 0.4).foreach { compressionFactor =>
+    Seq(1.0, 0.5).foreach { compressionFactor =>
       withSQLConf(SQLConf.FILE_COMPRESSION_FACTOR.key -> compressionFactor.toString,
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "250") {
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "350") {
         withTempPath { workDir =>
           // the file size is 504 bytes
           val workDirPath = workDir.getAbsolutePath
@@ -706,7 +706,7 @@ class FileBasedDataSourceSuite extends QueryTest
           data2.write.orc(workDirPath + "/data2")
           val df2FromFile = spark.read.orc(workDirPath + "/data2")
           val joinedDF = df1FromFile.join(df2FromFile, Seq("count"))
-          if (compressionFactor == 0.4) {
+          if (compressionFactor == 0.5) {
             val bJoinExec = collect(joinedDF.queryExecution.executedPlan) {
               case bJoin: BroadcastHashJoinExec => bJoin
             }
