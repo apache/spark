@@ -72,16 +72,6 @@ object SQLOpenHashSet {
     }
   }
 
-  def isNaNFuncAndValueNaN(dataType: DataType, valueName: String): Option[(String, String)] = {
-    dataType match {
-      case DoubleType =>
-        Some((s"java.lang.Double.isNaN((double)$valueName)", "java.lang.Double.NaN"))
-      case FloatType =>
-        Some((s"java.lang.Float.isNaN((float)$valueName)", "java.lang.Float.NaN"))
-      case _ => None
-    }
-  }
-
   def withNaNCheckCode(
       dataType: DataType,
       valueName: String,
