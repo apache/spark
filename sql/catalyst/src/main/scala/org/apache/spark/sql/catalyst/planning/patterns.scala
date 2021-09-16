@@ -176,10 +176,16 @@ object ScanOperation extends OperationHelper with PredicateHelper {
  * value).
  */
 object ExtractEquiJoinKeys extends Logging with PredicateHelper {
-  /** (joinType, leftKeys, rightKeys, condition, leftChild, rightChild, joinHint) */
+  /** (joinType, leftKeys, rightKeys, otherCondition, conditionOnJoinKeys, leftChild,
+   * rightChild, joinHint).
+   */
+  // Note that `otherCondition` is NOT the original Join condition and it contains only
+  // the subset that is not handled by the 'leftKeys' to 'rightKeys' equijoin.
+  // 'conditionOnJoinKeys' is the subset of the original Join condition that corresponds to the
+  // 'leftKeys' to 'rightKeys' equijoin.
   type ReturnType =
     (JoinType, Seq[Expression], Seq[Expression],
-      Option[Expression], LogicalPlan, LogicalPlan, JoinHint)
+      Option[Expression], Option[Expression], LogicalPlan, LogicalPlan, JoinHint)
 
   def unapply(join: Join): Option[ReturnType] = join match {
     case Join(left, right, joinType, condition, hint) =>
@@ -197,15 +203,15 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
           Seq((Coalesce(Seq(l, Literal.default(l.dataType))),
             Coalesce(Seq(r, Literal.default(r.dataType)))),
             (IsNull(l), IsNull(r))
-          )
+          )  // (coalesce(l, default) = coalesce(r, default)) and (isnull(l) = isnull(r))
         case EqualNullSafe(l, r) if canEvaluate(l, right) && canEvaluate(r, left) =>
           Seq((Coalesce(Seq(r, Literal.default(r.dataType))),
             Coalesce(Seq(l, Literal.default(l.dataType)))),
             (IsNull(r), IsNull(l))
-          )
-        case other => None
+          )  // Same as above with left/right reversed.
+        case _ => None
       }
-      val otherPredicates = predicates.filterNot {
+      val (predicatesOfJoinKeys, otherPredicates) = predicates.partition {
         case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => false
         case Equality(l, r) =>
           canEvaluate(l, left) && canEvaluate(r, right) ||
@@ -216,7 +222,8 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       if (joinKeys.nonEmpty) {
         val (leftKeys, rightKeys) = joinKeys.unzip
         logDebug(s"leftKeys:$leftKeys | rightKeys:$rightKeys")
-        Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right, hint))
+        Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And),
+          predicatesOfJoinKeys.reduceOption(And), left, right, hint))
       } else {
         None
       }
