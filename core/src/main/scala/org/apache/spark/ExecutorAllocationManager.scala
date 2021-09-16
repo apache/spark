@@ -766,7 +766,13 @@ private[spark] class ExecutorAllocationManager(
 
         if (!numExecutorsTargetPerResourceProfileId.contains(profId)) {
           numExecutorsTargetPerResourceProfileId.put(profId, initialNumExecutors)
-          if (initialNumExecutors > 0) {
+          val adjustedinitialNumExecutors = if (reuseExecutors) {
+            val numCompatibleExecutors = numExecutorsTargetsCompatibleProfiles(profId)
+            math.max(0, initialNumExecutors - numCompatibleExecutors)
+          } else {
+            initialNumExecutors
+          }
+          if (adjustedinitialNumExecutors > 0) {
             logDebug(s"requesting executors, rpId: $profId, initial number is $initialNumExecutors")
             // we need to trigger a schedule since we add an initial number here.
             client.requestTotalExecutors(
