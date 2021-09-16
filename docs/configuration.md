@@ -2056,6 +2056,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.network.dnsHealthCheck.host</code></td>
+  <td>(not set)</td>
+  <td>
+    Host used to check if there are DNS issues being currently faced.
+    This can be used, for example, to handle shuffle fetch failures and to prevent nodes from getting
+    added to the exclude list
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
   <td><code>spark.rpc.askTimeout</code></td>
   <td><code>spark.network.timeout</code></td>
   <td>

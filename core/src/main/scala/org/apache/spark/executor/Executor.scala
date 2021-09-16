@@ -20,7 +20,7 @@ package org.apache.spark.executor
 import java.io.{File, NotSerializableException}
 import java.lang.Thread.UncaughtExceptionHandler
 import java.lang.management.ManagementFactory
-import java.net.{URI, URL}
+import java.net.{InetAddress, UnknownHostException, URI, URL}
 import java.nio.ByteBuffer
 import java.util.{Locale, Properties}
 import java.util.concurrent._
@@ -32,6 +32,7 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map, WrappedArray}
 import scala.concurrent.duration._
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -308,6 +309,27 @@ private[spark] class Executor(
   def killAllTasks(interruptThread: Boolean, reason: String) : Unit = {
     runningTasks.keys().asScala.foreach(t =>
       killTask(t, interruptThread = interruptThread, reason = reason))
+  }
+
+  /**
+   * Quick and best effort check to see if any other host is resolvable from DNS server,
+   * if configured, to ensure current host doesn't have any DNS issues.
+   *
+   * Note: One caveat is when networkaddress.cache.ttl set to -1, then in JAVA the DNS is cached
+   * forever. This can result in false positives.
+   *
+   * This is kept public for testing purposes
+   */
+  protected def isDNSResolvableIfConfigured(conf: SparkConf): Boolean = {
+    conf.getOption(Network.DNS_HEALTH_CHECK_HOST.key) match {
+      case Some(dnsLookupAddress) =>
+        Try(InetAddress.getByName(dnsLookupAddress)).recover {
+          case t =>
+            logError(s"Trying to reach $dnsLookupAddress to check for DNS issues " +
+              s"on the current host $executorHostname failed", t)
+        }.isSuccess
+      case None => true // assume DNS is healthy
+    }
   }
 
   def stop(): Unit = {
@@ -652,6 +674,32 @@ private[spark] class Executor(
           val reason = TaskKilled(t.reason, accUpdates, accums, metricPeaks.toSeq)
           plugins.foreach(_.onTaskFailed(reason))
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(reason))
+
+         /*
+         *
+         * Ref: SPARK-36784
+         *
+         * Don't update the status back with FetchFailedExecption if the underlying fetch failure is
+         * due to UnknownHostException and the configured DNS host is not resolvable
+         * then the current executor/node is experiencing DNS issues.
+         *
+         * This achieves 2 things:
+         *
+         * 1. Stage won't be resubmitted due to FetchFailedException
+         * 2. Spark also won't add the shuffle service node to the exclude list when the problem is
+         * indeed with the current executor host.
+         */
+        case CausedBy(uhe: UnknownHostException) if hasFetchFailure &&
+            !isDNSResolvableIfConfigured(conf) =>
+          val fetchFailedCls = classOf[FetchFailedException].getName
+          logInfo(s"TID $taskId failed, likely due to $executorHostname experiencing DNS issues. " +
+            s"Reporting this as a normal failure instead of $fetchFailedCls")
+          val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
+          val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
+          val reason = new ExceptionFailure(uhe, accUpdates).withAccums(accums)
+            .withMetricPeaks(metricPeaks.toSeq)
+          plugins.foreach(_.onTaskFailed(reason))
+          execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
         case _: InterruptedException | NonFatal(_) if
             task != null && task.reasonIfKilled.isDefined =>

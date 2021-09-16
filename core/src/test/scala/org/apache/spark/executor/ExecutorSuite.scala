@@ -19,7 +19,7 @@ package org.apache.spark.executor
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.lang.Thread.UncaughtExceptionHandler
-import java.net.URL
+import java.net.{UnknownHostException, URL}
 import java.nio.ByteBuffer
 import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, TimeUnit}
@@ -78,11 +78,17 @@ class ExecutorSuite extends SparkFunSuite
       uncaughtExceptionHandler: UncaughtExceptionHandler
         = new SparkUncaughtExceptionHandler,
       resources: immutable.Map[String, ResourceInformation]
-        = immutable.Map.empty[String, ResourceInformation])(f: Executor => Unit): Unit = {
+        = immutable.Map.empty[String, ResourceInformation],
+      unknownHost: Boolean = false)(f: Executor => Unit): Unit = {
     var executor: Executor = null
     try {
-      executor = new Executor(executorId, executorHostname, env, userClassPath, isLocal,
-        uncaughtExceptionHandler, resources)
+      if (unknownHost) {
+        executor = new UnknownHostExecutor(executorId, executorHostname, env, userClassPath,
+          isLocal, uncaughtExceptionHandler, resources)
+      } else {
+        executor = new Executor(executorId, executorHostname, env, userClassPath, isLocal,
+          uncaughtExceptionHandler, resources)
+      }
 
       f(executor)
     } finally {
@@ -211,6 +217,56 @@ class ExecutorSuite extends SparkFunSuite
     // as the fetch failure could easily be caused by interrupting the thread.
     val (failReason, _) = testFetchFailureHandling(false)
     assert(failReason.isInstanceOf[TaskKilled])
+  }
+
+  test("SPARK-36784: Don't mark UnknownHostException happened while shuffle fetch as " +
+      "FetchFailed as this would unnecessarily cause the shuffle service node to be" +
+      "included in exclude list, if DNS Host address is configured and is unreachable") {
+    val conf = new SparkConf().setMaster("local")
+      .setAppName("executor suite test")
+      .set(Network.DNS_HEALTH_CHECK_HOST, "0.0.0.0")
+    val reason = shuffleFetchFailureWithUnknownHostException(conf)
+
+    assert(!reason.isInstanceOf[FetchFailed])
+    assert(reason.isInstanceOf[ExceptionFailure])
+  }
+
+
+  test("SPARK-36784: Mark UnknownHostException happened while shuffle fetch as " +
+    "FetchFailed, if DNS Host address is not configured") {
+    val conf = new SparkConf().setMaster("local")
+      .setAppName("executor suite test")
+    val reason = shuffleFetchFailureWithUnknownHostException(conf)
+    assert(reason.isInstanceOf[FetchFailed])
+    assert(!reason.isInstanceOf[ExceptionFailure])
+  }
+
+  private def shuffleFetchFailureWithUnknownHostException(conf: SparkConf): TaskFailedReason = {
+    sc = new SparkContext(conf)
+    val serializer = SparkEnv.get.closureSerializer.newInstance()
+    val resultFunc = (_: TaskContext, itr: Iterator[Int]) => itr.size
+
+    val inputRDD = new FetchFailureThrowingRDD(sc)
+    val secondRDD = new FetchFailureHidingRDD(sc, inputRDD, throwOOM = false, interrupt = false,
+      unknownHost = true)
+
+    val taskBinary = sc.broadcast(serializer.serialize((secondRDD, resultFunc)).array())
+    val serializedTaskMetrics = serializer.serialize(TaskMetrics.registered).array()
+    val task = new ResultTask(
+      stageId = 1,
+      stageAttemptId = 0,
+      taskBinary = taskBinary,
+      partition = secondRDD.partitions(0),
+      locs = Seq(),
+      outputId = 0,
+      localProperties = new Properties(),
+      serializedTaskMetrics = serializedTaskMetrics
+    )
+
+    val serTask = serializer.serialize(task)
+    val taskDescription = createFakeTaskDescription(serTask)
+
+    runTaskGetFailReasonAndExceptionHandler(taskDescription, false, true, true)._1
   }
 
   /**
@@ -582,13 +638,15 @@ class ExecutorSuite extends SparkFunSuite
   private def runTaskGetFailReasonAndExceptionHandler(
       taskDescription: TaskDescription,
       killTask: Boolean,
-      poll: Boolean = false): (TaskFailedReason, UncaughtExceptionHandler) = {
+      poll: Boolean = false,
+      unknownHost: Boolean = false): (TaskFailedReason, UncaughtExceptionHandler) = {
     val mockBackend = mock[ExecutorBackend]
     val mockUncaughtExceptionHandler = mock[UncaughtExceptionHandler]
     val timedOut = new AtomicBoolean(false)
 
     withExecutor("id", "localhost", SparkEnv.get,
-        uncaughtExceptionHandler = mockUncaughtExceptionHandler) { executor =>
+      uncaughtExceptionHandler = mockUncaughtExceptionHandler,
+      resources = null, unknownHost = unknownHost) { executor =>
 
       // the task will be launched in a dedicated worker thread
       executor.launchTask(mockBackend, taskDescription)
@@ -672,7 +730,8 @@ class FetchFailureHidingRDD(
     sc: SparkContext,
     val input: FetchFailureThrowingRDD,
     throwOOM: Boolean,
-    interrupt: Boolean) extends RDD[Int](input) {
+    interrupt: Boolean,
+    unknownHost: Boolean = false) extends RDD[Int](input) {
   override def compute(split: Partition, context: TaskContext): Iterator[Int] = {
     val inItr = input.compute(split, context)
     try {
@@ -686,6 +745,8 @@ class FetchFailureHidingRDD(
           // scalastyle:off throwerror
           throw new OutOfMemoryError("OOM while handling another exception")
           // scalastyle:on throwerror
+        } else if (unknownHost) {
+          throw new UnknownHostException("Host not found")
         } else if (interrupt) {
           // make sure our test is setup correctly
           assert(TaskContext.get().asInstanceOf[TaskContextImpl].fetchFailed.isDefined)
@@ -706,6 +767,28 @@ class FetchFailureHidingRDD(
     Array(new SimplePartition)
   }
 }
+
+private[spark] class UnknownHostExecutor(
+     executorId: String,
+     executorHostname: String,
+     env: SparkEnv,
+     userClassPath: Seq[URL],
+     isLocal: Boolean,
+     uncaughtExceptionHandler: UncaughtExceptionHandler,
+     resources: immutable.Map[String, ResourceInformation])
+  extends Executor(
+      executorId = executorId,
+      executorHostname = executorHostname,
+      env = env,
+      userClassPath = userClassPath,
+      isLocal = isLocal,
+      uncaughtExceptionHandler = uncaughtExceptionHandler,
+      resources = resources) {
+
+    override def isDNSResolvableIfConfigured(conf: SparkConf): Boolean = {
+      !conf.contains(Network.DNS_HEALTH_CHECK_HOST)
+    }
+ }
 
 // Helps to test("SPARK-15963")
 private class ExecutorSuiteHelper {

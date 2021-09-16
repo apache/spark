@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import java.net.UnknownHostException
 import java.util.{Properties, Random}
 
 import scala.collection.mutable
@@ -1428,6 +1429,32 @@ class TaskSetManagerSuite
       FetchFailed(BlockManagerId(taskDescs(0).executorId, "host1", 12345), 0, 0L, 0, 0, "ignored"))
 
     assert(healthTracker.isNodeExcluded("host1"))
+  }
+
+  test("SPARK-36784: Don't count DNS issues towards exclude list fetch failure") {
+    // Setup a taskset, and fail some one task for fetch failure.
+    val conf = new SparkConf()
+      .set(config.EXCLUDE_ON_FAILURE_ENABLED, true)
+      .set(config.SHUFFLE_SERVICE_ENABLED, true)
+      .set(config.EXCLUDE_ON_FAILURE_FETCH_FAILURE_ENABLED, true)
+    sc = new SparkContext("local", "test", conf)
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    val taskSet = FakeTask.createTaskSet(2)
+    val excludeListTracker = new HealthTracker(sc, None)
+    val tsm = new TaskSetManager(sched, taskSet, 4, Some(excludeListTracker))
+
+    // make some offers to our taskset, to get tasks we will fail
+    val taskDescs = Seq(
+      "exec1" -> "host1"
+    ).flatMap { case (exec, host) =>
+      // offer each executor twice (simulating 2 cores per executor)
+      (0 until 2).flatMap{ _ => tsm.resourceOffer(exec, host, TaskLocality.ANY)._1}
+    }
+    assert(taskDescs.size === 2)
+    tsm.handleFailedTask(taskDescs(0).taskId, TaskState.FAILED,
+      new ExceptionFailure(new UnknownHostException(), Seq.empty))
+    assert(tsm.taskSetExcludelistHelperOpt.get.isExecutorExcludedForTask("exec1", 0))
+    assert(!tsm.taskSetExcludelistHelperOpt.get.isNodeExcludedForTask("host1", 0))
   }
 
   test("update healthTracker before adding pending task to avoid race condition") {

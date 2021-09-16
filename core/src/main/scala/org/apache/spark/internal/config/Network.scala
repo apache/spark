@@ -104,4 +104,9 @@ private[spark] object Network {
       .version("1.4.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("3s")
+
+  private[spark] val DNS_HEALTH_CHECK_HOST = ConfigBuilder("spark.network.dnsHealthCheck.host")
+    .version("3.3.0")
+    .stringConf
+    .createOptional
 }
