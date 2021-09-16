@@ -65,7 +65,7 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
     val groups = collectGroups(plan)
     def collectShuffleStageInfos(plan: SparkPlan): Seq[ShuffleStageInfo] = plan match {
       case ShuffleStageInfo(stage, specs) => Seq(new ShuffleStageInfo(stage, specs))
-      case _ => plan.children.flatMap(child => collectShuffleStageInfos(child))
+      case _ => plan.children.flatMap(collectShuffleStageInfos)
     }
     // If not all leaf nodes are query stages, it's not safe to reduce the number of
     // shuffle partitions, because we may break the assumption that all children of a spark plan
