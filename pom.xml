@@ -182,6 +182,9 @@
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.11.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
+    <datanucleus-api-jdo.version>4.2.4</datanucleus-api-jdo.version>
+    <datanucleus-rdbms.version>4.1.19</datanucleus-rdbms.version>
+    <datanucleus-javax.jdo-version>3.2.0-m3</datanucleus-javax.jdo-version>
     <guava.version>30.1.1-jre</guava.version>
     <janino.version>3.0.16</janino.version>
     <jersey.version>2.34</jersey.version>
@@ -198,6 +201,7 @@
     <commons-cli.version>1.2</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
     <tink.version>1.6.0</tink.version>
+    <jline.version>2.14.6</jline.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -941,7 +945,7 @@
       <dependency>
         <groupId>jline</groupId>
         <artifactId>jline</artifactId>
-        <version>2.14.6</version>
+        <version>${jline.version}</version>
       </dependency>
       <dependency>
         <groupId>org.scalatest</groupId>
@@ -1652,6 +1656,10 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1783,6 +1791,43 @@
             <artifactId>hive-storage-api</artifactId>
           </exclusion>
           <!-- End of Hive 2.3 exclusion -->
+          <!-- the followings are already imported explicitly by Spark -->
+          <exclusion>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>joda-time</groupId>
+            <artifactId>joda-time</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.dropwizard.metrics</groupId>
+            <artifactId>metrics-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.dropwizard.metrics</groupId>
+            <artifactId>metrics-jvm</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.dropwizard.metrics</groupId>
+            <artifactId>metrics-json</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>jline</groupId>
+            <artifactId>jline</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 
@@ -1933,6 +1978,23 @@
             <groupId>org.pentaho</groupId>
             <artifactId>pentaho-aggdesigner-algorithm</artifactId>
           </exclusion>
+          <!-- the followings are already imported explicitly by Spark -->
+          <exclusion>
+            <groupId>org.datanucleus</groupId>
+            <artifactId>datanucleus-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>oro</groupId>
+            <artifactId>oro</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.ivy</groupId>
+            <artifactId>ivy</artifactId>
+          </exclusion>
           <!-- End of Hive 2.3 exclusion -->
         </exclusions>
       </dependency>
@@ -2001,6 +2063,11 @@
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
           </exclusion>
+          <!-- the followings are already imported explicitly by Spark -->
+          <exclusion>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpclient</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 
@@ -2053,6 +2120,31 @@
             <artifactId>*</artifactId>
           </exclusion>
           <!-- End of Hive 2.3 exclusion -->
+          <!-- the followings are imported explicitly by Spark -->
+          <exclusion>
+            <groupId>org.apache.derby</groupId>
+            <artifactId>derby</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-pool</groupId>
+            <artifactId>commons-pool</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.datanucleus</groupId>
+            <artifactId>datanucleus-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.datanucleus</groupId>
+            <artifactId>datanucleus-api-jdo</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.datanucleus</groupId>
+            <artifactId>datanucleus-rdbms</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.datanucleus</groupId>
+            <artifactId>javax.jdo</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 
@@ -2236,6 +2328,10 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <!-- hive-llap-client is needed when run MapReduce test in Hive 2.3. -->
@@ -2376,6 +2472,21 @@
         <groupId>org.datanucleus</groupId>
         <artifactId>datanucleus-core</artifactId>
         <version>${datanucleus-core.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.datanucleus</groupId>
+        <artifactId>datanucleus-api-jdo</artifactId>
+        <version>${datanucleus-api-jdo.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.datanucleus</groupId>
+        <artifactId>datanucleus-rdbms</artifactId>
+        <version>${datanucleus-rdbms.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.datanucleus</groupId>
+        <artifactId>javax.jdo</artifactId>
+        <version>${datanucleus-javax.jdo-version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.thrift</groupId>
