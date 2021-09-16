@@ -77,6 +77,8 @@ final class ParquetColumn {
     }
 
     if (isPrimitive) {
+      // TODO: avoid allocating these if not necessary, for instance, the node is of top-level
+      //  and is not repeated, or the node is not top-level but its max repetition level is 0.
       repetitionLevels = allocateLevelsVector(capacity, memoryMode);
       definitionLevels = allocateLevelsVector(capacity, memoryMode);
     } else {
