@@ -34,6 +34,8 @@
     <sbt.project.name>hive-shaded</sbt.project.name>
   </properties>
 
+  <!-- dependencies in the following are optional because we don't want to leak them as
+    transitive dependencies, as they are already included in the shaded jar -->
   <dependencies>
     <dependency>
       <groupId>${hive.group}</groupId>
@@ -76,6 +78,7 @@
       <scope>${hive.llap.scope}</scope>
       <optional>true</optional>
     </dependency>
+    <!-- re-import guava here since it's declared as provided in parent pom -->
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>

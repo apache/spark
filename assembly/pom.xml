@@ -79,6 +79,10 @@
       Because we don't shade dependencies anymore, we need to restore Guava to compile scope so
       that the libraries Spark depend on have it available. We'll package the version that Spark
       uses which is not the same as Hadoop dependencies, but works.
+
+      TODO: consider removing this. It's only required by a few libraries such as
+        curator-client. See https://cwiki.apache.org/confluence/display/CURATOR/TN13) on why
+        curator imposes a hard dependency on Guava.
     -->
     <dependency>
       <groupId>com.google.guava</groupId>
