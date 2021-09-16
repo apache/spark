@@ -467,13 +467,13 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("no stats and selective predicate with the size of dim too large")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
+          SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         withTable("fact_aux") {
           sql(
             """
               |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
               |FROM fact_sk f WHERE store_id < 5
-          """.stripMargin)
+            """.stripMargin)
             .write
             .partitionBy("store_id")
             .saveAsTable("fact_aux")
@@ -483,7 +483,7 @@ abstract class DynamicPartitionPruningSuiteBase
               |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
               |FROM fact_aux f JOIN dim_store s
               |ON f.store_id = s.store_id WHERE s.country = 'US'
-          """.stripMargin)
+            """.stripMargin)
 
           checkPartitionPruningPredicate(df, false, false)
 
@@ -498,14 +498,14 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("no stats and selective predicate with the size of dim too large but cached")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
+          SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         withTable("fact_aux") {
           withTempView("cached_dim_store") {
             sql(
               """
                 |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
                 |FROM fact_sk f WHERE store_id < 5
-          """.stripMargin)
+              """.stripMargin)
               .write
               .partitionBy("store_id")
               .saveAsTable("fact_aux")
@@ -518,7 +518,7 @@ abstract class DynamicPartitionPruningSuiteBase
                 |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
                 |FROM fact_aux f JOIN cached_dim_store s
                 |ON f.store_id = s.store_id WHERE s.country = 'US'
-          """.stripMargin)
+              """.stripMargin)
 
             checkPartitionPruningPredicate(df, true, false)
 
