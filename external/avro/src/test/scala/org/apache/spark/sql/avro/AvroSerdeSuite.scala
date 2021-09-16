@@ -121,30 +121,41 @@ class AvroSerdeSuite extends SparkFunSuite {
     }
   }
 
-  test("Fail to convert for serialization with field count mismatch") {
-    // Note that this is allowed for deserialization, but not serialization
-    val tooManyFields =
-      createAvroSchemaWithTopLevelFields(_.optionalInt("foo").optionalLong("bar"))
-    assertFailedConversionMessage(tooManyFields, Serializer, BY_NAME,
+  test("Fail to convert with missing Catalyst fields") {
+    val nestedFooField = SchemaBuilder.record("foo").fields().optionalInt("bar").endRecord()
+    val avroExtraOptional = createAvroSchemaWithTopLevelFields(
+      _.name("foo").`type`(nestedFooField).noDefault().optionalLong("bar"))
+    val avroExtraRequired = createAvroSchemaWithTopLevelFields(
+      _.name("foo").`type`(nestedFooField).noDefault().requiredLong("bar"))
+
+    // serializing with extra _nullable_ Avro field is okay, but fails if extra field is required
+    withFieldMatchType(Serializer.create(CATALYST_STRUCT, avroExtraOptional, _))
+    assertFailedConversionMessage(avroExtraRequired, Serializer, BY_NAME,
       "Found field 'bar' in Avro schema but there is no match in the SQL schema")
-    assertFailedConversionMessage(tooManyFields, Serializer, BY_POSITION,
+    assertFailedConversionMessage(avroExtraRequired, Serializer, BY_POSITION,
       "Found field 'bar' at position 1 of top-level record from Avro schema but there is no " +
         "match in the SQL schema at top-level record (using positional matching)")
 
-    val tooManyFieldsNested =
+    // deserializing should work regardless of whether the extra field is required or not
+    withFieldMatchType(Deserializer.create(CATALYST_STRUCT, avroExtraOptional, _))
+    withFieldMatchType(Deserializer.create(CATALYST_STRUCT, avroExtraRequired, _))
+
+    val avroExtraNestedOptional =
       createNestedAvroSchemaWithFields("foo", _.optionalInt("bar").optionalInt("baz"))
-    assertFailedConversionMessage(tooManyFieldsNested, Serializer, BY_NAME,
+    val avroExtraNestedRequired =
+      createNestedAvroSchemaWithFields("foo", _.optionalInt("bar").requiredInt("baz"))
+
+    // serializing with extra _nullable_ Avro field is okay, but fails if extra field is required
+    withFieldMatchType(Serializer.create(CATALYST_STRUCT, avroExtraNestedOptional, _))
+    assertFailedConversionMessage(avroExtraNestedRequired, Serializer, BY_NAME,
       "Found field 'foo.baz' in Avro schema but there is no match in the SQL schema")
-    assertFailedConversionMessage(tooManyFieldsNested, Serializer, BY_POSITION,
+    assertFailedConversionMessage(avroExtraNestedRequired, Serializer, BY_POSITION,
       s"Found field 'baz' at position 1 of field 'foo' from Avro schema but there is no match " +
         s"in the SQL schema at field 'foo' (using positional matching)")
 
-    val tooFewFields = createAvroSchemaWithTopLevelFields(f => f)
-    assertFailedConversionMessage(tooFewFields, Serializer, BY_NAME,
-      "Cannot find field 'foo' in Avro schema")
-    assertFailedConversionMessage(tooFewFields, Serializer, BY_POSITION,
-      "Cannot find field at position 0 of top-level record from Avro schema " +
-        "(using positional matching)")
+    // deserializing should work regardless of whether the extra field is required or not
+    withFieldMatchType(Deserializer.create(CATALYST_STRUCT, avroExtraNestedOptional, _))
+    withFieldMatchType(Deserializer.create(CATALYST_STRUCT, avroExtraNestedRequired, _))
   }
 
   /**
