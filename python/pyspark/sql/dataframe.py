@@ -2536,6 +2536,28 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrame(self._jdf.withColumnRenamed(existing, new), self.sql_ctx)
 
+    def withMetadata(self, columnName, metadata):
+        """Returns a new :class:`DataFrame` by updating an existing column with metadata.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        columnName : str
+            string, name of the existing column to update the metadata.
+        metadata : dict
+            dict, new metadata to be assigned to df.schema[columnName].metadata
+
+        Examples
+        --------
+        >>> df_meta = df.withMetadata('age', {'foo': 'bar'})
+        >>> df_meta.schema['age'].metadata
+        {'foo': 'bar'}
+        """
+        if not isinstance(metadata, dict):
+            raise TypeError("metadata should be a dict")
+        return DataFrame(self._jdf.withMetadata(columnName, metadata), self.sql_ctx)
+
     def drop(self, *cols):
         """Returns a new :class:`DataFrame` that drops the specified column.
         This is a no-op if schema doesn't contain the given column name(s).
