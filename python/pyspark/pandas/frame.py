@@ -6647,9 +6647,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         labels : single label or list-like
             Column labels to drop.
         axis : {0 or 'index', 1 or 'columns'}, default 0
+
+            .. versionchanged:: 3.3
+               Set dropping by index by default.
         index : single label or list-like
             Alternative to specifying axis (``labels, axis=0``
             is quivalent to ``index=columns``).
+
+            .. versionchanged:: 3.3
+               Added dropping rows by 'index'.
         columns : single label or list-like
             Alternative to specifying axis (``labels, axis=1``
             is equivalent to ``columns=labels``).
