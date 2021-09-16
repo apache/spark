@@ -1660,17 +1660,9 @@ class iLocIndexer(LocIndexerLike):
         if len(new_rows_sel) == 0:
             cond = SF.lit(False)
         else:
-
-            if len(new_rows_sel) <= ps.get_option("compute.isin_limit"):
-                cond = sdf[self._sequence_col].isin(
-                    [SF.lit(int(key)).cast(LongType()) for key in new_rows_sel]
-                )
-            else:
-                cond_list = []
-                sequence_scol = sdf[self._sequence_col]
-                for key in new_rows_sel:
-                    cond_list.append(sequence_scol == SF.lit(int(key)).cast(LongType()))
-                cond = reduce(lambda x, y: x | y, cond_list)
+            cond = sdf[self._sequence_col].isin(
+                [SF.lit(int(key)).cast(LongType()) for key in new_rows_sel]
+            )
         return cond, None, None
 
     def _select_rows_else(
