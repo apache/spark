@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.deploy
 
 import java.io.File
 import java.sql.Timestamp
@@ -27,8 +27,8 @@ import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.Utils
 
 trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {

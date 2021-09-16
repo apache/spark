@@ -28,6 +28,7 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, TestUtils}
+import org.apache.spark.deploy.SparkSubmitTestUtils
 import org.apache.spark.internal.config.MASTER_REST_SERVER_ENABLED
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
