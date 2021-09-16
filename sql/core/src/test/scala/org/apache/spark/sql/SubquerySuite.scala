@@ -1929,12 +1929,12 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }
 
         if (reuse) {
-          assert(countSubqueryExec == 1, "Missing or unexpected MultiScalarSubquery in the plan")
+          assert(countSubqueryExec == 1, "Missing or unexpected SubqueryExec in the plan")
           assert(countReuseSubqueryExec == 2,
-            "Missing or unexpected reused MultiScalarSubquery in the plan")
+            "Missing or unexpected reused ReusedSubqueryExec in the plan")
         } else {
-          assert(countSubqueryExec == 3, "Missing or unexpected ScalarSubquery in the plan")
-          assert(countReuseSubqueryExec == 0, "Unexpected reused ScalarSubquery in the plan")
+          assert(countSubqueryExec == 3, "Missing or unexpected SubqueryExec in the plan")
+          assert(countReuseSubqueryExec == 0, "Unexpected reused ReusedSubqueryExec in the plan")
         }
       }
     }
