@@ -257,6 +257,9 @@ public class YarnShuffleService extends AuxiliaryService {
       MetricsSystemImpl metricsSystem = (MetricsSystemImpl) DefaultMetricsSystem.instance();
       metricsSystem.register(
           metricsNamespace, "Metrics on the Spark Shuffle Service", serviceMetrics);
+      metricsSystem.register(
+          "ShuffleMergeManager", "Metrics in Spark Shuffle Merge Manager",
+          new YarnShuffleServiceMetrics(shuffleMergeManager.getMetrics()));
       logger.info("Registered metrics with Hadoop's DefaultMetricsSystem using namespace '{}'",
           metricsNamespace);
 
