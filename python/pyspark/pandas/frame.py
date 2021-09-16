@@ -8193,6 +8193,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         min_periods = 1 if min_periods is None else min_periods
 
+        # Only compute covariance for Boolean and Numeric except Decimal
         psdf = self[
             [
                 col
@@ -8210,6 +8211,21 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         cov_scols = []
         count_not_null_scols = []
 
+        # Count number of null row between two columns
+        # Example:
+        #    a   b   c
+        # 0  1   1   1
+        # 1  NaN 2   2
+        # 2  3   NaN 3
+        # 3  4   4   4
+        #
+        #    a           b             c
+        # a  count(a, a) count(a, b) count(a, c)
+        # b              count(b, b) count(b, c)
+        # c                          count(c, c)
+        #
+        # count_not_null_scols =
+        # [F.count(a, a), F.count(a, b), F.count(a, c), F.count(b, b), F.count(b, c), F.count(c, c)]
         for r in range(0, num_cols):
             for c in range(r, num_cols):
                 count_not_null_scols.append(
@@ -8224,6 +8240,21 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             .head(1)[0]
         )
 
+        # Calculate covariance between two columns
+        # Example:
+        # with min_periods = 3
+        #    a   b   c
+        # 0  1   1   1
+        # 1  NaN 2   2
+        # 2  3   NaN 3
+        # 3  4   4   4
+        #
+        #    a         b         c
+        # a  cov(a, a) None      cov(a, c)
+        # b            cov(b, b) cov(b, c)
+        # c                      cov(c, c)
+        #
+        # cov_scols = [F.cov(a, a), None, F.cov(a, c), F.cov(b, b), F.cov(b, c), F.cov(c, c)]
         step = 0
         for r in range(0, num_cols):
             step += r
@@ -8238,6 +8269,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         pair_cov = psdf._internal.spark_frame.select(*cov_scols).head(1)[0]
 
+        # Convert from row to 2D array
+        # Example:
+        # pair_cov = [cov(a, a), None, cov(a, c), cov(b, b), cov(b, c), cov(c, c)]
+        #
+        # cov =
+        #
+        #    a         b         c
+        # a  cov(a, a) None      cov(a, c)
+        # b            cov(b, b) cov(b, c)
+        # c                      cov(c, c)
         cov = np.zeros([num_cols, num_cols])
         step = 0
         for r in range(0, num_cols):
@@ -8245,6 +8286,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             for c in range(r, num_cols):
                 cov[r][c] = pair_cov[r * num_cols + c - step]
 
+        # Copy values
+        # Example:
+        # cov =
+        #    a         b         c
+        # a  cov(a, a) None      cov(a, c)
+        # b  None      cov(b, b) cov(b, c)
+        # c  cov(a, c) cov(b, c) cov(c, c)
         cov = cov + cov.T - np.diag(np.diag(cov))
         return DataFrame(cov, columns=psdf.columns, index=psdf.columns)
 
