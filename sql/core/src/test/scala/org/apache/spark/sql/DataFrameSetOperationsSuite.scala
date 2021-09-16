@@ -1018,6 +1018,23 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     unionDF = df1.unionByName(df2)
     checkAnswer(unionDF, expected)
   }
+
+  test("SPARK-36673: Incorrect Unions of struct") {
+    val df1 = spark.range(2).withColumn("nested", struct(expr("id * 5 AS INNER")))
+    val df2 = spark.range(2).withColumn("nested", struct(expr("id * 5 AS inner")))
+
+    val df = df1.union(df2)
+
+    val schema = StructType(Seq(StructField("id", LongType, false),
+      StructField("nested", StructType(Seq(StructField("INNER", LongType, false))), false)))
+
+    assert(df.schema == schema)
+    assert(df.queryExecution.optimizedPlan.schema == schema)
+    assert(df.queryExecution.executedPlan.schema == schema)
+
+    checkAnswer(df, Row(0, Row(0)) :: Row(1, Row(5)) :: Row(0, Row(0)) :: Row(1, Row(5)) :: Nil)
+    checkAnswer(df.select("nested.*"), Row(0) :: Row(5) :: Row(0) :: Row(5) :: Nil)
+  }
 }
 
 case class UnionClass1a(a: Int, b: Long, nested: UnionClass2)

@@ -559,6 +559,42 @@ object StructType extends AbstractDataType {
       case _ => dt
     }
 
+  /**
+   * This works a little similarly to `merge`, but it does not actually merge two DataTypes.
+   * This method just merges nullability.
+   */
+  private[sql] def mergeNullability(left: DataType, right: DataType): DataType =
+    (left, right) match {
+      case (ArrayType(leftElementType, leftContainsNull),
+          ArrayType(rightElementType, rightContainsNull)) =>
+        ArrayType(
+          merge(leftElementType, rightElementType),
+          leftContainsNull || rightContainsNull)
+
+      case (MapType(leftKeyType, leftValueType, leftContainsNull),
+          MapType(rightKeyType, rightValueType, rightContainsNull)) =>
+        MapType(
+          merge(leftKeyType, rightKeyType),
+          merge(leftValueType, rightValueType),
+          leftContainsNull || rightContainsNull)
+
+      case (StructType(leftFields), StructType(rightFields)) =>
+        require(leftFields.size == rightFields.size, "To merge nullability," +
+          "two structs must have same number of fields.")
+
+        val newFields = leftFields.zip(rightFields).map {
+          case (leftField@StructField(_, leftType, leftNullable, _),
+              _@StructField(_, rightType, rightNullable, _)) =>
+            leftField.copy(
+              dataType = mergeNullability(leftType, rightType),
+              nullable = leftNullable || rightNullable)
+        }.toSeq
+        StructType(newFields)
+
+      case (leftType, _) =>
+        leftType
+    }
+
   private[sql] def merge(left: DataType, right: DataType): DataType =
     (left, right) match {
       case (ArrayType(leftElementType, leftContainsNull),
