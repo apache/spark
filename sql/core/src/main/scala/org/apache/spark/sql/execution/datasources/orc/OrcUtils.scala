@@ -110,7 +110,7 @@ object OrcUtils extends Logging {
     }
 
     def toArrayType(orcType: TypeDescription): ArrayType = {
-      val elementType = orcType.getChildren.asScala.head
+      val elementType = orcType.getChildren.get(0)
       ArrayType(toCatalystType(elementType))
     }
 
