@@ -23,6 +23,7 @@ from functools import reduce
 from html import escape as html_escape
 
 from pyspark import copy_func, since, _NoValue
+from pyspark.context import SparkContext
 from pyspark.rdd import RDD, _load_from_socket, _local_iterator_from_socket
 from pyspark.serializers import BatchedSerializer, PickleSerializer, \
     UTF8Deserializer
