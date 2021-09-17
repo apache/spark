@@ -113,35 +113,27 @@ class FunctionsTests(ReusedSQLTestCase):
         from pyspark.sql import functions
         import math
 
-        def get_values(l):
-            return [j[0] for j in l]
-
-        def assert_close(a, b):
-            c = get_values(b)
-            diff = [abs(v - c[k]) < 1e-6 for k, v in enumerate(a)]
-            return sum(diff) == len(a)
-
-        assert_close([math.cos(i) for i in range(10)],
+        self.assert_close([math.cos(i) for i in range(10)],
                      df.select(functions.cos(df.a)).collect())
-        assert_close([math.cos(i) for i in range(10)],
+        self.assert_close([math.cos(i) for i in range(10)],
                      df.select(functions.cos("a")).collect())
-        assert_close([math.sin(i) for i in range(10)],
+        self.assert_close([math.sin(i) for i in range(10)],
                      df.select(functions.sin(df.a)).collect())
-        assert_close([math.sin(i) for i in range(10)],
+        self.assert_close([math.sin(i) for i in range(10)],
                      df.select(functions.sin(df['a'])).collect())
-        assert_close([math.pow(i, 2 * i) for i in range(10)],
+        self.assert_close([math.pow(i, 2 * i) for i in range(10)],
                      df.select(functions.pow(df.a, df.b)).collect())
-        assert_close([math.pow(i, 2) for i in range(10)],
+        self.assert_close([math.pow(i, 2) for i in range(10)],
                      df.select(functions.pow(df.a, 2)).collect())
-        assert_close([math.pow(i, 2) for i in range(10)],
+        self.assert_close([math.pow(i, 2) for i in range(10)],
                      df.select(functions.pow(df.a, 2.0)).collect())
-        assert_close([math.hypot(i, 2 * i) for i in range(10)],
+        self.assert_close([math.hypot(i, 2 * i) for i in range(10)],
                      df.select(functions.hypot(df.a, df.b)).collect())
-        assert_close([math.hypot(i, 2 * i) for i in range(10)],
+        self.assert_close([math.hypot(i, 2 * i) for i in range(10)],
                      df.select(functions.hypot("a", u"b")).collect())
-        assert_close([math.hypot(i, 2) for i in range(10)],
+        self.assert_close([math.hypot(i, 2) for i in range(10)],
                      df.select(functions.hypot("a", 2)).collect())
-        assert_close([math.hypot(i, 2) for i in range(10)],
+        self.assert_close([math.hypot(i, 2) for i in range(10)],
                      df.select(functions.hypot(df.a, 2)).collect())
 
     def test_inverse_trig_functions(self):
@@ -160,29 +152,20 @@ class FunctionsTests(ReusedSQLTestCase):
                 self.assertIn(f"{alias}(a)", repr(f(c)))
 
     def test_reciprocal_trig_functions(self):
-        # SPARK-36683: Add new built-in SQL functions: SEC and CSC
-        list = [0.0, math.pi/6, math.pi/4, math.pi/3, math.pi/2,
+        # SPARK-36683: Tests for reciprocal trig functions (SEC, CSC and COT)
+        l = [0.0, math.pi / 6, math.pi / 4, math.pi / 3, math.pi / 2,
                 math.pi, 3 * math.pi / 2, 2 * math.pi]
 
-        df = self.spark.createDataFrame(list, types.DoubleType())
+        df = self.spark.createDataFrame(l, types.DoubleType())
 
         def to_reciprocal_trig(func):
-            return [1.0 / func(i) if func(i) != 0 else math.inf for i in list]
+            return [1.0 / func(i) if func(i) != 0 else math.inf for i in l]
 
-        def get_values(l):
-            return [j[0] for j in l]
-
-        def assert_close(a, b):
-            c = get_values(b)
-            diff = [abs(v - c[k]) < 1e-6 if v != math.inf else v == c[k]
-                    for k, v in enumerate(a)]
-            return sum(diff) == len(a)
-
-        assert_close(to_reciprocal_trig(math.cos),
+        self.assert_close(to_reciprocal_trig(math.cos),
                      df.select(sec(df.value)).collect())
-        assert_close(to_reciprocal_trig(math.sin),
+        self.assert_close(to_reciprocal_trig(math.sin),
                      df.select(csc(df.value)).collect())
-        assert_close(to_reciprocal_trig(math.tan),
+        self.assert_close(to_reciprocal_trig(math.tan),
                      df.select(cot(df.value)).collect())
 
     def test_rand_functions(self):
