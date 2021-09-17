@@ -554,6 +554,11 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   @transient private[this] lazy val hasNull: Boolean = hset.contains(null)
+  private[this] val isNaN: Any => Boolean = child.dataType match {
+    case DoubleType => (value: Any) => java.lang.Double.isNaN(value.asInstanceOf[java.lang.Double])
+    case FloatType => (value: Any) => java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float])
+    case _ => (_: Any) => false
+  }
 
   override def nullable: Boolean = child.nullable || hasNull
 
@@ -562,6 +567,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   protected override def nullSafeEval(value: Any): Any = {
     if (set.contains(value)) {
       true
+    } else if (isNaN(value)) {
+      set.exists(isNaN(_))
     } else if (hasNull) {
       null
     } else {
@@ -593,15 +600,40 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   private def genCodeWithSet(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
       val setTerm = ctx.addReferenceObj("set", set)
+      val i = ctx.freshName("i")
+      val elem = ctx.freshName("elem")
+      val jt = CodeGenerator.javaType(child.dataType)
+
       val setIsNull = if (hasNull) {
         s"${ev.isNull} = !${ev.value};"
       } else {
         ""
       }
-      s"""
-         |${ev.value} = $setTerm.contains($c);
-         |$setIsNull
-       """.stripMargin
+      val ret = child.dataType match {
+        case DoubleType => Some((v: String) => s"java.lang.Double.isNaN((double)$v)")
+        case FloatType => Some((v: String) => s"java.lang.Float.isNaN((float)$v)")
+        case _ => None
+      }
+      ret.map { isNaN =>
+        s"""
+          |if ($setTerm.contains($c)) {
+          |  ${ev.value} = true;
+          |} else if (${isNaN(c)}) {
+          |  for (int $i = 0; $i < $setTerm.size(); $i++) {
+          |    $jt $elem = $setTerm.elems()[$i];
+          |    if (${isNaN(s"$elem")}) {
+          |      ${ev.value} = true;
+          |      break;
+          |     }
+          |  }
+          |}
+          |$setIsNull
+          |""".stripMargin
+      }.getOrElse(
+        s"""
+           |${ev.value} = $setTerm.contains($c);
+           |$setIsNull
+         """.stripMargin)
     })
   }
 
