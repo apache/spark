@@ -3846,16 +3846,16 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
           val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
           val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
             (value: Any) => hs.add(value),
-            (value: Any) => {} )
+            (valueNaN: Any) => {} )
           val withArray1NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hsResult,
             (value: Any) =>
               if (hs.contains(value) && !hsResult.contains(value)) {
                 arrayBuffer += value
                 hsResult.add(value)
               },
-            (value: Any) =>
+            (valueNaN: Any) =>
               if (hs.containsNaN()) {
-                arrayBuffer += value
+                arrayBuffer += valueNaN
               })
           var i = 0
           while (i < array2.numElements()) {
@@ -3960,14 +3960,6 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
 
-        val isNaNMethodAndValue = elementType match {
-          case DoubleType =>
-            Some((s"java.lang.Double.isNaN((double)$value)", "java.lang.Double.NaN"))
-          case FloatType =>
-            Some((s"java.lang.Float.isNaN((float)$value)", "java.lang.Float.NaN"))
-          case _ => None
-        }
-
         def withArray2NullCheck(body: String): String =
           if (right.dataType.asInstanceOf[ArrayType].containsNull) {
             if (left.dataType.asInstanceOf[ArrayType].containsNull) {
@@ -3993,7 +3985,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
         val writeArray2ToHashSet = withArray2NullCheck(
         s"$jt $value = ${genGetValue(array2, i)};" +
           SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet,
-            s"$hashSet.add$hsPostFix($hsValueCast$value);", (value: String) => ""))
+            s"$hashSet.add$hsPostFix($hsValueCast$value);", (valueNaN: String) => ""))
 
         def withArray1NullAssignment(body: String) =
           if (left.dataType.asInstanceOf[ArrayType].containsNull) {
@@ -4036,11 +4028,11 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
         val processArray1 = withArray1NullAssignment(
           s"$jt $value = ${genGetValue(array1, i)};" +
             SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSetResult, body,
-              (value: Any) =>
+              (valueNaN: Any) =>
                 s"""
                    |if ($hashSet.containsNaN()) {
                    |  ++$size;
-                   |  $builder.$$plus$$eq($value);
+                   |  $builder.$$plus$$eq($valueNaN);
                    |}
                  """.stripMargin))
 
