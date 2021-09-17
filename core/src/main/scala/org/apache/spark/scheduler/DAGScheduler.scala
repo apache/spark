@@ -1032,7 +1032,7 @@ private[spark] class DAGScheduler(
    * Receives notification about shuffle push for a given shuffle from one map
    * task has completed
    */
-  def shufflePushCompleted(shuffleId: Int, mapIndex: Int) {
+  def shufflePushCompleted(shuffleId: Int, mapIndex: Int): Unit = {
     eventProcessLoop.post(ShufflePushCompleted(shuffleId, mapIndex))
   }
 
