@@ -1325,6 +1325,17 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       }
     }
   }
+
+  test("SPARK-36772: Store application attemptId in BlockStoreClient for push based shuffle") {
+    // Regression test for SPARK-4180
+    val conf = new SparkConf().setAppName("testAppAttemptId")
+      .setMaster(
+        "coarseclustermanager[org.apache.spark.scheduler.TestCoarseGrainedSchedulerBackend]")
+    sc = new SparkContext(conf)
+    val env = SparkEnv.get
+    assert(env.blockManager.blockStoreClient.getAppAttemptId === 1)
+  }
+
 }
 
 object SparkContextSuite {

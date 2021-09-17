@@ -298,7 +298,7 @@ private class CSMockExternalClusterManager extends ExternalClusterManager {
     ts = mock[TaskSchedulerImpl]
     when(ts.sc).thenReturn(sc)
     when(ts.applicationId()).thenReturn("appid1")
-    when(ts.applicationAttemptId()).thenReturn(Some("attempt1"))
+    when(ts.applicationAttemptId()).thenReturn(Some("1"))
     when(ts.schedulingMode).thenReturn(SchedulingMode.FIFO)
     when(ts.excludedNodes()).thenReturn(Set.empty[String])
     ts
