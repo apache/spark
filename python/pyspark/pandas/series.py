@@ -4604,10 +4604,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def _combine_frame_with_fill_value(self, other: "Series", fill_value: Any) -> DataFrame:
         this = self.to_frame()
-        this_col = this.columns[0]
+        this_col = this._internal.column_labels[0]
 
         that = other.to_frame()
-        that_col = that.columns[0]
+        that_col = that._internal.column_labels[0]
 
         tmp_col = "__tmp_check_missing_index__"
         verify_temp_column_name(this, tmp_col)
@@ -4616,10 +4616,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         combined = combine_frames(this, that)
 
-        combined.loc[combined[("this", tmp_col)].isnull(), ("this", this_col)] = fill_value
-        combined.loc[combined[("that", tmp_col)].isnull(), ("that", that_col)] = fill_value
+        combined.loc[combined[("this", tmp_col)].isnull(), ("this",) + this_col] = fill_value
+        combined.loc[combined[("that", tmp_col)].isnull(), ("that",) + that_col] = fill_value
 
-        return combined[[("this", this_col), ("that", that_col)]]
+        return combined[[("this",) + this_col, ("that",) + that_col]]
 
     def update(self, other: "Series") -> None:
         """

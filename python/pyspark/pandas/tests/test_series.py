@@ -3005,6 +3005,14 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf["s1"].combine(100, max, fill_value=100),
         )
 
+        pdf = pd.DataFrame({("x", "s1"): [1, 2, 3], ("y", "s2"): [4, 5, 6]})
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            pdf[("x", "s1")].combine(pdf[("y", "s2")], max),
+            psdf[("x", "s1")].combine(psdf[("y", "s2")], max),
+        )
+
         pdf = pd.DataFrame({"s1": ["a a", "b", ""], "s2": [345.0, np.nan, 30.0]})
         psdf = ps.from_pandas(pdf)
 
