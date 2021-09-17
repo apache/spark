@@ -403,7 +403,11 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pser = pd.Series([None, 5, None, 3, 2, 1, None, 0, 0], name="a")
         psser = ps.from_pandas(pser)
 
-        self.assert_eq(psser.isin([1, 5, 0, None]), pser.isin([1, 5, 0, None]))
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+            self.assert_eq(psser.isin([1, 5, 0, None]), pser.isin([1, 5, 0, None]))
+        else:
+            expected = pd.Series([True, True, True, False, False, True, True, True, True], name="a")
+            self.assert_eq(psser.isin([1, 5, 0, None]), expected)
 
     def test_drop_duplicates(self):
         pdf = pd.DataFrame({"animal": ["lama", "cow", "lama", "beetle", "lama", "hippo"]})
