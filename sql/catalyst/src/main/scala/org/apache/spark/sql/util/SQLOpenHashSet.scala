@@ -60,21 +60,55 @@ class SQLOpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
 }
 
 object SQLOpenHashSet {
-  def isNaN(dataType: DataType): Any => Boolean = {
-    dataType match {
+  def withNaNCheckFunc(
+      dataType: DataType,
+      hashSet: SQLOpenHashSet[Any],
+      handleNotNaN: Any => Unit,
+      handleNaN: Any => Unit): Any => Unit = {
+    val (isNaN, valueNaN) = dataType match {
       case DoubleType =>
-        (value: Any) => java.lang.Double.isNaN(value.asInstanceOf[java.lang.Double])
+        ((value: Any) => java.lang.Double.isNaN(value.asInstanceOf[java.lang.Double]),
+          java.lang.Double.NaN)
       case FloatType =>
-        (value: Any) => java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float])
-      case _ => (_: Any) => false
+        ((value: Any) => java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float]),
+          java.lang.Float.NaN)
+      case _ => ((_: Any) => false, null)
     }
+    (value: Any) =>
+      if (isNaN(value)) {
+        if (!hashSet.containsNaN) {
+          hashSet.addNaN
+          handleNaN(valueNaN)
+        }
+      } else {
+        handleNotNaN(value)
+      }
   }
 
-  def valueNaN(dataType: DataType): Any = {
-    dataType match {
-      case DoubleType => java.lang.Double.NaN
-      case FloatType => java.lang.Float.NaN
-      case _ => null
+  def withNaNCheckCode(
+      dataType: DataType,
+      valueName: String,
+      hashSet: String,
+      handleNotNaN: String,
+      handleNaN: String => String): String = {
+    val ret = dataType match {
+      case DoubleType =>
+        Some((s"java.lang.Double.isNaN((double)$valueName)", "java.lang.Double.NaN"))
+      case FloatType =>
+        Some((s"java.lang.Float.isNaN((float)$valueName)", "java.lang.Float.NaN"))
+      case _ => None
     }
+    ret.map { case (isNaN, valueNaN) =>
+      s"""
+         |if ($isNaN) {
+         |  if (!$hashSet.containsNaN()) {
+         |     $hashSet.addNaN();
+         |     ${handleNaN(valueNaN)}
+         |  }
+         |} else {
+         |  $handleNotNaN
+         |}
+       """.stripMargin
+    }.getOrElse(handleNotNaN)
   }
 }
