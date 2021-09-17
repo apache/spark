@@ -3530,10 +3530,10 @@ case class ArrayDistinct(child: Expression)
         val processArray = withArrayNullAssignment(
           s"$jt $value = ${genGetValue(array, i)};" +
             SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
-              (valueNaN: String) =>
+              (value: String) =>
                 s"""
                    |$size++;
-                   |$builder.$$plus$$eq($valueNaN);
+                   |$builder.$$plus$$eq($value);
                    |""".stripMargin))
 
         s"""
@@ -3728,10 +3728,10 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
         val processArray = withArrayNullAssignment(
           s"$jt $value = ${genGetValue(array, i)};" +
             SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
-              (valueNaN: String) =>
+              (value: String) =>
                 s"""
                    |$size++;
-                   |$builder.$$plus$$eq($valueNaN);
+                   |$builder.$$plus$$eq($value);
                  """.stripMargin))
 
         // Only need to track null element index when result array's element is nullable.
