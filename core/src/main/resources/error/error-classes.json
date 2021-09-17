@@ -5,31 +5,28 @@
   },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [ "Cannot cast %s to %s." ],
-    "sqlState" : "22018"
+    "sqlState" : "22005"
   },
   "CANNOT_CHANGE_DECIMAL_PRECISION" : {
     "message" : [ "%s cannot be represented as Decimal(%s, %s)." ],
-    "sqlState" : "22023"
+    "sqlState" : "22005"
   },
   "CANNOT_EVALUATE_EXPRESSION" : {
-    "message" : [ "Cannot evaluate expression: %s: %s" ],
-    "sqlState" : "42000"
+    "message" : [ "Cannot evaluate expression: %s" ]
   },
   "CANNOT_GENERATE_CODE_FOR_EXPRESSION" : {
-    "message" : [ "Cannot generate code for expression: %s" ],
-    "sqlState" : "42000"
+    "message" : [ "Cannot generate code for expression: %s" ]
   },
   "CANNOT_PARSE_DECIMAL" : {
-    "message" : [ "Cannot parse any decimal" ],
+    "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"
   },
   "CANNOT_TERMINATE_GENERATOR" : {
-    "message" : [ "Cannot terminate expression: %s" ],
-    "sqlState" : "42000"
+    "message" : [ "Cannot terminate expression: %s" ]
   },
-  "CAST_CAUSE_OVERFLOW" : {
+  "CAST_CAUSES_OVERFLOW" : {
     "message" : [ "Casting %s to %s causes overflow" ],
-    "sqlState" : "22018"
+    "sqlState" : "22005"
   },
   "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
@@ -88,17 +85,17 @@
     "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]." ],
     "sqlState" : "22023"
   },
-  "INVALID_INPUT_SYNTAX_FOR_NUMERIC" : {
+  "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE" : {
     "message" : [ "invalid input syntax for type numeric: %s" ],
     "sqlState" : "42000"
   },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
   },
-  "LOGICAL_HINT_OPERATOR_NOT_REMOVE_DURING_ANALYSIS" : {
+  "LOGICAL_HINT_OPERATOR_NOT_REMOVED_DURING_ANALYSIS" : {
     "message" : [ "Internal error: logical hint operator should have been removed during analysis" ]
   },
-  "MAP_KEY_NOT_EXIST" : {
+  "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist." ]
   },
   "MISSING_COLUMN" : {
@@ -149,14 +146,14 @@
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATATYPE" : {
-    "message" : [ "Unsupported data type %s %s" ],
+    "message" : [ "Unsupported data type %s" ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_LITERAL_TYPE" : {
     "message" : [ "Unsupported literal type %s %s" ],
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_SIMPLE_STRING_WITH_NODEID" : {
+  "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID" : {
     "message" : [ "%s does not implement simpleStringWithNodeId" ]
   },
   "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER" : {

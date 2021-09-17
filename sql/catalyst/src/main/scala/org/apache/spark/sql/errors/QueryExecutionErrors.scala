@@ -72,7 +72,7 @@ object QueryExecutionErrors {
   }
 
   def logicalHintOperatorNotRemovedDuringAnalysisError(): Throwable = {
-    new SparkIllegalStateException(errorClass = "LOGICAL_HINT_OPERATOR_NOT_REMOVE_DURING_ANALYSIS",
+    new SparkIllegalStateException(errorClass = "LOGICAL_HINT_OPERATOR_NOT_REMOVED_DURING_ANALYSIS",
       messageParameters = Array.empty)
   }
 
@@ -92,7 +92,7 @@ object QueryExecutionErrors {
   }
 
   def castingCauseOverflowError(t: Any, targetType: String): ArithmeticException = {
-    new SparkArithmeticException (errorClass = "CAST_CAUSE_OVERFLOW",
+    new SparkArithmeticException (errorClass = "CAST_CAUSES_OVERFLOW",
       messageParameters = Array(t.toString, targetType))
   }
 
@@ -104,7 +104,7 @@ object QueryExecutionErrors {
   }
 
   def invalidInputSyntaxForNumericError(s: UTF8String): NumberFormatException = {
-    new SparkNumberFormatException(errorClass = "INVALID_INPUT_SYNTAX_FOR_NUMERIC",
+    new SparkNumberFormatException(errorClass = "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE",
       messageParameters = Array(s.toString))
   }
 
@@ -124,24 +124,24 @@ object QueryExecutionErrors {
   }
 
   def simpleStringWithNodeIdUnsupportedError(nodeName: String): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_SIMPLE_STRING_WITH_NODEID",
+    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID",
       messageParameters = Array(nodeName))
   }
 
   def evaluateUnevaluableAggregateUnsupportedError(
       methodName: String, unEvaluable: UnevaluableAggregate): Throwable = {
     new SparkUnsupportedOperationException(errorClass = "CANNOT_EVALUATE_EXPRESSION",
-      messageParameters = Array(methodName, unEvaluable.toString))
+      messageParameters = Array(methodName + ": " + unEvaluable.toString))
   }
 
   def dataTypeUnsupportedError(dt: DataType): Throwable = {
     new SparkException(errorClass = "UNSUPPORTED_DATATYPE",
-      messageParameters = Array(dt.typeName, ""), null)
+      messageParameters = Array(dt.typeName), null)
   }
 
   def dataTypeUnsupportedError(dataType: String, failure: String): Throwable = {
     new SparkIllegalArgumentException(errorClass = "UNSUPPORTED_DATATYPE",
-      messageParameters = Array(dataType, failure))
+      messageParameters = Array(dataType + failure))
   }
 
   def failedExecuteUserDefinedFunctionError(funcCls: String, inputTypes: String,
@@ -160,7 +160,7 @@ object QueryExecutionErrors {
   }
 
   def mapKeyNotExistError(key: Any): NoSuchElementException = {
-    new SparkNoSuchElementException(errorClass = "MAP_KEY_NOT_EXIST",
+    new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
       messageParameters = Array(key.toString))
   }
 
