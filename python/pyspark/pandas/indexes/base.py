@@ -2604,6 +2604,9 @@ class Index(IndexOpsMixin):
     def __xor__(self, other: "Index") -> "Index":
         return self.symmetric_difference(other)
 
+    def __rxor__(self, other: Any) -> "Index":
+        return NotImplemented
+
     def __bool__(self) -> bool:
         raise ValueError(
             "The truth value of a {0} is ambiguous. "

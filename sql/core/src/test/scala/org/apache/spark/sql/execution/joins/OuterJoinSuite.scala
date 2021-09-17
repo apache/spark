@@ -107,7 +107,7 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
     }
 
     testWithWholeStageCodegenOnAndOff(s"$testName using ShuffledHashJoin") { _ =>
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           val buildSide = if (joinType == LeftOuter) BuildRight else BuildLeft
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
@@ -127,7 +127,7 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
           case RightOuter => BuildLeft
           case _ => fail(s"Unsupported join type $joinType")
         }
-        extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+        extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
           withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
             checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
               BroadcastHashJoinExec(
@@ -140,7 +140,7 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
     }
 
     testWithWholeStageCodegenOnAndOff(s"$testName using SortMergeJoin") { _ =>
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements.apply(

@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeFiltering
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 
@@ -164,8 +165,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     }
 
     val estimatePruningSideSize = filterRatio * partPlan.stats.sizeInBytes.toFloat
-    // the pruning overhead is the total size in bytes of all scan relations
-    val overhead = otherPlan.collectLeaves().map(_.stats.sizeInBytes).sum.toFloat
+    val overhead = calculatePlanOverhead(otherPlan)
     if (canBuildBroadcast) {
       estimatePruningSideSize > overhead
     } else {
@@ -175,6 +175,29 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       canBroadcastBySize(otherPlan, conf) &&
         estimatePruningSideSize * conf.dynamicPartitionPruningPruningSideExtraFilterRatio > overhead
     }
+  }
+
+  /**
+   * Calculates a heuristic overhead of a logical plan. Normally it returns the total
+   * size in bytes of all scan relations. We don't count in-memory relation which uses
+   * only memory.
+   */
+  private def calculatePlanOverhead(plan: LogicalPlan): Float = {
+    val (cached, notCached) = plan.collectLeaves().partition(p => p match {
+      case _: InMemoryRelation => true
+      case _ => false
+    })
+    val scanOverhead = notCached.map(_.stats.sizeInBytes).sum.toFloat
+    val cachedOverhead = cached.map {
+      case m: InMemoryRelation if m.cacheBuilder.storageLevel.useDisk &&
+          !m.cacheBuilder.storageLevel.useMemory =>
+        m.stats.sizeInBytes.toFloat
+      case m: InMemoryRelation if m.cacheBuilder.storageLevel.useDisk =>
+        m.stats.sizeInBytes.toFloat * 0.2
+      case m: InMemoryRelation if m.cacheBuilder.storageLevel.useMemory =>
+        0.0
+    }.sum.toFloat
+    scanOverhead + cachedOverhead
   }
 
   /**
@@ -233,7 +256,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
 
         // extract the left and right keys of the join condition
         val (leftKeys, rightKeys) = j match {
-          case ExtractEquiJoinKeys(_, lkeys, rkeys, _, _, _, _) => (lkeys, rkeys)
+          case ExtractEquiJoinKeys(_, lkeys, rkeys, _, _, _, _, _) => (lkeys, rkeys)
           case _ => (Nil, Nil)
         }
 
