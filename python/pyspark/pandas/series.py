@@ -4536,22 +4536,33 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if not isinstance(other, Series):
             raise TypeError("'other' must be a Series")
 
-        combined = combine_frames(self._psdf, other._psdf, how="leftouter")
+        if same_anchor(self, other):
+            scol = (
+                F.when(other.spark.column.isNotNull(), other.spark.column)
+                .otherwise(self.spark.column)
+                .alias(self._psdf._internal.spark_column_name_for(self._column_label))
+            )
+            internal = self._psdf._internal.with_new_spark_column(
+                self._column_label, scol  # TODO: dtype?
+            )
+            self._psdf._update_internal_frame(internal)
+        else:
+            combined = combine_frames(self._psdf, other._psdf, how="leftouter")
 
-        this_scol = combined["this"]._internal.spark_column_for(self._column_label)
-        that_scol = combined["that"]._internal.spark_column_for(other._column_label)
+            this_scol = combined["this"]._internal.spark_column_for(self._column_label)
+            that_scol = combined["that"]._internal.spark_column_for(other._column_label)
 
-        scol = (
-            F.when(that_scol.isNotNull(), that_scol)
-            .otherwise(this_scol)
-            .alias(self._psdf._internal.spark_column_name_for(self._column_label))
-        )
+            scol = (
+                F.when(that_scol.isNotNull(), that_scol)
+                .otherwise(this_scol)
+                .alias(self._psdf._internal.spark_column_name_for(self._column_label))
+            )
 
-        internal = combined["this"]._internal.with_new_spark_column(
-            self._column_label, scol  # TODO: dtype?
-        )
+            internal = combined["this"]._internal.with_new_spark_column(
+                self._column_label, scol  # TODO: dtype?
+            )
 
-        self._psdf._update_internal_frame(internal.resolved_copy, requires_same_anchor=False)
+            self._psdf._update_internal_frame(internal.resolved_copy, requires_same_anchor=False)
 
     def where(self, cond: "Series", other: Any = np.nan) -> "Series":
         """

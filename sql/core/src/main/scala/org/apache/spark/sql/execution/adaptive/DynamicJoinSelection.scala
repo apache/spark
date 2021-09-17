@@ -69,7 +69,7 @@ object DynamicJoinSelection extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDown {
-    case j @ ExtractEquiJoinKeys(_, _, _, _, left, right, hint) =>
+    case j @ ExtractEquiJoinKeys(_, _, _, _, _, left, right, hint) =>
       var newHint = hint
       if (!hint.leftHint.exists(_.strategy.isDefined)) {
         selectJoinStrategy(left).foreach { strategy =>
