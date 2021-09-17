@@ -4603,20 +4603,23 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         return result
 
     def _combine_frame_with_fill_value(self, other: "Series", fill_value: Any) -> DataFrame:
-        return combine_frames(
-            self._fill_value_for_missing_index(other, fill_value=fill_value),
-            other._fill_value_for_missing_index(self, fill_value=fill_value),
-        )
+        this = self.to_frame()
+        this_col = this.columns[0]
 
-    def _fill_value_for_missing_index(self, other: "Series", fill_value: Any) -> DataFrame:
-        filled_self = self._internal.spark_frame.select(
-            *self._internal.index_spark_column_names, *self._internal.data_spark_column_names
-        ).union(
-            other.index.difference(self.index)._internal.spark_frame.select(
-                *self._internal.index_spark_column_names, F.lit(fill_value)
-            )
-        )
-        return DataFrame(self._internal.with_new_sdf(filled_self))
+        that = other.to_frame()
+        that_col = that.columns[0]
+
+        tmp_col = "__tmp_check_missing_index__"
+        verify_temp_column_name(this, tmp_col)
+        verify_temp_column_name(that, tmp_col)
+        this[tmp_col], that[tmp_col] = True, True
+
+        combined = combine_frames(this, that)
+
+        combined.loc[combined[("this", tmp_col)].isnull(), ("this", this_col)] = fill_value
+        combined.loc[combined[("that", tmp_col)].isnull(), ("that", that_col)] = fill_value
+
+        return combined[[("this", this_col), ("that", that_col)]]
 
     def update(self, other: "Series") -> None:
         """
