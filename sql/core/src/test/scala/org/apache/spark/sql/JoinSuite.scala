@@ -1402,4 +1402,28 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       assertJoin(sql, classOf[ShuffledHashJoinExec])
     }
   }
+
+  test("SPARK-36794: Ignore duplicated key when building relation for semi/anti hash join") {
+    withTable("t1", "t2") {
+      spark.range(10).map(i => i.toString).toDF("k").write.saveAsTable("t1")
+      spark.range(10).map(i => (i % 5).toString).toDF("k").write.saveAsTable("t2")
+
+      Seq("BROADCAST", "SHUFFLE_HASH").foreach {
+        joinHint =>
+          val semiJoinDF = sql(
+            s"SELECT /*+ $joinHint(t2) */ t1.k FROM t1 LEFT SEMI JOIN t2 ON t1.k = t2.k")
+          val antiJoinDF = sql(
+            s"SELECT /*+ $joinHint(t2) */ t1.k FROM t1 LEFT ANTI JOIN t2 ON t1.k = t2.k")
+          Seq(semiJoinDF, antiJoinDF).foreach {
+            joinDF =>
+              assert(collect(joinDF.queryExecution.executedPlan) {
+                case _: BroadcastHashJoinExec => joinHint == "BROADCAST"
+                case _: ShuffledHashJoinExec => joinHint == "SHUFFLE_HASH"
+              }.size == 1)
+          }
+          checkAnswer(semiJoinDF, Seq(Row("0"), Row("1"), Row("2"), Row("3"), Row("4")))
+          checkAnswer(antiJoinDF, Seq(Row("5"), Row("6"), Row("7"), Row("8"), Row("9")))
+      }
+    }
+  }
 }

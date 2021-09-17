@@ -158,6 +158,11 @@ trait HashJoin extends JoinCodegenSupport {
         output, (streamedPlan.output ++ buildPlan.output).map(_.withNullability(true)))
   }
 
+  @transient protected lazy val ignoreDuplicatedKey = joinType match {
+    case LeftExistence(_) if condition.isEmpty => true
+    case _ => false
+  }
+
   private def innerJoin(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation): Iterator[InternalRow] = {
