@@ -4077,8 +4077,6 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
       (array1, array2) =>
         val hs = new SQLOpenHashSet[Any]
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-        val isNaN = SQLOpenHashSet.isNaN(elementType)
-        val valueNan = SQLOpenHashSet.valueNaN(elementType)
         val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
           (value: Any) => hs.add(value),
           (value: Any) => {})
