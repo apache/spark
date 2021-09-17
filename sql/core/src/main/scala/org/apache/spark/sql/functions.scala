@@ -3841,6 +3841,7 @@ object functions {
 
   /**
    * Sorts the input array in ascending order. The elements of the input array must be orderable.
+   * NaN is greater than any non-NaN elements for double/float type.
    * Null elements will be placed at the end of the returned array.
    *
    * @group collection_funcs
@@ -4550,8 +4551,9 @@ object functions {
 
   /**
    * Sorts the input array for the given column in ascending or descending order,
-   * according to the natural ordering of the array elements.
-   * Null elements will be placed at the beginning of the returned array in ascending order or
+   * according to the natural ordering of the array elements. NaN is greater than any non-NaN
+   * elements for double/float type. Null elements will be placed at the beginning of the returned
+   * array in ascending order or
    * at the end of the returned array in descending order.
    *
    * @group collection_funcs
@@ -4560,7 +4562,8 @@ object functions {
   def sort_array(e: Column, asc: Boolean): Column = withExpr { SortArray(e.expr, lit(asc).expr) }
 
   /**
-   * Returns the minimum value in the array.
+   * Returns the minimum value in the array. NaN is greater than any non-NaN elements for
+   * double/float type. NULL elements are skipped.
    *
    * @group collection_funcs
    * @since 2.4.0
@@ -4568,7 +4571,8 @@ object functions {
   def array_min(e: Column): Column = withExpr { ArrayMin(e.expr) }
 
   /**
-   * Returns the maximum value in the array.
+   * Returns the maximum value in the array. NaN is greater than any non-NaN elements for
+   * double/float type. NULL elements are skipped.
    *
    * @group collection_funcs
    * @since 2.4.0
