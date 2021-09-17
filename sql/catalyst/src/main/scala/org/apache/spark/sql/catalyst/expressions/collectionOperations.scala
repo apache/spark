@@ -3845,8 +3845,8 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
           val hsResult = new SQLOpenHashSet[Any]
           val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
           val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
-            (value: Any) => {},
-            (value: Any) => hs.add(value))
+            (value: Any) => hs.add(value),
+            (value: Any) => {} )
           val withArray1NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hsResult,
             (value: Any) =>
               if (hs.contains(value) && !hsResult.contains(value)) {
