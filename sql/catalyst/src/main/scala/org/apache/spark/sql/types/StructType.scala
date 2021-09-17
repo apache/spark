@@ -616,7 +616,7 @@ object StructType extends AbstractDataType {
       StructType(newFields.toSeq)
     })
 
-  private[sql] def mergeInternal(
+  private def mergeInternal(
       left: DataType,
       right: DataType,
       mergeStruct: (StructType, StructType) => StructType): DataType =
