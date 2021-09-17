@@ -406,7 +406,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
             self.assert_eq(psser.isin([1, 5, 0, None]), pser.isin([1, 5, 0, None]))
         else:
-            expected = pd.Series([True, True, True, False, False, True, True, True, True], name="a")
+            expected = pd.Series([False, True, False, False, False, True, False, True, True], name="a")
             self.assert_eq(psser.isin([1, 5, 0, None]), expected)
 
     def test_drop_duplicates(self):
