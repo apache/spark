@@ -95,7 +95,7 @@ object PythonRunner {
     try {
       val process = builder.start()
 
-      val redirectOutput = new SparkProcess(process, System.out, "redirect output", "Traceback")
+      val redirectOutput = new SparkProcess(process, System.out, "redirect output")
       redirectOutput.start()
 
       val exitCode = process.waitFor()

@@ -3286,7 +3286,6 @@ private[spark] class SparkProcess(
     process: Process,
     out: OutputStream,
     name: String,
-    errorFlag: String,
     propagateEof: Boolean = false) extends Thread(name) {
 
   val lock = new ReentrantReadWriteLock()
@@ -3294,39 +3293,33 @@ private[spark] class SparkProcess(
 
   def errorMessage: String = error.toString()
 
-  private class ProcessRedirectThread(
-    in: InputStream,
-    out: OutputStream,
-    name: String)
+  private class SparkProcessRedirectThread(
+      in: InputStream,
+      out: OutputStream,
+      name: String,
+      stderr: Boolean)
     extends Thread(name) {
 
     setDaemon(true)
     override def run(): Unit = {
       scala.util.control.Exception.ignoring(classOf[IOException]) {
         Utils.tryWithSafeFinally {
-          val bufferedReader = new BufferedReader(new InputStreamReader(in))
-          var errorStart = false
-          var line = bufferedReader.readLine()
-          while (line != null) {
+          val buf = new Array[Byte](1024)
+          var len = in.read(buf)
+          while (len != 1) {
             lock.writeLock().lock()
-            while (line != "" && line != null) {
-              if (errorStart) {
-                error.write((line + "\n").getBytes)
-                error.flush()
-              } else {
-                if (line.contains(errorFlag)) {
-                  errorStart = true
-                  error.write((line + "\n").getBytes)
-                  error.flush()
-                }
-              }
-              out.write((line + "\n").getBytes)
+            while (len > 0) {
+              out.write(buf, 0, len)
               out.flush()
-              line = bufferedReader.readLine()
+              if (stderr) {
+                error.write(buf, 0, len)
+                error.flush()
+              }
+              len = in.read(buf)
             }
             lock.writeLock().unlock()
-            if (line != null) {
-              line = bufferedReader.readLine()
+            if (len != 1) {
+              len = in.read(buf)
             }
           }
         } {}
@@ -3338,8 +3331,10 @@ private[spark] class SparkProcess(
   override def run(): Unit = {
     scala.util.control.Exception.ignoring(classOf[IOException]) {
       Utils.tryWithSafeFinally {
-        val inputThread = new ProcessRedirectThread(process.getInputStream, out, "input stream")
-        val errorThread = new ProcessRedirectThread(process.getErrorStream, out, "error stream")
+        val inputThread =
+          new SparkProcessRedirectThread(process.getInputStream, out, "input stream", false)
+        val errorThread =
+          new SparkProcessRedirectThread(process.getErrorStream, out, "error stream", true)
 
         inputThread.start()
         errorThread.start()
