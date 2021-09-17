@@ -43,8 +43,8 @@ trait OperationHelper extends AliasHelper with PredicateHelper {
   /**
    * This legacy mode is for PhysicalOperation which has been there for years and we want to be
    * extremely safe to not change its behavior. There are two differences when legacy mode is off:
-   *   1. We postpone the deterministic check to the very end, so that it's more likely to collect
-   *      more projects and filters.
+   *   1. We postpone the deterministic check to the very end (calling `canCollapseExpressions`),
+   *      so that it's more likely to collect more projects and filters.
    *   2. We follow CollapseProject and only collect adjacent projects if they don't produce
    *      repeated expensive expressions.
    */
