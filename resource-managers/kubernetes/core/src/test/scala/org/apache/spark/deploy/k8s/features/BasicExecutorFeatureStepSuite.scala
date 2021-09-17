@@ -436,6 +436,19 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     ))
   }
 
+  test("container log configs") {
+    val logPath = "/spark/log"
+    baseConf.set(KUBERNETES_LOG_TO_FILE, true)
+    baseConf.set(KUBERNETES_LOG_TO_FILE_PATH, logPath)
+    initDefaultProfile(baseConf)
+    val kconf = KubernetesTestConf.createExecutorConf(baseConf)
+    val step = new BasicExecutorFeatureStep(kconf, new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    checkEnv(executor, baseConf, Map(ENV_SPARK_LOG_PATH -> logPath))
+  }
+
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {
     assert(executor.getMetadata.getOwnerReferences.size() === 1)

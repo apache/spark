@@ -1121,6 +1121,22 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.logToFile.enabled</code></td>
+  <td><code>false</code></td>
+  <td>
+   Whether to write executor/driver stdout/stderr as log file
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.logToFile.path</code></td>
+  <td><code>/var/log/spark</code></td>
+  <td>
+   The path to write executor/driver stdout/stderr as log file
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.memoryOverheadFactor</code></td>
   <td><code>0.1</code></td>
   <td>

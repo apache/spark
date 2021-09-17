@@ -616,6 +616,20 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Maximum number of pending pods should be a positive integer")
       .createWithDefault(Int.MaxValue)
 
+  val KUBERNETES_LOG_TO_FILE =
+    ConfigBuilder("spark.kubernetes.logToFile.enabled")
+      .doc("Whether to write executor/driver stdout/stderr as log file")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_LOG_TO_FILE_PATH =
+    ConfigBuilder("spark.kubernetes.logToFile.path")
+      .doc("The path to write executor/driver stdout/stderr as log file")
+      .version("3.2.0")
+      .stringConf
+      .createWithDefault("/var/log/spark")
+
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SERVICE_ANNOTATION_PREFIX = "spark.kubernetes.driver.service.annotation."
