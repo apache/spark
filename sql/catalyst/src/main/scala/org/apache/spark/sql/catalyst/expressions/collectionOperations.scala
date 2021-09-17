@@ -3428,7 +3428,7 @@ case class ArrayDistinct(child: Expression)
             arrayBuffer += value
             hs.add(value)
           },
-        (valueNaN: Any) => arrayBuffer += valueNaN)
+        (value: Any) => arrayBuffer += value)
       var i = 0
       while (i < array.numElements()) {
         if (array.isNullAt(i)) {
@@ -3621,7 +3621,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
               arrayBuffer += value
               hs.add(value)
             },
-          (valueNaN: Any) => arrayBuffer += valueNaN)
+          (value: Any) => arrayBuffer += value)
         Seq(array1, array2).foreach { array =>
           var i = 0
           while (i < array.numElements()) {
