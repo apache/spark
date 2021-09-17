@@ -2933,11 +2933,6 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     checkAnswer(uncDf.filter($"src".ilike("_\u20AC_a")), Seq("a€AA").toDF())
     checkAnswer(uncDf.filter($"src".ilike("_€_Z")), Seq("a\u20ACaz").toDF())
     checkAnswer(uncDf.filter($"src".ilike("ѐёђѻώề")), Seq("ЀЁЂѺΏỀ").toDF())
-    // escape char
-    val escCDf = Seq("Addb", "a_%b").toDF("src")
-    checkAnswer(escCDf.filter($"src".ilike("a%#%b", '#')), Seq("a_%b").toDF())
-    checkAnswer(escCDf.filter($"src".ilike("A%$%b", '$')), Seq("a_%b").toDF())
-    checkAnswer(escCDf.filter($"src".ilike("a%+%B", '+')), Seq("a_%b").toDF())
     // scalastyle:on
   }
 }
