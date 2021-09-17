@@ -78,37 +78,37 @@ case class EnsureRequirements(
     if (childrenIndexes.length > 1 && childrenIndexes.map(requiredChildDistributions(_))
         .forall(_.isInstanceOf[ClusteredDistribution])) {
       // TODO: can we handle AllTuples together?
-      val childrenWithDistribution = childrenIndexes
-          .map(i => (children(i).outputPartitioning,
-              requiredChildDistributions(i).asInstanceOf[ClusteredDistribution]))
-      val requirements = childrenWithDistribution.flatMap(pd => pd._1.createRequirement(pd._2))
+      val specs = childrenIndexes.map(i =>
+        i -> newChildren(i).outputPartitioning.createShuffleSpec(
+          requiredChildDistributions(i).asInstanceOf[ClusteredDistribution])
+      ).toMap
 
-      children = children.zip(requiredChildDistributions).zipWithIndex.map {
-        case ((child, _), idx) if !childrenIndexes.contains(idx) =>
-          child
-        case ((child, dist), _) =>
-          val partitioningOpt = if (requirements.isEmpty) {
-            // all the children need to be re-shuffled
-            val numPartitions = dist.requiredNumPartitions.getOrElse(conf.numShufflePartitions)
-            Some(dist.createPartitioning(numPartitions))
-          } else {
+      if (specs.values.exists(_.isDefined)) {
+        // one or more children have requirement on others for shuffle, so we need to check
+        // compatibility and come up a common partitioning for them
+        val bestSpec = specs.values.flatten.maxBy(_.numPartitions)
+
+        newChildren = newChildren.zip(requiredChildDistributions).zipWithIndex.map {
+          case ((child, _), idx) if !childrenIndexes.contains(idx) =>
+            child
+          case ((child, dist), idx) =>
             // pick the best candidate from the requirements and use that to re-shuffle other
             // children if necessary
-            val best = requirements.max
             val clustering = dist.asInstanceOf[ClusteredDistribution].clustering
-            if (best.isCompatibleWith(child.outputPartitioning, clustering)) {
+            val specOpt = specs(idx)
+            val partitioningOpt = if (specOpt.isDefined && bestSpec.isCompatibleWith(specOpt.get)) {
               None
             } else {
-              Some(best.createPartitioning(clustering))
+              Some(bestSpec.createPartitioning(clustering))
             }
-          }
 
-          partitioningOpt.map { p =>
-            child match {
-              case ShuffleExchangeExec(_, c, so) => ShuffleExchangeExec(p, c, so)
-              case _ => ShuffleExchangeExec(p, child)
-            }
-          }.getOrElse(child)
+            partitioningOpt.map { p =>
+              child match {
+                case ShuffleExchangeExec(_, c, so) => ShuffleExchangeExec(p, c, so)
+                case _ => ShuffleExchangeExec(p, child)
+              }
+            }.getOrElse(child)
+        }
       }
     }
 

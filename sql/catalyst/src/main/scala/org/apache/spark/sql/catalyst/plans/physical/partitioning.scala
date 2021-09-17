@@ -149,13 +149,20 @@ trait Partitioning {
   }
 
   /**
-   * Only return non-empty if the requirement can be used to repartition another side to match
+   * Creates a shuffle spec for this partitioning and its required distribution. The
+   * spec is used in the scenario where an operator has multiple children (e.g., join), and is
+   * used to decide whether this child is co-partitioned with others, therefore whether extra
+   * shuffle shall be introduced.
+   *
+   * Only return non-empty if the spec can be used to repartition another side to match
    * the distribution of this side.
    */
-  final def createRequirement(distribution: Distribution): Option[ShuffleSpec] =
+  final def createShuffleSpec(
+      defaultNumPartitions: Int,
+      distribution: Distribution): Option[ShuffleSpec] =
     distribution match {
       case clustered: ClusteredDistribution =>
-        createRequirement0(clustered)
+        createShuffleSpec0(defaultNumPartitions, clustered)
       case _ =>
         throw new IllegalStateException(s"Unexpected distribution: " +
             s"${distribution.getClass.getSimpleName}")
@@ -175,8 +182,9 @@ trait Partitioning {
     case _ => false
   }
 
-  protected def createRequirement0(distribution: ClusteredDistribution): Option[ShuffleSpec] =
-    None
+  protected def createShuffleSpec0(
+      defaultNumPartitions: Int,
+      distribution: ClusteredDistribution): Option[ShuffleSpec] = None
 }
 
 case class UnknownPartitioning(numPartitions: Int) extends Partitioning
@@ -196,8 +204,11 @@ case object SinglePartition extends Partitioning {
     case _ => true
   }
 
-  override protected def createRequirement0(
-      distribution: ClusteredDistribution): Option[ShuffleSpec] = Some(SinglePartitionShuffleSpec$)
+  override protected def createShuffleSpec0(
+      defaultNumPartitions: Int,
+      distribution: ClusteredDistribution): Option[ShuffleSpec] = {
+    Some(SinglePartitionShuffleSpec)
+  }
 }
 
 /**
@@ -222,7 +233,9 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     }
   }
 
-  override def createRequirement0(distribution: ClusteredDistribution): Option[ShuffleSpec] = {
+  override def createShuffleSpec0(
+      defaultNumPartitions: Int,
+      distribution: ClusteredDistribution): Option[ShuffleSpec] = {
     Some(HashShuffleSpec(this, distribution))
   }
 
@@ -284,6 +297,13 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
     }
   }
 
+  override def createShuffleSpec0(
+      defaultNumPartitions: Int,
+      distribution: ClusteredDistribution): Option[ShuffleSpec] = {
+    Some(RangeShuffleSpec(
+      distribution.requiredNumPartitions.getOrElse(defaultNumPartitions), distribution))
+  }
+
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): RangePartitioning =
     copy(ordering = newChildren.asInstanceOf[Seq[SortOrder]])
@@ -326,10 +346,14 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
   override def satisfies0(required: Distribution): Boolean =
     partitionings.exists(_.satisfies(required))
 
-  override def createRequirement0(distribution: ClusteredDistribution): Option[ShuffleSpec] = {
+  override def createShuffleSpec0(
+      defaultNumPartitions: Int,
+      distribution: ClusteredDistribution): Option[ShuffleSpec] = {
+    require(satisfies(distribution), "createShuffleSpec should only be called after satisfies " +
+        "check is successful.")
     val eligible = partitionings
         .filter(_.satisfies(distribution))
-        .flatMap(_.createRequirement(distribution))
+        .flatMap(_.createShuffleSpec(defaultNumPartitions, distribution))
     if (eligible.nonEmpty) {
       Some(ShuffleSpecCollection(eligible))
     } else {
@@ -361,22 +385,22 @@ case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
 }
 
 /**
- * This specifies that, when a operator has more than one children where each of which has
- * its own partitioning and required distribution, the requirement for the other children to be
- * co-partitioned with the current child.
- */
-
-/**
- * This is used in the scenario where an operator has multiple children (e.g., join), and each of
- * which has its own partitioning and required distribution. The spec is mainly used for two things:
+ * This is used in the scenario where an operator has multiple children (e.g., join) and one or more
+ * of which have their own requirement regarding whether its data can be considered as
+ * co-partitioned from others. This offers APIs for:
  *
- *   1. Compare with specs from other children and check if they are compatible. When two specs
- *      are compatible, we can say their data are co-partitioned, and thus will allow Spark to
- *      eliminate shuffle in operators such as join.
- *   2. In case this spec is not compatible with another, create a partitioning that can be used to
- *      re-partition the other side.
+ *   1. Comparing with specs from other children of the operator and check if they are compatible.
+ *      When two specs are compatible, we can say their data are co-partitioned, and Spark will
+ *      potentially able to eliminate shuffle if necessary.
+ *   2. Creating a partitioning that can be used to re-partition another child, so that to make it
+ *      having a compatible partitioning as this node.
  */
-trait ShuffleSpec extends Ordered[ShuffleSpec] {
+trait ShuffleSpec {
+  /**
+   * Returns the number of partitions of this shuffle spec
+   */
+  def numPartitions: Int
+
   /**
    * Returns true iff this spec is compatible with the other [[Partitioning]] and
    * clustering expressions (e.g., from [[ClusteredDistribution]]).
@@ -388,7 +412,7 @@ trait ShuffleSpec extends Ordered[ShuffleSpec] {
   def isCompatibleWith(other: ShuffleSpec): Boolean
 
   /**
-   * Create a partitioning that can be used to re-partitioned the other side whose required
+   * Creates a partitioning that can be used to re-partitioned the other side whose required
    * distribution is specified via `clustering`.
    *
    * Note: this will only be called after `isCompatibleWith` returns true on the side where the
@@ -397,23 +421,25 @@ trait ShuffleSpec extends Ordered[ShuffleSpec] {
   def createPartitioning(clustering: Seq[Expression]): Partitioning
 }
 
-case object SinglePartitionShuffleSpec$ extends ShuffleSpec {
-  override def isCompatibleWith(
-      otherPartitioning: Partitioning,
-      otherClustering: Seq[Expression]): Boolean = {
-    otherPartitioning.numPartitions == 1
+case object SinglePartitionShuffleSpec extends ShuffleSpec {
+  override def isCompatibleWith(other: ShuffleSpec): Boolean = {
+    other.numPartitions == numPartitions
   }
 
   override def createPartitioning(clustering: Seq[Expression]): Partitioning =
     SinglePartition
 
-  override def compare(that: ShuffleSpec): Int = that match {
-    case SinglePartitionShuffleSpec$ =>
-      0
-    case HashShuffleSpec(partitioning, _) =>
-      1.compare(partitioning.numPartitions)
-    case ShuffleSpecCollection(requirements) =>
-      requirements.map(compare).min
+  override def numPartitions: Int = 1
+}
+
+case class RangeShuffleSpec(
+    numPartitions: Int,
+    distribution: ClusteredDistribution) extends ShuffleSpec {
+
+  override def isCompatibleWith(other: ShuffleSpec): Boolean = false
+
+  override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
+    distribution.createPartitioning(numPartitions)
   }
 }
 
@@ -422,20 +448,19 @@ case class HashShuffleSpec(
     distribution: ClusteredDistribution) extends ShuffleSpec {
   private lazy val matchingIndexes = indexMap(distribution.clustering, partitioning.expressions)
 
-  override def isCompatibleWith(
-      otherPartitioning: Partitioning,
-      otherClustering: Seq[Expression]): Boolean = otherPartitioning match {
-    case SinglePartition =>
+  override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
+    case SinglePartitionShuffleSpec =>
       partitioning.numPartitions == 1
-    case HashPartitioning(expressions, _) =>
+    case HashShuffleSpec(partitioning, distribution) =>
+      val expressions = partitioning.expressions
       // we need to check:
       //  1. both partitioning have the same number of expressions
       //  2. each corresponding expression in both partitioning is used in the same positions
       //     of the corresponding distribution.
       partitioning.expressions.length == expressions.length &&
-          matchingIndexes == indexMap(otherClustering, expressions)
-    case PartitioningCollection(partitionings) =>
-      partitionings.exists(isCompatibleWith(_, otherClustering))
+          matchingIndexes == indexMap(distribution.clustering, expressions)
+    case ShuffleSpecCollection(specs) =>
+      specs.exists(isCompatibleWith)
     case _ =>
       false
   }
@@ -448,25 +473,13 @@ case class HashShuffleSpec(
     HashPartitioning(exprs, partitioning.numPartitions)
   }
 
-  override def compare(that: ShuffleSpec): Int = that match {
-    case SinglePartitionShuffleSpec$ =>
-      partitioning.numPartitions.compare(1)
-    case HashShuffleSpec(otherPartitioning, _) =>
-      if (partitioning.numPartitions != otherPartitioning.numPartitions) {
-        partitioning.numPartitions.compare(otherPartitioning.numPartitions)
-      } else {
-        partitioning.expressions.length.compare(otherPartitioning.expressions.length)
-      }
-    case ShuffleSpecCollection(requirements) =>
-      // pick the best requirement in the other collection
-      requirements.map(compare).min
-  }
+  override def numPartitions: Int = partitioning.numPartitions
 
-  // For each expression in the `HashPartitioning` that has occurrences in
-  // `ClusteredDistribution`, returns a mapping from its index in the partitioning to the
+  // For each expression in the `expressions` that has occurrences in
+  // `clustering`, returns a mapping from its index in the partitioning to the
   // indexes where it appears in the distribution.
-  // For instance, if `partitioning` is `[a, b]` and `distribution is `[a, a, b]`, then the
-  // result mapping could be `{ 0 -> (0, 1), 1 -> (2) }`.
+  // For instance, if `clustering` is [a, b] and `expressions` is [a, a, b], then the
+  // result mapping could be { 0 -> (0, 1), 1 -> (2) }.
   private def indexMap(
       clustering: Seq[Expression],
       expressions: Seq[Expression]): mutable.Map[Int, mutable.BitSet] = {
@@ -482,20 +495,15 @@ case class HashShuffleSpec(
   }
 }
 
-case class ShuffleSpecCollection(requirements: Seq[ShuffleSpec]) extends ShuffleSpec {
-  override def isCompatibleWith(
-      otherPartitioning: Partitioning,
-      otherClustering: Seq[Expression]): Boolean = {
-    requirements.exists(_.isCompatibleWith(otherPartitioning, otherClustering))
+case class ShuffleSpecCollection(specs: Seq[ShuffleSpec]) extends ShuffleSpec {
+  override def isCompatibleWith(other: ShuffleSpec): Boolean = {
+    specs.exists(_.isCompatibleWith(this))
   }
 
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
-    // choose the best requirement (e.g., maximum shuffle parallelism, min shuffle data size, etc)
-    // from the collection and use that to repartition the other sides
-    requirements.max.createPartitioning(clustering)
+    // choose the spec with the max number of partitions for better parallelism
+    specs.maxBy(_.numPartitions).createPartitioning(clustering)
   }
 
-  override def compare(that: ShuffleSpec): Int = {
-    requirements.map(_.compare(that)).max
-  }
+  override def numPartitions: Int = specs.maxBy(_.numPartitions).numPartitions
 }
