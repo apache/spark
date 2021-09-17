@@ -3427,7 +3427,7 @@ case class ArrayDistinct(child: Expression)
             arrayBuffer += value
             hs.add(value)
           },
-        (value: Any) => arrayBuffer += value)
+        (valueNaN: Any) => arrayBuffer += valueNaN)
       var i = 0
       while (i < array.numElements()) {
         if (array.isNullAt(i)) {
@@ -3530,10 +3530,10 @@ case class ArrayDistinct(child: Expression)
         val processArray = withArrayNullAssignment(
           s"$jt $value = ${genGetValue(array, i)};" +
             SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
-              (value: String) =>
+              (valueNaN: String) =>
                 s"""
                    |$size++;
-                   |$builder.$$plus$$eq($value);
+                   |$builder.$$plus$$eq($valueNaN);
                    |""".stripMargin))
 
         s"""
@@ -3619,7 +3619,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
               arrayBuffer += value
               hs.add(value)
             },
-          (value: Any) => arrayBuffer += value)
+          (valueNaN: Any) => arrayBuffer += valueNaN)
         Seq(array1, array2).foreach { array =>
           var i = 0
           while (i < array.numElements()) {
@@ -3728,10 +3728,10 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
         val processArray = withArrayNullAssignment(
           s"$jt $value = ${genGetValue(array, i)};" +
             SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
-              (value: String) =>
+              (valueNaN: String) =>
                 s"""
                    |$size++;
-                   |$builder.$$plus$$eq($value);
+                   |$builder.$$plus$$eq($valueNaN);
                  """.stripMargin))
 
         // Only need to track null element index when result array's element is nullable.
