@@ -3990,21 +3990,10 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
             body
           }
 
-        def withArray2NaNCheck(body: String): String = {
-          isNaNMethodAndValue.map { case (isNaN, _) =>
-            s"""
-               |if ($isNaN) {
-               |  $hashSet.addNaN();
-               |} else {
-               |  $body
-               |}
-             """.stripMargin
-          }
-        }.getOrElse(body)
-
         val writeArray2ToHashSet = withArray2NullCheck(
         s"$jt $value = ${genGetValue(array2, i)};" +
-         withArray2NaNCheck(s"$hashSet.add$hsPostFix($hsValueCast$value);"))
+          SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet,
+            s"$hashSet.add$hsPostFix($hsValueCast$value);", (value: String) => ""))
 
         def withArray1NullAssignment(body: String) =
           if (left.dataType.asInstanceOf[ArrayType].containsNull) {
@@ -4032,22 +4021,6 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
             body
           }
 
-        def withArray1NaNCheck(body: String): String = {
-          isNaNMethodAndValue.map { case (isNaN, valueNaN) =>
-            s"""
-               |if ($isNaN) {
-               |  if ($hashSet.containsNaN() && !$hashSetResult.containsNaN()) {
-               |    ++$size;
-               |    $hashSetResult.addNaN();
-               |    $builder.$$plus$$eq($valueNaN);
-               |  }
-               |} else {
-               |  $body
-               |}
-             """.stripMargin
-          }
-        }.getOrElse(body)
-
         val body =
           s"""
              |if ($hashSet.contains($hsValueCast$value) &&
@@ -4061,7 +4034,15 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
            """.stripMargin
 
         val processArray1 = withArray1NullAssignment(
-        s"$jt $value = ${genGetValue(array1, i)};" + withArray1NaNCheck(body))
+          s"$jt $value = ${genGetValue(array1, i)};" +
+            SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSetResult, body,
+              (value: Any) =>
+                s"""
+                   |if ($hashSet.containsNaN()) {
+                   |  ++$size;
+                   |  $builder.$$plus$$eq($value);
+                   |}
+                 """.stripMargin))
 
         // Only need to track null element index when result array's element is nullable.
         val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
