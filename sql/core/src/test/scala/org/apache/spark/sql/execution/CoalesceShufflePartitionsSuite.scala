@@ -412,8 +412,6 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
 
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-      // As the pre-shuffle partition number are different, we will skip reducing
-      // the shuffle partition numbers.
       assert(
         finalPlan.collect {
           case r @ CoalescedShuffleRead() => r

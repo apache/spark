@@ -46,6 +46,34 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
     coalescePartitions(plan)
   }
 
+  private def coalescePartitions(plan: SparkPlan): SparkPlan = {
+    val groups = collectGroups(plan)
+    def collectShuffleStageInfos(plan: SparkPlan): Seq[ShuffleStageInfo] = plan match {
+      case ShuffleStageInfo(stage, specs) => Seq(new ShuffleStageInfo(stage, specs))
+      case _ => plan.children.flatMap(collectShuffleStageInfos)
+    }
+    // If not all leaf nodes are query stages, it's not safe to reduce the number of
+    // shuffle partitions, because we may break the assumption that all children of a spark plan
+    // have same number of output partitions.
+    val stagePartitions = groups.filter(_.collectLeaves().forall(_.isInstanceOf[QueryStageExec]))
+      .map { group =>
+        val stages = collectShuffleStageInfos(group)
+        (stages, coalescePartitionsForOneGroup(stages))
+      }
+      .filter(_._2.nonEmpty)
+      .flatMap { case (stages, newPartitionSpecs) =>
+        stages.zip(newPartitionSpecs).map { case (stageInfo, partSpecs) =>
+          (stageInfo.shuffleStage.id, partSpecs)
+        }
+      }
+
+    if (stagePartitions.nonEmpty) {
+      updateShuffleReads(plan, stagePartitions.toMap)
+    } else {
+      plan
+    }
+  }
+
   private def collectGroups(plan: SparkPlan): Seq[SparkPlan] = {
     // Union is the special case that it's children are independent in query stage which means
     // they are not required all leaf node are query stages and had same partition number.
@@ -61,39 +89,13 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
     }
   }
 
-  private def coalescePartitions(plan: SparkPlan): SparkPlan = {
-    val groups = collectGroups(plan)
-    def collectShuffleStageInfos(plan: SparkPlan): Seq[ShuffleStageInfo] = plan match {
-      case ShuffleStageInfo(stage, specs) => Seq(new ShuffleStageInfo(stage, specs))
-      case _ => plan.children.flatMap(collectShuffleStageInfos)
-    }
-    // If not all leaf nodes are query stages, it's not safe to reduce the number of
-    // shuffle partitions, because we may break the assumption that all children of a spark plan
-    // have same number of output partitions.
-    // ShuffleExchanges introduced by repartition do not support changing the number of partitions.
-    // We change the number of partitions in the stage only if all the ShuffleExchanges support it.
-    val stageGroups = groups.filter(_.collectLeaves().forall(_.isInstanceOf[QueryStageExec]))
-      .map(collectShuffleStageInfos)
-      .filter(_.forall(s => isSupported(s.shuffleStage.shuffle)))
-    val newPartitionGroups = stageGroups.map(coalescePartitionsForOneGroup)
-    val stagePartitions =
-      stageGroups.zip(newPartitionGroups)
-        .filter(_._2.nonEmpty)
-        .flatMap { case (stages, newPartitionSpecs) =>
-          stages.zip(newPartitionSpecs).map { case (stageInfo, partSpecs) =>
-            (stageInfo.shuffleStage.id, partSpecs)
-          }
-        }
-
-    if (stagePartitions.nonEmpty) {
-      updateShuffleReads(plan, stagePartitions.toMap)
-    } else {
-      plan
-    }
-  }
-
   private def coalescePartitionsForOneGroup(
       shuffleStageInfos: Seq[ShuffleStageInfo]): Seq[Seq[ShufflePartitionSpec]] = {
+    // ShuffleExchanges introduced by repartition do not support changing the number of partitions.
+    // We change the number of partitions in the stage only if all the ShuffleExchanges support it.
+    if (!shuffleStageInfos.forall(s => isSupported(s.shuffleStage.shuffle))) {
+      return Nil
+    }
     // Ideally, this rule should simply coalesce partitions w.r.t. the target size specified by
     // ADVISORY_PARTITION_SIZE_IN_BYTES (default 64MB). To avoid perf regression in AQE, this
     // rule by default tries to maximize the parallelism and set the target size to
