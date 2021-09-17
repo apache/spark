@@ -60,7 +60,6 @@ class SQLOpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
 }
 
 object SQLOpenHashSet {
-
   def withNaNCheckFunc(
       dataType: DataType,
       hashSet: SQLOpenHashSet[Any],
