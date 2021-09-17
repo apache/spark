@@ -3336,7 +3336,9 @@ trait ArraySetLike {
   @transient protected lazy val nullValueHolder = et match {
     case ByteType => "(byte) 0"
     case ShortType => "(short) 0"
-    case LongType => "(long) 0"
+    case LongType => "0L"
+    case FloatType => "0.0f"
+    case DoubleType => "0.0"
     case _ => "0"
   }
 
@@ -3427,7 +3429,7 @@ case class ArrayDistinct(child: Expression)
             arrayBuffer += value
             hs.add(value)
           },
-        (value: Any) => arrayBuffer += value)
+        (valueNaN: Any) => arrayBuffer += valueNaN)
       var i = 0
       while (i < array.numElements()) {
         if (array.isNullAt(i)) {
@@ -3619,7 +3621,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
               arrayBuffer += value
               hs.add(value)
             },
-          (value: Any) => arrayBuffer += value)
+          (valueNaN: Any) => arrayBuffer += valueNaN)
         Seq(array1, array2).foreach { array =>
           var i = 0
           while (i < array.numElements()) {

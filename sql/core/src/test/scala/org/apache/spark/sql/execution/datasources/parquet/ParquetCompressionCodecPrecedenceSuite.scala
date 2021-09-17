@@ -105,7 +105,7 @@ class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSpar
 
   test("Create parquet table with compression") {
     Seq(true, false).foreach { isPartitioned =>
-      Seq("UNCOMPRESSED", "SNAPPY", "GZIP").foreach { compressionCodec =>
+      Seq("UNCOMPRESSED", "SNAPPY", "GZIP", "LZ4", "ZSTD").foreach { compressionCodec =>
         checkCompressionCodec(compressionCodec, isPartitioned)
       }
     }

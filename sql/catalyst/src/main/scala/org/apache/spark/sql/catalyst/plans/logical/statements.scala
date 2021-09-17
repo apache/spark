@@ -274,14 +274,6 @@ case class InsertIntoStatement(
 }
 
 /**
- * A CREATE NAMESPACE statement, as parsed from SQL.
- */
-case class CreateNamespaceStatement(
-    namespace: Seq[String],
-    ifNotExists: Boolean,
-    properties: Map[String, String]) extends LeafParsedStatement
-
-/**
  * A USE statement, as parsed from SQL.
  */
 case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends LeafParsedStatement

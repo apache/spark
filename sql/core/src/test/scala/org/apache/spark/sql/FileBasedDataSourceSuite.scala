@@ -695,9 +695,9 @@ class FileBasedDataSourceSuite extends QueryTest
   test("SPARK-22790,SPARK-27668: spark.sql.sources.compressionFactor takes effect") {
     Seq(1.0, 0.5).foreach { compressionFactor =>
       withSQLConf(SQLConf.FILE_COMPRESSION_FACTOR.key -> compressionFactor.toString,
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "250") {
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "350") {
         withTempPath { workDir =>
-          // the file size is 486 bytes
+          // the file size is 504 bytes
           val workDirPath = workDir.getAbsolutePath
           val data1 = Seq(100, 200, 300, 400).toDF("count")
           data1.write.orc(workDirPath + "/data1")
