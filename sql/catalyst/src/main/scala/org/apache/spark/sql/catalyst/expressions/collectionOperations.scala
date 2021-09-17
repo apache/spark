@@ -4076,25 +4076,29 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
     if (TypeUtils.typeWithProperEquals(elementType)) {
       (array1, array2) =>
         val hs = new SQLOpenHashSet[Any]
+        val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
         val isNaN = SQLOpenHashSet.isNaN(elementType)
         val valueNan = SQLOpenHashSet.valueNaN(elementType)
+        val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
+          (value: Any) => hs.add(value),
+          (value: Any) => {})
+        val withArray1NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
+          (value: Any) =>
+            if (!hs.contains(value)) {
+              arrayBuffer += value
+              hs.add(value)
+            },
+          (value: Any) => arrayBuffer += value)
         var i = 0
         while (i < array2.numElements()) {
           if (array2.isNullAt(i)) {
             hs.addNull()
           } else {
             val elem = array2.get(i, elementType)
-            if (isNaN(elem)) {
-              if (!hs.containsNaN) {
-                hs.addNaN()
-              }
-            } else {
-              hs.add(elem)
-            }
+            withArray2NaNCheckFunc(elem)
           }
           i += 1
         }
-        val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
         i = 0
         while (i < array1.numElements()) {
           if (array1.isNullAt(i)) {
@@ -4104,17 +4108,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
             }
           } else {
             val elem = array1.get(i, elementType)
-            if (isNaN(elem)) {
-              if (!hs.containsNaN()) {
-                hs.addNaN()
-                arrayBuffer += valueNan
-              }
-            } else {
-              if (!hs.contains(elem)) {
-                arrayBuffer += elem
-                hs.add(elem)
-              }
-            }
+            withArray1NaNCheckFunc(elem)
           }
           i += 1
         }
