@@ -948,7 +948,7 @@ object QueryExecutionErrors {
   }
 
   def concurrentQueryInstanceError(): Throwable = {
-    new SparkConcurrentModificationException("CONCURRENT_QUERY_ERROR", Array.empty)
+    new SparkConcurrentModificationException("CONCURRENT_QUERY", Array.empty)
   }
 
   def cannotParseJsonArraysAsStructsError(): Throwable = {

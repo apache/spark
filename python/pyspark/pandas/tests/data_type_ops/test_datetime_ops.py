@@ -237,6 +237,13 @@ class DatetimeOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pdf["this"] >= pdf["this"], psdf["this"] >= psdf["this"])
 
 
+class DatetimeNTZOpsTest(DatetimeOpsTest):
+    @classmethod
+    def setUpClass(cls):
+        super(DatetimeOpsTest, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.timestampType", "timestamp_ntz")
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.pandas.tests.data_type_ops.test_datetime_ops import *  # noqa: F401

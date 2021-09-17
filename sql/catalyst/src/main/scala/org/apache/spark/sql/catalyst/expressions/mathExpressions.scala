@@ -731,7 +731,7 @@ case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN") {
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr) - Returns the cotangent of `expr`, as if computed by `1/java.lang.Math._FUNC_`.
+    _FUNC_(expr) - Returns the cotangent of `expr`, as if computed by `1/java.lang.Math.tan`.
   """,
   arguments = """
     Arguments:
