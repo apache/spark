@@ -3306,7 +3306,7 @@ private[spark] class SparkProcess(
         Utils.tryWithSafeFinally {
           val buf = new Array[Byte](1024)
           var len = in.read(buf)
-          while (len != 1) {
+          while (len != -1) {
             lock.writeLock().lock()
             while (len > 0) {
               out.write(buf, 0, len)
@@ -3315,11 +3315,19 @@ private[spark] class SparkProcess(
                 error.write(buf, 0, len)
                 error.flush()
               }
-              len = in.read(buf)
+              if (in.available() > 0) {
+                len = in.read(buf)
+              } else {
+                len = 0
+              }
             }
             lock.writeLock().unlock()
-            if (len != 1) {
-              len = in.read(buf)
+            if (len != -1) {
+              if (in.available() > 0) {
+                len = in.read(buf)
+              } else {
+                len = 0
+              }
             }
           }
         } {}
