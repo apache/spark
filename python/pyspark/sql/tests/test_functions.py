@@ -113,27 +113,27 @@ class FunctionsTests(ReusedSQLTestCase):
         from pyspark.sql import functions
         import math
 
-        self.assert_close([math.cos(i) for i in range(10)],
+        assert_close([math.cos(i) for i in range(10)],
                      df.select(functions.cos(df.a)).collect())
-        self.assert_close([math.cos(i) for i in range(10)],
+        assert_close([math.cos(i) for i in range(10)],
                      df.select(functions.cos("a")).collect())
-        self.assert_close([math.sin(i) for i in range(10)],
+        assert_close([math.sin(i) for i in range(10)],
                      df.select(functions.sin(df.a)).collect())
-        self.assert_close([math.sin(i) for i in range(10)],
+        assert_close([math.sin(i) for i in range(10)],
                      df.select(functions.sin(df['a'])).collect())
-        self.assert_close([math.pow(i, 2 * i) for i in range(10)],
+        assert_close([math.pow(i, 2 * i) for i in range(10)],
                      df.select(functions.pow(df.a, df.b)).collect())
-        self.assert_close([math.pow(i, 2) for i in range(10)],
+        assert_close([math.pow(i, 2) for i in range(10)],
                      df.select(functions.pow(df.a, 2)).collect())
-        self.assert_close([math.pow(i, 2) for i in range(10)],
+        assert_close([math.pow(i, 2) for i in range(10)],
                      df.select(functions.pow(df.a, 2.0)).collect())
-        self.assert_close([math.hypot(i, 2 * i) for i in range(10)],
+        assert_close([math.hypot(i, 2 * i) for i in range(10)],
                      df.select(functions.hypot(df.a, df.b)).collect())
-        self.assert_close([math.hypot(i, 2 * i) for i in range(10)],
+        assert_close([math.hypot(i, 2 * i) for i in range(10)],
                      df.select(functions.hypot("a", u"b")).collect())
-        self.assert_close([math.hypot(i, 2) for i in range(10)],
+        assert_close([math.hypot(i, 2) for i in range(10)],
                      df.select(functions.hypot("a", 2)).collect())
-        self.assert_close([math.hypot(i, 2) for i in range(10)],
+        assert_close([math.hypot(i, 2) for i in range(10)],
                      df.select(functions.hypot(df.a, 2)).collect())
 
     def test_inverse_trig_functions(self):
@@ -161,11 +161,11 @@ class FunctionsTests(ReusedSQLTestCase):
         def to_reciprocal_trig(func):
             return [1.0 / func(i) if func(i) != 0 else math.inf for i in l]
 
-        self.assert_close(to_reciprocal_trig(math.cos),
+        assert_close(to_reciprocal_trig(math.cos),
                      df.select(sec(df.value)).collect())
-        self.assert_close(to_reciprocal_trig(math.sin),
+        assert_close(to_reciprocal_trig(math.sin),
                      df.select(csc(df.value)).collect())
-        self.assert_close(to_reciprocal_trig(math.tan),
+        assert_close(to_reciprocal_trig(math.tan),
                      df.select(cot(df.value)).collect())
 
     def test_rand_functions(self):
