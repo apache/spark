@@ -3418,8 +3418,7 @@ case class ArrayDistinct(child: Expression)
     (array: ArrayData) =>
       val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
       val hs = new SQLOpenHashSet[Any]()
-      val (isNaN, valueNaN) = SQLOpenHashSet.isNaNFuncAndValueNaN(elementType)
-      val withNaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(isNaN, valueNaN, hs,
+      val withNaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
         (value: Any) =>
           if (!hs.contains(value)) {
             if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
@@ -3611,8 +3610,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
       (array1, array2) =>
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
         val hs = new SQLOpenHashSet[Any]()
-        val (isNaN, valueNaN) = SQLOpenHashSet.isNaNFuncAndValueNaN(elementType)
-        val withNaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(isNaN, valueNaN, hs,
+        val withNaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
           (value: Any) =>
             if (!hs.contains(value)) {
               if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
