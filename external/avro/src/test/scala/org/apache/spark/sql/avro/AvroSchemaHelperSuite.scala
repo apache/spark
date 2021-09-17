@@ -134,7 +134,7 @@ class AvroSchemaHelperSuite extends SQLTestUtils with SharedSparkSession {
     }
   }
 
-  test("validateNoExtraRequiredAvroFields detects required fields and ignores nullable fields") {
+  test("SPARK-34378: validateNoExtraRequiredAvroFields detects required and ignores nullable") {
     val avroSchema = SchemaBuilder.record("record").fields()
       .requiredInt("foo")
       .nullableInt("bar", 1)
