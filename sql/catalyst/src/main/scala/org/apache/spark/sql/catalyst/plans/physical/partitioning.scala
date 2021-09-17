@@ -159,7 +159,7 @@ trait Partitioning {
    */
   final def createShuffleSpec(
       defaultNumPartitions: Int,
-      distribution: Distribution): Option[ShuffleSpec] =
+      distribution: Distribution): ShuffleSpec =
     distribution match {
       case clustered: ClusteredDistribution =>
         createShuffleSpec0(defaultNumPartitions, clustered)
@@ -184,7 +184,9 @@ trait Partitioning {
 
   protected def createShuffleSpec0(
       defaultNumPartitions: Int,
-      distribution: ClusteredDistribution): Option[ShuffleSpec] = None
+      distribution: ClusteredDistribution): ShuffleSpec =
+    throw new IllegalStateException("createShuffleSpec0 is called on unexpected " +
+        s"partitioning: $this")
 }
 
 case class UnknownPartitioning(numPartitions: Int) extends Partitioning
@@ -206,9 +208,7 @@ case object SinglePartition extends Partitioning {
 
   override protected def createShuffleSpec0(
       defaultNumPartitions: Int,
-      distribution: ClusteredDistribution): Option[ShuffleSpec] = {
-    Some(SinglePartitionShuffleSpec)
-  }
+      distribution: ClusteredDistribution): ShuffleSpec = SinglePartitionShuffleSpec
 }
 
 /**
@@ -235,9 +235,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
   override def createShuffleSpec0(
       defaultNumPartitions: Int,
-      distribution: ClusteredDistribution): Option[ShuffleSpec] = {
-    Some(HashShuffleSpec(this, distribution))
-  }
+      distribution: ClusteredDistribution): ShuffleSpec = HashShuffleSpec(this, distribution)
 
   /**
    * Returns an expression that will produce a valid partition ID(i.e. non-negative and is less
@@ -299,9 +297,9 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
 
   override def createShuffleSpec0(
       defaultNumPartitions: Int,
-      distribution: ClusteredDistribution): Option[ShuffleSpec] = {
-    Some(RangeShuffleSpec(
-      distribution.requiredNumPartitions.getOrElse(defaultNumPartitions), distribution))
+      distribution: ClusteredDistribution): ShuffleSpec = {
+    RangeShuffleSpec(
+      distribution.requiredNumPartitions.getOrElse(defaultNumPartitions), distribution)
   }
 
   override protected def withNewChildrenInternal(
@@ -348,17 +346,13 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
 
   override def createShuffleSpec0(
       defaultNumPartitions: Int,
-      distribution: ClusteredDistribution): Option[ShuffleSpec] = {
+      distribution: ClusteredDistribution): ShuffleSpec = {
     require(satisfies(distribution), "createShuffleSpec should only be called after satisfies " +
         "check is successful.")
     val eligible = partitionings
         .filter(_.satisfies(distribution))
-        .flatMap(_.createShuffleSpec(defaultNumPartitions, distribution))
-    if (eligible.nonEmpty) {
-      Some(ShuffleSpecCollection(eligible))
-    } else {
-      None
-    }
+        .map(_.createShuffleSpec(defaultNumPartitions, distribution))
+    ShuffleSpecCollection(eligible)
   }
 
   override def toString: String = {
