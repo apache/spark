@@ -4079,14 +4079,14 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
         val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
           (value: Any) => hs.add(value),
-          (value: Any) => {})
+          (valueNaN: Any) => {})
         val withArray1NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
           (value: Any) =>
             if (!hs.contains(value)) {
               arrayBuffer += value
               hs.add(value)
             },
-          (value: Any) => arrayBuffer += value)
+          (valueNaN: Any) => arrayBuffer += valueNaN)
         var i = 0
         while (i < array2.numElements()) {
           if (array2.isNullAt(i)) {
@@ -4183,14 +4183,6 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
 
-        val isNaNMethodAndValue = elementType match {
-          case DoubleType =>
-            Some((s"java.lang.Double.isNaN((double)$value)", "java.lang.Double.NaN"))
-          case FloatType =>
-            Some((s"java.lang.Float.isNaN((float)$value)", "java.lang.Float.NaN"))
-          case _ => None
-        }
-
         def withArray2NullCheck(body: String): String =
           if (right.dataType.asInstanceOf[ArrayType].containsNull) {
             if (left.dataType.asInstanceOf[ArrayType].containsNull) {
@@ -4215,23 +4207,11 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
             body
           }
 
-        def withArray2NaNCheck(body: String): String = {
-          isNaNMethodAndValue.map { case (isNaN, _) =>
-            s"""
-               |if ($isNaN) {
-               |  if (!$hashSet.containsNaN()) {
-               |    $hashSet.addNaN();
-               |  }
-               |} else {
-               |  $body
-               |}
-             """.stripMargin
-          }
-        }.getOrElse(body)
-
         val writeArray2ToHashSet = withArray2NullCheck(
           s"$jt $value = ${genGetValue(array2, i)};" +
-            withArray2NaNCheck(s"$hashSet.add$hsPostFix($hsValueCast$value);"))
+            SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet,
+              s"$hashSet.add$hsPostFix($hsValueCast$value);",
+              (valueNaN: Any) => ""))
 
         def withArray1NullAssignment(body: String) =
           if (left.dataType.asInstanceOf[ArrayType].containsNull) {
@@ -4251,22 +4231,6 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
             body
           }
 
-        def withArray1NaNCheck(body: String): String = {
-          isNaNMethodAndValue.map { case (isNaN, valueNaN) =>
-            s"""
-               |if ($isNaN) {
-               |  if (!$hashSet.containsNaN()) {
-               |    $hashSet.addNaN();
-               |    $size++;
-               |    $builder.$$plus$$eq($valueNaN);
-               |  }
-               |} else {
-               |  $body
-               |}
-             """.stripMargin
-          }
-        }.getOrElse(body)
-
         val body =
           s"""
              |if (!$hashSet.contains($hsValueCast$value)) {
@@ -4279,7 +4243,13 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
            """.stripMargin
 
         val processArray1 = withArray1NullAssignment(
-          s"$jt $value = ${genGetValue(array1, i)};" + withArray1NaNCheck(body))
+          s"$jt $value = ${genGetValue(array1, i)};" +
+            SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
+              (valueNaN: String) =>
+                s"""
+                   |$size++;
+                   |$builder.$$plus$$eq($valueNaN);
+                 """.stripMargin))
 
         // Only need to track null element index when array1's element is nullable.
         val declareNullTrackVariables = if (left.dataType.asInstanceOf[ArrayType].containsNull) {
