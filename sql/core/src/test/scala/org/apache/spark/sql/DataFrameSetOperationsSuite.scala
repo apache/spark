@@ -1039,23 +1039,6 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-36673: Only merge nullability for unionByName of struct") {
-    val df1 = spark.range(2).withColumn("nested", struct(expr("id * 5 AS INNER")))
-    val df2 = spark.range(2).withColumn("nested", struct(expr("id * 5 AS inner")))
-
-    val df = df1.unionByName(df2)
-
-    val schema = StructType(Seq(StructField("id", LongType, false),
-      StructField("nested", StructType(Seq(StructField("INNER", LongType, false))), false)))
-
-    assert(df.schema == schema)
-    assert(df.queryExecution.optimizedPlan.schema == schema)
-    assert(df.queryExecution.executedPlan.schema == schema)
-
-    checkAnswer(df, Row(0, Row(0)) :: Row(1, Row(5)) :: Row(0, Row(0)) :: Row(1, Row(5)) :: Nil)
-    checkAnswer(df.select("nested.*"), Row(0) :: Row(5) :: Row(0) :: Row(5) :: Nil)
-  }
-
   test("SPARK-36673: Union of structs with different orders") {
     val df1 = spark.range(2).withColumn("nested",
       struct(expr("id * 5 AS inner1"), struct(expr("id * 10 AS inner2"))))
