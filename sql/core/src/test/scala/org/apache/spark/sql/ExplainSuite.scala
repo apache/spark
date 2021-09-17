@@ -704,6 +704,31 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         "Bucketed: false (bucket column(s) not read)")
     }
   }
+
+  test("SPARK-36795: Node IDs should not be duplicated when InMemoryRelation Present") {
+    withTempView("t1", "t2") {
+      Seq(1).toDF("k").write.saveAsTable("t1")
+      Seq(1).toDF("key").write.saveAsTable("t2")
+      spark.sql("SELECT * FROM t1").persist()
+      val query = "SELECT * FROM (SELECT * FROM t1) join t2 " +
+        "ON k = t2.key"
+      val df = sql(query).toDF()
+
+      df.collect()
+      checkKeywordsExistsInExplain(df, FormattedMode,
+        """   * BroadcastHashJoin Inner BuildLeft (12)
+          |   :- BroadcastQueryStage (8)
+          |   :  +- BroadcastExchange (7)
+          |   :     +- * Filter (6)
+          |   :        +- * ColumnarToRow (5)
+          |   :           +- InMemoryTableScan (1)
+          |   :                 +- InMemoryRelation (2)
+          |   :                       +- * ColumnarToRow (4)
+          |   :                          +- Scan parquet default.t1 (3)
+          |""".stripMargin
+      )
+    }
+  }
 }
 
 case class ExplainSingleData(id: Int)
