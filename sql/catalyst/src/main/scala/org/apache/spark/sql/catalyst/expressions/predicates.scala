@@ -600,9 +600,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   private def genCodeWithSet(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
       val setTerm = ctx.addReferenceObj("set", set)
-      val i = ctx.freshName("i")
       val elem = ctx.freshName("elem")
-      val jt = CodeGenerator.javaType(child.dataType)
+      val jt = CodeGenerator.primitiveTypeName(child.dataType)
 
       val setIsNull = if (hasNull) {
         s"${ev.isNull} = !${ev.value};"
@@ -614,17 +613,18 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
         case FloatType => Some((v: String) => s"java.lang.Float.isNaN((float)$v)")
         case _ => None
       }
+
       ret.map { isNaN =>
         s"""
           |if ($setTerm.contains($c)) {
           |  ${ev.value} = true;
           |} else if (${isNaN(c)}) {
-          |  for (int $i = 0; $i < $setTerm.size(); $i++) {
-          |    $jt $elem = $setTerm.elems()[$i];
-          |    if (${isNaN(s"$elem")}) {
+          |  scala.collection.Iterator<java.lang.$jt> it = $setTerm.iterator();
+          |  while (it.hasNext()) {
+          |    if (${isNaN("it.next()")}) {
           |      ${ev.value} = true;
           |      break;
-          |     }
+          |    }
           |  }
           |}
           |$setIsNull
