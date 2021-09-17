@@ -75,38 +75,32 @@ case class EnsureRequirements(
 
     // If there are more than one children, we'll need to check partitioning & distribution of them
     // and see if extra shuffles are necessary.
-    if (childrenIndexes.length > 1 && childrenIndexes.map(requiredChildDistributions(_))
-        .forall(_.isInstanceOf[ClusteredDistribution])) {
-      // TODO: can we handle AllTuples together?
+    if (childrenIndexes.length > 1) {
       val specs = childrenIndexes.map(i =>
-        i -> newChildren(i).outputPartitioning.createShuffleSpec(
+        i -> children(i).outputPartitioning.createShuffleSpec(
           conf.numShufflePartitions,
-          requiredChildDistributions(i).asInstanceOf[ClusteredDistribution])
+          requiredChildDistributions(i))
       ).toMap
 
       // one or more children have requirement on others for shuffle, so we need to check
       // compatibility and come up a common partitioning for them
       val bestSpec = specs.values.maxBy(_.numPartitions)
 
-      newChildren = newChildren.zip(requiredChildDistributions).zipWithIndex.map {
+      children = children.zip(requiredChildDistributions).zipWithIndex.map {
         case ((child, _), idx) if !childrenIndexes.contains(idx) =>
           child
         case ((child, dist), idx) =>
           // pick the best candidate from the requirements and use that to re-shuffle other
           // children if necessary
-          val clustering = dist.asInstanceOf[ClusteredDistribution].clustering
-          val partitioningOpt = if (bestSpec.isCompatibleWith(specs(idx))) {
-            None
+          if (bestSpec.isCompatibleWith(specs(idx))) {
+            child
           } else {
-            Some(bestSpec.createPartitioning(clustering))
-          }
-
-          partitioningOpt.map { p =>
+            val newPartitioning = bestSpec.createPartitioning(dist)
             child match {
-              case ShuffleExchangeExec(_, c, so) => ShuffleExchangeExec(p, c, so)
-              case _ => ShuffleExchangeExec(p, child)
+              case ShuffleExchangeExec(_, c, so) => ShuffleExchangeExec(newPartitioning, c, so)
+              case _ => ShuffleExchangeExec(newPartitioning, child)
             }
-          }.getOrElse(child)
+          }
       }
     }
 
