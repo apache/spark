@@ -4274,7 +4274,6 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
           ""
         }
 
-
         s"""
            |$openHashSet $hashSet = new $openHashSet$hsPostFix($classTag);
            |$declareNullTrackVariables
