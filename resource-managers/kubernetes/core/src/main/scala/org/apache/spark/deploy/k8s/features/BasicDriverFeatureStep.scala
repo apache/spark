@@ -82,7 +82,14 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
           .withName(env._1)
           .withValue(env._2)
           .build()
-      }
+      } ++ {
+      if (conf.get(KUBERNETES_LOG_TO_FILE)) {
+        Seq(new EnvVarBuilder()
+          .withName(ENV_SPARK_LOG_PATH)
+          .withValue(conf.get(KUBERNETES_LOG_TO_FILE_PATH))
+          .build())
+      } else None
+    }
 
     val driverCpuQuantity = new Quantity(driverCoresRequest)
     val driverMemoryQuantity = new Quantity(s"${driverMemoryWithOverheadMiB}Mi")

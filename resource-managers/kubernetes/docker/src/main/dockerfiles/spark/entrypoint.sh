@@ -107,4 +107,14 @@ case "$1" in
 esac
 
 # Execute the container CMD under tini for better hygiene
-exec /usr/bin/tini -s -- "${CMD[@]}"
+if [ -z "$SPARK_K8S_LOG_PATH" ]; then
+  exec /usr/bin/tini -s -- "${CMD[@]}"
+else
+  if [ -n "$SPARK_K8S_LOG_PATH" ]; then
+    mkdir -p "$SPARK_K8S_LOG_PATH"
+  fi
+  # TODO: support custom stdout/stderr file name by spark config
+  K8S_SPARK_LOG_STDOUT=$SPARK_K8S_LOG_PATH/stdout
+  K8S_SPARK_LOG_STDERR=$SPARK_K8S_LOG_PATH/stderr
+  exec /usr/bin/tini -s -- "${CMD[@]}" > >(tee $K8S_SPARK_LOG_STDOUT) 2> >(tee $K8S_SPARK_LOG_STDERR >&2)
+fi

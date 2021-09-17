@@ -50,6 +50,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val resourceID = new ResourceID(SPARK_DRIVER_PREFIX, GPU)
     val resources =
       Map(("nvidia.com/gpu" -> TestResourceInformation(resourceID, "2", "nvidia.com")))
+    val logPath = "/spark/log"
     val sparkConf = new SparkConf()
       .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
       .set(DRIVER_CORES, 2)
@@ -58,6 +59,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(DRIVER_MEMORY_OVERHEAD, 200L)
       .set(CONTAINER_IMAGE, "spark-driver:latest")
       .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS)
+      .set(KUBERNETES_LOG_TO_FILE, true)
+      .set(KUBERNETES_LOG_TO_FILE_PATH, logPath)
     resources.foreach { case (_, testRInfo) =>
       sparkConf.set(testRInfo.rId.amountConf, testRInfo.count)
       sparkConf.set(testRInfo.rId.vendorConf, testRInfo.vendor)
@@ -94,6 +97,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     }
     assert(envs(ENV_SPARK_USER) === Utils.getCurrentUserName())
     assert(envs(ENV_APPLICATION_ID) === kubernetesConf.appId)
+    assert(envs(ENV_SPARK_LOG_PATH) === logPath)
 
     assert(configuredPod.pod.getSpec().getImagePullSecrets.asScala ===
       TEST_IMAGE_PULL_SECRET_OBJECTS)
