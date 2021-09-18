@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.math.{BigDecimal => JavaBigDecimal, BigInteger => JavaBigInteger}
-import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -29,13 +26,10 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.SparkUpgradeException
-import org.apache.spark.sql.{sources, SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96, SPARK_VERSION_METADATA_KEY}
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper}
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, RebaseDateTime}
-import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
-import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse => V2AlwaysFalse, AlwaysTrue => V2AlwaysTrue, And => V2And, EqualNullSafe => V2EqualNullSafe, EqualTo => V2EqualTo, Filter => V2Filter, GreaterThan => V2GreaterThan, GreaterThanOrEqual => V2GreaterThanOrEqual, In => V2In, IsNotNull => V2IsNotNull, IsNull => V2IsNull, LessThan => V2LessThan, LessThanOrEqual => V2LessThanOrEqual, Not => V2Not, Or => V2Or, StringContains => V2StringContains, StringEndsWith => V2StringEndsWith, StringStartsWith => V2StringStartsWith}
+import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
 import org.apache.spark.sql.internal.SQLConf
@@ -43,7 +37,6 @@ import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 object DataSourceUtils extends PredicateHelper {

@@ -56,12 +56,6 @@ class FiltersSuite extends SparkFunSuite {
   test("EqualTo V1 V2 conversion") { withFieldNames { (name, _) =>
     val v1Filter = EqualTo(name, "1")
     val v2Filter = new V2EqualTo(ref(name), LiteralValue(UTF8String.fromString("1"), StringType))
-    assert(DataSourceUtils.convertV1FilterToV2(v1Filter) == v2Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(v2Filter) == v1Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(
-      DataSourceUtils.convertV1FilterToV2(v1Filter)) == v1Filter)
-    assert(DataSourceUtils.convertV1FilterToV2(
-      DataSourceUtils.convertV2FilterToV1(v2Filter)) == v2Filter)
   }}
 
   test("EqualNullSafe references") { withFieldNames { (name, fieldNames) =>
@@ -81,12 +75,6 @@ class FiltersSuite extends SparkFunSuite {
     val v1Filter = EqualNullSafe(name, "1")
     val v2Filter = new V2EqualNullSafe(ref(name),
       LiteralValue(UTF8String.fromString("1"), StringType))
-    assert(DataSourceUtils.convertV1FilterToV2(v1Filter) == v2Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(v2Filter) == v1Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(
-      DataSourceUtils.convertV1FilterToV2(v1Filter)) == v1Filter)
-    assert(DataSourceUtils.convertV1FilterToV2(
-      DataSourceUtils.convertV2FilterToV1(v2Filter)) == v2Filter)
   }}
 
   test("GreaterThan references") { withFieldNames { (name, fieldNames) =>
@@ -106,12 +94,6 @@ class FiltersSuite extends SparkFunSuite {
     val v1Filter = GreaterThan(name, "1")
     val v2Filter = new V2GreaterThan(ref(name),
       LiteralValue(UTF8String.fromString("1"), StringType))
-    assert(DataSourceUtils.convertV1FilterToV2(v1Filter) == v2Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(v2Filter) == v1Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(
-      DataSourceUtils.convertV1FilterToV2(v1Filter)) == v1Filter)
-    assert(DataSourceUtils.convertV1FilterToV2(
-      DataSourceUtils.convertV2FilterToV1(v2Filter)) == v2Filter)
   }}
 
   test("GreaterThanOrEqual references") { withFieldNames { (name, fieldNames) =>
@@ -131,12 +113,6 @@ class FiltersSuite extends SparkFunSuite {
     val v1Filter = GreaterThanOrEqual(name, "1")
     val v2Filter = new V2GreaterThanOrEqual(ref(name),
       LiteralValue(UTF8String.fromString("1"), StringType))
-    assert(DataSourceUtils.convertV1FilterToV2(v1Filter) == v2Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(v2Filter) == v1Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(
-      DataSourceUtils.convertV1FilterToV2(v1Filter)) == v1Filter)
-    assert(DataSourceUtils.convertV1FilterToV2(
-      DataSourceUtils.convertV2FilterToV1(v2Filter)) == v2Filter)
   }}
 
   test("LessThan references") { withFieldNames { (name, fieldNames) =>
@@ -149,12 +125,6 @@ class FiltersSuite extends SparkFunSuite {
   test("LessThan V1 V2 conversion") { withFieldNames { (name, _) =>
     val v1Filter = LessThan(name, "1")
     val v2Filter = new V2LessThan(ref(name), LiteralValue(UTF8String.fromString("1"), StringType))
-    assert(DataSourceUtils.convertV1FilterToV2(v1Filter) == v2Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(v2Filter) == v1Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(
-      DataSourceUtils.convertV1FilterToV2(v1Filter)) == v1Filter)
-    assert(DataSourceUtils.convertV1FilterToV2(
-      DataSourceUtils.convertV2FilterToV1(v2Filter)) == v2Filter)
   }}
 
   test("LessThanOrEqual references") { withFieldNames { (name, fieldNames) =>
@@ -174,12 +144,6 @@ class FiltersSuite extends SparkFunSuite {
     val v1Filter = LessThanOrEqual(name, "1")
     val v2Filter = new V2LessThanOrEqual(ref(name),
       LiteralValue(UTF8String.fromString("1"), StringType))
-    assert(DataSourceUtils.convertV1FilterToV2(v1Filter) == v2Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(v2Filter) == v1Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(
-      DataSourceUtils.convertV1FilterToV2(v1Filter)) == v1Filter)
-    assert(DataSourceUtils.convertV1FilterToV2(
-      DataSourceUtils.convertV2FilterToV1(v2Filter)) == v2Filter)
   }}
 
   test("In references") { withFieldNames { (name, fieldNames) =>
@@ -201,12 +165,6 @@ class FiltersSuite extends SparkFunSuite {
       LiteralValue(UTF8String.fromString("2"), StringType),
       LiteralValue(UTF8String.fromString("3"), StringType),
       LiteralValue(UTF8String.fromString("4"), StringType)))
-    assert(DataSourceUtils.convertV1FilterToV2(v1Filter) == v2Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(v2Filter) == v1Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(
-      DataSourceUtils.convertV1FilterToV2(v1Filter)) == v1Filter)
-    assert(DataSourceUtils.convertV1FilterToV2(
-      DataSourceUtils.convertV2FilterToV1(v2Filter)) == v2Filter)
   }}
 
   test("IsNull references") { withFieldNames { (name, fieldNames) =>
@@ -217,12 +175,6 @@ class FiltersSuite extends SparkFunSuite {
   test("IsNull V1 V2 conversion") { withFieldNames { (name, _) =>
     val v1Filter = IsNull(name)
     val v2Filter = new V2IsNull(ref(name))
-    assert(DataSourceUtils.convertV1FilterToV2(v1Filter) == v2Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(v2Filter) == v1Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(
-      DataSourceUtils.convertV1FilterToV2(v1Filter)) == v1Filter)
-    assert(DataSourceUtils.convertV1FilterToV2(
-      DataSourceUtils.convertV2FilterToV1(v2Filter)) == v2Filter)
   }}
 
   test("IsNotNull references") { withFieldNames { (name, fieldNames) =>
@@ -233,12 +185,6 @@ class FiltersSuite extends SparkFunSuite {
   test("IsNotNull V1 V2 conversion") { withFieldNames { (name, _) =>
     val v1Filter = IsNotNull(name)
     val v2Filter = new V2IsNotNull(ref(name))
-    assert(DataSourceUtils.convertV1FilterToV2(v1Filter) == v2Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(v2Filter) == v1Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(
-      DataSourceUtils.convertV1FilterToV2(v1Filter)) == v1Filter)
-    assert(DataSourceUtils.convertV1FilterToV2(
-      DataSourceUtils.convertV2FilterToV1(v2Filter)) == v2Filter)
   }}
 
   test("And references") { withFieldNames { (name, fieldNames) =>
@@ -256,12 +202,6 @@ class FiltersSuite extends SparkFunSuite {
     val v2Filter = new V2And(new V2EqualTo(ref(name),
       LiteralValue(UTF8String.fromString("1"), StringType)),
       new V2EqualTo(ref("b"), LiteralValue(UTF8String.fromString("1"), StringType)))
-    assert(DataSourceUtils.convertV1FilterToV2(v1Filter) == v2Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(v2Filter) == v1Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(
-      DataSourceUtils.convertV1FilterToV2(v1Filter)) == v1Filter)
-    assert(DataSourceUtils.convertV1FilterToV2(
-      DataSourceUtils.convertV2FilterToV1(v2Filter)) == v2Filter)
   }}
 
   test("Or references") { withFieldNames { (name, fieldNames) =>
@@ -279,12 +219,6 @@ class FiltersSuite extends SparkFunSuite {
     val v2Filter = new V2Or(new V2EqualTo(ref(name),
       LiteralValue(UTF8String.fromString("1"), StringType)),
       new V2EqualTo(ref("b"), LiteralValue(UTF8String.fromString("1"), StringType)))
-    assert(DataSourceUtils.convertV1FilterToV2(v1Filter) == v2Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(v2Filter) == v1Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(
-      DataSourceUtils.convertV1FilterToV2(v1Filter)) == v1Filter)
-    assert(DataSourceUtils.convertV1FilterToV2(
-      DataSourceUtils.convertV2FilterToV1(v2Filter)) == v2Filter)
   }}
 
   test("StringStartsWith references") { withFieldNames { (name, fieldNames) =>
@@ -295,12 +229,6 @@ class FiltersSuite extends SparkFunSuite {
   test("StringStartsWith V1 V2 conversion") { withFieldNames { (name, fieldNames) =>
     val v1Filter = StringStartsWith(name, "str")
     val v2Filter = new V2StringStartsWith(ref(name), UTF8String.fromString("str"))
-    assert(DataSourceUtils.convertV1FilterToV2(v1Filter) == v2Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(v2Filter) == v1Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(
-      DataSourceUtils.convertV1FilterToV2(v1Filter)) == v1Filter)
-    assert(DataSourceUtils.convertV1FilterToV2(
-      DataSourceUtils.convertV2FilterToV1(v2Filter)) == v2Filter)
   }}
 
   test("StringEndsWith references") { withFieldNames { (name, fieldNames) =>
@@ -311,12 +239,6 @@ class FiltersSuite extends SparkFunSuite {
   test("StringEndsWith V1 V2 conversion") { withFieldNames { (name, _) =>
     val v1Filter = StringEndsWith(name, "str")
     val v2Filter = new V2StringEndsWith(ref(name), UTF8String.fromString("str"))
-    assert(DataSourceUtils.convertV1FilterToV2(v1Filter) == v2Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(v2Filter) == v1Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(
-      DataSourceUtils.convertV1FilterToV2(v1Filter)) == v1Filter)
-    assert(DataSourceUtils.convertV1FilterToV2(
-      DataSourceUtils.convertV2FilterToV1(v2Filter)) == v2Filter)
   }}
 
   test("StringContains references") { withFieldNames { (name, fieldNames) =>
@@ -327,12 +249,6 @@ class FiltersSuite extends SparkFunSuite {
   test("StringContains V1 V2 conversion") { withFieldNames { (name, _) =>
     val v1Filter = StringContains(name, "str")
     val v2Filter = new V2StringContains(ref(name), UTF8String.fromString("str"))
-    assert(DataSourceUtils.convertV1FilterToV2(v1Filter) == v2Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(v2Filter) == v1Filter)
-    assert(DataSourceUtils.convertV2FilterToV1(
-      DataSourceUtils.convertV1FilterToV2(v1Filter)) == v1Filter)
-    assert(DataSourceUtils.convertV1FilterToV2(
-      DataSourceUtils.convertV2FilterToV1(v2Filter)) == v2Filter)
   }}
 }
 
