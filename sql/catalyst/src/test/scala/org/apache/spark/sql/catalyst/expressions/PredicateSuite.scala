@@ -645,7 +645,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkExpr(GreaterThan, 0.0, -0.0, false)
   }
 
-  test("Inset NaN") {
+  test("SPARK-36792: InSet should handle Double.NaN and Float.NaN") {
     checkInAndInSet(In(Literal(Double.NaN), Seq(Literal(Double.NaN), Literal(2d))), true)
     checkInAndInSet(In(Literal.create(null, DoubleType),
       Seq(Literal(Double.NaN), Literal(2d), Literal.create(null, DoubleType))), null)
