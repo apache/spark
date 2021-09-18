@@ -47,7 +47,7 @@ public abstract class BlockStoreClient implements Closeable {
   protected volatile TransportClientFactory clientFactory;
   protected String appId;
   // Store the application attemptId
-  protected int appAttemptId;
+  private String appAttemptId;
   protected TransportConf transportConf;
 
   /**
@@ -127,12 +127,12 @@ public abstract class BlockStoreClient implements Closeable {
   }
 
   // Set the application attemptId
-  public void setAppAttemptId(int appAttemptId) {
+  public void setAppAttemptId(String appAttemptId) {
     this.appAttemptId = appAttemptId;
   }
 
-  // get the application attemptId
-  public int getAppAttemptId() {
+  // Get the application attemptId
+  public String getAppAttemptId() {
     return this.appAttemptId;
   }
 
