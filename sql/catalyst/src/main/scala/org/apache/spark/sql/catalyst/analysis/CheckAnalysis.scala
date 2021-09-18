@@ -416,8 +416,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                   }
                 }
               } else {
+                // `TypeCoercion` takes care of type coercion already. If any columns or nested
+                // columns are not compatible, we detect it here and throw analysis exception.
+                val typeChecker = (dt1: DataType, dt2: DataType) => {
+                  !TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty
+                }
                 dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
-                  if (!DataType.equalsStructurally(dt1, dt2, true)) {
+                  if (!DataType.equalsStructurally(dt1, dt2, true, typeChecker)) {
                     failAnalysis(
                       s"""
                          |${operator.nodeName} can only be performed on tables with the compatible

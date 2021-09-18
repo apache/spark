@@ -405,7 +405,8 @@ object DataType {
   def equalsStructurally(
       from: DataType,
       to: DataType,
-      ignoreNullability: Boolean = false): Boolean = {
+      ignoreNullability: Boolean = false,
+      typeChecker: (DataType, DataType) => Boolean = (l, r) => l == r): Boolean = {
     (from, to) match {
       case (left: ArrayType, right: ArrayType) =>
         equalsStructurally(left.elementType, right.elementType, ignoreNullability) &&
@@ -424,7 +425,7 @@ object DataType {
                 (ignoreNullability || l.nullable == r.nullable)
             }
 
-      case (fromDataType, toDataType) => fromDataType == toDataType
+      case (fromDataType, toDataType) => typeChecker(fromDataType, toDataType)
     }
   }
 
