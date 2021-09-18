@@ -112,6 +112,7 @@ from pyspark.pandas.typedef import (
     create_type_for_series_type,
     as_spark_type,
     UnknownType,
+    DataFrameType,
 )
 
 if TYPE_CHECKING:
@@ -4574,31 +4575,40 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         try:
             sig_return = infer_return_type(func)
-            if isinstance(sig_return, UnknownType):
+            if isinstance(sig_return, (UnknownType, DataFrameType)):
                 raise TypeError()
-            return_type = sig_return.spark_type
+            return_spark_type = sig_return.spark_type
+            return_dtype = sig_return.dtype
         except TypeError:
             limit = ps.get_option("compute.shortcut_limit")
             pdf = combined.head(limit + 1)._to_internal_pandas()
             combined_pser = pdf.iloc[:, 0].combine(pdf.iloc[:, 1], func, fill_value=fill_value)
-            return_type = as_spark_type(combined_pser.dtype)
 
-        @pandas_udf(returnType=return_type)  # type: ignore
+            return_dtype = combined_pser.dtype
+            return_spark_type = as_spark_type(return_dtype)
+
+        @pandas_udf(returnType=return_spark_type)  # type: ignore
         def wrapped_func(x: pd.Series, y: pd.Series) -> pd.Series:
             return x.combine(y, func)
 
-        scol = wrapped_func(*combined._internal.data_spark_columns)
-        combined_sdf = combined._internal.spark_frame.select(
-            *combined._internal.index_spark_columns,
-            scol.alias(self._internal.spark_column_name_for(self.spark.column)),
-            NATURAL_ORDER_COLUMN_NAME
+        scol = wrapped_func(*combined._internal.data_spark_columns).alias(
+            self._internal.spark_column_name_for(self.spark.column)
         )
-        internal = InternalFrame(
-            spark_frame=combined_sdf,
-            index_spark_columns=combined._internal.index_spark_columns,
+
+        data_field = self._internal.data_fields[0].copy(
+            dtype=return_dtype, spark_type=return_spark_type, nullable=True
         )
+
+        internal = combined._internal.copy(
+            data_spark_columns=[scol],
+            data_fields=[data_field],
+            column_labels=self._internal.column_labels,
+            column_label_names=self._internal.column_label_names,
+        )
+
         result = first_series(DataFrame(internal))
-        result.name = None if isinstance(other, Series) and (self.name != other.name) else self.name
+        if isinstance(other, Series) and (self.name != other.name):
+            result.name = None
 
         return result
 
