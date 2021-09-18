@@ -93,11 +93,6 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     setComparableAppAttemptId(appAttemptId);
   }
 
-  @Override
-  public String getAppAttemptId() {
-    return Integer.toString(getComparableAppAttemptId());
-  }
-
   private void setComparableAppAttemptId(String appAttemptId) {
     // For now, push based shuffle only supports running in YARN.
     // Application attemptId in YARN is integer and it can be safely parsed
@@ -107,12 +102,9 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     try {
       this.comparableAppAttemptId = Integer.parseInt(appAttemptId);
     } catch (NumberFormatException e) {
-      logger.warn("Push based shuffle requires comparable application attemptId", e);
+      logger.warn("Push based shuffle requires comparable application attemptId, " +
+        "but the appAttemptId {} cannot be parsed to Integer", appAttemptId, e);
     }
-  }
-
-  private int getComparableAppAttemptId() {
-    return this.comparableAppAttemptId;
   }
 
   @Override

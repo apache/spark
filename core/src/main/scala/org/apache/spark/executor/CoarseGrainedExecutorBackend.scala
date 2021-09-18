@@ -471,12 +471,10 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
       // Set the application attemptId in the BlockStoreClient if available.
-      if (Utils.isPushBasedShuffleEnabled(env.conf)) {
-        val appAttemptId = env.conf.get(APP_ATTEMPT_ID)
-        appAttemptId.foreach(attemptId =>
-          env.blockManager.blockStoreClient.setAppAttemptId(attemptId)
-        )
-      }
+      val appAttemptId = env.conf.get(APP_ATTEMPT_ID)
+      appAttemptId.foreach(attemptId =>
+        env.blockManager.blockStoreClient.setAppAttemptId(attemptId)
+      )
       val backend = backendCreateFn(env.rpcEnv, arguments, env, cfg.resourceProfile)
       env.rpcEnv.setupEndpoint("Executor", backend)
       arguments.workerUrl.foreach { url =>
