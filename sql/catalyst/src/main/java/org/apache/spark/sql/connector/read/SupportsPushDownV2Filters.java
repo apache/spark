@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.sources.Filter;
+import org.apache.spark.sql.connector.expressions.filter.Filter;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
@@ -27,7 +27,7 @@ import org.apache.spark.sql.sources.Filter;
  * @since 3.0.0
  */
 @Evolving
-public interface SupportsPushDownFilters extends ScanBuilder {
+public interface SupportsPushDownV2Filters extends ScanBuilder {
 
   /**
    * Pushes down filters, and returns filters that need to be evaluated after scanning.

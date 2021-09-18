@@ -17,33 +17,35 @@
 
 package test.org.apache.spark.sql.connector;
 
-import java.io.IOException;
-import java.util.*;
-
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.connector.TestingV2Source;
 import org.apache.spark.sql.connector.catalog.Table;
+import org.apache.spark.sql.connector.expressions.filter.Filter;
 import org.apache.spark.sql.connector.read.*;
-import org.apache.spark.sql.sources.Filter;
-import org.apache.spark.sql.sources.GreaterThan;
+import org.apache.spark.sql.connector.expressions.filter.GreaterThan;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
-public class JavaAdvancedDataSourceV2 implements TestingV2Source {
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+public class JavaAdvancedDataSourceV2WithV2Filter implements TestingV2Source {
 
   @Override
   public Table getTable(CaseInsensitiveStringMap options) {
     return new JavaSimpleBatchTable() {
       @Override
       public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
-        return new AdvancedScanBuilder();
+        return new AdvancedScanBuilderWithV2Filter();
       }
     };
   }
 
-  static class AdvancedScanBuilder implements ScanBuilder, Scan,
-    SupportsPushDownFilters, SupportsPushDownRequiredColumns {
+  static class AdvancedScanBuilderWithV2Filter implements ScanBuilder, Scan,
+    SupportsPushDownV2Filters, SupportsPushDownRequiredColumns {
 
     private StructType requiredSchema = TestingV2Source.schema();
     private Filter[] filters = new Filter[0];
@@ -63,7 +65,7 @@ public class JavaAdvancedDataSourceV2 implements TestingV2Source {
       Filter[] supported = Arrays.stream(filters).filter(f -> {
         if (f instanceof GreaterThan) {
           GreaterThan gt = (GreaterThan) f;
-          return gt.attribute().equals("i") && gt.value() instanceof Integer;
+          return gt.column().describe().equals("i") && gt.value().value() instanceof Integer;
         } else {
           return false;
         }
@@ -72,7 +74,7 @@ public class JavaAdvancedDataSourceV2 implements TestingV2Source {
       Filter[] unsupported = Arrays.stream(filters).filter(f -> {
         if (f instanceof GreaterThan) {
           GreaterThan gt = (GreaterThan) f;
-          return !gt.attribute().equals("i") || !(gt.value() instanceof Integer);
+          return !gt.column().describe().equals("i") || !(gt.value().value() instanceof Integer);
         } else {
           return true;
         }
@@ -94,16 +96,16 @@ public class JavaAdvancedDataSourceV2 implements TestingV2Source {
 
     @Override
     public Batch toBatch() {
-      return new AdvancedBatch(requiredSchema, filters);
+      return new AdvancedBatchWithV2Filter(requiredSchema, filters);
     }
   }
 
-  public static class AdvancedBatch implements Batch {
+  public static class AdvancedBatchWithV2Filter implements Batch {
     // Exposed for testing.
     public StructType requiredSchema;
     public Filter[] filters;
 
-    AdvancedBatch(StructType requiredSchema, Filter[] filters) {
+    AdvancedBatchWithV2Filter(StructType requiredSchema, Filter[] filters) {
       this.requiredSchema = requiredSchema;
       this.filters = filters;
     }
@@ -116,8 +118,8 @@ public class JavaAdvancedDataSourceV2 implements TestingV2Source {
       for (Filter filter : filters) {
         if (filter instanceof GreaterThan) {
           GreaterThan f = (GreaterThan) filter;
-          if ("i".equals(f.attribute()) && f.value() instanceof Integer) {
-            lowerBound = (Integer) f.value();
+          if ("i".equals(f.column().describe()) && f.value().value() instanceof Integer) {
+            lowerBound = (Integer) f.value().value();
             break;
           }
         }
@@ -138,14 +140,14 @@ public class JavaAdvancedDataSourceV2 implements TestingV2Source {
 
     @Override
     public PartitionReaderFactory createReaderFactory() {
-      return new AdvancedReaderFactory(requiredSchema);
+      return new AdvancedReaderFactoryWithV2Filter(requiredSchema);
     }
   }
 
-  static class AdvancedReaderFactory implements PartitionReaderFactory {
+  static class AdvancedReaderFactoryWithV2Filter implements PartitionReaderFactory {
     StructType requiredSchema;
 
-    AdvancedReaderFactory(StructType requiredSchema) {
+    AdvancedReaderFactoryWithV2Filter(StructType requiredSchema) {
       this.requiredSchema = requiredSchema;
     }
 
