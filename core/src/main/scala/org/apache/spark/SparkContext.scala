@@ -583,7 +583,10 @@ class SparkContext(config: SparkConf) extends Logging {
     _applicationId = _taskScheduler.applicationId()
     _applicationAttemptId = _taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
-    _applicationAttemptId.foreach(attemptId => _conf.set(APP_ATTEMPT_ID, attemptId))
+    _applicationAttemptId.foreach { attemptId =>
+      _conf.set(APP_ATTEMPT_ID, attemptId)
+      _env.blockManager.blockStoreClient.setAppAttemptId(attemptId)
+    }
     if (_conf.get(UI_REVERSE_PROXY)) {
       val proxyUrl = _conf.get(UI_REVERSE_PROXY_URL.key, "").stripSuffix("/") +
         "/proxy/" + _applicationId
