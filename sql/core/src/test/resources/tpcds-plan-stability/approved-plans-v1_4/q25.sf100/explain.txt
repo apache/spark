@@ -173,7 +173,7 @@ Input [6]: [sr_item_sk#18, sr_customer_sk#19, sr_ticket_number#20, sr_net_loss#2
 
 (29) Exchange
 Input [4]: [sr_item_sk#18, sr_customer_sk#19, sr_ticket_number#20, sr_net_loss#21]
-Arguments: hashpartitioning(sr_customer_sk#19, 5), ENSURE_REQUIREMENTS, [id=#25]
+Arguments: hashpartitioning(sr_item_sk#18, 5), ENSURE_REQUIREMENTS, [id=#25]
 
 (30) Sort [codegen id : 10]
 Input [4]: [sr_item_sk#18, sr_customer_sk#19, sr_ticket_number#20, sr_net_loss#21]
@@ -217,7 +217,7 @@ Input [5]: [cs_bill_customer_sk#26, cs_item_sk#27, cs_net_profit#28, cs_sold_dat
 
 (39) Exchange
 Input [3]: [cs_bill_customer_sk#26, cs_item_sk#27, cs_net_profit#28]
-Arguments: hashpartitioning(cs_bill_customer_sk#26, 5), ENSURE_REQUIREMENTS, [id=#31]
+Arguments: hashpartitioning(cs_item_sk#27, 5), ENSURE_REQUIREMENTS, [id=#31]
 
 (40) Sort [codegen id : 14]
 Input [3]: [cs_bill_customer_sk#26, cs_item_sk#27, cs_net_profit#28]

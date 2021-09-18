@@ -399,7 +399,7 @@ Input [3]: [sr_item_sk#32, sr_ticket_number#33, sr_returned_date_sk#34]
 
 (70) Exchange
 Input [2]: [sr_item_sk#32, sr_ticket_number#33]
-Arguments: hashpartitioning(sr_ticket_number#33, 5), ENSURE_REQUIREMENTS, [id=#53]
+Arguments: hashpartitioning(sr_item_sk#32, 5), ENSURE_REQUIREMENTS, [id=#53]
 
 (71) Sort [codegen id : 10]
 Input [2]: [sr_item_sk#32, sr_ticket_number#33]

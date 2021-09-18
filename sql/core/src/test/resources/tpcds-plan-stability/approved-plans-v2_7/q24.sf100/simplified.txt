@@ -52,7 +52,7 @@ WholeStageCodegen (12)
                                           WholeStageCodegen (10)
                                             Sort [sr_ticket_number,sr_item_sk]
                                               InputAdapter
-                                                Exchange [sr_ticket_number] #14
+                                                Exchange [sr_item_sk] #14
                                                   WholeStageCodegen (9)
                                                     Project [sr_item_sk,sr_ticket_number]
                                                       Filter [sr_ticket_number,sr_item_sk]

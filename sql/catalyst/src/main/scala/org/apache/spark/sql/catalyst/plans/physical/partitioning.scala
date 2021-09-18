@@ -444,27 +444,31 @@ case class RangeShuffleSpec(
 
   override def isCompatibleWith(other: ShuffleSpec): Boolean = false
 
-  override def createPartitioning0(clustering: Seq[Expression]): Partitioning = {
-    distribution.createPartitioning(numPartitions)
-  }
+  override def createPartitioning0(clustering: Seq[Expression]): Partitioning =
+    HashPartitioning(clustering, numPartitions)
 }
 
 case class HashShuffleSpec(
     partitioning: HashPartitioning,
     distribution: ClusteredDistribution) extends ShuffleSpec {
-  private lazy val matchingIndexes = indexMap(distribution.clustering, partitioning.expressions)
+  private lazy val hashKeyPositions =
+    createHashKeyPositions(distribution.clustering, partitioning.expressions)
 
   override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
     case SinglePartitionShuffleSpec =>
       partitioning.numPartitions == 1
-    case HashShuffleSpec(partitioning, distribution) =>
-      val expressions = partitioning.expressions
+    case HashShuffleSpec(otherPartitioning, otherDistribution) =>
       // we need to check:
       //  1. both partitioning have the same number of expressions
       //  2. each corresponding expression in both partitioning is used in the same positions
       //     of the corresponding distribution.
-      partitioning.expressions.length == expressions.length &&
-          matchingIndexes == indexMap(distribution.clustering, expressions)
+      partitioning.expressions.length == otherPartitioning.expressions.length && {
+        val otherHashKeyPositions = createHashKeyPositions(
+          otherDistribution.clustering, otherPartitioning.expressions)
+        hashKeyPositions.zip(otherHashKeyPositions).forall { case (left, right) =>
+          left.intersect(right).nonEmpty
+        }
+      }
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)
     case _ =>
@@ -472,32 +476,26 @@ case class HashShuffleSpec(
   }
 
   override def createPartitioning0(clustering: Seq[Expression]): Partitioning = {
-    val exprs = clustering
-        .zipWithIndex
-        .filter(x => matchingIndexes.keySet.contains(x._2))
-        .map(_._1)
+    val exprs = hashKeyPositions.map(v => clustering(v.head))
     HashPartitioning(exprs, partitioning.numPartitions)
   }
 
   override def numPartitions: Int = partitioning.numPartitions
 
-  // For each expression in the `expressions` that has occurrences in
-  // `clustering`, returns a mapping from its index in the partitioning to the
-  // indexes where it appears in the distribution.
-  // For instance, if `clustering` is [a, b] and `expressions` is [a, a, b], then the
-  // result mapping could be { 0 -> (0, 1), 1 -> (2) }.
-  private def indexMap(
-      clustering: Seq[Expression],
-      expressions: Seq[Expression]): mutable.Map[Int, mutable.BitSet] = {
-    val result = mutable.Map.empty[Int, mutable.BitSet]
-    val expressionToIndex = expressions.zipWithIndex.toMap
-    clustering.zipWithIndex.foreach { case (distKey, distKeyIdx) =>
-      expressionToIndex.find { case (partKey, _) => partKey.semanticEquals(distKey) }.forall {
-        case (_, partIdx) =>
-          result.getOrElseUpdate(partIdx, mutable.BitSet.empty).add(distKeyIdx)
-      }
+  /**
+   * Returns a sequence where each element is a set of positions of the key in `hashKeys` to its
+   * positions in `requiredClusterKeys`. For instance, if `requiredClusterKeys` is [a, b, b] and
+   * `hashKeys` is [a, b], the result will be [(0), (1, 2)].
+   */
+  private def createHashKeyPositions(
+      requiredClusterKeys: Seq[Expression],
+      hashKeys: Seq[Expression]): Seq[mutable.BitSet] = {
+    val distKeyToPos = mutable.Map.empty[Expression, mutable.BitSet]
+    requiredClusterKeys.zipWithIndex.foreach { case (distKey, distKeyPos) =>
+      distKeyToPos.getOrElseUpdate(distKey.canonicalized, mutable.BitSet.empty).add(distKeyPos)
     }
-    result
+
+    hashKeys.map(k => distKeyToPos(k.canonicalized))
   }
 }
 
