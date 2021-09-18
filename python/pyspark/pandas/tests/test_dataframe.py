@@ -1954,6 +1954,20 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, msg):
             psdf.isin(1)
 
+        pdf = pd.DataFrame(
+            {
+                "a": [4, 2, 3, 4, 8, 6],
+                "b": [1, None, 9, 4, None, 4],
+                "c": [None, 5, None, 3, 2, 1],
+            },
+            index=np.random.rand(6),
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(psdf.isin([4, 3, 1]), pdf.isin([4, 3, 1]))
+        self.assert_eq(psdf.isin([4, 3, 1, 1, None]), pdf.isin([4, 3, 1, 1, None]))
+        self.assert_eq(psdf.isin({"b": [4, 3, 1, 1, None]}), pdf.isin({"b": [4, 3, 1, 1, None]}))
+
     def test_merge(self):
         left_pdf = pd.DataFrame(
             {
