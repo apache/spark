@@ -608,9 +608,14 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
       } else {
         ""
       }
+
       val ret = child.dataType match {
-        case DoubleType => Some((v: String) => s"java.lang.Double.isNaN((double)$v)")
-        case FloatType => Some((v: String) => s"java.lang.Float.isNaN((float)$v)")
+        case DoubleType =>
+          Some((v: Any) => s"$v == null ? false : " +
+            s"java.lang.Double.isNaN(java.lang.Double.parseDouble(String.valueOf($v)))")
+        case FloatType =>
+          Some((v: Any) => s"$v == null ? false : " +
+            s"java.lang.Float.isNaN(java.lang.Float.parseFloat(String.valueOf($v)))")
         case _ => None
       }
 
@@ -619,9 +624,10 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
           |if ($setTerm.contains($c)) {
           |  ${ev.value} = true;
           |} else if (${isNaN(c)}) {
-          |  scala.collection.Iterator<java.lang.$jt> it = $setTerm.iterator();
+          |  scala.collection.Iterator<java.lang.Object> it = $setTerm.iterator();
           |  while (it.hasNext()) {
-          |    if (${isNaN("it.next()")}) {
+          |    java.lang.Object $elem = it.next();
+          |    if (${isNaN(elem)}) {
           |      ${ev.value} = true;
           |      break;
           |    }
