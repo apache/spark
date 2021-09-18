@@ -39,6 +39,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
+
 object DataSourceUtils extends PredicateHelper {
   /**
    * The key to use for storing partitionBy columns as options.
