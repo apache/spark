@@ -110,8 +110,7 @@ private[sql] object PruneFileSourcePartitions
       }
 
     case op @ PhysicalOperation(projects, filters,
-        v2Relation @ DataSourceV2ScanRelation(_, scan: FileScan, output))
-        if filters.nonEmpty && scan.readDataSchema.nonEmpty =>
+        v2Relation @ DataSourceV2ScanRelation(_, scan: FileScan, output)) if filters.nonEmpty =>
       val (partitionKeyFilters, dataFilters) =
         getPartitionKeyFiltersAndDataFilters(scan.sparkSession, v2Relation,
           scan.readPartitionSchema, filters, output)
