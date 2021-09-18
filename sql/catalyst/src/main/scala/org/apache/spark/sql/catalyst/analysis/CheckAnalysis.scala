@@ -401,16 +401,30 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                     |the ${ordinalNumber(ti + 1)} table has ${child.output.length} columns
                   """.stripMargin.replace("\n", " ").trim())
               }
+              val isUnion = operator.isInstanceOf[Union]
               // Check if the data types match.
-              dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
-                // SPARK-18058: we shall not care about the nullability of columns
-                if (TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty) {
-                  failAnalysis(
-                    s"""
-                      |${operator.nodeName} can only be performed on tables with the compatible
-                      |column types. ${dt1.catalogString} <> ${dt2.catalogString} at the
-                      |${ordinalNumber(ci)} column of the ${ordinalNumber(ti + 1)} table
-                    """.stripMargin.replace("\n", " ").trim())
+              if (!isUnion) {
+                dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
+                  // SPARK-18058: we shall not care about the nullability of columns
+                  if (TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty) {
+                    failAnalysis(
+                      s"""
+                         |${operator.nodeName} can only be performed on tables with the compatible
+                         |column types. ${dt1.catalogString} <> ${dt2.catalogString} at the
+                         |${ordinalNumber(ci)} column of the ${ordinalNumber(ti + 1)} table
+                      """.stripMargin.replace("\n", " ").trim())
+                  }
+                }
+              } else {
+                dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
+                  if (!DataType.equalsStructurally(dt1, dt2, true)) {
+                    failAnalysis(
+                      s"""
+                         |${operator.nodeName} can only be performed on tables with the compatible
+                         |column types. ${dt1.catalogString} <> ${dt2.catalogString} at the
+                         |${ordinalNumber(ci)} column of the ${ordinalNumber(ti + 1)} table
+                      """.stripMargin.replace("\n", " ").trim())
+                  }
                 }
               }
             }
