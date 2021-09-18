@@ -1960,13 +1960,34 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
                 "b": [1, None, 9, 4, None, 4],
                 "c": [None, 5, None, 3, 2, 1],
             },
-            index=np.random.rand(6),
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(psdf.isin([4, 3, 1]), pdf.isin([4, 3, 1]))
-        self.assert_eq(psdf.isin([4, 3, 1, 1, None]), pdf.isin([4, 3, 1, 1, None]))
-        self.assert_eq(psdf.isin({"b": [4, 3, 1, 1, None]}), pdf.isin({"b": [4, 3, 1, 1, None]}))
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+            self.assert_eq(psdf.isin([4, 3, 1, 1, None]), pdf.isin([4, 3, 1, 1, None]))
+        else:
+            expected = pd.DataFrame(
+                {
+                    "a": [True, False, True, True, False, False],
+                    "b": [True, True, False, True, True, True],
+                    "c": [True, False, True, True, False, True],
+                }
+            )
+            self.assert_eq(psdf.isin([4, 3, 1, 1, None]), expected)
+
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+            self.assert_eq(
+                psdf.isin({"b": [4, 3, 1, 1, None]}), pdf.isin({"b": [4, 3, 1, 1, None]})
+            )
+        else:
+            expected = pd.DataFrame(
+                {
+                    "a": [False, False, False, False, False, False],
+                    "b": [True, True, False, True, True, True],
+                    "c": [False, False, False, False, False, False],
+                }
+            )
+            self.assert_eq(psdf.isin([4, 3, 1, 1, None]), expected)
 
     def test_merge(self):
         left_pdf = pd.DataFrame(
