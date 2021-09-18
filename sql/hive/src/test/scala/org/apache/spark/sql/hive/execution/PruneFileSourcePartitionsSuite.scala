@@ -110,7 +110,7 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase {
     }
   }
 
-  test("SPARK-35985 push filters for empty read schema") {
+  test("SPARK-35985 SPARK-36776 push filters for empty read schema") {
     // Force datasource v2 for parquet
     withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
       withTempPath { dir =>
