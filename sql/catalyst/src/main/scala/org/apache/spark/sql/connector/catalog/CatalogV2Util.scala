@@ -307,11 +307,6 @@ private[sql] object CatalogV2Util {
     catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)
   }
 
-//  def convertTableProperties(c: CreateTableStatement): Map[String, String] = {
-//    convertTableProperties(
-//      c.properties, c.options, c.serde, c.location, c.comment, c.provider, c.external)
-//  }
-
   def convertTableProperties(c: CreateTableAsSelectStatement): Map[String, String] = {
     convertTableProperties(
       c.properties, c.options, c.serde, c.location, c.comment, c.provider, c.external)

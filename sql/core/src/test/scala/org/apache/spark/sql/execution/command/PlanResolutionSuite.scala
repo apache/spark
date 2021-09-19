@@ -2276,14 +2276,6 @@ class PlanResolutionSuite extends AnalysisTest {
     assert(e2.getMessage.contains("Operation not allowed"))
   }
 
-//  test("create table - properties") {
-//    val query = "CREATE TABLE my_table (id int, name string) TBLPROPERTIES ('k1'='v1', 'k2'='v2')"
-//    parsePlan(query) match {
-//      case state: CreateTableStatement =>
-//        assert(state.properties == Map("k1" -> "v1", "k2" -> "v2"))
-//    }
-//  }
-
   test("create table(hive) - everything!") {
     val query =
       """
