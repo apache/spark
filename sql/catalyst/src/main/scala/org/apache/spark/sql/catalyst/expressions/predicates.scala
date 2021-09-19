@@ -554,7 +554,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   @transient private[this] lazy val hasNull: Boolean = hset.contains(null)
-  private[this] val isNaN: Any => Boolean = child.dataType match {
+  private[this] lazy val isNaN: Any => Boolean = child.dataType match {
     case DoubleType => (value: Any) => java.lang.Double.isNaN(value.asInstanceOf[java.lang.Double])
     case FloatType => (value: Any) => java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float])
     case _ => (_: Any) => false
