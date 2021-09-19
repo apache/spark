@@ -26,15 +26,16 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedFieldName, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedDBObjectName, ResolvedFieldName, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{AnsiCast, AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTableAsSelect, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, V1Table}
+import org.apache.spark.sql.connector.catalog.CatalogV2Util.convertTableProperties
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -479,17 +480,22 @@ class PlanResolutionSuite extends AnalysisTest {
       "location" -> "s3://bucket/path/to/data",
       "comment" -> "table comment",
       "other" -> "20")
+    import org.apache.spark.sql.connector.catalog.CatalogV2Util.convertTableProperties
 
     parseAndResolve(sql) match {
       case create: CreateV2Table =>
-        assert(create.catalog.name == "testcat")
-        assert(create.tableName == Identifier.of(Array("mydb"), "table_name"))
+        assert(create.name.asInstanceOf[ResolvedDBObjectName].catalog.name == "testcat")
+        assert(create.name.asInstanceOf[ResolvedDBObjectName].nameParts.mkString(".") ==
+          "mydb.table_name")
         assert(create.tableSchema == new StructType()
             .add("id", LongType)
             .add("description", StringType)
             .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
         assert(create.partitioning.isEmpty)
-        assert(create.properties == expectedProperties)
+        val props = convertTableProperties(
+          create.properties, create.options, create.serdeInfo, create.location, create.comment,
+          create.provider, create.external)
+        assert(props == expectedProperties)
         assert(create.ignoreIfExists)
 
       case other =>
@@ -522,14 +528,18 @@ class PlanResolutionSuite extends AnalysisTest {
 
     parseAndResolve(sql, withDefault = true) match {
       case create: CreateV2Table =>
-        assert(create.catalog.name == "testcat")
-        assert(create.tableName == Identifier.of(Array("mydb"), "table_name"))
+        assert(create.name.asInstanceOf[ResolvedDBObjectName].catalog.name == "testcat")
+        assert(create.name.asInstanceOf[ResolvedDBObjectName].nameParts.mkString(".") ==
+          "mydb.table_name")
         assert(create.tableSchema == new StructType()
             .add("id", LongType)
             .add("description", StringType)
             .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
         assert(create.partitioning.isEmpty)
-        assert(create.properties == expectedProperties)
+        val props = convertTableProperties(
+          create.properties, create.options, create.serdeInfo, create.location, create.comment,
+          create.provider, create.external)
+        assert(props == expectedProperties)
         assert(create.ignoreIfExists)
 
       case other =>
@@ -560,14 +570,19 @@ class PlanResolutionSuite extends AnalysisTest {
 
     parseAndResolve(sql) match {
       case create: CreateV2Table =>
-        assert(create.catalog.name == CatalogManager.SESSION_CATALOG_NAME)
-        assert(create.tableName == Identifier.of(Array("mydb"), "page_view"))
+        assert(create.name.asInstanceOf[ResolvedDBObjectName].catalog.name ==
+          CatalogManager.SESSION_CATALOG_NAME)
+        assert(create.name.asInstanceOf[ResolvedDBObjectName].nameParts.mkString(".") ==
+          "mydb.page_view")
         assert(create.tableSchema == new StructType()
             .add("id", LongType)
             .add("description", StringType)
             .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
         assert(create.partitioning.isEmpty)
-        assert(create.properties == expectedProperties)
+        val props = convertTableProperties(
+          create.properties, create.options, create.serdeInfo, create.location, create.comment,
+          create.provider, create.external)
+        assert(props == expectedProperties)
         assert(create.ignoreIfExists)
 
       case other =>
@@ -2261,13 +2276,13 @@ class PlanResolutionSuite extends AnalysisTest {
     assert(e2.getMessage.contains("Operation not allowed"))
   }
 
-  test("create table - properties") {
-    val query = "CREATE TABLE my_table (id int, name string) TBLPROPERTIES ('k1'='v1', 'k2'='v2')"
-    parsePlan(query) match {
-      case state: CreateTableStatement =>
-        assert(state.properties == Map("k1" -> "v1", "k2" -> "v2"))
-    }
-  }
+//  test("create table - properties") {
+//    val query = "CREATE TABLE my_table (id int, name string) TBLPROPERTIES ('k1'='v1', 'k2'='v2')"
+//    parsePlan(query) match {
+//      case state: CreateTableStatement =>
+//        assert(state.properties == Map("k1" -> "v1", "k2" -> "v2"))
+//    }
+//  }
 
   test("create table(hive) - everything!") {
     val query =

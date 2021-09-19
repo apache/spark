@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, FieldName, NamedRelation, PartitionSpec, UnresolvedException}
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
@@ -190,17 +191,35 @@ trait V2CreateTablePlan extends LogicalPlan {
   def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan
 }
 
+trait V2CreateTablePlanX extends LogicalPlan {
+  def name: LogicalPlan
+  def partitioning: Seq[Transform]
+  def tableSchema: StructType
+
+  /**
+   * Creates a copy of this node with the new partitioning transforms. This method is used to
+   * rewrite the partition transforms normalized according to the table schema.
+   */
+  def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlanX
+}
+
 /**
  * Create a new table with a v2 catalog.
  */
 case class CreateV2Table(
-    catalog: TableCatalog,
-    tableName: Identifier,
+    name: LogicalPlan,
     tableSchema: StructType,
     partitioning: Seq[Transform],
+    bucketSpec: Option[BucketSpec],
     properties: Map[String, String],
-    ignoreIfExists: Boolean) extends LeafCommand with V2CreateTablePlan {
-  override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
+    options: Map[String, String],
+    serdeInfo: Option[SerdeInfo],
+    location: Option[String],
+    comment: Option[String],
+    provider: Option[String],
+    external: Boolean,
+    ignoreIfExists: Boolean) extends LeafCommand with V2CreateTablePlanX {
+  override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlanX = {
     this.copy(partitioning = rewritten)
   }
 }
