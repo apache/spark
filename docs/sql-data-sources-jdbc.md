@@ -29,7 +29,9 @@ as a DataFrame and they can easily be processed in Spark SQL or joined with othe
 The JDBC data source is also easier to use from Java or Python as it does not require the user to
 provide a ClassTag.
 (Note that this is different than the Spark SQL JDBC server, which allows other applications to
-run queries using Spark SQL).
+run queries using Spark SQL). 
+
+All columns are automatically converted to be nullable for compatibility reasons.
 
 To get started you will need to include the JDBC driver for your particular database on the
 spark classpath. For example, to connect to postgres from the Spark Shell you would run the
