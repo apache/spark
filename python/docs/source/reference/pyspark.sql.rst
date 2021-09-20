@@ -394,6 +394,7 @@ Functions
     covar_samp
     crc32
     create_map
+    csc
     cume_dist
     current_date
     current_timestamp
@@ -511,6 +512,7 @@ Functions
     rtrim
     schema_of_csv
     schema_of_json
+    sec
     second
     sentences
     sequence
