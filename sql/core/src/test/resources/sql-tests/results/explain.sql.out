@@ -842,20 +842,20 @@ EXPLAIN FORMATTED
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-Execute CreateViewCommand (1)
-   +- CreateViewCommand (2)
-         +- Project (5)
-            +- SubqueryAlias (4)
-               +- LogicalRelation (3)
+Execute CreateViewCommand (5)
+   +- CreateViewCommand (4)
+         +- Project (3)
+            +- SubqueryAlias (2)
+               +- LogicalRelation (1)
 
 
-(1) Execute CreateViewCommand
+(5) Execute CreateViewCommand
 Output: []
 
-(2) CreateViewCommand
+(4) CreateViewCommand
 Arguments: `default`.`explain_view`, SELECT key, val FROM explain_temp1, false, false, PersistedView, true
 
-(3) LogicalRelation
+(1) LogicalRelation
 Arguments: parquet, [key#x, val#x], CatalogTable(
 Database: default
 Table: explain_temp1
@@ -870,10 +870,10 @@ Schema: root
 -- val: integer (nullable = true)
 ), false
 
-(4) SubqueryAlias
+(2) SubqueryAlias
 Arguments: spark_catalog.default.explain_temp1
 
-(5) Project
+(3) Project
 Arguments: [key#x, val#x]
 
 
