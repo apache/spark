@@ -1126,7 +1126,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
    Whether to write executor/driver stdout/stderr as log file
   </td>
-  <td>3.2.0</td>
+  <td>3.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.logToFile.path</code></td>
@@ -1134,7 +1134,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
    The path to write executor/driver stdout/stderr as log file
   </td>
-  <td>3.2.0</td>
+  <td>3.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.memoryOverheadFactor</code></td>
