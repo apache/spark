@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
@@ -111,10 +110,9 @@ case class InSubqueryExec(
     child: Expression,
     plan: BaseSubqueryExec,
     exprId: ExprId,
-    private var resultBroadcast: Broadcast[Array[Any]] = null)
+    @transient private var result: Array[Any] = null)
   extends ExecSubqueryExpression with UnaryLike[Expression] {
 
-  @transient private var result: Array[Any] = _
   @transient private lazy val inSet = InSet(child, result.toSet)
 
   override def dataType: DataType = BooleanType
@@ -130,16 +128,12 @@ case class InSubqueryExec(
     } else {
       rows.map(_.get(0, child.dataType))
     }
-    resultBroadcast = plan.session.sparkContext.broadcast(result)
   }
 
-  def values(): Option[Array[Any]] = Option(resultBroadcast).map(_.value)
+  def values(): Option[Array[Any]] = Option(result)
 
   private def prepareResult(): Unit = {
-    require(resultBroadcast != null, s"$this has not finished")
-    if (result == null) {
-      result = resultBroadcast.value
-    }
+    require(result != null, s"$this has not finished")
   }
 
   override def eval(input: InternalRow): Any = {
@@ -157,7 +151,7 @@ case class InSubqueryExec(
       child = child.canonicalized,
       plan = plan.canonicalized.asInstanceOf[BaseSubqueryExec],
       exprId = ExprId(0),
-      resultBroadcast = null)
+      result = null)
   }
 
   override protected def withNewChildInternal(newChild: Expression): InSubqueryExec =

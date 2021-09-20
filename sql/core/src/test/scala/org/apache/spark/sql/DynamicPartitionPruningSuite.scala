@@ -1473,11 +1473,12 @@ abstract class DynamicPartitionPruningSuiteBase
         }
       }
 
-      // DPP will only apply if left side can broadcast by size
-      Seq(1L, 100000L).foreach { threshold =>
-        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$threshold") {
+      // DPP will only apply if the overhead is smaller than pruning size after extra filter ratio.
+      Seq(0.01, 1).foreach { ratio =>
+        withSQLConf(
+            SQLConf.DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO.key -> s"$ratio") {
           val df = sql(sqlStr)
-          checkPartitionPruningPredicate(df, threshold > 10L, false)
+          checkPartitionPruningPredicate(df, ratio > 0.5, false)
         }
       }
     }
