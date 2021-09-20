@@ -20,10 +20,9 @@ package org.apache.spark.resource
 import java.io.File
 import java.util.Optional
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
-import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils.executeAndGetOutput
 
@@ -51,13 +50,16 @@ class ResourceDiscoveryScriptPlugin extends ResourceDiscoveryPlugin with Logging
         val output = executeAndGetOutput(Seq(script.get), new File("."))
         ResourceInformation.parseJson(output)
       } else {
-        throw SparkCoreErrors.resourceScriptNotExistError(scriptFile, resourceName)
+        throw new SparkException(s"Resource script: $scriptFile to discover $resourceName " +
+          "doesn't exist!")
       }
     } else {
-      throw SparkCoreErrors.noDiscoveryScriptSpecifiedError(resourceName)
+      throw new SparkException(s"User is expecting to use resource: $resourceName, but " +
+        "didn't specify a discovery script!")
     }
     if (!result.name.equals(resourceName)) {
-      throw SparkCoreErrors.discoveryScriptNameMismatchError(script, result.name, resourceName)
+      throw new SparkException(s"Error running the resource discovery script ${script.get}: " +
+        s"script returned resource name ${result.name} and we were expecting $resourceName.")
     }
     Optional.of(result)
   }

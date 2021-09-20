@@ -24,7 +24,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.{Evolving, Since}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
@@ -186,8 +186,8 @@ class ResourceProfile(
       numPartsPerResourceMap(rName) = 1
       if (taskReq > 0.0) {
         if (taskReq > execReq.amount) {
-          throw SparkCoreErrors.executorResourceLessThanTaskResourceRequestError(rName,
-            execReq.amount, taskReq)
+          throw new SparkException(s"The executor resource: $rName, amount: ${execReq.amount} " +
+            s"needs to be >= the task resource request amount of $taskReq")
         }
         val (numPerTask, parts) = ResourceUtils.calculateAmountAndPartsForFraction(taskReq)
         numPartsPerResourceMap(rName) = parts
@@ -203,7 +203,8 @@ class ResourceProfile(
       }
     }
     if (taskResourcesToCheck.nonEmpty) {
-      throw SparkCoreErrors.noExecutorResourceConfigError(taskResourcesToCheck.keys.mkString(","))
+      throw new SparkException("No executor resource configs were not specified for the " +
+        s"following task configs: ${taskResourcesToCheck.keys.mkString(",")}")
     }
     val limiting =
       if (taskLimit == -1) "cpu" else s"$limitingResource at $taskLimit tasks per executor"
