@@ -708,6 +708,19 @@ case class UnixSeconds(child: Expression) extends TimestampToLongBase {
     copy(child = newChild)
 }
 
+// Internal expression used to get the raw UTC timestamp in pandas API on Spark.
+// This is to work around casting timestamp_ntz to long disallowed by ANSI.
+case class CastTimestampNTZToLong(child: Expression) extends TimestampToLongBase {
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampNTZType)
+
+  override def scaleFactor: Long = MICROS_PER_SECOND
+
+  override def prettyName: String = "cast_timestamp_ntz_to_long"
+
+  override protected def withNewChildInternal(newChild: Expression): CastTimestampNTZToLong =
+    copy(child = newChild)
+}
+
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp) - Returns the number of milliseconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of precision.",

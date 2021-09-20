@@ -22,7 +22,7 @@ pandas instances during the type conversion.
 
 from pyspark.sql.types import BooleanType, ByteType, ShortType, IntegerType, LongType, \
     FloatType, DoubleType, DecimalType, StringType, BinaryType, DateType, TimestampType, \
-    ArrayType, MapType, StructType, StructField, NullType
+    TimestampNTZType, ArrayType, MapType, StructType, StructField, NullType
 
 
 def to_arrow_type(dt):
@@ -55,6 +55,8 @@ def to_arrow_type(dt):
     elif type(dt) == TimestampType:
         # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
         arrow_type = pa.timestamp('us', tz='UTC')
+    elif type(dt) == TimestampNTZType:
+        arrow_type = pa.timestamp('us', tz=None)
     elif type(dt) == ArrayType:
         if type(dt.elementType) in [StructType, TimestampType]:
             raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
@@ -88,7 +90,7 @@ def to_arrow_schema(schema):
     return pa.schema(fields)
 
 
-def from_arrow_type(at):
+def from_arrow_type(at, prefer_timestamp_ntz=False):
     """ Convert pyarrow type to Spark data type.
     """
     from distutils.version import LooseVersion
@@ -116,6 +118,8 @@ def from_arrow_type(at):
         spark_type = BinaryType()
     elif types.is_date32(at):
         spark_type = DateType()
+    elif types.is_timestamp(at) and prefer_timestamp_ntz and at.tz is None:
+        spark_type = TimestampNTZType()
     elif types.is_timestamp(at):
         spark_type = TimestampType()
     elif types.is_list(at):

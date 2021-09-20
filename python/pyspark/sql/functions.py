@@ -377,6 +377,23 @@ def cosh(col):
     return _invoke_function_over_column("cosh", col)
 
 
+def cot(col):
+    """
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Angle in radians
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Cotangent of the angle.
+    """
+    return _invoke_function_over_column("cot", col)
+
+
 @since(1.4)
 def exp(col):
     """
@@ -3079,6 +3096,58 @@ def length(col):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.length(_to_java_column(col)))
+
+
+def octet_length(col):
+    """
+    Calculates the byte length for the specified string column.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Source column or strings
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Byte length of the col
+
+    Examples
+    -------
+    >>> from pyspark.sql.functions import octet_length
+    >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']) \
+            .select(octet_length('cat')).collect()
+        [Row(octet_length(cat)=3), Row(octet_length(cat)=4)]
+    """
+    return _invoke_function_over_column("octet_length", col)
+
+
+def bit_length(col):
+    """
+    Calculates the bit length for the specified string column.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Source column or strings
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Bit length of the col
+
+    Examples
+    -------
+    >>> from pyspark.sql.functions import bit_length
+    >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']) \
+            .select(bit_length('cat')).collect()
+        [Row(bit_length(cat)=24), Row(bit_length(cat)=32)]
+    """
+    return _invoke_function_over_column("bit_length", col)
 
 
 def translate(srcCol, matching, replace):

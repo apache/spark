@@ -1801,6 +1801,15 @@ object functions {
   def cosh(columnName: String): Column = cosh(Column(columnName))
 
   /**
+   * @param e angle in radians
+   * @return cotangent of the angle
+   *
+   * @group math_funcs
+   * @since 3.3.0
+   */
+  def cot(e: Column): Column = withExpr { Cot(e.expr) }
+
+  /**
    * Computes the exponential of the given value.
    *
    * @group math_funcs
@@ -2533,6 +2542,14 @@ object functions {
   def base64(e: Column): Column = withExpr { Base64(e.expr) }
 
   /**
+   * Calculates the bit length for the specified string column.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def bit_length(e: Column): Column = withExpr { BitLength(e.expr) }
+
+  /**
    * Concatenates multiple input string columns together into a single string column,
    * using the given separator.
    *
@@ -2696,6 +2713,14 @@ object functions {
   def ltrim(e: Column, trimString: String): Column = withExpr {
     StringTrimLeft(e.expr, Literal(trimString))
   }
+
+  /**
+   * Calculates the byte length for the specified string column.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def octet_length(e: Column): Column = withExpr { OctetLength(e.expr) }
 
   /**
    * Extract a specific group matched by a Java regex, from the specified string column.
@@ -3816,6 +3841,7 @@ object functions {
 
   /**
    * Sorts the input array in ascending order. The elements of the input array must be orderable.
+   * NaN is greater than any non-NaN elements for double/float type.
    * Null elements will be placed at the end of the returned array.
    *
    * @group collection_funcs
@@ -4525,8 +4551,9 @@ object functions {
 
   /**
    * Sorts the input array for the given column in ascending or descending order,
-   * according to the natural ordering of the array elements.
-   * Null elements will be placed at the beginning of the returned array in ascending order or
+   * according to the natural ordering of the array elements. NaN is greater than any non-NaN
+   * elements for double/float type. Null elements will be placed at the beginning of the returned
+   * array in ascending order or
    * at the end of the returned array in descending order.
    *
    * @group collection_funcs
@@ -4535,7 +4562,8 @@ object functions {
   def sort_array(e: Column, asc: Boolean): Column = withExpr { SortArray(e.expr, lit(asc).expr) }
 
   /**
-   * Returns the minimum value in the array.
+   * Returns the minimum value in the array. NaN is greater than any non-NaN elements for
+   * double/float type. NULL elements are skipped.
    *
    * @group collection_funcs
    * @since 2.4.0
@@ -4543,7 +4571,8 @@ object functions {
   def array_min(e: Column): Column = withExpr { ArrayMin(e.expr) }
 
   /**
-   * Returns the maximum value in the array.
+   * Returns the maximum value in the array. NaN is greater than any non-NaN elements for
+   * double/float type. NULL elements are skipped.
    *
    * @group collection_funcs
    * @since 2.4.0

@@ -120,7 +120,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
     parser = new UnivocityParser(StructType(Seq.empty), timestampsOptions)
     val customTimestamp = "31/01/2015 00:00"
     var format = FastDateFormat.getInstance(
-      timestampsOptions.timestampFormat,
+      timestampsOptions.timestampFormatInRead.get,
       TimeZone.getTimeZone(timestampsOptions.zoneId),
       timestampsOptions.locale)
     val expectedTime = format.parse(customTimestamp).getTime
@@ -132,7 +132,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
     val dateOptions = new CSVOptions(Map("dateFormat" -> "dd/MM/yyyy"), false, "UTC")
     parser = new UnivocityParser(StructType(Seq.empty), dateOptions)
     format = FastDateFormat.getInstance(
-      dateOptions.dateFormat,
+      dateOptions.dateFormatInRead.get,
       TimeZone.getTimeZone(dateOptions.zoneId),
       dateOptions.locale)
     val expectedDate = DateTimeUtils.millisToMicros(format.parse(customDate).getTime)

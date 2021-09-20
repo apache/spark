@@ -1161,7 +1161,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> tsType.toString) {
         val expected = expectedAnswer("2013-07-15 08:15:23.5")
 
-        Seq(true).foreach { ansi =>
+        Seq(true, false).foreach { ansi =>
           withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
             var makeTimestampExpr = MakeTimestamp(
               Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15),

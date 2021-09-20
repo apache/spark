@@ -298,6 +298,7 @@ Data Types
     StringType
     StructField
     StructType
+    TimestampNTZType
     TimestampType
 
 
@@ -366,6 +367,7 @@ Functions
     avg
     base64
     bin
+    bit_length
     bitwise_not
     bitwiseNOT
     broadcast
@@ -384,6 +386,7 @@ Functions
     corr
     cos
     cosh
+    cot
     count
     count_distinct
     countDistinct
@@ -482,6 +485,7 @@ Functions
     next_day
     nth_value
     ntile
+    octet_length
     overlay
     pandas_udf
     percent_rank
