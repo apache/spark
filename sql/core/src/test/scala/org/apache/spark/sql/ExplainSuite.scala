@@ -721,10 +721,10 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
           |   :  +- BroadcastExchange (7)
           |   :     +- * Filter (6)
           |   :        +- * ColumnarToRow (5)
-          |   :           +- InMemoryTableScan (1)
-          |   :                 +- InMemoryRelation (2)
-          |   :                       +- * ColumnarToRow (4)
-          |   :                          +- Scan parquet default.t1 (3)
+          |   :           +- InMemoryTableScan (4)
+          |   :                 +- InMemoryRelation (3)
+          |   :                       +- * ColumnarToRow (2)
+          |   :                          +- Scan parquet default.t1 (1)
           |""".stripMargin
       )
     }
