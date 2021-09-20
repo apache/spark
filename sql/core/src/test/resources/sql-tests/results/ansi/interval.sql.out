@@ -121,7 +121,7 @@ select interval 2 second * 'a'
 -- !query schema
 struct<>
 -- !query output
-java.lang.NumberFormatException
+org.apache.spark.SparkNumberFormatException
 invalid input syntax for type numeric: a
 
 
@@ -130,7 +130,7 @@ select interval 2 second / 'a'
 -- !query schema
 struct<>
 -- !query output
-java.lang.NumberFormatException
+org.apache.spark.SparkNumberFormatException
 invalid input syntax for type numeric: a
 
 
@@ -139,7 +139,7 @@ select interval 2 year * 'a'
 -- !query schema
 struct<>
 -- !query output
-java.lang.NumberFormatException
+org.apache.spark.SparkNumberFormatException
 invalid input syntax for type numeric: a
 
 
@@ -148,7 +148,7 @@ select interval 2 year / 'a'
 -- !query schema
 struct<>
 -- !query output
-java.lang.NumberFormatException
+org.apache.spark.SparkNumberFormatException
 invalid input syntax for type numeric: a
 
 
@@ -173,7 +173,7 @@ select 'a' * interval 2 second
 -- !query schema
 struct<>
 -- !query output
-java.lang.NumberFormatException
+org.apache.spark.SparkNumberFormatException
 invalid input syntax for type numeric: a
 
 
@@ -182,7 +182,7 @@ select 'a' * interval 2 year
 -- !query schema
 struct<>
 -- !query output
-java.lang.NumberFormatException
+org.apache.spark.SparkNumberFormatException
 invalid input syntax for type numeric: a
 
 
