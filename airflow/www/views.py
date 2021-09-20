@@ -564,11 +564,15 @@ class Airflow(AirflowBaseView):
                 ),
                 category="warning",
             )
+
+        for fm in settings.DASHBOARD_UIALERTS:
+            if fm.should_show(current_app.appbuilder.sm):
+                flash(fm.message, fm.category)
+
         hide_paused_dags_by_default = conf.getboolean('webserver', 'hide_paused_dags_by_default')
-
         default_dag_run = conf.getint('webserver', 'default_dag_run_display_number')
-        num_runs = request.args.get('num_runs', default=default_dag_run, type=int)
 
+        num_runs = request.args.get('num_runs', default=default_dag_run, type=int)
         current_page = request.args.get('page', default=0, type=int)
         arg_search_query = request.args.get('search')
         arg_tags_filter = request.args.getlist('tags')
