@@ -17,13 +17,10 @@
 
 package org.apache.spark.errors
 
-import java.io.File
 import java.io.IOException
-import java.util.Optional
 import java.util.concurrent.TimeoutException
 
 import org.apache.hadoop.fs.Path
-import org.json4s.JValue
 
 import org.apache.spark.{SparkException, TaskNotSerializableException}
 import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException}
@@ -160,150 +157,12 @@ object SparkCoreErrors {
     new SparkException("Checkpoint dir must be specified.")
   }
 
-  def acquireNonExistingAddressError(resourceName: String, address: String): Throwable = {
-    new SparkException(s"Try to acquire an address that doesn't exist. $resourceName " +
-      s"address $address doesn't exist.")
-  }
-
-  def acquireUnavailableAddressError(resourceName: String, address: String): Throwable = {
-    new SparkException("Try to acquire an address that is not available. " +
-      s"$resourceName address $address is not available.")
-  }
-
-  def releaseNonExistingAddressError(resourceName: String, address: String): Throwable = {
-    new SparkException(s"Try to release an address that doesn't exist. $resourceName " +
-      s"address $address doesn't exist.")
-  }
-
-  def releaseUnassignedAddressError(resourceName: String, address: String): Throwable = {
-    new SparkException(s"Try to release an address that is not assigned. $resourceName " +
-      s"address $address is not assigned.")
-  }
-
-  def resourceScriptNotExistError(scriptFile: File, resourceName: String): Throwable = {
-    new SparkException(s"Resource script: $scriptFile to discover $resourceName " +
-      "doesn't exist!")
-  }
-
-  def noDiscoveryScriptSpecifiedError(resourceName: String): Throwable = {
-    new SparkException(s"User is expecting to use resource: $resourceName, but " +
-      "didn't specify a discovery script!")
-  }
-
-  def discoveryScriptNameMismatchError(
-      script: Optional[String],
-      name: String,
-      resourceName: String): Throwable = {
-    new SparkException(s"Error running the resource discovery script ${script.get}: " +
-      s"script returned resource name ${name} and we were expecting $resourceName.")
-  }
-
-  def failToParseJsonToResourceInformationError(
-      json: String,
-      exampleJson: String,
-      e: Throwable): Throwable = {
-    new SparkException(s"Error parsing JSON into ResourceInformation:\n$json\n" +
-      s"Here is a correct example: $exampleJson.", e)
-  }
-
-  def parsingJsonToResourceInformationError(json: JValue, e: Throwable): Throwable = {
-    new SparkException(s"Error parsing JSON into ResourceInformation:\n$json\n", e)
-  }
-
   def resourceNotExistInProfileIdError(resource: String, id: Int): Throwable = {
     new SparkException(s"Resource $resource doesn't exist in profile id: $id")
   }
 
-  def executorResourceLessThanTaskResourceRequestError(
-      rName: String,
-      num: Long,
-      taskReq: Double): Throwable = {
-    new SparkException(s"The executor resource: $rName, amount: ${num} " +
-      s"needs to be >= the task resource request amount of $taskReq")
-  }
-
-  def noExecutorResourceConfigError(str: String): Throwable = {
-    new SparkException("No executor resource configs were not specified for the " +
-      s"following task configs: ${str}")
-  }
-
-  def resourceProfilesUnsupportedError(): Throwable = {
-    new SparkException("ResourceProfiles are only supported on YARN and Kubernetes " +
-      "with dynamic allocation enabled.")
-  }
-
-  def resourceProfileIdNotFoundError(rpId: Int): Throwable = {
-    new SparkException(s"ResourceProfileId $rpId not found!")
-  }
-
   def noAmountSpecifiedForResourceError(str: String): Throwable = {
     new SparkException(s"You must specify an amount for ${str}")
-  }
-
-  def noAmountConfigSpecifiedForResourceError(
-      key: String,
-      componentName: String,
-      RESOURCE_PREFIX: String): Throwable = {
-    new SparkException(s"You must specify an amount config for resource: $key " +
-      s"config: $componentName.$RESOURCE_PREFIX.$key")
-  }
-
-  def invalidResourceAmountError(doubleAmount: Double): Throwable = {
-    new SparkException(
-      s"The resource amount ${doubleAmount} must be either <= 0.5, or a whole number.")
-  }
-
-  def fractionalResourcesUnsupportedError(componentName: String): Throwable = {
-    new SparkException(
-      s"Only tasks support fractional resources, please check your $componentName settings")
-  }
-
-  def failToParseResourceFileError(resourcesFile: String, e: Throwable): Throwable = {
-    new SparkException(s"Error parsing resources file $resourcesFile", e)
-  }
-
-  def numCoresPerExecutorLessThanNumCPUsPerTaskError(execCores: Int, taskCpus: Int): Throwable = {
-    new SparkException(s"The number of cores per executor (=$execCores) has to be >= " +
-      s"the number of cpus per task = $taskCpus.")
-  }
-
-  def nonOfTheDiscoveryPluginsReturnedResourceInfoError(str: String): Throwable = {
-    new SparkException(s"None of the discovery plugins returned ResourceInformation for " +
-      s"${str}")
-  }
-
-  def adjustConfigurationofCoresError(
-      cores: Int,
-      taskCpus: Int,
-      resourceNumSlots: Int,
-      limitingResource: String,
-      maxTaskPerExec: Int): Throwable = {
-    new SparkException(
-      s"""
-        |The configuration of cores (exec = ${cores}
-        |task = ${taskCpus}, runnable tasks = ${resourceNumSlots}) will
-        |result in wasted resources due to resource ${limitingResource} limiting the
-        |number of runnable tasks per executor to: ${maxTaskPerExec}. Please adjust
-        |your configuration.
-      """.stripMargin.replaceAll("\n", " "))
-  }
-
-  def adjustConfigurationOfResourceError(
-      uri: String,
-      execAmount: Long,
-      taskReqStr: String,
-      resourceNumSlots: Int,
-      limitingResource: String,
-      maxTaskPerExec: Int): Throwable = {
-    new SparkException(
-      s"""
-        |The configuration of resource: $uri
-        |(exec = ${execAmount}, task = ${taskReqStr},
-        |runnable tasks = ${resourceNumSlots}) will
-        |result in wasted resources due to resource ${limitingResource} limiting the
-        |number of runnable tasks per executor to: ${maxTaskPerExec}. Please adjust
-        |your configuration.
-      """.stripMargin.replaceAll("\n", " "))
   }
 
   def askStandaloneSchedulerToShutDownExecutorsError(e: Exception): Throwable = {
