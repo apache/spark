@@ -1654,11 +1654,27 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
         pser = pd.Series(["a", "b", "c", "a"], dtype="category")
         psser = ps.from_pandas(pser)
-        self.assert_eq(psser.pop(0), pser.pop(0))
-        self.assert_eq(psser, pser)
 
-        self.assert_eq(psser.pop(3), pser.pop(3))
-        self.assert_eq(psser, pser)
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
+            self.assert_eq(psser.pop(0), pser.pop(0))
+            self.assert_eq(psser, pser)
+
+            self.assert_eq(psser.pop(3), pser.pop(3))
+            self.assert_eq(psser, pser)
+        else:
+            self.assert_eq(psser.pop(0), pser.pop(0))
+            self.assert_eq(
+                psser,
+                pd.Series(
+                    pd.Categorical(["b", "c", "a"], categories=["a", "b", "c"]), index=[1, 2, 3]
+                ),
+            )
+
+            self.assert_eq(psser.pop(3), pser.pop(3))
+            self.assert_eq(
+                psser,
+                pd.Series(pd.Categorical(["b", "c"], categories=["a", "b", "c"]), index=[1, 2]),
+            )
 
     def test_replace(self):
         pser = pd.Series([10, 20, 15, 30, np.nan], name="x")
