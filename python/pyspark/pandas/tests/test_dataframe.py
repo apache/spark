@@ -1969,8 +1969,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             expected = pd.DataFrame(
                 {
                     "a": [True, False, True, True, False, False],
-                    "b": [True, True, False, True, True, True],
-                    "c": [True, False, True, True, False, True],
+                    "b": [True, False, False, True, False, True],
+                    "c": [False, False, False, True, False, True],
                 }
             )
             self.assert_eq(psdf.isin([4, 3, 1, 1, None]), expected)
@@ -1983,11 +1983,11 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             expected = pd.DataFrame(
                 {
                     "a": [False, False, False, False, False, False],
-                    "b": [True, True, False, True, True, True],
+                    "b": [True, False, False, True, False, True],
                     "c": [False, False, False, False, False, False],
                 }
             )
-            self.assert_eq(psdf.isin([4, 3, 1, 1, None]), expected)
+            self.assert_eq(psdf.isin({"b": [4, 3, 1, 1, None]}), expected)
 
     def test_merge(self):
         left_pdf = pd.DataFrame(
