@@ -99,9 +99,11 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  type Header = Project
+
   private def extractCommonScalarSubqueries(plan: LogicalPlan) = {
     // Plan of subqueries and a flag is the plan is merged
-    val cache = ListBuffer.empty[(Project, Boolean)]
+    val cache = ListBuffer.empty[(Header, Boolean)]
     val newPlan = removeReferences(insertReferences(plan, cache), cache)
     if (cache.nonEmpty) {
       val scalarSubqueries = cache.map { case (header, _) => ScalarSubquery(header) }.toSeq
@@ -114,7 +116,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   // First traversal builds up the cache and inserts `ScalarSubqueryReference`s to the plan.
   private def insertReferences(
       plan: LogicalPlan,
-      cache: ListBuffer[(Project, Boolean)]): LogicalPlan = {
+      cache: ListBuffer[(Header, Boolean)]): LogicalPlan = {
     plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY)) {
       case s: ScalarSubquery if s.children.isEmpty =>
         val (subqueryIndex, headerIndex) = cacheSubquery(s.plan, cache)
@@ -127,7 +129,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   // [[Project]] node.
   private def cacheSubquery(
       plan: LogicalPlan,
-      cache: ListBuffer[(Project, Boolean)]): (Int, Int) = {
+      cache: ListBuffer[(Header, Boolean)]): (Int, Int) = {
     val firstOutput = plan.output.head
     cache.zipWithIndex.collectFirst(Function.unlift { case ((header, merged), subqueryIndex) =>
       checkIdenticalPlans(plan, header.child)
@@ -279,7 +281,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
       })
   }
 
-  private def createHeader(headerElements: Seq[(Literal, Attribute)], plan: LogicalPlan) = {
+  private def createHeader(headerElements: Seq[(Literal, Attribute)], plan: LogicalPlan): Header = {
     Project(
       Seq(Alias(
         CreateNamedStruct(headerElements.flatMap {
@@ -289,7 +291,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
       plan)
   }
 
-  private def getHeaderElements(header: Project) = {
+  private def getHeaderElements(header: Header) = {
     val mergedValue =
       header.projectList.head.asInstanceOf[Alias].child.asInstanceOf[CreateNamedStruct]
     mergedValue.children.grouped(2).map {
@@ -371,7 +373,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   // merged from multiple subqueries or `ScalarSubquery(original plan)` it it isn't.
   private def removeReferences(
       plan: LogicalPlan,
-      cache: ListBuffer[(Project, Boolean)]): LogicalPlan = {
+      cache: ListBuffer[(Header, Boolean)]): LogicalPlan = {
     val nonMergedSubqueriesBefore = cache.scanLeft(0) {
       case (nonMergedSubqueriesBefore, (_, merged)) =>
         nonMergedSubqueriesBefore + (if (merged) 0 else 1)
