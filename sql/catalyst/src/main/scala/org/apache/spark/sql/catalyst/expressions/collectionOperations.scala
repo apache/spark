@@ -4222,9 +4222,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
             if (left.dataType.asInstanceOf[ArrayType].containsNull) {
               s"""
                  |if ($array2.isNullAt($i)) {
-                 |  if (!$hashSet.containsNull()) {
-                 |    $hashSet.addNull();
-                 |  }
+                 |  $hashSet.addNull();
                  |} else {
                  |  $body
                  |}
