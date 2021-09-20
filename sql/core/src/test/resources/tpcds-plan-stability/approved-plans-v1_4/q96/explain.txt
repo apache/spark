@@ -67,7 +67,7 @@ Input [2]: [hd_demo_sk#5, hd_dep_count#6]
 
 (9) BroadcastExchange
 Input [1]: [hd_demo_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#7]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#7]
 
 (10) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_hdemo_sk#2]
@@ -98,7 +98,7 @@ Input [3]: [t_time_sk#8, t_hour#9, t_minute#10]
 
 (16) BroadcastExchange
 Input [1]: [t_time_sk#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#11]
 
 (17) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_sold_time_sk#1]
@@ -129,7 +129,7 @@ Input [2]: [s_store_sk#12, s_store_name#13]
 
 (23) BroadcastExchange
 Input [1]: [s_store_sk#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#14]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#14]
 
 (24) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_store_sk#3]

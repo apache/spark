@@ -145,7 +145,7 @@ Condition : isnotnull(i_item_sk#20)
 
 (26) BroadcastExchange
 Input [2]: [i_item_sk#20, i_product_name#21]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#22]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#22]
 
 (27) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [item_sk#11]
