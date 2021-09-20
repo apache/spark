@@ -97,7 +97,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
     }
   }
 
-  test("parquet files with legacy mode and schema evolution") {
+  test("SPARK-36803: parquet files with legacy mode and schema evolution") {
     // This test case writes arrays in Parquet legacy mode and schema evolution and verifies that
     // the data can be correctly read back.
 
