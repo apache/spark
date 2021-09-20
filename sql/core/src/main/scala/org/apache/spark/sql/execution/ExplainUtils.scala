@@ -151,7 +151,6 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
         currentOperationID = other.innerChildren.foldLeft(currentOperationID) {
           (curId, plan) => generateOperatorIDs(plan, curId)
         }
-        ()
     }
     currentOperationID
   }
