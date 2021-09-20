@@ -60,7 +60,7 @@ Input [3]: [d_date_sk#1, d_year#2, d_moy#3]
 
 (5) BroadcastExchange
 Input [1]: [d_date_sk#1]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#4]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#4]
 
 (6) Scan parquet default.store_sales
 Output [5]: [ss_item_sk#5, ss_customer_sk#6, ss_store_sk#7, ss_ext_sales_price#8, ss_sold_date_sk#9]
@@ -88,7 +88,7 @@ Input [6]: [d_date_sk#1, ss_item_sk#5, ss_customer_sk#6, ss_store_sk#7, ss_ext_s
 
 (11) BroadcastExchange
 Input [4]: [ss_item_sk#5, ss_customer_sk#6, ss_store_sk#7, ss_ext_sales_price#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [id=#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false,false), [id=#11]
 
 (12) Scan parquet default.customer
 Output [2]: [c_customer_sk#12, c_current_addr_sk#13]
@@ -129,7 +129,7 @@ Condition : (isnotnull(s_zip#15) AND isnotnull(s_store_sk#14))
 
 (20) BroadcastExchange
 Input [2]: [s_store_sk#14, s_zip#15]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#16]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#16]
 
 (21) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_store_sk#7]
@@ -142,7 +142,7 @@ Input [6]: [ss_item_sk#5, ss_store_sk#7, ss_ext_sales_price#8, c_current_addr_sk
 
 (23) BroadcastExchange
 Input [4]: [ss_item_sk#5, ss_ext_sales_price#8, c_current_addr_sk#13, s_zip#15]
-Arguments: HashedRelationBroadcastMode(List(cast(input[2, int, true] as bigint)),false), [id=#17]
+Arguments: HashedRelationBroadcastMode(List(cast(input[2, int, true] as bigint)),false,false), [id=#17]
 
 (24) Scan parquet default.customer_address
 Output [2]: [ca_address_sk#18, ca_zip#19]
@@ -187,7 +187,7 @@ Input [6]: [i_item_sk#20, i_brand_id#21, i_brand#22, i_manufact_id#23, i_manufac
 
 (33) BroadcastExchange
 Input [5]: [i_item_sk#20, i_brand_id#21, i_brand#22, i_manufact_id#23, i_manufact#24]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#26]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#26]
 
 (34) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [ss_item_sk#5]
