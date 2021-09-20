@@ -36,6 +36,7 @@ configuring an Airflow environment.
     customize-state-colors-ui
     customize-dag-ui-page-instance-name
     custom-operator
+    create-custom-decorator
     connection
     variable
     run-behind-proxy
