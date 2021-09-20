@@ -2317,7 +2317,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             In case when axis is 1, it requires to specify `DataFrame` or scalar value
             with type hints as below:
 
-            >>> def plus_one(x) -> ps.DataFrame[float, float]:
+            >>> def plus_one(x) -> ps.DataFrame[int, [float, float]]:
             ...     return x + 1
 
             If the return type is specified as `DataFrame`, the output column names become
@@ -2326,21 +2326,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             To specify the column names, you can assign them in a pandas friendly style as below:
 
-            >>> def plus_one(x) -> ps.DataFrame["a": float, "b": float]:
+            >>> def plus_one(x) -> ps.DataFrame[("index", int), [("a", float), ("b", float)]]:
             ...     return x + 1
 
             >>> pdf = pd.DataFrame({'a': [1, 2, 3], 'b': [3, 4, 5]})
-            >>> def plus_one(x) -> ps.DataFrame[zip(pdf.dtypes, pdf.columns)]:
+            >>> def plus_one(x) -> ps.DataFrame[
+            ...         (pdf.index.name, pdf.index.dtype), zip(pdf.dtypes, pdf.columns)]:
             ...     return x + 1
-
-            However, this way switches the index type to default index type in the output
-            because the type hint cannot express the index type at this moment. Use
-            `reset_index()` to keep index as a workaround.
-
-            When the given function has the return type annotated, the original index of the
-            DataFrame will be lost and then a default index will be attached to the result.
-            Please be careful about configuring the default index. See also `Default Index Type
-            <https://koalas.readthedocs.io/en/latest/user_guide/options.html#default-index-type>`_.
 
         Parameters
         ----------
@@ -2436,18 +2428,19 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         In order to specify the types when `axis` is '1', it should use DataFrame[...]
         annotation. In this case, the column names are automatically generated.
 
-        >>> def identify(x) -> ps.DataFrame['A': np.int64, 'B': np.int64]:
+        >>> def identify(x) -> ps.DataFrame[('index', int), [('A', np.int64), ('B', np.int64)]]:
         ...     return x
         ...
-        >>> df.apply(identify, axis=1)
-           A  B
-        0  4  9
-        1  4  9
-        2  4  9
+        >>> df.apply(identify, axis=1)  # doctest: +NORMALIZE_WHITESPACE
+               A  B
+        index
+        0      4  9
+        1      4  9
+        2      4  9
 
         You can also specify extra arguments.
 
-        >>> def plus_two(a, b, c) -> ps.DataFrame[np.int64, np.int64]:
+        >>> def plus_two(a, b, c) -> ps.DataFrame[np.int64, [np.int64, np.int64]]:
         ...     return a + b + c
         ...
         >>> df.apply(plus_two, axis=1, args=(1,), c=3)
@@ -2469,6 +2462,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         spec = inspect.getfullargspec(func)
         return_sig = spec.annotations.get("return", None)
         should_infer_schema = return_sig is None
+        should_retain_index = should_infer_schema
 
         def apply_func(pdf: pd.DataFrame) -> pd.DataFrame:
             pdf_or_pser = pdf.apply(func, axis=axis, args=args, **kwds)
@@ -2501,7 +2495,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return_schema = StructType([field.struct_field for field in index_fields + data_fields])
 
             output_func = GroupBy._make_pandas_df_builder_func(
-                self_applied, apply_func, return_schema, retain_index=True
+                self_applied, apply_func, return_schema, retain_index=should_retain_index
             )
             sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
                 lambda iterator: map(output_func, iterator), schema=return_schema
@@ -2515,6 +2509,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return_type = infer_return_type(func)
             require_index_axis = isinstance(return_type, SeriesType)
             require_column_axis = isinstance(return_type, DataFrameType)
+            index_field = None
 
             if require_index_axis:
                 if axis != 0:
@@ -2539,7 +2534,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         "hints when axis is 1 or 'column'; however, the return type "
                         "was %s" % return_sig
                     )
-                data_fields = cast(DataFrameType, return_type).fields
+                index_field = cast(DataFrameType, return_type).index_field
+                should_retain_index = index_field is not None
+                data_fields = cast(DataFrameType, return_type).data_fields
                 return_schema = cast(DataFrameType, return_type).spark_type
             else:
                 # any axis is fine.
@@ -2558,18 +2555,27 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 column_labels = [None]
 
             output_func = GroupBy._make_pandas_df_builder_func(
-                self_applied, apply_func, return_schema, retain_index=False
+                self_applied, apply_func, return_schema, retain_index=should_retain_index
             )
             sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
                 lambda iterator: map(output_func, iterator), schema=return_schema
             )
 
-            # Otherwise, it loses index.
+            index_spark_columns = None
+            index_names: Optional[List[Optional[Tuple[Any, ...]]]] = None
+            index_fields = None
+            if should_retain_index:
+                index_spark_columns = [scol_for(sdf, index_field.struct_field.name)]
+                index_fields = [index_field]
+                if index_field.struct_field.name != SPARK_DEFAULT_INDEX_NAME:
+                    index_names = [(index_field.struct_field.name,)]
             internal = InternalFrame(
                 spark_frame=sdf,
-                index_spark_columns=None,
-                column_labels=column_labels,
+                index_names=index_names,
+                index_spark_columns=index_spark_columns,
+                index_fields=index_fields,
                 data_fields=data_fields,
+                column_labels=column_labels,
             )
 
         result = DataFrame(internal)  # type: "DataFrame"
