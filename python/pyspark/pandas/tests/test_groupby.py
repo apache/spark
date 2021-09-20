@@ -743,7 +743,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             # 1. Check that non-percentile columns are equal.
             agg_cols = [col.name for col in psdf.groupby("a")._agg_columns]
             self.assert_eq(
-                describe_psdf.drop(list(product(agg_cols, formatted_percentiles))),
+                describe_psdf.drop(columns=list(product(agg_cols, formatted_percentiles))),
                 describe_pdf.drop(columns=formatted_percentiles, level=1),
                 check_exact=False,
             )
@@ -753,7 +753,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             quantile_pdf = pdf.groupby("a").quantile(percentiles, interpolation="nearest")
             quantile_pdf = quantile_pdf.unstack(level=1).astype(float)
             self.assert_eq(
-                describe_psdf.drop(list(product(agg_cols, non_percentile_stats))),
+                describe_psdf.drop(columns=list(product(agg_cols, non_percentile_stats))),
                 quantile_pdf.rename(columns="{:.0%}".format, level=1),
             )
 
@@ -780,7 +780,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         agg_column_labels = [col._column_label for col in psdf.groupby(("x", "a"))._agg_columns]
         self.assert_eq(
             describe_psdf.drop(
-                [
+                columns=[
                     tuple(list(label) + [s])
                     for label, s in product(agg_column_labels, formatted_percentiles)
                 ]
@@ -796,7 +796,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
         self.assert_eq(
             describe_psdf.drop(
-                [
+                columns=[
                     tuple(list(label) + [s])
                     for label, s in product(agg_column_labels, non_percentile_stats)
                 ]

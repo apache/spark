@@ -2817,7 +2817,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3       NaN
         """
         result = self[item]
-        self._update_internal_frame(self.drop(item)._internal)
+        self._update_internal_frame(self.drop(columns=item)._internal)
         return result
 
     # TODO: add axis parameter can work when '1' or 'columns'
@@ -6586,23 +6586,31 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def drop(
         self,
         labels: Optional[Union[Name, List[Name]]] = None,
-        axis: Axis = 1,
+        axis: Optional[Axis] = 0,
+        index: Union[Name, List[Name]] = None,
         columns: Union[Name, List[Name]] = None,
     ) -> "DataFrame":
         """
         Drop specified labels from columns.
 
-        Remove columns by specifying label names and axis=1 or columns.
-        When specifying both labels and columns, only labels will be dropped.
-        Removing rows is yet to be implemented.
+        Remove rows and/or columns by specifying label names and corresponding axis,
+        or by specifying directly index and/or column names.
+        Drop rows of a MultiIndex DataFrame is not supported yet.
 
         Parameters
         ----------
         labels : single label or list-like
             Column labels to drop.
-        axis : {1 or 'columns'}, default 1
-            .. dropna currently only works for axis=1 'columns'
-               axis=0 is yet to be implemented.
+        axis : {0 or 'index', 1 or 'columns'}, default 0
+
+            .. versionchanged:: 3.3
+               Set dropping by index by default.
+        index : single label or list-like
+            Alternative to specifying axis (``labels, axis=0``
+            is quivalent to ``index=columns``).
+
+            .. versionchanged:: 3.3
+               Added dropping rows by 'index'.
         columns : single label or list-like
             Alternative to specifying axis (``labels, axis=1``
             is equivalent to ``columns=labels``).
@@ -6617,29 +6625,38 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = ps.DataFrame({'x': [1, 2], 'y': [3, 4], 'z': [5, 6], 'w': [7, 8]},
-        ...                   columns=['x', 'y', 'z', 'w'])
+        >>> df = ps.DataFrame(np.arange(12).reshape(3, 4), columns=['A', 'B', 'C', 'D'])
         >>> df
-           x  y  z  w
-        0  1  3  5  7
-        1  2  4  6  8
+           A  B   C   D
+        0  0  1   2   3
+        1  4  5   6   7
+        2  8  9  10  11
 
-        >>> df.drop('x', axis=1)
-           y  z  w
-        0  3  5  7
-        1  4  6  8
+        Drop columns
 
-        >>> df.drop(['y', 'z'], axis=1)
-           x  w
-        0  1  7
-        1  2  8
+        >>> df.drop(['B', 'C'], axis=1)
+           A   D
+        0  0   3
+        1  4   7
+        2  8  11
 
-        >>> df.drop(columns=['y', 'z'])
-           x  w
-        0  1  7
-        1  2  8
+        >>> df.drop(columns=['B', 'C'])
+           A   D
+        0  0   3
+        1  4   7
+        2  8  11
 
-        Also support for MultiIndex
+        Drop a row by index
+
+        >>> df.drop([0, 1])
+           A  B   C   D
+        2  8  9  10  11
+
+        >>> df.drop(index=[0, 1], columns='A')
+           B   C   D
+        2  9  10  11
+
+        Also support dropping columns for MultiIndex
 
         >>> df = ps.DataFrame({'x': [1, 2], 'y': [3, 4], 'z': [5, 6], 'w': [7, 8]},
         ...                   columns=['x', 'y', 'z', 'w'])
@@ -6650,7 +6667,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
            x  y  z  w
         0  1  3  5  7
         1  2  4  6  8
-        >>> df.drop('a')  # doctest: +NORMALIZE_WHITESPACE
+        >>> df.drop(labels='a', axis=1)  # doctest: +NORMALIZE_WHITESPACE
            b
            z  w
         0  5  7
@@ -6658,45 +6675,88 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Notes
         -----
-        Currently only axis = 1 is supported in this function,
-        axis = 0 is yet to be implemented.
+        Currently, dropping rows of a MultiIndex DataFrame is not supported yet.
         """
         if labels is not None:
+            if index is not None or columns is not None:
+                raise ValueError("Cannot specify both 'labels' and 'index'/'columns'")
             axis = validate_axis(axis)
             if axis == 1:
-                return self.drop(columns=labels)
-            raise NotImplementedError("Drop currently only works for axis=1")
-        elif columns is not None:
-            if is_name_like_tuple(columns):
-                columns = [columns]
-            elif is_name_like_value(columns):
-                columns = [(columns,)]
+                return self.drop(index=index, columns=labels)
             else:
-                columns = [col if is_name_like_tuple(col) else (col,) for col in columns]
-            drop_column_labels = set(
-                label
-                for label in self._internal.column_labels
-                for col in columns
-                if label[: len(col)] == col
-            )
-            if len(drop_column_labels) == 0:
-                raise KeyError(columns)
-
-            keep_columns_and_labels = [
-                (column, label)
-                for column, label in zip(
-                    self._internal.data_spark_column_names, self._internal.column_labels
-                )
-                if label not in drop_column_labels
-            ]
-
-            cols, labels = (
-                zip(*keep_columns_and_labels) if len(keep_columns_and_labels) > 0 else ([], [])
-            )
-            internal = self._internal.with_new_columns([self._psser_for(label) for label in labels])
-            return DataFrame(internal)
+                return self.drop(index=labels, columns=columns)
         else:
-            raise ValueError("Need to specify at least one of 'labels' or 'columns'")
+            if index is None and columns is None:
+                raise ValueError("Need to specify at least one of 'labels' or 'columns' or 'index'")
+
+            internal = self._internal
+            if index is not None:
+                if is_name_like_tuple(index) or is_name_like_value(index):
+                    index = [index]
+
+                if len(index) > 0:
+                    if internal.index_level == 1:
+                        internal = internal.resolved_copy
+
+                        if len(index) <= ps.get_option("compute.isin_limit"):
+                            self_index_type = self.index.spark.data_type
+                            cond = ~internal.index_spark_columns[0].isin(
+                                [SF.lit(label).cast(self_index_type) for label in index]
+                            )
+                            internal = internal.with_filter(cond)
+                        else:
+                            index_sdf_col = "__index"
+                            index_sdf = default_session().createDataFrame(
+                                pd.DataFrame({index_sdf_col: index})
+                            )
+                            joined_sdf = internal.spark_frame.join(
+                                other=F.broadcast(index_sdf),
+                                on=(
+                                    internal.index_spark_columns[0]
+                                    == scol_for(index_sdf, index_sdf_col)
+                                ),
+                                how="anti",
+                            )
+                            internal = internal.with_new_sdf(joined_sdf)
+                    else:
+                        raise NotImplementedError(
+                            "Drop rows of MultiIndex DataFrame is not supported yet"
+                        )
+            if columns is not None:
+                if is_name_like_tuple(columns):
+                    columns = [columns]
+                elif is_name_like_value(columns):
+                    columns = [(columns,)]
+                else:
+                    columns = [col if is_name_like_tuple(col) else (col,) for col in columns]
+
+                if len(columns) > 0:
+                    drop_column_labels = set(
+                        label
+                        for label in internal.column_labels
+                        for col in columns
+                        if label[: len(col)] == col
+                    )
+                    if len(drop_column_labels) == 0:
+                        raise KeyError(columns)
+
+                    keep_columns_and_labels = [
+                        (column, label)
+                        for column, label in zip(
+                            self._internal.data_spark_column_names, self._internal.column_labels
+                        )
+                        if label not in drop_column_labels
+                    ]
+
+                    cols, labels = (
+                        zip(*keep_columns_and_labels)
+                        if len(keep_columns_and_labels) > 0
+                        else ([], [])
+                    )
+                    internal = internal.with_new_columns(
+                        [self._psser_for(label) for label in labels]
+                    )
+            return DataFrame(internal)
 
     def _sort(
         self, by: List[Column], ascending: Union[bool, List[bool]], na_position: str
