@@ -1662,6 +1662,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assert_eq(psser.pop(3), pser.pop(3))
             self.assert_eq(psser, pser)
         else:
+            # Before pandas 1.3.0, `pop` modifies the dtype of categorical series wrongly
             self.assert_eq(psser.pop(0), pser.pop(0))
             self.assert_eq(
                 psser,
