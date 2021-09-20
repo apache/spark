@@ -38,10 +38,10 @@ import org.apache.spark.sql.types.DataType
  *   [[ScalarSubqueryReference]] pointing to its cached version.
  *   The cache uses a flag to keep track of if a cache entry is a results of merging 2 or more
  *   plans, or it is a plan that was seen only once.
- *   Merged plans in the cache get a "header" that is is basically
- *   `CreateNamedStructure(name1, attribute1, name2, attribute2, ...)`
- *   expression in new root [[Project]] node. This expression ensures that the merged plan is a
- *   valid scalar subquery that returns only one value.
+ *   Merged plans in the cache get a "header", that is is basically
+ *   `CreateNamedStruct(name1, attribute1, name2, attribute2, ...)` expression in new root
+ *   [[Project]] node. This expression ensures that the merged plan is a valid scalar subquery that
+ *   returns only one value.
  * - A second traversal checks if a [[ScalarSubqueryReference]] is pointing to a merged subquery
  *   plan or not and either keeps the reference or restores the original [[ScalarSubquery]].
  *   If there are [[ScalarSubqueryReference]] nodes remained a [[CommonScalarSubqueries]] root node
@@ -123,7 +123,8 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   // Caching returns the index of the subquery in the cache and the index of scalar member in the
-  // `CreateNamedStruct` header.
+  // "header", that `CreateNamedStruct(name1, attribute1, name2, attribute2, ...)` expression in a
+  // [[Project]] node.
   private def cacheSubquery(
       plan: LogicalPlan,
       cache: ListBuffer[(Project, Boolean)]): (Int, Int) = {
