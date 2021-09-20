@@ -156,8 +156,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       } else {
         CreateV2Table(
           ResolvedDBObjectName(catalog, name),
-          c.tableSchema, c.partitioning, c.bucketSpec, c.properties, c.options, c.serdeInfo,
-          c.location, c.comment, c.provider, c.external, c.ignoreIfExists)
+          c.tableSchema, c.partitioning ++ c.bucketSpec.map(_.asTransform), None, c.properties,
+          c.options, c.serdeInfo, c.location, c.comment, c.provider, c.external, c.ignoreIfExists)
       }
 
     case c @ CreateTableAsSelectStatement(
