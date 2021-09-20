@@ -2344,6 +2344,23 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Seq(1f))
   }
 
+  test("SPARK-36754: ArrayIntersect should handle duplicated Double.NaN and Float.Nan") {
+    checkEvaluation(ArrayIntersect(
+      Literal.apply(Array(Double.NaN, 1d)), Literal.apply(Array(Double.NaN, 1d, 2d))),
+      Seq(Double.NaN, 1d))
+    checkEvaluation(ArrayIntersect(
+      Literal.create(Seq(null, Double.NaN, null, 1d), ArrayType(DoubleType)),
+      Literal.create(Seq(null, Double.NaN, null), ArrayType(DoubleType))),
+      Seq(null, Double.NaN))
+    checkEvaluation(ArrayIntersect(
+      Literal.apply(Array(Float.NaN, 1f)), Literal.apply(Array(Float.NaN, 1f, 2f))),
+      Seq(Float.NaN, 1f))
+    checkEvaluation(ArrayIntersect(
+      Literal.create(Seq(null, Float.NaN, null, 1f), ArrayType(FloatType)),
+      Literal.create(Seq(null, Float.NaN, null), ArrayType(FloatType))),
+      Seq(null, Float.NaN))
+  }
+
   test("SPARK-36741: ArrayDistinct should handle duplicated Double.NaN and Float.Nan") {
     checkEvaluation(ArrayDistinct(
       Literal.create(Seq(Double.NaN, Double.NaN, null, null, 1d, 1d), ArrayType(DoubleType))),
@@ -2364,5 +2381,22 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArraysOverlap(
       Literal.create(Seq(Float.NaN, null), ArrayType(FloatType)),
       Literal.create(Seq(Float.NaN, null, 1f), ArrayType(FloatType))), true)
+  }
+
+  test("SPARK-36740: ArrayMin/ArrayMax/SortArray should handle NaN greater then non-NaN value") {
+    // ArrayMin
+    checkEvaluation(ArrayMin(
+      Literal.create(Seq(Double.NaN, 1d, 2d), ArrayType(DoubleType))), 1d)
+    checkEvaluation(ArrayMin(
+      Literal.create(Seq(Double.NaN, 1d, 2d, null), ArrayType(DoubleType))), 1d)
+    // ArrayMax
+    checkEvaluation(ArrayMax(
+      Literal.create(Seq(Double.NaN, 1d, 2d), ArrayType(DoubleType))), Double.NaN)
+    checkEvaluation(ArrayMax(
+      Literal.create(Seq(Double.NaN, 1d, 2d, null), ArrayType(DoubleType))), Double.NaN)
+    // SortArray
+    checkEvaluation(new SortArray(
+      Literal.create(Seq(Double.NaN, 1d, 2d, null), ArrayType(DoubleType))),
+      Seq(null, 1d, 2d, Double.NaN))
   }
 }

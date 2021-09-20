@@ -57,7 +57,14 @@ class ScanOperationSuite extends SparkFunSuite {
 
   test("Project which has the same non-deterministic expression with its child Project") {
     val project3 = Project(Seq(colA, colR), Project(Seq(colA, aliasR), relation))
-    assert(ScanOperation.unapply(project3).isEmpty)
+    project3 match {
+      case ScanOperation(projects, filters, _: Project) =>
+        assert(projects.size === 2)
+        assert(projects(0) === colA)
+        assert(projects(1) === colR)
+        assert(filters.isEmpty)
+      case _ => assert(false)
+    }
   }
 
   test("Project which has different non-deterministic expressions with its child Project") {
@@ -73,13 +80,18 @@ class ScanOperationSuite extends SparkFunSuite {
 
   test("Filter with non-deterministic Project") {
     val filter1 = Filter(EqualTo(colA, Literal(1)), Project(Seq(colA, aliasR), relation))
-    assert(ScanOperation.unapply(filter1).isEmpty)
+    filter1 match {
+      case ScanOperation(projects, filters, _: Filter) =>
+        assert(projects.size === 2)
+        assert(filters.isEmpty)
+      case _ => assert(false)
+    }
   }
 
   test("Non-deterministic Filter with deterministic Project") {
-    val filter3 = Filter(EqualTo(MonotonicallyIncreasingID(), Literal(1)),
+    val filter2 = Filter(EqualTo(MonotonicallyIncreasingID(), Literal(1)),
       Project(Seq(colA, colB), relation))
-    filter3 match {
+    filter2 match {
       case ScanOperation(projects, filters, _: LocalRelation) =>
         assert(projects.size === 2)
         assert(projects(0) === colA)
@@ -91,7 +103,11 @@ class ScanOperationSuite extends SparkFunSuite {
 
 
   test("Deterministic filter which has a non-deterministic child Filter") {
-    val filter4 = Filter(EqualTo(colA, Literal(1)), Filter(EqualTo(aliasR, Literal(1)), relation))
-    assert(ScanOperation.unapply(filter4).isEmpty)
+    val filter3 = Filter(EqualTo(colA, Literal(1)), Filter(EqualTo(aliasR, Literal(1)), relation))
+    filter3 match {
+      case ScanOperation(projects, filters, _: Filter) =>
+        assert(filters.isEmpty)
+      case _ => assert(false)
+    }
   }
 }
