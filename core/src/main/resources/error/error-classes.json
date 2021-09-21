@@ -3,6 +3,10 @@
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
   },
+  "BINARY_ARITHMETIC_OVERFLOW" : {
+    "message" : [ "%s %s %s caused overflow." ],
+    "sqlState" : "22003"
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [ "Cannot cast %s to %s." ],
     "sqlState" : "22005"
@@ -11,16 +15,50 @@
     "message" : [ "%s cannot be represented as Decimal(%s, %s)." ],
     "sqlState" : "22005"
   },
+  "CANNOT_CREATE_OBJECT_DUE_TO_FAILED_DIRECTORY_CREATION" : {
+    "message" : [ "Unable to CREATE %s %s as failed to create its directory %s." ]
+  },
+  "CANNOT_CREATE_PARTITION_PATH" : {
+    "message" : [ "Unable to create partition path %s" ]
+  },
+  "CANNOT_DELETE_PARTITION_PATH" : {
+    "message" : [ "Unable to delete partition path %s" ]
+  },
+  "CANNOT_DROP_OBJECT_DUE_TO_FAILED_DIRECTORY_DELETION" : {
+    "message" : [ "Unable to DROP %s %s as failed to delete its directory %s." ]
+  },
+  "CANNOT_EVALUATE_EXPRESSION" : {
+    "message" : [ "Cannot evaluate expression: %s" ]
+  },
+  "CANNOT_GENERATE_CODE_FOR_EXPRESSION" : {
+    "message" : [ "Cannot generate code for expression: %s" ]
+  },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"
+  },
+  "CANNOT_RENAME_PARTITION_PATH" : {
+    "message" : [ "Unable to rename partition path %s" ]
+  },
+  "CANNOT_RENAME_TABLE_DUE_TO_FAILED_DIRECTORY_RENAMING" : {
+    "message" : [ "Unable to rename table %s to %s as failed to rename its directory %s" ]
+  },
+  "CANNOT_TERMINATE_GENERATOR" : {
+    "message" : [ "Cannot terminate expression: %s" ]
   },
   "CAST_CAUSES_OVERFLOW" : {
     "message" : [ "Casting %s to %s causes overflow" ],
     "sqlState" : "22005"
   },
+  "COMPILATION_FAILED" : {
+    "message" : [ "failed to compile: %s" ]
+  },
   "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
+  },
+  "DATA_PATH_NOT_SPECIFIED" : {
+    "message" : [ "'path' is not specified" ],
+    "sqlState" : "42000"
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero" ],
@@ -39,6 +77,9 @@
   },
   "FAILED_SET_ORIGINAL_PERMISSION_BACK" : {
     "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ]
+  },
+  "FAILED_SPLIT_SUBEXPRESSION" : {
+    "message" : [ "Failed to split subexpression code into small functions because the parameter length of at least one split function went over the JVM limit: %s" ]
   },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [ "Column of grouping (%s) can't be found in grouping columns %s" ],
@@ -89,6 +130,10 @@
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist." ]
   },
+  "METHOD_NOT_IMPLEMENTED" : {
+    "message" : [ "%s is not implemented" ],
+    "sqlState" : "0A000"
+  },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
     "sqlState" : "42000"
@@ -104,6 +149,9 @@
   "NON_PARTITION_COLUMN" : {
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
     "sqlState" : "42000"
+  },
+  "NOT_A_DATA_SOURCE_RDD_PARTITION" : {
+    "message" : [ "[BUG] Not a DataSourceRDDPartition: %s" ]
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
@@ -121,8 +169,16 @@
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
     "sqlState" : "22023"
   },
+  "TABLE_STATISTICS_NOT_SPECIFIED" : {
+    "message" : [ "table stats must be specified." ],
+    "sqlState" : "42000"
+  },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
+  },
+  "UNARY_MINUS_OVERFLOW" : {
+    "message" : [ "- %s caused overflow." ],
+    "sqlState" : "22003"
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [ "Unrecognized SQL type %s" ],
@@ -142,6 +198,10 @@
   },
   "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID" : {
     "message" : [ "%s does not implement simpleStringWithNodeId" ]
+  },
+  "UNSUPPORTED_TABLE_CHANGE" : {
+    "message" : [ "Unsupported table change: %s" ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER" : {
     "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],
