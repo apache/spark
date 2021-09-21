@@ -201,26 +201,28 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   }
 
   /**
-   * Returns whether an expression is likely to be selective
+   * Returns whether an expression is likely to be selective. If the filtering predicate is on join
+   * key then partition filter can be inferred statically in optimization phase, hence return false.
    */
-  private def isLikelySelective(e: Expression): Boolean = e match {
-    case Not(expr) => isLikelySelective(expr)
-    case And(l, r) => isLikelySelective(l) || isLikelySelective(r)
-    case Or(l, r) => isLikelySelective(l) && isLikelySelective(r)
-    case _: StringRegexExpression => true
-    case _: BinaryComparison => true
-    case _: In | _: InSet => true
-    case _: StringPredicate => true
-    case _: MultiLikeBase => true
+  private def isLikelySelective(e: Expression, joinKey: Expression): Boolean = e match {
+    case Not(expr) => isLikelySelective(expr, joinKey)
+    case And(l, r) => isLikelySelective(l, joinKey) || isLikelySelective(r, joinKey)
+    case Or(l, r) => isLikelySelective(l, joinKey) && isLikelySelective(r, joinKey)
+    case expr: StringRegexExpression => true && !expr.references.subsetOf(joinKey.references)
+    case expr: BinaryComparison => true && !expr.references.subsetOf(joinKey.references)
+    case expr: In => true && !expr.references.subsetOf(joinKey.references)
+    case expr: InSet => true && !expr.references.subsetOf(joinKey.references)
+    case expr: StringPredicate => true && !expr.references.subsetOf(joinKey.references)
+    case expr: MultiLikeBase => true && !expr.references.subsetOf(joinKey.references)
     case _ => false
   }
 
   /**
-   * Search a filtering predicate in a given logical plan
+   * Search a filtering predicate in a given logical plan.
    */
-  private def hasSelectivePredicate(plan: LogicalPlan): Boolean = {
+  private def hasSelectivePredicate(plan: LogicalPlan, joinKey: Expression): Boolean = {
     plan.find {
-      case f: Filter => isLikelySelective(f.condition)
+      case f: Filter => isLikelySelective(f.condition, joinKey)
       case _ => false
     }.isDefined
   }
@@ -231,8 +233,8 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    *   (1) it can not be a stream
    *   (2) it needs to contain a selective predicate used for filtering
    */
-  private def hasPartitionPruningFilter(plan: LogicalPlan): Boolean = {
-    !plan.isStreaming && hasSelectivePredicate(plan)
+  private def hasPartitionPruningFilter(plan: LogicalPlan, joinKey: Expression): Boolean = {
+    !plan.isStreaming && hasSelectivePredicate(plan, joinKey)
   }
 
   private def canPruneLeft(joinType: JoinType): Boolean = joinType match {
@@ -282,13 +284,13 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
             // otherwise the pruning will not trigger
             var filterableScan = getFilterableTableScan(l, left)
             if (filterableScan.isDefined && canPruneLeft(joinType) &&
-                hasPartitionPruningFilter(right)) {
+                hasPartitionPruningFilter(right, r)) {
               newLeft = insertPredicate(l, newLeft, r, right, rightKeys, filterableScan.get,
                 canBuildBroadcastRight(joinType))
             } else {
               filterableScan = getFilterableTableScan(r, right)
               if (filterableScan.isDefined && canPruneRight(joinType) &&
-                  hasPartitionPruningFilter(left) ) {
+                  hasPartitionPruningFilter(left, l)) {
                 newRight = insertPredicate(r, newRight, l, left, leftKeys, filterableScan.get,
                   canBuildBroadcastLeft(joinType))
               }
