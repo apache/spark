@@ -1,4 +1,7 @@
 {
+  "ADD_NEW_FUNCTION_NAME_MISMATCHED" : {
+    "message" : [ "%s is not matched at addNewFunction" ]
+  },
   "AMBIGUOUS_FIELD_NAME" : {
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
@@ -35,7 +38,7 @@
   "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
-  "COPY_NULL_FIELD" : {
+  "COPY_NULL_FIELD_NOT_ALLOWED" : {
     "message" : [ "Do not attempt to copy a null field" ]
   },
   "DIVIDE_BY_ZERO" : {
@@ -46,9 +49,6 @@
     "message" : [ "Found duplicate keys '%s'" ],
     "sqlState" : "23000"
   },
-  "EXCEED_ARRAY_SIZE_WHEN_ZIP_MAP" : {
-    "message" : [ "Unsuccessful try to zip maps with %s unique keys due to exceeding the array size limit %s." ]
-  },
   "FAILED_EXECUTE_UDF" : {
     "message" : [ "Failed to execute user defined function (%s: (%s) => %s)" ]
   },
@@ -58,10 +58,6 @@
   },
   "FAILED_SET_ORIGINAL_PERMISSION_BACK" : {
     "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ]
-  },
-  "FOUND_NEGATIVE_VALUES" : {
-    "message" : [ "Negative values found in %s" ],
-    "sqlState" : "22003"
   },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [ "Column of grouping (%s) can't be found in grouping columns %s" ],
@@ -80,7 +76,7 @@
   },
   "GROUP_INDEX_LESS_THAN_ZERO" : {
     "message" : [ "The specified group index cannot be less than zero" ],
-    "sqlState" : "07009"
+    "sqlState" : "42000"
   },
   "IF_PARTITION_NOT_EXISTS_UNSUPPORTED" : {
     "message" : [ "Cannot write, IF NOT EXISTS is not supported for table: %s" ]
@@ -98,7 +94,7 @@
   },
   "INTEGRAL_DIVIDE_OVERFLOW" : {
     "message" : [ "Overflow in integral divide." ],
-    "sqlState" : "22015"
+    "sqlState" : "22003"
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [ "Invalid index: %s, numElements: %s" ]
@@ -152,13 +148,13 @@
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
     "sqlState" : "42000"
   },
-  "NOT_MATCH_FUNCTION_NAME" : {
-    "message" : [ "%s is not matched at addNewFunction" ],
-    "sqlState" : "42000"
-  },
   "NO_DEFAULT_FOR_TYPE" : {
     "message" : [ "no default for type %s" ],
     "sqlState" : "0700C"
+  },
+  "ORDERED_OPERATIONS_UNSUPPORTED_BY_DATA_TYPE" : {
+    "message" : [ "Type %s does not support ordered operations" ],
+    "sqlState" : "0A000"
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
@@ -185,6 +181,10 @@
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
+  },
+  "UNEXPECTED_NEGATIVE_VALUES" : {
+    "message" : [ "Negative values found in %s" ],
+    "sqlState" : "22003"
   },
   "UNEXPECTED_TYPE" : {
     "message" : [ "Unexpected type %s" ],
@@ -214,16 +214,8 @@
     "message" : [ "Unsupported literal type %s %s" ],
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_ORDERED_OPERATIONS" : {
-    "message" : [ "Type %s does not support ordered operations" ],
-    "sqlState" : "0A000"
-  },
   "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID" : {
     "message" : [ "%s does not implement simpleStringWithNodeId" ]
-  },
-  "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER" : {
-    "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],
-    "sqlState" : "0A000"
   },
   "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER" : {
     "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],
@@ -232,5 +224,8 @@
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
     "sqlState" : "40000"
+  },
+  "ZIPPED_MAPS_EXCEED_SIZE_LIMIT" : {
+    "message" : [ "Unsuccessful try to zip maps with %s unique keys due to exceeding the array size limit %s." ]
   }
 }

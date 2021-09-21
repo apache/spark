@@ -186,12 +186,12 @@ object QueryExecutionErrors {
   }
 
   def mapSizeExceedArraySizeWhenZipMapError(size: Int): RuntimeException = {
-    new SparkRuntimeException("EXCEED_ARRAY_SIZE_WHEN_ZIP_MAP",
+    new SparkRuntimeException("ZIPPED_MAPS_EXCEED_SIZE_LIMIT",
       Array(size.toString, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString))
   }
 
   def copyNullFieldNotAllowedError(): Throwable = {
-    new SparkIllegalStateException("COPY_NULL_FIELD", Array.empty)
+    new SparkIllegalStateException("COPY_NULL_FIELD_NOT_ALLOWED", Array.empty)
   }
 
   def literalTypeUnsupportedError(v: Any): RuntimeException = {
@@ -207,7 +207,8 @@ object QueryExecutionErrors {
   }
 
   def orderedOperationUnsupportedByDataTypeError(dataType: DataType): Throwable = {
-    new SparkIllegalArgumentException("UNSUPPORTED_ORDERED_OPERATIONS", Array(dataType.toString))
+    new SparkIllegalArgumentException("ORDERED_OPERATIONS_UNSUPPORTED_BY_DATA_TYPE",
+      Array(dataType.toString))
   }
 
   def regexGroupIndexLessThanZeroError(): Throwable = {
@@ -241,12 +242,12 @@ object QueryExecutionErrors {
   }
 
   def negativeValueUnexpectedError(frequencyExpression : Expression): Throwable = {
-    new SparkException(errorClass = "FOUND_NEGATIVE_VALUES",
+    new SparkException(errorClass = "UNEXPECTED_NEGATIVE_VALUES",
       messageParameters = Array(frequencyExpression.sql), cause = null)
   }
 
   def addNewFunctionMismatchedWithFunctionError(funcName: String): Throwable = {
-    new SparkIllegalArgumentException("NOT_MATCH_FUNCTION_NAME", Array(funcName))
+    new SparkIllegalArgumentException("ADD_NEW_FUNCTION_NAME_MISMATCHED", Array(funcName))
   }
 
   def cannotGenerateCodeForUncomparableTypeError(
