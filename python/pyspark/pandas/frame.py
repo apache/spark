@@ -9995,13 +9995,25 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 raise ValueError("items should be a list-like object.")
             if axis == 0:
                 if len(index_scols) == 1:
-                    col = None
-                    for item in items:
-                        if col is None:
-                            col = index_scols[0] == SF.lit(item)
-                        else:
-                            col = col | (index_scols[0] == SF.lit(item))
-                elif len(index_scols) > 1:
+                    if len(items) <= ps.get_option("compute.isin_limit"):
+                        col = index_scols[0].isin([SF.lit(item) for item in items])
+                        return DataFrame(self._internal.with_filter(col))
+                    else:
+                        item_sdf_col = verify_temp_column_name(
+                            self._internal.spark_frame, "__item__"
+                        )
+                        item_sdf = default_session().createDataFrame(
+                            pd.DataFrame({item_sdf_col: items})
+                        )
+                        joined_sdf = self._internal.spark_frame.join(
+                            other=F.broadcast(item_sdf),
+                            on=(index_scols[0] == scol_for(item_sdf, item_sdf_col)),
+                            how="semi",
+                        )
+
+                        return DataFrame(self._internal.with_new_sdf(joined_sdf))
+
+                else:
                     # for multi-index
                     col = None
                     for item in items:
@@ -10019,7 +10031,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                             col = midx_col
                         else:
                             col = col | midx_col
-                return DataFrame(self._internal.with_filter(col))
+                    return DataFrame(self._internal.with_filter(col))
             else:
                 return self[items]
         elif like is not None:

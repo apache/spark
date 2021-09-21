@@ -4313,6 +4313,13 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf.filter(items=["ab", "aa"], axis=0).sort_index(),
             pdf.filter(items=["ab", "aa"], axis=0).sort_index(),
         )
+
+        with option_context("compute.isin_limit", 0):
+            self.assert_eq(
+                psdf.filter(items=["ab", "aa"], axis=0).sort_index(),
+                pdf.filter(items=["ab", "aa"], axis=0).sort_index(),
+            )
+
         self.assert_eq(
             psdf.filter(items=["ba", "db"], axis=1).sort_index(),
             pdf.filter(items=["ba", "db"], axis=1).sort_index(),
