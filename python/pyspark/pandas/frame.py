@@ -7409,31 +7409,37 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 if col in values:
                     item = values[col]
                     item = item.tolist() if isinstance(item, np.ndarray) else list(item)
-                    data_spark_columns.append(
-                        self._internal.spark_column_for(self._internal.column_labels[i])
-                        .isin(item)
-                        .alias(self._internal.data_spark_column_names[i])
+
+                    scol = self._internal.spark_column_for(self._internal.column_labels[i]).isin(
+                        [SF.lit(v) for v in item]
                     )
+                    scol = F.coalesce(scol, F.lit(False))
                 else:
-                    data_spark_columns.append(
-                        SF.lit(False).alias(self._internal.data_spark_column_names[i])
-                    )
+                    scol = SF.lit(False)
+                data_spark_columns.append(scol.alias(self._internal.data_spark_column_names[i]))
         elif is_list_like(values):
             values = (
                 cast(np.ndarray, values).tolist()
                 if isinstance(values, np.ndarray)
                 else list(values)
             )
-            data_spark_columns += [
-                self._internal.spark_column_for(label)
-                .isin(values)
-                .alias(self._internal.spark_column_name_for(label))
-                for label in self._internal.column_labels
-            ]
+
+            for label in self._internal.column_labels:
+                scol = self._internal.spark_column_for(label).isin([SF.lit(v) for v in values])
+                scol = F.coalesce(scol, F.lit(False))
+                data_spark_columns.append(scol.alias(self._internal.spark_column_name_for(label)))
         else:
             raise TypeError("Values should be iterable, Series, DataFrame or dict.")
 
-        return DataFrame(self._internal.with_new_columns(data_spark_columns))
+        return DataFrame(
+            self._internal.with_new_columns(
+                data_spark_columns,
+                data_fields=[
+                    field.copy(dtype=np.dtype("bool"), spark_type=BooleanType(), nullable=False)
+                    for field in self._internal.data_fields
+                ],
+            )
+        )
 
     @property
     def shape(self) -> Tuple[int, int]:
