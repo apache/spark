@@ -1029,6 +1029,24 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true,
     outputTimestampType = SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS)
 
+  testCatalystToParquet(
+    "Year-month interval written and read as INT32",
+    StructType(Seq(StructField("f1", YearMonthIntervalType()))),
+    """message root {
+      |  optional INT32 f1;
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testCatalystToParquet(
+    "Day-time interval written and read as INT64",
+    StructType(Seq(StructField("f1", DayTimeIntervalType()))),
+    """message root {
+      |  optional INT64 f1;
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
   private def testSchemaClipping(
       testName: String,
       parquetSchema: String,
