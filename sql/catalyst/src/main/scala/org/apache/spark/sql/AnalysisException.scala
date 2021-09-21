@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql
 
+import org.codehaus.commons.compiler.{CompileException, Location}
+import org.codehaus.janino.InternalCompilerException
+
 import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -93,4 +96,24 @@ class AnalysisException protected[sql] (
 
   override def getErrorClass: String = errorClass.orNull
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass.orNull)
+}
+
+private[spark] class SparkInternalCompilerException(
+    errorClass: String,
+    messageParameters: Array[String])
+  extends InternalCompilerException(SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+private[spark] class SparkCompileException(
+    errorClass: String,
+    messageParameters: Array[String],
+    location: Location)
+  extends CompileException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters),
+    location) with SparkThrowable {
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
