@@ -110,13 +110,14 @@ object TypeUtils {
   }
 
   def failWithIntervalType(dataType: DataType): Unit = {
-    invokeOnceForInterval(dataType) {
+    invokeOnceForInterval(dataType, forbidAnsiIntervals = true) {
       throw QueryCompilationErrors.cannotUseIntervalTypeInTableSchemaError()
     }
   }
 
-  def invokeOnceForInterval(dataType: DataType)(f: => Unit): Unit = {
+  def invokeOnceForInterval(dataType: DataType, forbidAnsiIntervals: Boolean)(f: => Unit): Unit = {
     def isInterval(dataType: DataType): Boolean = dataType match {
+      case _: AnsiIntervalType => forbidAnsiIntervals
       case CalendarIntervalType => true
       case _ => false
     }
