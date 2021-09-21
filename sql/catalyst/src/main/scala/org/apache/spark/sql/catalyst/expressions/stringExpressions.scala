@@ -2651,7 +2651,7 @@ case class Sentences(
 }
 
 /**
- * A function that returns the bitwise AND of two binary strings.
+ * Expression that returns the bitwise AND of two binary strings.
  * The byte length of the result is the maximum of the byte lengths of the two input binary
  * strings. If the two input binary strings are of different byte length they aligned according
  * to their least significant (right-most) bit.  The shorter binary string is semantically
@@ -2679,17 +2679,12 @@ case class BitAnd(bytes1: Expression, bytes2: Expression)
   override def right: Expression = bytes2
 
   override def nullSafeEval(left: Any, right: Any): Any = {
-    bytes1.dataType match {
-      case BinaryType => ByteArray.bitwiseAnd(left.asInstanceOf[Array[Byte]],
-        right.asInstanceOf[Array[Byte]])
-    }
+    ByteArray.bitwiseAnd(left.asInstanceOf[Array[Byte]], right.asInstanceOf[Array[Byte]])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (left, right) => {
-      bytes1.dataType match {
-        case BinaryType => s"${classOf[ByteArray].getName}.bitwiseAnd($left, $right)"
-      }
+      s"${classOf[ByteArray].getName}.bitwiseAnd($left, $right)"
     })
   }
 
@@ -2700,7 +2695,7 @@ case class BitAnd(bytes1: Expression, bytes2: Expression)
 }
 
 /**
- * A function that returns the bitwise OR of two binary strings.
+ * Expression that returns the bitwise OR of two binary strings.
  * The byte length of the result is the maximum of the byte lengths of the two input binary
  * strings. If the two input binary strings are of different byte length they aligned according
  * to their least significant (right-most) bit. The shorter binary string is semantically
@@ -2728,17 +2723,12 @@ case class BitOr(bytes1: Expression, bytes2: Expression)
   override def right: Expression = bytes2
 
   override def nullSafeEval(left: Any, right: Any): Any = {
-    bytes1.dataType match {
-      case BinaryType => ByteArray.bitwiseOr(left.asInstanceOf[Array[Byte]],
-        right.asInstanceOf[Array[Byte]])
-    }
+    ByteArray.bitwiseOr(left.asInstanceOf[Array[Byte]], right.asInstanceOf[Array[Byte]])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (left, right) => {
-      bytes1.dataType match {
-        case BinaryType => s"${classOf[ByteArray].getName}.bitwiseOr($left, $right)"
-      }
+      s"${classOf[ByteArray].getName}.bitwiseOr($left, $right)"
     })
   }
 
@@ -2749,7 +2739,7 @@ case class BitOr(bytes1: Expression, bytes2: Expression)
 }
 
 /**
- * A function that returns the bitwise XOR of two binary strings.
+ * Expression that returns the bitwise XOR of two binary strings.
  * The byte length of the result is the maximum of the byte lengths of the two input binary
  * strings. If the two input binary strings are of different byte length they aligned according
  * to their least significant (right-most) bit. The shorter binary string is semantically
@@ -2777,17 +2767,12 @@ case class BitXor(bytes1: Expression, bytes2: Expression)
   override def right: Expression = bytes2
 
   override def nullSafeEval(left: Any, right: Any): Any = {
-    bytes1.dataType match {
-      case BinaryType => ByteArray.bitwiseXor(left.asInstanceOf[Array[Byte]],
-        right.asInstanceOf[Array[Byte]])
-    }
+    ByteArray.bitwiseXor(left.asInstanceOf[Array[Byte]], right.asInstanceOf[Array[Byte]])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (left, right) => {
-      bytes1.dataType match {
-        case BinaryType => s"${classOf[ByteArray].getName}.bitwiseXor($left, $right)"
-      }
+      s"${classOf[ByteArray].getName}.bitwiseXor($left, $right)"
     })
   }
 
@@ -2798,7 +2783,7 @@ case class BitXor(bytes1: Expression, bytes2: Expression)
 }
 
 /**
- * A function that returns the bitwise NOT of a binary string.
+ * Expression that returns the bitwise NOT of a binary string.
  */
 @ExpressionDescription(
   usage = """
@@ -2821,16 +2806,12 @@ case class BitNot(bytes: Expression)
   override def child: Expression = bytes
 
   override def nullSafeEval(e: Any): Any = {
-    bytes.dataType match {
-      case BinaryType => ByteArray.bitwiseNot(e.asInstanceOf[Array[Byte]])
-    }
+    ByteArray.bitwiseNot(e.asInstanceOf[Array[Byte]])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (e) => {
-      bytes.dataType match {
-        case BinaryType => s"${classOf[ByteArray].getName}.bitwiseNot($e)"
-      }
+      s"${classOf[ByteArray].getName}.bitwiseNot($e)"
     })
   }
 
