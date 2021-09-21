@@ -56,6 +56,7 @@ class ParquetCodecSuite extends FileSourceCodecSuite {
   override def format: String = "parquet"
   override val codecConfigName: String = SQLConf.PARQUET_COMPRESSION.key
   // Exclude "lzo" because it is GPL-licenced so not included in Hadoop.
+  // TODO: test "brotli" if the system is not of ARM64 CPU architecture.
   override protected def availableCodecs: Seq[String] =
     Seq("none", "uncompressed", "snappy", "lz4", "gzip", "zstd")
 }
