@@ -33,6 +33,7 @@ import numpy as np
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import Label, Name, Scalar
 from pyspark.pandas.internal import (
+    DEFAULT_SERIES_NAME,
     InternalField,
     InternalFrame,
     NATURAL_ORDER_COLUMN_NAME,
@@ -439,7 +440,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 temp_col = verify_temp_column_name(psdf, "__temp_col__")
 
                 psdf[temp_col] = key
-                name = self._psdf_or_psser.name if self._psdf_or_psser.name else 0
+                name = self._psdf_or_psser.name if self._psdf_or_psser.name else DEFAULT_SERIES_NAME
                 return cast(Series, psdf[name][psdf[temp_col]]).rename(self._psdf_or_psser.name)
 
             cond, limit, remaining_index = self._select_rows(key)
