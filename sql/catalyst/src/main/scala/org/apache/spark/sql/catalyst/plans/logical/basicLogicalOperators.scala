@@ -1597,3 +1597,112 @@ case class LateralJoin(
     copy(left = newChild)
   }
 }
+
+/**
+ * A logical plan for as-of join.
+ */
+case class AsOfJoin(
+    left: LogicalPlan,
+    right: LogicalPlan,
+    asOfCondition: Expression,
+    condition: Option[Expression],
+    orderExpression: Expression,
+    joinType: JoinType) extends BinaryNode {
+
+  require(Seq(Inner, LeftOuter).contains(joinType),
+    s"Unsupported as-of join type $joinType")
+
+  override def output: Seq[Attribute] = {
+    joinType match {
+      case LeftOuter =>
+        left.output ++ right.output.map(_.withNullability(true))
+      case _ =>
+        left.output ++ right.output
+    }
+  }
+
+  def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
+
+  override lazy val resolved: Boolean = {
+    childrenResolved &&
+      expressions.forall(_.resolved) &&
+      duplicateResolved &&
+      asOfCondition.dataType == BooleanType &&
+      condition.forall(_.dataType == BooleanType)
+  }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(AS_OF_JOIN)
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): AsOfJoin = {
+    copy(left = newLeft, right = newRight)
+  }
+}
+
+object AsOfJoin {
+
+  def apply(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      leftAsOf: Expression,
+      rightAsOf: Expression,
+      condition: Option[Expression],
+      joinType: JoinType,
+      tolerance: Option[Expression],
+      allowExactMatches: Boolean,
+      direction: AsOfJoinDirection): AsOfJoin = {
+    val asOfCond = makeAsOfCond(leftAsOf, rightAsOf, tolerance, allowExactMatches, direction)
+    val orderingExpr = makeOrderingExpr(leftAsOf, rightAsOf, direction)
+    AsOfJoin(left, right, asOfCond, condition, orderingExpr, joinType)
+  }
+
+  private def makeAsOfCond(
+      leftAsOf: Expression,
+      rightAsOf: Expression,
+      tolerance: Option[Expression],
+      allowExactMatches: Boolean,
+      direction: AsOfJoinDirection): Expression = {
+    val base = (allowExactMatches, direction) match {
+      case (true, Backward) => GreaterThanOrEqual(leftAsOf, rightAsOf)
+      case (false, Backward) => GreaterThan(leftAsOf, rightAsOf)
+      case (true, Forward) => LessThanOrEqual(leftAsOf, rightAsOf)
+      case (false, Forward) => LessThan(leftAsOf, rightAsOf)
+      case (true, Nearest) => Literal.TrueLiteral
+      case (false, Nearest) => Not(EqualTo(leftAsOf, rightAsOf))
+    }
+    tolerance match {
+      case Some(tolerance) =>
+        (allowExactMatches, direction) match {
+          case (true, Backward) =>
+            And(base, GreaterThanOrEqual(rightAsOf, Subtract(leftAsOf, tolerance)))
+          case (false, Backward) =>
+            And(base, GreaterThan(rightAsOf, Subtract(leftAsOf, tolerance)))
+          case (true, Forward) =>
+            And(base, LessThanOrEqual(rightAsOf, Add(leftAsOf, tolerance)))
+          case (false, Forward) =>
+            And(base, LessThan(rightAsOf, Add(leftAsOf, tolerance)))
+          case (true, Nearest) =>
+            And(GreaterThanOrEqual(rightAsOf, Subtract(leftAsOf, tolerance)),
+              LessThanOrEqual(rightAsOf, Add(leftAsOf, tolerance)))
+          case (false, Nearest) =>
+            And(base,
+              And(GreaterThan(rightAsOf, Subtract(leftAsOf, tolerance)),
+                LessThan(rightAsOf, Add(leftAsOf, tolerance))))
+        }
+      case None => base
+    }
+  }
+
+  private def makeOrderingExpr(
+      leftAsOf: Expression,
+      rightAsOf: Expression,
+      direction: AsOfJoinDirection): Expression = {
+    direction match {
+      case Backward => Subtract(leftAsOf, rightAsOf)
+      case Forward => Subtract(rightAsOf, leftAsOf)
+      case Nearest =>
+        If(GreaterThan(leftAsOf, rightAsOf),
+          Subtract(leftAsOf, rightAsOf), Subtract(rightAsOf, leftAsOf))
+    }
+  }
+}
