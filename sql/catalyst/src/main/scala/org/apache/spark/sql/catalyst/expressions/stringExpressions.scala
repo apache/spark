@@ -2657,7 +2657,6 @@ case class Sentences(
  * to their least significant (right-most) bit.  The shorter binary string is semantically
  * left-padded with zeros.
  */
-// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(bytes1, bytes2) - Returns the bitwise AND of two binary strings.
@@ -2669,7 +2668,6 @@ case class Sentences(
   """,
   since = "3.3.0",
   group = "string_funcs")
-// scalastyle:on line.size.limit
 case class BitAnd(bytes1: Expression, bytes2: Expression)
   extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
 
@@ -2708,7 +2706,6 @@ case class BitAnd(bytes1: Expression, bytes2: Expression)
  * to their least significant (right-most) bit. The shorter binary string is semantically
  * left-padded with zeros.
  */
-// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(bytes1, bytes2) - Returns the bitwise OR of two binary strings.
@@ -2758,7 +2755,6 @@ case class BitOr(bytes1: Expression, bytes2: Expression)
  * to their least significant (right-most) bit. The shorter binary string is semantically
  * left-padded with zeros.
  */
-// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(bytes1, bytes2) - Returns the bitwise XOR of two binary strings.
@@ -2804,7 +2800,6 @@ case class BitXor(bytes1: Expression, bytes2: Expression)
 /**
  * A function that returns the bitwise NOT of a binary string.
  */
-// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(bytes) - Returns the bitwise NOT of a binary string.
