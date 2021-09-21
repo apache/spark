@@ -117,7 +117,7 @@ object TypeUtils {
 
   def invokeOnceForInterval(dataType: DataType)(f: => Unit): Unit = {
     def isInterval(dataType: DataType): Boolean = dataType match {
-      case CalendarIntervalType | _: AnsiIntervalType => true
+      case CalendarIntervalType => true
       case _ => false
     }
     if (dataType.existsRecursively(isInterval)) f

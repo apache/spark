@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.time.Period
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -1057,6 +1058,20 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           assert(Seq(866, 20, 492, 76, 824, 604, 343, 820, 864, 243)
             .zip(last10Df).forall(d =>
             d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
+      }
+    }
+  }
+
+  test("SPARK-XXXXX: year-month interval written and read as INT32") {
+    val data = (1 to 10).map(i => Row(i, Period.of(i, i, 0)))
+    val schema = StructType(List(StructField("d", IntegerType, false),
+      StructField("i", YearMonthIntervalType(), false)).toArray)
+    withTempPath { file =>
+      val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+      df.write.parquet(file.getCanonicalPath)
+      withAllParquetReaders {
+        val df2 = spark.read.parquet(file.getCanonicalPath)
+        checkAnswer(df2, df.collect().toSeq)
       }
     }
   }
