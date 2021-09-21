@@ -439,7 +439,8 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 temp_col = verify_temp_column_name(psdf, "__temp_col__")
 
                 psdf[temp_col] = key
-                return type(self)(psdf[self._psdf_or_psser.name])[psdf[temp_col]]
+                name = self._psdf_or_psser.name if self._psdf_or_psser.name else 0
+                return type(self)(psdf[name])[psdf[temp_col]].rename(self._psdf_or_psser.name)
 
             cond, limit, remaining_index = self._select_rows(key)
             if cond is None and limit is None:
