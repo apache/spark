@@ -495,10 +495,10 @@ object SimplifyBinaryComparison
         case TrueLiteral EqualTo (b: Predicate) => b
         case (a: Predicate) EqualTo FalseLiteral => Not(a)
         case FalseLiteral EqualTo (b: Predicate) => Not(b)
-        case (a: Predicate) EqualNullSafe TrueLiteral => And(a, IsNotNull(a))
-        case TrueLiteral EqualNullSafe (b: Predicate) => And(b, IsNotNull(b))
-        case (a: Predicate) EqualNullSafe FalseLiteral => And(Not(a), IsNotNull(a))
-        case FalseLiteral EqualNullSafe (b: Predicate) => And(Not(b), IsNotNull(b))
+        case (a: Predicate) EqualNullSafe TrueLiteral if !a.nullable => a
+        case TrueLiteral EqualNullSafe (b: Predicate) if !b.nullable => b
+        case (a: Predicate) EqualNullSafe FalseLiteral if !a.nullable => Not(a)
+        case FalseLiteral EqualNullSafe (b: Predicate) if !b.nullable => Not(b)
       }
   }
 }
