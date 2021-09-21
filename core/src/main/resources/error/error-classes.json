@@ -122,7 +122,7 @@
     "message" : [ "Window Functions do not support merging." ],
     "sqlState" : "0A000"
   },
-    "LOGICAL_HINT_OPERATOR_NOT_REMOVED_DURING_ANALYSIS" : {
+  "LOGICAL_HINT_OPERATOR_NOT_REMOVED_DURING_ANALYSIS" : {
     "message" : [ "Internal error: logical hint operator should have been removed during analysis" ]
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
