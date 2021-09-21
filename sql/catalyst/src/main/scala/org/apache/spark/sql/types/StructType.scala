@@ -653,6 +653,12 @@ object StructType extends AbstractDataType {
       case (leftUdt: UserDefinedType[_], rightUdt: UserDefinedType[_])
         if leftUdt.userClass == rightUdt.userClass => leftUdt
 
+      case (YearMonthIntervalType(lstart, lend), YearMonthIntervalType(rstart, rend)) =>
+        YearMonthIntervalType(Math.min(lstart, rstart).toByte, Math.max(lend, rend).toByte)
+
+      case (DayTimeIntervalType(lstart, lend), DayTimeIntervalType(rstart, rend)) =>
+        DayTimeIntervalType(Math.min(lstart, rstart).toByte, Math.max(lend, rend).toByte)
+
       case (leftType, rightType) if leftType == rightType =>
         leftType
 
