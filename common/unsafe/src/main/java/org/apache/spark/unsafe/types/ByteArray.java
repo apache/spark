@@ -101,4 +101,95 @@ public final class ByteArray {
     }
     return result;
   }
+
+  // Return the bitwise AND of two byte arrays. The byte length of the result is equal to the
+  // maximum byte length of the two inputs. The two input byte arrays are aligned with respect
+  // to their least significant (right-most) bytes.
+  public static byte[] bitwiseAnd(byte[] bytes1, byte[] bytes2) {
+    if (bytes1 == null || bytes2 == null) return null;
+    // Compute the length of the result (maximum of the lengths of the inputs).
+    final int len1 = bytes1.length;
+    final int len2 = bytes2.length;
+    final int maxLen = Math.max(len1, len2);
+    if (maxLen == 0) {
+      return EMPTY_BYTE;
+    }
+    final byte[] result = new byte[maxLen];
+    final int minLen = Math.min(len1, len2);
+    // Initialize the first `maxLen - minLen` bytes to 0.
+    Platform.setMemory(result, Platform.BYTE_ARRAY_OFFSET, maxLen - minLen, (byte)0);
+    // Compute the right-most minLen bytes of the result.
+    for (int j = 0; j < minLen; ++j) {
+      result[maxLen - 1 - j] = (byte)(bytes1[len1 - 1 - j] & bytes2[len2 - 1 - j]);
+    }
+    return result;
+  }
+
+  // Return the bitwise OR of two byte arrays. The byte length of the result is equal to the
+  // maximum byte length of the two inputs. The two input byte arrays are aligned with respect
+  // to their least significant (right-most) bytes.
+  public static byte[] bitwiseOr(byte[] bytes1, byte[] bytes2) {
+    if (bytes1 == null || bytes2 == null) return null;
+    // Compute the length of the result (maximum of the lengths of the inputs).
+    final int len1 = bytes1.length;
+    final int len2 = bytes2.length;
+    final int maxLen = Math.max(len1, len2);
+    if (maxLen == 0) {
+      return EMPTY_BYTE;
+    }
+    final byte[] result = new byte[maxLen];
+    final int minLen = Math.min(len1, len2);
+    // Copy the first `maxLen - minLen` bytes of the longer byte array into the result buffer.
+    final byte[] maxLenBytes = (len1 == maxLen) ? bytes1 : bytes2;
+    Platform.copyMemory(
+            maxLenBytes, Platform.BYTE_ARRAY_OFFSET,
+            result, Platform.BYTE_ARRAY_OFFSET,
+            maxLen - minLen);
+    // Compute the right-most minLen bytes of the result.
+    for (int j = 0; j < minLen; ++j) {
+      result[maxLen - 1 - j] = (byte)(bytes1[len1 - 1 - j] | bytes2[len2 - 1 - j]);
+    }
+    return result;
+  }
+
+  // Return the bitwise XOR of two byte arrays. The byte length of the result is equal to the
+  // maximum byte length of the two inputs. The two input byte arrays are aligned with respect
+  // to their least significant (right-most) bytes.
+  public static byte[] bitwiseXor(byte[] bytes1, byte[] bytes2) {
+    if (bytes1 == null || bytes2 == null) return null;
+    // Compute the length of the result (maximum of the lengths of the inputs).
+    final int len1 = bytes1.length;
+    final int len2 = bytes2.length;
+    final int maxLen = Math.max(len1, len2);
+    if (maxLen == 0) {
+      return EMPTY_BYTE;
+    }
+    final byte[] result = new byte[maxLen];
+    final int minLen = Math.min(len1, len2);
+    // Copy the first `maxLen - minLen` bytes of the longer byte array into the result buffer.
+    final byte[] maxLenBytes = (len1 == maxLen) ? bytes1 : bytes2;
+    Platform.copyMemory(
+            maxLenBytes, Platform.BYTE_ARRAY_OFFSET,
+            result, Platform.BYTE_ARRAY_OFFSET,
+            maxLen - minLen);
+    // Compute the right-most minLen bytes of the result.
+    for (int j = 0; j < minLen; ++j) {
+      result[maxLen - 1 - j] = (byte)(bytes1[len1 - 1 - j] ^ bytes2[len2 - 1 - j]);
+    }
+    return result;
+  }
+
+  // Return the bitwise NOT of a byte array.
+  public static byte[] bitwiseNot(byte[] bytes) {
+    if (bytes == null) return null;
+    final int len = bytes.length;
+    if (bytes.length == 0) {
+      return EMPTY_BYTE;
+    }
+    final byte[] result = new byte[len];
+    for (int i = 0; i < len; ++i) {
+      result[i] = (byte)(~bytes[i]);
+    }
+    return result;
+  }
 }

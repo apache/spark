@@ -5406,4 +5406,45 @@ object functions {
   def call_udf(udfName: String, cols: Column*): Column = withExpr {
     UnresolvedFunction(udfName, cols.map(_.expr), isDistinct = false)
   }
+
+  /**
+   * Computes the bitwise AND of two binary strings. If the two binary strings are of
+   * different lengths they are aligned according to their least-significant bit (left-most
+   * bit). The byte length of the result is the maximum of the byte lengths of the two
+   * inputs. The shorter binary string is semantically left-padded with zeros.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def bitand(l: Column, r: Column): Column = withExpr { BitAnd(l.expr, r.expr) }
+
+  /**
+   * Computes the bitwise OR of two binary strings. If the two binary strings are of
+   * different lengths they are aligned according to their least-significant bit (left-most
+   * bit). The byte length of the result is the maximum of the byte lengths of the two
+   * inputs. The shorter binary string is semantically left-padded with zeros.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def bitor(l: Column, r: Column): Column = withExpr { BitOr(l.expr, r.expr) }
+
+  /**
+   * Computes the bitwise XOR of two binary strings. If the two binary strings are of
+   * different lengths they are aligned according to their least-significant bit (left-most
+   * bit). The byte length of the result is the maximum of the byte lengths of the two
+   * inputs. The shorter binary string is semantically left-padded with zeros.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def bitxor(l: Column, r: Column): Column = withExpr { BitXor(l.expr, r.expr) }
+
+  /**
+   * Computes the bitwise NOT of a binary string.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def bitnot(e: Column): Column = withExpr { BitNot(e.expr) }
 }

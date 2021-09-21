@@ -71,3 +71,32 @@ select decode(2, 1, 'Southlake');
 select decode(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
+
+-- bitand
+select hex(bitand(null, unhex('11223344')));
+select hex(bitand(unhex('aabb'), null));
+select hex(bitand(unhex('aabb'), unhex('')));
+select hex(bitand(unhex(''), unhex('11223344')));
+select hex(bitand(unhex('aabb'), unhex('11223344')));
+select bitand(unhex('aabb'), unhex('11223344')) = bitand(unhex('11223344'), unhex('aabb'));
+
+-- bitnot
+select hex(bitnot(null));
+select hex(bitnot(unhex('')));
+select hex(bitnot(unhex('aabb')));
+
+-- bitor
+select hex(bitor(null, unhex('11223344')));
+select hex(bitor(unhex('aabb'), null));
+select hex(bitor(unhex('aabb'), unhex('')));
+select hex(bitor(unhex(''), unhex('11223344')));
+select hex(bitor(unhex('aabb'), unhex('11223344')));
+select bitor(unhex('aabb'), unhex('11223344')) = bitor(unhex('11223344'), unhex('aabb'));
+
+-- bitxor
+select hex(bitxor(null, unhex('11223344')));
+select hex(bitxor(unhex('aabb'), null));
+select hex(bitxor(unhex('aabb'), unhex('')));
+select hex(bitxor(unhex(''), unhex('11223344')));
+select hex(bitxor(unhex('aabb'), unhex('11223344')));
+select bitxor(unhex('aabb'), unhex('11223344')) = bitxor(unhex('11223344'), unhex('aabb'));

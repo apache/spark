@@ -690,6 +690,11 @@ object FunctionRegistry {
     expression[BitwiseGet]("bit_get"),
     expression[BitwiseGet]("getbit", true),
 
+    expression[BitAnd]("bitand"),
+    expression[BitOr]("bitor"),
+    expression[BitXor]("bitxor"),
+    expression[BitNot]("bitnot"),
+
     // json
     expression[StructsToJson]("to_json"),
     expression[JsonToStructs]("from_json"),

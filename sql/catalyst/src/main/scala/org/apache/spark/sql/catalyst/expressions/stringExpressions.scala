@@ -2649,3 +2649,197 @@ case class Sentences(
     copy(str = newFirst, language = newSecond, country = newThird)
 
 }
+
+/**
+ * A function that returns the bitwise AND of two binary strings.
+ * The byte length of the result is the maximum of the byte lengths of the two input binary
+ * strings. If the two input binary strings are of different byte length they aligned according
+ * to their least significant (right-most) bit.  The shorter binary string is semantically
+ * left-padded with zeros.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(bytes1, bytes2) - Returns the bitwise AND of two binary strings.
+  """,
+  examples = """
+    Examples:
+      > SELECT hex(_FUNC_(unhex('AABB'), unhex('11223344')));
+       00002200
+  """,
+  since = "3.3.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class BitAnd(bytes1: Expression, bytes2: Expression)
+  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
+
+  override def dataType: DataType = BinaryType
+
+  override def left: Expression = bytes1
+  override def right: Expression = bytes2
+
+  override def nullSafeEval(left: Any, right: Any): Any = {
+    bytes1.dataType match {
+      case BinaryType => ByteArray.bitwiseAnd(left.asInstanceOf[Array[Byte]],
+        right.asInstanceOf[Array[Byte]])
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (left, right) => {
+      bytes1.dataType match {
+        case BinaryType => s"${classOf[ByteArray].getName}.bitwiseAnd($left, $right)"
+      }
+    })
+  }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): BitAnd =
+    copy(bytes1 = newLeft, bytes2 = newRight)
+
+}
+
+/**
+ * A function that returns the bitwise OR of two binary strings.
+ * The byte length of the result is the maximum of the byte lengths of the two input binary
+ * strings. If the two input binary strings are of different byte length they aligned according
+ * to their least significant (right-most) bit. The shorter binary string is semantically
+ * left-padded with zeros.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(bytes1, bytes2) - Returns the bitwise OR of two binary strings.
+  """,
+  examples = """
+    Examples:
+      > SELECT hex(_FUNC_(unhex('AABB'), unhex('11223344')));
+       1122BBFF
+  """,
+  since = "3.3.0",
+  group = "string_funcs")
+case class BitOr(bytes1: Expression, bytes2: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
+
+  override def dataType: DataType = BinaryType
+
+  override def left: Expression = bytes1
+  override def right: Expression = bytes2
+
+  override def nullSafeEval(left: Any, right: Any): Any = {
+    bytes1.dataType match {
+      case BinaryType => ByteArray.bitwiseOr(left.asInstanceOf[Array[Byte]],
+        right.asInstanceOf[Array[Byte]])
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (left, right) => {
+      bytes1.dataType match {
+        case BinaryType => s"${classOf[ByteArray].getName}.bitwiseOr($left, $right)"
+      }
+    })
+  }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): BitOr =
+    copy(bytes1 = newLeft, bytes2 = newRight)
+
+}
+
+/**
+ * A function that returns the bitwise XOR of two binary strings.
+ * The byte length of the result is the maximum of the byte lengths of the two input binary
+ * strings. If the two input binary strings are of different byte length they aligned according
+ * to their least significant (right-most) bit. The shorter binary string is semantically
+ * left-padded with zeros.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(bytes1, bytes2) - Returns the bitwise XOR of two binary strings.
+  """,
+  examples = """
+    Examples:
+      > SELECT hex(_FUNC_(unhex('AABB'), unhex('11223344')));
+       112299FF
+  """,
+  since = "3.3.0",
+  group = "string_funcs")
+case class BitXor(bytes1: Expression, bytes2: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
+
+  override def dataType: DataType = BinaryType
+
+  override def left: Expression = bytes1
+  override def right: Expression = bytes2
+
+  override def nullSafeEval(left: Any, right: Any): Any = {
+    bytes1.dataType match {
+      case BinaryType => ByteArray.bitwiseXor(left.asInstanceOf[Array[Byte]],
+        right.asInstanceOf[Array[Byte]])
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (left, right) => {
+      bytes1.dataType match {
+        case BinaryType => s"${classOf[ByteArray].getName}.bitwiseXor($left, $right)"
+      }
+    })
+  }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): BitXor =
+    copy(bytes1 = newLeft, bytes2 = newRight)
+
+}
+
+/**
+ * A function that returns the bitwise NOT of a binary string.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(bytes) - Returns the bitwise NOT of a binary string.
+  """,
+  examples = """
+    Examples:
+      > SELECT hex(_FUNC_(unhex('AABB')));
+       5544
+  """,
+  since = "3.3.0",
+  group = "string_funcs")
+case class BitNot(bytes: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
+
+  override def dataType: DataType = BinaryType
+
+  override def child: Expression = bytes
+
+  override def nullSafeEval(e: Any): Any = {
+    bytes.dataType match {
+      case BinaryType => ByteArray.bitwiseNot(e.asInstanceOf[Array[Byte]])
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (e) => {
+      bytes.dataType match {
+        case BinaryType => s"${classOf[ByteArray].getName}.bitwiseNot($e)"
+      }
+    })
+  }
+
+  override protected def withNewChildInternal(
+      newChild: Expression): BitNot = copy(bytes = newChild)
+
+}
