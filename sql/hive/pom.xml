@@ -141,6 +141,14 @@
       <artifactId>javax.jdo</artifactId>
     </dependency>
     <dependency>
+      <groupId>javax.jdo</groupId>
+      <artifactId>jdo-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>stax</groupId>
+      <artifactId>stax-api</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>${hadoop-client-runtime.artifact}</artifactId>
       <scope>${hadoop.deps.scope}</scope>

@@ -86,6 +86,10 @@
       <artifactId>jetty-servlet</artifactId>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpcore</artifactId>
+    </dependency>
     <!-- Added for selenium: -->
     <dependency>
       <groupId>org.seleniumhq.selenium</groupId>

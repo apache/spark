@@ -145,6 +145,12 @@
                     <exclude>META-INF/*.SF</exclude>
                     <exclude>META-INF/*.DSA</exclude>
                     <exclude>META-INF/*.RSA</exclude>
+                    <exclude>parquet-logging.properties</exclude>
+                    <exclude>hive-log4j2.properties</exclude>
+                    <exclude>hive-exec-log4j2.properties</exclude>
+                    <exclude>beeline-log4j2.properties</exclude>
+                    <exclude>tez-container-log4j2.properties</exclude>
+                    <exclude>bonecp-default-config.xml</exclude>
                   </excludes>
                 </filter>
               </filters>
@@ -196,6 +202,10 @@
                 <relocation>
                   <pattern>javolution</pattern>
                   <shadedPattern>${spark.shade.packageName}.hive.javolution</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.supercsv</pattern>
+                  <shadedPattern>${spark.shade.packageName}.hive.org.supercsv</shadedPattern>
                 </relocation>
               </relocations>
               <transformers>

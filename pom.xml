@@ -185,6 +185,8 @@
     <datanucleus-api-jdo.version>4.2.4</datanucleus-api-jdo.version>
     <datanucleus-rdbms.version>4.1.19</datanucleus-rdbms.version>
     <datanucleus-javax.jdo-version>3.2.0-m3</datanucleus-javax.jdo-version>
+    <javax.jdo.version>3.0.1</javax.jdo.version>
+    <stax-api.version>1.0.1</stax-api.version>
     <guava.version>30.1.1-jre</guava.version>
     <janino.version>3.0.16</janino.version>
     <jersey.version>2.34</jersey.version>
@@ -1660,6 +1662,10 @@
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>jline</groupId>
+            <artifactId>jline</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1715,6 +1721,10 @@
           <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>jline</groupId>
+            <artifactId>jline</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1995,6 +2005,10 @@
             <groupId>org.apache.ivy</groupId>
             <artifactId>ivy</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>stax</groupId>
+            <artifactId>stax-api</artifactId>
+          </exclusion>
           <!-- End of Hive 2.3 exclusion -->
         </exclusions>
       </dependency>
@@ -2067,6 +2081,10 @@
           <exclusion>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpcore</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -2144,6 +2162,10 @@
           <exclusion>
             <groupId>org.datanucleus</groupId>
             <artifactId>javax.jdo</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>javax.jdo</groupId>
+            <artifactId>jdo-api</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -2339,7 +2361,6 @@
         <groupId>org.apache.hive</groupId>
         <artifactId>hive-llap-client</artifactId>
         <version>${hive23.version}</version>
-        <scope>test</scope>
         <exclusions>
           <exclusion>
             <groupId>org.apache.hive</groupId>
@@ -2364,6 +2385,10 @@
           <exclusion>
             <groupId>org.apache.zookeeper</groupId>
             <artifactId>zookeeper</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.slf4j</groupId>
@@ -2487,6 +2512,16 @@
         <groupId>org.datanucleus</groupId>
         <artifactId>javax.jdo</artifactId>
         <version>${datanucleus-javax.jdo-version}</version>
+      </dependency>
+      <dependency>
+        <groupId>javax.jdo</groupId>
+        <artifactId>jdo-api</artifactId>
+        <version>${javax.jdo.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>stax</groupId>
+        <artifactId>stax-api</artifactId>
+        <version>${stax-api.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.thrift</groupId>
