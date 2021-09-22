@@ -82,7 +82,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>14.0.1</version>
+      <version>${hive.guava.version}</version>
       <scope>compile</scope>
       <optional>true</optional>
     </dependency>

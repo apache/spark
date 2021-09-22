@@ -316,10 +316,14 @@ com.fasterxml.jackson.module:jackson-module-scala_2.12
 com.github.mifmif:generex
 com.google.code.findbugs:jsr305
 com.google.code.gson:gson
+com.google.errorprone:error_prone_annotations
 com.google.flatbuffers:flatbuffers-java
+com.google.guava:failureaccess
 com.google.guava:guava
+com.google.guava:listenablefuture
 com.google.inject:guice
 com.google.inject.extensions:guice-servlet
+com.google.j2objc:j2objc-annotations
 com.twitter:parquet-hadoop-bundle
 commons-cli:commons-cli
 commons-dbcp:commons-dbcp
@@ -471,6 +475,7 @@ MIT License
 -----------
 
 com.microsoft.sqlserver:mssql-jdbc
+org.checkerframework:checker-qual
 org.typelevel:spire_2.12
 org.typelevel:spire-macros_2.12
 org.typelevel:spire-platform_2.12
