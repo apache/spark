@@ -208,12 +208,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     case Not(expr) => isLikelySelective(expr, joinKey)
     case And(l, r) => isLikelySelective(l, joinKey) || isLikelySelective(r, joinKey)
     case Or(l, r) => isLikelySelective(l, joinKey) && isLikelySelective(r, joinKey)
-    case expr: StringRegexExpression => true && !expr.references.subsetOf(joinKey.references)
-    case expr: BinaryComparison => true && !expr.references.subsetOf(joinKey.references)
-    case expr: In => true && !expr.references.subsetOf(joinKey.references)
-    case expr: InSet => true && !expr.references.subsetOf(joinKey.references)
-    case expr: StringPredicate => true && !expr.references.subsetOf(joinKey.references)
-    case expr: MultiLikeBase => true && !expr.references.subsetOf(joinKey.references)
+    case expr: StringRegexExpression => !expr.references.subsetOf(joinKey.references)
+    case expr: BinaryComparison => !expr.references.subsetOf(joinKey.references)
+    case expr: In => !expr.references.subsetOf(joinKey.references)
+    case expr: InSet => !expr.references.subsetOf(joinKey.references)
+    case expr: StringPredicate => !expr.references.subsetOf(joinKey.references)
+    case expr: MultiLikeBase => !expr.references.subsetOf(joinKey.references)
     case _ => false
   }
 

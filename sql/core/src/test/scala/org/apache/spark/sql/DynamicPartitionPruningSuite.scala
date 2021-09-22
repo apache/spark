@@ -1544,29 +1544,28 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("No dynamic partition pruning filters in case of static partition filtering") {
+  test("SPARK-36819: No dynamic partition pruning filters in case of static partition filtering") {
     // join on single attribute
-      val sqlStr =
-        """
-          |SELECT f.date_id, f.pid, f.sid FROM
-          |(select date_id, product_id as pid, store_id as sid from fact_stats) as f
-          |JOIN dim_stats s
-          |ON f.sid = s.store_id WHERE s.store_id = 3
-        """.stripMargin
-
-      Seq(true, false).foreach { reuseBroadcastOnly =>
-        withSQLConf(
-          SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> s"$reuseBroadcastOnly") {
-          val df = sql(sqlStr)
-          checkPartitionPruningPredicate(df, false, false)
-          checkAnswer(df,
-            Row(1030, 2, 3) ::
-            Row(1040, 2, 3) ::
-            Row(1050, 2, 3) ::
-            Row(1060, 2, 3) :: Nil
-          )
-        }
+    val sqlStr =
+      """
+        |SELECT f.date_id, f.pid, f.sid FROM
+        |(select date_id, product_id as pid, store_id as sid from fact_stats) as f
+        |JOIN dim_stats s
+        |ON f.sid = s.store_id WHERE s.store_id = 3
+      """.stripMargin
+    Seq(true, false).foreach { reuseBroadcastOnly =>
+      withSQLConf(
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> s"$reuseBroadcastOnly") {
+        val df = sql(sqlStr)
+        checkPartitionPruningPredicate(df, false, false)
+        checkAnswer(df,
+          Row(1030, 2, 3) ::
+          Row(1040, 2, 3) ::
+          Row(1050, 2, 3) ::
+          Row(1060, 2, 3) :: Nil
+        )
       }
+    }
 
     // Join on multiple attributes"
     withTable("fact", "dim") {
