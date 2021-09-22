@@ -253,6 +253,8 @@ def product(col):
 
 def acos(col):
     """
+    Computes inverse cosine of the input column.
+
     .. versionadded:: 1.4.0
 
     Returns
@@ -278,6 +280,8 @@ def acosh(col):
 
 def asin(col):
     """
+    Computes inverse sine of the input column.
+
     .. versionadded:: 1.3.0
 
 
@@ -304,6 +308,8 @@ def asinh(col):
 
 def atan(col):
     """
+    Compute inverse tangent of the input column.
+
     .. versionadded:: 1.4.0
 
     Returns
@@ -345,6 +351,8 @@ def ceil(col):
 
 def cos(col):
     """
+    Computes cosine of the input column.
+
     .. versionadded:: 1.4.0
 
     Parameters
@@ -362,6 +370,8 @@ def cos(col):
 
 def cosh(col):
     """
+    Computes hyperbolic cosine of the input column.
+
     .. versionadded:: 1.4.0
 
     Parameters
@@ -379,6 +389,8 @@ def cosh(col):
 
 def cot(col):
     """
+    Computes cotangent of the input column.
+
     .. versionadded:: 3.3.0
 
     Parameters
@@ -392,6 +404,25 @@ def cot(col):
         Cotangent of the angle.
     """
     return _invoke_function_over_column("cot", col)
+
+
+def csc(col):
+    """
+    Computes cosecant of the input column.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Angle in radians
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Cosecant of the angle.
+    """
+    return _invoke_function_over_column("csc", col)
 
 
 @since(1.4)
@@ -451,6 +482,25 @@ def rint(col):
     return _invoke_function_over_column("rint", col)
 
 
+def sec(col):
+    """
+    Computes secant of the input column.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Angle in radians
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Secant of the angle.
+    """
+    return _invoke_function_over_column("sec", col)
+
+
 @since(1.4)
 def signum(col):
     """
@@ -461,6 +511,8 @@ def signum(col):
 
 def sin(col):
     """
+    Computes sine of the input column.
+
     .. versionadded:: 1.4.0
 
     Parameters
@@ -477,6 +529,8 @@ def sin(col):
 
 def sinh(col):
     """
+    Computes hyperbolic sine of the input column.
+
     .. versionadded:: 1.4.0
 
     Parameters
@@ -495,6 +549,8 @@ def sinh(col):
 
 def tan(col):
     """
+    Computes tangent of the input column.
+
     .. versionadded:: 1.4.0
 
     Parameters
@@ -512,6 +568,8 @@ def tan(col):
 
 def tanh(col):
     """
+    Computes hyperbolic tangent of the input column.
+
     .. versionadded:: 1.4.0
 
     Parameters

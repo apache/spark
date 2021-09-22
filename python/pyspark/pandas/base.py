@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd  # noqa: F401
 from pandas.api.types import is_list_like, CategoricalDtype
 from pyspark.sql import functions as F, Column, Window
-from pyspark.sql.types import LongType
+from pyspark.sql.types import LongType, BooleanType
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex
@@ -873,7 +873,13 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             )
 
         values = values.tolist() if isinstance(values, np.ndarray) else list(values)
-        return self._with_new_scol(self.spark.column.isin([SF.lit(v) for v in values]))
+
+        other = [SF.lit(v) for v in values]
+        scol = self.spark.column.isin(other)
+        field = self._internal.data_fields[0].copy(
+            dtype=np.dtype("bool"), spark_type=BooleanType(), nullable=False
+        )
+        return self._with_new_scol(scol=F.coalesce(scol, F.lit(False)), field=field)
 
     def isnull(self: IndexOpsLike) -> IndexOpsLike:
         """
