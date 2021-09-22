@@ -213,6 +213,30 @@
           </execution>
         </executions>
       </plugin>
+      <plugin>
+        <!-- This is to ensure references to shaded Hive classes can be resolved in IDEs such as
+          Intellij. For reference: https://youtrack.jetbrains.com/issue/IDEA-126596 -->
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>compile</id>
+            <phase>package</phase>
+            <goals>
+              <goal>attach-artifact</goal>
+            </goals>
+            <configuration>
+              <artifacts>
+                <artifact>
+                  <file>${basedir}/target/${project.artifactId}-${project.version}.jar</file>
+                  <type>jar</type>
+                  <classifier>optional</classifier>
+                </artifact>
+              </artifacts>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 </project>
