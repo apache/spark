@@ -488,7 +488,7 @@ queryTerm
 queryPrimary
     : querySpecification                                                    #queryPrimaryDefault
     | fromStatement                                                         #fromStmt
-    | TABLE multipartIdentifier                                             #table
+    | TABLE multipartIdentifier optionHint?                                 #table
     | inlineTable                                                           #inlineTableDefault1
     | '(' query ')'                                                         #subquery
     ;
@@ -593,6 +593,10 @@ hint
 hintStatement
     : hintName=identifier
     | hintName=identifier '(' parameters+=primaryExpression (',' parameters+=primaryExpression)* ')'
+    ;
+
+optionHint
+    : '/*+' OPTIONS options=tablePropertyList '*/'
     ;
 
 fromClause
@@ -711,11 +715,11 @@ identifierComment
     ;
 
 relationPrimary
-    : multipartIdentifier sample? tableAlias  #tableName
-    | '(' query ')' sample? tableAlias        #aliasedQuery
-    | '(' relation ')' sample? tableAlias     #aliasedRelation
-    | inlineTable                             #inlineTableDefault2
-    | functionTable                           #tableValuedFunction
+    : multipartIdentifier optionHint? sample? tableAlias  #tableName
+    | '(' query ')' sample? tableAlias                    #aliasedQuery
+    | '(' relation ')' sample? tableAlias                 #aliasedRelation
+    | inlineTable                                         #inlineTableDefault2
+    | functionTable                                       #tableValuedFunction
     ;
 
 inlineTable
