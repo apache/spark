@@ -36,9 +36,7 @@ trait CommonFileDataSourceSuite extends SQLHelper { self: AnyFunSuite =>
   protected def inputDataset: Dataset[_] = spark.createDataset(Seq("abc"))(Encoders.STRING)
 
   test(s"SPARK-36349: disallow saving of ANSI intervals to $dataSourceFormat") {
-    // Check all built-in file-based datasources except of libsvm which requires particular
-    // schema, and parquet which should support ANSI intervals.
-    if (!Set("libsvm", "parquet").contains(dataSourceFormat.toLowerCase(Locale.ROOT))) {
+    if (!Set("parquet").contains(dataSourceFormat.toLowerCase(Locale.ROOT))) {
       Seq("INTERVAL '1' DAY", "INTERVAL '1' YEAR").foreach { i =>
         withTempPath { dir =>
           val errMsg = intercept[AnalysisException] {
@@ -47,7 +45,10 @@ trait CommonFileDataSourceSuite extends SQLHelper { self: AnyFunSuite =>
           assert(errMsg.contains("Cannot save interval data type into external storage"))
         }
       }
+    }
 
+    // Check all built-in file-based datasources except of libsvm which requires particular schema.
+    if (!Set("libsvm").contains(dataSourceFormat.toLowerCase(Locale.ROOT))) {
       Seq("INTERVAL DAY TO SECOND", "INTERVAL YEAR TO MONTH").foreach { it =>
         val errMsg = intercept[AnalysisException] {
           spark.sql(s"CREATE TABLE t (i $it) USING $dataSourceFormat")
