@@ -126,6 +126,10 @@ Join hints allow users to suggest the join strategy that Spark should use. Prior
 
     Suggests that Spark use shuffle-and-replicate nested loop join.
 
+* **BROADCAST_NL**
+
+    Suggests that Spark use broadcast nested loop join. The join side with the hint will be broadcast regardless of `autoBroadcastJoinThreshold`. If both sides of the join have the broadcast hints, the one with the smaller size (based on stats) will be broadcast.
+
 #### Examples
 
 ```sql
@@ -144,6 +148,10 @@ SELECT /*+ SHUFFLE_HASH(t1) */ * FROM t1 INNER JOIN t2 ON t1.key = t2.key;
 
 -- Join Hints for shuffle-and-replicate nested loop join
 SELECT /*+ SHUFFLE_REPLICATE_NL(t1) */ * FROM t1 INNER JOIN t2 ON t1.key = t2.key;
+
+-- Join Hints for broadcast nested loop join
+SELECT /*+ BROADCAST_NL(t1) */ * FROM t1 LEFT JOIN t2 ON t1.key = t2.key;
+SELECT /*+ BROADCAST_NL(t1) */ * FROM t1 LEFT JOIN t2;
 
 -- When different join strategy hints are specified on both sides of a join, Spark
 -- prioritizes the BROADCAST hint over the MERGE hint over the SHUFFLE_HASH hint

@@ -706,4 +706,42 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
       assert(logs.isEmpty)
     }
   }
+
+  test("SPARK-36823: Support broadcast nested loop join hint for equi-join") {
+    def checkBroadcastNLJoin(query: String, buildSide: BuildSide): Unit = {
+      val df = sql(query)
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        assertBroadcastNLJoin(df, buildSide)
+        df.collect()
+        assertBroadcastNLJoin(df, buildSide)
+      }
+    }
+
+    withTempView("t1", "t2") {
+      Seq((1, "4"), (2, "2")).toDF("key", "value").createTempView("t1")
+      Seq((1, "1"), (2, "12.3"), (2, "123")).toDF("key", "value").createTempView("t2")
+
+      val t1Size = spark.table("t1").queryExecution.analyzed.children.head.stats.sizeInBytes
+      val t2Size = spark.table("t2").queryExecution.analyzed.children.head.stats.sizeInBytes
+      assert(t1Size < t2Size)
+
+      // Broadcast nested loop hint specified on one side
+      checkBroadcastNLJoin(
+        equiJoinQueryWithHint("BROADCAST_NL(t1)" :: Nil), BuildLeft)
+      checkBroadcastNLJoin(
+        equiJoinQueryWithHint("BROADCAST_NL(t2)" :: Nil), BuildRight)
+      checkBroadcastNLJoin(
+        nonEquiJoinQueryWithHint("BROADCAST_NL(t1)" :: Nil), BuildLeft)
+      checkBroadcastNLJoin(
+        nonEquiJoinQueryWithHint("BROADCAST_NL(t2)" :: Nil), BuildRight)
+
+      // Broadcast nested loop hint specified on both sides and determine build side based on
+      // child relation sizes
+      checkBroadcastNLJoin(
+        equiJoinQueryWithHint("BROADCAST_NL(t1, t2)" :: Nil), BuildLeft)
+      checkBroadcastNLJoin(
+        nonEquiJoinQueryWithHint("BROADCAST_NL(t1, t2)" :: Nil), BuildLeft)
+    }
+  }
 }

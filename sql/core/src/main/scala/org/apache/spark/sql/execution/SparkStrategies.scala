@@ -253,6 +253,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         }
 
+        def createBroadcastNLJoinWithHint() = {
+          getBroadcastNLBuildSideWithHint(left, right, hint).map { buildSide =>
+            Seq(joins.BroadcastNestedLoopJoinExec(
+              planLater(left), planLater(right), buildSide, joinType, j.condition))
+          }
+        }
+
         def createJoinWithoutHint() = {
           createBroadcastHashJoin(false)
             .orElse(createShuffleHashJoin(false))
@@ -269,6 +276,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         createBroadcastHashJoin(true)
           .orElse { if (hintToSortMergeJoin(hint)) createSortMergeJoin() else None }
           .orElse(createShuffleHashJoin(true))
+          .orElse(createBroadcastNLJoinWithHint())
           .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
           .getOrElse(createJoinWithoutHint())
 
@@ -339,7 +347,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
         }
 
-        createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
+        createBroadcastNLJoin(
+          hintToBroadcastLeft(hint) || hintToBroadcastNLLeft(hint),
+          hintToBroadcastRight(hint) || hintToBroadcastNLRight(hint))
           .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
           .getOrElse(createJoinWithoutHint())
 

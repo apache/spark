@@ -125,7 +125,8 @@ object JoinStrategyHint {
     BROADCAST,
     SHUFFLE_MERGE,
     SHUFFLE_HASH,
-    SHUFFLE_REPLICATE_NL)
+    SHUFFLE_REPLICATE_NL,
+    BROADCAST_NL)
 }
 
 /**
@@ -167,6 +168,14 @@ case object SHUFFLE_REPLICATE_NL extends JoinStrategyHint {
   override def displayName: String = "shuffle_replicate_nl"
   override def hintAliases: Set[String] = Set(
     "SHUFFLE_REPLICATE_NL")
+}
+
+/**
+ * The hint for broadcast nested loop join.
+ */
+case object BROADCAST_NL extends JoinStrategyHint {
+  override def displayName: String = "broadcast_nl"
+  override def hintAliases: Set[String] = Set("BROADCAST_NL")
 }
 
 /**

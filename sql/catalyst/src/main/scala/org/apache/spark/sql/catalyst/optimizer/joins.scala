@@ -263,6 +263,15 @@ trait JoinSelectionHelper {
     )
   }
 
+  def getBroadcastNLBuildSideWithHint(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      hint: JoinHint): Option[BuildSide] = {
+    val canBuildLeft = hintToBroadcastNLLeft(hint)
+    val canBuildRight = hintToBroadcastNLRight(hint)
+    getBuildSide(canBuildLeft, canBuildRight, left, right)
+  }
+
   def getShuffleHashJoinBuildSide(
       left: LogicalPlan,
       right: LogicalPlan,
@@ -353,6 +362,14 @@ trait JoinSelectionHelper {
 
   def hintToBroadcastRight(hint: JoinHint): Boolean = {
     hint.rightHint.exists(_.strategy.contains(BROADCAST))
+  }
+
+  def hintToBroadcastNLLeft(hint: JoinHint): Boolean = {
+    hint.leftHint.exists(_.strategy.contains(BROADCAST_NL))
+  }
+
+  def hintToBroadcastNLRight(hint: JoinHint): Boolean = {
+    hint.rightHint.exists(_.strategy.contains(BROADCAST_NL))
   }
 
   def hintToNotBroadcastLeft(hint: JoinHint): Boolean = {
