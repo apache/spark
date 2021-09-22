@@ -130,6 +130,8 @@
               <goal>shade</goal>
             </goals>
             <configuration>
+              <createSourcesJar>true</createSourcesJar>
+              <shadeSourcesContent>true</shadeSourcesContent>
               <shadedArtifactAttached>false</shadedArtifactAttached>
               <artifactSet combine.self="override">
                 <includes>
