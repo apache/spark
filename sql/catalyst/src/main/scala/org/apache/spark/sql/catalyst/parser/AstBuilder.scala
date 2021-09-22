@@ -47,6 +47,7 @@ import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransfo
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.random.RandomSampler
 
@@ -1244,7 +1245,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitTable(ctx: TableContext): LogicalPlan = withOrigin(ctx) {
-    UnresolvedRelation(visitMultipartIdentifier(ctx.multipartIdentifier))
+    val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val options = Option(ctx.optionHint).map(hint =>
+      visitPropertyKeyValues(hint.options)).getOrElse(Map.empty)
+    UnresolvedRelation(tableId, new CaseInsensitiveStringMap(options.asJava))
   }
 
   /**
@@ -1252,7 +1256,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
     val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val table = mayApplyAliasPlan(ctx.tableAlias, UnresolvedRelation(tableId))
+    val options = Option(ctx.optionHint).map(hint =>
+      visitPropertyKeyValues(hint.options)).getOrElse(Map.empty)
+    val table = mayApplyAliasPlan(ctx.tableAlias,
+      UnresolvedRelation(tableId, new CaseInsensitiveStringMap(options.asJava)))
     table.optionalMap(ctx.sample)(withSample)
   }
 

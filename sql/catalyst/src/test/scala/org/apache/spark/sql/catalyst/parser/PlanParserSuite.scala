@@ -24,6 +24,9 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
+
+import java.util.{HashMap => JHashMap}
 
 /**
  * Parser test cases for rules defined in [[CatalystSqlParser]] / [[AstBuilder]].
@@ -1082,6 +1085,18 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(
       "SELECT /*+ BROADCAST(tab) */ * FROM testcat.db.tab",
       table("testcat", "db", "tab").select(star()).hint("BROADCAST", $"tab"))
+  }
+
+  test("option hint") {
+    val map = new JHashMap[String, String]()
+    map.put("key1", "val1")
+    map.put("key2", "val2")
+    assertEqual("TABLE testcat.db.tab /*+ OPTIONS('key1'='val1', 'key2'='val2') */",
+      UnresolvedRelation(Array("testcat", "db", "tab"),
+        new CaseInsensitiveStringMap(map)))
+    assertEqual("SELECT * FROM testcat.db.tab /*+ OPTIONS('key1'='val1', 'key2'='val2') */",
+      UnresolvedRelation(Array("testcat", "db", "tab"),
+        new CaseInsensitiveStringMap(map)).select(star()))
   }
 
   test("CTE with column alias") {
