@@ -384,7 +384,7 @@ class FileBasedDataSourceSuite extends QueryTest
 
         withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
           // write path
-          Seq("csv", "json", "parquet", "orc").foreach { format =>
+          Seq("csv", "json", "orc").foreach { format =>
             val msg = intercept[AnalysisException] {
               sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
             }.getMessage
