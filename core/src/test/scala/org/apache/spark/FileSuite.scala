@@ -33,6 +33,7 @@ import org.apache.hadoop.mapred.{FileAlreadyExistsException, FileSplit, JobConf,
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.{FileSplit => NewFileSplit, TextInputFormat => NewTextInputFormat}
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
+import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
@@ -137,9 +138,11 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
   // Hadoop "gzip" and "zstd" codecs require native library installed for sequence files
   // "snappy" codec does not work due to SPARK-36681.
-  Seq((new DefaultCodec(), "default"), (new BZip2Codec(), "bzip2"), (new Lz4Codec(), "lz4"))
-    .foreach { case (codec, codecName) =>
-      runSequenceFileCodecTest(codec, codecName)
+  val codecs = Seq((new DefaultCodec(), "default"), (new BZip2Codec(), "bzip2")) ++ {
+    if (VersionInfo.getVersion.startsWith("3")) Seq((new Lz4Codec(), "lz4")) else Seq()
+  }
+  codecs.foreach { case (codec, codecName) =>
+    runSequenceFileCodecTest(codec, codecName)
   }
 
   test("SequenceFile with writable key") {
