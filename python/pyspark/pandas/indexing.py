@@ -594,7 +594,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                     psdf[temp_key_col] = key
                 if isinstance(value, Series):
                     psdf[temp_value_col] = value
-                psdf = psdf.sort_values(temp_natural_order).drop(temp_natural_order)
+                psdf = psdf.sort_values(temp_natural_order).drop(columns=temp_natural_order)
 
                 psser = psdf._psser_for(column_label)
                 if isinstance(key, Series):
@@ -686,7 +686,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                     psdf[temp_key_col] = rows_sel
                 if isinstance(value, Series):
                     psdf[temp_value_col] = value
-                psdf = psdf.sort_values(temp_natural_order).drop(temp_natural_order)
+                psdf = psdf.sort_values(temp_natural_order).drop(columns=temp_natural_order)
 
                 if isinstance(rows_sel, Series):
                     rows_sel = F.col(
@@ -1657,14 +1657,13 @@ class iLocIndexer(LocIndexerLike):
                 "however, normalised index was [%s]" % new_rows_sel
             )
 
-        sequence_scol = sdf[self._sequence_col]
-        cond = []
-        for key in new_rows_sel:
-            cond.append(sequence_scol == SF.lit(int(key)).cast(LongType()))
-
-        if len(cond) == 0:
-            cond = [SF.lit(False)]
-        return reduce(lambda x, y: x | y, cond), None, None
+        if len(new_rows_sel) == 0:
+            cond = SF.lit(False)
+        else:
+            cond = sdf[self._sequence_col].isin(
+                [SF.lit(int(key)).cast(LongType()) for key in new_rows_sel]
+            )
+        return cond, None, None
 
     def _select_rows_else(
         self, rows_sel: Any

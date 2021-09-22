@@ -18,7 +18,7 @@
 pandas-on-Spark specific features.
 """
 import inspect
-from typing import Any, Callable, Optional, Tuple, Union, TYPE_CHECKING, cast
+from typing import Any, Callable, Optional, Tuple, Union, TYPE_CHECKING, cast, List
 from types import FunctionType
 
 import numpy as np  # noqa: F401
@@ -34,6 +34,7 @@ from pyspark.pandas.internal import (
     InternalFrame,
     SPARK_INDEX_NAME_FORMAT,
     SPARK_DEFAULT_SERIES_NAME,
+    SPARK_DEFAULT_INDEX_NAME,
 )
 from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
 from pyspark.pandas.utils import (
@@ -211,7 +212,7 @@ class PandasOnSparkFrameMethods(object):
 
             >>> # This case does not return the length of whole frame but of the batch internally
             ... # used.
-            ... def length(pdf) -> ps.DataFrame[int]:
+            ... def length(pdf) -> ps.DataFrame[int, [int]]:
             ...     return pd.DataFrame([len(pdf)])
             ...
             >>> df = ps.DataFrame({'A': range(1000)})
@@ -230,27 +231,23 @@ class PandasOnSparkFrameMethods(object):
 
             To avoid this, specify return type in ``func``, for instance, as below:
 
-            >>> def plus_one(x) -> ps.DataFrame[float, float]:
+            >>> def plus_one(x) -> ps.DataFrame[int, [float, float]]:
             ...     return x + 1
 
             If the return type is specified, the output column names become
             `c0, c1, c2 ... cn`. These names are positionally mapped to the returned
             DataFrame in ``func``.
 
-            To specify the column names, you can assign them in a pandas friendly style as below:
+            To specify the column names, you can assign them in a NumPy compound type style
+            as below:
 
-            >>> def plus_one(x) -> ps.DataFrame["a": float, "b": float]:
+            >>> def plus_one(x) -> ps.DataFrame[("index", int), [("a", float), ("b", float)]]:
             ...     return x + 1
 
             >>> pdf = pd.DataFrame({'a': [1, 2, 3], 'b': [3, 4, 5]})
-            >>> def plus_one(x) -> ps.DataFrame[zip(pdf.dtypes, pdf.columns)]:
+            >>> def plus_one(x) -> ps.DataFrame[
+            ...         (pdf.index.name, pdf.index.dtype), zip(pdf.dtypes, pdf.columns)]:
             ...     return x + 1
-
-            When the given function has the return type annotated, the original index of the
-            DataFrame will be lost and a default index will be attached to the result DataFrame.
-            Please be careful about configuring the default index. See also `Default Index Type
-            <https://koalas.readthedocs.io/en/latest/user_guide/options.html#default-index-type>`_.
-
 
         Parameters
         ----------
@@ -284,17 +281,18 @@ class PandasOnSparkFrameMethods(object):
         1  3  4
         2  5  6
 
-        >>> def query_func(pdf) -> ps.DataFrame[int, int]:
+        >>> def query_func(pdf) -> ps.DataFrame[int, [int, int]]:
         ...     return pdf.query('A == 1')
         >>> df.pandas_on_spark.apply_batch(query_func)
            c0  c1
         0   1   2
 
-        >>> def query_func(pdf) -> ps.DataFrame["A": int, "B": int]:
+        >>> def query_func(pdf) -> ps.DataFrame[("idx", int), [("A", int), ("B", int)]]:
         ...     return pdf.query('A == 1')
-        >>> df.pandas_on_spark.apply_batch(query_func)
-           A  B
-        0  1  2
+        >>> df.pandas_on_spark.apply_batch(query_func)  # doctest: +NORMALIZE_WHITESPACE
+             A  B
+        idx
+        0    1  2
 
         You can also omit the type hints so pandas-on-Spark infers the return schema as below:
 
@@ -304,7 +302,7 @@ class PandasOnSparkFrameMethods(object):
 
         You can also specify extra arguments.
 
-        >>> def calculation(pdf, y, z) -> ps.DataFrame[int, int]:
+        >>> def calculation(pdf, y, z) -> ps.DataFrame[int, [int, int]]:
         ...     return pdf ** y + z
         >>> df.pandas_on_spark.apply_batch(calculation, args=(10,), z=20)
                 c0        c1
@@ -386,22 +384,32 @@ class PandasOnSparkFrameMethods(object):
                     "The given function should specify a frame as its type "
                     "hints; however, the return type was %s." % return_sig
                 )
+            index_field = cast(DataFrameType, return_type).index_field
+            should_retain_index = index_field is not None
             return_schema = cast(DataFrameType, return_type).spark_type
 
             output_func = GroupBy._make_pandas_df_builder_func(
-                self_applied, func, return_schema, retain_index=False
+                self_applied, func, return_schema, retain_index=should_retain_index
             )
             sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
                 lambda iterator: map(output_func, iterator), schema=return_schema
             )
 
-            # Otherwise, it loses index.
+            index_spark_columns = None
+            index_names: Optional[List[Optional[Tuple[Any, ...]]]] = None
+            index_fields = None
+            if should_retain_index:
+                index_spark_columns = [scol_for(sdf, index_field.struct_field.name)]
+                index_fields = [index_field]
+                if index_field.struct_field.name != SPARK_DEFAULT_INDEX_NAME:
+                    index_names = [(index_field.struct_field.name,)]
             internal = InternalFrame(
                 spark_frame=sdf,
-                index_spark_columns=None,
-                data_fields=cast(DataFrameType, return_type).fields,
+                index_names=index_names,
+                index_spark_columns=index_spark_columns,
+                index_fields=index_fields,
+                data_fields=cast(DataFrameType, return_type).data_fields,
             )
-
         return DataFrame(internal)
 
     def transform_batch(
@@ -439,27 +447,23 @@ class PandasOnSparkFrameMethods(object):
 
             To avoid this, specify return type in ``func``, for instance, as below:
 
-            >>> def plus_one(x) -> ps.DataFrame[float, float]:
+            >>> def plus_one(x) -> ps.DataFrame[int, [float, float]]:
             ...     return x + 1
 
             If the return type is specified, the output column names become
             `c0, c1, c2 ... cn`. These names are positionally mapped to the returned
             DataFrame in ``func``.
 
-            To specify the column names, you can assign them in a pandas friendly style as below:
+            To specify the column names, you can assign them in a NumPy compound type style
+            as below:
 
-            >>> def plus_one(x) -> ps.DataFrame['a': float, 'b': float]:
+            >>> def plus_one(x) -> ps.DataFrame[("index", int), [("a", float), ("b", float)]]:
             ...     return x + 1
 
             >>> pdf = pd.DataFrame({'a': [1, 2, 3], 'b': [3, 4, 5]})
-            >>> def plus_one(x) -> ps.DataFrame[zip(pdf.dtypes, pdf.columns)]:
+            >>> def plus_one(x) -> ps.DataFrame[
+            ...         (pdf.index.name, pdf.index.dtype), zip(pdf.dtypes, pdf.columns)]:
             ...     return x + 1
-
-            When the given function returns DataFrame and has the return type annotated, the
-            original index of the DataFrame will be lost and then a default index will be attached
-            to the result. Please be careful about configuring the default index. See also
-            `Default Index Type
-            <https://koalas.readthedocs.io/en/latest/user_guide/options.html#default-index-type>`_.
 
         Parameters
         ----------
@@ -488,7 +492,7 @@ class PandasOnSparkFrameMethods(object):
         1  3  4
         2  5  6
 
-        >>> def plus_one_func(pdf) -> ps.DataFrame[int, int]:
+        >>> def plus_one_func(pdf) -> ps.DataFrame[int, [int, int]]:
         ...     return pdf + 1
         >>> df.pandas_on_spark.transform_batch(plus_one_func)
            c0  c1
@@ -496,13 +500,14 @@ class PandasOnSparkFrameMethods(object):
         1   4   5
         2   6   7
 
-        >>> def plus_one_func(pdf) -> ps.DataFrame['A': int, 'B': int]:
+        >>> def plus_one_func(pdf) -> ps.DataFrame[("index", int), [('A', int), ('B', int)]]:
         ...     return pdf + 1
-        >>> df.pandas_on_spark.transform_batch(plus_one_func)
-           A  B
-        0  2  3
-        1  4  5
-        2  6  7
+        >>> df.pandas_on_spark.transform_batch(plus_one_func)  # doctest: +NORMALIZE_WHITESPACE
+               A  B
+        index
+        0      2  3
+        1      4  5
+        2      6  7
 
         >>> def plus_one_func(pdf) -> ps.Series[int]:
         ...     return pdf.B + 1
@@ -551,6 +556,7 @@ class PandasOnSparkFrameMethods(object):
         spec = inspect.getfullargspec(func)
         return_sig = spec.annotations.get("return", None)
         should_infer_schema = return_sig is None
+        should_retain_index = should_infer_schema
         original_func = func
         func = lambda o: original_func(o, *args, **kwargs)
 
@@ -672,16 +678,22 @@ class PandasOnSparkFrameMethods(object):
                 )
                 return first_series(DataFrame(internal))
             else:
+                index_field = cast(DataFrameType, return_type).index_field
+                index_field = (
+                    index_field.normalize_spark_type() if index_field is not None else None
+                )
                 data_fields = [
                     field.normalize_spark_type()
-                    for field in cast(DataFrameType, return_type).fields
+                    for field in cast(DataFrameType, return_type).data_fields
                 ]
-                return_schema = StructType([field.struct_field for field in data_fields])
+                normalized_fields = ([index_field] if index_field is not None else []) + data_fields
+                return_schema = StructType([field.struct_field for field in normalized_fields])
+                should_retain_index = index_field is not None
 
                 self_applied = DataFrame(self._psdf._internal.resolved_copy)
 
                 output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, func, return_schema, retain_index=False
+                    self_applied, func, return_schema, retain_index=should_retain_index
                 )
                 columns = self_applied._internal.spark_columns
 
@@ -693,8 +705,20 @@ class PandasOnSparkFrameMethods(object):
                 sdf = self_applied._internal.spark_frame.select(applied)
                 sdf = sdf.selectExpr("%s.*" % temp_struct_column)
 
+                index_spark_columns = None
+                index_names: Optional[List[Optional[Tuple[Any, ...]]]] = None
+                index_fields = None
+                if should_retain_index:
+                    index_spark_columns = [scol_for(sdf, index_field.struct_field.name)]
+                    index_fields = [index_field]
+                    if index_field.struct_field.name != SPARK_DEFAULT_INDEX_NAME:
+                        index_names = [(index_field.struct_field.name,)]
                 internal = InternalFrame(
-                    spark_frame=sdf, index_spark_columns=None, data_fields=data_fields
+                    spark_frame=sdf,
+                    index_names=index_names,
+                    index_spark_columns=index_spark_columns,
+                    index_fields=index_fields,
+                    data_fields=data_fields,
                 )
                 return DataFrame(internal)
 
