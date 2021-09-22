@@ -201,28 +201,46 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   }
 
   /**
-   * Returns whether an expression is likely to be selective. If the filtering predicate is on join
-   * key then partition filter can be inferred statically in optimization phase, hence return false.
+   * Returns whether an expression is likely to be selective in dynamic partition filtering.
+   * 1. the predicate is selective.
+   * 2. the filtering predicate must not be subset of join key. In case it is, key then partition
+   * filter. can be inferred statically in optimization phase, hence return false.
    */
-  private def isLikelySelective(e: Expression, joinKey: Expression): Boolean = e match {
+  private def isLikelySelective(e: Expression, joinKey: Expression): (Boolean, Boolean) = e match {
     case Not(expr) => isLikelySelective(expr, joinKey)
-    case And(l, r) => isLikelySelective(l, joinKey) || isLikelySelective(r, joinKey)
-    case Or(l, r) => isLikelySelective(l, joinKey) && isLikelySelective(r, joinKey)
-    case expr: StringRegexExpression => !expr.references.subsetOf(joinKey.references)
-    case expr: BinaryComparison => !expr.references.subsetOf(joinKey.references)
-    case expr: In => !expr.references.subsetOf(joinKey.references)
-    case expr: InSet => !expr.references.subsetOf(joinKey.references)
-    case expr: StringPredicate => !expr.references.subsetOf(joinKey.references)
-    case expr: MultiLikeBase => !expr.references.subsetOf(joinKey.references)
-    case _ => false
+    case And(l, r) =>
+      val (isSelectiveLeft, notSubsetOfJoinKeyLeft) = isLikelySelective(l, joinKey)
+      val (isSelectiveRight, notSubsetOfJoinKeyRight) = isLikelySelective(r, joinKey)
+      (isSelectiveLeft || isSelectiveRight, notSubsetOfJoinKeyLeft || notSubsetOfJoinKeyRight)
+    case Or(l, r) =>
+      val (isSelectiveLeft, notSubsetOfJoinKeyLeft) = isLikelySelective(l, joinKey)
+      val (isSelectiveRight, notSubsetOfJoinKeyRight) = isLikelySelective(r, joinKey)
+      (isSelectiveLeft && isSelectiveRight && (notSubsetOfJoinKeyLeft || notSubsetOfJoinKeyRight),
+        notSubsetOfJoinKeyLeft || notSubsetOfJoinKeyRight)
+    case expr: StringRegexExpression => (true, !isSubsetOfJoinKey(expr, joinKey))
+    case expr: BinaryComparison => (true, !isSubsetOfJoinKey(expr, joinKey))
+    case expr: In => (true, !isSubsetOfJoinKey(expr, joinKey))
+    case expr: InSet => (true, !isSubsetOfJoinKey(expr, joinKey))
+    case expr: StringPredicate => (true, !isSubsetOfJoinKey(expr, joinKey))
+    case expr: MultiLikeBase => (true, !isSubsetOfJoinKey(expr, joinKey))
+    case _ => (false, false)
   }
+   private def isSubsetOfJoinKey(e: Expression, joinKey: Expression): Boolean = {
+     if (conf.constraintPropagationEnabled) {
+       e.references.subsetOf(joinKey.references)
+     } else {
+       false
+     }
+   }
 
   /**
    * Search a filtering predicate in a given logical plan.
    */
   private def hasSelectivePredicate(plan: LogicalPlan, joinKey: Expression): Boolean = {
     plan.find {
-      case f: Filter => isLikelySelective(f.condition, joinKey)
+      case f: Filter => val (isSelectiveOnFilters, isSelectiveOnAttributes) = isLikelySelective(f
+        .condition, joinKey)
+        isSelectiveOnFilters && isSelectiveOnAttributes
       case _ => false
     }.isDefined
   }

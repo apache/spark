@@ -1545,61 +1545,87 @@ abstract class DynamicPartitionPruningSuiteBase
   }
 
   test("SPARK-36819: No dynamic partition pruning filters in case of static partition filtering") {
-    // join on single attribute
-    val sqlStr =
-      """
-        |SELECT f.date_id, f.pid, f.sid FROM
-        |(select date_id, product_id as pid, store_id as sid from fact_stats) as f
-        |JOIN dim_stats s
-        |ON f.sid = s.store_id WHERE s.store_id = 3
-      """.stripMargin
-    Seq(true, false).foreach { reuseBroadcastOnly =>
-      withSQLConf(
-        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> s"$reuseBroadcastOnly") {
-        val df = sql(sqlStr)
-        checkPartitionPruningPredicate(df, false, false)
-        checkAnswer(df,
-          Row(1030, 2, 3) ::
-          Row(1040, 2, 3) ::
-          Row(1050, 2, 3) ::
-          Row(1060, 2, 3) :: Nil
-        )
+    Given("join on single attribute with aliases")
+    Seq(true, false).foreach { inferFiltersFromConstraintsEnabled =>
+      withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key ->
+        s"$inferFiltersFromConstraintsEnabled") {
+        val sqlStr =
+          """
+            |SELECT f.date_id, f.pid, f.sid FROM
+            |(select date_id, product_id as pid, store_id as sid from fact_stats) as f
+            |JOIN dim_stats s
+            |ON f.sid = s.store_id WHERE s.store_id = 3
+          """.stripMargin
+        Seq(true, false).foreach { reuseBroadcastOnly =>
+          withSQLConf(
+            SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> s"$reuseBroadcastOnly") {
+            val df = sql(sqlStr)
+            checkPartitionPruningPredicate(df, false, !inferFiltersFromConstraintsEnabled)
+            checkAnswer(df,
+              Row(1030, 2, 3) ::
+                Row(1040, 2, 3) ::
+                Row(1050, 2, 3) ::
+                Row(1060, 2, 3) :: Nil
+            )
+          }
+        }
       }
     }
 
-    // Join on multiple attributes"
-    withTable("fact", "dim") {
-      spark.range(100).select(
-        $"id",
-        ($"id" + 1).as("one"),
-        ($"id" + 2).cast("string").as("two"),
-        ($"id" + 3).cast("string").as("three"),
-        (($"id" * 20) % 100).as("mod"),
-        ($"id" % 10).cast("string").as("str"))
-        .write.partitionBy("one", "two", "three")
-        .format(tableFormat).mode("overwrite").saveAsTable("fact")
-
-      spark.range(10).select(
-        $"id",
-        ($"id" + 1).as("one"),
-        ($"id" + 2).cast("string").as("two"),
-        ($"id" + 3).cast("string").as("three"),
-        ($"id" * 10).as("prod"))
-        .write.partitionBy("one", "two", "three", "prod")
-        .format(tableFormat).mode("overwrite").saveAsTable("dim")
-
-      // without the fix, there would be three DPP filters on different keys
-      val df = sql(
-        """
-          |SELECT f.id, f.one, f.two, f.str FROM fact f
-          |JOIN dim d
-          |ON (f.one = d.one and f.two = d.two and f.three = d.three)
-          |WHERE d.one > 9
-        """.stripMargin)
-
+    Given("join on single attribute with multiple filters")
       Seq(true, false).foreach { reuseBroadcastOnly =>
-        withSQLConf(
-          SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> s"$reuseBroadcastOnly") {
+        withSQLConf( SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key ->
+          s"$reuseBroadcastOnly") {
+          val sqlStr =
+            """
+              |SELECT f.date_id, f.product_id, f.store_id FROM fact_stats as f
+              |JOIN dim_stats s
+              |ON f.store_id = s.store_id WHERE s.store_id = 3 or s.country = 'DE'
+            """.stripMargin
+          val df = sql(sqlStr)
+          checkPartitionPruningPredicate(df, false, true)
+          checkAnswer(df,
+            Row(1030, 2, 3) ::
+            Row(1040, 2, 3) ::
+            Row(1050, 2, 3) ::
+            Row(1060, 2, 3) :: Nil
+          )
+        }
+      }
+
+    Given("join on many attributes")
+    Seq(true, false).foreach { reuseBroadcastOnly =>
+      withSQLConf( SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key ->
+        s"$reuseBroadcastOnly") {
+        withTable("fact", "dim") {
+          spark.range(100).select(
+            $"id",
+            ($"id" + 1).as("one"),
+            ($"id" + 2).cast("string").as("two"),
+            ($"id" + 3).cast("string").as("three"),
+            (($"id" * 20) % 100).as("mod"),
+            ($"id" % 10).cast("string").as("str"))
+            .write.partitionBy("one", "two", "three")
+            .format(tableFormat).mode("overwrite").saveAsTable("fact")
+
+          spark.range(10).select(
+            $"id",
+            ($"id" + 1).as("one"),
+            ($"id" + 2).cast("string").as("two"),
+            ($"id" + 3).cast("string").as("three"),
+            ($"id" * 10).as("prod"))
+            .write.partitionBy("one", "two", "three", "prod")
+            .format(tableFormat).mode("overwrite").saveAsTable("dim")
+
+          val df = sql(
+            """
+              |SELECT f.id, f.one, f.two, f.str FROM fact f
+              |JOIN dim d
+              |ON (f.one = d.one and f.two = d.two and f.three = d.three)
+              |WHERE d.one > 9
+            """.stripMargin)
+
+          // without the fix, there would be three DPP filters on different keys
           checkDistinctSubqueries(df, 2)
           checkAnswer(df, Row(9, 10, "11", "9") :: Nil)
         }
