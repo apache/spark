@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.time.Period
+import java.time.{Duration, Period}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -1062,16 +1062,21 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
-  test("SPARK-XXXXX: year-month interval written and read as INT32") {
-    val data = (1 to 10).map(i => Row(i, Period.of(i, i, 0)))
-    val schema = StructType(List(StructField("d", IntegerType, false),
-      StructField("i", YearMonthIntervalType(), false)).toArray)
-    withTempPath { file =>
-      val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
-      df.write.parquet(file.getCanonicalPath)
-      withAllParquetReaders {
-        val df2 = spark.read.parquet(file.getCanonicalPath)
-        checkAnswer(df2, df.collect().toSeq)
+  test("SPARK-36825: year-month/day-time intervals written and read as INT32/INT64") {
+    Seq(
+      YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
+      DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
+    ).foreach { case (it, f) =>
+      val data = (1 to 10).map(i => Row(i, f(i)))
+      val schema = StructType(List(StructField("d", IntegerType, false),
+        StructField("i", it, false)).toArray)
+      withTempPath { file =>
+        val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+        df.write.parquet(file.getCanonicalPath)
+        withAllParquetReaders {
+          val df2 = spark.read.parquet(file.getCanonicalPath)
+          checkAnswer(df2, df.collect().toSeq)
+        }
       }
     }
   }
