@@ -33,22 +33,17 @@
 PySpark User Guide
 =============
 
-Installation and the Spark Internals
+Installation 
 ============
 
 - Installing packages: `Python package management <python_packaging.html>`_
 
         - `Using the PySpark Native Features <python_packaging.html#using-pyspark-native-features>`_
-
         - `Using Conda <python_packaging.html#using-conda>`_
-        
         - `Using Virtualenv <python_packaging.html#using-virtualenv>`_
-        
         - `Using PEX <python_packaging.html#using-pex>`_
 
-- The Spark internals:  `Spark Core + SQL Engine <sql/arrow_pandas.html>`_
-
-Data Access APIs
+Data APIs
 ================
 
 - `PySpark DataFrame <../getting_started/quickstart_df.html>`_
@@ -61,6 +56,11 @@ High-level APIs
 - `Streaming in PySpark <https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html>`_
 - `Machine Learning in PySpark <https://spark.apache.org/docs/latest/ml-guide.html>`_ 
 
+
+The Spark internals
+===============
+
+- `Spark Core + SQL Engine <sql/arrow_pandas.html>`_
 
 ==========
 Spark User Guide (All languages)

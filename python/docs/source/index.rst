@@ -18,7 +18,7 @@
 .. PySpark documentation master file
 
 =====================
-PySpark Documentation
+PySpark Documentation2
 =====================
 
 |binder|_ | `GitHub <https://github.com/apache/spark>`_ | `Issues <https://issues.apache.org/jira/projects/SPARK/issues>`_ | |examples|_ | `Community <https://spark.apache.org/community.html>`_
@@ -34,7 +34,7 @@ of Spark's features such as Spark SQL, DataFrame, Streaming, MLlib
   :alt: PySpark Components
 
 *******************
-Data Processing
+Data APIs 
 *******************
 
 `Spark SQL and DataFrame <https://spark.apache.org/docs/latest/sql-programming-guide.html>`_
@@ -52,24 +52,24 @@ With this package, you can:
 * Have a single codebase that works both with pandas (tests, smaller datasets) and with Spark (distributed datasets).
 * Switch to pandas API and PySpark API contexts easily without any overhead.
 
+*****************
+High-level APIs
+*****************
+
 `Streaming <https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html>`_
 
 Running on top of Spark, the streaming feature in Apache Spark enables powerful
 interactive and analytical applications across both streaming and historical data,
 while inheriting Spark's ease of use and fault tolerance characteristics.
 
-*****************
-Machine Learning
-*****************
-
-`MLlib <https://spark.apache.org/docs/latest/ml-guide.html>`_
+`Machine Learning (MLlib) <https://spark.apache.org/docs/latest/ml-guide.html>`_
 
 Built on top of Spark, MLlib is a scalable machine learning library that provides
 a uniform set of high-level APIs that help users create and tune practical machine
 learning pipelines.
 
 *****************
-Spark Core
+Spark Core + Spark SQL Engine
 *****************
 
 Spark Core is the underlying general execution engine for the Spark platform that all
