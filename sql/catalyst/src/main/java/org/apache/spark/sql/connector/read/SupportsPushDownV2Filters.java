@@ -22,7 +22,8 @@ import org.apache.spark.sql.connector.expressions.filter.Filter;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
- * push down filters to the data source and reduce the size of the data to be read.
+ * push down data source V2 filters {@link Filter} to the data source and reduce the size of
+ * the data to be read.
  *
  * @since 3.3.0
  */
@@ -30,7 +31,8 @@ import org.apache.spark.sql.connector.expressions.filter.Filter;
 public interface SupportsPushDownV2Filters extends ScanBuilder {
 
   /**
-   * Pushes down filters, and returns filters that need to be evaluated after scanning.
+   * Pushes down data source V2 filters, and returns V2 filters that need to be evaluated after
+   * scanning.
    * <p>
    * Rows should be returned from the data source if and only if all of the filters match. That is,
    * filters must be interpreted as ANDed together.
@@ -38,7 +40,8 @@ public interface SupportsPushDownV2Filters extends ScanBuilder {
   Filter[] pushFilters(Filter[] filters);
 
   /**
-   * Returns the filters that are pushed to the data source via {@link #pushFilters(Filter[])}.
+   * Returns the V2 filters that are pushed to the data source via
+   * {@link #pushFilters(Filter[])}.
    * <p>
    * There are 3 kinds of filters:
    * <ol>
