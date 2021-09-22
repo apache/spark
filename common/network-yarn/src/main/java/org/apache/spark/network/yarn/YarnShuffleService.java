@@ -57,6 +57,7 @@ import org.apache.spark.network.sasl.ShuffleSecretManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.shuffle.ExternalBlockHandler;
+import org.apache.spark.network.shuffle.RemoteBlockPushResolver;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.yarn.util.HadoopConfigProvider;
 
@@ -159,6 +160,9 @@ public class YarnShuffleService extends AuxiliaryService {
   @VisibleForTesting
   ExternalBlockHandler blockHandler;
 
+  @VisibleForTesting
+  RemoteBlockPushResolver shuffleMergeManager;
+
   // Where to store & reload executor info for recovering state after an NM restart
   @VisibleForTesting
   File registeredExecutorFile;
@@ -219,8 +223,7 @@ public class YarnShuffleService extends AuxiliaryService {
       }
 
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(_conf));
-      MergedShuffleFileManager shuffleMergeManager = newMergedShuffleFileManagerInstance(
-        transportConf);
+      shuffleMergeManager = new RemoteBlockPushResolver(transportConf);
       blockHandler = new ExternalBlockHandler(
         transportConf, registeredExecutorFile, shuffleMergeManager);
 
@@ -259,7 +262,7 @@ public class YarnShuffleService extends AuxiliaryService {
           metricsNamespace, "Metrics on the Spark Shuffle Service", serviceMetrics);
       metricsSystem.register(
           "ShuffleMergeManager", "Metrics in Spark Shuffle Merge Manager",
-          new YarnShuffleServiceMetrics(shuffleMergeManager.getMetrics()));
+          new YarnShuffleServiceMetrics(metricsNamespace, shuffleMergeManager.getMetrics()));
       logger.info("Registered metrics with Hadoop's DefaultMetricsSystem using namespace '{}'",
           metricsNamespace);
 
