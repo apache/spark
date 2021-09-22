@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import scala.collection.mutable
-
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.sql.QueryTest
@@ -63,10 +61,10 @@ class ParquetCodecSuite extends FileSourceCodecSuite {
   // Exclude "brotli" because the com.github.rdblue:brotli-codec dependency is not available
   // on Maven Central.
   override protected def availableCodecs: Seq[String] = {
-    var codecs = mutable.Seq("none", "uncompressed", "snappy", "gzip", "zstd")
-    // Exclude "lz4" for Hadoop 2.x profile since the lz4-java support is only in 3.x
-    if (VersionInfo.getVersion.startsWith("3")) codecs :+= "lz4"
-    codecs
+    Seq("none", "uncompressed", "snappy", "gzip", "zstd") ++ {
+      // Exclude "lz4" for Hadoop 2.x profile since the lz4-java support is only in 3.x
+      if (VersionInfo.getVersion.startsWith("3")) Seq("lz4") else Seq()
+    }
   }
 }
 
