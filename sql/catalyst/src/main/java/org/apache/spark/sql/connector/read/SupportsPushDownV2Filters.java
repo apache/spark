@@ -24,7 +24,7 @@ import org.apache.spark.sql.connector.expressions.filter.Filter;
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
  * push down filters to the data source and reduce the size of the data to be read.
  *
- * @since 3.0.0
+ * @since 3.3.0
  */
 @Evolving
 public interface SupportsPushDownV2Filters extends ScanBuilder {
