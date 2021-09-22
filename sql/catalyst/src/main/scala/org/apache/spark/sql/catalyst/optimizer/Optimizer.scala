@@ -984,13 +984,14 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
   }
 
   /**
-   * Check if the Project can be combined with the aggregate. If there exists a correlated
-   * scalar subquery in the project list that uses the output of the aggregate, the project
-   * cannot be collapsed. Otherwise the plan after subquery rewrite will not be valid.
+   * A project cannot be collapsed with an aggregate when there are correlated scalar
+   * subqueries in the project list, because currently we only allow correlated subqueries
+   * in aggregate if they are also part of the grouping expressions. Otherwise the plan
+   * after subquery rewrite will not be valid.
    */
   private def canCollapseAggregate(p: Project, a: Aggregate): Boolean = {
     p.projectList.forall(_.collect {
-      case s: ScalarSubquery if AttributeSet(s.children).intersect(a.outputSet).nonEmpty => s
+      case s: ScalarSubquery if s.outerAttrs.nonEmpty => s
     }.isEmpty)
   }
 
