@@ -1929,16 +1929,16 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(
         sql(
           """
-            |select c1, s, s * 10 from (
-            |  select c1, (select first(c2) from t2 where t1.c1 = t2.c1) s from t1)
+            |SELECT c1, s, s * 10 FROM (
+            |  SELECT c1, (SELECT FIRST(c2) FROM t2 WHERE t1.c1 = t2.c1) s FROM t1)
             |""".stripMargin),
         correctAnswer)
       checkAnswer(
         sql(
           """
-            |select c1, s, s * 10 from (
-            |  select c1, sum((select first(c2) from t2 where t1.c1 = t2.c1)) s
-            |  from t1 group by c1
+            |SELECT c1, s, s * 10 FROM (
+            |  SELECT c1, SUM((SELECT FIRST(c2) FROM t2 WHERE t1.c1 = t2.c1)) s
+            |  FROM t1 GROUP BY c1
             |)
             |""".stripMargin),
         correctAnswer)
