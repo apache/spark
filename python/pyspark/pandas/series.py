@@ -47,7 +47,7 @@ import numpy as np
 import pandas as pd
 from pandas.core.accessor import CachedAccessor
 from pandas.io.formats.printing import pprint_thing
-from pandas.api.types import is_list_like, is_hashable
+from pandas.api.types import is_list_like, is_hashable, CategoricalDtype
 from pandas.api.extensions import ExtensionDtype
 from pandas.tseries.frequencies import DateOffset
 from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
@@ -4060,7 +4060,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             pdf = sdf.limit(2).toPandas()
             length = len(pdf)
             if length == 1:
-                return pdf[internal.data_spark_column_names[0]].iloc[0]
+                val = pdf[internal.data_spark_column_names[0]].iloc[0]
+                if isinstance(self.dtype, CategoricalDtype):
+                    return self.dtype.categories[val]
+                else:
+                    return val
 
             item_string = name_like_string(item)
             sdf = sdf.withColumn(SPARK_DEFAULT_INDEX_NAME, SF.lit(str(item_string)))
