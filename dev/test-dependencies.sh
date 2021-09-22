@@ -56,11 +56,6 @@ SCALA_BINARY_VERSION=$($MVN -q \
     -Dexec.args='${scala.binary.version}' \
     --non-recursive \
     org.codehaus.mojo:exec-maven-plugin:1.6.0:exec | grep -E '[0-9]+\.[0-9]+')
-if [[ "$SCALA_BINARY_VERSION" != "2.12" ]]; then
-  # TODO(SPARK-36168) Support Scala 2.13 in dev/test-dependencies.sh
-  echo "Skip dependency testing on $SCALA_BINARY_VERSION"
-  exit 0
-fi
 set -e
 TEMP_VERSION="spark-$(python3 -S -c "import random; print(random.randrange(100000, 999999))")"
 
@@ -85,14 +80,14 @@ for HADOOP_HIVE_PROFILE in "${HADOOP_HIVE_PROFILES[@]}"; do
     HIVE_PROFILE=hive-2.3
   fi
   echo "Performing Maven install for $HADOOP_HIVE_PROFILE"
-  $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE -P$HIVE_PROFILE jar:jar jar:test-jar install:install clean -q
+  $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE -P$HIVE_PROFILE -Pscala-$SCALA_BINARY_VERSION jar:jar jar:test-jar install:install clean -q
 
   echo "Performing Maven validate for $HADOOP_HIVE_PROFILE"
-  $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE -P$HIVE_PROFILE validate -q
+  $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE -P$HIVE_PROFILE -Pscala-$SCALA_BINARY_VERSION validate -q
 
   echo "Generating dependency manifest for $HADOOP_HIVE_PROFILE"
   mkdir -p dev/pr-deps
-  $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE -P$HIVE_PROFILE dependency:build-classpath -pl assembly -am \
+  $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE -P$HIVE_PROFILE -Pscala-$SCALA_BINARY_VERSION dependency:build-classpath -pl assembly -am \
     | grep "Dependencies classpath:" -A 1 \
     | tail -n 1 | tr ":" "\n" | awk -F '/' '{
       # For each dependency classpath, we fetch the last three parts split by "/": artifact id, version, and jar name.
