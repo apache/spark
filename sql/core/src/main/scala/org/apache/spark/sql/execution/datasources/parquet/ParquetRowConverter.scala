@@ -574,7 +574,7 @@ private[parquet] class ParquetRowConverter(
       val repeatedType = parquetSchema.getType(0)
       val elementType = catalystSchema.elementType
 
-      // At this stage, we're not sure whether the repeated field maps to the element type or is
+      // At this stage, we need to figure out if the repeated field maps to the element type or is
       // just the syntactic repeated group of the 3-level standard LIST layout. Take the following
       // Parquet LIST-annotated group type as an example:
       //
@@ -598,12 +598,20 @@ private[parquet] class ParquetRowConverter(
       //
       //      ARRAY<STRUCT<element: STRUCT<element: INT>>>
       //
+      //
       // Here we try to convert field `list` into a Catalyst type to see whether the converted type
-      // matches the Catalyst array element type. If it doesn't match, then it's case 1; otherwise,
-      // it's case 2.
+      // matches the Catalyst array element type.
+      //
+      // If the guessed element type from the above does not match the Catalyst type (for example,
+      // in case of schema evolution), we need to check if the repeated type matches one of the
+      // backward-compatibility rules for legacy LIST types (see the link above).
+      //
+      // If the element type does not match the Catalyst type and the underlying repeated type
+      // does not belong to the legacy LIST type, then it is case 1; otherwise, it is case 2.
       val guessedElementType = schemaConverter.convertField(repeatedType)
+      val isLegacy = schemaConverter.isElementType(repeatedType, parquetSchema.getName)
 
-      if (DataType.equalsIgnoreCompatibleNullability(guessedElementType, elementType)) {
+      if (DataType.equalsIgnoreCompatibleNullability(guessedElementType, elementType) || isLegacy) {
         // If the repeated field corresponds to the element type, creates a new converter using the
         // type of the repeated field.
         newConverter(repeatedType, elementType, new ParentContainerUpdater {
