@@ -118,15 +118,15 @@
     "message" : [ "Find an invalid url string %s" ],
     "sqlState" : "42000"
   },
-  "MERGE_UNSUPPORTED_BY_WINDOW_FUNCTIONS" : {
-    "message" : [ "Window Functions do not support merging." ],
-    "sqlState" : "0A000"
-  },
   "LOGICAL_HINT_OPERATOR_NOT_REMOVED_DURING_ANALYSIS" : {
     "message" : [ "Internal error: logical hint operator should have been removed during analysis" ]
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist." ]
+  },
+  "MERGE_UNSUPPORTED_BY_WINDOW_FUNCTIONS" : {
+    "message" : [ "Window Functions do not support merging." ],
+    "sqlState" : "0A000"
   },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
@@ -204,7 +204,7 @@
   },
   "UNSUPPORTED_DATA_TYPE" : {
     "message" : [ "dataType" ],
-    "sqlState": "0A000"
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_INPUT_TYPE" : {
     "message" : [ "Unsupported input type %s" ],
