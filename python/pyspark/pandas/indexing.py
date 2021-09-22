@@ -436,12 +436,12 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
 
         if self._is_series:
             if isinstance(key, Series) and not same_anchor(key, self._psdf_or_psser):
-                psdf = self._psdf_or_psser.to_frame()
+                name = self._psdf_or_psser.name or DEFAULT_SERIES_NAME
+                psdf = self._psdf_or_psser.to_frame(name)
                 temp_col = verify_temp_column_name(psdf, "__temp_col__")
 
                 psdf[temp_col] = key
-                name = self._psdf_or_psser.name or DEFAULT_SERIES_NAME
-                return cast(Series, psdf[name][psdf[temp_col]]).rename(self._psdf_or_psser.name)
+                return type(self)(psdf[name].rename(self._psdf_or_psser.name))[psdf[temp_col]]
 
             cond, limit, remaining_index = self._select_rows(key)
             if cond is None and limit is None:
