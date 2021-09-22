@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.hadoop.util.VersionInfo
-
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.util.VersionUtils
 
 trait FileSourceCodecSuite extends QueryTest with SQLTestUtils with SharedSparkSession {
 
@@ -63,7 +62,7 @@ class ParquetCodecSuite extends FileSourceCodecSuite {
   override protected def availableCodecs: Seq[String] = {
     Seq("none", "uncompressed", "snappy", "gzip", "zstd") ++ {
       // Exclude "lz4" for Hadoop 2.x profile since the lz4-java support is only in 3.x
-      if (VersionInfo.getVersion.startsWith("3")) Seq("lz4") else Seq()
+      if (VersionUtils.isHadoop3) Seq("lz4") else Seq()
     }
   }
 }
