@@ -402,34 +402,30 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                   """.stripMargin.replace("\n", " ").trim())
               }
               val isUnion = operator.isInstanceOf[Union]
-              // Check if the data types match.
-              if (!isUnion) {
-                dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
-                  // SPARK-18058: we shall not care about the nullability of columns
-                  if (TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty) {
-                    failAnalysis(
-                      s"""
-                         |${operator.nodeName} can only be performed on tables with the compatible
-                         |column types. ${dt1.catalogString} <> ${dt2.catalogString} at the
-                         |${ordinalNumber(ci)} column of the ${ordinalNumber(ti + 1)} table
-                      """.stripMargin.replace("\n", " ").trim())
-                  }
-                }
-              } else {
+              val dataTypesAreCompatibleFn = if (isUnion) {
                 // `TypeCoercion` takes care of type coercion already. If any columns or nested
                 // columns are not compatible, we detect it here and throw analysis exception.
                 val typeChecker = (dt1: DataType, dt2: DataType) => {
                   !TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty
                 }
-                dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
-                  if (!DataType.equalsStructurally(dt1, dt2, true, typeChecker)) {
-                    failAnalysis(
-                      s"""
-                         |${operator.nodeName} can only be performed on tables with the compatible
-                         |column types. ${dt1.catalogString} <> ${dt2.catalogString} at the
-                         |${ordinalNumber(ci)} column of the ${ordinalNumber(ti + 1)} table
-                      """.stripMargin.replace("\n", " ").trim())
-                  }
+                (dt1: DataType, dt2: DataType) =>
+                  !DataType.equalsStructurally(dt1, dt2, true, typeChecker)
+              } else {
+                // SPARK-18058: we shall not care about the nullability of columns
+                (dt1: DataType, dt2: DataType) =>
+                  TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty
+              }
+
+              // Check if the data types match.
+              dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
+                // SPARK-18058: we shall not care about the nullability of columns
+                if (dataTypesAreCompatibleFn(dt1, dt2)) {
+                  failAnalysis(
+                    s"""
+                       |${operator.nodeName} can only be performed on tables with the compatible
+                       |column types. ${dt1.catalogString} <> ${dt2.catalogString} at the
+                       |${ordinalNumber(ci)} column of the ${ordinalNumber(ti + 1)} table
+                    """.stripMargin.replace("\n", " ").trim())
                 }
               }
             }
