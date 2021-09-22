@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
-import org.apache.spark.{broadcast, SparkEnv}
+import org.apache.spark.broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -337,82 +335,14 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   private def getByteArrayRdd(
       n: Int = -1, takeFromEnd: Boolean = false): RDD[(Long, Array[Byte])] = {
+    val maxCollectSize = session.sessionState.conf.maxCollectSize
     execute().mapPartitionsInternal { iter =>
-      var count = 0
-      val buffer = new Array[Byte](4 << 10)  // 4K
-      val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
-      val bos = new ByteArrayOutputStream()
-      val out = new DataOutputStream(codec.compressedOutputStream(bos))
-
-      if (takeFromEnd && n > 0) {
-        // To collect n from the last, we should anyway read everything with keeping the n.
-        // Otherwise, we don't know where is the last from the iterator.
-        var last: Seq[UnsafeRow] = Seq.empty[UnsafeRow]
-        val slidingIter = iter.map(_.copy()).sliding(n)
-        while (slidingIter.hasNext) { last = slidingIter.next().asInstanceOf[Seq[UnsafeRow]] }
-        var i = 0
-        count = last.length
-        while (i < count) {
-          val row = last(i)
-          out.writeInt(row.getSizeInBytes)
-          row.writeToStream(out, buffer)
-          i += 1
-        }
-      } else {
-        // `iter.hasNext` may produce one row and buffer it, we should only call it when the
-        // limit is not hit.
-        while ((n < 0 || count < n) && iter.hasNext) {
-          val row = iter.next().asInstanceOf[UnsafeRow]
-          out.writeInt(row.getSizeInBytes)
-          row.writeToStream(out, buffer)
-          count += 1
-        }
-      }
-      out.writeInt(-1)
-      out.flush()
-      out.close()
-      Iterator((count, bos.toByteArray))
+      new SizeLimitingByteArrayUnsafeRowsConverter(maxCollectSize).
+        encodeUnsafeRows(n, iter, takeFromEnd)
     }
   }
 
-  /**
-   * Decodes the byte arrays back to UnsafeRows and put them into buffer.
-   */
-  private def decodeUnsafeRows(bytes: Array[Byte]): Iterator[InternalRow] = {
-    val nFields = schema.length
 
-    val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
-    val bis = new ByteArrayInputStream(bytes)
-    val ins = new DataInputStream(codec.compressedInputStream(bis))
-
-    new NextIterator[InternalRow] {
-      private var sizeOfNextRow = ins.readInt()
-      private def _next(): InternalRow = {
-        val bs = new Array[Byte](sizeOfNextRow)
-        ins.readFully(bs)
-        val row = new UnsafeRow(nFields)
-        row.pointTo(bs, sizeOfNextRow)
-        sizeOfNextRow = ins.readInt()
-        row
-      }
-
-      override def getNext(): InternalRow = {
-        if (sizeOfNextRow >= 0) {
-          try {
-            _next()
-          } catch {
-            case t: Throwable if ins != null =>
-              ins.close()
-              throw t
-          }
-        } else {
-          finished = true
-          null
-        }
-      }
-      override def close(): Unit = ins.close()
-    }
-  }
 
   /**
    * Runs this query returning the result as an array.
@@ -421,8 +351,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     val byteArrayRdd = getByteArrayRdd()
 
     val results = ArrayBuffer[InternalRow]()
+    val maxCollectSize = session.sessionState.conf.maxCollectSize
+    val decoder = new SizeLimitingByteArrayUnsafeRowsConverter(maxCollectSize)
     byteArrayRdd.collect().foreach { countAndBytes =>
-      decodeUnsafeRows(countAndBytes._2).foreach(results.+=)
+      decoder.decodeUnsafeRows(schema.length, countAndBytes._2).foreach(results.+=)
     }
     results.toArray
   }
@@ -430,7 +362,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   private[spark] def executeCollectIterator(): (Long, Iterator[InternalRow]) = {
     val countsAndBytes = getByteArrayRdd().collect()
     val total = countsAndBytes.map(_._1).sum
-    val rows = countsAndBytes.iterator.flatMap(countAndBytes => decodeUnsafeRows(countAndBytes._2))
+    val maxCollectSize = session.sessionState.conf.maxCollectSize
+    val decoder = new SizeLimitingByteArrayUnsafeRowsConverter(maxCollectSize)
+    val rows = countsAndBytes.iterator
+      .flatMap(countAndBytes => decoder.decodeUnsafeRows(schema.length, countAndBytes._2))
     (total, rows)
   }
 
@@ -440,7 +375,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * @note Triggers multiple jobs (one for each partition).
    */
   def executeToIterator(): Iterator[InternalRow] = {
-    getByteArrayRdd().map(_._2).toLocalIterator.flatMap(decodeUnsafeRows)
+    val maxCollectSize = session.sessionState.conf.maxCollectSize
+    val decoder = new SizeLimitingByteArrayUnsafeRowsConverter(maxCollectSize)
+    getByteArrayRdd().map(_._2).toLocalIterator
+      .flatMap(iter => decoder.decodeUnsafeRows(schema.length, iter))
   }
 
   /**
@@ -475,6 +413,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     val buf = if (takeFromEnd) new ListBuffer[InternalRow] else new ArrayBuffer[InternalRow]
     val totalParts = childRDD.partitions.length
     var partsScanned = 0
+    val maxCollectSize = session.sessionState.conf.maxCollectSize
+    val decoder = new SizeLimitingByteArrayUnsafeRowsConverter(maxCollectSize)
     while (buf.length < n && partsScanned < totalParts) {
       // The number of partitions to try in this iteration. It is ok for this number to be
       // greater than totalParts because we actually cap it at totalParts in runJob.
@@ -510,7 +450,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
       if (takeFromEnd) {
         while (buf.length < n && i < res.length) {
-          val rows = decodeUnsafeRows(res(i)._2)
+          val rows = decoder.decodeUnsafeRows(schema.length, res(i)._2)
           if (n - buf.length >= res(i)._1) {
             buf.prepend(rows.toArray[InternalRow]: _*)
           } else {
@@ -524,7 +464,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         }
       } else {
         while (buf.length < n && i < res.length) {
-          val rows = decodeUnsafeRows(res(i)._2)
+          val rows = decoder.decodeUnsafeRows(schema.length, res(i)._2)
           if (n - buf.length >= res(i)._1) {
             buf ++= rows.toArray[InternalRow]
           } else {

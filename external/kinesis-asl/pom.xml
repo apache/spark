@@ -20,7 +20,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.1.1-kylin-4.x-r34</version>
+    <version>3.1.1-kylin-4.x-r35</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 

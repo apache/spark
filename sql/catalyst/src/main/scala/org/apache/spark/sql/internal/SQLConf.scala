@@ -1521,6 +1521,14 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
+  val MAX_COLLECT_SIZE = buildConf("spark.sql.driver.maxCollectSize")
+    .doc("If specified then its value will be used for limiting the total size of " +
+      "uncompressed results of all partitions for each Spark action (e.g. collect). " +
+      "This is similar to spark.driver.maxResultSize but it enforces the limit on the " +
+      "uncompressed result. Specifying this can help protect the driver from out-of-memory errors.")
+    .bytesConf(ByteUnit.BYTE)
+    .createOptional
+
   val CODEGEN_FACTORY_MODE = buildConf("spark.sql.codegen.factoryMode")
     .doc("This config determines the fallback behavior of several codegen generators " +
       "during tests. `FALLBACK` means trying codegen first and then falling back to " +
@@ -4018,6 +4026,8 @@ class SQLConf extends Serializable with Logging {
       defaultNumShufflePartitions
     }
   }
+
+  def maxCollectSize: Option[Long] = getConf(SQLConf.MAX_COLLECT_SIZE)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
