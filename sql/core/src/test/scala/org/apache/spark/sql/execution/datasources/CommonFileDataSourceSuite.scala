@@ -45,15 +45,16 @@ trait CommonFileDataSourceSuite extends SQLHelper { self: AnyFunSuite =>
           assert(errMsg.contains("Cannot save interval data type into external storage"))
         }
       }
-    }
 
-    // Check all built-in file-based datasources except of libsvm which requires particular schema.
-    if (!Set("libsvm").contains(dataSourceFormat.toLowerCase(Locale.ROOT))) {
-      Seq("INTERVAL DAY TO SECOND", "INTERVAL YEAR TO MONTH").foreach { it =>
-        val errMsg = intercept[AnalysisException] {
-          spark.sql(s"CREATE TABLE t (i $it) USING $dataSourceFormat")
-        }.getMessage
-        assert(errMsg.contains("data source does not support"))
+      // Check all built-in file-based datasources except of libsvm which
+      // requires particular schema.
+      if (!Set("libsvm").contains(dataSourceFormat.toLowerCase(Locale.ROOT))) {
+        Seq("INTERVAL DAY TO SECOND", "INTERVAL YEAR TO MONTH").foreach { it =>
+          val errMsg = intercept[AnalysisException] {
+            spark.sql(s"CREATE TABLE t (i $it) USING $dataSourceFormat")
+          }.getMessage
+          assert(errMsg.contains("data source does not support"))
+        }
       }
     }
   }
