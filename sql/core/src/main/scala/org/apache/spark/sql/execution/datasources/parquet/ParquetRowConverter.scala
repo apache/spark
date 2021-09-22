@@ -609,7 +609,7 @@ private[parquet] class ParquetRowConverter(
       // If the element type does not match the Catalyst type and the underlying repeated type
       // does not belong to the legacy LIST type, then it is case 1; otherwise, it is case 2.
       val guessedElementType = schemaConverter.convertField(repeatedType)
-      val isLegacy = schemaConverter.isElementType(repeatedType, parquetSchema.getName())
+      val isLegacy = schemaConverter.isElementType(repeatedType, parquetSchema.getName)
 
       if (DataType.equalsIgnoreCompatibleNullability(guessedElementType, elementType) || isLegacy) {
         // If the repeated field corresponds to the element type, creates a new converter using the
