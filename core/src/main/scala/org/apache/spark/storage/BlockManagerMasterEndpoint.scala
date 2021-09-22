@@ -583,8 +583,8 @@ class BlockManagerMasterEndpoint(
       blockId match {
         case ShuffleIndexBlockId(shuffleId, mapId, _) =>
           // We need to update this at index file because there exists the index-only block
-          logDebug(s"Received shuffle index block update for ${shuffleId} ${mapId}, updating.")
           return Future {
+            logDebug(s"Received shuffle index block update for ${shuffleId} ${mapId}, updating.")
             mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
             true
           }
