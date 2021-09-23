@@ -1532,9 +1532,8 @@ private[spark] object Client extends Logging {
     // {{...}} is a YARN thing and not OS-specific. Follow Unix shell naming conventions
     (osSpecificPatterns :+ "\\{\\{([A-z_][A-z_0-9]*)}}".r("varname"))
       .foldLeft(unresolvedString) { (inputStr, pattern) =>
-        pattern.replaceSomeIn(inputStr, m => {
-          val varname = m.group("varname")
-          Some(Regex.quoteReplacement(env.getOrElse(varname, "")))
+        pattern.replaceSomeIn(inputStr, { m =>
+          Some(Regex.quoteReplacement(env.getOrElse(m.group("varname"), "")))
         })
       }
   }
