@@ -602,7 +602,6 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     nullSafeCodeGen(ctx, ev, c => {
       val setTerm = ctx.addReferenceObj("set", set)
       val hasNaNValue = ctx.addReferenceObj("hasNaN", hasNaN)
-      val elem = ctx.freshName("elem")
 
       val setIsNull = if (hasNull) {
         s"${ev.isNull} = !${ev.value};"
@@ -611,10 +610,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
       }
 
       val ret = child.dataType match {
-        case DoubleType =>
-          Some((v: Any) => s"java.lang.Double.isNaN(new java.lang.Double($v))")
-        case FloatType =>
-          Some((v: Any) => s"java.lang.Float.isNaN(new java.lang.Float($v))")
+        case DoubleType => Some((v: Any) => s"java.lang.Double.isNaN($v)")
+        case FloatType => Some((v: Any) => s"java.lang.Float.isNaN($v)")
         case _ => None
       }
 
