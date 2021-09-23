@@ -28,8 +28,6 @@ import scala.tools.nsc.util.stringFromStream
 import scala.util.Properties.{javaVersion, javaVmName, versionString}
 // scalastyle:on println
 
-import org.apache.spark.repl.InactivityTimeout.{startInactivityTimer, stopInactivityTimer}
-
 /**
  *  A Spark-specific interactive shell.
  */
@@ -68,8 +66,11 @@ class SparkILoop(in0: BufferedReader, out: PrintWriter)
     "import org.apache.spark.SparkContext._",
     "import spark.implicits._",
     "import spark.sql",
-    "import org.apache.spark.sql.functions._"
+    "import org.apache.spark.sql.functions._",
+    "val _timerstart = org.apache.spark.repl.Main.interp.inactivityTimeout.startInactivityTimer()"
   )
+  val inactivityTimeout = new InactivityTimeout(
+    Main.conf.getTimeAsMs(InactivityTimeout.REPL_INACTIVITY_TIMEOUT, "0ms"))
 
   override protected def internalReplAutorunCode(): Seq[String] =
     initializationCommands
@@ -106,13 +107,13 @@ class SparkILoop(in0: BufferedReader, out: PrintWriter)
     echo(welcomeMsg)
     echo("Type in expressions to have them evaluated.")
     echo("Type :help for more information.")
-    startInactivityTimer()
   }
 
-  override def command(line: String): Result = {
-    stopInactivityTimer()
-    super.command(line)
-    startInactivityTimer()
+  override def processLine(line: String): Boolean = {
+    inactivityTimeout.stopInactivityTimer()
+    val result = super.processLine(line)
+    inactivityTimeout.startInactivityTimer()
+    result
   }
 
   /** Available commands */

@@ -411,21 +411,27 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("inactivity timeout is triggered") {
-    InactivityTimeout.inactivityTimeoutMs = 500
-    InactivityTimeout.isTest = true
-    val logs = runInterpreterAndGetErrors("val a = 5 * 5", 2000)
-    assert(logs.exists(_.contains("Inactivity timeout")))
+    try {
+      Main.conf.set(InactivityTimeout.REPL_INACTIVITY_TIMEOUT, "500ms")
+      val logs = runInterpreterAndGetErrors("val a = 5 * 5", 2000)
+      assert(logs.exists(_.contains("Inactivity timeout")))
+    } finally {
+      Main.conf.remove(InactivityTimeout.REPL_INACTIVITY_TIMEOUT)
+    }
   }
 
   test("inactivity timeout does not interrupt long running command") {
-    InactivityTimeout.inactivityTimeoutMs = 500
-    InactivityTimeout.isTest = true
-    val logs = runInterpreterAndGetErrors(
-      s"""
-         |Thread.sleep(2000)
-         |val a = 5 * 5
-         |""".stripMargin,
-      10)
-    assert(!logs.exists(_.contains("Inactivity timeout")))
+    try {
+      Main.conf.set(InactivityTimeout.REPL_INACTIVITY_TIMEOUT, "500ms")
+      val logs = runInterpreterAndGetErrors(
+        s"""
+           |Thread.sleep(2000)
+           |val a = 5 * 5
+           |""".stripMargin,
+        10)
+      assert(!logs.exists(_.contains("Inactivity timeout")))
+    } finally {
+      Main.conf.remove(InactivityTimeout.REPL_INACTIVITY_TIMEOUT)
+    }
   }
 }

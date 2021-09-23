@@ -21,25 +21,21 @@ import java.util.Timer
 import java.util.TimerTask
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.repl.Main.conf
 import org.apache.spark.repl.Main.sparkContext
+import org.apache.spark.util.Utils
 
-object InactivityTimeout extends Logging {
-  private[repl] var inactivityTimeoutMs = conf.getTimeAsMs("spark.repl.inactivityTimeout", "0s")
-  private[repl] var isTest: Boolean = false
+class InactivityTimeout(inactivityTimeoutMs: Long) extends Logging {
 
   private var inactivityTimer: Option[Timer] = None
 
   private class InactivityTimerTask extends TimerTask {
-
     override def run(): Unit = {
       logError(s"Inactivity timeout of $inactivityTimeoutMs ms reached - closing shell")
-      if (!isTest) {
+      if (!Utils.isTesting) {
         Option(sparkContext).foreach(_.stop)
         System.exit(1)
       }
     }
-
   }
 
   def stopInactivityTimer(): Unit = {
@@ -53,5 +49,8 @@ object InactivityTimeout extends Logging {
       inactivityTimer.foreach(_.schedule(new InactivityTimerTask, inactivityTimeoutMs))
     }
   }
+}
 
+object InactivityTimeout {
+  val REPL_INACTIVITY_TIMEOUT = "spark.repl.inactivityTimeout"
 }
