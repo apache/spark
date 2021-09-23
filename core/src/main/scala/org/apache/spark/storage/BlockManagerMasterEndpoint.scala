@@ -580,6 +580,13 @@ class BlockManagerMasterEndpoint(
     : Future[Boolean] = {
    blockId match {
      case ShuffleIndexBlockId(shuffleId, mapId, _) =>
+       // SPARK-36782: Invoke `MapOutputTracker.updateMapOutput` within the thread
+       // `dispatcher-BlockManagerMaster` could lead to the deadlock when
+       // `MapOutputTracker.serializeOutputStatuses` broadcasts the serialized mapstatues under
+       // the acquired write lock. The broadcast block would report its status to
+       // `BlockManagerMasterEndpoint`, while the `BlockManagerMasterEndpoint` is occupied by
+       // `updateMapOutput` since it's waiting for the write lock. Thus, we use `Future` to call
+       // `updateMapOutput` in a separate thread to avoid the deadlock.
        Future {
          // We need to update this at index file because there exists the index-only block
          logDebug(s"Received shuffle index block update for ${shuffleId} ${mapId}, updating.")
