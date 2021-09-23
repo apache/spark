@@ -490,7 +490,7 @@ object SimplifyBinaryComparison
         case a GreaterThan b if canSimplifyComparison(a, b, notNullExpressions) => FalseLiteral
         case a LessThan b if canSimplifyComparison(a, b, notNullExpressions) => FalseLiteral
 
-        // One side is Literal
+        // Optimize equalities with (Predicate, Literal) pair to help pushing down the filters
         case (a: Predicate) EqualTo TrueLiteral => a
         case TrueLiteral EqualTo (b: Predicate) => b
         case (a: Predicate) EqualTo FalseLiteral => Not(a)
