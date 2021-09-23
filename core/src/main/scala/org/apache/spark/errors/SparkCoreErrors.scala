@@ -31,6 +31,22 @@ import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException
  * Object for grouping error messages from (most) exceptions thrown during query execution.
  */
 object SparkCoreErrors {
+  def unexpectedPy4JServerError(other: Object): Throwable = {
+    new RuntimeException(s"Unexpected Py4J server ${other.getClass}")
+  }
+
+  def eofExceptionWhileReadPortNumberError(
+      daemonModule: String,
+      daemonExitValue: Option[Int] = null): Throwable = {
+    val msg = s"EOFException occurred while reading the port number from $daemonModule's" +
+      s" stdout" + daemonExitValue.map(v => s" and terminated with code: $v.").getOrElse("")
+    new SparkException(msg)
+  }
+
+  def unsupportedDataTypeError(other: Any): Throwable = {
+    new SparkException(s"Data of type $other is not supported")
+  }
+
   def rddBlockNotFoundError(blockId: BlockId, id: Int): Throwable = {
     new Exception(s"Could not compute split, block $blockId of RDD $id not found")
   }
@@ -77,10 +93,6 @@ object SparkCoreErrors {
 
   def reduceByKeyLocallyNotSupportArrayKeysError(): Throwable = {
     new SparkException("reduceByKeyLocally() does not support array keys")
-  }
-
-  def noSuchElementException(): Throwable = {
-    new NoSuchElementException()
   }
 
   def rddLacksSparkContextError(): Throwable = {
@@ -198,11 +210,7 @@ object SparkCoreErrors {
     new SparkException(s"Unrecognized $schedulerModeProperty: $schedulingModeConf")
   }
 
-  def failResourceOffersForBarrierStageError(errorMsg: String): Throwable = {
-    new SparkException(errorMsg)
-  }
-
-  def markExecutorAsFailedError(errorMsg: String): Throwable = {
+  def sparkError(errorMsg: String): Throwable = {
     new SparkException(errorMsg)
   }
 

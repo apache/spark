@@ -75,7 +75,7 @@ select (5e36BD + 0.1) + 5e36BD
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 Decimal(expanded,10000000000000000000000000000000000000.1,39,1}) cannot be represented as Decimal(38, 1).
 
 
@@ -84,7 +84,7 @@ select (-4e36BD - 0.1) - 7e36BD
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 Decimal(expanded,-11000000000000000000000000000000000000.1,39,1}) cannot be represented as Decimal(38, 1).
 
 
@@ -93,7 +93,7 @@ select 12345678901234567890.0 * 12345678901234567890.0
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 Decimal(expanded,152415787532388367501905199875019052100,39,0}) cannot be represented as Decimal(38, 2).
 
 
@@ -102,7 +102,7 @@ select 1e35BD / 0.1
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 Decimal(expanded,1000000000000000000000000000000000000,37,0}) cannot be represented as Decimal(38, 6).
 
 

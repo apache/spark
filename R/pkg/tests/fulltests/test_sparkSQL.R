@@ -1435,6 +1435,7 @@ test_that("column functions", {
     desc_nulls_first(c1) + desc_nulls_last(c1)
   c29 <- acosh(c1) + asinh(c1) + atanh(c1)
   c30 <- product(c1) + product(c1 * 0.5)
+  c31 <- sec(c1) + csc(c1) + cot(c1)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1986,6 +1987,17 @@ test_that("string operators", {
   expect_equal(
     collect(select(df5, repeat_string(df5$a, -1)))[1, 1],
     ""
+  )
+
+  l6 <- list(list("cat"), list("\ud83d\udc08"))
+  df6 <- createDataFrame(l6)
+  expect_equal(
+    collect(select(df6, octet_length(df6$"_1")))[, 1],
+    c(3, 4)
+  )
+  expect_equal(
+    collect(select(df6, bit_length(df6$"_1")))[, 1],
+    c(24, 32)
   )
 })
 

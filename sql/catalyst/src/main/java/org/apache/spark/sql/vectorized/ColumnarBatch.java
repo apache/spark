@@ -31,7 +31,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * the entire data loading process.
  */
 @Evolving
-public final class ColumnarBatch implements AutoCloseable {
+public class ColumnarBatch implements AutoCloseable {
   private int numRows;
   private final ColumnVector[] columns;
 

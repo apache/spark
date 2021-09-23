@@ -437,8 +437,8 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Substitute child plan with WindowSpecDefinitions.
    */
   object WindowsSubstitution extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      _.containsPattern(WITH_WINDOW_DEFINITION), ruleId) {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
+      _.containsAnyPattern(WITH_WINDOW_DEFINITION, UNRESOLVED_WINDOW_EXPRESSION), ruleId) {
       // Lookup WindowSpecDefinitions. This rule works with unresolved children.
       case WithWindowDefinition(windowDefinitions, child) => child.resolveExpressions {
         case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
@@ -446,6 +446,14 @@ class Analyzer(override val catalogManager: CatalogManager)
             throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName))
           WindowExpression(c, windowSpecDefinition)
       }
+
+      case p @ Project(projectList, _) =>
+        projectList.foreach(_.transformDownWithPruning(
+          _.containsPattern(UNRESOLVED_WINDOW_EXPRESSION), ruleId) {
+          case UnresolvedWindowExpression(_, windowSpec) =>
+            throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowSpec.name)
+        })
+        p
     }
   }
 
@@ -2494,6 +2502,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         expr.collect {
           case WindowExpression(ae: AggregateExpression, _) => ae
           case WindowExpression(e: PythonUDF, _) if PythonUDF.isGroupedAggPandasUDF(e) => e
+          case UnresolvedWindowExpression(ae: AggregateExpression, _) => ae
+          case UnresolvedWindowExpression(e: PythonUDF, _)
+            if PythonUDF.isGroupedAggPandasUDF(e) => e
         }
       }.toSet
 
@@ -3988,7 +3999,8 @@ object SessionWindowing extends Rule[LogicalPlan] {
         val sessionAttr = AttributeReference(
           SESSION_COL_NAME, session.dataType, metadata = newMetadata)()
 
-        val sessionStart = PreciseTimestampConversion(session.timeColumn, TimestampType, LongType)
+        val sessionStart =
+          PreciseTimestampConversion(session.timeColumn, session.timeColumn.dataType, LongType)
         val gapDuration = session.gapDuration match {
           case expr if Cast.canCast(expr.dataType, CalendarIntervalType) =>
             Cast(expr, CalendarIntervalType)
@@ -3996,13 +4008,13 @@ object SessionWindowing extends Rule[LogicalPlan] {
             throw QueryCompilationErrors.sessionWindowGapDurationDataTypeError(other.dataType)
         }
         val sessionEnd = PreciseTimestampConversion(session.timeColumn + gapDuration,
-          TimestampType, LongType)
+          session.timeColumn.dataType, LongType)
 
         val literalSessionStruct = CreateNamedStruct(
           Literal(SESSION_START) ::
-            PreciseTimestampConversion(sessionStart, LongType, TimestampType) ::
+            PreciseTimestampConversion(sessionStart, LongType, session.timeColumn.dataType) ::
             Literal(SESSION_END) ::
-            PreciseTimestampConversion(sessionEnd, LongType, TimestampType) ::
+            PreciseTimestampConversion(sessionEnd, LongType, session.timeColumn.dataType) ::
             Nil)
 
         val sessionStruct = Alias(literalSessionStruct, SESSION_COL_NAME)(

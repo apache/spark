@@ -394,6 +394,23 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, msg):
             psser.isin(1)
 
+        # when Series have NaN
+        pser = pd.Series(["lama", "cow", None, "lama", "beetle", "lama", "hippo", None], name="a")
+        psser = ps.from_pandas(pser)
+
+        self.assert_eq(psser.isin(["cow", "lama"]), pser.isin(["cow", "lama"]))
+
+        pser = pd.Series([None, 5, None, 3, 2, 1, None, 0, 0], name="a")
+        psser = ps.from_pandas(pser)
+
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+            self.assert_eq(psser.isin([1, 5, 0, None]), pser.isin([1, 5, 0, None]))
+        else:
+            expected = pd.Series(
+                [False, True, False, False, False, True, False, True, True], name="a"
+            )
+            self.assert_eq(psser.isin([1, 5, 0, None]), expected)
+
     def test_drop_duplicates(self):
         pdf = pd.DataFrame({"animal": ["lama", "cow", "lama", "beetle", "lama", "hippo"]})
         psdf = ps.from_pandas(pdf)
@@ -1682,6 +1699,31 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, msg):
             psser.pop(["lama", "speed"])
 
+        pser = pd.Series(["a", "b", "c", "a"], dtype="category")
+        psser = ps.from_pandas(pser)
+
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
+            self.assert_eq(psser.pop(0), pser.pop(0))
+            self.assert_eq(psser, pser)
+
+            self.assert_eq(psser.pop(3), pser.pop(3))
+            self.assert_eq(psser, pser)
+        else:
+            # Before pandas 1.3.0, `pop` modifies the dtype of categorical series wrongly.
+            self.assert_eq(psser.pop(0), "a")
+            self.assert_eq(
+                psser,
+                pd.Series(
+                    pd.Categorical(["b", "c", "a"], categories=["a", "b", "c"]), index=[1, 2, 3]
+                ),
+            )
+
+            self.assert_eq(psser.pop(3), "a")
+            self.assert_eq(
+                psser,
+                pd.Series(pd.Categorical(["b", "c"], categories=["a", "b", "c"]), index=[1, 2]),
+            )
+
     def test_replace(self):
         pser = pd.Series([10, 20, 15, 30, np.nan], name="x")
         psser = ps.Series(pser)
@@ -1740,6 +1782,38 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         msg = "'other' must be a Series"
         with self.assertRaisesRegex(TypeError, msg):
             psser.update(10)
+
+        def _get_data():
+            pdf = pd.DataFrame(
+                {
+                    "a": [None, 2, 3, 4, 5, 6, 7, 8, None],
+                    "b": [None, 5, None, 3, 2, 1, None, 0, 0],
+                    "c": [1, 5, 1, 3, 2, 1, 1, 0, 0],
+                },
+            )
+            psdf = ps.from_pandas(pdf)
+            return pdf, psdf
+
+        pdf, psdf = _get_data()
+
+        psdf.a.update(psdf.a)
+        pdf.a.update(pdf.a)
+        self.assert_eq(psdf, pdf)
+
+        pdf, psdf = _get_data()
+
+        psdf.a.update(psdf.b)
+        pdf.a.update(pdf.b)
+        self.assert_eq(psdf, pdf)
+
+        pdf, psdf = _get_data()
+        pser = pdf.a
+        psser = psdf.a
+
+        pser.update(pdf.b)
+        psser.update(psdf.b)
+        self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
 
     def test_where(self):
         pser1 = pd.Series([0, 1, 2, 3, 4])
@@ -2461,7 +2535,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
             ps.Series(["a", "b", "c"]).prod()
         with self.assertRaisesRegex(
-            TypeError, "Could not convert datetime64\\[ns\\] \\(timestamp\\) to numeric"
+            TypeError, "Could not convert datetime64\\[ns\\] \\(timestamp.*\\) to numeric"
         ):
             ps.Series([pd.Timestamp("2016-01-01") for _ in range(3)]).prod()
 
@@ -2951,6 +3025,51 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser2.name = pser2.name = ("Y", "B")
 
         self.assert_eq(psser1.combine_first(psser2), pser1.combine_first(pser2))
+
+    def test_cov(self):
+        pdf = pd.DataFrame(
+            {
+                "s1": ["a", "b", "c"],
+                "s2": [0.12528585, 0.26962463, 0.51111198],
+            },
+            index=[0, 1, 2],
+        )
+        psdf = ps.from_pandas(pdf)
+        with self.assertRaisesRegex(TypeError, "unsupported dtype: object"):
+            psdf["s1"].cov(psdf["s2"])
+
+        pdf = pd.DataFrame(
+            {
+                "s1": [0.90010907, 0.13484424, 0.62036035],
+                "s2": [0.12528585, 0.26962463, 0.51111198],
+            },
+            index=[0, 1, 2],
+        )
+        self._test_cov(pdf)
+
+        pdf = pd.DataFrame(
+            {
+                "s1": [0.90010907, np.nan, 0.13484424, 0.62036035],
+                "s2": [0.12528585, 0.81131178, 0.26962463, 0.51111198],
+            },
+            index=[0, 1, 2, 3],
+        )
+        self._test_cov(pdf)
+
+    def _test_cov(self, pdf):
+        psdf = ps.from_pandas(pdf)
+
+        pcov = pdf["s1"].cov(pdf["s2"])
+        pscov = psdf["s1"].cov(psdf["s2"])
+        self.assert_eq(pcov, pscov, almost=True)
+
+        pcov = pdf["s1"].cov(pdf["s2"], min_periods=3)
+        pscov = psdf["s1"].cov(psdf["s2"], min_periods=3)
+        self.assert_eq(pcov, pscov, almost=True)
+
+        pcov = pdf["s1"].cov(pdf["s2"], min_periods=4)
+        pscov = psdf["s1"].cov(psdf["s2"], min_periods=4)
+        self.assert_eq(pcov, pscov, almost=True)
 
 
 if __name__ == "__main__":

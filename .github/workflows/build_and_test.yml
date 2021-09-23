@@ -483,7 +483,7 @@ jobs:
       matrix:
         java:
           - 11
-          - 17-ea
+          - 17
     runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository

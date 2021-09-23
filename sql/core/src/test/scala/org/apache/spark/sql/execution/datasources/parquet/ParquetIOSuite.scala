@@ -855,6 +855,12 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  test("SPARK-36726: test incorrect Parquet row group file offset") {
+    readParquetFile(testFile("test-data/malformed-file-offset.parquet")) { df =>
+      assert(df.count() == 3650)
+    }
+  }
+
   test("VectorizedParquetRecordReader - direct path read") {
     val data = (0 to 10).map(i => (i, (i + 'a').toChar.toString))
     withTempPath { dir =>

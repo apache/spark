@@ -26,8 +26,8 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.io._
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat
 
-import org.apache.spark.SparkException
 import org.apache.spark.api.java.JavaSparkContext
+import org.apache.spark.errors.SparkCoreErrors
 
 /**
  * A class to test Pyrolite serialization on the Scala side, that will be deserialized
@@ -89,14 +89,14 @@ private[python] class DoubleArrayToWritableConverter extends Converter[Any, Writ
       val daw = new DoubleArrayWritable
       daw.set(arr.asInstanceOf[Array[Double]].map(new DoubleWritable(_)))
       daw
-    case other => throw new SparkException(s"Data of type $other is not supported")
+    case other => throw SparkCoreErrors.unsupportedDataTypeError(other)
   }
 }
 
 private[python] class WritableToDoubleArrayConverter extends Converter[Any, Array[Double]] {
   override def convert(obj: Any): Array[Double] = obj match {
     case daw : DoubleArrayWritable => daw.get().map(_.asInstanceOf[DoubleWritable].get())
-    case other => throw new SparkException(s"Data of type $other is not supported")
+    case other => throw SparkCoreErrors.unsupportedDataTypeError(other)
   }
 }
 

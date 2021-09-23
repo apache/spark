@@ -1045,7 +1045,7 @@ def _infer_type(obj, infer_dict_as_struct=False, prefer_timestamp_ntz=False):
     if dataType is DecimalType:
         # the precision and scale of `obj` may be different from row to row.
         return DecimalType(38, 18)
-    if dataType is TimestampType and prefer_timestamp_ntz and obj.tzname() is None:
+    if dataType is TimestampType and prefer_timestamp_ntz and obj.tzinfo is None:
         return TimestampNTZType()
     elif dataType is not None:
         return dataType()
@@ -1665,7 +1665,28 @@ class DatetimeConverter(object):
         t.setNanos(obj.microsecond * 1000)
         return t
 
+
+class DatetimeNTZConverter(object):
+    def can_convert(self, obj):
+        from pyspark.sql.utils import is_timestamp_ntz_preferred
+
+        return (
+            isinstance(obj, datetime.datetime) and
+            obj.tzinfo is None and
+            is_timestamp_ntz_preferred())
+
+    def convert(self, obj, gateway_client):
+        from pyspark import SparkContext
+
+        seconds = calendar.timegm(obj.utctimetuple())
+        jvm = SparkContext._jvm
+        return jvm.org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToLocalDateTime(
+            int(seconds) * 1000000 + obj.microsecond
+        )
+
+
 # datetime is a subclass of date, we should register DatetimeConverter first
+register_input_converter(DatetimeNTZConverter())
 register_input_converter(DatetimeConverter())
 register_input_converter(DateConverter())
 
