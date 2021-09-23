@@ -217,7 +217,7 @@ object QueryExecutionErrors {
 
   def regexGroupIndexExceedGroupCountError(
       groupCount: Int, groupIndex: Int): Throwable = {
-    new SparkIllegalArgumentException("GROUP_INDEX_EXCEED_GROUP_COUNT",
+    new SparkIllegalArgumentException("GROUP_INDEX_EXCEEDS_GROUP_COUNT",
       Array(groupCount.toString, groupIndex.toString))
   }
 

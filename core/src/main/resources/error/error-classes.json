@@ -70,7 +70,7 @@
   "GROUPING_SIZE_LIMIT_EXCEEDED" : {
     "message" : [ "Grouping sets size cannot be greater than %s" ]
   },
-  "GROUP_INDEX_EXCEED_GROUP_COUNT" : {
+  "GROUP_INDEX_EXCEEDS_GROUP_COUNT" : {
     "message" : [ "Regex group count is %s, but the specified group index is %s" ],
     "sqlState" : "42000"
   },
