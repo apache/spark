@@ -255,11 +255,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               s"join condition '${condition.sql}' " +
                 s"of type ${condition.dataType.catalogString} is not a boolean.")
 
-          case j @ AsOfJoin(_, _, _, _, _, _, Some(tolerance)) =>
-            if (!tolerance.foldable) {
+          case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion)) =>
+            if (!toleranceAssertion.foldable) {
               failAnalysis("Input argument tolerance must be a constant.")
             }
-            if (!tolerance.eval().asInstanceOf[Boolean]) {
+            if (!toleranceAssertion.eval().asInstanceOf[Boolean]) {
               failAnalysis("Input argument tolerance must be non-negative.")
             }
 
