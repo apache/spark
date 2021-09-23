@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.vectorized
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
+import java.util
+import java.util.NoSuchElementException
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -36,7 +38,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, DateTimeUtils, 
 import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnarBatchRow, ColumnVector}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -1151,7 +1153,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }}
   }
 
-
   test("ColumnarBatch customization") {
     (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
       val schema = new StructType()
@@ -1164,7 +1165,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       val columns = schema.fields.map { field =>
         allocate(capacity, field.dataType, memMode)
       }
-      val batch = new ColumnarBatch(columns.toArray)
+      val batch = new CustomizedColumnarBatch(columns.toArray)
       assert(batch.numCols() == 4)
       assert(batch.numRows() == 0)
       assert(batch.rowIterator().hasNext == false)
@@ -1179,28 +1180,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       // Verify the results of the row.
       assert(batch.numCols() == 4)
       assert(batch.numRows() == 1)
-      assert(batch.rowIterator().hasNext)
-      assert(batch.rowIterator().hasNext)
-
-      assert(columns(0).getInt(0) == 1)
-      assert(columns(0).isNullAt(0) == false)
-      assert(columns(1).getDouble(0) == 1.1)
-      assert(columns(1).isNullAt(0) == false)
-      assert(columns(2).isNullAt(0))
-      assert(columns(3).getUTF8String(0).toString == "Hello")
-
-      // Verify the iterator works correctly.
-      val it = batch.rowIterator()
-      assert(it.hasNext())
-      val row = it.next()
-      assert(row.getInt(0) == 1)
-      assert(row.isNullAt(0) == false)
-      assert(row.getDouble(1) == 1.1)
-      assert(row.isNullAt(1) == false)
-      assert(row.isNullAt(2))
-      assert(columns(3).getUTF8String(0).toString == "Hello")
-      assert(it.hasNext == false)
-      assert(it.hasNext == false)
+      // rowId 0 is skipped
+      assert(batch.rowIterator().hasNext == false)
 
       // Reset and add 3 rows
       columns.foreach(_.reset())
@@ -1238,13 +1219,45 @@ class ColumnarBatchSuite extends SparkFunSuite {
       // Verify
       assert(batch.numRows() == 3)
       val it2 = batch.rowIterator()
-      rowEquals(it2.next(), Row(null, 2.2, 2, "abc"))
+      // Only second row is valid
       rowEquals(it2.next(), Row(3, null, 3, ""))
-      rowEquals(it2.next(), Row(4, 4.4, 4, "world"))
-      assert(!it.hasNext)
+      assert(!it2.hasNext)
 
       batch.close()
     }}
+  }
+
+  class CustomizedColumnarBatch(columns: Array[ColumnVector]) extends ColumnarBatch(columns) {
+    val skipRowIds = List(0, 2)
+    override def rowIterator(): util.Iterator[InternalRow] = {
+      val maxRows: Int = numRows
+      val row = new ColumnarBatchRow(columns)
+      new util.Iterator[InternalRow]() {
+        var rowId = 0
+
+        override def hasNext: Boolean = {
+          while (skipRowIds.contains(rowId)) {
+            rowId += 1
+          }
+          rowId < maxRows
+        }
+
+        override def next: InternalRow = {
+          while (skipRowIds.contains(rowId)) {
+            rowId += 1
+          }
+
+          if (rowId >= maxRows) throw new NoSuchElementException
+          row.rowId = rowId
+          rowId += 1
+          row
+        }
+
+        override def remove(): Unit = {
+          throw new UnsupportedOperationException
+        }
+      }
+    }
   }
 
   private def doubleEquals(d1: Double, d2: Double): Boolean = {

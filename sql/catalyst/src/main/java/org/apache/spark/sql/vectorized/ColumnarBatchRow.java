@@ -29,7 +29,7 @@ public final class ColumnarBatchRow extends InternalRow {
   public int rowId;
   private final ColumnVector[] columns;
 
-  ColumnarBatchRow(ColumnVector[] columns) {
+  public ColumnarBatchRow(ColumnVector[] columns) {
     this.columns = columns;
   }
 
