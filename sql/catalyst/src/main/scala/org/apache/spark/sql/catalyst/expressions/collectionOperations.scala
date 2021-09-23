@@ -3498,24 +3498,6 @@ case class ArrayDistinct(child: Expression)
           ""
         }
 
-        def withArrayNullAssignment(body: String) =
-          if (dataType.asInstanceOf[ArrayType].containsNull) {
-            s"""
-               |if ($array.isNullAt($i)) {
-               |  if (!$hashSet.containsNull()) {
-               |    $nullElementIndex = $size;
-               |    $hashSet.addNull();
-               |    $size++;
-               |    $builder.$$plus$$eq($nullValueHolder);
-               |  }
-               |} else {
-               |  $body
-               |}
-             """.stripMargin
-          } else {
-            body
-          }
-
         val body =
           s"""
              |if (!$hashSet.contains($hsValueCast$value)) {
@@ -3527,14 +3509,21 @@ case class ArrayDistinct(child: Expression)
              |}
            """.stripMargin
 
-        val processArray = withArrayNullAssignment(
-          s"$jt $value = ${genGetValue(array, i)};" +
-            SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
-              (valueNaN: String) =>
-                s"""
-                   |$size++;
-                   |$builder.$$plus$$eq($valueNaN);
-                   |""".stripMargin))
+        val processArray = SQLOpenHashSet.withNullCheckCode(dataType, dataType, hashSet,
+          (array: String) =>
+            (index: String) =>
+              s"$jt $value = ${genGetValue(array, index)};" +
+                SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
+                  (valueNaN: String) =>
+                    s"""
+                       |$size++;
+                       |$builder.$$plus$$eq($valueNaN);
+                     """.stripMargin),
+          s"""
+             |$nullElementIndex = $size;
+             |$size++;
+             |$builder.$$plus$$eq($nullValueHolder);
+           """.stripMargin)
 
         s"""
            |$openHashSet $hashSet = new $openHashSet$hsPostFix($classTag);
@@ -3542,7 +3531,7 @@ case class ArrayDistinct(child: Expression)
            |$arrayBuilderClass $builder = new $arrayBuilderClass();
            |int $size = 0;
            |for (int $i = 0; $i < $array.numElements(); $i++) {
-           |  $processArray
+           |  ${processArray(array)(i)}
            |}
            |${buildResultArray(builder, ev.value, size, nullElementIndex)}
          """.stripMargin
@@ -3693,24 +3682,6 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
 
-        def withArrayNullAssignment(body: String) =
-          if (dataType.asInstanceOf[ArrayType].containsNull) {
-            s"""
-               |if ($array.isNullAt($i)) {
-               |  if (!$hashSet.containsNull()) {
-               |    $nullElementIndex = $size;
-               |    $hashSet.addNull();
-               |    $size++;
-               |    $builder.$$plus$$eq($nullValueHolder);
-               |  }
-               |} else {
-               |  $body
-               |}
-             """.stripMargin
-          } else {
-            body
-          }
-
         val body =
           s"""
              |if (!$hashSet.contains($hsValueCast$value)) {
@@ -3721,14 +3692,22 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
              |  $builder.$$plus$$eq($value);
              |}
            """.stripMargin
-        val processArray = withArrayNullAssignment(
-          s"$jt $value = ${genGetValue(array, i)};" +
-            SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
-              (valueNaN: String) =>
-                s"""
-                   |$size++;
-                   |$builder.$$plus$$eq($valueNaN);
-                 """.stripMargin))
+
+        val processArray = SQLOpenHashSet.withNullCheckCode(dataType, dataType, hashSet,
+          (array: String) =>
+            (index: String) =>
+              s"$jt $value = ${genGetValue(array, index)};" +
+                SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
+                  (valueNaN: String) =>
+                    s"""
+                       |$size++;
+                       |$builder.$$plus$$eq($valueNaN);
+                     """.stripMargin),
+          s"""
+             |$nullElementIndex = $size;
+             |$size++;
+             |$builder.$$plus$$eq($nullValueHolder);
+           """.stripMargin)
 
         // Only need to track null element index when result array's element is nullable.
         val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
@@ -3748,7 +3727,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
            |for (int $arrayDataIdx = 0; $arrayDataIdx < 2; $arrayDataIdx++) {
            |  ArrayData $array = $arrays[$arrayDataIdx];
            |  for (int $i = 0; $i < $array.numElements(); $i++) {
-           |    $processArray
+           |    ${processArray(array)(i)}
            |  }
            |}
            |${buildResultArray(builder, ev.value, size, nullElementIndex)}
@@ -3955,58 +3934,15 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
 
-        def withArray2NullCheck(body: String): String =
-          if (right.dataType.asInstanceOf[ArrayType].containsNull) {
-            if (left.dataType.asInstanceOf[ArrayType].containsNull) {
-              s"""
-                 |if ($array2.isNullAt($i)) {
-                 |  $hashSet.addNull();
-                 |} else {
-                 |  $body
-                 |}
-               """.stripMargin
-            } else {
-              // if array1's element is not nullable, we don't need to track the null element index.
-              s"""
-                 |if (!$array2.isNullAt($i)) {
-                 |  $body
-                 |}
-               """.stripMargin
-            }
-          } else {
-            body
-          }
-
-        val writeArray2ToHashSet = withArray2NullCheck(
-        s"$jt $value = ${genGetValue(array2, i)};" +
-          SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet,
-            s"$hashSet.add$hsPostFix($hsValueCast$value);", (valueNaN: String) => ""))
-
-        def withArray1NullAssignment(body: String) =
-          if (left.dataType.asInstanceOf[ArrayType].containsNull) {
-            if (right.dataType.asInstanceOf[ArrayType].containsNull) {
-              s"""
-                 |if ($array1.isNullAt($i)) {
-                 |  if ($hashSet.containsNull() && !$hashSetResult.containsNull()) {
-                 |    $nullElementIndex = $size;
-                 |    $hashSetResult.addNull();
-                 |    $size++;
-                 |    $builder.$$plus$$eq($nullValueHolder);
-                 |  }
-                 |} else {
-                 |  $body
-                 |}
-               """.stripMargin
-            } else {
-              s"""
-                 |if (!$array1.isNullAt($i)) {
-                 |  $body
-                 |}
-               """.stripMargin
-            }
-          } else {
-            body
-          }
+        val writeArray2ToHashSet = SQLOpenHashSet.withNullCheckCode(
+          right.dataType, left.dataType, hashSet,
+          (array: String) =>
+            (index: String) =>
+              s"$jt $value = ${genGetValue(array, index)};" +
+                SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet,
+                  s"$hashSet.add$hsPostFix($hsValueCast$value);",
+                  (valueNaN: String) => ""),
+          "")
 
         val body =
           s"""
@@ -4020,16 +3956,24 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
              |}
            """.stripMargin
 
-        val processArray1 = withArray1NullAssignment(
-          s"$jt $value = ${genGetValue(array1, i)};" +
-            SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSetResult, body,
-              (valueNaN: Any) =>
-                s"""
-                   |if ($hashSet.containsNaN()) {
-                   |  ++$size;
-                   |  $builder.$$plus$$eq($valueNaN);
-                   |}
-                 """.stripMargin))
+        val processArray1 = SQLOpenHashSet.withNullCheckCode(
+          left.dataType, right.dataType, hashSetResult,
+          (array: String) =>
+            (index: String) =>
+              s"$jt $value = ${genGetValue(array, index)};" +
+                SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSetResult, body,
+                  (valueNaN: Any) =>
+                    s"""
+                       |if ($hashSet.containsNaN()) {
+                       |  ++$size;
+                       |  $builder.$$plus$$eq($valueNaN);
+                       |}
+                 """.stripMargin),
+          s"""
+             |$nullElementIndex = $size;
+             |$size++;
+             |$builder.$$plus$$eq($nullValueHolder);
+           """.stripMargin)
 
         // Only need to track null element index when result array's element is nullable.
         val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
@@ -4045,12 +3989,12 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
            |$openHashSet $hashSetResult = new $openHashSet$hsPostFix($classTag);
            |$declareNullTrackVariables
            |for (int $i = 0; $i < $array2.numElements(); $i++) {
-           |  $writeArray2ToHashSet
+           |  ${writeArray2ToHashSet(array2)(i)}
            |}
            |$arrayBuilderClass $builder = new $arrayBuilderClass();
            |int $size = 0;
            |for (int $i = 0; $i < $array1.numElements(); $i++) {
-           |  $processArray1
+           |  ${processArray1(array1)(i)}
            |}
            |${buildResultArray(builder, ev.value, size, nullElementIndex)}
          """.stripMargin
@@ -4201,51 +4145,15 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
 
-        def withArray2NullCheck(body: String): String =
-          if (right.dataType.asInstanceOf[ArrayType].containsNull) {
-            if (left.dataType.asInstanceOf[ArrayType].containsNull) {
-              s"""
-                 |if ($array2.isNullAt($i)) {
-                 |  $hashSet.addNull();
-                 |} else {
-                 |  $body
-                 |}
-             """.stripMargin
-            } else {
-              // if array1's element is not nullable, we don't need to track the null element index.
-              s"""
-                 |if (!$array2.isNullAt($i)) {
-                 |  $body
-                 |}
-               """.stripMargin
-            }
-          } else {
-            body
-          }
-
-        val writeArray2ToHashSet = withArray2NullCheck(
-          s"$jt $value = ${genGetValue(array2, i)};" +
+        val writeArray2ToHashSet = SQLOpenHashSet.withNullCheckCode(
+          right.dataType, left.dataType, hashSet,
+          (array: String) =>
+            (index: String) =>
+          s"$jt $value = ${genGetValue(array, i)};" +
             SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet,
               s"$hashSet.add$hsPostFix($hsValueCast$value);",
-              (valueNaN: Any) => ""))
-
-        def withArray1NullAssignment(body: String) =
-          if (left.dataType.asInstanceOf[ArrayType].containsNull) {
-            s"""
-               |if ($array1.isNullAt($i)) {
-               |  if (!$hashSet.containsNull()) {
-               |    $hashSet.addNull();
-               |    $nullElementIndex = $size;
-               |    $size++;
-               |    $builder.$$plus$$eq($nullValueHolder);
-               |  }
-               |} else {
-               |  $body
-               |}
-             """.stripMargin
-          } else {
-            body
-          }
+              (valueNaN: Any) => ""),
+        "")
 
         val body =
           s"""
@@ -4258,14 +4166,22 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
              |}
            """.stripMargin
 
-        val processArray1 = withArray1NullAssignment(
-          s"$jt $value = ${genGetValue(array1, i)};" +
-            SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
-              (valueNaN: String) =>
-                s"""
-                   |$size++;
-                   |$builder.$$plus$$eq($valueNaN);
-                 """.stripMargin))
+        val processArray1 = SQLOpenHashSet.withNullCheckCode(
+          left.dataType, left.dataType, hashSet,
+          (array: String) =>
+            (index: String) =>
+              s"$jt $value = ${genGetValue(array, index)};" +
+                SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
+                  (valueNaN: String) =>
+                    s"""
+                       |$size++;
+                       |$builder.$$plus$$eq($valueNaN);
+                 """.stripMargin),
+          s"""
+             |$nullElementIndex = $size;
+             |$size++;
+             |$builder.$$plus$$eq($nullValueHolder);
+           """.stripMargin)
 
         // Only need to track null element index when array1's element is nullable.
         val declareNullTrackVariables = if (left.dataType.asInstanceOf[ArrayType].containsNull) {
@@ -4280,12 +4196,12 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
            |$openHashSet $hashSet = new $openHashSet$hsPostFix($classTag);
            |$declareNullTrackVariables
            |for (int $i = 0; $i < $array2.numElements(); $i++) {
-           |  $writeArray2ToHashSet
+           |  ${writeArray2ToHashSet(array2)(i)}
            |}
            |$arrayBuilderClass $builder = new $arrayBuilderClass();
            |int $size = 0;
            |for (int $i = 0; $i < $array1.numElements(); $i++) {
-           |  $processArray1
+           |  ${processArray1(array1)(i)}
            |}
            |${buildResultArray(builder, ev.value, size, nullElementIndex)}
          """.stripMargin

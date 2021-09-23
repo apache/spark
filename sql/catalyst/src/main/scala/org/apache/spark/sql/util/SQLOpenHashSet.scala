@@ -21,7 +21,7 @@ import scala.reflect._
 
 import org.apache.spark.annotation.Private
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DoubleType, FloatType}
 import org.apache.spark.util.collection.OpenHashSet
 
 // A wrap of OpenHashSet that can handle null, Double.NaN and Float.NaN w.r.t. the SQL semantic.
@@ -78,6 +78,38 @@ object SQLOpenHashSet {
           handleNotNull(elem)
         }
     }
+  }
+
+  def withNullCheckCode(
+      arrayType1: DataType,
+      arrayType2: DataType,
+      hashSet: String,
+      handleNotNull: String => String => String,
+      handleNull: String): String => String => String = {
+    (array: String) =>
+      (index: String) =>
+        if (arrayType1.asInstanceOf[ArrayType].containsNull) {
+          if (arrayType2.asInstanceOf[ArrayType].containsNull) {
+            s"""
+               |if ($array.isNullAt($index)) {
+               |  if (!$hashSet.containsNull()) {
+               |    $hashSet.addNull();
+               |    $handleNull
+               |  }
+               |} else {
+               |  ${handleNotNull(array)(index)}
+               |}
+           """.stripMargin
+          } else {
+            s"""
+               |if (!$array.isNullAt($index)) {
+               | ${handleNotNull(array)(index)}
+               |}
+           """.stripMargin
+          }
+        } else {
+          handleNotNull(array)(index)
+        }
   }
 
   def withNaNCheckFunc(
