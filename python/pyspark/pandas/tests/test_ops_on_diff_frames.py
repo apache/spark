@@ -2012,6 +2012,13 @@ class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
             psser.rpow(psser_other)
 
+    def test_equals(self):
+        psidx1 = ps.Index([1, 2, 3, 4])
+        psidx2 = ps.Index([1, 2, 3, 4])
+
+        with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
+            psidx1.equals(psidx2)
+
     def test_combine_first(self):
         pdf1 = pd.DataFrame({"A": [None, 0], "B": [4, None]})
         psdf1 = ps.from_pandas(pdf1)

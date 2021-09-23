@@ -1963,7 +1963,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             if not isinstance(value, (float, int, str, bool)):
                 raise TypeError("Unsupported type %s" % type(value).__name__)
             if limit is not None:
-                raise ValueError("limit parameter for value is not support now")
+                raise NotImplementedError("limit parameter for value is not support now")
             scol = F.when(cond, value).otherwise(scol)
         else:
             if method in ["ffill", "pad"]:
@@ -3597,7 +3597,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise ValueError(msg)
 
         if self._internal.index_level > 1:
-            raise ValueError("rank do not support index now")
+            raise NotImplementedError("rank do not support MultiIndex now")
 
         if ascending:
             asc_func = lambda scol: scol.asc()
@@ -6258,7 +6258,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         axis = validate_axis(axis)
         if axis == 1:
-            raise ValueError("Series does not support columns axis.")
+            raise NotImplementedError("Series does not support columns axis.")
 
         scol = sfun(self)
 
