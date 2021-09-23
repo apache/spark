@@ -21,6 +21,7 @@ import inspect
 import sys
 import unittest
 from io import StringIO
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -4648,6 +4649,32 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         expected = pdf
         self.assert_eq(sorted(actual["a"].to_numpy()), sorted(expected["a"].to_numpy()))
         self.assert_eq(sorted(actual["b"].to_numpy()), sorted(expected["b"].to_numpy()))
+
+        pdf = pd.DataFrame(
+            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [[e] for e in [4, 5, 6, 3, 2, 1, 0, 0, 0]]},
+            index=np.random.rand(9),
+        )
+        psdf = ps.from_pandas(pdf)
+
+        def identify3(x) -> ps.DataFrame[float, [int, List[int]]]:
+            return x
+
+        actual = psdf.pandas_on_spark.apply_batch(identify3)
+        actual.columns = ["a", "b"]
+        self.assert_eq(actual, pdf)
+
+        # For NumPy typing, NumPy version should be 1.21+ and Python version should be 3.8+
+        if sys.version_info >= (3, 8) and LooseVersion(np.__version__) >= LooseVersion("1.21"):
+            import numpy.typing as ntp
+
+            psdf = ps.from_pandas(pdf)
+
+            def identify4(x) -> ps.DataFrame[float, [int, ntp.NDArray[int]]]:  # type: ignore
+                return x
+
+            actual = psdf.pandas_on_spark.apply_batch(identify4)
+            actual.columns = ["a", "b"]
+            self.assert_eq(actual, pdf)
 
     def test_transform_batch(self):
         pdf = pd.DataFrame(

@@ -19,6 +19,7 @@ import sys
 import unittest
 import datetime
 import decimal
+from distutils.version import LooseVersion
 from typing import List
 
 import pandas
@@ -334,29 +335,6 @@ class TypeHintTests(unittest.TestCase):
             decimal.Decimal: (np.dtype("object"), DecimalType(38, 18)),
             # ArrayType
             np.ndarray: (np.dtype("object"), ArrayType(StringType())),
-            List[bytes]: (np.dtype("object"), ArrayType(BinaryType())),
-            List[np.character]: (np.dtype("object"), ArrayType(BinaryType())),
-            List[np.bytes_]: (np.dtype("object"), ArrayType(BinaryType())),
-            List[np.string_]: (np.dtype("object"), ArrayType(BinaryType())),
-            List[bool]: (np.dtype("object"), ArrayType(BooleanType())),
-            List[np.bool]: (np.dtype("object"), ArrayType(BooleanType())),
-            List[datetime.date]: (np.dtype("object"), ArrayType(DateType())),
-            List[np.int8]: (np.dtype("object"), ArrayType(ByteType())),
-            List[np.byte]: (np.dtype("object"), ArrayType(ByteType())),
-            List[decimal.Decimal]: (np.dtype("object"), ArrayType(DecimalType(38, 18))),
-            List[float]: (np.dtype("object"), ArrayType(DoubleType())),
-            List[np.float]: (np.dtype("object"), ArrayType(DoubleType())),
-            List[np.float64]: (np.dtype("object"), ArrayType(DoubleType())),
-            List[np.float32]: (np.dtype("object"), ArrayType(FloatType())),
-            List[np.int32]: (np.dtype("object"), ArrayType(IntegerType())),
-            List[int]: (np.dtype("object"), ArrayType(LongType())),
-            List[np.int]: (np.dtype("object"), ArrayType(LongType())),
-            List[np.int64]: (np.dtype("object"), ArrayType(LongType())),
-            List[np.int16]: (np.dtype("object"), ArrayType(ShortType())),
-            List[str]: (np.dtype("object"), ArrayType(StringType())),
-            List[np.unicode_]: (np.dtype("object"), ArrayType(StringType())),
-            List[datetime.datetime]: (np.dtype("object"), ArrayType(TimestampType())),
-            List[np.datetime64]: (np.dtype("object"), ArrayType(TimestampType())),
             # CategoricalDtype
             CategoricalDtype(categories=["a", "b", "c"]): (
                 CategoricalDtype(categories=["a", "b", "c"]),
@@ -367,6 +345,28 @@ class TypeHintTests(unittest.TestCase):
         for numpy_or_python_type, (dtype, spark_type) in type_mapper.items():
             self.assertEqual(as_spark_type(numpy_or_python_type), spark_type)
             self.assertEqual(pandas_on_spark_type(numpy_or_python_type), (dtype, spark_type))
+
+            if isinstance(numpy_or_python_type, CategoricalDtype):
+                # Nested CategoricalDtype is not yet supported.
+                continue
+
+            self.assertEqual(as_spark_type(List[numpy_or_python_type]), ArrayType(spark_type))
+            self.assertEqual(
+                pandas_on_spark_type(List[numpy_or_python_type]),
+                (np.dtype("object"), ArrayType(spark_type)),
+            )
+
+            # For NumPy typing, NumPy version should be 1.21+ and Python version should be 3.8+
+            if sys.version_info >= (3, 8) and LooseVersion(np.__version__) >= LooseVersion("1.21"):
+                import numpy.typing as ntp
+
+                self.assertEqual(
+                    as_spark_type(ntp.NDArray[numpy_or_python_type]), ArrayType(spark_type)
+                )
+                self.assertEqual(
+                    pandas_on_spark_type(ntp.NDArray[numpy_or_python_type]),
+                    (np.dtype("object"), ArrayType(spark_type)),
+                )
 
         with self.assertRaisesRegex(TypeError, "Type uint64 was not understood."):
             as_spark_type(np.dtype("uint64"))
