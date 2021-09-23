@@ -32,7 +32,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
-import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIllegalStateException, SparkIndexOutOfBoundsException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIllegalStateException, SparkIndexOutOfBoundsException, SparkIOException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -435,131 +435,127 @@ object QueryExecutionErrors {
   }
 
   def createStreamingSourceNotSpecifySchemaError(): Throwable = {
-    new IllegalArgumentException(
-      s"""
-         |Schema must be specified when creating a streaming source DataFrame. If some
-         |files already exist in the directory, then depending on the file format you
-         |may be able to create a static DataFrame on that directory with
-         |'spark.read.load(directory)' and infer schema from it.
-       """.stripMargin)
+    new SparkIllegalArgumentException(
+      errorClass = "MISSING_STREAMING_SOURCE_SCHEMA",
+      messageParameters = Array.empty)
   }
 
   def streamedOperatorUnsupportedByDataSourceError(
       className: String, operator: String): Throwable = {
-    new UnsupportedOperationException(
-      s"Data source $className does not support streamed $operator")
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_STREAMED_OPERATOR_BY_DATASOURCE",
+      messageParameters = Array(className, operator))
   }
 
   def multiplePathsSpecifiedError(allPaths: Seq[String]): Throwable = {
-    new IllegalArgumentException("Expected exactly one path to be specified, but " +
-      s"got: ${allPaths.mkString(", ")}")
+    new SparkIllegalArgumentException(
+      errorClass = "SPECIFIED_MULTIPLE_PATHS",
+      messageParameters = Array(allPaths.mkString(", ")))
   }
 
   def failedToFindDataSourceError(provider: String, error: Throwable): Throwable = {
-    new ClassNotFoundException(
-      s"""
-         |Failed to find data source: $provider. Please find packages at
-         |http://spark.apache.org/third-party-projects.html
-       """.stripMargin, error)
+    new SparkClassNotFoundException(
+      errorClass = "FAILED_FIND_DATASOURCE",
+      messageParameters = Array(provider), error)
   }
 
   def removedClassInSpark2Error(className: String, e: Throwable): Throwable = {
-    new ClassNotFoundException(s"$className was removed in Spark 2.0. " +
-      "Please check if your library is compatible with Spark 2.0", e)
+    new SparkClassNotFoundException(
+      errorClass = "CANNOT_FIND_CLASS_IN_SPARK2",
+      messageParameters = Array(className), e)
   }
 
   def incompatibleDataSourceRegisterError(e: Throwable): Throwable = {
-    new SparkClassNotFoundException("INCOMPATIBLE_DATASOURCE_REGISTER", Array(e.getMessage), e)
+    new SparkClassNotFoundException(
+      errorClass = "INCOMPATIBLE_DATASOURCE_REGISTER",
+      messageParameters = Array(e.getMessage), e)
   }
 
   def unrecognizedFileFormatError(format: String): Throwable = {
-    new IllegalStateException(s"unrecognized format $format")
+    new SparkIllegalStateException(
+      errorClass = "UNRECOGNIZED_FORMAT",
+      messageParameters = Array(format))
   }
 
   def sparkUpgradeInReadingDatesError(
       format: String, config: String, option: String): SparkUpgradeException = {
-    new SparkUpgradeException("3.0",
-      s"""
-         |reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z from $format
-         |files can be ambiguous, as the files may be written by Spark 2.x or legacy versions of
-         |Hive, which uses a legacy hybrid calendar that is different from Spark 3.0+'s Proleptic
-         |Gregorian calendar. See more details in SPARK-31404. You can set the SQL config
-         |'$config' or the datasource option '$option' to 'LEGACY' to rebase the datetime values
-         |w.r.t. the calendar difference during reading. To read the datetime values as it is,
-         |set the SQL config '$config' or the datasource option '$option' to 'CORRECTED'.
-       """.stripMargin, null)
+    new SparkUpgradeException(
+      errorClass = "CANNOT_UPGRADE_IN_READING_DATES",
+      messageParameters = Array("3.0", format, config, option, config, option))
   }
 
   def sparkUpgradeInWritingDatesError(format: String, config: String): SparkUpgradeException = {
-    new SparkUpgradeException("3.0",
-      s"""
-         |writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z into $format
-         |files can be dangerous, as the files may be read by Spark 2.x or legacy versions of Hive
-         |later, which uses a legacy hybrid calendar that is different from Spark 3.0+'s Proleptic
-         |Gregorian calendar. See more details in SPARK-31404. You can set $config to 'LEGACY' to
-         |rebase the datetime values w.r.t. the calendar difference during writing, to get maximum
-         |interoperability. Or set $config to 'CORRECTED' to write the datetime values as it is,
-         |if you are 100% sure that the written files will only be read by Spark 3.0+ or other
-         |systems that use Proleptic Gregorian calendar.
-       """.stripMargin, null)
+    new SparkUpgradeException(
+      errorClass = "CANNOT_UPGRADE_IN_WRITING_DATES",
+      messageParameters = Array("3.0", format, config, config))
   }
 
   def buildReaderUnsupportedForFileFormatError(format: String): Throwable = {
-    new UnsupportedOperationException(s"buildReader is not supported for $format")
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_BUILD_READER_FOR_FILE_FORMAT",
+      messageParameters = Array(format))
   }
 
   def jobAbortedError(cause: Throwable): Throwable = {
-    new SparkException("Job aborted.", cause)
+    new SparkException(
+      errorClass = "JOB_ABORTED",
+      messageParameters = Array.empty, cause)
   }
 
   def taskFailedWhileWritingRowsError(cause: Throwable): Throwable = {
-    new SparkException("Task failed while writing rows.", cause)
+    new SparkException(
+      errorClass = "TASK_FAILED_WRITING_ROWS",
+      messageParameters = Array.empty, cause)
   }
 
   def readCurrentFileNotFoundError(e: FileNotFoundException): Throwable = {
-    new FileNotFoundException(
-      s"""
-         |${e.getMessage}\n
-         |It is possible the underlying files have been updated. You can explicitly invalidate
-         |the cache in Spark by running 'REFRESH TABLE tableName' command in SQL or by
-         |recreating the Dataset/DataFrame involved.
-       """.stripMargin)
+    new SparkFileNotFoundException(
+      errorClass = "CANNOT_READ_CURRENT_FILE",
+      messageParameters = Array(e.getMessage))
   }
 
   def unsupportedSaveModeError(saveMode: String, pathExists: Boolean): Throwable = {
-    new IllegalStateException(s"unsupported save mode $saveMode ($pathExists)")
+    new SparkIllegalStateException(
+      errorClass = "UNSUPPORTED_SAVE_MODE",
+      messageParameters = Array(saveMode + " (" + pathExists.toString + ")"))
   }
 
   def cannotClearOutputDirectoryError(staticPrefixPath: Path): Throwable = {
-    new IOException(s"Unable to clear output directory $staticPrefixPath prior to writing to it")
+    new SparkIOException(
+      errorClass = "CANNOT_CLEAR_SOME_DIRECTORY",
+      messageParameters = Array("output", staticPrefixPath.toString))
   }
 
   def cannotClearPartitionDirectoryError(path: Path): Throwable = {
-    new IOException(s"Unable to clear partition directory $path prior to writing to it")
+    new SparkIOException(
+      errorClass = "CANNOT_CLEAR_SOME_DIRECTORY",
+      messageParameters = Array("partition", path.toString))
   }
 
   def failedToCastValueToDataTypeForPartitionColumnError(
       value: String, dataType: DataType, columnName: String): Throwable = {
-    new RuntimeException(s"Failed to cast value `$value` to " +
-      s"`$dataType` for partition column `$columnName`")
+    new SparkRuntimeException(
+      errorClass = "FAILED_CAST_VALUE_TO_DATATYPE_FOR_PARTITION_COLUMN",
+      messageParameters = Array(value, dataType.toString, columnName))
   }
 
   def endOfStreamError(): Throwable = {
-    new NoSuchElementException("End of stream")
+    new SparkNoSuchElementException(
+      errorClass = "END_OF_STREAM",
+      messageParameters = Array.empty)
   }
 
   def fallbackV1RelationReportsInconsistentSchemaError(
       v2Schema: StructType, v1Schema: StructType): Throwable = {
-    new IllegalArgumentException(
-      "The fallback v1 relation reports inconsistent schema:\n" +
-        "Schema of v2 scan:     " + v2Schema + "\n" +
-        "Schema of v1 relation: " + v1Schema)
+    new SparkIllegalArgumentException(
+      errorClass = "FAILED_FALLBACK_V1_BECAUSE_OF_INCONSISTENT_SCHEMA",
+      messageParameters = Array(v2Schema.sql, v1Schema.sql))
   }
 
   def cannotDropNonemptyNamespaceError(namespace: Seq[String]): Throwable = {
     new SparkException(
-      s"Cannot drop a non-empty namespace: ${namespace.quoted}. " +
-        "Use CASCADE option to drop a non-empty namespace.")
+      errorClass = "CANNOT_DROP_NONEMPTY_NAMESPACE",
+      messageParameters = Array(namespace.quoted), null)
   }
 
   def noRecordsFromEmptyDataReaderError(): Throwable = {
@@ -929,27 +925,22 @@ object QueryExecutionErrors {
   }
 
   def failToParseDateTimeInNewParserError(s: String, e: Throwable): Throwable = {
-    new SparkUpgradeException("3.0", s"Fail to parse '$s' in the new parser. You can " +
-      s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior " +
-      s"before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
+    new SparkUpgradeException(
+      errorClass = "FAILED_PARSE_DATETIME_IN_NEW_PARSER",
+      messageParameters = Array("3.0", s, SQLConf.LEGACY_TIME_PARSER_POLICY.key), e)
   }
 
   def failToFormatDateTimeInNewFormatterError(
       resultCandidate: String, e: Throwable): Throwable = {
-    new SparkUpgradeException("3.0",
-      s"""
-         |Fail to format it to '$resultCandidate' in the new formatter. You can set
-         |${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior before
-         |Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
-       """.stripMargin.replaceAll("\n", " "), e)
+    new SparkUpgradeException(
+      errorClass = "FAILED_FORMAT_DATETIME_IN_NEW_FORMATTER",
+      messageParameters = Array("3.0", resultCandidate, SQLConf.LEGACY_TIME_PARSER_POLICY.key), e)
   }
 
   def failToRecognizePatternAfterUpgradeError(pattern: String, e: Throwable): Throwable = {
-    new SparkUpgradeException("3.0", s"Fail to recognize '$pattern' pattern in the" +
-      s" DateTimeFormatter. 1) You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY" +
-      s" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern" +
-      s" with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html",
-      e)
+    new SparkUpgradeException(
+      errorClass = "FAILED_RECOGNIZE_PATTERN_AFTER_UPGRADE",
+      messageParameters = Array("3.0", pattern, SQLConf.LEGACY_TIME_PARSER_POLICY.key), e)
   }
 
   def failToRecognizePatternError(pattern: String, e: Throwable): Throwable = {
