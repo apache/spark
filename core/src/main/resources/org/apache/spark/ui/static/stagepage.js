@@ -17,7 +17,7 @@
 
 /* global $, ConvertDurationString, Mustache, createRESTEndPointForExecutorsPage */
 /* global createTemplateURI, formatBytes, formatDate, formatDuration, formatLogsCells */
-/* global getStandAloneAppId, setDataTableDefaults, uiRoot */
+/* global getStandAloneAppId, setDataTableDefaults, getBaseURI, uiRoot */
 
 var shouldBlockUI = true;
 
@@ -71,8 +71,8 @@ $.extend( $.fn.dataTable.ext.type.order, {
 // e.g. (history) https://domain:50509/history/application_1536254569791_3806251/1/stages/stage/?id=4&attempt=1
 // e.g. (proxy) https://domain:50505/proxy/application_1502220952225_59143/stages/stage?id=4&attempt=1
 function stageEndPoint(appId) {
-  var queryString = document.baseURI.split('?');
-  var words = document.baseURI.split('/');
+  var queryString = getBaseURI().split('?');
+  var words = getBaseURI().split('/');
   var indexOfProxy = words.indexOf("proxy");
   var stageId = queryString[1].split("&").filter(word => word.includes("id="))[0].split("=")[1];
   var newBaseURI;
@@ -304,7 +304,7 @@ function reselectCheckboxesBasedOnTaskTableState() {
 }
 
 function getStageAttemptId() {
-  var words = document.baseURI.split('?');
+  var words = getBaseURI().split('?');
   var digitsRegex = /[0-9]+/;
   // We are using regex here to extract the stage attempt id as there might be certain url's with format
   // like /proxy/application_1539986433979_27115/stages/stage/?id=0&attempt=0#tasksTitle

@@ -503,6 +503,12 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             (pdf1.A + 1).loc[pdf2.A > -3].sort_index(), (psdf1.A + 1).loc[psdf2.A > -3].sort_index()
         )
 
+        pser = pd.Series([0, 1, 2, 3, 4], index=[20, 10, 30, 0, 50])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.loc[pdf2.A > -3].sort_index(), psser.loc[psdf2.A > -3].sort_index())
+        pser.name = psser.name = "B"
+        self.assert_eq(pser.loc[pdf2.A > -3].sort_index(), psser.loc[psdf2.A > -3].sort_index())
+
     def test_bitwise(self):
         pser1 = pd.Series([True, False, True, False, np.nan, np.nan, True, False, np.nan])
         pser2 = pd.Series([True, False, False, True, True, False, np.nan, np.nan, np.nan])
@@ -1357,6 +1363,15 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         psser.update(ps.Series([4, 5, 6]))
         self.assert_eq(psser.sort_index(), pser.sort_index())
         self.assert_eq(psdf.sort_index(), pdf.sort_index())
+
+        pser1 = pd.Series([None, 2, 3, 4, 5, 6, 7, 8, None])
+        pser2 = pd.Series([None, 5, None, 3, 2, 1, None, 0, 0])
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
+
+        pser1.update(pser2)
+        psser1.update(psser2)
+        self.assert_eq(psser1, pser1)
 
     def test_where(self):
         pdf1 = pd.DataFrame({"A": [0, 1, 2, 3, 4], "B": [100, 200, 300, 400, 500]})

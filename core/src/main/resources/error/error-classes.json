@@ -3,8 +3,25 @@
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
   },
+  "CANNOT_CAST_DATATYPE" : {
+    "message" : [ "Cannot cast %s to %s." ],
+    "sqlState" : "22005"
+  },
+  "CANNOT_CHANGE_DECIMAL_PRECISION" : {
+    "message" : [ "%s cannot be represented as Decimal(%s, %s)." ],
+    "sqlState" : "22005"
+  },
+  "CANNOT_EVALUATE_EXPRESSION" : {
+    "message" : [ "Cannot evaluate expression: %s" ]
+  },
+  "CANNOT_GENERATE_CODE_FOR_EXPRESSION" : {
+    "message" : [ "Cannot generate code for expression: %s" ]
+  },
   "CANNOT_GET_JDBC_TYPE" : {
-    "message" : [ "Can't get JDBC type for %s" ],
+    "message" : [ "Can't get JDBC type for %s" ]
+  },
+  "CANNOT_PARSE_DECIMAL" : {
+    "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"
   },
   "CANNOT_READ_FOOTER_FOR_FILE" : {
@@ -12,10 +29,16 @@
     "sqlState" : "42000"
   },
   "CANNOT_TRANSLATE_NON_NULL_VALUE_FOR_FIELD" : {
-    "message" : [ "Can't translate non-null value for field %s" ],
-    "sqlState" : "0A000"
+    "message" : [ "Can't translate non-null value for field %s" ]
   },
-  "CONCURRENT_QUERY_ERROR" : {
+  "CANNOT_TERMINATE_GENERATOR" : {
+    "message" : [ "Cannot terminate expression: %s" ]
+  },
+  "CAST_CAUSES_OVERFLOW" : {
+    "message" : [ "Casting %s to %s causes overflow" ],
+    "sqlState" : "22005"
+  },
+  "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
   "DATA_TYPE_UNSUPPORTED" : {
@@ -37,6 +60,9 @@
   "EMPTY_OPTION" : {
     "message" : [ "Option `%s` can not be empty." ],
     "sqlState" : "08006"
+  },
+  "FAILED_EXECUTE_UDF" : {
+    "message" : [ "Failed to execute user defined function (%s: (%s) => %s)" ]
   },
   "FAILED_RENAME_PATH" : {
     "message" : [ "Failed to rename %s to %s as destination already exists" ],
@@ -82,6 +108,9 @@
     "message" : [ "The input filter of %s should be fully convertible." ],
     "sqlState" : "42000"
   },
+  "INVALID_ARRAY_INDEX" : {
+    "message" : [ "Invalid index: %s, numElements: %s" ]
+  },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name %s is invalid: %s is not a struct." ],
     "sqlState" : "42000"
@@ -98,8 +127,18 @@
     "message" : [ "Invalid value `%s` for parameter `%s`. This can be `NONE`, `READ_UNCOMMITTED`, `READ_COMMITTED`, `REPEATABLE_READ` or `SERIALIZABLE`." ],
     "sqlState" : "42000"
   },
+  "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE" : {
+    "message" : [ "invalid input syntax for type numeric: %s" ],
+    "sqlState" : "42000"
+  },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
+  },
+  "LOGICAL_HINT_OPERATOR_NOT_REMOVED_DURING_ANALYSIS" : {
+    "message" : [ "Internal error: logical hint operator should have been removed during analysis" ]
+  },
+  "MAP_KEY_DOES_NOT_EXIST" : {
+    "message" : [ "Key %s does not exist." ]
   },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
@@ -107,7 +146,7 @@
   },
   "MISSING_JDBC_TABLE_NAME_AND_QUERY" : {
     "message" : [ "Option '%s' or '%s' is required." ],
-    "sqlState" : "08006"
+    "sqlState" : "22023"
   },
   "MISSING_METHOD" : {
     "message" : [ "A method named \"%s\" is not declared in any enclosing class nor any supertype" ],
@@ -129,7 +168,7 @@
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
     "sqlState" : "42000"
   },
-  "OPERATING_ON_CANONICALIZATION_PLAN" : {
+  "CANNOT_OPERATE_ON_CANONICALIZATION_PLAN" : {
     "message" : [ "Operating on canonicalization plan" ]
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
@@ -139,6 +178,10 @@
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [ "Failed to rename as %s was not found" ],
     "sqlState" : "22023"
+  },
+  "ROW_FROM_CSV_PARSER_NOT_EXPECTED" : {
+    "message" : [ "Expected one row from CSV parser." ],
+    "sqlState" : "42000"
   },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
@@ -159,13 +202,24 @@
     "message" : [ "Unsupported type %s" ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_CHANGE_COLUMN" : {
+    "message" : [ "Please add an implementation for a column change here" ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_DATATYPE" : {
+    "message" : [ "Unsupported data type %s" ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_LITERAL_TYPE" : {
     "message" : [ "Unsupported literal type %s %s" ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_OPERATION_FOR_DATA_TYPE" : {
-    "message" : [ "DataType: %s" ],
+    "message" : [ "Unsupported operation for data type: %s" ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID" : {
+    "message" : [ "%s does not implement simpleStringWithNodeId" ]
   },
   "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER" : {
     "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],

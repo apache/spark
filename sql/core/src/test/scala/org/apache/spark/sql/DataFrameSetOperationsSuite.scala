@@ -1018,6 +1018,47 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     unionDF = df1.unionByName(df2)
     checkAnswer(unionDF, expected)
   }
+
+  test("SPARK-36673: Only merge nullability for Unions of struct") {
+    val df1 = spark.range(2).withColumn("nested", struct(expr("id * 5 AS INNER")))
+    val df2 = spark.range(2).withColumn("nested", struct(expr("id * 5 AS inner")))
+
+    val union1 = df1.union(df2)
+    val union2 = df1.unionByName(df2)
+
+    val schema = StructType(Seq(StructField("id", LongType, false),
+      StructField("nested", StructType(Seq(StructField("INNER", LongType, false))), false)))
+
+    Seq(union1, union2).foreach { df =>
+      assert(df.schema == schema)
+      assert(df.queryExecution.optimizedPlan.schema == schema)
+      assert(df.queryExecution.executedPlan.schema == schema)
+
+      checkAnswer(df, Row(0, Row(0)) :: Row(1, Row(5)) :: Row(0, Row(0)) :: Row(1, Row(5)) :: Nil)
+      checkAnswer(df.select("nested.*"), Row(0) :: Row(5) :: Row(0) :: Row(5) :: Nil)
+    }
+  }
+
+  test("SPARK-36673: Union of structs with different orders") {
+    val df1 = spark.range(2).withColumn("nested",
+      struct(expr("id * 5 AS inner1"), struct(expr("id * 10 AS inner2"))))
+    val df2 = spark.range(2).withColumn("nested",
+      struct(expr("id * 5 AS inner2"), struct(expr("id * 10 AS inner1"))))
+
+    val err1 = intercept[AnalysisException](df1.union(df2).collect())
+
+    assert(err1.message
+      .contains("Union can only be performed on tables with the compatible column types"))
+
+    val df3 = spark.range(2).withColumn("nested",
+      struct(expr("id * 5 AS inner1"), struct(expr("id * 10 AS inner2").cast("string"))))
+    val df4 = spark.range(2).withColumn("nested",
+      struct(expr("id * 5 AS inner2").cast("string"), struct(expr("id * 10 AS inner1"))))
+
+    val err2 = intercept[AnalysisException](df3.union(df4).collect())
+    assert(err2.message
+      .contains("Union can only be performed on tables with the compatible column types"))
+  }
 }
 
 case class UnionClass1a(a: Int, b: Long, nested: UnionClass2)

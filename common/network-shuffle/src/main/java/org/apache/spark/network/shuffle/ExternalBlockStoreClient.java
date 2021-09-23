@@ -52,6 +52,10 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
   private final boolean authEnabled;
   private final SecretKeyHolder secretKeyHolder;
   private final long registrationTimeoutMs;
+  // Push based shuffle requires a comparable Id to distinguish the shuffle data among multiple
+  // application attempts. This variable is derived from the String typed appAttemptId. If no
+  // appAttemptId is set, the default comparableAppAttemptId is -1.
+  private int comparableAppAttemptId = -1;
 
   /**
    * Creates an external shuffle client, with SASL optionally enabled. If SASL is not enabled,
@@ -81,6 +85,26 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       bootstraps.add(new AuthClientBootstrap(transportConf, appId, secretKeyHolder));
     }
     clientFactory = context.createClientFactory(bootstraps);
+  }
+
+  @Override
+  public void setAppAttemptId(String appAttemptId) {
+    super.setAppAttemptId(appAttemptId);
+    setComparableAppAttemptId(appAttemptId);
+  }
+
+  private void setComparableAppAttemptId(String appAttemptId) {
+    // For now, push based shuffle only supports running in YARN.
+    // Application attemptId in YARN is integer and it can be safely parsed
+    // to integer here. For the application attemptId from other cluster set up
+    // which is not numeric, it needs to generate this comparableAppAttemptId
+    // from the String typed appAttemptId through some other customized logic.
+    try {
+      this.comparableAppAttemptId = Integer.parseInt(appAttemptId);
+    } catch (NumberFormatException e) {
+      logger.warn("Push based shuffle requires comparable application attemptId, " +
+        "but the appAttemptId {} cannot be parsed to Integer", appAttemptId, e);
+    }
   }
 
   @Override
@@ -146,7 +170,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
               assert inputListener instanceof BlockPushingListener :
                 "Expecting a BlockPushingListener, but got " + inputListener.getClass();
               TransportClient client = clientFactory.createClient(host, port);
-              new OneForOneBlockPusher(client, appId, transportConf.appAttemptId(), inputBlockId,
+              new OneForOneBlockPusher(client, appId, comparableAppAttemptId, inputBlockId,
                 (BlockPushingListener) inputListener, buffersWithId).start();
             } else {
               logger.info("This clientFactory was closed. Skipping further block push retries.");
@@ -178,8 +202,8 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     try {
       TransportClient client = clientFactory.createClient(host, port);
       ByteBuffer finalizeShuffleMerge =
-        new FinalizeShuffleMerge(appId, transportConf.appAttemptId(), shuffleId,
-          shuffleMergeId).toByteBuffer();
+        new FinalizeShuffleMerge(
+          appId, comparableAppAttemptId, shuffleId, shuffleMergeId).toByteBuffer();
       client.sendRpc(finalizeShuffleMerge, new RpcResponseCallback() {
         @Override
         public void onSuccess(ByteBuffer response) {

@@ -14,10 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
-
-import pandas as pd
-
 from pyspark.pandas.missing import unsupported_function, unsupported_property, common
 
 
@@ -47,22 +43,19 @@ class MissingPandasLikeSeries(object):
     resample = _unsupported_function("resample")
     searchsorted = _unsupported_function("searchsorted")
     set_axis = _unsupported_function("set_axis")
-    slice_shift = _unsupported_function("slice_shift")
     to_hdf = _unsupported_function("to_hdf")
     to_period = _unsupported_function("to_period")
     to_sql = _unsupported_function("to_sql")
     to_timestamp = _unsupported_function("to_timestamp")
-    tshift = _unsupported_function("tshift")
     tz_convert = _unsupported_function("tz_convert")
     tz_localize = _unsupported_function("tz_localize")
     view = _unsupported_function("view")
 
     # Deprecated functions
-    convert_objects = _unsupported_function("convert_objects", deprecated=True)
-    nonzero = _unsupported_function("nonzero", deprecated=True)
-    reindex_axis = _unsupported_function("reindex_axis", deprecated=True)
-    select = _unsupported_function("select", deprecated=True)
-    get_values = _unsupported_function("get_values", deprecated=True)
+    slice_shift = _unsupported_function(
+        "slice_shift", deprecated=True, reason="Use DataFrame/Series.shift instead."
+    )
+    tshift = _unsupported_function("tshift", deprecated=True, reason="Use `shift` instead.")
 
     # Properties we won't support.
     array = common.array(_unsupported_property)
@@ -84,41 +77,3 @@ class MissingPandasLikeSeries(object):
         reason="If you want to collect your flattened underlying data as an NumPy array, "
         "use 'to_numpy().ravel()' instead.",
     )
-
-    if LooseVersion(pd.__version__) < LooseVersion("1.0"):
-        # Deprecated properties
-        blocks = _unsupported_property("blocks", deprecated=True)
-        ftypes = _unsupported_property("ftypes", deprecated=True)
-        ftype = _unsupported_property("ftype", deprecated=True)
-        is_copy = _unsupported_property("is_copy", deprecated=True)
-        ix = _unsupported_property("ix", deprecated=True)
-        asobject = _unsupported_property("asobject", deprecated=True)
-        strides = _unsupported_property("strides", deprecated=True)
-        imag = _unsupported_property("imag", deprecated=True)
-        itemsize = _unsupported_property("itemsize", deprecated=True)
-        data = _unsupported_property("data", deprecated=True)
-        base = _unsupported_property("base", deprecated=True)
-        flags = _unsupported_property("flags", deprecated=True)
-
-        # Deprecated functions
-        as_blocks = _unsupported_function("as_blocks", deprecated=True)
-        as_matrix = _unsupported_function("as_matrix", deprecated=True)
-        clip_lower = _unsupported_function("clip_lower", deprecated=True)
-        clip_upper = _unsupported_function("clip_upper", deprecated=True)
-        compress = _unsupported_function("compress", deprecated=True)
-        get_ftype_counts = _unsupported_function("get_ftype_counts", deprecated=True)
-        get_value = _unsupported_function("get_value", deprecated=True)
-        set_value = _unsupported_function("set_value", deprecated=True)
-        valid = _unsupported_function("valid", deprecated=True)
-        to_dense = _unsupported_function("to_dense", deprecated=True)
-        to_sparse = _unsupported_function("to_sparse", deprecated=True)
-        to_msgpack = _unsupported_function("to_msgpack", deprecated=True)
-        compound = _unsupported_function("compound", deprecated=True)
-        put = _unsupported_function("put", deprecated=True)
-        ptp = _unsupported_function("ptp", deprecated=True)
-
-        # Functions we won't support.
-        real = _unsupported_property(
-            "real",
-            reason="If you want to collect your data as an NumPy array, use 'to_numpy()' instead.",
-        )

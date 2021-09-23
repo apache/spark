@@ -367,6 +367,7 @@ Functions
     avg
     base64
     bin
+    bit_length
     bitwise_not
     bitwiseNOT
     broadcast
@@ -385,6 +386,7 @@ Functions
     corr
     cos
     cosh
+    cot
     count
     count_distinct
     countDistinct
@@ -392,6 +394,7 @@ Functions
     covar_samp
     crc32
     create_map
+    csc
     cume_dist
     current_date
     current_timestamp
@@ -483,6 +486,7 @@ Functions
     next_day
     nth_value
     ntile
+    octet_length
     overlay
     pandas_udf
     percent_rank
@@ -508,6 +512,7 @@ Functions
     rtrim
     schema_of_csv
     schema_of_json
+    sec
     second
     sentences
     sequence

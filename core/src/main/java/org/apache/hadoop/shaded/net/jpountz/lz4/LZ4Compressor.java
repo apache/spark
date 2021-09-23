@@ -15,23 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.test
+package org.apache.hadoop.shaded.net.jpountz.lz4;
 
-import java.io.{InputStream, IOException}
+/**
+ * TODO(SPARK-36679): A temporary workaround for SPARK-36669. We should remove this after
+ * Hadoop 3.3.2 release which fixes the LZ4 relocation in shaded Hadoop client libraries.
+ * This does not need implement all net.jpountz.lz4.LZ4Compressor API, just the ones used
+ * by Hadoop Lz4Compressor.
+ */
+public final class LZ4Compressor {
 
-import scala.sys.process.BasicIO
+  private net.jpountz.lz4.LZ4Compressor lz4Compressor;
 
-object ProcessTestUtils {
-  class ProcessOutputCapturer(stream: InputStream, capture: String => Unit) extends Thread {
-    this.setDaemon(true)
+  public LZ4Compressor(net.jpountz.lz4.LZ4Compressor lz4Compressor) {
+    this.lz4Compressor = lz4Compressor;
+  }
 
-    override def run(): Unit = {
-      try {
-        BasicIO.processFully(capture)(stream)
-      } catch { case _: IOException =>
-        // Ignores the IOException thrown when the process termination, which closes the input
-        // stream abruptly.
-      }
-    }
+  public void compress(java.nio.ByteBuffer src, java.nio.ByteBuffer dest) {
+    lz4Compressor.compress(src, dest);
   }
 }
