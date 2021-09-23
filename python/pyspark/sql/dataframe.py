@@ -1390,7 +1390,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             If `on` is a string or a list of strings indicating the name of the join column(s),
             the column(s) must exist on both sides, and this performs an equi-join.
         how : str, optional
-            default ``left``. Must be one of: ``inner`` and ``left``.
+            default ``inner``. Must be one of: ``inner`` and ``left``.
         tolerance : :class:`Column`, optional
             an asof tolerance within this range; must be compatible
             with the merge index.
@@ -1406,30 +1406,37 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> left = spark.createDataFrame([(1, "a"), (5, "b"), (10,  "c")], ["a", "left_val"])
         >>> right = spark.createDataFrame([(1, 1), (2, 2), (3, 3), (6, 6), (7, 7)],
         ...                               ["a", "right_val"])
-        >>> left._joinAsOf(right, leftAsOfColumn="a", rightAsOfColumn="a")\
-                .select(left.a, 'left_val', 'right_val').sort("a").collect()
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a"
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
         [Row(a=1, left_val='a', right_val=1),
          Row(a=5, left_val='b', right_val=3),
          Row(a=10, left_val='c', right_val=7)]
 
         >>> from pyspark.sql import functions as F
-        >>> left._joinAsOf(right, leftAsOfColumn="a", rightAsOfColumn="a", tolerance=F.lit(1))\
-                .select(left.a, 'left_val', 'right_val').sort("a").collect()
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", tolerance=F.lit(1)
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
+        [Row(a=1, left_val='a', right_val=1)]
+
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", how="left", tolerance=F.lit(1)
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
         [Row(a=1, left_val='a', right_val=1),
          Row(a=5, left_val='b', right_val=None),
          Row(a=10, left_val='c', right_val=None)]
 
-        >>> left._joinAsOf(right, leftAsOfColumn="a", rightAsOfColumn="a", allowExactMatches=False)\
-                .select(left.a, 'left_val', 'right_val').sort("a").collect()
-        [Row(a=1, left_val='a', right_val=None),
-         Row(a=5, left_val='b', right_val=3),
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", allowExactMatches=False
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
+        [Row(a=5, left_val='b', right_val=3),
          Row(a=10, left_val='c', right_val=7)]
 
-        >>> left._joinAsOf(right, leftAsOfColumn="a", rightAsOfColumn="a", direction="forward")\
-                .select(left.a, 'left_val', 'right_val').sort("a").collect()
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", direction="forward"
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
         [Row(a=1, left_val='a', right_val=1),
-         Row(a=5, left_val='b', right_val=6),
-         Row(a=10, left_val='c', right_val=None)]
+         Row(a=5, left_val='b', right_val=6)]
         """
         if isinstance(leftAsOfColumn, str):
             leftAsOfColumn = self[leftAsOfColumn]
@@ -1450,7 +1457,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 on = on._jc
 
         if how is None:
-            how = "left"
+            how = "inner"
         assert isinstance(how, str), "how should be a string"
 
         if tolerance is not None:

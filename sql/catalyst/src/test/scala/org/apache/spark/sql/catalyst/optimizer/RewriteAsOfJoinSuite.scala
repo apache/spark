@@ -29,7 +29,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("simple") {
     val left = LocalRelation('a.int, 'b.int, 'c.int)
     val right = LocalRelation('a.int, 'b.int, 'd.int)
-    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, LeftOuter,
+    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
       tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
@@ -45,6 +45,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
         right.where(filter).groupBy()(nearestRight),
         left.output).as("__right__"): _*)
     val correctAnswer = scalarSubquery
+      .where(scalarSubquery.output.last.isNotNull)
       .select(left.output :+
         GetStructField(scalarSubquery.output.last, 0).as("a") :+
         GetStructField(scalarSubquery.output.last, 1).as("b") :+
@@ -57,7 +58,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
     val left = LocalRelation('a.int, 'b.int, 'c.int)
     val right = LocalRelation('a.int, 'b.int, 'd.int)
     val query = AsOfJoin(left, right, left.output(0), right.output(0),
-      Some(left.output(1) === right.output(1)), LeftOuter,
+      Some(left.output(1) === right.output(1)), Inner,
       tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
@@ -74,6 +75,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
         right.where(filter).groupBy()(nearestRight),
         left.output).as("__right__"): _*)
     val correctAnswer = scalarSubquery
+      .where(scalarSubquery.output.last.isNotNull)
       .select(left.output :+
         GetStructField(scalarSubquery.output.last, 0).as("a") :+
         GetStructField(scalarSubquery.output.last, 1).as("b") :+
@@ -82,7 +84,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
     comparePlans(rewritten, correctAnswer, checkAnalysis = false)
   }
 
-  test("inner") {
+  test("left outer") {
     val left = LocalRelation('a.int, 'b.int, 'c.int)
     val right = LocalRelation('a.int, 'b.int, 'd.int)
     val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
@@ -113,7 +115,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("tolerance") {
     val left = LocalRelation('a.int, 'b.int, 'c.int)
     val right = LocalRelation('a.int, 'b.int, 'd.int)
-    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, LeftOuter,
+    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
       tolerance = Some(1), allowExactMatches = true, direction = AsOfJoinDirection("backward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
@@ -130,6 +132,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
         right.where(filter).groupBy()(nearestRight),
         left.output).as("__right__"): _*)
     val correctAnswer = scalarSubquery
+      .where(scalarSubquery.output.last.isNotNull)
       .select(left.output :+
         GetStructField(scalarSubquery.output.last, 0).as("a") :+
         GetStructField(scalarSubquery.output.last, 1).as("b") :+
@@ -168,7 +171,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("tolerance & allowExactMatches = false") {
     val left = LocalRelation('a.int, 'b.int, 'c.int)
     val right = LocalRelation('a.int, 'b.int, 'd.int)
-    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, LeftOuter,
+    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
       tolerance = Some(1), allowExactMatches = false, direction = AsOfJoinDirection("backward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
@@ -185,6 +188,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
         right.where(filter).groupBy()(nearestRight),
         left.output).as("__right__"): _*)
     val correctAnswer = scalarSubquery
+      .where(scalarSubquery.output.last.isNotNull)
       .select(left.output :+
         GetStructField(scalarSubquery.output.last, 0).as("a") :+
         GetStructField(scalarSubquery.output.last, 1).as("b") :+
@@ -196,7 +200,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("direction = forward") {
     val left = LocalRelation('a.int, 'b.int, 'c.int)
     val right = LocalRelation('a.int, 'b.int, 'd.int)
-    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, LeftOuter,
+    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
       tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("forward"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
@@ -212,6 +216,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
         right.where(filter).groupBy()(nearestRight),
         left.output).as("__right__"): _*)
     val correctAnswer = scalarSubquery
+      .where(scalarSubquery.output.last.isNotNull)
       .select(left.output :+
         GetStructField(scalarSubquery.output.last, 0).as("a") :+
         GetStructField(scalarSubquery.output.last, 1).as("b") :+
@@ -223,7 +228,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("direction = nearest") {
     val left = LocalRelation('a.int, 'b.int, 'c.int)
     val right = LocalRelation('a.int, 'b.int, 'd.int)
-    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, LeftOuter,
+    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
       tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("nearest"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
@@ -241,6 +246,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
         right.where(filter).groupBy()(nearestRight),
         left.output).as("__right__"): _*)
     val correctAnswer = scalarSubquery
+      .where(scalarSubquery.output.last.isNotNull)
       .select(left.output :+
         GetStructField(scalarSubquery.output.last, 0).as("a") :+
         GetStructField(scalarSubquery.output.last, 1).as("b") :+
@@ -252,7 +258,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
   test("tolerance & allowExactMatches = false & direction = nearest") {
     val left = LocalRelation('a.int, 'b.int, 'c.int)
     val right = LocalRelation('a.int, 'b.int, 'd.int)
-    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, LeftOuter,
+    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
       tolerance = Some(1), allowExactMatches = false, direction = AsOfJoinDirection("nearest"))
 
     val rewritten = RewriteAsOfJoin(query.analyze)
@@ -272,6 +278,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
         right.where(filter).groupBy()(nearestRight),
         left.output).as("__right__"): _*)
     val correctAnswer = scalarSubquery
+      .where(scalarSubquery.output.last.isNotNull)
       .select(left.output :+
         GetStructField(scalarSubquery.output.last, 0).as("a") :+
         GetStructField(scalarSubquery.output.last, 1).as("b") :+

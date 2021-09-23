@@ -3159,6 +3159,7 @@ def merge_asof(
         leftAsOfColumn=left_as_of_column,
         rightAsOfColumn=right_as_of_column,
         on=on,
+        how="left",
         tolerance=tolerance,
         allowExactMatches=allow_exact_matches,
         direction=direction,

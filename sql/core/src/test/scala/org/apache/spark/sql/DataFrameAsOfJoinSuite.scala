@@ -52,7 +52,7 @@ class DataFrameAsOfJoinSuite extends QueryTest
     checkAnswer(
       df1.joinAsOf(
         df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
-        joinType = "left", tolerance = null, allowExactMatches = true, direction = "backward"),
+        joinType = "inner", tolerance = null, allowExactMatches = true, direction = "backward"),
       Seq(
         Row(1, "x", "a", 1, "v", 1),
         Row(5, "y", "b", 3, "x", 3),
@@ -65,6 +65,17 @@ class DataFrameAsOfJoinSuite extends QueryTest
     val (df1, df2) = prepareForAsOfJoin()
     checkAnswer(
       df1.joinAsOf(df2, df1.col("a"), df2.col("a"), usingColumns = Seq("b"),
+        joinType = "inner", tolerance = null, allowExactMatches = true, direction = "backward"),
+      Seq(
+        Row(10, "z", "c", 7, "z", 7)
+      )
+    )
+  }
+
+  test("as-of join - usingColumns, left outer") {
+    val (df1, df2) = prepareForAsOfJoin()
+    checkAnswer(
+      df1.joinAsOf(df2, df1.col("a"), df2.col("a"), usingColumns = Seq("b"),
         joinType = "left", tolerance = null, allowExactMatches = true, direction = "backward"),
       Seq(
         Row(1, "x", "a", null, null, null),
@@ -74,26 +85,13 @@ class DataFrameAsOfJoinSuite extends QueryTest
     )
   }
 
-  test("as-of join - usingColumns, inner") {
-    val (df1, df2) = prepareForAsOfJoin()
-    checkAnswer(
-      df1.joinAsOf(df2, df1.col("a"), df2.col("a"), usingColumns = Seq("b"),
-        joinType = "inner", tolerance = null, allowExactMatches = true, direction = "backward"),
-      Seq(
-        Row(10, "z", "c", 7, "z", 7)
-      )
-    )
-  }
-
   test("as-of join - tolerance = 1") {
     val (df1, df2) = prepareForAsOfJoin()
     checkAnswer(
       df1.joinAsOf(df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
-        joinType = "left", tolerance = lit(1), allowExactMatches = true, direction = "backward"),
+        joinType = "inner", tolerance = lit(1), allowExactMatches = true, direction = "backward"),
       Seq(
-        Row(1, "x", "a", 1, "v", 1),
-        Row(5, "y", "b", null, null, null),
-        Row(10, "z", "c", null, null, null)
+        Row(1, "x", "a", 1, "v", 1)
       )
     )
   }
@@ -102,9 +100,8 @@ class DataFrameAsOfJoinSuite extends QueryTest
     val (df1, df2) = prepareForAsOfJoin()
     checkAnswer(
       df1.joinAsOf(df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
-        joinType = "left", tolerance = null, allowExactMatches = false, direction = "backward"),
+        joinType = "inner", tolerance = null, allowExactMatches = false, direction = "backward"),
       Seq(
-        Row(1, "x", "a", null, null, null),
         Row(5, "y", "b", 3, "x", 3),
         Row(10, "z", "c", 7, "z", 7)
       )
@@ -115,11 +112,10 @@ class DataFrameAsOfJoinSuite extends QueryTest
     val (df1, df2) = prepareForAsOfJoin()
     checkAnswer(
       df1.joinAsOf(df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
-        joinType = "left", tolerance = null, allowExactMatches = true, direction = "forward"),
+        joinType = "inner", tolerance = null, allowExactMatches = true, direction = "forward"),
       Seq(
         Row(1, "x", "a", 1, "v", 1),
-        Row(5, "y", "b", 6, "y", 6),
-        Row(10, "z", "c", null, null, null)
+        Row(5, "y", "b", 6, "y", 6)
       )
     )
   }
@@ -128,7 +124,7 @@ class DataFrameAsOfJoinSuite extends QueryTest
     val (df1, df2) = prepareForAsOfJoin()
     checkAnswer(
       df1.joinAsOf(df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
-        joinType = "left", tolerance = null, allowExactMatches = true, direction = "nearest"),
+        joinType = "inner", tolerance = null, allowExactMatches = true, direction = "nearest"),
       Seq(
         Row(1, "x", "a", 1, "v", 1),
         Row(5, "y", "b", 6, "y", 6),

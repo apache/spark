@@ -45,6 +45,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
  *             ) as __right__
  *        FROM left
  *        )
+ *   WHERE __right__ IS NOT NULL
  * }}}
  */
 object RewriteAsOfJoin extends Rule[LogicalPlan] {
