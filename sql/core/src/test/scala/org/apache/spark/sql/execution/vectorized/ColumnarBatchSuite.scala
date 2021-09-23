@@ -1151,6 +1151,102 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }}
   }
 
+
+  test("ColumnarBatch customization") {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+      val schema = new StructType()
+        .add("intCol", IntegerType)
+        .add("doubleCol", DoubleType)
+        .add("intCol2", IntegerType)
+        .add("string", BinaryType)
+
+      val capacity = 4 * 1024
+      val columns = schema.fields.map { field =>
+        allocate(capacity, field.dataType, memMode)
+      }
+      val batch = new ColumnarBatch(columns.toArray)
+      assert(batch.numCols() == 4)
+      assert(batch.numRows() == 0)
+      assert(batch.rowIterator().hasNext == false)
+
+      // Add a row [1, 1.1, NULL]
+      columns(0).putInt(0, 1)
+      columns(1).putDouble(0, 1.1)
+      columns(2).putNull(0)
+      columns(3).putByteArray(0, "Hello".getBytes(StandardCharsets.UTF_8))
+      batch.setNumRows(1)
+
+      // Verify the results of the row.
+      assert(batch.numCols() == 4)
+      assert(batch.numRows() == 1)
+      assert(batch.rowIterator().hasNext)
+      assert(batch.rowIterator().hasNext)
+
+      assert(columns(0).getInt(0) == 1)
+      assert(columns(0).isNullAt(0) == false)
+      assert(columns(1).getDouble(0) == 1.1)
+      assert(columns(1).isNullAt(0) == false)
+      assert(columns(2).isNullAt(0))
+      assert(columns(3).getUTF8String(0).toString == "Hello")
+
+      // Verify the iterator works correctly.
+      val it = batch.rowIterator()
+      assert(it.hasNext())
+      val row = it.next()
+      assert(row.getInt(0) == 1)
+      assert(row.isNullAt(0) == false)
+      assert(row.getDouble(1) == 1.1)
+      assert(row.isNullAt(1) == false)
+      assert(row.isNullAt(2))
+      assert(columns(3).getUTF8String(0).toString == "Hello")
+      assert(it.hasNext == false)
+      assert(it.hasNext == false)
+
+      // Reset and add 3 rows
+      columns.foreach(_.reset())
+      // Add rows [NULL, 2.2, 2, "abc"], [3, NULL, 3, ""], [4, 4.4, 4, "world]
+      columns(0).putNull(0)
+      columns(1).putDouble(0, 2.2)
+      columns(2).putInt(0, 2)
+      columns(3).putByteArray(0, "abc".getBytes(StandardCharsets.UTF_8))
+
+      columns(0).putInt(1, 3)
+      columns(1).putNull(1)
+      columns(2).putInt(1, 3)
+      columns(3).putByteArray(1, "".getBytes(StandardCharsets.UTF_8))
+
+      columns(0).putInt(2, 4)
+      columns(1).putDouble(2, 4.4)
+      columns(2).putInt(2, 4)
+      columns(3).putByteArray(2, "world".getBytes(StandardCharsets.UTF_8))
+      batch.setNumRows(3)
+
+      def rowEquals(x: InternalRow, y: Row): Unit = {
+        assert(x.isNullAt(0) == y.isNullAt(0))
+        if (!x.isNullAt(0)) assert(x.getInt(0) == y.getInt(0))
+
+        assert(x.isNullAt(1) == y.isNullAt(1))
+        if (!x.isNullAt(1)) assert(x.getDouble(1) == y.getDouble(1))
+
+        assert(x.isNullAt(2) == y.isNullAt(2))
+        if (!x.isNullAt(2)) assert(x.getInt(2) == y.getInt(2))
+
+        assert(x.isNullAt(3) == y.isNullAt(3))
+        if (!x.isNullAt(3)) assert(x.getString(3) == y.getString(3))
+      }
+
+      // Verify
+      assert(batch.numRows() == 3)
+      val it2 = batch.rowIterator()
+      rowEquals(it2.next(), Row(null, 2.2, 2, "abc"))
+      rowEquals(it2.next(), Row(3, null, 3, ""))
+      rowEquals(it2.next(), Row(4, 4.4, 4, "world"))
+      assert(!it.hasNext)
+
+      batch.close()
+    }}
+  }
+
   private def doubleEquals(d1: Double, d2: Double): Boolean = {
     if (d1.isNaN && d2.isNaN) {
       true
