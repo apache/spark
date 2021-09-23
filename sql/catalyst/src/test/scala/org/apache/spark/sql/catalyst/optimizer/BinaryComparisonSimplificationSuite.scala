@@ -209,5 +209,11 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
     checkCondition(boolRelation, TrueLiteral <=> IsNull('a), IsNull('a))
     checkCondition(boolRelation, IsNull('a) <=> FalseLiteral, IsNotNull('a))
     checkCondition(boolRelation, FalseLiteral <=> IsNull('a), IsNotNull('a))
+
+    // Should not optimize for nullable <=> Literal
+    checkCondition(boolRelation, And('a, 'b) <=> TrueLiteral, And('a, 'b) <=> TrueLiteral)
+    checkCondition(boolRelation, TrueLiteral <=> And('a, 'b), TrueLiteral <=> And('a, 'b))
+    checkCondition(boolRelation, And('a, 'b) <=> FalseLiteral, And('a, 'b) <=> FalseLiteral)
+    checkCondition(boolRelation, FalseLiteral <=> And('a, 'b), FalseLiteral <=> And('a, 'b))
   }
 }
