@@ -56,7 +56,7 @@ There are multiple ways to manage Python dependencies in the cluster:
 - Using PySpark Native Features
 - Using Conda
 - Using Virtualenv
-- Using PEX
+- Using PEX or Shiv
 
 
 Using PySpark Native Features
@@ -187,12 +187,14 @@ In the case of a pyspark shell:
     pyspark --archives pyspark_venv.tar.gz#environment
 
 
-Using PEX
----------
+Using PEX or Shiv
+-----------------
 
-PySpark can also use `PEX <https://github.com/pantsbuild/pex>`_ to ship the Python packages
-together. PEX is a tool that creates a self-contained Python environment. This is similar
-to Conda or virtualenv, but a ``.pex`` file is executable by itself.
+PySpark can also use `PEX <https://github.com/pantsbuild/pex>`_ or `Shiv
+<https://github.com/linkedin/shiv>`_ to ship the Python packages together. PEX
+and Shiv are tools that create a self-contained Python environment. This is
+similar to Conda or virtualenv, but a ``.pex`` or ``.pyz`` file is executable
+by itself.
 
 The following example creates a ``.pex`` file for the driver and executor to use.
 The file contains the Python dependencies specified with the ``pex`` command.
@@ -209,15 +211,36 @@ This file behaves similarly with a regular Python interpreter.
     ./pyspark_pex_env.pex -c "import pandas; print(pandas.__version__)"
     1.1.5
 
-However, ``.pex`` file does not include a Python interpreter itself under the hood so all
-nodes in a cluster should have the same Python interpreter installed.
+Similar commands can be used to package dependencies using the ``shiv`` command
+which creates a ``.pyz`` file for the driver and executor to use.
 
-In order to transfer and use the ``.pex`` file in a cluster, you should ship it via the
-``spark.files`` configuration (``spark.yarn.dist.files`` in YARN) or ``--files`` option because they are regular files instead
-of directories or archive files.
+.. code-block:: bash
+
+    pip install pyarrow pandas shiv
+    shiv pyspark pyarrow pandas -o pyspark_shiv_env.pyz -q
+
+This file behaves similarly with a regular Python interpreter.
+
+.. code-block:: bash
+
+    ./pyspark_shiv_env.pyz -c "import pandas; print(pandas.__version__)"
+    1.3.3
+
+However, neither the ``.pex`` file nor the ``.pyz`` file contains a Python
+interpreter itself. All nodes in a cluster should have the same Python
+interpreter installed. For a discussion of PEX and Shiv packaging tools, read
+the `Motivation & Comparisons
+<https://shiv.readthedocs.io/en/latest/history.html>`_ page in the Shiv
+documentation.
+
+In order to transfer and use the ``.pex`` or ``.pyz`` file in a cluster, you
+should ship it via the ``spark.files`` configuration (``spark.yarn.dist.files``
+in YARN) or ``--files`` option because they are regular files instead of
+directories or archive files.
 
 For application submission, you run the commands as shown below.
 Note that ``PYSPARK_DRIVER_PYTHON`` should not be set for cluster modes in YARN or Kubernetes.
+The example below uses a ``.pex`` file and would work similarly with a ``.pyz`` file.
 
 .. code-block:: bash
 
