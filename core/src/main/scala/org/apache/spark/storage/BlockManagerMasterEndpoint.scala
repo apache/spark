@@ -596,7 +596,6 @@ class BlockManagerMasterEndpoint(
    }
  }
 
-
   private def updateBlockInfo(
       blockManagerId: BlockManagerId,
       blockId: BlockId,
