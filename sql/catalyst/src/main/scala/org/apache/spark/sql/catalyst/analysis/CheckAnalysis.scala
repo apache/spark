@@ -403,13 +403,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               }
               val isUnion = operator.isInstanceOf[Union]
               val dataTypesAreCompatibleFn = if (isUnion) {
-                // `TypeCoercion` takes care of type coercion already. If any columns or nested
-                // columns are not compatible, we detect it here and throw analysis exception.
-                val typeChecker = (dt1: DataType, dt2: DataType) => {
-                  !TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty
-                }
                 (dt1: DataType, dt2: DataType) =>
-                  !DataType.equalsStructurally(dt1, dt2, true, typeChecker)
+                  !DataType.equalsStructurally(dt1, dt2, true)
               } else {
                 // SPARK-18058: we shall not care about the nullability of columns
                 (dt1: DataType, dt2: DataType) =>
