@@ -422,7 +422,7 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("inactivity timeout does not interrupt long running command") {
     try {
-      Main.conf.set(InactivityTimeout.REPL_INACTIVITY_TIMEOUT, "500ms")
+      Main.conf.set(InactivityTimeout.REPL_INACTIVITY_TIMEOUT, "1s")
       val logs = runInterpreterAndGetErrors(
         s"""
            |Thread.sleep(2000)
