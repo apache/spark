@@ -25,7 +25,7 @@ import org.apache.spark.sql.connector.expressions.filter.Filter;
  * push down V2 {@link Filter} to the data source and reduce the size of the data to be read.
  * Please Note that this interface is preferred over {@link SupportsPushDownFilters}, which uses
  * V1 {@link org.apache.spark.sql.sources.Filter} and is less efficient due to the
- * internal -> external data conversion.
+ * internal -&gt; external data conversion.
  *
  * @since 3.3.0
  */
