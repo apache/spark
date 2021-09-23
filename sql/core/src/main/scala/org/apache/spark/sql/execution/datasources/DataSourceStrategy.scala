@@ -705,20 +705,19 @@ object DataSourceStrategy
     if (aggregates.filter.isEmpty) {
       aggregates.aggregateFunction match {
         case aggregate.Min(PushableColumnWithoutNestedColumn(name)) =>
-          Some(new Min(FieldReference(name).asInstanceOf[FieldReference]))
+          Some(new Min(FieldReference(name)))
         case aggregate.Max(PushableColumnWithoutNestedColumn(name)) =>
-          Some(new Max(FieldReference(name).asInstanceOf[FieldReference]))
+          Some(new Max(FieldReference(name)))
         case count: aggregate.Count if count.children.length == 1 =>
           count.children.head match {
             // SELECT COUNT(*) FROM table is translated to SELECT 1 FROM table
             case Literal(_, _) => Some(new CountStar())
             case PushableColumnWithoutNestedColumn(name) =>
-              Some(new Count(FieldReference(name).asInstanceOf[FieldReference],
-                aggregates.isDistinct))
+              Some(new Count(FieldReference(name), aggregates.isDistinct))
             case _ => None
           }
         case sum @ aggregate.Sum(PushableColumnWithoutNestedColumn(name), _) =>
-          Some(new Sum(FieldReference(name).asInstanceOf[FieldReference], aggregates.isDistinct))
+          Some(new Sum(FieldReference(name), aggregates.isDistinct))
         case _ => None
       }
     } else {

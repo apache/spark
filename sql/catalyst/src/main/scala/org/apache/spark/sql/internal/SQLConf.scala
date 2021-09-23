@@ -666,6 +666,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN =
+    buildConf("spark.sql.adaptive.forceOptimizeSkewedJoin")
+      .doc("When true, force enable OptimizeSkewedJoin even if it introduces extra shuffle.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS =
     buildConf("spark.sql.adaptive.customCostEvaluatorClass")
       .doc("The custom cost evaluator class to be used for adaptive execution. If not being set," +
@@ -1860,6 +1867,13 @@ object SQLConf {
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
+
+  val COLLAPSE_PROJECT_ALWAYS_INLINE = buildConf("spark.sql.optimizer.collapseProjectAlwaysInline")
+    .doc("Whether to always collapse two adjacent projections and inline expressions even if " +
+      "it causes extra duplication.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()

@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -85,10 +86,44 @@ object OrcUtils extends Logging {
   }
 
   private def toCatalystSchema(schema: TypeDescription): StructType = {
+    import TypeDescription.Category
+
+    def toCatalystType(orcType: TypeDescription): DataType = {
+      orcType.getCategory match {
+        case Category.STRUCT => toStructType(orcType)
+        case Category.LIST => toArrayType(orcType)
+        case Category.MAP => toMapType(orcType)
+        case _ => CatalystSqlParser.parseDataType(orcType.toString)
+      }
+    }
+
+    def toStructType(orcType: TypeDescription): StructType = {
+      val fieldNames = orcType.getFieldNames.asScala
+      val fieldTypes = orcType.getChildren.asScala
+      val fields = new ArrayBuffer[StructField]()
+      fieldNames.zip(fieldTypes).foreach {
+        case (fieldName, fieldType) =>
+          val catalystType = toCatalystType(fieldType)
+          fields += StructField(fieldName, catalystType)
+      }
+      StructType(fields.toSeq)
+    }
+
+    def toArrayType(orcType: TypeDescription): ArrayType = {
+      val elementType = orcType.getChildren.get(0)
+      ArrayType(toCatalystType(elementType))
+    }
+
+    def toMapType(orcType: TypeDescription): MapType = {
+      val Seq(keyType, valueType) = orcType.getChildren.asScala.toSeq
+      val catalystKeyType = toCatalystType(keyType)
+      val catalystValueType = toCatalystType(valueType)
+      MapType(catalystKeyType, catalystValueType)
+    }
+
     // The Spark query engine has not completely supported CHAR/VARCHAR type yet, and here we
     // replace the orc CHAR/VARCHAR with STRING type.
-    CharVarcharUtils.replaceCharVarcharWithStringInSchema(
-      CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType])
+    CharVarcharUtils.replaceCharVarcharWithStringInSchema(toStructType(schema))
   }
 
   def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])

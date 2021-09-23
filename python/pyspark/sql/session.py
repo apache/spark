@@ -30,7 +30,7 @@ from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.types import DataType, StructType, \
     _make_type_verifier, _infer_schema, _has_nulltype, _merge_type, _create_converter, \
     _parse_datatype_string
-from pyspark.sql.utils import install_exception_handler
+from pyspark.sql.utils import install_exception_handler, is_timestamp_ntz_preferred
 
 __all__ = ["SparkSession"]
 
@@ -419,9 +419,6 @@ class SparkSession(SparkConversionMixin):
 
         return DataFrame(jdf, self._wrapped)
 
-    def _is_timestamp_ntz_preferred(self):
-        return self._wrapped._conf.timestampType().typeName() == "timestamp_ntz"
-
     def _inferSchemaFromList(self, data, names=None):
         """
         Infer schema from list of Row, dict, or tuple.
@@ -440,7 +437,7 @@ class SparkSession(SparkConversionMixin):
         if not data:
             raise ValueError("can not infer schema from empty dataset")
         infer_dict_as_struct = self._wrapped._conf.inferDictAsStruct()
-        prefer_timestamp_ntz = self._is_timestamp_ntz_preferred()
+        prefer_timestamp_ntz = is_timestamp_ntz_preferred()
         schema = reduce(_merge_type, (
             _infer_schema(row, names, infer_dict_as_struct, prefer_timestamp_ntz)
                         for row in data))
@@ -470,7 +467,7 @@ class SparkSession(SparkConversionMixin):
                              "can not infer schema")
 
         infer_dict_as_struct = self._wrapped._conf.inferDictAsStruct()
-        prefer_timestamp_ntz = self._is_timestamp_ntz_preferred()
+        prefer_timestamp_ntz = is_timestamp_ntz_preferred()
         if samplingRatio is None:
             schema = _infer_schema(
                 first,

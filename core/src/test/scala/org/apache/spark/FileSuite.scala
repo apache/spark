@@ -28,7 +28,7 @@ import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io._
-import org.apache.hadoop.io.compress.{BZip2Codec, CompressionCodec, DefaultCodec}
+import org.apache.hadoop.io.compress.{BZip2Codec, CompressionCodec, DefaultCodec, Lz4Codec}
 import org.apache.hadoop.mapred.{FileAlreadyExistsException, FileSplit, JobConf, TextInputFormat, TextOutputFormat}
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.{FileSplit => NewFileSplit, TextInputFormat => NewTextInputFormat}
@@ -38,7 +38,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Utils, VersionUtils}
 
 class FileSuite extends SparkFunSuite with LocalSparkContext {
   var tempDir: File = _
@@ -136,10 +136,12 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   // Hadoop "gzip" and "zstd" codecs require native library installed for sequence files
-  // "snappy" and "lz4" codecs do not work due to SPARK-36669 and SPARK-36681.
-  Seq((new DefaultCodec(), "default"), (new BZip2Codec(), "bzip2")).foreach {
-    case (codec, codecName) =>
-      runSequenceFileCodecTest(codec, codecName)
+  // "snappy" codec does not work due to SPARK-36681.
+  val codecs = Seq((new DefaultCodec(), "default"), (new BZip2Codec(), "bzip2")) ++ {
+    if (VersionUtils.isHadoop3) Seq((new Lz4Codec(), "lz4")) else Seq()
+  }
+  codecs.foreach { case (codec, codecName) =>
+    runSequenceFileCodecTest(codec, codecName)
   }
 
   test("SequenceFile with writable key") {

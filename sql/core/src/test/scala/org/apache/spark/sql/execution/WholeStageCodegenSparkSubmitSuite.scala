@@ -21,8 +21,8 @@ import org.scalatest.{Assertions, BeforeAndAfterEach}
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkFunSuite, TestUtils}
-import org.apache.spark.deploy.SparkSubmitSuite
+import org.apache.spark.TestUtils
+import org.apache.spark.deploy.SparkSubmitTestUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.functions.{array, col, count, lit}
@@ -31,7 +31,7 @@ import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.ResetSystemProperties
 
 // Due to the need to set driver's extraJavaOptions, this test needs to use actual SparkSubmit.
-class WholeStageCodegenSparkSubmitSuite extends SparkFunSuite
+class WholeStageCodegenSparkSubmitSuite extends SparkSubmitTestUtils
   with Matchers
   with BeforeAndAfterEach
   with ResetSystemProperties {
@@ -51,7 +51,7 @@ class WholeStageCodegenSparkSubmitSuite extends SparkFunSuite
       "--conf", "spark.executor.extraJavaOptions=-XX:+UseCompressedOops",
       "--conf", "spark.sql.adaptive.enabled=false",
       unusedJar.toString)
-    SparkSubmitSuite.runSparkSubmit(argsForSparkSubmit, "../..", 3.minutes)
+    runSparkSubmit(argsForSparkSubmit, timeout = 3.minutes)
   }
 }
 

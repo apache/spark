@@ -38,7 +38,6 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.util.Utils
 
@@ -459,8 +458,8 @@ class RocksDBFileManager(
         throw e
     } finally {
       // Close everything no matter what happened
-      JavaUtils.closeQuietly(in)
-      JavaUtils.closeQuietly(zout)
+      IOUtils.closeQuietly(in)
+      IOUtils.closeQuietly(zout)
     }
   }
 

@@ -23,6 +23,7 @@ from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.types import IntegralType
 from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, \
     DoubleType, BooleanType, MapType, TimestampType, TimestampNTZType, StructType, DataType
+from pyspark.sql.utils import is_timestamp_ntz_preferred
 from pyspark.traceback_utils import SCCallSiteSync
 
 
@@ -372,7 +373,7 @@ class SparkConversionMixin(object):
                                 copied = True
                             pdf[field.name] = s
             else:
-                should_localize = not self._is_timestamp_ntz_preferred()
+                should_localize = not is_timestamp_ntz_preferred()
                 for column, series in pdf.iteritems():
                     s = series
                     if should_localize and is_datetime64tz_dtype(s.dtype) and s.dt.tz is not None:
@@ -455,7 +456,7 @@ class SparkConversionMixin(object):
         if isinstance(schema, (list, tuple)):
             arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
             struct = StructType()
-            prefer_timestamp_ntz = self._is_timestamp_ntz_preferred()
+            prefer_timestamp_ntz = is_timestamp_ntz_preferred()
             for name, field in zip(schema, arrow_schema):
                 struct.add(
                     name,
