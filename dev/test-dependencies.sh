@@ -106,7 +106,7 @@ for HADOOP_HIVE_PROFILE in "${HADOOP_HIVE_PROFILES[@]}"; do
       classifier_end_index=index(jar_name, ".jar") - 1;
       classifier=substr(jar_name, classifier_start_index, classifier_end_index - classifier_start_index + 1);
       print artifact_id"/"version"/"classifier"/"jar_name
-    }' | sort | grep -v spark > dev/pr-deps/spark-deps-$HADOOP_HIVE_PROFILE
+    }' | sort | grep -v spark > dev/pr-deps/spark-deps-$HADOOP_HIVE_PROFILE-scala-$SCALA_BINARY_VERSION
 done
 
 if [[ $@ == **replace-manifest** ]]; then
@@ -121,8 +121,8 @@ for HADOOP_HIVE_PROFILE in "${HADOOP_HIVE_PROFILES[@]}"; do
   dep_diff="$(
     git diff \
     --no-index \
-    dev/deps/spark-deps-$HADOOP_HIVE_PROFILE \
-    dev/pr-deps/spark-deps-$HADOOP_HIVE_PROFILE \
+    dev/deps/spark-deps-$HADOOP_HIVE_PROFILE-scala-$SCALA_BINARY_VERSION \
+    dev/pr-deps/spark-deps-$HADOOP_HIVE_PROFILE-scala-$SCALA_BINARY_VERSION \
   )"
   set -e
   if [ "$dep_diff" != "" ]; then
