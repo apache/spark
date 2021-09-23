@@ -1563,9 +1563,9 @@ abstract class DynamicPartitionPruningSuiteBase
             checkPartitionPruningPredicate(df, false, !inferFiltersFromConstraintsEnabled)
             checkAnswer(df,
               Row(1030, 2, 3) ::
-                Row(1040, 2, 3) ::
-                Row(1050, 2, 3) ::
-                Row(1060, 2, 3) :: Nil
+              Row(1040, 2, 3) ::
+              Row(1050, 2, 3) ::
+              Row(1060, 2, 3) :: Nil
             )
           }
         }
