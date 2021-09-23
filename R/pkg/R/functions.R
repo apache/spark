@@ -929,6 +929,19 @@ setMethod("crc32",
           })
 
 #' @details
+#' \code{csc}: Returns the cosecant of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases csc csc,Column-method
+#' @note csc since 3.3.0
+setMethod("csc",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "csc", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{hash}: Calculates the hash code of given columns, and returns the result
 #' as an int column.
 #'
@@ -3387,6 +3400,19 @@ setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "rpad",
                               x@jc, as.integer(len), pad)
+            column(jc)
+          })
+
+#' @details
+#' \code{sec}: Returns the secant of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases sec sec,Column-method
+#' @note sec since 3.3.0
+setMethod("sec",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "sec", x@jc)
             column(jc)
           })
 
