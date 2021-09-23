@@ -920,7 +920,8 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
         p2.copy(projectList = buildCleanedProjectList(p1.projectList, p2.projectList))
       }
     case p @ Project(_, agg: Aggregate) =>
-      if (haveCommonNonDeterministicOutput(p.projectList, agg.aggregateExpressions)) {
+      if (haveCommonNonDeterministicOutput(p.projectList, agg.aggregateExpressions) ||
+          !canCollapseAggregate(p, agg)) {
         p
       } else {
         agg.copy(aggregateExpressions = buildCleanedProjectList(
@@ -948,6 +949,18 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
     upper.exists(_.collect {
       case a: Attribute if aliases.contains(a) => aliases(a).child
     }.exists(!_.deterministic))
+  }
+
+  /**
+   * A project cannot be collapsed with an aggregate when there are correlated scalar
+   * subqueries in the project list, because currently we only allow correlated subqueries
+   * in aggregate if they are also part of the grouping expressions. Otherwise the plan
+   * after subquery rewrite will not be valid.
+   */
+  private def canCollapseAggregate(p: Project, a: Aggregate): Boolean = {
+    p.projectList.forall(_.collect {
+      case s: ScalarSubquery if s.outerAttrs.nonEmpty => s
+    }.isEmpty)
   }
 
   private def buildCleanedProjectList(
