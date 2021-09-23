@@ -128,7 +128,7 @@ Join hints allow users to suggest the join strategy that Spark should use. Prior
 
 * **BROADCAST_NL**
 
-    Suggests that Spark use broadcast nested loop join. The join side with the hint will be broadcast regardless of `autoBroadcastJoinThreshold`. If both sides of the join have the broadcast hints, the one with the smaller size (based on stats) will be broadcast. Note that, this hint is only useful if the join type and build side is not supported by hash join. i.e. full outer join, left outer/semi/anti join with build left, right outer join with build right.
+    Suggests that Spark use broadcast nested loop join. The join side with the hint will be broadcast regardless of `autoBroadcastJoinThreshold`. If both sides of the join have the broadcast hints, the one with the smaller size (based on stats) will be broadcast. Note that, this hint is only useful if the join type and build side is not supported by broadcast hash join. i.e. full outer join, left outer/semi/anti join with build left, right outer join with build right.
 
 #### Examples
 
