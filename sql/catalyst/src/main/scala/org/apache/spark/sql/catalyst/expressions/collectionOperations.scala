@@ -3433,17 +3433,12 @@ case class ArrayDistinct(child: Expression)
             hs.add(value)
           },
         (valueNaN: Any) => arrayBuffer += valueNaN)
+      val withNullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
+        (value: Any) => withNaNCheckFunc(value),
+        () => arrayBuffer += null)
       var i = 0
       while (i < array.numElements()) {
-        if (array.isNullAt(i)) {
-          if (!hs.containsNull) {
-            hs.addNull
-            arrayBuffer += null
-          }
-        } else {
-          val elem = array.get(i, elementType)
-          withNaNCheckFunc(elem)
-        }
+        withNullCheckFunc(array)(i)
         i += 1
       }
       new GenericArrayData(arrayBuffer.toSeq)
@@ -3625,18 +3620,14 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
               hs.add(value)
             },
           (valueNaN: Any) => arrayBuffer += valueNaN)
+        val withNullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
+          (value: Any) => withNaNCheckFunc(value),
+          () => arrayBuffer += null
+        )
         Seq(array1, array2).foreach { array =>
           var i = 0
           while (i < array.numElements()) {
-            if (array.isNullAt(i)) {
-              if (!hs.containsNull) {
-                hs.addNull
-                arrayBuffer += null
-              }
-            } else {
-              val elem = array.get(i, elementType)
-              withNaNCheckFunc(elem)
-            }
+            withNullCheckFunc(array)(i)
             i += 1
           }
         }
@@ -3852,6 +3843,10 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
           val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
             (value: Any) => hs.add(value),
             (valueNaN: Any) => {} )
+          val withArray2NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
+            (value: Any) => withArray2NaNCheckFunc(value),
+            () => {}
+          )
           val withArray1NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hsResult,
             (value: Any) =>
               if (hs.contains(value) && !hsResult.contains(value)) {
@@ -3862,27 +3857,22 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
               if (hs.containsNaN()) {
                 arrayBuffer += valueNaN
               })
+          val withArray1NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hsResult,
+            (value: Any) => withArray1NaNCheckFunc(value),
+            () =>
+              if (hs.containsNull()) {
+                arrayBuffer += null
+              }
+          )
+
           var i = 0
           while (i < array2.numElements()) {
-            if (array2.isNullAt(i)) {
-              hs.addNull()
-            } else {
-              val elem = array2.get(i, elementType)
-              withArray2NaNCheckFunc(elem)
-            }
+            withArray2NullCheckFunc(array2)(i)
             i += 1
           }
           i = 0
           while (i < array1.numElements()) {
-            if (array1.isNullAt(i)) {
-              if (hs.containsNull() && !hsResult.containsNull()) {
-                arrayBuffer += null
-                hsResult.addNull()
-              }
-            } else {
-              val elem = array1.get(i, elementType)
-              withArray1NaNCheckFunc(elem)
-            }
+            withArray1NullCheckFunc(array1)(i)
             i += 1
           }
           new GenericArrayData(arrayBuffer.toSeq)
@@ -4113,6 +4103,10 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
         val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
           (value: Any) => hs.add(value),
           (valueNaN: Any) => {})
+        val withArray2NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
+          (value: Any) => withArray2NaNCheckFunc(value),
+          () => {}
+        )
         val withArray1NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
           (value: Any) =>
             if (!hs.contains(value)) {
@@ -4120,27 +4114,18 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
               hs.add(value)
             },
           (valueNaN: Any) => arrayBuffer += valueNaN)
+        val withArray1NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
+          (value: Any) => withArray1NaNCheckFunc(value),
+          () => arrayBuffer += null
+        )
         var i = 0
         while (i < array2.numElements()) {
-          if (array2.isNullAt(i)) {
-            hs.addNull()
-          } else {
-            val elem = array2.get(i, elementType)
-            withArray2NaNCheckFunc(elem)
-          }
+          withArray2NullCheckFunc(array2)(i)
           i += 1
         }
         i = 0
         while (i < array1.numElements()) {
-          if (array1.isNullAt(i)) {
-            if (!hs.containsNull()) {
-              arrayBuffer += null
-              hs.addNull()
-            }
-          } else {
-            val elem = array1.get(i, elementType)
-            withArray1NaNCheckFunc(elem)
-          }
+          withArray1NullCheckFunc(array1)(i)
           i += 1
         }
         new GenericArrayData(arrayBuffer.toSeq)
