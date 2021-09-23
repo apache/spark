@@ -21,7 +21,8 @@ import java.util.Date
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable
 
 import org.apache.spark._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
@@ -1253,44 +1254,46 @@ private[spark] class AppStatusListener(
     toDelete.foreach { j => kvstore.delete(j.getClass(), j.info.jobId) }
   }
 
+  private case class StageCompletionTime(
+      stageId: Int,
+      attemptId: Int,
+      completionTime: Long)
+
   private def cleanupStages(count: Long): Unit = {
     val countToDelete = calculateNumberToRemove(count, conf.get(MAX_RETAINED_STAGES))
     if (countToDelete <= 0L) {
       return
     }
 
+    val stageArray = new ArrayBuffer[StageCompletionTime]()
+    val stageDataCount = new mutable.HashMap[Int, Int]()
+    kvstore.view(classOf[StageDataWrapper]).forEach { s =>
+      // Here we keep track of the total number of StageDataWrapper entries for each stage id.
+      // This will be used in cleaning up the RDDOperationGraphWrapper data.
+      if (stageDataCount.contains(s.info.stageId)) {
+        stageDataCount(s.info.stageId) += 1
+      } else {
+        stageDataCount(s.info.stageId) = 1
+      }
+      if (s.info.status != v1.StageStatus.ACTIVE && s.info.status != v1.StageStatus.PENDING) {
+        val candidate =
+          StageCompletionTime(s.info.stageId, s.info.attemptId, s.completionTime)
+        stageArray.append(candidate)
+      }
+    }
+
     // As the completion time of a skipped stage is always -1, we will remove skipped stages first.
     // This is safe since the job itself contains enough information to render skipped stages in the
     // UI.
-    val view = kvstore.view(classOf[StageDataWrapper]).index("completionTime")
-    val stages = KVUtils.viewToSeq(view, countToDelete.toInt) { s =>
-      s.info.status != v1.StageStatus.ACTIVE && s.info.status != v1.StageStatus.PENDING
-    }
-
-    val stageIds = stages.map { s =>
-      val key = Array(s.info.stageId, s.info.attemptId)
-      kvstore.delete(s.getClass(), key)
-
+    val stageIds = stageArray.sortBy(_.completionTime).take(countToDelete.toInt).map { s =>
+      val key = Array(s.stageId, s.attemptId)
+      kvstore.delete(classOf[StageDataWrapper], key)
+      stageDataCount(s.stageId) -= 1
       // Check whether there are remaining attempts for the same stage. If there aren't, then
       // also delete the RDD graph data.
-      val remainingAttempts = kvstore.view(classOf[StageDataWrapper])
-        .index("stageId")
-        .first(s.info.stageId)
-        .last(s.info.stageId)
-        .closeableIterator()
-
-      val hasMoreAttempts = try {
-        remainingAttempts.asScala.exists { other =>
-          other.info.attemptId != s.info.attemptId
-        }
-      } finally {
-        remainingAttempts.close()
+      if (stageDataCount(s.stageId) == 0) {
+        kvstore.delete(classOf[RDDOperationGraphWrapper], s.stageId)
       }
-
-      if (!hasMoreAttempts) {
-        kvstore.delete(classOf[RDDOperationGraphWrapper], s.info.stageId)
-      }
-
       cleanupCachedQuantiles(key)
       key
     }
