@@ -159,7 +159,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       PullOutGroupingExpressions,
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager),
-      SpecialDatetimeValues) ::
+      SpecialDatetimeValues,
+      RewriteAsOfJoin) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -185,8 +186,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // PropagateEmptyRelation can change the nullability of an attribute from nullable to
       // non-nullable when an empty relation child of a Union is removed
       UpdateAttributeNullability) ::
-    Batch("Rewrite with Correlated Expressions", Once,
-      RewriteAsOfJoin) ::
     Batch("Pullup Correlated Expressions", Once,
       OptimizeOneRowRelationSubquery,
       PullupCorrelatedPredicates) ::
@@ -2122,68 +2121,6 @@ object RewriteIntersectAll extends Rule[LogicalPlan] {
         projectMinPlan
       )
       Project(left.output, genRowPlan)
-  }
-}
-
-/**
- * Replaces logical [[AsOfJoin]] operator using a combination of Join and Aggregate operator.
- *
- * Input Pseudo-Query:
- * {{{
- *    SELECT * FROM left ASOF JOIN right ON (condition, as_of on(left.t, right.t), tolerance)
- * }}}
- *
- * Rewritten Query:
- * {{{
- *   SELECT left.*, __right__.*
- *   FROM (
- *        SELECT
- *             left.*,
- *             (
- *                  SELECT MIN_BY(STRUCT(right.*), left.t - right.t)
- *                  FROM right
- *                  WHERE condition AND left.t >= right.t AND right.t >= left.t - tolerance
- *             ) as __right__
- *        FROM left
- *        )
- * }}}
- */
-object RewriteAsOfJoin extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(AS_OF_JOIN), ruleId) {
-    case AsOfJoin(left, right, asOfCondition, condition, orderExpression, joinType) =>
-      val conditionWithOuterReference =
-        condition.map(And(_, asOfCondition)).getOrElse(asOfCondition).transformUp {
-          case a: AttributeReference if left.outputSet.contains(a) =>
-            OuterReference(a)
-      }
-      val filtered = Filter(conditionWithOuterReference, right)
-
-      val orderExpressionWithOuterReference = orderExpression.transformUp {
-          case a: AttributeReference if left.outputSet.contains(a) =>
-            OuterReference(a)
-        }
-      val rightStruct = CreateStruct(right.output)
-      val nearestRight = MinBy(rightStruct, orderExpressionWithOuterReference)
-        .toAggregateExpression()
-      val aggExpr = Alias(nearestRight, "__nearest_right__")()
-      val aggregate = Aggregate(Seq.empty, Seq(aggExpr), filtered)
-
-      val scalarSubquery = Project(
-        left.output :+ Alias(ScalarSubquery(aggregate, left.output), "__right__")(),
-        left)
-
-      val filterRight = joinType match {
-        case LeftOuter => scalarSubquery
-        case _ => Filter(IsNotNull(scalarSubquery.output.last), scalarSubquery)
-      }
-
-      Project(
-        left.output ++ right.output.zipWithIndex.map {
-          case (out, idx) =>
-            Alias(GetStructField(filterRight.output.last, idx), out.name)(exprId = out.exprId)
-        },
-        filterRight)
   }
 }
 

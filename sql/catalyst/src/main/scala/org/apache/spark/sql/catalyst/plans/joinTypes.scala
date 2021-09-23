@@ -125,7 +125,7 @@ object LeftSemiOrAnti {
 object AsOfJoinDirection {
 
   def apply(direction: String): AsOfJoinDirection = {
-    direction.toLowerCase(Locale.ROOT).replace("_", "") match {
+    direction.toLowerCase(Locale.ROOT) match {
       case "forward" => Forward
       case "backward" => Backward
       case "nearest" => Nearest
