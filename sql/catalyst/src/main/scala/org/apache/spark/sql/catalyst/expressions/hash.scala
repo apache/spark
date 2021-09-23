@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit._
 import java.util.zip.CRC32
 
 import scala.annotation.tailrec
+import scala.math.BigInt
 
 import org.apache.commons.codec.digest.DigestUtils
 
@@ -111,8 +112,10 @@ case class Sha2(left: Expression, right: Expression)
         // DigestUtils doesn't support SHA-224 now
         try {
           val md = MessageDigest.getInstance("SHA-224")
-          md.update(input)
-          UTF8String.fromBytes(md.digest())
+          val messageDigest = md.digest(input);
+          val hashText = BigInt(1, messageDigest).toString(16);
+          val paddedHashText = "0" * (56 - hashText.length()) + hashText
+          UTF8String.fromString(paddedHashText);
         } catch {
           // SHA-224 is not supported on the system, return null
           case noa: NoSuchAlgorithmException => null
@@ -134,8 +137,10 @@ case class Sha2(left: Expression, right: Expression)
         if ($eval2 == 224) {
           try {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-224");
-            md.update($eval1);
-            ${ev.value} = UTF8String.fromBytes(md.digest());
+            byte[] messageDigest = md.digest($eval1);
+            String hashText = new java.math.BigInteger(1, messageDigest).toString(16);
+            hashText = String.format("%56s", hashText).replace(' ', '0');
+            ${ev.value} = UTF8String.fromString(hashText);
           } catch (java.security.NoSuchAlgorithmException e) {
             ${ev.isNull} = true;
           }
