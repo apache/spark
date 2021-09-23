@@ -605,7 +605,6 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   private def genCodeWithSet(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
       val setTerm = ctx.addReferenceObj("set", set)
-      val hasNaNValue = ctx.addReferenceObj("hasNaN", hasNaN)
 
       val setIsNull = if (hasNull) {
         s"${ev.isNull} = !${ev.value};"
@@ -624,7 +623,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
           |if ($setTerm.contains($c)) {
           |  ${ev.value} = true;
           |} else if (${isNaN(c)}) {
-          |  ${ev.value} =  $hasNaNValue;
+          |  ${ev.value} =  $hasNaN;
           |}
           |$setIsNull
           |""".stripMargin
