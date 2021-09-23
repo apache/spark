@@ -382,9 +382,11 @@ class FileBasedDataSourceSuite extends QueryTest
             msg.toLowerCase(Locale.ROOT).contains(msg2))
         }
 
-        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+        withSQLConf(
+          SQLConf.USE_V1_SOURCE_LIST.key -> useV1List,
+          SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
           // write path
-          Seq("csv", "json", "orc").foreach { format =>
+          Seq("csv", "json", "parquet", "orc").foreach { format =>
             val msg = intercept[AnalysisException] {
               sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
             }.getMessage
