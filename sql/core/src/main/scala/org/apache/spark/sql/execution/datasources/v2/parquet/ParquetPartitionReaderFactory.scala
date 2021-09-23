@@ -83,7 +83,6 @@ case class ParquetPartitionReaderFactory(
   private val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
   private val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
   private val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
-  private val columnBatchSize = sqlConf.columnBatchSize
 
   private def getFooter(file: PartitionedFile): ParquetMetadata = {
     val conf = broadcastedConf.value.value
@@ -92,6 +91,12 @@ case class ParquetPartitionReaderFactory(
     if (aggregation.isEmpty) {
       ParquetFooterReader.readFooter(conf, filePath, SKIP_ROW_GROUPS)
     } else {
+      // For aggregate push down, we will get max/min/count from footer statistics.
+      // We want to read the footer for the whole file instead of reading multiple
+      // footers for every split of the file. Basically if the start (the beginning of)
+      // the offset in PartitionedFile is 0, we will read the footer. Otherwise, it means
+      // that we have already read footer for that file, so we will skip reading again.
+      if (file.start != 0) return null
       ParquetFooterReader.readFooter(conf, filePath, NO_FILTER)
     }
   }
@@ -127,15 +132,23 @@ case class ParquetPartitionReaderFactory(
     } else {
       new PartitionReader[InternalRow] {
         private var hasNext = true
-
-        override def next(): Boolean = hasNext
+        private lazy val row: InternalRow = {
+          val footer = getFooter(file)
+          if (footer != null && footer.getBlocks.size > 0) {
+            ParquetUtils.createAggInternalRowFromFooter(footer, dataSchema, partitionSchema,
+              aggregation.get, readDataSchema, getDatetimeRebaseMode(footer.getFileMetaData),
+              isCaseSensitive)
+          } else {
+            null
+          }
+        }
+        override def next(): Boolean = {
+          hasNext && row != null
+        }
 
         override def get(): InternalRow = {
           hasNext = false
-          val footer = getFooter(file)
-          ParquetUtils.createAggInternalRowFromFooter(footer, dataSchema, partitionSchema,
-            aggregation.get, readDataSchema, getDatetimeRebaseMode(footer.getFileMetaData),
-            isCaseSensitive)
+          row
         }
 
         override def close(): Unit = {}
@@ -162,15 +175,24 @@ case class ParquetPartitionReaderFactory(
     } else {
       new PartitionReader[ColumnarBatch] {
         private var hasNext = true
+        private var row: ColumnarBatch = {
+          val footer = getFooter(file)
+          if (footer != null && footer.getBlocks.size > 0) {
+            ParquetUtils.createAggColumnarBatchFromFooter(footer, dataSchema, partitionSchema,
+              aggregation.get, readDataSchema, enableOffHeapColumnVector,
+              getDatetimeRebaseMode(footer.getFileMetaData), isCaseSensitive)
+          } else {
+            null
+          }
+        }
 
-        override def next(): Boolean = hasNext
+        override def next(): Boolean = {
+          hasNext && row != null
+        }
 
         override def get(): ColumnarBatch = {
           hasNext = false
-          val footer = getFooter(file)
-          ParquetUtils.createAggColumnarBatchFromFooter(footer, dataSchema, partitionSchema,
-            aggregation.get, readDataSchema, enableOffHeapColumnVector,
-            getDatetimeRebaseMode(footer.getFileMetaData), isCaseSensitive)
+          row
         }
 
         override def close(): Unit = {}

@@ -161,39 +161,39 @@ object ParquetUtils {
       aggSchema: StructType,
       datetimeRebaseMode: LegacyBehaviorPolicy.Value,
       isCaseSensitive: Boolean): InternalRow = {
-    val (primitiveType, values) =
+    val (primitiveTypes, values) =
       getPushedDownAggResult(footer, dataSchema, partitionSchema, aggregation, isCaseSensitive)
 
-    val builder = Types.buildMessage()
-    primitiveType.foreach(t => builder.addField(t))
+    val builder = Types.buildMessage
+    primitiveTypes.foreach(t => builder.addField(t))
     val parquetSchema = builder.named("root")
 
     val schemaConverter = new ParquetToSparkSchemaConverter
     val converter = new ParquetRowConverter(schemaConverter, parquetSchema, aggSchema,
       None, datetimeRebaseMode, LegacyBehaviorPolicy.CORRECTED, NoopUpdater)
-    val primitiveTypeName = primitiveType.map(_.getPrimitiveTypeName)
+    val primitiveTypeName = primitiveTypes.map(_.getPrimitiveTypeName)
     primitiveTypeName.zipWithIndex.foreach {
       case (PrimitiveType.PrimitiveTypeName.BOOLEAN, i) =>
         val v = values(i).asInstanceOf[Boolean]
-        converter.getConverter(i).asPrimitiveConverter().addBoolean(v)
+        converter.getConverter(i).asPrimitiveConverter.addBoolean(v)
       case (PrimitiveType.PrimitiveTypeName.INT32, i) =>
         val v = values(i).asInstanceOf[Integer]
-        converter.getConverter(i).asPrimitiveConverter().addInt(v)
+        converter.getConverter(i).asPrimitiveConverter.addInt(v)
       case (PrimitiveType.PrimitiveTypeName.INT64, i) =>
         val v = values(i).asInstanceOf[Long]
-        converter.getConverter(i).asPrimitiveConverter().addLong(v)
+        converter.getConverter(i).asPrimitiveConverter.addLong(v)
       case (PrimitiveType.PrimitiveTypeName.FLOAT, i) =>
         val v = values(i).asInstanceOf[Float]
-        converter.getConverter(i).asPrimitiveConverter().addFloat(v)
+        converter.getConverter(i).asPrimitiveConverter.addFloat(v)
       case (PrimitiveType.PrimitiveTypeName.DOUBLE, i) =>
         val v = values(i).asInstanceOf[Double]
-        converter.getConverter(i).asPrimitiveConverter().addDouble(v)
+        converter.getConverter(i).asPrimitiveConverter.addDouble(v)
       case (PrimitiveType.PrimitiveTypeName.BINARY, i) =>
         val v = values(i).asInstanceOf[Binary]
-        converter.getConverter(i).asPrimitiveConverter().addBinary(v)
+        converter.getConverter(i).asPrimitiveConverter.addBinary(v)
       case (PrimitiveType.PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY, i) =>
         val v = values(i).asInstanceOf[Binary]
-        converter.getConverter(i).asPrimitiveConverter().addBinary(v)
+        converter.getConverter(i).asPrimitiveConverter.addBinary(v)
       case (_, i) =>
         throw new SparkException("Unexpected parquet type name: " + primitiveTypeName(i))
     }
@@ -257,7 +257,7 @@ object ParquetUtils {
     val primitiveTypeBuilder = mutable.ArrayBuilder.make[PrimitiveType]
     val valuesBuilder = mutable.ArrayBuilder.make[Any]
 
-    aggregation.aggregateExpressions().foreach { agg =>
+    aggregation.aggregateExpressions.foreach { agg =>
       var value: Any = None
       var rowCount = 0L
       var isCount = false
@@ -287,13 +287,13 @@ object ParquetUtils {
             rowCount += block.getRowCount
             var isPartitionCol = false
             if (partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive))
-              .toSet.contains(count.column().fieldNames.head)) {
+              .toSet.contains(count.column.fieldNames.head)) {
               isPartitionCol = true
             }
             isCount = true
-            if(!isPartitionCol) {
+            if (!isPartitionCol) {
               index = dataSchema.fieldNames.toList.indexOf(count.column.fieldNames.head)
-              // Count(*) includes the null values, but Count (colName) doesn't.
+              // Count(*) includes the null values, but Count(colName) doesn't.
               rowCount -= getNumNulls(blockMetaData, index)
             }
           case _: CountStar =>
@@ -309,13 +309,13 @@ object ParquetUtils {
       } else {
         valuesBuilder += value
         val field = fields.get(index)
-        primitiveTypeBuilder += Types.required(field.asPrimitiveType().getPrimitiveTypeName)
+        primitiveTypeBuilder += Types.required(field.asPrimitiveType.getPrimitiveTypeName)
           .as(field.getLogicalTypeAnnotation)
-          .length(field.asPrimitiveType().getTypeLength)
+          .length(field.asPrimitiveType.getTypeLength)
           .named(schemaName)
       }
     }
-    (primitiveTypeBuilder.result(), valuesBuilder.result())
+    (primitiveTypeBuilder.result, valuesBuilder.result)
   }
 
   /**
@@ -327,23 +327,23 @@ object ParquetUtils {
       columnChunkMetaData: util.List[ColumnChunkMetaData],
       i: Int,
       isMax: Boolean): Any = {
-    val statistics = columnChunkMetaData.get(i).getStatistics()
+    val statistics = columnChunkMetaData.get(i).getStatistics
     if (!statistics.hasNonNullValue) {
       throw new UnsupportedOperationException("No min/max found for Parquet file, Set SQLConf" +
         s" ${PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key} to false and execute again")
     } else {
-      if (isMax) statistics.genericGetMax() else statistics.genericGetMin()
+      if (isMax) statistics.genericGetMax else statistics.genericGetMin
     }
   }
 
   private def getNumNulls(
       columnChunkMetaData: util.List[ColumnChunkMetaData],
       i: Int): Long = {
-    val statistics = columnChunkMetaData.get(i).getStatistics()
-    if (!statistics.isNumNullsSet()) {
+    val statistics = columnChunkMetaData.get(i).getStatistics
+    if (!statistics.isNumNullsSet) {
       throw new UnsupportedOperationException("Number of nulls not set for Parquet file." +
         s" Set SQLConf ${PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key} to false and execute again")
     }
-    statistics.getNumNulls();
+    statistics.getNumNulls;
   }
 }
