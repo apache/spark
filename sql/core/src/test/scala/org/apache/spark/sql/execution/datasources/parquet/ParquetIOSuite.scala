@@ -1068,8 +1068,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
     ).foreach { case (it, f) =>
       val data = (1 to 10).map(i => Row(i, f(i)))
-      val schema = StructType(List(StructField("d", IntegerType, false),
-        StructField("i", it, false)).toArray)
+      val schema = StructType(Array(StructField("d", IntegerType, false),
+        StructField("i", it, false)))
       withTempPath { file =>
         val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
         df.write.parquet(file.getCanonicalPath)
