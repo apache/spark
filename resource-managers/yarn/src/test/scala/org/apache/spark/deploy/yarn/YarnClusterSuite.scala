@@ -188,6 +188,20 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     }))
   }
 
+  test("SPARK-35672: run Spark in yarn-client mode with additional jar using URI scheme 'local' " +
+    "and gateway-replacement path containing an environment variable") {
+    // Set up the replacement path to point to the correct path, but suffixed with some
+    // nonexistent environment variable. If environment variable replacement takes place, then
+    // the var will be replaced with an empty string, and the path will be correct again
+    def urlToParentPath(url: URL): String = Paths.get(url.toURI).getParent.toString
+    testWithAddJar(clientMode = true, "local", Some(jarUrl => {
+      (jarUrl.getPath, Map(
+        GATEWAY_ROOT_PATH.key -> urlToParentPath(jarUrl),
+        REPLACEMENT_ROOT_PATH.key -> s"${urlToParentPath(jarUrl)}{{NO_SUCH_ENV_VAR___}}"
+      ))
+    }))
+  }
+
   test("SPARK-35672: run Spark in yarn-client mode with additional jar using URI scheme 'file'") {
     testWithAddJar(clientMode = true, "file")
   }

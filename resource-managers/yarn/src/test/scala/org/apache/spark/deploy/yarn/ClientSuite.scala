@@ -618,6 +618,44 @@ class ClientSuite extends SparkFunSuite with Matchers {
     assertUserClasspathUrls(cluster = true, replacementRootPath)
   }
 
+  test("SPARK-35672: test replaceEnvVars in Unix mode") {
+    Map(
+      "F_O_O$FOO$BAR" -> "F_O_OBAR",
+      "$FOO" -> "BAR",
+      "$F_O_O$FOO" -> "BarBAR",
+      "${FOO}" -> "BAR",
+      "$FOO.$BAR" -> "BAR.",
+      "{{FOO}}" -> "BAR",
+      "{{FOO}}$FOO" -> "BARBAR",
+      "%FOO%" -> "%FOO%",
+    ).foreach { case (input, expected) =>
+      withClue(s"input string `$input`: ") {
+        assert(Client.replaceEnvVars(input, Map(
+          "F_O_O" -> "Bar",
+          "FOO" -> "BAR"
+        ), isWindows = false) === expected)
+      }
+    }
+  }
+
+  test("SPARK-35672: test replaceEnvVars in Windows mode") {
+    Map(
+      "Foo%FOO%%BAR%" -> "FooBAR",
+      "%FOO%" -> "BAR",
+      "%Foo%%FOO%" -> "BarBAR",
+      "{{FOO}}%FOO%" -> "BARBAR",
+      "$FOO" -> "$FOO",
+      "${FOO}" -> "${FOO}",
+    ).foreach { case (input, expected) =>
+      withClue(s"input string `$input`: ") {
+        assert(Client.replaceEnvVars(input, Map(
+          "Foo" -> "Bar",
+          "FOO" -> "BAR"
+        ), isWindows = true) === expected)
+      }
+    }
+  }
+
   private val matching = Seq(
     ("files URI match test1", "file:///file1", "file:///file2"),
     ("files URI match test2", "file:///c:file1", "file://c:file2"),
