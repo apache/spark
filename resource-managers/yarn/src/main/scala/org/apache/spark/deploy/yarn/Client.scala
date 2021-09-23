@@ -1486,14 +1486,15 @@ private[spark] object Client extends Logging {
     Client.getUserClasspath(conf).map { uri =>
       val inputPath = uri.getPath
       val replacedFilePath = if (Utils.isLocalUri(uri.toString) && useClusterPath) {
-        replaceEnvVars(Client.getClusterPath(conf, inputPath), sys.env)
+        Client.getClusterPath(conf, inputPath)
       } else {
         // Any other URI schemes should have been resolved by this point
         assert(uri.getScheme == null || uri.getScheme == "file" || Utils.isLocalUri(uri.toString),
           "getUserClasspath should only return 'file' or 'local' URIs but found: " + uri)
         inputPath
       }
-      Paths.get(replacedFilePath).toAbsolutePath.toUri.toURL
+      val envVarResolvedFilePath = replaceEnvVars(replacedFilePath, sys.env)
+      Paths.get(envVarResolvedFilePath).toAbsolutePath.toUri.toURL
     }
   }
 
