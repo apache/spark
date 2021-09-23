@@ -2599,6 +2599,24 @@ class Index(IndexOpsMixin):
     def __iter__(self) -> Iterator:
         return MissingPandasLikeIndex.__iter__(self)
 
+    def __and__(self, other: "Index") -> "Index":
+        warnings.warn(
+            "Index.__and__ operating as a set operation is deprecated, "
+            "in the future this will be a logical operation matching Series.__and__.  "
+            "Use index.intersection(other) instead",
+            FutureWarning,
+        )
+        return self.intersection(other)
+
+    def __or__(self, other: "Index") -> "Index":
+        warnings.warn(
+            "Index.__or__ operating as a set operation is deprecated, "
+            "in the future this will be a logical operation matching Series.__or__.  "
+            "Use index.union(other) instead",
+            FutureWarning,
+        )
+        return self.union(other)
+
     def __xor__(self, other: "Index") -> "Index":
         warnings.warn(
             "Index.__xor__ operating as a set operation is deprecated, "
