@@ -20,8 +20,10 @@ Utilities to deal with types. This is mostly focused on python3.
 """
 import datetime
 import decimal
+import sys
 import typing
 from collections import Iterable
+from distutils.version import LooseVersion
 from inspect import getfullargspec, isclass
 from typing import (  # noqa: F401
     Any,
@@ -152,6 +154,19 @@ def as_spark_type(
     - dictionaries of field_name -> type
     - Python3's typing system
     """
+    # For NumPy typing, NumPy version should be 1.21+ and Python version should be 3.8+
+    if sys.version_info >= (3, 8) and LooseVersion(np.__version__) >= LooseVersion("1.21"):
+        if (
+            hasattr(tpe, "__origin__")
+            and tpe.__origin__ is np.ndarray  # type: ignore
+            and hasattr(tpe, "__args__")
+            and len(tpe.__args__) > 1  # type: ignore
+        ):
+            # numpy.typing.NDArray
+            return types.ArrayType(
+                as_spark_type(tpe.__args__[1].__args__[0], raise_error=raise_error)  # type: ignore
+            )
+
     if isinstance(tpe, np.dtype) and tpe == np.dtype("object"):
         pass
     # ArrayType
@@ -568,7 +583,9 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
         else:
             parameters = getattr(tuple_type, "__args__")
 
-        index_parameters = [p for p in parameters if issubclass(p, IndexNameTypeHolder)]
+        index_parameters = [
+            p for p in parameters if isclass(p) and issubclass(p, IndexNameTypeHolder)
+        ]
         data_parameters = [p for p in parameters if p not in index_parameters]
         assert len(data_parameters) > 0, "Type hints for data must not be empty."
 

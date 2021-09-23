@@ -405,6 +405,14 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             (psidx1 + 1).symmetric_difference(psidx2).sort_values(),
             (pidx1 + 1).symmetric_difference(pidx2).sort_values(),
         )
+        self.assert_eq(
+            (psidx1 ^ psidx2).sort_values(),
+            (pidx1 ^ pidx2).sort_values(),
+        )
+        self.assert_eq(
+            psidx1.symmetric_difference(psidx2, result_name="result").sort_values(),
+            pidx1.symmetric_difference(pidx2, result_name="result").sort_values(),
+        )
 
         pmidx1 = pd.MultiIndex(
             [["lama", "cow", "falcon"], ["speed", "weight", "length"]],
@@ -1370,6 +1378,11 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(psmidx.unique().sort_values(), pmidx.unique().sort_values())
         self.assert_eq(psmidx.unique().sort_values(), pmidx.unique().sort_values())
 
+        with self.assertRaisesRegex(
+            IndexError, "Too many levels: Index has only 1 level, -2 is not a valid level number"
+        ):
+            psidx.unique(level=-2)
+
     def test_asof(self):
         # Increasing values
         pidx = pd.Index(["2013-12-31", "2014-01-02", "2014-01-03"])
@@ -1895,6 +1908,8 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             psmidx.intersection(4)
         with self.assertRaisesRegex(TypeError, "other must be a MultiIndex or a list of tuples"):
             psmidx.intersection(ps.Series([3, 4, 5, 6]))
+        with self.assertRaisesRegex(TypeError, "other must be a MultiIndex or a list of tuples"):
+            psmidx.intersection([("c", "z"), ["d", "w"]])
         with self.assertRaisesRegex(ValueError, "Index data must be 1-dimensional"):
             psidx.intersection(ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]}))
         with self.assertRaisesRegex(ValueError, "Index data must be 1-dimensional"):
@@ -2186,6 +2201,10 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         with self.assertRaisesRegex(IndexError, err_msg):
             psmidx.insert(4, ("b", "y"))
 
+        err_msg = "index -4 is out of bounds for axis 0 with size 3"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psmidx.insert(-4, ("b", "y"))
+
     def test_astype(self):
         pidx = pd.Index([10, 20, 15, 30, 45], name="x")
         psidx = ps.Index(pidx)
@@ -2368,6 +2387,22 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             TypeError,
             lambda: psidx.map({1: 1, 2: 2.0, 3: "three"}),
         )
+
+    def test_to_numpy(self):
+        pidx = pd.Index([1, 2, 3, 4])
+        psidx = ps.from_pandas(pidx)
+
+        self.assert_eq(pidx.to_numpy(copy=True), psidx.to_numpy(copy=True))
+
+    def test_drop_level(self):
+        tuples = [(1, "red"), (1, "blue"), (2, "red"), (2, "green")]
+        pmidx = pd.MultiIndex.from_tuples(tuples)
+        psmidx = ps.from_pandas(pmidx)
+
+        with self.assertRaisesRegex(
+            IndexError, "Too many levels: Index has only 2 levels, -3 is not a valid level number"
+        ):
+            psmidx.droplevel(-3)
 
 
 if __name__ == "__main__":
