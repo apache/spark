@@ -1087,7 +1087,7 @@ class PlanParserSuite extends AnalysisTest {
       table("testcat", "db", "tab").select(star()).hint("BROADCAST", $"tab"))
   }
 
-  test("option hint") {
+  test("SPARK-36680: option hint") {
     val map = new JHashMap[String, String]()
     map.put("key1", "val1")
     map.put("key2", "val2")
