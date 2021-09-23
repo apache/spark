@@ -705,7 +705,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
     }
   }
 
-  test("SPARK-36795: Node IDs should not be duplicated when InMemoryRelation Present") {
+  test("SPARK-36795: Node IDs should not be duplicated when InMemoryRelation present") {
     withTempView("t1", "t2") {
       Seq(1).toDF("k").write.saveAsTable("t1")
       Seq(1).toDF("key").write.saveAsTable("t2")
@@ -714,19 +714,13 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         "ON k = t2.key"
       val df = sql(query).toDF()
 
-      df.collect()
-      checkKeywordsExistsInExplain(df, FormattedMode,
-        """   * BroadcastHashJoin Inner BuildLeft (12)
-          |   :- BroadcastQueryStage (8)
-          |   :  +- BroadcastExchange (7)
-          |   :     +- * Filter (6)
-          |   :        +- * ColumnarToRow (5)
-          |   :           +- InMemoryTableScan (1)
-          |   :                 +- InMemoryRelation (2)
-          |   :                       +- * ColumnarToRow (4)
-          |   :                          +- Scan parquet default.t1 (3)
-          |""".stripMargin
-      )
+      val inMemoryRelationRegex = """InMemoryRelation \(([0-9]+)\)""".r
+      val columnarToRowRegex = """ColumnarToRow \(([0-9]+)\)""".r
+      val explainString = getNormalizedExplain(df, FormattedMode)
+      val inMemoryRelationNodeId = inMemoryRelationRegex.findAllIn(explainString).group(1)
+      val columnarToRowNodeId = columnarToRowRegex.findAllIn(explainString).group(1)
+
+      assert(inMemoryRelationNodeId != columnarToRowNodeId)
     }
   }
 }
