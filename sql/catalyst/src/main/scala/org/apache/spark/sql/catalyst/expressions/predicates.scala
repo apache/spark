@@ -559,6 +559,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     case FloatType => (value: Any) => java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float])
     case _ => (_: Any) => false
   }
+  @transient private[this] lazy val hasNaN = set.exists(isNaN)
 
   override def nullable: Boolean = child.nullable || hasNull
 
@@ -568,7 +569,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     if (set.contains(value)) {
       true
     } else if (isNaN(value)) {
-      set.exists(isNaN(_))
+      hasNaN
     } else if (hasNull) {
       null
     } else {
@@ -600,6 +601,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   private def genCodeWithSet(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
       val setTerm = ctx.addReferenceObj("set", set)
+      val hasNaNValue = ctx.addReferenceObj("hasNaN", hasNaN)
       val elem = ctx.freshName("elem")
 
       val setIsNull = if (hasNull) {
@@ -621,14 +623,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
           |if ($setTerm.contains($c)) {
           |  ${ev.value} = true;
           |} else if (${isNaN(c)}) {
-          |  scala.collection.Iterator<java.lang.Object> it = $setTerm.iterator();
-          |  while (it.hasNext()) {
-          |    java.lang.String $elem = String.valueOf(it.next());
-          |    if ($elem != "null" && ${isNaN(elem)}) {
-          |      ${ev.value} = true;
-          |      break;
-          |    }
-          |  }
+          |  ${ev.value} =  $hasNaNValue;
           |}
           |$setIsNull
           |""".stripMargin
