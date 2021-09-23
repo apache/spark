@@ -24,6 +24,7 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.utils import name_like_string
+from pyspark.sql.utils import AnalysisException
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
@@ -414,6 +415,11 @@ class ReshapeTest(PandasOnSparkTestCase):
                 .sort_values("a")
                 .reset_index(drop=True)
             ),
+        )
+
+        self.assertRaises(
+            AnalysisException,
+            lambda: ps.merge_asof(psdf_left, psdf_right, on="a", tolerance=-1)
         )
 
 

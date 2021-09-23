@@ -1606,11 +1606,14 @@ case class AsOfJoin(
     right: LogicalPlan,
     asOfCondition: Expression,
     condition: Option[Expression],
+    joinType: JoinType,
     orderExpression: Expression,
-    joinType: JoinType) extends BinaryNode {
+    toleranceAssertion: Option[Expression]) extends BinaryNode {
 
   require(Seq(Inner, LeftOuter).contains(joinType),
     s"Unsupported as-of join type $joinType")
+
+  override protected def stringArgs: Iterator[Any] = super.stringArgs.take(5)
 
   override def output: Seq[Attribute] = {
     joinType match {
@@ -1628,7 +1631,10 @@ case class AsOfJoin(
       expressions.forall(_.resolved) &&
       duplicateResolved &&
       asOfCondition.dataType == BooleanType &&
-      condition.forall(_.dataType == BooleanType)
+      condition.forall(_.dataType == BooleanType) &&
+      toleranceAssertion.forall { assertion =>
+        assertion.foldable && assertion.eval().asInstanceOf[Boolean]
+      }
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(AS_OF_JOIN)
@@ -1653,7 +1659,8 @@ object AsOfJoin {
       direction: AsOfJoinDirection): AsOfJoin = {
     val asOfCond = makeAsOfCond(leftAsOf, rightAsOf, tolerance, allowExactMatches, direction)
     val orderingExpr = makeOrderingExpr(leftAsOf, rightAsOf, direction)
-    AsOfJoin(left, right, asOfCond, condition, orderingExpr, joinType)
+    AsOfJoin(left, right, asOfCond, condition, joinType,
+      orderingExpr, tolerance.map(t => GreaterThanOrEqual(t, Literal.default(t.dataType))))
   }
 
   private def makeAsOfCond(

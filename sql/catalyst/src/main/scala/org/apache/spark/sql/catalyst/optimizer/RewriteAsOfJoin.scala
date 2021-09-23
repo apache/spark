@@ -51,7 +51,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 object RewriteAsOfJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(AS_OF_JOIN), ruleId) {
-    case AsOfJoin(left, right, asOfCondition, condition, orderExpression, joinType) =>
+    case AsOfJoin(left, right, asOfCondition, condition, joinType, orderExpression, _) =>
       val conditionWithOuterReference =
         condition.map(And(_, asOfCondition)).getOrElse(asOfCondition).transformUp {
           case a: AttributeReference if left.outputSet.contains(a) =>

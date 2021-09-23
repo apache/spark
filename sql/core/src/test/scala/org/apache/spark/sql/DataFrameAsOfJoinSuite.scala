@@ -96,6 +96,26 @@ class DataFrameAsOfJoinSuite extends QueryTest
     )
   }
 
+  test("as-of join - tolerance should be a constant") {
+    val (df1, df2) = prepareForAsOfJoin()
+    val errMsg = intercept[AnalysisException] {
+      df1.joinAsOf(
+        df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
+        joinType = "inner", tolerance = df1.col("b"), allowExactMatches = true,
+        direction = "backward")
+    }.getMessage
+    assert(errMsg.contains("Input argument tolerance must be a constant."))
+  }
+
+  test("as-of join - tolerance should be non-negative") {
+    val (df1, df2) = prepareForAsOfJoin()
+    val errMsg = intercept[AnalysisException] {
+      df1.joinAsOf(df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
+        joinType = "inner", tolerance = lit(-1), allowExactMatches = true, direction = "backward")
+    }.getMessage
+    assert(errMsg.contains("Input argument tolerance must be non-negative."))
+  }
+
   test("as-of join - allowExactMatches = false") {
     val (df1, df2) = prepareForAsOfJoin()
     checkAnswer(

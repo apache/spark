@@ -51,7 +51,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
       case j @ LateralJoin(left, right, _, _) if right.resolved && !j.duplicateResolved =>
         j.copy(right = right.withNewPlan(dedupRight(left, right.plan)))
       // Resolve duplicate output for AsOfJoin.
-      case j @ AsOfJoin(left, right, _, _, _, _) if !j.duplicateResolved =>
+      case j @ AsOfJoin(left, right, _, _, _, _, _) if !j.duplicateResolved =>
         j.copy(right = dedupRight(left, right))
       // intersect/except will be rewritten to join at the beginning of optimizer. Here we need to
       // deduplicate the right side plan, so that we won't produce an invalid self-join later.
