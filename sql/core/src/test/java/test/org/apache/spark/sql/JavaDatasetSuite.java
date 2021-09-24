@@ -98,6 +98,16 @@ public class JavaDatasetSuite implements Serializable {
     Assert.assertFalse(iter.hasNext());
   }
 
+  @Test
+  public void testToIterator() {
+    List<String> data = Arrays.asList("hello", "world");
+    Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
+    Iterator<String> iter = ds.toIterator();
+    Assert.assertEquals("hello", iter.next());
+    Assert.assertEquals("world", iter.next());
+    Assert.assertFalse(iter.hasNext());
+  }
+
   // SPARK-15632: typed filter should preserve the underlying logical schema
   @Test
   public void testTypedFilterPreservingSchema() {
