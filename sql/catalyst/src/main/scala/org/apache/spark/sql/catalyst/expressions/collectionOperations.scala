@@ -3519,8 +3519,10 @@ case class ArrayDistinct(child: Expression)
                        |$builder.$$plus$$eq($valueNaN);
                      """.stripMargin)
 
-        val processArray = SQLOpenHashSet.withNullCheckCode(dataType, dataType, hashSet,
-          withNaNCheckCodeGenerator,
+        val processArray = SQLOpenHashSet.withNullCheckCode(
+          dataType.asInstanceOf[ArrayType].containsNull,
+          dataType.asInstanceOf[ArrayType].containsNull,
+          hashSet, withNaNCheckCodeGenerator,
           s"""
              |$nullElementIndex = $size;
              |$size++;
@@ -3705,8 +3707,10 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
                    |$builder.$$plus$$eq($valueNaN);
                      """.stripMargin)
 
-        val processArray = SQLOpenHashSet.withNullCheckCode(dataType, dataType, hashSet,
-          withNaNCheckCodeGenerator,
+        val processArray = SQLOpenHashSet.withNullCheckCode(
+          dataType.asInstanceOf[ArrayType].containsNull,
+          dataType.asInstanceOf[ArrayType].containsNull,
+          hashSet, withNaNCheckCodeGenerator,
           s"""
              |$nullElementIndex = $size;
              |$size++;
@@ -3946,7 +3950,9 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
                 (valueNaN: String) => "")
 
         val writeArray2ToHashSet = SQLOpenHashSet.withNullCheckCode(
-          right.dataType, left.dataType, hashSet, withArray2NaNCheckCodeGenerator, "")
+          right.dataType.asInstanceOf[ArrayType].containsNull,
+          left.dataType.asInstanceOf[ArrayType].containsNull,
+          hashSet, withArray2NaNCheckCodeGenerator, "")
 
         val body =
           s"""
@@ -3973,8 +3979,9 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
                  """.stripMargin)
 
         val processArray1 = SQLOpenHashSet.withNullCheckCode(
-          left.dataType, right.dataType, hashSetResult,
-          withArray1NaNCheckCodeGenerator,
+          left.dataType.asInstanceOf[ArrayType].containsNull,
+          right.dataType.asInstanceOf[ArrayType].containsNull,
+          hashSetResult, withArray1NaNCheckCodeGenerator,
           s"""
              |$nullElementIndex = $size;
              |$size++;
@@ -4159,7 +4166,9 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
                 (valueNaN: Any) => "")
 
         val writeArray2ToHashSet = SQLOpenHashSet.withNullCheckCode(
-          right.dataType, left.dataType, hashSet, withArray2NaNCheckCodeGenerator, "")
+          right.dataType.asInstanceOf[ArrayType].containsNull,
+          left.dataType.asInstanceOf[ArrayType].containsNull,
+          hashSet, withArray2NaNCheckCodeGenerator, "")
 
         val body =
           s"""
@@ -4183,7 +4192,9 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
                  """.stripMargin)
 
         val processArray1 = SQLOpenHashSet.withNullCheckCode(
-          left.dataType, left.dataType, hashSet, withArray1NaNCheckCodeGenerator,
+          left.dataType.asInstanceOf[ArrayType].containsNull,
+          left.dataType.asInstanceOf[ArrayType].containsNull,
+          hashSet, withArray1NaNCheckCodeGenerator,
           s"""
              |$nullElementIndex = $size;
              |$size++;

@@ -79,14 +79,14 @@ object SQLOpenHashSet {
   }
 
   def withNullCheckCode(
-      arrayType1: DataType,
-      arrayType2: DataType,
+      arrayContainsNull: Boolean,
+      setContainsNull: Boolean,
       hashSet: String,
       handleNotNull: (String, String) => String,
       handleNull: String): (String, String) => String = {
     (array: String, index: String) =>
-        if (arrayType1.asInstanceOf[ArrayType].containsNull) {
-          if (arrayType2.asInstanceOf[ArrayType].containsNull) {
+        if (arrayContainsNull) {
+          if (setContainsNull) {
             s"""
                |if ($array.isNullAt($index)) {
                |  if (!$hashSet.containsNull()) {
