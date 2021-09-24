@@ -1405,24 +1405,69 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
 
   test("SPARK-36794: Ignore duplicated key when building relation for semi/anti hash join") {
     withTable("t1", "t2") {
-      spark.range(10).map(i => i.toString).toDF("k").write.saveAsTable("t1")
-      spark.range(10).map(i => (i % 5).toString).toDF("k").write.saveAsTable("t2")
+      spark.range(10).map(i => (i.toString, i + 1)).toDF("c1", "c2").write.saveAsTable("t1")
+      spark.range(10).map(i => ((i % 5).toString, i % 3)).toDF("c1", "c2").write.saveAsTable("t2")
 
       Seq("BROADCAST", "SHUFFLE_HASH").foreach {
         joinHint =>
-          val semiJoinDF = sql(
-            s"SELECT /*+ $joinHint(t2) */ t1.k FROM t1 LEFT SEMI JOIN t2 ON t1.k = t2.k")
-          val antiJoinDF = sql(
-            s"SELECT /*+ $joinHint(t2) */ t1.k FROM t1 LEFT ANTI JOIN t2 ON t1.k = t2.k")
-          Seq(semiJoinDF, antiJoinDF).foreach {
-            joinDF =>
-              assert(collect(joinDF.queryExecution.executedPlan) {
-                case _: BroadcastHashJoinExec => joinHint == "BROADCAST"
-                case _: ShuffledHashJoinExec => joinHint == "SHUFFLE_HASH"
+          val semiJoinDFs = Seq(
+            // No join condition, ignore duplicated key.
+            (sql(
+              s"SELECT /*+ $joinHint(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2 ON t1.c1 = t2.c1"),
+              true),
+            // Have join condition on build join key only, ignore duplicated key.
+            (sql(
+              s"""
+                  |SELECT /*+ $joinHint(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2
+                  |ON t1.c1 = t2.c1 AND CAST(t1.c2 * 2 AS STRING) != t2.c1
+               """.stripMargin),
+              true),
+            // Have join condition on other build attribute beside join key, do not ignore
+            // duplicated key.
+            (sql(
+              s"""
+                 |SELECT /*+ $joinHint(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2
+                 |ON t1.c1 = t2.c1 AND t1.c2 * 100 != t2.c2
+               """.stripMargin),
+              false)
+          )
+          val antiJoinDFs = Seq(
+            // No join condition, ignore duplicated key.
+            (sql(
+              s"SELECT /*+ $joinHint(t2) */ t1.c1 FROM t1 LEFT ANTI JOIN t2 ON t1.c1 = t2.c1"),
+              true),
+            // Have join condition on build join key only, ignore duplicated key.
+            (sql(
+              s"""
+                 |SELECT /*+ $joinHint(t2) */ t1.c1 FROM t1 LEFT ANTI JOIN t2
+                 |ON t1.c1 = t2.c1 AND CAST(t1.c2 * 2 AS STRING) != t2.c1
+               """.stripMargin),
+              true),
+            // Have join condition on other build attribute beside join key, do not ignore
+            // duplicated key.
+            (sql(
+              s"""
+                 |SELECT /*+ $joinHint(t2) */ t1.c1 FROM t1 LEFT ANTI JOIN t2
+                 |ON t1.c1 = t2.c1 AND t1.c2 * 100 != t2.c2
+               """.stripMargin),
+              false)
+          )
+          semiJoinDFs.foreach {
+            case (df, _) => checkAnswer(df, Seq(Row("0"), Row("1"), Row("2"), Row("3"), Row("4")))
+          }
+          antiJoinDFs.foreach {
+            case (df, _) => checkAnswer(df, Seq(Row("5"), Row("6"), Row("7"), Row("8"), Row("9")))
+          }
+
+          (semiJoinDFs ++ antiJoinDFs).foreach {
+            case (df, ignoreDuplicatedKey) =>
+              assert(collect(df.queryExecution.executedPlan) {
+                case j: BroadcastHashJoinExec =>
+                  joinHint == "BROADCAST" && j.ignoreDuplicatedKey == ignoreDuplicatedKey
+                case j: ShuffledHashJoinExec =>
+                  joinHint == "SHUFFLE_HASH" && j.ignoreDuplicatedKey == ignoreDuplicatedKey
               }.size == 1)
           }
-          checkAnswer(semiJoinDF, Seq(Row("0"), Row("1"), Row("2"), Row("3"), Row("4")))
-          checkAnswer(antiJoinDF, Seq(Row("5"), Row("6"), Row("7"), Row("8"), Row("9")))
       }
     }
   }
