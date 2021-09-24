@@ -45,11 +45,11 @@
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
   "DATA_TYPE_UNSUPPORTED" : {
-    "message" : [ "%s is not supported." ],
+    "message" : [ "Data type '%s' is not supported." ],
     "sqlState" : "0A000"
   },
   "DDL_UNSUPPORTED" : {
-    "message" : [ "%s is not supported." ],
+    "message" : [ "DDL '%s' is not supported." ],
     "sqlState" : "0A000"
   },
   "DIVIDE_BY_ZERO" : {
