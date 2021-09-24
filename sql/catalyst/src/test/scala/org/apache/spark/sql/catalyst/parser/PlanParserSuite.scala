@@ -26,8 +26,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-import java.util.{HashMap => JHashMap}
-
 /**
  * Parser test cases for rules defined in [[CatalystSqlParser]] / [[AstBuilder]].
  *
@@ -1087,16 +1085,59 @@ class PlanParserSuite extends AnalysisTest {
       table("testcat", "db", "tab").select(star()).hint("BROADCAST", $"tab"))
   }
 
-  test("SPARK-36680: option hint") {
-    val map = new JHashMap[String, String]()
-    map.put("key1", "val1")
-    map.put("key2", "val2")
-    assertEqual("TABLE testcat.db.tab /*+ OPTIONS('key1'='val1', 'key2'='val2') */",
-      UnresolvedRelation(Array("testcat", "db", "tab"),
-        new CaseInsensitiveStringMap(map)))
-    assertEqual("SELECT * FROM testcat.db.tab /*+ OPTIONS('key1'='val1', 'key2'='val2') */",
-      UnresolvedRelation(Array("testcat", "db", "tab"),
-        new CaseInsensitiveStringMap(map)).select(star()))
+  test("SPARK-36680: options hint") {
+    val options1 = new java.util.HashMap[String, String]()
+    options1.put("key1", "val1")
+    options1.put("key2", "val2")
+    val options2 = new java.util.HashMap[String, String]()
+    options2.put("key3", "val3")
+    options2.put("key4", "val4")
+    val relation1 = UnresolvedRelation(Array("testcat", "db", "tab1"),
+      new CaseInsensitiveStringMap(options1))
+    val relation2 = UnresolvedRelation(Array("testcat", "db", "tab2"),
+      new CaseInsensitiveStringMap(options2))
+
+    assertEqual(
+      """
+        |INSERT INTO TABLE testcat.db.tab1 /*+ OPTIONS('key1'='val1', 'key2'='val2') */
+        |SELECT * FROM t
+      """.stripMargin,
+      InsertIntoStatement(relation1, Map.empty, Nil, table("t").select(star()),
+        overwrite = false, ifPartitionNotExists = false))
+
+    assertEqual(
+      """
+        |INSERT OVERWRITE TABLE testcat.db.tab1 /*+ OPTIONS('key1'='val1', 'key2'='val2') */
+        |SELECT * FROM t
+      """.stripMargin,
+      InsertIntoStatement(relation1, Map.empty, Nil, table("t").select(star()),
+        overwrite = true, ifPartitionNotExists = false))
+
+    assertEqual("DELETE FROM testcat.db.tab1 /*+ OPTIONS('key1'='val1', 'key2'='val2') */",
+      DeleteFromTable(relation1, None))
+
+    assertEqual("UPDATE testcat.db.tab1 /*+ OPTIONS('key1'='val1', 'key2'='val2') */ SET a=1",
+      UpdateTable(relation1, Seq(Assignment(UnresolvedAttribute("a"), Literal(1))), None))
+
+    assertEqual(
+      """
+        |MERGE INTO testcat.db.tab1 /*+ OPTIONS('key1'='val1', 'key2'='val2') */ AS target
+        |USING testcat.db.tab2 /*+ OPTIONS('key3'='val3', 'key4'='val4') */ AS source
+        |ON target.col1 = source.col1
+        |WHEN MATCHED AND (target.col2='delete') THEN DELETE
+        |""".stripMargin,
+      MergeIntoTable(
+        relation1.as("target"),
+        relation2.as("source"),
+        EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+        Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete"))))),
+        Seq()))
+
+    assertEqual("TABLE testcat.db.tab1 /*+ OPTIONS('key1'='val1', 'key2'='val2') */",
+      relation1)
+
+    assertEqual("SELECT * FROM testcat.db.tab1 /*+ OPTIONS('key1'='val1', 'key2'='val2') */",
+      relation1.select(star()))
   }
 
   test("CTE with column alias") {
