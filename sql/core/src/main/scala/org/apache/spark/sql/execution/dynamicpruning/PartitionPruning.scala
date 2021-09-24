@@ -104,7 +104,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     val index = joinKeys.indexOf(filteringKey)
     lazy val hasBenefit =
       pruningHasBenefit(pruningKey, partScan, filteringKey, filteringPlan, canBuildBroadcast)
-    if (reuseEnabled || hasBenefit) {
+    if ((reuseEnabled && hasSelectivePredicate(filteringPlan)) || hasBenefit) {
       // insert a DynamicPruning wrapper to identify the subquery during query planning
       Filter(
         DynamicPruningSubquery(
@@ -142,7 +142,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
 
     // the default filtering ratio when CBO stats are missing, but there is a
     // predicate that is likely to be selective
-    val fallbackRatio = conf.dynamicPartitionPruningFallbackFilterRatio
+    val fallbackRatio = if (hasSelectivePredicate(otherPlan)) {
+      conf.dynamicPartitionPruningFallbackFilterRatio
+    } else {
+      // make the filter ratio much smaller if filtering side does not has selective predicate.
+      conf.dynamicPartitionPruningFallbackFilterRatio * 0.0001
+    }
     // the filtering ratio based on the type of the join condition and on the column statistics
     val filterRatio = (partExpr.references.toList, otherExpr.references.toList) match {
       // filter out expressions with more than one attribute on any side of the operator
@@ -225,16 +230,6 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     }.isDefined
   }
 
-  /**
-   * To be able to prune partitions on a join key, the filtering side needs to
-   * meet the following requirements:
-   *   (1) it can not be a stream
-   *   (2) it needs to contain a selective predicate used for filtering
-   */
-  private def hasPartitionPruningFilter(plan: LogicalPlan): Boolean = {
-    !plan.isStreaming && hasSelectivePredicate(plan)
-  }
-
   private def canPruneLeft(joinType: JoinType): Boolean = joinType match {
     case Inner | LeftSemi | RightOuter => true
     case _ => false
@@ -282,13 +277,13 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
             // otherwise the pruning will not trigger
             var filterableScan = getFilterableTableScan(l, left)
             if (filterableScan.isDefined && canPruneLeft(joinType) &&
-                hasPartitionPruningFilter(right)) {
+              !right.isStreaming) {
               newLeft = insertPredicate(l, newLeft, r, right, rightKeys, filterableScan.get,
                 canBuildBroadcastRight(joinType))
             } else {
               filterableScan = getFilterableTableScan(r, right)
               if (filterableScan.isDefined && canPruneRight(joinType) &&
-                  hasPartitionPruningFilter(left) ) {
+                !left.isStreaming) {
                 newRight = insertPredicate(r, newRight, l, left, leftKeys, filterableScan.get,
                   canBuildBroadcastLeft(joinType))
               }

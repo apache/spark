@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.scalatest.GivenWhenThen
 
+import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
@@ -1541,6 +1542,32 @@ abstract class DynamicPartitionPruningSuiteBase
 
       checkPartitionPruningPredicate(df, false, true)
       checkAnswer(df, Row(1150, 1) :: Row(1130, 4) :: Row(1140, 4) :: Nil)
+    }
+  }
+
+  test("SPARK-36840: Support DPP if there is no selective predicate on the filtering side") {
+    withSQLConf(
+      SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.CBO_ENABLED.key -> "true") {
+      withTable("big_table") {
+        spark.table("fact_sk")
+          .write
+          .partitionBy("store_id")
+          .format(tableFormat)
+          .saveAsTable("big_table")
+        spark.sessionState.catalog.externalCatalog
+          .alterTableStats("default", "big_table",
+            Some(CatalogStatistics(Long.MaxValue, Some(Int.MaxValue))))
+
+        val df = sql(
+          """
+            |SELECT count(*) FROM big_table f
+            |JOIN dim_store s ON f.store_id = s.store_id
+        """.stripMargin)
+
+        checkPartitionPruningPredicate(df, false, true)
+        checkAnswer(df, Row(13) :: Nil)
+      }
     }
   }
 }
