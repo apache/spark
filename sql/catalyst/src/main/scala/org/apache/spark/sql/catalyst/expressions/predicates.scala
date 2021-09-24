@@ -612,26 +612,28 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
         ""
       }
 
-      val ret = child.dataType match {
+      val isNaNCode = child.dataType match {
         case DoubleType => Some((v: Any) => s"java.lang.Double.isNaN($v)")
         case FloatType => Some((v: Any) => s"java.lang.Float.isNaN($v)")
         case _ => None
       }
 
-      ret.map { isNaN =>
-        s"""
-          |if ($setTerm.contains($c)) {
-          |  ${ev.value} = true;
-          |} else if (${isNaN(c)}) {
-          |  ${ev.value} =  $hasNaN;
-          |}
-          |$setIsNull
-          |""".stripMargin
-      }.getOrElse(
-        s"""
-           |${ev.value} = $setTerm.contains($c);
-           |$setIsNull
-         """.stripMargin)
+      hasNaN match {
+        case true if isNaNCode.isDefined =>
+          s"""
+             |if (${isNaNCode.get(c)}) {
+             |  ${ev.value} =  true;
+             |} else {
+             | ${ev.value} = $setTerm.contains($c);
+             |}
+             |$setIsNull
+             |""".stripMargin
+        case false =>
+          s"""
+             |${ev.value} = $setTerm.contains($c);
+             |$setIsNull
+             """.stripMargin
+      }
     })
   }
 
