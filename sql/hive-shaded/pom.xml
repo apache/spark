@@ -34,49 +34,40 @@
     <sbt.project.name>hive-shaded</sbt.project.name>
   </properties>
 
-  <!-- dependencies in the following are optional because we don't want to leak them as
-    transitive dependencies, as they are already included in the shaded jar -->
   <dependencies>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-common</artifactId>
       <scope>${hive.common.scope}</scope>
-      <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-exec</artifactId>
       <classifier>${hive.classifier}</classifier>
-      <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-metastore</artifactId>
-      <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-serde</artifactId>
       <scope>${hive.serde.scope}</scope>
-      <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-shims</artifactId>
       <scope>${hive.shims.scope}</scope>
-      <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>org.apache.hive</groupId>
       <artifactId>hive-llap-common</artifactId>
       <scope>${hive.llap.scope}</scope>
-      <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>org.apache.hive</groupId>
       <artifactId>hive-llap-client</artifactId>
       <scope>${hive.llap.scope}</scope>
-      <optional>true</optional>
     </dependency>
     <!-- re-import guava here since it's declared as provided in parent pom -->
     <dependency>
@@ -84,7 +75,6 @@
       <artifactId>guava</artifactId>
       <version>${hive.guava.version}</version>
       <scope>compile</scope>
-      <optional>true</optional>
     </dependency>
   </dependencies>
 
@@ -95,22 +85,18 @@
         <dependency>
           <groupId>${hive.group}</groupId>
           <artifactId>hive-cli</artifactId>
-          <optional>true</optional>
         </dependency>
         <dependency>
           <groupId>${hive.group}</groupId>
           <artifactId>hive-jdbc</artifactId>
-          <optional>true</optional>
         </dependency>
         <dependency>
           <groupId>${hive.group}</groupId>
           <artifactId>hive-beeline</artifactId>
-          <optional>true</optional>
         </dependency>
         <dependency>
           <groupId>${hive.group}</groupId>
           <artifactId>hive-service-rpc</artifactId>
-          <optional>true</optional>
         </dependency>
       </dependencies>
     </profile>
