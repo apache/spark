@@ -109,7 +109,7 @@ def lit(col: Any) -> Column:
 
 
 @since(1.3)
-def col(col):
+def col(col: str) -> Column:
     """
     Returns a :class:`~pyspark.sql.Column` based on the given column name.'
     Examples
@@ -357,7 +357,7 @@ def ceil(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("ceil", col)
 
 
-def col(col: str) -> Column:
+def cos(col: ColumnOrName) -> Column:
     """
     Computes cosine of the input column.
 
