@@ -38,28 +38,38 @@ jobs:
     runs-on: ubuntu-20.04
     outputs:
       branch: ${{ steps.set-outputs.outputs.branch }}
+      hadoop: ${{ steps.set-outputs.outputs.hadoop }}
       type: ${{ steps.set-outputs.outputs.type }}
       envs: ${{ steps.set-outputs.outputs.envs }}
     steps:
     - name: Configure branch and additional environment variables
       id: set-outputs
       run: |
-        if [ "${{ github.event.schedule }}" = "0 4 * * *" ]; then
+        if [ "${{ github.event.schedule }}" = "0 1 * * *" ]; then
+          echo '::set-output name=branch::master'
+          echo '::set-output name=type::scheduled'
+          echo '::set-output name=envs::{}'
+          echo '::set-output name=hadoop::hadoop2.7'
+        elif [ "${{ github.event.schedule }}" = "0 4 * * *" ]; then
           echo '::set-output name=branch::master'
           echo '::set-output name=type::scheduled'
           echo '::set-output name=envs::{"SCALA_PROFILE": "scala2.13"}'
+          echo '::set-output name=hadoop::hadoop3.2'
         elif [ "${{ github.event.schedule }}" = "0 7 * * *" ]; then
           echo '::set-output name=branch::branch-3.2'
           echo '::set-output name=type::scheduled'
           echo '::set-output name=envs::{"SCALA_PROFILE": "scala2.13"}'
+          echo '::set-output name=hadoop::hadoop3.2'
         elif [ "${{ github.event.schedule }}" = "0 10 * * *" ]; then
           echo '::set-output name=branch::master'
           echo '::set-output name=type::pyspark-coverage-scheduled'
           echo '::set-output name=envs::{"PYSPARK_CODECOV": "true"}'
+          echo '::set-output name=hadoop::hadoop3.2'
         else
           echo '::set-output name=branch::master' # Default branch to run on. CHANGE here when a branch is cut out.
           echo '::set-output name=type::regular'
           echo '::set-output name=envs::{}'
+          echo '::set-output name=hadoop::hadoop3.2'
         fi
 
   # Build: build Spark and run the tests for specified modules.
@@ -104,26 +114,26 @@ jobs:
           # Hive tests
           - modules: hive
             java: 8
-            hadoop: hadoop3.2
+            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
             hive: hive2.3
             included-tags: org.apache.spark.tags.SlowHiveTest
             comment: "- slow tests"
           - modules: hive
             java: 8
-            hadoop: hadoop3.2
+            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
             hive: hive2.3
             excluded-tags: org.apache.spark.tags.SlowHiveTest
             comment: "- other tests"
           # SQL tests
           - modules: sql
             java: 8
-            hadoop: hadoop3.2
+            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
             hive: hive2.3
             included-tags: org.apache.spark.tags.ExtendedSQLTest
             comment: "- slow tests"
           - modules: sql
             java: 8
-            hadoop: hadoop3.2
+            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
             hive: hive2.3
             excluded-tags: org.apache.spark.tags.ExtendedSQLTest
             comment: "- other tests"
@@ -233,7 +243,7 @@ jobs:
             pyspark-pandas-slow
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
-      HADOOP_PROFILE: hadoop3.2
+      HADOOP_PROFILE: ${{ needs.configure-jobs.outputs.hadoop }}
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
@@ -301,13 +311,13 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v2
       with:
-        name: test-results-${{ matrix.modules }}--8-hadoop3.2-hive2.3
+        name: test-results-${{ matrix.modules }}--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: failure()
       uses: actions/upload-artifact@v2
       with:
-        name: unit-tests-log-${{ matrix.modules }}--8-hadoop3.2-hive2.3
+        name: unit-tests-log-${{ matrix.modules }}--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
 
   sparkr:
@@ -318,7 +328,7 @@ jobs:
     container:
       image: dongjoon/apache-spark-github-action-image:20210602
     env:
-      HADOOP_PROFILE: hadoop3.2
+      HADOOP_PROFILE: ${{ needs.configure-jobs.outputs.hadoop }}
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
@@ -368,7 +378,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v2
       with:
-        name: test-results-sparkr--8-hadoop3.2-hive2.3
+        name: test-results-sparkr--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
 
   # Static analysis, and documentation build
@@ -574,50 +584,6 @@ jobs:
         ./dev/change-scala-version.sh 2.13
         ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.13 compile test:compile
 
-  hadoop-2:
-    needs: configure-jobs
-    if: needs.configure-jobs.outputs.type == 'regular'
-    name: Hadoop 2 build with SBT
-    runs-on: ubuntu-20.04
-    steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v2
-      with:
-        fetch-depth: 0
-        repository: apache/spark
-        ref: master
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
-    - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v2
-      with:
-        path: |
-          build/apache-maven-*
-          build/scala-*
-          build/*.jar
-          ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
-        restore-keys: |
-          build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v2
-      with:
-        path: ~/.cache/coursier
-        key: hadoop-2-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-        restore-keys: |
-          hadoop-2-coursier-
-    - name: Install Java 8
-      uses: actions/setup-java@v1
-      with:
-        java-version: 8
-    - name: Build with SBT
-      run: |
-        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Phadoop-2.7 compile test:compile
-
   tpcds-1g:
     needs: configure-jobs
     if: needs.configure-jobs.outputs.type == 'regular'
@@ -686,13 +652,13 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v2
       with:
-        name: test-results-tpcds--8-hadoop3.2-hive2.3
+        name: test-results-tpcds--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: failure()
       uses: actions/upload-artifact@v2
       with:
-        name: unit-tests-log-tpcds--8-hadoop3.2-hive2.3
+        name: unit-tests-log-tpcds--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
 
   docker-integration-tests:
@@ -701,7 +667,7 @@ jobs:
     name: Run docker integration tests
     runs-on: ubuntu-20.04
     env:
-      HADOOP_PROFILE: hadoop3.2
+      HADOOP_PROFILE: ${{ needs.configure-jobs.outputs.hadoop }}
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
@@ -750,11 +716,11 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v2
       with:
-        name: test-results-docker-integration--8-hadoop3.2-hive2.3
+        name: test-results-docker-integration--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: failure()
       uses: actions/upload-artifact@v2
       with:
-        name: unit-tests-log-docker-integration--8-hadoop3.2-hive2.3
+        name: unit-tests-log-docker-integration--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
