@@ -33,12 +33,12 @@
     "message" : [ "Failed to rename as %s was not found" ],
     "sqlState" : "22023"
   },
+  "CANNOT_TERMINATE_GENERATOR" : {
+    "message" : [ "Cannot terminate expression: %s" ]
+  },
   "CAST_CAUSES_OVERFLOW" : {
     "message" : [ "Casting %s to %s causes overflow" ],
     "sqlState" : "22005"
-  },
-  "CANNOT_TERMINATE_GENERATOR" : {
-    "message" : [ "Cannot terminate expression: %s" ]
   },
   "CLASS_UNSUPPORTED_BY_MAP_OBJECTS" : {
     "message" : [ "Class `%s` is not supported by `MapObjects` as resulting collection." ],
@@ -198,16 +198,16 @@
     "message" : [ "Unrecognized SQL type %s" ],
     "sqlState" : "42000"
   },
-  "UNSUPPORTED_ENCODER" : {
-    "message" : [ "Only expression encoders are supported." ],
-    "sqlState" : "0A000"
-  },
   "UNSUPPORTED_CHANGE_COLUMN" : {
     "message" : [ "Please add an implementation for a column change here" ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [ "Unsupported data type %s" ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_ENCODER" : {
+    "message" : [ "Only expression encoders are supported." ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_LITERAL_TYPE" : {
