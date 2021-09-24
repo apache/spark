@@ -1259,12 +1259,7 @@ private[spark] class AppStatusListener(
       attemptId: Int,
       completionTime: Long)
 
-  private def cleanupStages(count: Long): Unit = {
-    val countToDelete = calculateNumberToRemove(count, conf.get(MAX_RETAINED_STAGES))
-    if (countToDelete <= 0L) {
-      return
-    }
-
+  private def cleanupStagesWithInMemoryStore(countToDelete: Long): Seq[Array[Int]] = {
     val stageArray = new ArrayBuffer[StageCompletionTime]()
     val stageDataCount = new mutable.HashMap[Int, Int]()
     kvstore.view(classOf[StageDataWrapper]).forEach { s =>
@@ -1285,7 +1280,7 @@ private[spark] class AppStatusListener(
     // As the completion time of a skipped stage is always -1, we will remove skipped stages first.
     // This is safe since the job itself contains enough information to render skipped stages in the
     // UI.
-    val stageIds = stageArray.sortBy(_.completionTime).take(countToDelete.toInt).map { s =>
+    stageArray.sortBy(_.completionTime).take(countToDelete.toInt).map { s =>
       val key = Array(s.stageId, s.attemptId)
       kvstore.delete(classOf[StageDataWrapper], key)
       stageDataCount(s.stageId) -= 1
@@ -1296,6 +1291,60 @@ private[spark] class AppStatusListener(
       }
       cleanupCachedQuantiles(key)
       key
+    }
+  }
+
+  private def cleanupStagesInKVStore(countToDelete: Long): Seq[Array[Int]] = {
+    // As the completion time of a skipped stage is always -1, we will remove skipped stages first.
+    // This is safe since the job itself contains enough information to render skipped stages in the
+    // UI.
+    val view = kvstore.view(classOf[StageDataWrapper]).index("completionTime")
+    val stages = KVUtils.viewToSeq(view, countToDelete.toInt) { s =>
+      s.info.status != v1.StageStatus.ACTIVE && s.info.status != v1.StageStatus.PENDING
+    }
+
+    stages.map { s =>
+      val key = Array(s.info.stageId, s.info.attemptId)
+      kvstore.delete(s.getClass(), key)
+
+      // Check whether there are remaining attempts for the same stage. If there aren't, then
+      // also delete the RDD graph data.
+      val remainingAttempts = kvstore.view(classOf[StageDataWrapper])
+        .index("stageId")
+        .first(s.info.stageId)
+        .last(s.info.stageId)
+        .closeableIterator()
+
+      val hasMoreAttempts = try {
+        remainingAttempts.asScala.exists { other =>
+          other.info.attemptId != s.info.attemptId
+        }
+      } finally {
+        remainingAttempts.close()
+      }
+
+      if (!hasMoreAttempts) {
+        kvstore.delete(classOf[RDDOperationGraphWrapper], s.info.stageId)
+      }
+
+      cleanupCachedQuantiles(key)
+      key
+    }
+  }
+
+  private def cleanupStages(count: Long): Unit = {
+    val countToDelete = calculateNumberToRemove(count, conf.get(MAX_RETAINED_STAGES))
+    if (countToDelete <= 0L) {
+      return
+    }
+
+    // SPARK-36827: For better performance and avoiding OOM, here we use a optimized method for
+    //              cleaning the StageDataWrapper and RDDOperationGraphWrapper data if Spark is
+    //              using InMemoryStore.
+    val stageIds = if (kvstore.usingInMemoryStore) {
+      cleanupStagesWithInMemoryStore(countToDelete)
+    } else {
+      cleanupStagesInKVStore(countToDelete)
     }
 
     // Delete summaries in one pass, as deleting them for each stage is slow
