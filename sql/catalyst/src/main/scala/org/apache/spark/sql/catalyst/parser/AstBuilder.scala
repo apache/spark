@@ -309,7 +309,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       operationNotAllowed("INSERT INTO ... IF NOT EXISTS", ctx)
     }
 
-    (createUnresolvedRelation(ctx.multipartIdentifier), cols, partitionKeys, false)
+    (createUnresolvedRelation(ctx.multipartIdentifier, ctx.optionsHint),
+        cols, partitionKeys, false)
   }
 
   /**
@@ -327,7 +328,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         dynamicPartitionKeys.keys.mkString(", "), ctx)
     }
 
-    (createUnresolvedRelation(ctx.multipartIdentifier), cols, partitionKeys, ctx.EXISTS() != null)
+    (createUnresolvedRelation(ctx.multipartIdentifier, ctx.optionsHint),
+        cols, partitionKeys, ctx.EXISTS() != null)
   }
 
   /**
@@ -361,7 +363,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
   override def visitDeleteFromTable(
       ctx: DeleteFromTableContext): LogicalPlan = withOrigin(ctx) {
-    val table = createUnresolvedRelation(ctx.multipartIdentifier())
+    val table = createUnresolvedRelation(ctx.multipartIdentifier(), ctx.optionsHint())
     val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "DELETE")
     val aliasedTable = tableAlias.map(SubqueryAlias(_, table)).getOrElse(table)
     val predicate = if (ctx.whereClause() != null) {
@@ -373,7 +375,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   override def visitUpdateTable(ctx: UpdateTableContext): LogicalPlan = withOrigin(ctx) {
-    val table = createUnresolvedRelation(ctx.multipartIdentifier())
+    val table = createUnresolvedRelation(ctx.multipartIdentifier(), ctx.optionsHint)
     val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "UPDATE")
     val aliasedTable = tableAlias.map(SubqueryAlias(_, table)).getOrElse(table)
     val assignments = withAssignments(ctx.setClause().assignmentList())
@@ -395,12 +397,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
 
   override def visitMergeIntoTable(ctx: MergeIntoTableContext): LogicalPlan = withOrigin(ctx) {
-    val targetTable = createUnresolvedRelation(ctx.target)
+    val targetTable = createUnresolvedRelation(ctx.target, ctx.targetHint)
     val targetTableAlias = getTableAliasWithoutColumnAlias(ctx.targetAlias, "MERGE")
     val aliasedTarget = targetTableAlias.map(SubqueryAlias(_, targetTable)).getOrElse(targetTable)
 
     val sourceTableOrQuery = if (ctx.source != null) {
-      createUnresolvedRelation(ctx.source)
+      createUnresolvedRelation(ctx.source, ctx.sourceHint)
     } else if (ctx.sourceQuery != null) {
       visitQuery(ctx.sourceQuery)
     } else {
@@ -1241,6 +1243,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     plan(ctx.query)
   }
 
+  override def visitOptionsHint(
+      ctx: OptionsHintContext): CaseInsensitiveStringMap = {
+    val keyValues: Map[String, String] = Option(ctx).map( options =>
+      withOrigin(ctx) {
+        visitPropertyKeyValues(options.options)
+      }).getOrElse(Map.empty)
+    new CaseInsensitiveStringMap(keyValues.asJava)
+  }
+
   /**
    * Create an un-aliased table reference. This is typically used for top-level table references,
    * for example:
@@ -1251,9 +1262,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitTable(ctx: TableContext): LogicalPlan = withOrigin(ctx) {
     val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val options = Option(ctx.optionHint).map(hint =>
-      visitPropertyKeyValues(hint.options)).getOrElse(Map.empty)
-    UnresolvedRelation(tableId, new CaseInsensitiveStringMap(options.asJava))
+    UnresolvedRelation(tableId, visitOptionsHint(ctx.optionsHint))
   }
 
   /**
@@ -1261,10 +1270,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
     val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val options = Option(ctx.optionHint).map(hint =>
-      visitPropertyKeyValues(hint.options)).getOrElse(Map.empty)
     val table = mayApplyAliasPlan(ctx.tableAlias,
-      UnresolvedRelation(tableId, new CaseInsensitiveStringMap(options.asJava)))
+      UnresolvedRelation(tableId, visitOptionsHint(ctx.optionsHint)))
     table.optionalMap(ctx.sample)(withSample)
   }
 
@@ -2386,8 +2393,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Create an [[UnresolvedRelation]] from a multi-part identifier context.
    */
   private def createUnresolvedRelation(
-      ctx: MultipartIdentifierContext): UnresolvedRelation = withOrigin(ctx) {
-    UnresolvedRelation(visitMultipartIdentifier(ctx))
+      ctx: MultipartIdentifierContext,
+      optionsHint: OptionsHintContext): UnresolvedRelation = withOrigin(ctx) {
+    UnresolvedRelation(visitMultipartIdentifier(ctx), visitOptionsHint(optionsHint))
   }
 
   /**
@@ -4077,7 +4085,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     val query = Option(ctx.query).map(plan)
-    val relation = createUnresolvedRelation(ctx.multipartIdentifier)
+    val relation = createUnresolvedRelation(ctx.multipartIdentifier, null)
     val tableName = relation.multipartIdentifier
     if (query.isDefined && tableName.length > 1) {
       val catalogAndNamespace = tableName.init
@@ -4098,7 +4106,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitUncacheTable(ctx: UncacheTableContext): LogicalPlan = withOrigin(ctx) {
     UncacheTable(
-      createUnresolvedRelation(ctx.multipartIdentifier),
+      createUnresolvedRelation(ctx.multipartIdentifier, null),
       ctx.EXISTS != null)
   }
 

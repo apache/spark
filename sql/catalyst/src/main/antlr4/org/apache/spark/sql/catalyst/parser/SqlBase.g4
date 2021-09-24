@@ -343,10 +343,10 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE? multipartIdentifier (partitionSpec (IF NOT EXISTS)?)?  identifierList?        #insertOverwriteTable
-    | INSERT INTO TABLE? multipartIdentifier partitionSpec? (IF NOT EXISTS)? identifierList?                #insertIntoTable
-    | INSERT OVERWRITE LOCAL? DIRECTORY path=STRING rowFormat? createFileFormat?                            #insertOverwriteHiveDir
-    | INSERT OVERWRITE LOCAL? DIRECTORY (path=STRING)? tableProvider (OPTIONS options=propertyList)?        #insertOverwriteDir
+    : INSERT OVERWRITE TABLE? multipartIdentifier optionsHint? (partitionSpec (IF NOT EXISTS)?)?  identifierList?       #insertOverwriteTable
+    | INSERT INTO TABLE? multipartIdentifier optionsHint? partitionSpec? (IF NOT EXISTS)? identifierList?               #insertIntoTable
+    | INSERT OVERWRITE LOCAL? DIRECTORY path=STRING rowFormat? createFileFormat?                                        #insertOverwriteHiveDir
+    | INSERT OVERWRITE LOCAL? DIRECTORY (path=STRING)? tableProvider (OPTIONS options=propertyList)?                    #insertOverwriteDir
     ;
 
 partitionSpecLocation
@@ -452,10 +452,10 @@ resource
 dmlStatementNoWith
     : insertInto query                                                             #singleInsertQuery
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
-    | DELETE FROM multipartIdentifier tableAlias whereClause?                      #deleteFromTable
-    | UPDATE multipartIdentifier tableAlias setClause whereClause?                 #updateTable
-    | MERGE INTO target=multipartIdentifier targetAlias=tableAlias
-        USING (source=multipartIdentifier |
+    | DELETE FROM multipartIdentifier optionsHint? tableAlias whereClause?         #deleteFromTable
+    | UPDATE multipartIdentifier optionsHint? tableAlias setClause whereClause?    #updateTable
+    | MERGE INTO target=multipartIdentifier targetHint=optionsHint? targetAlias=tableAlias
+        USING (source=multipartIdentifier sourceHint=optionsHint? |
           '(' sourceQuery=query')') sourceAlias=tableAlias
         ON mergeCondition=booleanExpression
         matchedClause*
@@ -488,7 +488,7 @@ queryTerm
 queryPrimary
     : querySpecification                                                    #queryPrimaryDefault
     | fromStatement                                                         #fromStmt
-    | TABLE multipartIdentifier optionHint?                                 #table
+    | TABLE multipartIdentifier optionsHint?                                #table
     | inlineTable                                                           #inlineTableDefault1
     | '(' query ')'                                                         #subquery
     ;
@@ -595,8 +595,8 @@ hintStatement
     | hintName=identifier '(' parameters+=primaryExpression (',' parameters+=primaryExpression)* ')'
     ;
 
-optionHint
-    : '/*+' OPTIONS options=tablePropertyList '*/'
+optionsHint
+    : '/*+' OPTIONS options=propertyList '*/'
     ;
 
 fromClause
@@ -715,11 +715,11 @@ identifierComment
     ;
 
 relationPrimary
-    : multipartIdentifier optionHint? sample? tableAlias  #tableName
-    | '(' query ')' sample? tableAlias                    #aliasedQuery
-    | '(' relation ')' sample? tableAlias                 #aliasedRelation
-    | inlineTable                                         #inlineTableDefault2
-    | functionTable                                       #tableValuedFunction
+    : multipartIdentifier optionsHint? sample? tableAlias  #tableName
+    | '(' query ')' sample? tableAlias                     #aliasedQuery
+    | '(' relation ')' sample? tableAlias                  #aliasedRelation
+    | inlineTable                                          #inlineTableDefault2
+    | functionTable                                        #tableValuedFunction
     ;
 
 inlineTable
