@@ -139,8 +139,8 @@ case class Sha2(left: Expression, right: Expression)
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-224");
             byte[] messageDigest = md.digest($eval1);
             String hashText = new java.math.BigInteger(1, messageDigest).toString(16);
-            hashText = String.format("%56s", hashText).replace(' ', '0');
-            ${ev.value} = UTF8String.fromString(hashText);
+            String paddedHashText = String.format("%56s", hashText).replace(' ', '0');
+            ${ev.value} = UTF8String.fromString(paddedHashText);
           } catch (java.security.NoSuchAlgorithmException e) {
             ${ev.isNull} = true;
           }
