@@ -3438,7 +3438,7 @@ case class ArrayDistinct(child: Expression)
         () => arrayBuffer += null)
       var i = 0
       while (i < array.numElements()) {
-        withNullCheckFunc(array)(i)
+        withNullCheckFunc(array, i)
         i += 1
       }
       new GenericArrayData(arrayBuffer.toSeq)
@@ -3520,7 +3520,7 @@ case class ArrayDistinct(child: Expression)
                      """.stripMargin)
 
         val processArray = SQLOpenHashSet.withNullCheckCode(dataType, dataType, hashSet,
-          array => withNaNCheckCodeGenerator(array, _),
+          withNaNCheckCodeGenerator,
           s"""
              |$nullElementIndex = $size;
              |$size++;
@@ -3533,7 +3533,7 @@ case class ArrayDistinct(child: Expression)
            |$arrayBuilderClass $builder = new $arrayBuilderClass();
            |int $size = 0;
            |for (int $i = 0; $i < $array.numElements(); $i++) {
-           |  ${processArray(array)(i)}
+           |  ${processArray(array, i)}
            |}
            |${buildResultArray(builder, ev.value, size, nullElementIndex)}
          """.stripMargin
@@ -3618,7 +3618,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
         Seq(array1, array2).foreach { array =>
           var i = 0
           while (i < array.numElements()) {
-            withNullCheckFunc(array)(i)
+            withNullCheckFunc(array, i)
             i += 1
           }
         }
@@ -3706,7 +3706,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
                      """.stripMargin)
 
         val processArray = SQLOpenHashSet.withNullCheckCode(dataType, dataType, hashSet,
-          array => withNaNCheckCodeGenerator(array, _),
+          withNaNCheckCodeGenerator,
           s"""
              |$nullElementIndex = $size;
              |$size++;
@@ -3731,7 +3731,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
            |for (int $arrayDataIdx = 0; $arrayDataIdx < 2; $arrayDataIdx++) {
            |  ArrayData $array = $arrays[$arrayDataIdx];
            |  for (int $i = 0; $i < $array.numElements(); $i++) {
-           |    ${processArray(array)(i)}
+           |    ${processArray(array, i)}
            |  }
            |}
            |${buildResultArray(builder, ev.value, size, nullElementIndex)}
@@ -3850,12 +3850,12 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
 
           var i = 0
           while (i < array2.numElements()) {
-            withArray2NullCheckFunc(array2)(i)
+            withArray2NullCheckFunc(array2, i)
             i += 1
           }
           i = 0
           while (i < array1.numElements()) {
-            withArray1NullCheckFunc(array1)(i)
+            withArray1NullCheckFunc(array1, i)
             i += 1
           }
           new GenericArrayData(arrayBuffer.toSeq)
@@ -3946,8 +3946,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
                 (valueNaN: String) => "")
 
         val writeArray2ToHashSet = SQLOpenHashSet.withNullCheckCode(
-          right.dataType, left.dataType, hashSet,
-          (array: String) => withArray2NaNCheckCodeGenerator(array, _), "")
+          right.dataType, left.dataType, hashSet, withArray2NaNCheckCodeGenerator, "")
 
         val body =
           s"""
@@ -3975,7 +3974,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
 
         val processArray1 = SQLOpenHashSet.withNullCheckCode(
           left.dataType, right.dataType, hashSetResult,
-          (array: String) => withArray1NaNCheckCodeGenerator(array, _),
+          withArray1NaNCheckCodeGenerator,
           s"""
              |$nullElementIndex = $size;
              |$size++;
@@ -3996,12 +3995,12 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
            |$openHashSet $hashSetResult = new $openHashSet$hsPostFix($classTag);
            |$declareNullTrackVariables
            |for (int $i = 0; $i < $array2.numElements(); $i++) {
-           |  ${writeArray2ToHashSet(array2)(i)}
+           |  ${writeArray2ToHashSet(array2, i)}
            |}
            |$arrayBuilderClass $builder = new $arrayBuilderClass();
            |int $size = 0;
            |for (int $i = 0; $i < $array1.numElements(); $i++) {
-           |  ${processArray1(array1)(i)}
+           |  ${processArray1(array1, i)}
            |}
            |${buildResultArray(builder, ev.value, size, nullElementIndex)}
          """.stripMargin
@@ -4071,12 +4070,12 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
         )
         var i = 0
         while (i < array2.numElements()) {
-          withArray2NullCheckFunc(array2)(i)
+          withArray2NullCheckFunc(array2, i)
           i += 1
         }
         i = 0
         while (i < array1.numElements()) {
-          withArray1NullCheckFunc(array1)(i)
+          withArray1NullCheckFunc(array1, i)
           i += 1
         }
         new GenericArrayData(arrayBuffer.toSeq)
@@ -4160,8 +4159,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
                 (valueNaN: Any) => "")
 
         val writeArray2ToHashSet = SQLOpenHashSet.withNullCheckCode(
-          right.dataType, left.dataType, hashSet,
-          (array: String) => withArray2NaNCheckCodeGenerator(array, _), "")
+          right.dataType, left.dataType, hashSet, withArray2NaNCheckCodeGenerator, "")
 
         val body =
           s"""
@@ -4185,8 +4183,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
                  """.stripMargin)
 
         val processArray1 = SQLOpenHashSet.withNullCheckCode(
-          left.dataType, left.dataType, hashSet,
-          (array: String) => withArray1NaNCheckCodeGenerator(array, _),
+          left.dataType, left.dataType, hashSet, withArray1NaNCheckCodeGenerator,
           s"""
              |$nullElementIndex = $size;
              |$size++;
@@ -4206,12 +4203,12 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
            |$openHashSet $hashSet = new $openHashSet$hsPostFix($classTag);
            |$declareNullTrackVariables
            |for (int $i = 0; $i < $array2.numElements(); $i++) {
-           |  ${writeArray2ToHashSet(array2)(i)}
+           |  ${writeArray2ToHashSet(array2, i)}
            |}
            |$arrayBuilderClass $builder = new $arrayBuilderClass();
            |int $size = 0;
            |for (int $i = 0; $i < $array1.numElements(); $i++) {
-           |  ${processArray1(array1)(i)}
+           |  ${processArray1(array1, i)}
            |}
            |${buildResultArray(builder, ev.value, size, nullElementIndex)}
          """.stripMargin

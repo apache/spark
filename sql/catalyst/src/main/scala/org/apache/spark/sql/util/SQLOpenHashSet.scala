@@ -65,29 +65,26 @@ object SQLOpenHashSet {
       dataType: DataType,
       hashSet: SQLOpenHashSet[Any],
       handleNotNull: Any => Unit,
-      handleNull: () => Unit): ArrayData => Int => Unit = {
-    (array: ArrayData) => {
-      (index: Int) =>
-        if (array.isNullAt(index)) {
-          if (!hashSet.containsNull) {
-            hashSet.addNull
-            handleNull()
-          }
-        } else {
-          val elem = array.get(index, dataType)
-          handleNotNull(elem)
+      handleNull: () => Unit): (ArrayData, Int) => Unit = {
+    (array: ArrayData, index: Int) =>
+      if (array.isNullAt(index)) {
+        if (!hashSet.containsNull) {
+          hashSet.addNull
+          handleNull()
         }
-    }
+      } else {
+        val elem = array.get(index, dataType)
+        handleNotNull(elem)
+      }
   }
 
   def withNullCheckCode(
       arrayType1: DataType,
       arrayType2: DataType,
       hashSet: String,
-      handleNotNull: String => String => String,
-      handleNull: String): String => String => String = {
-    (array: String) =>
-      (index: String) =>
+      handleNotNull: (String, String) => String,
+      handleNull: String): (String, String) => String = {
+    (array: String, index: String) =>
         if (arrayType1.asInstanceOf[ArrayType].containsNull) {
           if (arrayType2.asInstanceOf[ArrayType].containsNull) {
             s"""
@@ -97,18 +94,18 @@ object SQLOpenHashSet {
                |    $handleNull
                |  }
                |} else {
-               |  ${handleNotNull(array)(index)}
+               |  ${handleNotNull(array, index)}
                |}
            """.stripMargin
           } else {
             s"""
                |if (!$array.isNullAt($index)) {
-               | ${handleNotNull(array)(index)}
+               | ${handleNotNull(array, index)}
                |}
            """.stripMargin
           }
         } else {
-          handleNotNull(array)(index)
+          handleNotNull(array, index)
         }
   }
 
