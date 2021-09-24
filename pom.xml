@@ -3011,7 +3011,6 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <createDependencyReducedPom>false</createDependencyReducedPom>
           <artifactSet>
             <includes>
               <include>org.spark-project.spark:unused</include>
