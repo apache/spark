@@ -3509,16 +3509,18 @@ case class ArrayDistinct(child: Expression)
              |}
            """.stripMargin
 
-        val processArray = SQLOpenHashSet.withNullCheckCode(dataType, dataType, hashSet,
-          (array: String) =>
-            (index: String) =>
+        val withNaNCheckCodeGenerator =
+          (array: String, index: String) =>
               s"$jt $value = ${genGetValue(array, index)};" +
                 SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
                   (valueNaN: String) =>
                     s"""
                        |$size++;
                        |$builder.$$plus$$eq($valueNaN);
-                     """.stripMargin),
+                     """.stripMargin)
+
+        val processArray = SQLOpenHashSet.withNullCheckCode(dataType, dataType, hashSet,
+          array => withNaNCheckCodeGenerator(array, _),
           s"""
              |$nullElementIndex = $size;
              |$size++;
@@ -3693,16 +3695,18 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
              |}
            """.stripMargin
 
+        val withNaNCheckCodeGenerator =
+          (array: String, index: String) =>
+            s"$jt $value = ${genGetValue(array, index)};" +
+            SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
+              (valueNaN: String) =>
+                s"""
+                   |$size++;
+                   |$builder.$$plus$$eq($valueNaN);
+                     """.stripMargin)
+
         val processArray = SQLOpenHashSet.withNullCheckCode(dataType, dataType, hashSet,
-          (array: String) =>
-            (index: String) =>
-              s"$jt $value = ${genGetValue(array, index)};" +
-                SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
-                  (valueNaN: String) =>
-                    s"""
-                       |$size++;
-                       |$builder.$$plus$$eq($valueNaN);
-                     """.stripMargin),
+          array => withNaNCheckCodeGenerator(array, _),
           s"""
              |$nullElementIndex = $size;
              |$size++;
@@ -3934,15 +3938,16 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
 
+        val withArray2NaNCheckCodeGenerator =
+          (array: String, index: String) =>
+            s"$jt $value = ${genGetValue(array, index)};" +
+              SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet,
+                s"$hashSet.add$hsPostFix($hsValueCast$value);",
+                (valueNaN: String) => "")
+
         val writeArray2ToHashSet = SQLOpenHashSet.withNullCheckCode(
           right.dataType, left.dataType, hashSet,
-          (array: String) =>
-            (index: String) =>
-              s"$jt $value = ${genGetValue(array, index)};" +
-                SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet,
-                  s"$hashSet.add$hsPostFix($hsValueCast$value);",
-                  (valueNaN: String) => ""),
-          "")
+          (array: String) => withArray2NaNCheckCodeGenerator(array, _), "")
 
         val body =
           s"""
@@ -3956,19 +3961,21 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
              |}
            """.stripMargin
 
+        val withArray1NaNCheckCodeGenerator =
+          (array: String, index: String) =>
+            s"$jt $value = ${genGetValue(array, index)};" +
+              SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSetResult, body,
+                (valueNaN: Any) =>
+                  s"""
+                     |if ($hashSet.containsNaN()) {
+                     |  ++$size;
+                     |  $builder.$$plus$$eq($valueNaN);
+                     |}
+                 """.stripMargin)
+
         val processArray1 = SQLOpenHashSet.withNullCheckCode(
           left.dataType, right.dataType, hashSetResult,
-          (array: String) =>
-            (index: String) =>
-              s"$jt $value = ${genGetValue(array, index)};" +
-                SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSetResult, body,
-                  (valueNaN: Any) =>
-                    s"""
-                       |if ($hashSet.containsNaN()) {
-                       |  ++$size;
-                       |  $builder.$$plus$$eq($valueNaN);
-                       |}
-                 """.stripMargin),
+          (array: String) => withArray1NaNCheckCodeGenerator(array, _),
           s"""
              |$nullElementIndex = $size;
              |$size++;
@@ -4145,15 +4152,16 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
 
+        val withArray2NaNCheckCodeGenerator =
+          (array: String, index: String) =>
+            s"$jt $value = ${genGetValue(array, i)};" +
+              SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet,
+                s"$hashSet.add$hsPostFix($hsValueCast$value);",
+                (valueNaN: Any) => "")
+
         val writeArray2ToHashSet = SQLOpenHashSet.withNullCheckCode(
           right.dataType, left.dataType, hashSet,
-          (array: String) =>
-            (index: String) =>
-          s"$jt $value = ${genGetValue(array, i)};" +
-            SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet,
-              s"$hashSet.add$hsPostFix($hsValueCast$value);",
-              (valueNaN: Any) => ""),
-        "")
+          (array: String) => withArray2NaNCheckCodeGenerator(array, _), "")
 
         val body =
           s"""
@@ -4166,17 +4174,19 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
              |}
            """.stripMargin
 
+        val withArray1NaNCheckCodeGenerator =
+          (array: String, index: String) =>
+            s"$jt $value = ${genGetValue(array, index)};" +
+              SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
+                (valueNaN: String) =>
+                  s"""
+                     |$size++;
+                     |$builder.$$plus$$eq($valueNaN);
+                 """.stripMargin)
+
         val processArray1 = SQLOpenHashSet.withNullCheckCode(
           left.dataType, left.dataType, hashSet,
-          (array: String) =>
-            (index: String) =>
-              s"$jt $value = ${genGetValue(array, index)};" +
-                SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
-                  (valueNaN: String) =>
-                    s"""
-                       |$size++;
-                       |$builder.$$plus$$eq($valueNaN);
-                 """.stripMargin),
+          (array: String) => withArray1NaNCheckCodeGenerator(array, _),
           s"""
              |$nullElementIndex = $size;
              |$size++;
