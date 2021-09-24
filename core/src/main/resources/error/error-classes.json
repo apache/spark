@@ -29,10 +29,6 @@
     "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"
   },
-  "CANNOT_RESOLVE_NESTED_SCHEMA" : {
-    "message" : [ "Failed to rename as %s was not found" ],
-    "sqlState" : "22023"
-  },
   "CANNOT_TERMINATE_GENERATOR" : {
     "message" : [ "Cannot terminate expression: %s" ]
   },
@@ -172,6 +168,10 @@
   "REACHED_UNREACHABLE_LINE" : {
     "message" : [ "This line should be unreachable %s" ],
     "sqlState" : "42000"
+  },
+  "RENAME_SRC_PATH_NOT_FOUND" : {
+    "message" : [ "Failed to rename as %s was not found" ],
+    "sqlState" : "22023"
   },
   "RESOLVE_CANNOT_HANDLE_NESTED_SCHEMA" : {
     "message" : [ "Can not handle nested schema...  plan %s" ]

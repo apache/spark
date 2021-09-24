@@ -316,7 +316,7 @@ object QueryExecutionErrors {
   }
 
   def failToConvertValueToJsonError(value: AnyRef, cls: Class[_], dataType: DataType): Throwable = {
-    new SparkRuntimeException(errorClass = "FAIL_TO_CONVERT_VALUE_TO_JSON",
+    new SparkRuntimeException(errorClass = "FAILED_TO_CONVERT_VALUE_TO_JSON",
       messageParameters = Array(value.toString, cls.getName, dataType.typeName))
   }
 
@@ -1390,7 +1390,7 @@ object QueryExecutionErrors {
   }
 
   def renameSrcPathNotFoundError(srcPath: Path): Throwable = {
-    new SparkFileNotFoundException(errorClass = "CANNOT_RESOLVE_NESTED_SCHEMA",
+    new SparkFileNotFoundException(errorClass = "RENAME_SRC_PATH_NOT_FOUND",
       Array(srcPath.toString))
   }
 

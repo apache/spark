@@ -2389,7 +2389,7 @@ object QueryCompilationErrors {
 
   def invalidJsonSchema(schema: DataType): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
+      errorClass = "INVALID_JSON_MAP_KEY_TYPE",
       messageParameters = Array(schema.toString))
   }
 }
