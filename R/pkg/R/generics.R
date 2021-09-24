@@ -955,6 +955,10 @@ setGeneric("create_array", function(x, ...) { standardGeneric("create_array") })
 #' @name NULL
 setGeneric("create_map", function(x, ...) { standardGeneric("create_map") })
 
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("csc", function(x) { standardGeneric("csc") })
+
 #' @rdname column_misc_functions
 #' @name NULL
 setGeneric("hash", function(x, ...) { standardGeneric("hash") })
@@ -1331,6 +1335,10 @@ setGeneric("schema_of_json", function(x, ...) { standardGeneric("schema_of_json"
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("sd", function(x, na.rm = FALSE) { standardGeneric("sd") })
+
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("sec", function(x) { standardGeneric("sec") })
 
 #' @rdname column_datetime_functions
 #' @name NULL

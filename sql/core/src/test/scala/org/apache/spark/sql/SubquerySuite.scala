@@ -1902,4 +1902,22 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       assert(exchanges.size === 1)
     }
   }
+
+  test("SPARK-36747: should not combine Project with Aggregate") {
+    withTempView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      checkAnswer(
+        sql("""
+              |SELECT m, (SELECT SUM(c2) FROM t WHERE c1 = m)
+              |FROM (SELECT MIN(c2) AS m FROM t)
+              |""".stripMargin),
+        Row(1, 2) :: Nil)
+      checkAnswer(
+        sql("""
+              |SELECT c, (SELECT SUM(c2) FROM t WHERE c1 = c)
+              |FROM (SELECT c1 AS c FROM t GROUP BY c1)
+              |""".stripMargin),
+        Row(0, 1) :: Row(1, 2) :: Nil)
+    }
+  }
 }
