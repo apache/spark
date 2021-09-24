@@ -2916,6 +2916,22 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-36481: Test for SET CATALOG statement") {
+    val catalogManager = spark.sessionState.catalogManager
+    assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
+
+    sql("SET CATALOG testcat")
+    assert(catalogManager.currentCatalog.name() == "testcat")
+
+    sql("SET CATALOG testcat2")
+    assert(catalogManager.currentCatalog.name() == "testcat2")
+
+    val errMsg = intercept[CatalogNotFoundException] {
+      sql("SET CATALOG not_exist_catalog")
+    }.getMessage
+    assert(errMsg.contains("Catalog 'not_exist_catalog' plugin class not found"))
+  }
+
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
