@@ -1170,7 +1170,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(batch.numRows() == 0)
       assert(batch.rowIterator().hasNext == false)
 
-      // Add a row [1, 1.1, NULL]
+      // Add a row [1, 1.1, NULL, "Hello"]
       columns(0).putInt(0, 1)
       columns(1).putDouble(0, 1.1)
       columns(2).putNull(0)
@@ -1185,7 +1185,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
       // Reset and add 3 rows
       columns.foreach(_.reset())
-      // Add rows [NULL, 2.2, 2, "abc"], [3, NULL, 3, ""], [4, 4.4, 4, "world]
+      // Add rows [NULL, 2.2, 2, "abc"], [3, NULL, 3, ""], [4, 4.4, 4, "world"]
       columns(0).putNull(0)
       columns(1).putDouble(0, 2.2)
       columns(2).putInt(0, 2)

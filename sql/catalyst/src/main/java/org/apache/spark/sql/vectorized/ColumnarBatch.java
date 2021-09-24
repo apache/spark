@@ -18,15 +18,15 @@ package org.apache.spark.sql.vectorized;
 
 import java.util.*;
 
-import org.apache.spark.annotation.Evolving;
+import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.sql.catalyst.InternalRow;
 
 /**
  * This class wraps multiple ColumnVectors as a row-wise table. It provides a row view of this
  * batch so that Spark can access the data row by row. Instance of it is meant to be reused during
- * the entire data loading process.
+ * the entire data loading process. A data source may extend this class with customized logic.
  */
-@Evolving
+@DeveloperApi
 public class ColumnarBatch implements AutoCloseable {
   protected int numRows;
   protected final ColumnVector[] columns;
