@@ -111,7 +111,7 @@ case class InSubqueryExec(
     child: Expression,
     plan: BaseSubqueryExec,
     exprId: ExprId,
-    needBroadcast: Boolean = false,
+    shouldBroadcast: Boolean = false,
     private var resultBroadcast: Broadcast[Array[Any]] = null,
     @transient private var result: Array[Any] = null)
   extends ExecSubqueryExpression with UnaryLike[Expression] {
@@ -131,7 +131,7 @@ case class InSubqueryExec(
     } else {
       rows.map(_.get(0, child.dataType))
     }
-    if (needBroadcast) {
+    if (shouldBroadcast) {
       resultBroadcast = plan.session.sparkContext.broadcast(result)
     }
   }
