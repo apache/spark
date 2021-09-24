@@ -20,6 +20,9 @@
   "CANNOT_GET_JDBC_TYPE" : {
     "message" : [ "Can't get JDBC type for %s" ]
   },
+  "CANNOT_OPERATE_ON_CANONICALIZATION_PLAN" : {
+    "message" : [ "Operating on canonicalization plan" ]
+  },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"
@@ -28,11 +31,11 @@
     "message" : [ "Could not read footer for file: %s" ],
     "sqlState" : "42000"
   },
-  "CANNOT_TRANSLATE_NON_NULL_VALUE_FOR_FIELD" : {
-    "message" : [ "Can't translate non-null value for field %s" ]
-  },
   "CANNOT_TERMINATE_GENERATOR" : {
     "message" : [ "Cannot terminate expression: %s" ]
+  },
+  "CANNOT_TRANSLATE_NON_NULL_VALUE_FOR_FIELD" : {
+    "message" : [ "Can't translate non-null value for field %s" ]
   },
   "CAST_CAUSES_OVERFLOW" : {
     "message" : [ "Casting %s to %s causes overflow" ],
@@ -119,16 +122,16 @@
     "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]." ],
     "sqlState" : "22023"
   },
+  "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE" : {
+    "message" : [ "invalid input syntax for type numeric: %s" ],
+    "sqlState" : "42000"
+  },
   "INVALID_JDBC_NUM_PARTITIONS" : {
     "message" : [ "Invalid value `%s` for parameter `%s` in table writing via JDBC. The minimum value is 1." ],
     "sqlState" : "42000"
   },
   "INVALID_JDBC_TRANSACTION_ISOLATION_LEVEL" : {
     "message" : [ "Invalid value `%s` for parameter `%s`. This can be `NONE`, `READ_UNCOMMITTED`, `READ_COMMITTED`, `REPEATABLE_READ` or `SERIALIZABLE`." ],
-    "sqlState" : "42000"
-  },
-  "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE" : {
-    "message" : [ "invalid input syntax for type numeric: %s" ],
     "sqlState" : "42000"
   },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
@@ -168,9 +171,6 @@
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
     "sqlState" : "42000"
   },
-  "CANNOT_OPERATE_ON_CANONICALIZATION_PLAN" : {
-    "message" : [ "Operating on canonicalization plan" ]
-  },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
     "sqlState" : "42000"
@@ -198,16 +198,16 @@
     "message" : [ "Unsupported array element type %s based on binary" ],
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_JDBC_TYPE" : {
-    "message" : [ "Unsupported type %s" ],
-    "sqlState" : "0A000"
-  },
   "UNSUPPORTED_CHANGE_COLUMN" : {
     "message" : [ "Please add an implementation for a column change here" ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [ "Unsupported data type %s" ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_JDBC_TYPE" : {
+    "message" : [ "Unsupported type %s" ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_LITERAL_TYPE" : {
