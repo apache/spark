@@ -418,8 +418,7 @@ class ReshapeTest(PandasOnSparkTestCase):
         )
 
         self.assertRaises(
-            AnalysisException,
-            lambda: ps.merge_asof(psdf_left, psdf_right, on="a", tolerance=-1)
+            AnalysisException, lambda: ps.merge_asof(psdf_left, psdf_right, on="a", tolerance=-1)
         )
 
 
