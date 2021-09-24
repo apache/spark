@@ -1644,9 +1644,6 @@ def to_datetime(
 
         return value
 
-    unit = {k: f(k) for k in arg.keys()}
-    unit_rev = {v: k for k, v in unit.items()}
-
     def pandas_to_datetime(pser_or_pdf: Union[pd.DataFrame, pd.Series]) -> Series[np.datetime64]:
         if isinstance(pser_or_pdf, pd.DataFrame):
             pser_or_pdf = pser_or_pdf[[unit_rev["year"], unit_rev["month"], unit_rev["day"]]]
@@ -1660,10 +1657,14 @@ def to_datetime(
         )
 
     if isinstance(arg, Series):
+        unit = {k: f(k) for k in arg.keys()}
+        unit_rev = {v: k for k, v in unit.items()}
         return arg[
             [unit_rev["year"], unit_rev["month"], unit_rev["day"]]
         ].pandas_on_spark.transform_batch(pandas_to_datetime)
     if isinstance(arg, DataFrame):
+        unit = {k: f(k) for k in arg.keys()}
+        unit_rev = {v: k for k, v in unit.items()}
         psdf = arg[[unit_rev["year"], unit_rev["month"], unit_rev["day"]]]
         return psdf.pandas_on_spark.transform_batch(pandas_to_datetime)
     return pd.to_datetime(
