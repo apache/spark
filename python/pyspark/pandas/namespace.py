@@ -1657,11 +1657,7 @@ def to_datetime(
         )
 
     if isinstance(arg, Series):
-        unit = {k: f(k) for k in arg.keys()}
-        unit_rev = {v: k for k, v in unit.items()}
-        return arg[
-            [unit_rev["year"], unit_rev["month"], unit_rev["day"]]
-        ].pandas_on_spark.transform_batch(pandas_to_datetime)
+        return arg.pandas_on_spark.transform_batch(pandas_to_datetime)
     if isinstance(arg, DataFrame):
         unit = {k: f(k) for k in arg.keys()}
         unit_rev = {v: k for k, v in unit.items()}
