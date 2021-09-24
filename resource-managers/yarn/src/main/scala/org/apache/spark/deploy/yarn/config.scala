@@ -52,10 +52,13 @@ package object config extends Logging {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
-  private[spark] val AM_CLIENT_MODE_EXIT_DIRECTLY =
-    ConfigBuilder("spark.yarn.am.clientModeExitDirectly")
-      .doc("When ture, if YarnClientSchedulerBackend.MonitorThread got report with " +
-        "KILLED or FAILED status, driver will stop SparkContext and exit program with code 1.")
+  private[spark] val AM_CLIENT_MODE_EXIT_ON_ERROR =
+    ConfigBuilder("spark.yarn.am.clientModeExitOnError")
+      .doc("In yarn-client mode when this is true, if driver got " +
+        "application report with final status of KILLED or FAILED, driver " +
+        "will stop corresponding SparkContext and exit program with code 1." +
+        "Note that if this is true can called from another application and " +
+        "it will terminate the parent application as well.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(false)
