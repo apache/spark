@@ -1291,7 +1291,7 @@ private[spark] class AppStatusListener(
       }
       cleanupCachedQuantiles(key)
       key
-    }
+    }.toSeq
   }
 
   private def cleanupStagesInKVStore(countToDelete: Long): Seq[Array[Int]] = {
