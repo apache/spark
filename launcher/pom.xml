@@ -85,13 +85,32 @@
       <version>${hadoop.version}</version>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>${hadoop-client-runtime.artifact}</artifactId>
-      <version>${hadoop.version}</version>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
+
+  <profiles>
+    <profile>
+      <id>hadoop-2.7</id>
+    </profile>
+    <profile>
+      <id>hadoop-3.2</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
+      <!--
+        Only declare for Hadoop 3.2 profile. Otherwise maven-shade-plugin may stuck in an infinite
+        loop building the dependency-reduced pom, perhaps due to a maven bug:
+          https://issues.apache.org/jira/browse/MSHADE-148
+      -->
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>${hadoop-client-runtime.artifact}</artifactId>
+          <version>${hadoop.version}</version>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
 
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
