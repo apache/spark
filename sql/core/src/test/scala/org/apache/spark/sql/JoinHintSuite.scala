@@ -709,9 +709,9 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
 
   test("SPARK-36823: Support broadcast nested loop join hint for equi-join") {
     def checkBroadcastNLJoin(query: String, buildSide: BuildSide): Unit = {
-      val df = sql(query)
       withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
           SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        val df = sql(query)
         assertBroadcastNLJoin(df, buildSide)
         df.collect()
         assertBroadcastNLJoin(df, buildSide)

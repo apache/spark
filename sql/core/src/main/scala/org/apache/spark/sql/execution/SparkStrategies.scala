@@ -186,7 +186,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //   3. shuffle hash hint: We pick shuffle hash join if the join type is supported. If both
       //      sides have the shuffle hash hints, choose the smaller side (based on stats) as the
       //      build side.
-      //   4. shuffle replicate NL hint: pick cartesian product if join type is inner like.
+      //   4. broadcast NL hint: pick broadcast nested loop join. If both sides have the
+      //      broadcast NL hint, choose the smaller side (based on stats) to broadcast.
+      //   5. shuffle replicate NL hint: pick cartesian product if join type is inner like.
       //
       // If there is no hint or the hints are not applicable, we follow these rules one by one:
       //   1. Pick broadcast hash join if one side is small enough to broadcast, and the join type
