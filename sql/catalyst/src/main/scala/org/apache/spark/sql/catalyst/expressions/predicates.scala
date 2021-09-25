@@ -628,7 +628,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
              |}
              |$setIsNull
              |""".stripMargin
-        case false =>
+        case _ =>
           s"""
              |${ev.value} = $setTerm.contains($c);
              |$setIsNull
