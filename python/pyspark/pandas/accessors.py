@@ -568,7 +568,7 @@ class PandasOnSparkFrameMethods(object):
         ) -> "UserDefinedFunctionLike":
             ff = f
 
-            @pandas_udf(returnType=return_type)  # type: ignore
+            @pandas_udf(returnType=return_type)  # type: ignore[call-overload]
             def udf(pdf: pd.DataFrame) -> pd.Series:
                 return first_series(ff(pdf))
 
@@ -632,7 +632,9 @@ class PandasOnSparkFrameMethods(object):
                 )
                 columns = self_applied._internal.spark_columns
 
-                pudf = pandas_udf(output_func, returnType=return_schema)  # type: ignore
+                pudf = pandas_udf(  # type: ignore[call-overload]
+                    output_func, returnType=return_schema
+                )
                 temp_struct_column = verify_temp_column_name(
                     self_applied._internal.spark_frame, "__temp_struct__"
                 )
@@ -697,7 +699,9 @@ class PandasOnSparkFrameMethods(object):
                 )
                 columns = self_applied._internal.spark_columns
 
-                pudf = pandas_udf(output_func, returnType=return_schema)  # type: ignore
+                pudf = pandas_udf(  # type: ignore[call-overload]
+                    output_func, returnType=return_schema
+                )
                 temp_struct_column = verify_temp_column_name(
                     self_applied._internal.spark_frame, "__temp_struct__"
                 )
@@ -907,7 +911,7 @@ class PandasOnSparkSeriesMethods(object):
             psdf, apply_func, return_schema, retain_index=False
         )
 
-        @pandas_udf(returnType=field.spark_type)  # type: ignore
+        @pandas_udf(returnType=field.spark_type)  # type: ignore[call-overload]
         def pudf(*series: pd.Series) -> pd.Series:
             return first_series(output_func(pandas_concat(*series)))
 
