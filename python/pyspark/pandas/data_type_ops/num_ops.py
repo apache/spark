@@ -33,6 +33,8 @@ from pyspark.pandas.data_type_ops.base import (
     _as_other_type,
     _as_string_type,
     _sanitize_list_like,
+    _is_valid_for_logical_operator,
+    _is_boolean_type,
 )
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef.typehints import extension_dtypes, pandas_on_spark_type
@@ -180,6 +182,30 @@ class IntegralOps(NumericOps):
     The class for binary operations of pandas-on-Spark objects with spark types:
     LongType, IntegerType, ByteType and ShortType.
     """
+
+    def xor(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+
+        if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
+            return right ^ left
+        elif _is_valid_for_logical_operator(right):
+            right_is_boolean = _is_boolean_type(right)
+
+            def xor_func(left: Column, right: Any) -> Column:
+                if not isinstance(right, Column):
+                    if pd.isna(right):
+                        right = SF.lit(None)
+                    else:
+                        right = SF.lit(right)
+                return (
+                    left.bitwiseXOR(right.cast("integer")).cast("boolean")
+                    if right_is_boolean
+                    else left.bitwiseXOR(right)
+                )
+
+            return column_op(xor_func)(left, right)
+        else:
+            raise TypeError("XOR can not be applied to given types.")
 
     @property
     def pretty_name(self) -> str:
@@ -434,6 +460,10 @@ class IntegralExtensionOps(IntegralOps):
     - dtypes:
         Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
     """
+
+    def xor(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+        raise TypeError("XOR can not be applied to given types.")
 
     def restore(self, col: pd.Series) -> pd.Series:
         """Restore column when to_pandas."""

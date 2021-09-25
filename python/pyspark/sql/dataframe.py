@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import json
 import sys
 import random
 import warnings
@@ -23,6 +24,7 @@ from functools import reduce
 from html import escape as html_escape
 
 from pyspark import copy_func, since, _NoValue
+from pyspark.context import SparkContext
 from pyspark.rdd import RDD, _load_from_socket, _local_iterator_from_socket
 from pyspark.serializers import BatchedSerializer, PickleSerializer, \
     UTF8Deserializer
@@ -2535,6 +2537,31 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         [Row(age2=2, name='Alice'), Row(age2=5, name='Bob')]
         """
         return DataFrame(self._jdf.withColumnRenamed(existing, new), self.sql_ctx)
+
+    def withMetadata(self, columnName, metadata):
+        """Returns a new :class:`DataFrame` by updating an existing column with metadata.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        columnName : str
+            string, name of the existing column to update the metadata.
+        metadata : dict
+            dict, new metadata to be assigned to df.schema[columnName].metadata
+
+        Examples
+        --------
+        >>> df_meta = df.withMetadata('age', {'foo': 'bar'})
+        >>> df_meta.schema['age'].metadata
+        {'foo': 'bar'}
+        """
+        if not isinstance(metadata, dict):
+            raise TypeError("metadata should be a dict")
+        sc = SparkContext._active_spark_context
+        jmeta = sc._jvm.org.apache.spark.sql.types.Metadata.fromJson(
+            json.dumps(metadata))
+        return DataFrame(self._jdf.withMetadata(columnName, jmeta), self.sql_ctx)
 
     def drop(self, *cols):
         """Returns a new :class:`DataFrame` that drops the specified column.

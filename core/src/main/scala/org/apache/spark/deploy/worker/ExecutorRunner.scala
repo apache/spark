@@ -83,7 +83,7 @@ private[deploy] class ExecutorRunner(
     shutdownHook = ShutdownHookManager.addShutdownHook { () =>
       // It's possible that we arrive here before calling `fetchAndRunExecutor`, then `state` will
       // be `ExecutorState.LAUNCHING`. In this case, we should set `state` to `FAILED`.
-      if (state == ExecutorState.LAUNCHING) {
+      if (state == ExecutorState.LAUNCHING || state == ExecutorState.RUNNING) {
         state = ExecutorState.FAILED
       }
       killProcess(Some("Worker shutting down")) }

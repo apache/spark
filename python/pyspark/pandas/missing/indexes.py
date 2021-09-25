@@ -14,10 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
-
-import pandas as pd
-
 from pyspark.pandas.missing import unsupported_function, unsupported_property, common
 
 
@@ -56,7 +52,6 @@ class MissingPandasLikeIndex(object):
     get_value = _unsupported_function("get_value")
     groupby = _unsupported_function("groupby")
     is_ = _unsupported_function("is_")
-    is_lexsorted_for_tuple = _unsupported_function("is_lexsorted_for_tuple")
     join = _unsupported_function("join")
     putmask = _unsupported_function("putmask")
     ravel = _unsupported_function("ravel")
@@ -66,13 +61,12 @@ class MissingPandasLikeIndex(object):
     slice_locs = _unsupported_function("slice_locs")
     sortlevel = _unsupported_function("sortlevel")
     to_flat_index = _unsupported_function("to_flat_index")
-    to_native_types = _unsupported_function("to_native_types")
     where = _unsupported_function("where")
+    is_mixed = _unsupported_function("is_mixed")
 
     # Deprecated functions
-    is_mixed = _unsupported_function("is_mixed")
-    get_values = _unsupported_function("get_values", deprecated=True)
-    set_value = _unsupported_function("set_value")
+    set_value = _unsupported_function("set_value", deprecated=True)
+    to_native_types = _unsupported_function("to_native_types", deprecated=True)
 
     # Properties we won't support.
     array = common.array(_unsupported_property)
@@ -81,19 +75,6 @@ class MissingPandasLikeIndex(object):
     # Functions we won't support.
     memory_usage = common.memory_usage(_unsupported_function)
     __iter__ = common.__iter__(_unsupported_function)
-
-    if LooseVersion(pd.__version__) < LooseVersion("1.0"):
-        # Deprecated properties
-        strides = _unsupported_property("strides", deprecated=True)
-        data = _unsupported_property("data", deprecated=True)
-        itemsize = _unsupported_property("itemsize", deprecated=True)
-        base = _unsupported_property("base", deprecated=True)
-        flags = _unsupported_property("flags", deprecated=True)
-
-        # Deprecated functions
-        get_duplicates = _unsupported_function("get_duplicates", deprecated=True)
-        summary = _unsupported_function("summary", deprecated=True)
-        contains = _unsupported_function("contains", deprecated=True)
 
 
 class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
@@ -121,11 +102,6 @@ class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
 
 class MissingPandasLikeMultiIndex(object):
 
-    # Deprecated properties
-    strides = _unsupported_property("strides", deprecated=True)
-    data = _unsupported_property("data", deprecated=True)
-    itemsize = _unsupported_property("itemsize", deprecated=True)
-
     # Functions
     argsort = _unsupported_function("argsort")
     asof_locs = _unsupported_function("asof_locs")
@@ -143,7 +119,6 @@ class MissingPandasLikeMultiIndex(object):
     groupby = _unsupported_function("groupby")
     is_ = _unsupported_function("is_")
     is_lexsorted = _unsupported_function("is_lexsorted")
-    is_lexsorted_for_tuple = _unsupported_function("is_lexsorted_for_tuple")
     join = _unsupported_function("join")
     map = _unsupported_function("map")
     putmask = _unsupported_function("putmask")
@@ -158,15 +133,15 @@ class MissingPandasLikeMultiIndex(object):
     slice_locs = _unsupported_function("slice_locs")
     sortlevel = _unsupported_function("sortlevel")
     to_flat_index = _unsupported_function("to_flat_index")
-    to_native_types = _unsupported_function("to_native_types")
     truncate = _unsupported_function("truncate")
     where = _unsupported_function("where")
 
     # Deprecated functions
-    is_mixed = _unsupported_function("is_mixed")
-    get_duplicates = _unsupported_function("get_duplicates", deprecated=True)
-    get_values = _unsupported_function("get_values", deprecated=True)
+    is_mixed = _unsupported_function(
+        "is_mixed", deprecated=True, reason="Check index.inferred_type directly instead."
+    )
     set_value = _unsupported_function("set_value", deprecated=True)
+    to_native_types = _unsupported_function("to_native_types", deprecated=True)
 
     # Functions we won't support.
     array = common.array(_unsupported_property)
@@ -187,15 +162,3 @@ class MissingPandasLikeMultiIndex(object):
 
     # Properties we won't support.
     memory_usage = common.memory_usage(_unsupported_function)
-
-    if LooseVersion(pd.__version__) < LooseVersion("1.0"):
-        # Deprecated properties
-        base = _unsupported_property("base", deprecated=True)
-        labels = _unsupported_property("labels", deprecated=True)
-        flags = _unsupported_property("flags", deprecated=True)
-
-        # Deprecated functions
-        set_labels = _unsupported_function("set_labels")
-        summary = _unsupported_function("summary", deprecated=True)
-        to_hierarchical = _unsupported_function("to_hierarchical", deprecated=True)
-        contains = _unsupported_function("contains", deprecated=True)

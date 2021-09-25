@@ -965,6 +965,7 @@ private[deploy] class Master(
       app.driver.send(WorkerRemoved(worker.id, worker.host, msg))
     }
     persistenceEngine.removeWorker(worker)
+    schedule()
   }
 
   private def relaunchDriver(driver: DriverInfo): Unit = {

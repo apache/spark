@@ -291,10 +291,13 @@ case class ReplaceTableAsSelect(
  * The logical plan of the CREATE NAMESPACE command.
  */
 case class CreateNamespace(
-    catalog: SupportsNamespaces,
-    namespace: Seq[String],
+    name: LogicalPlan,
     ifNotExists: Boolean,
-    properties: Map[String, String]) extends LeafCommand
+    properties: Map[String, String]) extends UnaryCommand {
+  override def child: LogicalPlan = name
+  override protected def withNewChildInternal(newChild: LogicalPlan): CreateNamespace =
+    copy(name = newChild)
+}
 
 /**
  * The logical plan of the DROP NAMESPACE command.

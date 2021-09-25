@@ -19,8 +19,15 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.regex.Pattern
 
+import scala.collection.JavaConverters._
+
+import com.fasterxml.jackson.databind.ObjectMapper
+
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, Table, TableProvider}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSupport, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
+import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -81,6 +88,61 @@ private[sql] object DataSourceV2Utils extends Logging {
           provider.inferSchema(options),
           provider.inferPartitioning(options),
           options.asCaseSensitiveMap())
+    }
+  }
+
+  def loadV2Source(
+      sparkSession: SparkSession,
+      provider: TableProvider,
+      userSpecifiedSchema: Option[StructType],
+      extraOptions: CaseInsensitiveMap[String],
+      source: String,
+      paths: String*): Option[DataFrame] = {
+    val catalogManager = sparkSession.sessionState.catalogManager
+    val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+      source = provider, conf = sparkSession.sessionState.conf)
+
+    val optionsWithPath = getOptionsWithPaths(extraOptions, paths: _*)
+
+    val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
+      optionsWithPath.originalMap
+    val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
+    val (table, catalog, ident) = provider match {
+      case _: SupportsCatalogOptions if userSpecifiedSchema.nonEmpty =>
+        throw new IllegalArgumentException(
+          s"$source does not support user specified schema. Please don't specify the schema.")
+      case hasCatalog: SupportsCatalogOptions =>
+        val ident = hasCatalog.extractIdentifier(dsOptions)
+        val catalog = CatalogV2Util.getTableProviderCatalog(
+          hasCatalog,
+          catalogManager,
+          dsOptions)
+        (catalog.loadTable(ident), Some(catalog), Some(ident))
+      case _ =>
+        // TODO: Non-catalog paths for DSV2 are currently not well defined.
+        val tbl = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
+        (tbl, None, None)
+    }
+    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+    table match {
+      case _: SupportsRead if table.supports(BATCH_READ) =>
+        Option(Dataset.ofRows(
+          sparkSession,
+          DataSourceV2Relation.create(table, catalog, ident, dsOptions)))
+      case _ => None
+    }
+  }
+
+  private def getOptionsWithPaths(
+      extraOptions: CaseInsensitiveMap[String],
+      paths: String*): CaseInsensitiveMap[String] = {
+    if (paths.isEmpty) {
+      extraOptions
+    } else if (paths.length == 1) {
+      extraOptions + ("path" -> paths.head)
+    } else {
+      val objectMapper = new ObjectMapper()
+      extraOptions + ("paths" -> objectMapper.writeValueAsString(paths.toArray))
     }
   }
 }

@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, CaseWhen, Expression, If, IsNotNull, Literal, Or, Rand}
+import org.apache.spark.sql.catalyst.expressions.{And, CaseWhen, Coalesce, Expression, If, IsNotNull, Literal, Not, Or, Rand}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LocalRelation, LogicalPlan, UpdateTable}
@@ -65,7 +65,7 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
       UnresolvedAttribute("b"),
       TrueLiteral)
     val expectedCond = Or(
-      UnresolvedAttribute("i") <= Literal(10),
+      Not(Coalesce(Seq(UnresolvedAttribute("i") > Literal(10), FalseLiteral))),
       UnresolvedAttribute("b"))
     testFilter(originalCond, expectedCond = expectedCond)
     testJoin(originalCond, expectedCond = expectedCond)
@@ -80,7 +80,7 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
       FalseLiteral,
       UnresolvedAttribute("b"))
     val expectedCond = And(
-      UnresolvedAttribute("i") <= Literal(10),
+      Not(Coalesce(Seq(UnresolvedAttribute("i") > Literal(10), FalseLiteral))),
       UnresolvedAttribute("b"))
     testFilter(originalCond, expectedCond = expectedCond)
     testJoin(originalCond, expectedCond = expectedCond)
@@ -125,7 +125,7 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
       Seq((UnresolvedAttribute("i") > Literal(10), UnresolvedAttribute("b"))),
       TrueLiteral)
     val expectedCond = Or(
-      UnresolvedAttribute("i") <= Literal(10),
+      Not(Coalesce(Seq(UnresolvedAttribute("i") > Literal(10), FalseLiteral))),
       UnresolvedAttribute("b"))
     testFilter(originalCond, expectedCond = expectedCond)
     testJoin(originalCond, expectedCond = expectedCond)
@@ -139,7 +139,7 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
       Seq((UnresolvedAttribute("i") > Literal(10), FalseLiteral)),
       UnresolvedAttribute("b"))
     val expectedCond = And(
-      UnresolvedAttribute("i") <= Literal(10),
+      Not(Coalesce(Seq(UnresolvedAttribute("i") > Literal(10), FalseLiteral))),
       UnresolvedAttribute("b"))
     testFilter(originalCond, expectedCond = expectedCond)
     testJoin(originalCond, expectedCond = expectedCond)

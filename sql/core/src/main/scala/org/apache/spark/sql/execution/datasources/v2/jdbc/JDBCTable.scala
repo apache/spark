@@ -34,7 +34,7 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
   override def name(): String = ident.toString
 
   override def capabilities(): util.Set[TableCapability] = {
-    Set(BATCH_READ, V1_BATCH_WRITE, TRUNCATE).asJava
+    util.EnumSet.of(BATCH_READ, V1_BATCH_WRITE, TRUNCATE)
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): JDBCScanBuilder = {

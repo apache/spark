@@ -129,7 +129,14 @@ class PrefixScannableHDFSBackedStateStoreMap(
     other match {
       case o: PrefixScannableHDFSBackedStateStoreMap =>
         map.putAll(o.map)
-        prefixKeyToKeysMap.putAll(o.prefixKeyToKeysMap)
+        o.prefixKeyToKeysMap.asScala.foreach { case (prefixKey, keySet) =>
+          // Here we create a copy version of Set. Shallow-copying the prefix key map will lead
+          // two maps having the same Set "instances" for values, meaning modifying the prefix map
+          // on newer version will also affect on the prefix map on older version.
+          val newSet = new mutable.HashSet[UnsafeRow]()
+          newSet ++= keySet
+          prefixKeyToKeysMap.put(prefixKey, newSet)
+        }
 
       case _ => other.iterator().foreach { pair => put(pair.key, pair.value) }
     }
