@@ -999,8 +999,9 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     }.getMessage
     assert(errMsg.contains("Union can only be performed on tables with" +
       " the compatible column types." +
-      " struct<c1:int,c2:int,c3:struct<c3:int,c5:int>> <> struct<c1:int,c2:int,c3:struct<c3:int>>" +
-      " at the third column of the second table"))
+      " The third column of the second table is struct<c1:int,c2:int,c3:struct<c3:int,c5:int>>" +
+      " type which is not compatible with struct<c1:int,c2:int,c3:struct<c3:int>> at same" +
+      " column of first table"))
 
     // diff Case sensitive attributes names and diff sequence scenario for unionByName
     df1 = Seq((1, 2, UnionClass1d(1, 2, Struct3(1)))).toDF("a", "b", "c")
