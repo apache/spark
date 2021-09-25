@@ -1418,14 +1418,15 @@ object QueryExecutionErrors {
   }
 
   def cannotGetEventTimeWatermarkError(): Throwable = {
-    new UnsupportedOperationException(
-      "Cannot get event time watermark timestamp without setting watermark before " +
-        "[map|flatMap]GroupsWithState")
+    new SparkUnsupportedOperationException(
+      errorClass = "CANNOT_GET_EVENT_TIME_WATERMARK",
+      messageParameters = Array.empty
+    )
   }
 
   def cannotSetTimeoutTimestampError(): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "CANNOT_GET_EVENT_TIME_WATERMARK",
+      errorClass = "CANNOT_SET_TIMEOUT_TIMESTAMP",
       messageParameters = Array.empty
     )
   }
