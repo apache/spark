@@ -197,7 +197,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     assertEquivalent(castInt(f) > intLit, nullLit)
     assertEquivalent(castInt(f) >= intLit, nullLit)
     assertEquivalent(castInt(f) === intLit, nullLit)
-    assertEquivalent(castInt(f) <=> intLit, IsNull(f))
+    assertEquivalent(castInt(f) <=> intLit, IsNull(castInt(f)))
     assertEquivalent(castInt(f) <= intLit, nullLit)
     assertEquivalent(castInt(f) < intLit, nullLit)
   }
