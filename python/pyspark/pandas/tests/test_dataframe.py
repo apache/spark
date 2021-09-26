@@ -4669,7 +4669,9 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
             psdf = ps.from_pandas(pdf)
 
-            def identify4(x) -> ps.DataFrame[float, [int, ntp.NDArray[int]]]:  # type: ignore
+            def identify4(
+                x,
+            ) -> ps.DataFrame[float, [int, ntp.NDArray[int]]]:  # type: ignore[name-defined]
                 return x
 
             actual = psdf.pandas_on_spark.apply_batch(identify4)

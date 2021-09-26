@@ -287,7 +287,7 @@ def read_csv(
     >>> ps.read_csv('data.csv')  # doctest: +SKIP
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     if mangle_dupe_cols is not True:
         raise ValueError("mangle_dupe_cols can only be `True`: %s" % mangle_dupe_cols)
@@ -295,7 +295,7 @@ def read_csv(
         raise ValueError("parse_dates can only be `False`: %s" % parse_dates)
 
     if usecols is not None and not callable(usecols):
-        usecols = list(usecols)  # type: ignore
+        usecols = list(usecols)  # type: ignore[assignment]
 
     if usecols is None or callable(usecols) or len(usecols) > 0:
         reader = default_session().read
@@ -484,7 +484,7 @@ def read_json(
     1         c     d
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     if not lines:
         raise NotImplementedError("lines=False is not implemented yet.")
@@ -571,7 +571,7 @@ def read_delta(
     if version is not None and timestamp is not None:
         raise ValueError("version and timestamp cannot be used together.")
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     if version is not None:
         options["versionAsOf"] = version
@@ -698,7 +698,7 @@ def read_spark_io(
     4      14
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     sdf = default_session().read.load(path=path, format=format, schema=schema, **options)
     index_spark_columns, index_names = _get_index_map(sdf, index_col)
@@ -760,7 +760,7 @@ def read_parquet(
     0       0
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     if columns is not None:
         columns = list(columns)
@@ -1364,7 +1364,7 @@ def read_sql_table(
     >>> ps.read_sql_table('table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     reader = default_session().read
     reader.option("dbtable", table_name)
@@ -1426,7 +1426,7 @@ def read_sql_query(
     >>> ps.read_sql_query('SELECT * FROM table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     reader = default_session().read
     reader.option("query", sql)
@@ -1493,7 +1493,7 @@ def read_sql(
     >>> ps.read_sql('SELECT * FROM table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     striped = sql.strip()
     if " " not in striped:  # TODO: identify the table name or not more precisely.
@@ -2930,7 +2930,7 @@ def read_orc(
     0       0
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     psdf = read_spark_io(path, format="orc", index_col=index_col, **options)
 

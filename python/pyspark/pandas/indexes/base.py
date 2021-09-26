@@ -1990,7 +1990,7 @@ class Index(IndexOpsMixin):
         if isinstance(self, MultiIndex):
             if level is not None:
                 self_names = self.names
-                self_names[level] = names  # type: ignore
+                self_names[level] = names  # type: ignore[index]
                 names = self_names
         return self.rename(name=names, inplace=inplace)
 
@@ -2060,7 +2060,7 @@ class Index(IndexOpsMixin):
                 [isinstance(item, tuple) for item in other]
             )
             if is_other_list_of_tuples:
-                other = MultiIndex.from_tuples(other)  # type: ignore
+                other = MultiIndex.from_tuples(other)  # type: ignore[arg-type]
             else:
                 raise TypeError("other must be a MultiIndex or a list of tuples")
 
@@ -2576,7 +2576,7 @@ class Index(IndexOpsMixin):
         if hasattr(MissingPandasLikeIndex, item):
             property_or_func = getattr(MissingPandasLikeIndex, item)
             if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
+                return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
         raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, item))

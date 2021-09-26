@@ -265,7 +265,13 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         relabeling = func_or_funcs is None and is_multi_agg_with_relabel(**kwargs)
         if relabeling:
-            func_or_funcs, columns, order = normalize_keyword_aggregation(kwargs)  # type: ignore
+            (
+                func_or_funcs,
+                columns,
+                order,
+            ) = normalize_keyword_aggregation(  # type: ignore[assignment]
+                kwargs
+            )
 
         if not isinstance(func_or_funcs, (str, list)):
             if not isinstance(func_or_funcs, dict) or not all(
@@ -1157,7 +1163,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1    52
         Name: B, dtype: int64
         """
-        if not isinstance(func, Callable):  # type: ignore
+        if not callable(func):
             raise TypeError("%s object is not callable" % type(func).__name__)
 
         spec = inspect.getfullargspec(func)
@@ -1377,7 +1383,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         5    6
         Name: B, dtype: int64
         """
-        if not isinstance(func, Callable):  # type: ignore
+        if not callable(func):
             raise TypeError("%s object is not callable" % type(func).__name__)
 
         is_series_groupby = isinstance(self, SeriesGroupBy)
@@ -1425,9 +1431,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         psdf = DataFrame(self._psdf[agg_columns]._internal.with_new_sdf(sdf))
         if is_series_groupby:
-            return first_series(psdf)  # type: ignore
+            return cast(FrameLike, first_series(psdf))
         else:
-            return psdf  # type: ignore
+            return cast(FrameLike, psdf)
 
     @staticmethod
     def _prepare_group_map_apply(
@@ -1468,7 +1474,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         from pyspark.sql.utils import is_timestamp_ntz_preferred
 
         arguments_for_restore_index = psdf._internal.arguments_for_restore_index
-        prefer_timestamp_ntz = is_timestamp_ntz_preferred()  # type: ignore
+        prefer_timestamp_ntz = is_timestamp_ntz_preferred()
 
         def rename_output(pdf: pd.DataFrame) -> pd.DataFrame:
             pdf = InternalFrame.restore_index(pdf.copy(), **arguments_for_restore_index)
@@ -2224,7 +2230,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1  28  35
         2  31  35
         """
-        if not isinstance(func, Callable):  # type: ignore
+        if not callable(func):
             raise TypeError("%s object is not callable" % type(func).__name__)
 
         spec = inspect.getfullargspec(func)
@@ -2781,7 +2787,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
         if hasattr(MissingPandasLikeDataFrameGroupBy, item):
             property_or_func = getattr(MissingPandasLikeDataFrameGroupBy, item)
             if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
+                return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
         return self.__getitem__(item)
@@ -2966,7 +2972,7 @@ class SeriesGroupBy(GroupBy[Series]):
         if hasattr(MissingPandasLikeSeriesGroupBy, item):
             property_or_func = getattr(MissingPandasLikeSeriesGroupBy, item)
             if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
+                return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
         raise AttributeError(item)
