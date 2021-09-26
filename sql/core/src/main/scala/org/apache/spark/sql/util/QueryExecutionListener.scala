@@ -27,6 +27,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd
 import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.sql.util.QueryExecutionListener.getExecutionId
 import org.apache.spark.util.{ListenerBus, Utils}
 
 /**
@@ -36,6 +37,15 @@ import org.apache.spark.util.{ListenerBus, Utils}
  * multiple different threads.
  */
 trait QueryExecutionListener {
+  /**
+   * A helper method to get executionId of query processed. Could be invoked in
+   * overwritten method [[onSuccess()]] and [[onFailure()]] to get the executionId.
+   *
+   * @return executionId of the query processed.
+   */
+  protected final def executionId: Long = {
+    getExecutionId
+  }
 
   /**
    * A callback function that will be called when a query executed successfully.
@@ -65,6 +75,24 @@ trait QueryExecutionListener {
   def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit
 }
 
+object QueryExecutionListener {
+  private val localExecutionId: ThreadLocal[Long] = new ThreadLocal[Long]() {
+    override def initialValue(): Long = -1L
+  }
+
+  private[sql] def withExecutionId[T](executionId: Long)(body: => T): T = {
+    try {
+      localExecutionId.set(executionId)
+      body
+    } finally {
+      localExecutionId.remove()
+    }
+  }
+
+  private[sql] def getExecutionId: Long = {
+    localExecutionId.get()
+  }
+}
 
 /**
  * Manager for [[QueryExecutionListener]]. See `org.apache.spark.sql.SQLContext.listenerManager`.
@@ -146,16 +174,20 @@ private[sql] class ExecutionListenerBus private(sessionUUID: String)
       event: SparkListenerSQLExecutionEnd): Unit = {
     if (shouldReport(event)) {
       val funcName = event.executionName.get
-      event.executionFailure match {
-        case Some(ex) =>
-          val exception = ex match {
-            case e: Exception => e
-            case other: Throwable =>
-              QueryExecutionErrors.failedToExecuteQueryError(other)
-          }
-          listener.onFailure(funcName, event.qe, exception)
-        case _ =>
-          listener.onSuccess(funcName, event.qe, event.duration)
+      val executionId = event.executionId
+
+      QueryExecutionListener.withExecutionId(executionId) {
+        event.executionFailure match {
+          case Some(ex) =>
+            val exception = ex match {
+              case e: Exception => e
+              case other: Throwable =>
+                QueryExecutionErrors.failedToExecuteQueryError(other)
+            }
+            listener.onFailure(funcName, event.qe, exception)
+          case _ =>
+            listener.onSuccess(funcName, event.qe, event.duration)
+        }
       }
     }
   }

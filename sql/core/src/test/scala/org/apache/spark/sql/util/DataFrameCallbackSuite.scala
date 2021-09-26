@@ -22,6 +22,7 @@ import java.lang.{Long => JLong}
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
+import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.sql.{functions, Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
@@ -30,6 +31,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, LeafRunnableCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
+import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -305,6 +307,42 @@ class DataFrameCallbackSuite extends QueryTest
 
       validateObservedMetrics(df)
     }
+  }
+
+  test("SPARK-36658: get executionId from listener") {
+    var queryExecutionId: Long = -1L
+    var expectedExecutionId: Long = -1L
+
+    val queryListener = new QueryExecutionListener {
+      // Only test successful case here, so no need to implement `onFailure`
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+
+      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+        queryExecutionId = executionId
+      }
+    }
+    spark.listenerManager.register(queryListener)
+    val sparkListener = new SparkFirehoseListener {
+      override def onEvent(event: SparkListenerEvent): Unit = {
+        event match {
+          case e @ SparkListenerSQLExecutionEnd(executionId, time) =>
+            expectedExecutionId = executionId
+          case _ => // nothing
+        }
+      }
+    }
+    sparkContext.addSparkListener(sparkListener)
+
+    val df = Seq(1 -> "a").toDF("i", "j")
+    df.select("i").collect()
+    df.filter($"i" > 0).count()
+
+    sparkContext.listenerBus.waitUntilEmpty()
+    assert(expectedExecutionId >= 0)
+    assert(expectedExecutionId == queryExecutionId)
+
+    spark.listenerManager.unregister(queryListener)
+    sparkContext.removeSparkListener(sparkListener)
   }
 
   private def validateObservedMetrics(df: Dataset[JLong]): Unit = {
