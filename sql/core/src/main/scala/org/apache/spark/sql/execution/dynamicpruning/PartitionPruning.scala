@@ -172,8 +172,14 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       // We can't reuse the broadcast because the join type doesn't support broadcast,
       // and doing DPP means running an extra query that may have significant overhead.
       // We need to make sure the pruning side is very big so that DPP is still worthy.
-      estimatePruningSideSize * conf.dynamicPartitionPruningPruningSideExtraFilterRatio > overhead
+      canCollectFilteringQuery(otherPlan) &&
+        estimatePruningSideSize * conf.dynamicPartitionPruningPruningSideExtraFilterRatio > overhead
     }
+  }
+
+  def canCollectFilteringQuery(plan: LogicalPlan): Boolean = {
+    plan.stats.sizeInBytes >= 0 &&
+      plan.stats.sizeInBytes <= conf.dynamicPartitionPruningFilteringQuerySizeThreshold
   }
 
   /**
