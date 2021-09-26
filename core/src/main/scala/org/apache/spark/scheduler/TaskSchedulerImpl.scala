@@ -930,13 +930,17 @@ private[spark] class TaskSchedulerImpl(
   override def stop(): Unit = {
     speculationScheduler.shutdown()
     if (backend != null) {
-      backend.stop()
+      Utils.tryLogNonFatalError {
+        backend.stop()
+      }
     }
     if (taskResultGetter != null) {
       taskResultGetter.stop()
     }
     if (barrierCoordinator != null) {
-      barrierCoordinator.stop()
+      Utils.tryLogNonFatalError {
+        barrierCoordinator.stop()
+      }
     }
     starvationTimer.cancel()
     abortTimer.cancel()
