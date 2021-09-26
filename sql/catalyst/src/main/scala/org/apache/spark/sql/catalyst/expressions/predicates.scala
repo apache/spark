@@ -620,10 +620,10 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
       if (hasNaN && isNaNCode.isDefined) {
         s"""
-           |if (${isNaNCode.get(c)}) {
-           |  ${ev.value} =  true;
-           |} else {
-           | ${ev.value} = $setTerm.contains($c);
+           |if ($setTerm.contains($c)) {
+           |  ${ev.value} = true;
+           |} else if (${isNaNCode.get(c)}) {
+           |  ${ev.value} = true;
            |}
            |$setIsNull
          """.stripMargin
