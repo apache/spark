@@ -618,21 +618,20 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
         case _ => None
       }
 
-      hasNaN match {
-        case true if isNaNCode.isDefined =>
-          s"""
-             |if (${isNaNCode.get(c)}) {
-             |  ${ev.value} =  true;
-             |} else {
-             | ${ev.value} = $setTerm.contains($c);
-             |}
-             |$setIsNull
-             |""".stripMargin
-        case _ =>
-          s"""
-             |${ev.value} = $setTerm.contains($c);
-             |$setIsNull
-             """.stripMargin
+      if (hasNaN && isNaNCode.isDefined) {
+        s"""
+           |if (${isNaNCode.get(c)}) {
+           |  ${ev.value} =  true;
+           |} else {
+           | ${ev.value} = $setTerm.contains($c);
+           |}
+           |$setIsNull
+         """.stripMargin
+      } else {
+        s"""
+           |${ev.value} = $setTerm.contains($c);
+           |$setIsNull
+         """.stripMargin
       }
     })
   }
