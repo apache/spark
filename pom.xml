@@ -249,9 +249,22 @@
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
 
     <!--
-      These default to Hadoop 3.x shaded client/minicluster jars, but are switched to hadoop-client
-      when the Hadoop profile is hadoop-2.7, because these are only available in 3.x. Note that,
-      as result we have to include the same hadoop-client dependency multiple times in hadoop-2.7.
+      These default to Hadoop 3.x shaded client/minicluster jars, but since the shaded jars are
+      only available in 3.x, we have to switch to non-shaded Hadoop client jars when the active
+      profile is hadoop-2.7.
+
+      To make the above work, in the hadoop-2.7 profile section we bind hadoop-client-api to
+      hadoop-client and hadoop-client-runtime to hadoop-yarn-api, which is a dependency of the
+      former. This effectively moves the hadoop-yarn-api to the same level as hadoop-client, but
+      should be fine since both dependencies are required. We cannot use hadoop-client for both
+      of these because the maven enforcer plugin bans duplicate dependencies.
+
+      We still leave hadoop-client-minicluster to use hadoop-client because it is of test scope,
+      and is only used by spark-yarn module. To avoid the duplicate dependency issue we only
+      declare the dependency when we're using hadoop-3.2 profile, in
+      resource-managers/yarn/pom.xml.
+
+      Please check SPARK-36835 for more details.
     -->
     <hadoop-client-api.artifact>hadoop-client-api</hadoop-client-api.artifact>
     <hadoop-client-runtime.artifact>hadoop-client-runtime</hadoop-client-runtime.artifact>
@@ -3276,8 +3289,11 @@
         <hadoop.version>2.7.4</hadoop.version>
         <curator.version>2.7.1</curator.version>
         <commons-io.version>2.4</commons-io.version>
+        <!--
+          the declaration site above of these variables explains why we need to re-assign them here
+        -->
         <hadoop-client-api.artifact>hadoop-client</hadoop-client-api.artifact>
-        <hadoop-client-runtime.artifact>hadoop-client</hadoop-client-runtime.artifact>
+        <hadoop-client-runtime.artifact>hadoop-yarn-api</hadoop-client-runtime.artifact>
         <hadoop-client-minicluster.artifact>hadoop-client</hadoop-client-minicluster.artifact>
       </properties>
     </profile>
