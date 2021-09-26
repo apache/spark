@@ -442,6 +442,16 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1.6.0</td>
 </tr>
 <tr>
+  <td><code>spark.yarn.am.clientModeExitOnErro</code></td>
+  <td>false</td>
+  <td>
+  In yarn-client mode when this is true, if driver got application report with final status of KILLED or FAILED,
+  driver will stop corresponding SparkContext and exit program with code 1.
+  Note that if this is true can called from another application and it will terminate the parent application as well.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
   <td><code>spark.yarn.executor.failuresValidityInterval</code></td>
   <td>(none)</td>
   <td>
