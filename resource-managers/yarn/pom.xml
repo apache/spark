@@ -30,16 +30,9 @@
   <properties>
     <sbt.project.name>yarn</sbt.project.name>
     <jersey-1.version>1.19</jersey-1.version>
-    <spark.yarn.isHadoopProvided>false</spark.yarn.isHadoopProvided>
   </properties>
 
   <profiles>
-    <profile>
-      <id>hadoop-provided</id>
-      <properties>
-        <spark.yarn.isHadoopProvided>true</spark.yarn.isHadoopProvided>
-      </properties>
-    </profile>
     <profile>
       <id>hadoop-2.7</id>
       <dependencies>

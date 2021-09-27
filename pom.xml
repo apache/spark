@@ -269,6 +269,7 @@
     <hadoop-client-api.artifact>hadoop-client-api</hadoop-client-api.artifact>
     <hadoop-client-runtime.artifact>hadoop-client-runtime</hadoop-client-runtime.artifact>
     <hadoop-client-minicluster.artifact>hadoop-client-minicluster</hadoop-client-minicluster.artifact>
+    <spark.yarn.isHadoopProvided>false</spark.yarn.isHadoopProvided>
 
     <!--
       Overridable test home. So that you can call individual pom files directly without
@@ -3485,6 +3486,9 @@
     -->
     <profile>
       <id>hadoop-provided</id>
+      <properties>
+        <spark.yarn.isHadoopProvided>true</spark.yarn.isHadoopProvided>
+      </properties>
     </profile>
     <profile>
       <id>hive-provided</id>
