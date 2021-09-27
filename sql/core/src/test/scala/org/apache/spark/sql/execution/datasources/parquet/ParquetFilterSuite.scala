@@ -1808,7 +1808,6 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     }
   }
 
-
   test("SPARK-36866: filter pushdown - year-month interval") {
     def months(m: Int): Period = Period.ofMonths(m)
     def monthsLit(m: Int): Literal = Literal(months(m))
