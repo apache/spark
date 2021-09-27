@@ -39,7 +39,7 @@ import org.apache.spark.util.{ListenerBus, Utils}
 trait QueryExecutionListener {
   /**
    * A helper method to get executionId of query processed. Could be invoked in
-   * overwritten method [[onSuccess()]] and [[onFailure()]] to get the executionId.
+   * overwritten method onSuccess and onFailure to get the executionId.
    *
    * @return executionId of the query processed.
    */
