@@ -64,8 +64,8 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   /**
    * Returns the value of Spark runtime configuration property for the given key.
    *
-   * @throws org.apache.spark.SparkNoSuchElementException if the key is not set and does not have
-   *                                    a default value
+   * @throws org.apache.spark.SparkNoSuchElementException if the key is not set and does not
+   *                                                      have a default value
    * @since 2.0.0
    */
   @throws[SparkNoSuchElementException]("if the key is not set")
