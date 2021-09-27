@@ -49,7 +49,7 @@ from pyspark.sql._typing import (
 # since it requires to make every single overridden definition.
 
 
-def _get_get_jvm_function(name, sc):
+def _get_get_jvm_function(name: str, sc: SparkContext) -> Callable:
     """
     Retrieves JVM function identified by name from
     Java gateway associated with sc.
@@ -57,7 +57,7 @@ def _get_get_jvm_function(name, sc):
     return getattr(sc._jvm.functions, name)
 
 
-def _invoke_function(name, *args):
+def _invoke_function(name: str, *args: Any) -> Column:
     """
     Invokes JVM function identified by name with args
     and wraps the result with :class:`~pyspark.sql.Column`.
@@ -66,7 +66,7 @@ def _invoke_function(name, *args):
     return Column(jf(*args))
 
 
-def _invoke_function_over_column(name, col):
+def _invoke_function_over_column(name: str, col: ColumnOrName) -> Column:
     """
     Invokes unary JVM function identified by name
     and wraps the result with :class:`~pyspark.sql.Column`.
@@ -74,7 +74,7 @@ def _invoke_function_over_column(name, col):
     return _invoke_function(name, _to_java_column(col))
 
 
-def _invoke_binary_math_function(name, col1, col2):
+def _invoke_binary_math_function(name: str, col1: ColumnOrName, col2: ColumnOrName) -> Column:
     """
     Invokes binary JVM math function identified by name
     and wraps the result with :class:`~pyspark.sql.Column`.
@@ -88,7 +88,7 @@ def _invoke_binary_math_function(name, col1, col2):
     )
 
 
-def _options_to_str(options=None):
+def _options_to_str(options: Optional[Any] = None) -> dict:
     if options:
         return {key: to_str(value) for (key, value) in options.items()}
     return {}
@@ -830,11 +830,20 @@ def radians(col: ColumnOrName) -> Column:
 
 
 @overload
-def atan2(col1: ColumnOrName, col2: ColumnOrName) -> Column: ...
+def atan2(col1: ColumnOrName, col2: ColumnOrName) -> Column:
+    ...
+
+
 @overload
-def atan2(col1: float, col2: ColumnOrName) -> Column: ...
+def atan2(col1: float, col2: ColumnOrName) -> Column:
+    ...
+
+
 @overload
-def atan2(col1: ColumnOrName, col2: float) -> Column: ...
+def atan2(col1: ColumnOrName, col2: float) -> Column:
+    ...
+
+
 def atan2(col1, col2):
     """
     .. versionadded:: 1.4.0
@@ -859,11 +868,20 @@ def atan2(col1, col2):
 
 
 @overload
-def hypot(col1: ColumnOrName, col2: ColumnOrName) -> Column: ...
+def hypot(col1: ColumnOrName, col2: ColumnOrName) -> Column:
+    ...
+
+
 @overload
-def hypot(col1: float, col2: ColumnOrName) -> Column: ...
+def hypot(col1: float, col2: ColumnOrName) -> Column:
+    ...
+
+
 @overload
-def hypot(col1: ColumnOrName, col2: float) -> Column: ...
+def hypot(col1: ColumnOrName, col2: float) -> Column:
+    ...
+
+
 @since(1.4)
 def hypot(col1, col2):
     """
@@ -873,11 +891,20 @@ def hypot(col1, col2):
 
 
 @overload
-def pow(col1: ColumnOrName, col2: ColumnOrName) -> Column: ...
+def pow(col1: ColumnOrName, col2: ColumnOrName) -> Column:
+    ...
+
+
 @overload
-def pow(col1: float, col2: ColumnOrName) -> Column: ...
+def pow(col1: float, col2: ColumnOrName) -> Column:
+    ...
+
+
 @overload
-def pow(col1: ColumnOrName, col2: float) -> Column: ...
+def pow(col1: ColumnOrName, col2: float) -> Column:
+    ...
+
+
 @since(1.4)
 def pow(col1, col2):
     """
@@ -1203,7 +1230,7 @@ def isnan(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.isnan(_to_java_column(col)))
 
 
-def isnull(col: ColumnOrName) -> Column
+def isnull(col: ColumnOrName) -> Column:
     """An expression that returns true iff the column is null.
 
     .. versionadded:: 1.6.0
@@ -1625,9 +1652,15 @@ def when(condition: Column, value: Any) -> Column:
 
 
 @overload
-def log(arg1: ColumnOrName) -> Column: ...
+def log(arg1: ColumnOrName) -> Column:
+    ...
+
+
 @overload
-def log(arg1: float, arg2: ColumnOrName) -> Column: ...
+def log(arg1: float, arg2: ColumnOrName) -> Column:
+    ...
+
+
 def log(arg1, arg2=None):
     """Returns the first argument-based logarithm of the second argument.
 
@@ -2125,9 +2158,15 @@ def to_date(col: ColumnOrName, format: Optional[str] = None) -> Column:
 
 
 @overload
-def to_timestamp(col: ColumnOrName) -> Column: ...
+def to_timestamp(col: ColumnOrName) -> Column:
+    ...
+
+
 @overload
-def to_timestamp(col: ColumnOrName, format: str) -> Column: ...
+def to_timestamp(col: ColumnOrName, format: str) -> Column:
+    ...
+
+
 def to_timestamp(col, format=None):
     """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.TimestampType`
     using the optionally specified format. Specify formats according to `datetime pattern`_.
@@ -4507,7 +4546,7 @@ def from_csv(
     return Column(jc)
 
 
-def _unresolved_named_lambda_variable(*name_parts):
+def _unresolved_named_lambda_variable(*name_parts: Any) -> Column:
     """
     Create `o.a.s.sql.expressions.UnresolvedNamedLambdaVariable`,
     convert it to o.s.sql.Column and wrap in Python `Column`
@@ -4526,7 +4565,7 @@ def _unresolved_named_lambda_variable(*name_parts):
     )
 
 
-def _get_lambda_parameters(f):
+def _get_lambda_parameters(f: Callable) -> Any:
     import inspect
 
     signature = inspect.signature(f)
@@ -4558,7 +4597,7 @@ def _get_lambda_parameters(f):
     return parameters
 
 
-def _create_lambda(f):
+def _create_lambda(f: Callable) -> Callable:
     """
     Create `o.a.s.sql.expressions.LambdaFunction` corresponding
     to transformation described by f
@@ -4592,7 +4631,7 @@ def _create_lambda(f):
     return expressions.LambdaFunction(jexpr, jargs, False)
 
 
-def _invoke_higher_order_function(name, cols, funs):
+def _invoke_higher_order_function(name: str, cols: List[ColumnOrName], funs: List[Callable]):
     """
     Invokes expression identified by name,
     (relative to ```org.apache.spark.sql.catalyst.expressions``)
@@ -4615,9 +4654,15 @@ def _invoke_higher_order_function(name, cols, funs):
 
 
 @overload
-def transform(col: ColumnOrName, f: Callable[[Column], Column]) -> Column: ...
+def transform(col: ColumnOrName, f: Callable[[Column], Column]) -> Column:
+    ...
+
+
 @overload
-def transform(col: ColumnOrName, f: Callable[[Column, Column], Column]) -> Column: ...
+def transform(col: ColumnOrName, f: Callable[[Column, Column], Column]) -> Column:
+    ...
+
+
 def transform(col, f):
     """
     Returns an array of elements after applying a transformation to each element in the input array.
@@ -4739,9 +4784,15 @@ def forall(col: ColumnOrName, f: Callable[[Column], Column]) -> Column:
 
 
 @overload
-def filter(col: ColumnOrName, f: Callable[[Column], Column]) -> Column: ...
+def filter(col: ColumnOrName, f: Callable[[Column], Column]) -> Column:
+    ...
+
+
 @overload
-def filter(col: ColumnOrName, f: Callable[[Column, Column], Column]) -> Column: ...
+def filter(col: ColumnOrName, f: Callable[[Column, Column], Column]) -> Column:
+    ...
+
+
 def filter(col, f):
     """
     Returns an array of elements for which a predicate holds in a given array.
@@ -5213,16 +5264,25 @@ def bucket(numBuckets, col):
 @overload
 def udf(
     f: Callable[..., Any], returnType: DataTypeOrString = StringType()
-) -> UserDefinedFunctionLike: ...
+) -> UserDefinedFunctionLike:
+    ...
+
+
 @overload
 def udf(
-    f: DataTypeOrString = None.,
-) -> Callable[[Callable[..., Any]], UserDefinedFunctionLike]: ...
+    f: DataTypeOrString = None,
+) -> Callable[[Callable[..., Any]], UserDefinedFunctionLike]:
+    ...
+
+
 @overload
 def udf(
     *,
     returnType: DataTypeOrString = StringType(),
-) -> Callable[[Callable[..., Any]], UserDefinedFunctionLike]: ...
+) -> Callable[[Callable[..., Any]], UserDefinedFunctionLike]:
+    ...
+
+
 def udf(f=None, returnType=StringType()):
     """Creates a user defined function (UDF).
 
