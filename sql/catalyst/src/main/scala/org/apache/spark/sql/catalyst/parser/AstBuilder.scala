@@ -4449,7 +4449,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a CREATE FUNCTION statement.
+   * Create a [[CreateFunction]] command.
    *
    * For example:
    * {{{
@@ -4469,8 +4469,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
 
     val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
-    CreateFunctionStatement(
-      functionIdentifier,
+    CreateFunction(
+      UnresolvedDBObjectName(
+        functionIdentifier,
+        isNamespace = false),
       string(ctx.className),
       resources.toSeq,
       ctx.TEMPORARY != null,

@@ -451,7 +451,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       val funcIdentifier = identifier.asFunctionIdentifier
       DropFunctionCommand(funcIdentifier.database, funcIdentifier.funcName, ifExists, isTemp)
 
-    case CreateFunctionStatement(nameParts,
+    case CreateFunction(UnresolvedDBObjectName(nameParts, _),
       className, resources, isTemp, ignoreIfExists, replace) =>
       if (isTemp) {
         // temp func doesn't belong to any catalog and we shouldn't resolve catalog in the name.
