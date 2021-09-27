@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.expressions.{BitwiseAnd, Expression, HiveHash, Literal, Pmod}
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -48,29 +49,37 @@ class BucketedWriteWithHiveSupportSuite extends BucketedWriteSuite with TestHive
     val table = "hive_bucketed_table"
 
     fileFormatsToTest.foreach { format =>
-      withTable(table) {
-        sql(
-          s"""
-             |CREATE TABLE IF NOT EXISTS $table (i int, j string)
-             |PARTITIONED BY(k string)
-             |CLUSTERED BY (i, j) SORTED BY (i) INTO 8 BUCKETS
-             |STORED AS $format
-           """.stripMargin)
+      Seq("true", "false").foreach { enableConvertMetastore =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> enableConvertMetastore,
+          HiveUtils.CONVERT_METASTORE_ORC.key -> enableConvertMetastore) {
+          withTable(table) {
+            sql(
+              s"""
+                 |CREATE TABLE IF NOT EXISTS $table (i int, j string)
+                 |PARTITIONED BY(k string)
+                 |CLUSTERED BY (i, j) SORTED BY (i) INTO 8 BUCKETS
+                 |STORED AS $format
+               """.stripMargin)
 
-        val df =
-          (0 until 50).map(i => (i % 13, i.toString, i % 5)).toDF("i", "j", "k")
-        df.write.mode(SaveMode.Overwrite).insertInto(table)
+            val df =
+              (0 until 50).map(i => (i % 13, i.toString, i % 5)).toDF("i", "j", "k")
 
-        for (k <- 0 until 5) {
-          testBucketing(
-            new File(tableDir(table), s"k=$k"),
-            format,
-            8,
-            Seq("i", "j"),
-            Seq("i"),
-            df,
-            bucketIdExpression,
-            getBucketIdFromFileName)
+            withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+              df.write.mode(SaveMode.Overwrite).insertInto(table)
+            }
+
+            for (k <- 0 until 5) {
+              testBucketing(
+                new File(tableDir(table), s"k=$k"),
+                format,
+                8,
+                Seq("i", "j"),
+                Seq("i"),
+                df,
+                bucketIdExpression,
+                getBucketIdFromFileName)
+            }
+          }
         }
       }
     }
