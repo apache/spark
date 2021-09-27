@@ -29,8 +29,8 @@ from pyspark.sql.functions import col
 from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.utils import AnalysisException
 from pyspark.sql.types import ByteType, ShortType, IntegerType, FloatType, DateType, \
-    TimestampType, MapType, StringType, StructType, StructField, ArrayType, DoubleType, LongType, \
-    DecimalType, BinaryType, BooleanType, NullType
+    TimestampType, MapType, StringType, StructType, StructField,\
+    ArrayType, DoubleType, LongType, DecimalType, BinaryType, BooleanType, NullType
 from pyspark.sql.types import (  # type: ignore
     _array_signed_int_typecode_ctype_mappings, _array_type_mappings,
     _array_unsigned_int_typecode_ctype_mappings, _infer_type, _make_type_verifier, _merge_type
@@ -174,6 +174,18 @@ class TypesTests(ReusedSQLTestCase):
             Row(a=1),
         ]
         self.assertEqual(actual, expected)
+
+        with self.sql_conf({"spark.sql.timestampType": "TIMESTAMP_NTZ"}):
+            with self.sql_conf({"spark.sql.session.timeZone": "America/Sao_Paulo"}):
+                df = self.spark.createDataFrame([(datetime.datetime(1970, 1, 1, 0, 0),)])
+                self.assertEqual(list(df.schema)[0].dataType.simpleString(), "timestamp_ntz")
+                self.assertEqual(df.first()[0], datetime.datetime(1970, 1, 1, 0, 0))
+
+            df = self.spark.createDataFrame([
+                (datetime.datetime(1970, 1, 1, 0, 0),),
+                (datetime.datetime(1970, 1, 1, 0, 0, tzinfo=datetime.timezone.utc),)
+            ])
+            self.assertEqual(list(df.schema)[0].dataType.simpleString(), "timestamp")
 
     def test_infer_schema_not_enough_names(self):
         df = self.spark.createDataFrame([["a", "b"]], ["col1"])

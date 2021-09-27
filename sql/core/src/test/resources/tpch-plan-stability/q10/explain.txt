@@ -1,0 +1,155 @@
+== Physical Plan ==
+TakeOrderedAndProject (27)
++- * HashAggregate (26)
+   +- Exchange (25)
+      +- * HashAggregate (24)
+         +- * Project (23)
+            +- * BroadcastHashJoin Inner BuildRight (22)
+               :- * Project (17)
+               :  +- * BroadcastHashJoin Inner BuildRight (16)
+               :     :- * Project (10)
+               :     :  +- * BroadcastHashJoin Inner BuildRight (9)
+               :     :     :- * Filter (3)
+               :     :     :  +- * ColumnarToRow (2)
+               :     :     :     +- Scan parquet default.customer (1)
+               :     :     +- BroadcastExchange (8)
+               :     :        +- * Project (7)
+               :     :           +- * Filter (6)
+               :     :              +- * ColumnarToRow (5)
+               :     :                 +- Scan parquet default.orders (4)
+               :     +- BroadcastExchange (15)
+               :        +- * Project (14)
+               :           +- * Filter (13)
+               :              +- * ColumnarToRow (12)
+               :                 +- Scan parquet default.lineitem (11)
+               +- BroadcastExchange (21)
+                  +- * Filter (20)
+                     +- * ColumnarToRow (19)
+                        +- Scan parquet default.nation (18)
+
+
+(1) Scan parquet default.customer
+Output [7]: [c_custkey#1, c_name#2, c_address#3, c_nationkey#4, c_phone#5, c_acctbal#6, c_comment#7]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer]
+PushedFilters: [IsNotNull(c_custkey), IsNotNull(c_nationkey)]
+ReadSchema: struct<c_custkey:bigint,c_name:string,c_address:string,c_nationkey:bigint,c_phone:string,c_acctbal:decimal(10,0),c_comment:string>
+
+(2) ColumnarToRow [codegen id : 4]
+Input [7]: [c_custkey#1, c_name#2, c_address#3, c_nationkey#4, c_phone#5, c_acctbal#6, c_comment#7]
+
+(3) Filter [codegen id : 4]
+Input [7]: [c_custkey#1, c_name#2, c_address#3, c_nationkey#4, c_phone#5, c_acctbal#6, c_comment#7]
+Condition : (isnotnull(c_custkey#1) AND isnotnull(c_nationkey#4))
+
+(4) Scan parquet default.orders
+Output [3]: [o_orderkey#8, o_custkey#9, o_orderdate#10]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/orders]
+PushedFilters: [IsNotNull(o_orderdate), GreaterThanOrEqual(o_orderdate,1993-10-01), LessThan(o_orderdate,1994-01-01), IsNotNull(o_custkey), IsNotNull(o_orderkey)]
+ReadSchema: struct<o_orderkey:bigint,o_custkey:bigint,o_orderdate:date>
+
+(5) ColumnarToRow [codegen id : 1]
+Input [3]: [o_orderkey#8, o_custkey#9, o_orderdate#10]
+
+(6) Filter [codegen id : 1]
+Input [3]: [o_orderkey#8, o_custkey#9, o_orderdate#10]
+Condition : ((((isnotnull(o_orderdate#10) AND (o_orderdate#10 >= 1993-10-01)) AND (o_orderdate#10 < 1994-01-01)) AND isnotnull(o_custkey#9)) AND isnotnull(o_orderkey#8))
+
+(7) Project [codegen id : 1]
+Output [2]: [o_orderkey#8, o_custkey#9]
+Input [3]: [o_orderkey#8, o_custkey#9, o_orderdate#10]
+
+(8) BroadcastExchange
+Input [2]: [o_orderkey#8, o_custkey#9]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false), [id=#11]
+
+(9) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [c_custkey#1]
+Right keys [1]: [o_custkey#9]
+Join condition: None
+
+(10) Project [codegen id : 4]
+Output [8]: [c_custkey#1, c_name#2, c_address#3, c_nationkey#4, c_phone#5, c_acctbal#6, c_comment#7, o_orderkey#8]
+Input [9]: [c_custkey#1, c_name#2, c_address#3, c_nationkey#4, c_phone#5, c_acctbal#6, c_comment#7, o_orderkey#8, o_custkey#9]
+
+(11) Scan parquet default.lineitem
+Output [4]: [l_orderkey#12, l_extendedprice#13, l_discount#14, l_returnflag#15]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/lineitem]
+PushedFilters: [IsNotNull(l_returnflag), EqualTo(l_returnflag,R), IsNotNull(l_orderkey)]
+ReadSchema: struct<l_orderkey:bigint,l_extendedprice:decimal(10,0),l_discount:decimal(10,0),l_returnflag:string>
+
+(12) ColumnarToRow [codegen id : 2]
+Input [4]: [l_orderkey#12, l_extendedprice#13, l_discount#14, l_returnflag#15]
+
+(13) Filter [codegen id : 2]
+Input [4]: [l_orderkey#12, l_extendedprice#13, l_discount#14, l_returnflag#15]
+Condition : ((isnotnull(l_returnflag#15) AND (l_returnflag#15 = R)) AND isnotnull(l_orderkey#12))
+
+(14) Project [codegen id : 2]
+Output [3]: [l_orderkey#12, l_extendedprice#13, l_discount#14]
+Input [4]: [l_orderkey#12, l_extendedprice#13, l_discount#14, l_returnflag#15]
+
+(15) BroadcastExchange
+Input [3]: [l_orderkey#12, l_extendedprice#13, l_discount#14]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#16]
+
+(16) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [o_orderkey#8]
+Right keys [1]: [l_orderkey#12]
+Join condition: None
+
+(17) Project [codegen id : 4]
+Output [9]: [c_custkey#1, c_name#2, c_address#3, c_nationkey#4, c_phone#5, c_acctbal#6, c_comment#7, l_extendedprice#13, l_discount#14]
+Input [11]: [c_custkey#1, c_name#2, c_address#3, c_nationkey#4, c_phone#5, c_acctbal#6, c_comment#7, o_orderkey#8, l_orderkey#12, l_extendedprice#13, l_discount#14]
+
+(18) Scan parquet default.nation
+Output [2]: [n_nationkey#17, n_name#18]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/nation]
+PushedFilters: [IsNotNull(n_nationkey)]
+ReadSchema: struct<n_nationkey:bigint,n_name:string>
+
+(19) ColumnarToRow [codegen id : 3]
+Input [2]: [n_nationkey#17, n_name#18]
+
+(20) Filter [codegen id : 3]
+Input [2]: [n_nationkey#17, n_name#18]
+Condition : isnotnull(n_nationkey#17)
+
+(21) BroadcastExchange
+Input [2]: [n_nationkey#17, n_name#18]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#19]
+
+(22) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [c_nationkey#4]
+Right keys [1]: [n_nationkey#17]
+Join condition: None
+
+(23) Project [codegen id : 4]
+Output [9]: [c_custkey#1, c_name#2, c_address#3, c_phone#5, c_acctbal#6, c_comment#7, l_extendedprice#13, l_discount#14, n_name#18]
+Input [11]: [c_custkey#1, c_name#2, c_address#3, c_nationkey#4, c_phone#5, c_acctbal#6, c_comment#7, l_extendedprice#13, l_discount#14, n_nationkey#17, n_name#18]
+
+(24) HashAggregate [codegen id : 4]
+Input [9]: [c_custkey#1, c_name#2, c_address#3, c_phone#5, c_acctbal#6, c_comment#7, l_extendedprice#13, l_discount#14, n_name#18]
+Keys [7]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#18, c_address#3, c_comment#7]
+Functions [1]: [partial_sum(CheckOverflow((promote_precision(cast(l_extendedprice#13 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#14 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true))]
+Aggregate Attributes [2]: [sum#20, isEmpty#21]
+Results [9]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#18, c_address#3, c_comment#7, sum#22, isEmpty#23]
+
+(25) Exchange
+Input [9]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#18, c_address#3, c_comment#7, sum#22, isEmpty#23]
+Arguments: hashpartitioning(c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#18, c_address#3, c_comment#7, 5), ENSURE_REQUIREMENTS, [id=#24]
+
+(26) HashAggregate [codegen id : 5]
+Input [9]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#18, c_address#3, c_comment#7, sum#22, isEmpty#23]
+Keys [7]: [c_custkey#1, c_name#2, c_acctbal#6, c_phone#5, n_name#18, c_address#3, c_comment#7]
+Functions [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#13 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#14 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true))]
+Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#13 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#14 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true))#25]
+Results [8]: [c_custkey#1, c_name#2, sum(CheckOverflow((promote_precision(cast(l_extendedprice#13 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#14 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true))#25 AS revenue#26, c_acctbal#6, n_name#18, c_address#3, c_phone#5, c_comment#7]
+
+(27) TakeOrderedAndProject
+Input [8]: [c_custkey#1, c_name#2, revenue#26, c_acctbal#6, n_name#18, c_address#3, c_phone#5, c_comment#7]
+Arguments: 20, [revenue#26 DESC NULLS LAST], [c_custkey#1, c_name#2, revenue#26, c_acctbal#6, n_name#18, c_address#3, c_phone#5, c_comment#7]
+

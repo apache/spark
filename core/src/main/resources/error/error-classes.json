@@ -3,24 +3,53 @@
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
   },
-  "CANNOT_ADD_MULTI_PARTITIONS_ON_NONATOMIC_PARTITION_TABLE_ERROR" : {
+  "CANNOT_ADD_MULTI_PARTITIONS_ON_NONATOMIC_PARTITION_TABLE" : {
     "message" : [ "Nonatomic partition table %s can not add multiple partitions." ],
-    "sqlState" : "42000"
+    "sqlState" : "0A000"
   },
-  "CANNOT_CREATE_PARQUET_CONVERTER_FOR_DATATYPE_ERROR" : {
+  "CANNOT_CAST_DATATYPE" : {
+    "message" : [ "Cannot cast %s to %s." ],
+    "sqlState" : "22005"
+  },
+  "CANNOT_CHANGE_DECIMAL_PRECISION" : {
+    "message" : [ "%s cannot be represented as Decimal(%s, %s)." ],
+    "sqlState" : "22005"
+  },
+  "CANNOT_CREATE_PARQUET_CONVERTER_FOR_DATATYPE" : {
     "message" : [ "Unable to create Parquet converter for data type %s whose Parquet type is %s" ],
-    "sqlState" : "42000"
+    "sqlState" : "0A000"
   },
-  "CANNOT_CREATE_PARQUET_CONVERTER_FOR_DECIMAL_TYPE_ERROR" : {
+  "CANNOT_CREATE_PARQUET_CONVERTER_FOR_DECIMAL_TYPE" : {
     "message" : [ "Unable to create Parquet converter for decimal type %s whose Parquet type is %s. Parquet DECIMAL type can only be backed by INT32, INT64,FIXED_LEN_BYTE_ARRAY, or BINARY." ],
-    "sqlState" : "42000"
+    "sqlState" : "0A000"
   },
-  "CANNOT_CREATE_PARQUET_CONVERTER_FOR_TYPE_ERROR" : {
+  "CANNOT_CREATE_PARQUET_CONVERTER_FOR_TYPE" : {
     "message" : [ "Unable to create Parquet converter for %s whose Parquet type is %s without decimal metadata. Please read this column/field as Spark BINARY type." ],
+    "sqlState" : "0A000"
+  },
+  "CANNOT_EVALUATE_EXPRESSION" : {
+    "message" : [ "Cannot evaluate expression: %s" ]
+  },
+  "CANNOT_GENERATE_CODE_FOR_EXPRESSION" : {
+    "message" : [ "Cannot generate code for expression: %s" ]
+  },
+  "CANNOT_LOAD_USER_DEFINED_TYPE" : {
+    "message" : [ "Can not load in UserDefinedType %s for user class %s." ],
+    "sqlState" : "0A000"
+  },
+  "CANNOT_PARSE_DECIMAL" : {
+    "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"
   },
-  "CANNOT_LOAD_USER_DEFINED_TYPE_ERROR" : {
-    "message" : [ "Can not load in UserDefinedType %s for user class %s." ]
+  "CANNOT_TERMINATE_GENERATOR" : {
+    "message" : [ "Cannot terminate expression: %s" ]
+  },
+  "CAST_CAUSES_OVERFLOW" : {
+    "message" : [ "Casting %s to %s causes overflow" ],
+    "sqlState" : "22005"
+  },
+  "CONCURRENT_QUERY" : {
+    "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero" ],
@@ -30,19 +59,26 @@
     "message" : [ "Found duplicate keys '%s'" ],
     "sqlState" : "23000"
   },
-  "FAIL_TO_SET_ORIGINAL_ACL_BACK_ERROR" : {
+  "FAILED_EXECUTE_UDF" : {
+    "message" : [ "Failed to execute user defined function (%s: (%s) => %s)" ]
+  },
+  "FAILED_RENAME_PATH" : {
+    "message" : [ "Failed to rename %s to %s as destination already exists" ],
+    "sqlState" : "22023"
+  },
+  "FAIL_TO_SET_ORIGINAL_ACL_BACK" : {
     "message" : [ "Failed to set original ACL %s back to the created path: %s. Exception: %s" ],
     "sqlState" : "42000"
   },
-  "FAIL_TO_SET_ORIGINAL_PERMISSION_BACK_ERROR" : {
+  "FAIL_TO_SET_ORIGINAL_PERMISSION_BACK" : {
     "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ],
     "sqlState" : "42000"
   },
-  "FIELD_INDEX_ON_ROW_WITHOUT_SCHEMA_ERROR" : {
+  "FIELD_INDEX_ON_ROW_WITHOUT_SCHEMA" : {
     "message" : [ "fieldIndex on a Row without schema is undefined." ],
     "sqlState" : "07009"
   },
-  "GET_PARENT_LOGGER_NOT_IMPLEMENTED_ERROR" : {
+  "GET_PARENT_LOGGER_NOT_IMPLEMENTED" : {
     "message" : [ "%s.getParentLogger is not yet implemented." ]
   },
   "GROUPING_COLUMN_MISMATCH" : {
@@ -63,22 +99,50 @@
     "message" : [ "Invalid pivot column '%s'. Pivot columns must be comparable." ],
     "sqlState" : "42000"
   },
+  "INCOMPATIBLE_DATASOURCE_REGISTER" : {
+    "message" : [ "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: %s" ]
+  },
+  "INDEX_OUT_OF_BOUNDS" : {
+    "message" : [ "Index %s must be between 0 and the length of the ArrayData." ],
+    "sqlState" : "22023"
+  },
+  "INVALID_ARRAY_INDEX" : {
+    "message" : [ "Invalid index: %s, numElements: %s" ]
+  },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name %s is invalid: %s is not a struct." ],
+    "sqlState" : "42000"
+  },
+  "INVALID_FRACTION_OF_SECOND" : {
+    "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]." ],
+    "sqlState" : "22023"
+  },
+  "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE" : {
+    "message" : [ "invalid input syntax for type numeric: %s" ],
     "sqlState" : "42000"
   },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
   },
+  "LOGICAL_HINT_OPERATOR_NOT_REMOVED_DURING_ANALYSIS" : {
+    "message" : [ "Internal error: logical hint operator should have been removed during analysis" ]
+  },
+  "MAP_KEY_DOES_NOT_EXIST" : {
+    "message" : [ "Key %s does not exist." ]
+  },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
+    "sqlState" : "42000"
+  },
+  "MISSING_METHOD" : {
+    "message" : [ "A method named \"%s\" is not declared in any enclosing class nor any supertype" ],
     "sqlState" : "42000"
   },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [ "Unknown static partition column: %s" ],
     "sqlState" : "42000"
   },
-  "MULTI_FAILURES_IN_STAGE_MATERIALIZATION_ERROR" : {
+  "MULTI_FAILURES_IN_STAGE_MATERIALIZATION" : {
     "message" : [ "Multiple failures in stage materialization." ]
   },
   "NON_LITERAL_PIVOT_VALUES" : {
@@ -89,52 +153,84 @@
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
     "sqlState" : "42000"
   },
-  "NOT_PUBLIC_CLASS_ERROR" : {
+  "NOT_PUBLIC_CLASS" : {
     "message" : [ "%s is not a public class. Only public classes are supported." ],
-    "sqlState" : "46120"
+    "sqlState" : "0A000"
   },
-  "NOT_USER_DEFINED_TYPE_ERROR" : {
+  "NOT_USER_DEFINED_TYPE" : {
     "message" : [ "%s is not an UserDefinedType. Please make sure registering an UserDefinedType for %s" ],
     "sqlState" : "42000"
   },
-  "NULL_LITERALS_CANNOT_BE_CASTED_ERROR" : {
+  "NULL_LITERALS_CANNOT_BE_CASTED" : {
     "message" : [ "null literals can't be casted to %s" ],
     "sqlState" : "22018"
   },
-  "ONLY_SUPPORT_DATA_SOURCES_PROVIDING_FILE_FORMAT_ERROR" : {
-    "message" : [ "Only Data Sources providing FileFormat are supported: %s" ]
+  "ONLY_SUPPORT_DATA_SOURCES_PROVIDING_FILE_FORMAT" : {
+    "message" : [ "Only Data Sources providing FileFormat are supported: %s" ],
+    "sqlState" : "0A000"
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
     "sqlState" : "42000"
   },
-  "PRIMITIVE_TYPES_NOT_SUPPORTED_ERROR" : {
+  "PRIMITIVE_TYPES_NOT_SUPPORTED" : {
     "message" : [ "Primitive types are not supported." ],
     "sqlState" : "0A000"
+  },
+  "RENAME_SRC_PATH_NOT_FOUND" : {
+    "message" : [ "Failed to rename as %s was not found" ],
+    "sqlState" : "22023"
+  },
+  "ROW_FROM_CSV_PARSER_NOT_EXPECTED" : {
+    "message" : [ "Expected one row from CSV parser." ],
+    "sqlState" : "42000"
   },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
     "sqlState" : "22023"
   },
-  "TIME_ZONE_ID_NOT_SPECIFIED_FOR_TIMESTAMP_TYPE_ERROR" : {
+  "TIME_ZONE_ID_NOT_SPECIFIED_FOR_TIMESTAMP_TYPE" : {
     "message" : [ "%s must supply timeZoneId parameter" ],
     "sqlState" : "23000"
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
   },
-  "UNRECOGNIZED_COMPRESSION_SCHEMA_TYPE_ID_ERROR" : {
+  "UNRECOGNIZED_COMPRESSION_SCHEMA_TYPE_ID" : {
     "message" : [ "Unrecognized compression scheme type ID: %s" ],
-    "sqlState" : "HV00Q"
+    "sqlState" : "42000"
   },
-  "UNSUPPORTED_OPERATION_EXCEPTION_ERROR" : {
+  "UNRECOGNIZED_SQL_TYPE" : {
+    "message" : [ "Unrecognized SQL type %s" ],
+    "sqlState" : "42000"
+  },
+  "UNSUPPORTED_CHANGE_COLUMN" : {
+    "message" : [ "Please add an implementation for a column change here" ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_DATATYPE" : {
+    "message" : [ "Unsupported data type %s" ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_LITERAL_TYPE" : {
+    "message" : [ "Unsupported literal type %s %s" ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_OPERATION" : {
     "message" : [ "" ]
   },
-  "USER_SPECIFIED_SCHEMA_UNSUPPORTED_BY_DATASOURCE_ERROR" : {
+  "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID" : {
+    "message" : [ "%s does not implement simpleStringWithNodeId" ]
+  },
+  "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER" : {
+    "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],
+    "sqlState" : "0A000"
+  },
+  "USER_SPECIFIED_SCHEMA_UNSUPPORTED_BY_DATASOURCE" : {
     "message" : [ "%s source does not support user-specified schema." ],
     "sqlState" : "0A000"
   },
-  "VALUE_IS_NULL_ERROR" : {
+  "VALUE_IS_NULL" : {
     "message" : [ "Value at index %s is null" ],
     "sqlState" : "22023"
   },

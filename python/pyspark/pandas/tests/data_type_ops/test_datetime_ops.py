@@ -195,6 +195,8 @@ class DatetimeOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         cat_type = CategoricalDtype(categories=["a", "b", "c"])
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
+        self.assertRaises(TypeError, lambda: psser.astype(bool))
+
     def test_neg(self):
         self.assertRaises(TypeError, lambda: -self.psser)
 
@@ -233,6 +235,13 @@ class DatetimeOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         pdf, psdf = self.datetime_pdf, self.datetime_psdf
         self.assert_eq(pdf["this"] >= pdf["that"], psdf["this"] >= psdf["that"])
         self.assert_eq(pdf["this"] >= pdf["this"], psdf["this"] >= psdf["this"])
+
+
+class DatetimeNTZOpsTest(DatetimeOpsTest):
+    @classmethod
+    def setUpClass(cls):
+        super(DatetimeOpsTest, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.timestampType", "timestamp_ntz")
 
 
 if __name__ == "__main__":

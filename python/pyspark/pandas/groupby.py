@@ -20,7 +20,6 @@ A wrapper for GroupedData to behave similar to pandas GroupBy.
 """
 
 from abc import ABCMeta, abstractmethod
-import builtins
 import sys
 import inspect
 from collections import OrderedDict, namedtuple
@@ -44,9 +43,15 @@ from typing import (
     TYPE_CHECKING,
 )
 
-import numpy as np
 import pandas as pd
 from pandas.api.types import is_hashable, is_list_like
+
+if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
+    from pandas.core.common import _builtin_table
+else:
+    from pandas.core.base import SelectionMixin
+
+    _builtin_table = SelectionMixin._builtin_table
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
 from pyspark.sql.types import (  # noqa: F401
@@ -70,6 +75,7 @@ from pyspark.pandas.internal import (
     NATURAL_ORDER_COLUMN_NAME,
     SPARK_INDEX_NAME_FORMAT,
     SPARK_DEFAULT_SERIES_NAME,
+    SPARK_DEFAULT_INDEX_NAME,
 )
 from pyspark.pandas.missing.groupby import (
     MissingPandasLikeDataFrameGroupBy,
@@ -96,12 +102,6 @@ if TYPE_CHECKING:
 
 # to keep it the same as pandas
 NamedAgg = namedtuple("NamedAgg", ["column", "aggfunc"])
-
-_builtin_table = {
-    builtins.sum: np.sum,
-    builtins.max: np.max,
-    builtins.min: np.min,
-}  # type: Dict[Callable, Callable]
 
 
 class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
@@ -265,7 +265,13 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         relabeling = func_or_funcs is None and is_multi_agg_with_relabel(**kwargs)
         if relabeling:
-            func_or_funcs, columns, order = normalize_keyword_aggregation(kwargs)  # type: ignore
+            (
+                func_or_funcs,
+                columns,
+                order,
+            ) = normalize_keyword_aggregation(  # type: ignore[assignment]
+                kwargs
+            )
 
         if not isinstance(func_or_funcs, (str, list)):
             if not isinstance(func_or_funcs, dict) or not all(
@@ -1027,26 +1033,23 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
             To avoid this, specify return type in ``func``, for instance, as below:
 
-            >>> def pandas_div(x) -> ps.DataFrame[float, float]:
+            >>> def pandas_div(x) -> ps.DataFrame[int, [float, float]]:
             ...     return x[['B', 'C']] / x[['B', 'C']]
 
             If the return type is specified, the output column names become
             `c0, c1, c2 ... cn`. These names are positionally mapped to the returned
             DataFrame in ``func``.
 
-            To specify the column names, you can assign them in a pandas friendly style as below:
+            To specify the column names, you can assign them in a NumPy compound type style
+            as below:
 
-            >>> def pandas_div(x) -> ps.DataFrame["a": float, "b": float]:
+            >>> def pandas_div(x) -> ps.DataFrame[("index", int), [("a", float), ("b", float)]]:
             ...     return x[['B', 'C']] / x[['B', 'C']]
 
             >>> pdf = pd.DataFrame({'B': [1.], 'C': [3.]})
-            >>> def plus_one(x) -> ps.DataFrame[zip(pdf.columns, pdf.dtypes)]:
+            >>> def plus_one(x) -> ps.DataFrame[
+            ...         (pdf.index.name, pdf.index.dtype), zip(pdf.columns, pdf.dtypes)]:
             ...     return x[['B', 'C']] / x[['B', 'C']]
-
-            When the given function has the return type annotated, the original index of the
-            GroupBy object will be lost and a default index will be attached to the result.
-            Please be careful about configuring the default index. See also `Default Index Type
-            <https://koalas.readthedocs.io/en/latest/user_guide/options.html#default-index-type>`_.
 
         .. note:: the dataframe within ``func`` is actually a pandas dataframe. Therefore,
             any pandas API within this function is allowed.
@@ -1107,13 +1110,22 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         You can specify the type hint and prevent schema inference for better performance.
 
-        >>> def pandas_div(x) -> ps.DataFrame[float, float]:
+        >>> def pandas_div(x) -> ps.DataFrame[int, [float, float]]:
         ...     return x[['B', 'C']] / x[['B', 'C']]
         >>> g.apply(pandas_div).sort_index()  # doctest: +NORMALIZE_WHITESPACE
             c0   c1
         0  1.0  1.0
         1  1.0  1.0
         2  1.0  1.0
+
+        >>> def pandas_div(x) -> ps.DataFrame[("index", int), [("f1", float), ("f2", float)]]:
+        ...     return x[['B', 'C']] / x[['B', 'C']]
+        >>> g.apply(pandas_div).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+                f1   f2
+        index
+        0      1.0  1.0
+        1      1.0  1.0
+        2      1.0  1.0
 
         In case of Series, it works as below.
 
@@ -1151,12 +1163,13 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1    52
         Name: B, dtype: int64
         """
-        if not isinstance(func, Callable):  # type: ignore
+        if not callable(func):
             raise TypeError("%s object is not callable" % type(func).__name__)
 
         spec = inspect.getfullargspec(func)
         return_sig = spec.annotations.get("return", None)
         should_infer_schema = return_sig is None
+        should_retain_index = should_infer_schema
 
         is_series_groupby = isinstance(self, SeriesGroupBy)
 
@@ -1227,8 +1240,12 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 )
 
             if isinstance(return_type, DataFrameType):
-                data_fields = cast(DataFrameType, return_type).fields
+                data_fields = cast(DataFrameType, return_type).data_fields
                 return_schema = cast(DataFrameType, return_type).spark_type
+                index_field = cast(DataFrameType, return_type).index_field
+                should_retain_index = index_field is not None
+                index_fields = [index_field]
+                psdf_from_pandas = None
             else:
                 should_return_series = True
                 dtype = cast(Union[SeriesType, ScalarType], return_type).dtype
@@ -1289,14 +1306,28 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             pandas_groupby_apply,
             [psdf._internal.spark_column_for(label) for label in groupkey_labels],
             return_schema,
-            retain_index=should_infer_schema,
+            retain_index=should_retain_index,
         )
 
-        if should_infer_schema:
+        if should_retain_index:
             # If schema is inferred, we can restore indexes too.
-            internal = psdf_from_pandas._internal.with_new_sdf(
-                spark_frame=sdf, index_fields=index_fields, data_fields=data_fields
-            )
+            if psdf_from_pandas is not None:
+                internal = psdf_from_pandas._internal.with_new_sdf(
+                    spark_frame=sdf, index_fields=index_fields, data_fields=data_fields
+                )
+            else:
+                index_names: Optional[List[Optional[Tuple[Any, ...]]]] = None
+                index_field = index_fields[0]
+                index_spark_columns = [scol_for(sdf, index_field.struct_field.name)]
+                if index_field.struct_field.name != SPARK_DEFAULT_INDEX_NAME:
+                    index_names = [(index_field.struct_field.name,)]
+                internal = InternalFrame(
+                    spark_frame=sdf,
+                    index_names=index_names,
+                    index_spark_columns=index_spark_columns,
+                    index_fields=index_fields,
+                    data_fields=data_fields,
+                )
         else:
             # Otherwise, it loses index.
             internal = InternalFrame(
@@ -1352,7 +1383,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         5    6
         Name: B, dtype: int64
         """
-        if not isinstance(func, Callable):  # type: ignore
+        if not callable(func):
             raise TypeError("%s object is not callable" % type(func).__name__)
 
         is_series_groupby = isinstance(self, SeriesGroupBy)
@@ -1400,9 +1431,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         psdf = DataFrame(self._psdf[agg_columns]._internal.with_new_sdf(sdf))
         if is_series_groupby:
-            return first_series(psdf)  # type: ignore
+            return cast(FrameLike, first_series(psdf))
         else:
-            return psdf  # type: ignore
+            return cast(FrameLike, psdf)
 
     @staticmethod
     def _prepare_group_map_apply(
@@ -1440,7 +1471,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         the same pandas DataFrame as if the pandas-on-Spark DataFrame is collected to driver side.
         The index, column labels, etc. are re-constructed within the function.
         """
+        from pyspark.sql.utils import is_timestamp_ntz_preferred
+
         arguments_for_restore_index = psdf._internal.arguments_for_restore_index
+        prefer_timestamp_ntz = is_timestamp_ntz_preferred()
 
         def rename_output(pdf: pd.DataFrame) -> pd.DataFrame:
             pdf = InternalFrame.restore_index(pdf.copy(), **arguments_for_restore_index)
@@ -1452,7 +1486,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             # When Spark output type is specified, without executing it, we don't know
             # if we should restore the index or not. For instance, see the example in
             # https://github.com/pyspark.pandas/issues/628.
-            pdf, _, _, _, _ = InternalFrame.prepare_pandas_frame(pdf, retain_index=retain_index)
+            pdf, _, _, _, _ = InternalFrame.prepare_pandas_frame(
+                pdf, retain_index=retain_index, prefer_timestamp_ntz=prefer_timestamp_ntz
+            )
 
             # Just positionally map the column names to given schema's.
             pdf.columns = return_schema.names
@@ -2194,7 +2230,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1  28  35
         2  31  35
         """
-        if not isinstance(func, Callable):  # type: ignore
+        if not callable(func):
             raise TypeError("%s object is not callable" % type(func).__name__)
 
         spec = inspect.getfullargspec(func)
@@ -2257,6 +2293,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 for c in psdf._internal.data_spark_column_names
                 if c not in groupkey_names
             ]
+
             return_schema = StructType([field.struct_field for field in data_fields])
 
             sdf = GroupBy._spark_group_map_apply(
@@ -2750,7 +2787,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
         if hasattr(MissingPandasLikeDataFrameGroupBy, item):
             property_or_func = getattr(MissingPandasLikeDataFrameGroupBy, item)
             if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
+                return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
         return self.__getitem__(item)
@@ -2935,7 +2972,7 @@ class SeriesGroupBy(GroupBy[Series]):
         if hasattr(MissingPandasLikeSeriesGroupBy, item):
             property_or_func = getattr(MissingPandasLikeSeriesGroupBy, item)
             if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
+                return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
         raise AttributeError(item)

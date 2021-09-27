@@ -467,31 +467,69 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("no stats and selective predicate with the size of dim too large")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
-        sql(
-          """
-            |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
-            |FROM fact_sk f WHERE store_id < 5
-          """.stripMargin)
-          .write
-          .partitionBy("store_id")
-          .saveAsTable("fact_aux")
+          SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
+        withTable("fact_aux") {
+          sql(
+            """
+              |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
+              |FROM fact_sk f WHERE store_id < 5
+            """.stripMargin)
+            .write
+            .partitionBy("store_id")
+            .saveAsTable("fact_aux")
 
-        val df = sql(
-          """
-            |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
-            |FROM fact_aux f JOIN dim_store s
-            |ON f.store_id = s.store_id WHERE s.country = 'US'
-          """.stripMargin)
+          val df = sql(
+            """
+              |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
+              |FROM fact_aux f JOIN dim_store s
+              |ON f.store_id = s.store_id WHERE s.country = 'US'
+            """.stripMargin)
 
-        checkPartitionPruningPredicate(df, false, false)
+          checkPartitionPruningPredicate(df, false, false)
 
-        checkAnswer(df,
-          Row(1070, 2, 10, 4) ::
-          Row(1080, 3, 20, 4) ::
-          Row(1090, 3, 10, 4) ::
-          Row(1100, 3, 10, 4) :: Nil
-        )
+          checkAnswer(df,
+            Row(1070, 2, 10, 4) ::
+              Row(1080, 3, 20, 4) ::
+              Row(1090, 3, 10, 4) ::
+              Row(1100, 3, 10, 4) :: Nil
+          )
+        }
+      }
+
+      Given("no stats and selective predicate with the size of dim too large but cached")
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
+        withTable("fact_aux") {
+          withTempView("cached_dim_store") {
+            sql(
+              """
+                |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
+                |FROM fact_sk f WHERE store_id < 5
+              """.stripMargin)
+              .write
+              .partitionBy("store_id")
+              .saveAsTable("fact_aux")
+
+            spark.table("dim_store").cache()
+              .createOrReplaceTempView("cached_dim_store")
+
+            val df = sql(
+              """
+                |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
+                |FROM fact_aux f JOIN cached_dim_store s
+                |ON f.store_id = s.store_id WHERE s.country = 'US'
+              """.stripMargin)
+
+            checkPartitionPruningPredicate(df, true, false)
+
+            checkAnswer(df,
+              Row(1070, 2, 10, 4) ::
+                Row(1080, 3, 20, 4) ::
+                Row(1090, 3, 10, 4) ::
+                Row(1100, 3, 10, 4) :: Nil
+            )
+          }
+        }
       }
 
       Given("no stats and selective predicate with the size of dim small")
@@ -1490,6 +1528,20 @@ abstract class DynamicPartitionPruningSuiteBase
         |""".stripMargin)
 
     checkAnswer(df, Row(3, 2) :: Row(3, 2) :: Row(3, 2) :: Row(3, 2) :: Nil)
+  }
+
+  test("SPARK-36444: Remove OptimizeSubqueries from batch of PartitionPruning") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      val df = sql(
+        """
+          |SELECT date_id, product_id FROM fact_sk f
+          |JOIN (select store_id + 3 as new_store_id from dim_store where country = 'US') s
+          |ON f.store_id = s.new_store_id
+        """.stripMargin)
+
+      checkPartitionPruningPredicate(df, false, true)
+      checkAnswer(df, Row(1150, 1) :: Row(1130, 4) :: Row(1140, 4) :: Nil)
+    }
   }
 }
 

@@ -58,6 +58,7 @@ from pyspark.sql.types import (
     DoubleType,
     BooleanType,
     TimestampType,
+    TimestampNTZType,
     DecimalType,
     StringType,
     DateType,
@@ -286,7 +287,7 @@ def read_csv(
     >>> ps.read_csv('data.csv')  # doctest: +SKIP
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     if mangle_dupe_cols is not True:
         raise ValueError("mangle_dupe_cols can only be `True`: %s" % mangle_dupe_cols)
@@ -294,7 +295,7 @@ def read_csv(
         raise ValueError("parse_dates can only be `False`: %s" % parse_dates)
 
     if usecols is not None and not callable(usecols):
-        usecols = list(usecols)  # type: ignore
+        usecols = list(usecols)  # type: ignore[assignment]
 
     if usecols is None or callable(usecols) or len(usecols) > 0:
         reader = default_session().read
@@ -483,7 +484,7 @@ def read_json(
     1         c     d
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     if not lines:
         raise NotImplementedError("lines=False is not implemented yet.")
@@ -570,7 +571,7 @@ def read_delta(
     if version is not None and timestamp is not None:
         raise ValueError("version and timestamp cannot be used together.")
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     if version is not None:
         options["versionAsOf"] = version
@@ -697,7 +698,7 @@ def read_spark_io(
     4      14
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     sdf = default_session().read.load(path=path, format=format, schema=schema, **options)
     index_spark_columns, index_names = _get_index_map(sdf, index_col)
@@ -759,7 +760,7 @@ def read_parquet(
     0       0
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     if columns is not None:
         columns = list(columns)
@@ -1363,7 +1364,7 @@ def read_sql_table(
     >>> ps.read_sql_table('table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     reader = default_session().read
     reader.option("dbtable", table_name)
@@ -1425,7 +1426,7 @@ def read_sql_query(
     >>> ps.read_sql_query('SELECT * FROM table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     reader = default_session().read
     reader.option("query", sql)
@@ -1492,7 +1493,7 @@ def read_sql(
     >>> ps.read_sql('SELECT * FROM table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     striped = sql.strip()
     if " " not in striped:  # TODO: identify the table name or not more precisely.
@@ -2747,13 +2748,20 @@ def merge(
 
 
 @no_type_check
-def to_numeric(arg):
+def to_numeric(arg, errors="raise"):
     """
     Convert argument to a numeric type.
 
     Parameters
     ----------
     arg : scalar, list, tuple, 1-d array, or Series
+        Argument to be converted.
+    errors : {'raise', 'coerce'}, default 'raise'
+        * If 'coerce', then invalid parsing will be set as NaN.
+        * If 'raise', then invalid parsing will raise an exception.
+        * If 'ignore', then invalid parsing will return the input.
+
+        .. note:: 'ignore' doesn't work yet when `arg` is pandas-on-Spark Series.
 
     Returns
     -------
@@ -2783,6 +2791,7 @@ def to_numeric(arg):
     dtype: float32
 
     If given Series contains invalid value to cast float, just cast it to `np.nan`
+    when `errors` is set to "coerce".
 
     >>> psser = ps.Series(['apple', '1.0', '2', '-3'])
     >>> psser
@@ -2792,7 +2801,7 @@ def to_numeric(arg):
     3       -3
     dtype: object
 
-    >>> ps.to_numeric(psser)
+    >>> ps.to_numeric(psser, errors="coerce")
     0    NaN
     1    1.0
     2    2.0
@@ -2814,9 +2823,21 @@ def to_numeric(arg):
     1.0
     """
     if isinstance(arg, Series):
-        return arg._with_new_scol(arg.spark.column.cast("float"))
+        if errors == "coerce":
+            return arg._with_new_scol(arg.spark.column.cast("float"))
+        elif errors == "raise":
+            scol = arg.spark.column
+            scol_casted = scol.cast("float")
+            cond = F.when(
+                F.assert_true(scol.isNull() | scol_casted.isNotNull()).isNull(), scol_casted
+            )
+            return arg._with_new_scol(cond)
+        elif errors == "ignore":
+            raise NotImplementedError("'ignore' is not implemented yet, when the `arg` is Series.")
+        else:
+            raise ValueError("invalid error value specified")
     else:
-        return pd.to_numeric(arg)
+        return pd.to_numeric(arg, errors=errors)
 
 
 def broadcast(obj: DataFrame) -> DataFrame:
@@ -2909,7 +2930,7 @@ def read_orc(
     0       0
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     psdf = read_spark_io(path, format="orc", index_col=index_col, **options)
 
@@ -2957,6 +2978,7 @@ _get_dummies_acceptable_types = _get_dummies_default_accept_types + (
     DoubleType,
     BooleanType,
     TimestampType,
+    TimestampNTZType,
 )
 
 

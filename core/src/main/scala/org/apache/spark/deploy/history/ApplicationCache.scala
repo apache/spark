@@ -18,14 +18,15 @@
 package org.apache.spark.deploy.history
 
 import java.util.NoSuchElementException
-import java.util.concurrent.CompletionException
+import java.util.concurrent.ExecutionException
 import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.JavaConverters._
 
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
-import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine, LoadingCache, RemovalCause, RemovalListener}
+import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
+import com.google.common.util.concurrent.UncheckedExecutionException
 import org.eclipse.jetty.servlet.FilterHolder
 
 import org.apache.spark.internal.Logging
@@ -61,27 +62,21 @@ private[history] class ApplicationCache(
 
     /**
      * Removal event notifies the provider to detach the UI.
-     * @param key removal key
-     * @param value removal value
-     * @param cause the reason why a `CacheEntry` was removed, it should
-     *              always be `SIZE` because `appCache` configured with
-     *              `maximumSize` eviction strategy
+     * @param rm removal notification
      */
-    override def onRemoval(key: CacheKey, value: CacheEntry, cause: RemovalCause): Unit = {
+    override def onRemoval(rm: RemovalNotification[CacheKey, CacheEntry]): Unit = {
       metrics.evictionCount.inc()
-      logDebug(s"Evicting entry $key")
-      operations.detachSparkUI(key.appId, key.attemptId, value.loadedUI.ui)
+      val key = rm.getKey
+      logDebug(s"Evicting entry ${key}")
+      operations.detachSparkUI(key.appId, key.attemptId, rm.getValue().loadedUI.ui)
     }
   }
 
   private val appCache: LoadingCache[CacheKey, CacheEntry] = {
-    val builder = Caffeine.newBuilder()
-      .maximumSize(retainedApplications)
-      .removalListener(removalListener)
-      // SPARK-34309: Use custom Executor to compatible with
-      // the data eviction behavior of Guava cache
-      .executor((command: Runnable) => command.run())
-    builder.build[CacheKey, CacheEntry](appLoader)
+    CacheBuilder.newBuilder()
+        .maximumSize(retainedApplications)
+        .removalListener(removalListener)
+        .build(appLoader)
   }
 
   /**
@@ -91,9 +86,9 @@ private[history] class ApplicationCache(
 
   def get(appId: String, attemptId: Option[String] = None): CacheEntry = {
     try {
-      appCache.get(CacheKey(appId, attemptId))
+      appCache.get(new CacheKey(appId, attemptId))
     } catch {
-      case e @ (_: CompletionException | _: RuntimeException) =>
+      case e @ (_: ExecutionException | _: UncheckedExecutionException) =>
         throw Option(e.getCause()).getOrElse(e)
     }
   }
@@ -132,7 +127,7 @@ private[history] class ApplicationCache(
   }
 
   /** @return Number of cached UIs. */
-  def size(): Long = appCache.estimatedSize()
+  def size(): Long = appCache.size()
 
   private def time[T](t: Timer)(f: => T): T = {
     val timeCtx = t.time()
@@ -202,7 +197,7 @@ private[history] class ApplicationCache(
     val sb = new StringBuilder(s"ApplicationCache(" +
           s" retainedApplications= $retainedApplications)")
     sb.append(s"; time= ${clock.getTimeMillis()}")
-    sb.append(s"; entry count= ${appCache.estimatedSize()}\n")
+    sb.append(s"; entry count= ${appCache.size()}\n")
     sb.append("----\n")
     appCache.asMap().asScala.foreach {
       case(key, entry) => sb.append(s"  $key -> $entry\n")

@@ -1080,8 +1080,8 @@ Tumbling and sliding window use `window` function, which has been described on a
 
 Session windows have different characteristic compared to the previous two types. Session window has a dynamic size
 of the window length, depending on the inputs. A session window starts with an input, and expands itself
-if following input has been received within gap duration. A session window closes when there's no input
-received within gap duration after receiving the latest input.
+if following input has been received within gap duration. For static gap duration, a session window closes when
+there's no input received within gap duration after receiving the latest input.
 
 Session window uses `session_window` function. The usage of the function is similar to the `window` function.
 
@@ -1127,6 +1127,77 @@ sessionizedCounts = events \
     .withWatermark("timestamp", "10 minutes") \
     .groupBy(
         session_window(events.timestamp, "5 minutes"),
+        events.userId) \
+    .count()
+{% endhighlight %}
+
+</div>
+</div>
+
+Instead of static value, we can also provide an expression to specify gap duration dynamically
+based on the input row. Note that the rows with negative or zero gap duration will be filtered
+out from the aggregation.
+
+With dynamic gap duration, the closing of a session window does not depend on the latest input
+anymore. A session window's range is the union of all events' ranges which are determined by
+event start time and evaluated gap duration during the query execution.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+import spark.implicits._
+
+val events = ... // streaming DataFrame of schema { timestamp: Timestamp, userId: String }
+
+val sessionWindow = session_window($"timestamp", when($"userId" === "user1", "5 seconds")
+  .when($"userId" === "user2", "20 seconds")
+  .otherwise("5 minutes"))
+
+// Group the data by session window and userId, and compute the count of each group
+val sessionizedCounts = events
+    .withWatermark("timestamp", "10 minutes")
+    .groupBy(
+        Column(sessionWindow),
+        $"userId")
+    .count()
+{% endhighlight %}
+
+</div>
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+Dataset<Row> events = ... // streaming DataFrame of schema { timestamp: Timestamp, userId: String }
+
+SessionWindow sessionWindow = session_window(col("timestamp"), when(col("userId").equalTo("user1"), "5 seconds")
+  .when(col("userId").equalTo("user2"), "20 seconds")
+  .otherwise("5 minutes"))
+
+// Group the data by session window and userId, and compute the count of each group
+Dataset<Row> sessionizedCounts = events
+    .withWatermark("timestamp", "10 minutes")
+    .groupBy(
+        new Column(sessionWindow),
+        col("userId"))
+    .count();
+{% endhighlight %}
+
+</div>
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+from pyspark.sql import functions as F
+
+events = ...  # streaming DataFrame of schema { timestamp: Timestamp, userId: String }
+
+session_window = session_window(events.timestamp, \
+    F.when(events.userId == "user1", "5 seconds") \
+    .when(events.userId == "user2", "20 seconds").otherwise("5 minutes"))
+
+# Group the data by session window and userId, and compute the count of each group
+sessionizedCounts = events \
+    .withWatermark("timestamp", "10 minutes") \
+    .groupBy(
+        session_window,
         events.userId) \
     .count()
 {% endhighlight %}
@@ -1749,6 +1820,8 @@ Some of them are as follows.
 
 - Distinct operations on streaming Datasets are not supported.
 
+- Deduplication operation is not supported after aggregation on a streaming Datasets.
+
 - Sorting operations are supported on streaming Datasets only after an aggregation and in Complete Output Mode.
 
 - Few types of outer joins on streaming Datasets are not supported. See the
@@ -1799,7 +1872,80 @@ hence the number is not same as the number of original input rows. You'd like to
 There's a known workaround: split your streaming query into multiple queries per stateful operator, and ensure
 end-to-end exactly once per query. Ensuring end-to-end exactly once for the last query is optional.
 
-### State Store and task locality
+### State Store
+
+State store is a versioned key-value store which provides both read and write operations. In
+Structured Streaming, we use the state store provider to handle the stateful operations across
+batches. There are two built-in state store provider implementations. End users can also implement
+their own state store provider by extending StateStoreProvider interface.
+
+#### HDFS state store provider
+
+The HDFS backend state store provider is the default implementation of [[StateStoreProvider]] and
+[[StateStore]] in which all the data is stored in memory map in the first stage, and then backed
+by files in an HDFS-compatible file system. All updates to the store have to be done in sets
+transactionally, and each set of updates increments the store's version. These versions can be
+used to re-execute the updates (by retries in RDD operations) on the correct version of the store,
+and regenerate the store version.
+
+#### RocksDB state store implementation
+
+As of Spark 3.2, we add a new built-in state store implementation, RocksDB state store provider.
+
+If you have stateful operations in your streaming query (for example, streaming aggregation,
+streaming dropDuplicates, stream-stream joins, mapGroupsWithState, or flatMapGroupsWithState)
+and you want to maintain millions of keys in the state, then you may face issues related to large
+JVM garbage collection (GC) pauses causing high variations in the micro-batch processing times.
+This occurs because, by the implementation of HDFSBackedStateStore, the state data is maintained
+in the JVM memory of the executors and large number of state objects puts memory pressure on the
+JVM causing high GC pauses.
+
+In such cases, you can choose to use a more optimized state management solution based on
+[RocksDB](https://rocksdb.org/). Rather than keeping the state in the JVM memory, this solution
+uses RocksDB to efficiently manage the state in the native memory and the local disk. Furthermore,
+any changes to this state are automatically saved by Structured Streaming to the checkpoint
+location you have provided, thus providing full fault-tolerance guarantees (the same as default
+state management).
+
+To enable the new build-in state store implementation, set `spark.sql.streaming.stateStore.providerClass`
+to `org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider`.
+
+Here are the configs regarding to RocksDB instance of the state store provider:
+
+<table class="table">
+  <tr>
+    <th>Config Name</th>
+    <th>Description</th>
+    <th>Default Value</th>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.compactOnCommit</td>
+    <td>Whether we perform a range compaction of RocksDB instance for commit operation</td>
+    <td>False</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.blockSizeKB</td>
+    <td>Approximate size in KB of user data packed per block for a RocksDB BlockBasedTable, which is a RocksDB's default SST file format.</td>
+    <td>4</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.blockCacheSizeMB</td>
+    <td>The size capacity in MB for a cache of blocks.</td>
+    <td>8</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.lockAcquireTimeoutMs</td>
+    <td>The waiting time in millisecond for acquiring lock in the load operation for RocksDB instance.</td>
+    <td>60000</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.resetStatsOnLoad</td>
+    <td>Whether we resets all ticker and histogram stats for RocksDB on load.</td>
+    <td>True</td>
+  </tr>
+</table>
+
+#### State Store and task locality
 
 The stateful operations store states for events in state stores of executors. State stores occupy resources such as memory and disk space to store the states.
 So it is more efficient to keep a state store provider running in the same executor across different streaming batches.
@@ -2603,6 +2749,15 @@ Here are the different kinds of triggers that are supported.
     </td>
   </tr>
   <tr>
+    <td><b>Available-now micro-batch</b></td>
+    <td>
+        Similar to queries one-time micro-batch trigger, the query will process all the available data and then
+        stop on its own. The difference is that, it will process the data in (possibly) multiple micro-batches
+        based on the source options (e.g. <code>maxFilesPerTrigger</code> for file source), which will result
+        in better query scalability.
+    </td>
+  </tr>
+  <tr>
     <td><b>Continuous with fixed checkpoint interval</b><br/><i>(experimental)</i></td>
     <td>
         The query will be executed in the new low-latency, continuous processing mode. Read more
@@ -2636,6 +2791,12 @@ df.writeStream
   .trigger(Trigger.Once())
   .start()
 
+// Available-now trigger
+df.writeStream
+  .format("console")
+  .trigger(Trigger.AvailableNow())
+  .start()
+
 // Continuous trigger with one-second checkpointing interval
 df.writeStream
   .format("console")
@@ -2666,6 +2827,12 @@ df.writeStream
 df.writeStream
   .format("console")
   .trigger(Trigger.Once())
+  .start();
+
+// Available-now trigger
+df.writeStream
+  .format("console")
+  .trigger(Trigger.AvailableNow())
   .start();
 
 // Continuous trigger with one-second checkpointing interval
@@ -3320,7 +3487,7 @@ the effect of the change is not well-defined. For all of them:
 
   - *Streaming aggregation*: For example, `sdf.groupBy("a").agg(...)`. Any change in number or type of grouping keys or aggregates is not allowed.
 
-  - *Streaming deduplication*: For example, `sdf.dropDuplicates("a")`. Any change in number or type of grouping keys or aggregates is not allowed.
+  - *Streaming deduplication*: For example, `sdf.dropDuplicates("a")`. Any change in number or type of deduplicating columns is not allowed.
 
   - *Stream-stream join*: For example, `sdf1.join(sdf2, ...)` (i.e. both inputs are generated with `sparkSession.readStream`). Changes
     in the schema or equi-joining columns are not allowed. Changes in join type (outer or inner) are not allowed. Other changes in the join condition are ill-defined.

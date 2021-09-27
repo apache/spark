@@ -37,6 +37,8 @@ public class ErrorHandlerSuite {
     assertFalse(pushHandler.shouldRetryError(new BlockPushNonFatalFailure(
       ReturnCode.TOO_LATE_BLOCK_PUSH, "")));
     assertFalse(pushHandler.shouldRetryError(new BlockPushNonFatalFailure(
+      ReturnCode.TOO_OLD_ATTEMPT_PUSH, "")));
+    assertFalse(pushHandler.shouldRetryError(new BlockPushNonFatalFailure(
       ReturnCode.STALE_BLOCK_PUSH, "")));
     assertFalse(pushHandler.shouldRetryError(new RuntimeException(new ConnectException())));
     assertTrue(pushHandler.shouldRetryError(new BlockPushNonFatalFailure(
@@ -53,6 +55,8 @@ public class ErrorHandlerSuite {
     ErrorHandler.BlockPushErrorHandler pushHandler = new ErrorHandler.BlockPushErrorHandler();
     assertFalse(pushHandler.shouldLogError(new BlockPushNonFatalFailure(
       ReturnCode.TOO_LATE_BLOCK_PUSH, "")));
+    assertFalse(pushHandler.shouldLogError(new BlockPushNonFatalFailure(
+      ReturnCode.TOO_OLD_ATTEMPT_PUSH, "")));
     assertFalse(pushHandler.shouldLogError(new BlockPushNonFatalFailure(
       ReturnCode.STALE_BLOCK_PUSH, "")));
     assertFalse(pushHandler.shouldLogError(new BlockPushNonFatalFailure(

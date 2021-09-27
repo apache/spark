@@ -65,6 +65,18 @@ select interval +'-1-1' year to month;
 select interval - '1 2:3:4.001' day to second;
 select interval +'1 2:3:4.001' day to second;
 select interval -'-1 2:3:4.001' day to second;
+select interval -'1' year;
+select interval -'-1' year;
+select interval -'11' month;
+select interval -'-11' month;
+select interval -'1' day;
+select interval -'-1' day;
+select interval -'23' hour;
+select interval -'-23' hour;
+select interval -'59' minute;
+select interval -'-59' minute;
+select interval -'59' second;
+select interval -'-59' second;
 
 -- make intervals
 select make_interval(1);
@@ -341,9 +353,15 @@ SELECT INTERVAL 1 MONTH > INTERVAL 20 DAYS;
 SELECT INTERVAL '1' DAY < '1';
 SELECT INTERVAL '1' DAY = '1';
 SELECT INTERVAL '1' DAY > '1';
+SELECT '1' < INTERVAL '1' DAY;
+SELECT '1' = INTERVAL '1' DAY;
+SELECT '1' > INTERVAL '1' DAY;
 SELECT INTERVAL '1' YEAR < '1';
 SELECT INTERVAL '1' YEAR = '1';
 SELECT INTERVAL '1' YEAR > '1';
+SELECT '1' < INTERVAL '1' YEAR;
+SELECT '1' = INTERVAL '1' YEAR;
+SELECT '1' > INTERVAL '1' YEAR;
 
 SELECT array(INTERVAL '1' YEAR, INTERVAL '1' MONTH);
 SELECT array(INTERVAL '1' DAY, INTERVAL '01:01' HOUR TO MINUTE);

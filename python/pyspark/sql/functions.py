@@ -253,6 +253,8 @@ def product(col):
 
 def acos(col):
     """
+    Computes inverse cosine of the input column.
+
     .. versionadded:: 1.4.0
 
     Returns
@@ -278,6 +280,8 @@ def acosh(col):
 
 def asin(col):
     """
+    Computes inverse sine of the input column.
+
     .. versionadded:: 1.3.0
 
 
@@ -304,6 +308,8 @@ def asinh(col):
 
 def atan(col):
     """
+    Compute inverse tangent of the input column.
+
     .. versionadded:: 1.4.0
 
     Returns
@@ -345,6 +351,8 @@ def ceil(col):
 
 def cos(col):
     """
+    Computes cosine of the input column.
+
     .. versionadded:: 1.4.0
 
     Parameters
@@ -362,6 +370,8 @@ def cos(col):
 
 def cosh(col):
     """
+    Computes hyperbolic cosine of the input column.
+
     .. versionadded:: 1.4.0
 
     Parameters
@@ -375,6 +385,44 @@ def cosh(col):
         hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh()`
     """
     return _invoke_function_over_column("cosh", col)
+
+
+def cot(col):
+    """
+    Computes cotangent of the input column.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Angle in radians
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Cotangent of the angle.
+    """
+    return _invoke_function_over_column("cot", col)
+
+
+def csc(col):
+    """
+    Computes cosecant of the input column.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Angle in radians
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Cosecant of the angle.
+    """
+    return _invoke_function_over_column("csc", col)
 
 
 @since(1.4)
@@ -434,6 +482,25 @@ def rint(col):
     return _invoke_function_over_column("rint", col)
 
 
+def sec(col):
+    """
+    Computes secant of the input column.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Angle in radians
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Secant of the angle.
+    """
+    return _invoke_function_over_column("sec", col)
+
+
 @since(1.4)
 def signum(col):
     """
@@ -444,6 +511,8 @@ def signum(col):
 
 def sin(col):
     """
+    Computes sine of the input column.
+
     .. versionadded:: 1.4.0
 
     Parameters
@@ -460,6 +529,8 @@ def sin(col):
 
 def sinh(col):
     """
+    Computes hyperbolic sine of the input column.
+
     .. versionadded:: 1.4.0
 
     Parameters
@@ -478,6 +549,8 @@ def sinh(col):
 
 def tan(col):
     """
+    Computes tangent of the input column.
+
     .. versionadded:: 1.4.0
 
     Parameters
@@ -495,6 +568,8 @@ def tan(col):
 
 def tanh(col):
     """
+    Computes hyperbolic tangent of the input column.
+
     .. versionadded:: 1.4.0
 
     Parameters
@@ -2346,6 +2421,8 @@ def session_window(timeColumn, gapDuration):
     processing time.
     gapDuration is provided as strings, e.g. '1 second', '1 day 12 hours', '2 minutes'. Valid
     interval strings are 'week', 'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
+    It could also be a Column which can be evaluated to gap duration dynamically based on the
+    input row.
     The output column will be a struct called 'session_window' by default with the nested columns
     'start' and 'end', where 'start' and 'end' will be of :class:`pyspark.sql.types.TimestampType`.
     .. versionadded:: 3.2.0
@@ -2356,15 +2433,24 @@ def session_window(timeColumn, gapDuration):
     >>> w.select(w.session_window.start.cast("string").alias("start"),
     ...          w.session_window.end.cast("string").alias("end"), "sum").collect()
     [Row(start='2016-03-11 09:00:07', end='2016-03-11 09:00:12', sum=1)]
+    >>> w = df.groupBy(session_window("date", lit("5 seconds"))).agg(sum("val").alias("sum"))
+    >>> w.select(w.session_window.start.cast("string").alias("start"),
+    ...          w.session_window.end.cast("string").alias("end"), "sum").collect()
+    [Row(start='2016-03-11 09:00:07', end='2016-03-11 09:00:12', sum=1)]
     """
-    def check_string_field(field, fieldName):
-        if not field or type(field) is not str:
-            raise TypeError("%s should be provided as a string" % fieldName)
+    def check_field(field, fieldName):
+        if field is None or not isinstance(field, (str, Column)):
+            raise TypeError("%s should be provided as a string or Column" % fieldName)
 
     sc = SparkContext._active_spark_context
     time_col = _to_java_column(timeColumn)
-    check_string_field(gapDuration, "gapDuration")
-    res = sc._jvm.functions.session_window(time_col, gapDuration)
+    check_field(gapDuration, "gapDuration")
+    gap_duration = (
+        gapDuration
+        if isinstance(gapDuration, str)
+        else _to_java_column(gapDuration)
+    )
+    res = sc._jvm.functions.session_window(time_col, gap_duration)
     return Column(res)
 
 
@@ -3068,6 +3154,58 @@ def length(col):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.length(_to_java_column(col)))
+
+
+def octet_length(col):
+    """
+    Calculates the byte length for the specified string column.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Source column or strings
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Byte length of the col
+
+    Examples
+    -------
+    >>> from pyspark.sql.functions import octet_length
+    >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']) \
+            .select(octet_length('cat')).collect()
+        [Row(octet_length(cat)=3), Row(octet_length(cat)=4)]
+    """
+    return _invoke_function_over_column("octet_length", col)
+
+
+def bit_length(col):
+    """
+    Calculates the bit length for the specified string column.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Source column or strings
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Bit length of the col
+
+    Examples
+    -------
+    >>> from pyspark.sql.functions import bit_length
+    >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']) \
+            .select(bit_length('cat')).collect()
+        [Row(bit_length(cat)=24), Row(bit_length(cat)=32)]
+    """
+    return _invoke_function_over_column("bit_length", col)
 
 
 def translate(srcCol, matching, replace):

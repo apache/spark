@@ -704,7 +704,7 @@ class MultiIndex(Index):
                     ('d', 'h')],
                    )
         """
-        return super().copy(deep=deep)  # type: ignore
+        return cast(MultiIndex, super().copy(deep=deep))
 
     def symmetric_difference(  # type: ignore[override]
         self,
@@ -911,7 +911,7 @@ class MultiIndex(Index):
         if hasattr(MissingPandasLikeMultiIndex, item):
             property_or_func = getattr(MissingPandasLikeMultiIndex, item)
             if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
+                return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
         raise AttributeError("'MultiIndex' object has no attribute '{}'".format(item))
@@ -1111,7 +1111,7 @@ class MultiIndex(Index):
             keep_name = self.names == other.names
         elif isinstance(other, Index):
             # Always returns an empty MultiIndex if `other` is Index.
-            return self.to_frame().head(0).index  # type: ignore
+            return cast(MultiIndex, self.to_frame().head(0).index)
         elif not all(isinstance(item, tuple) for item in other):
             raise TypeError("other must be a MultiIndex or a list of tuples")
         else:
@@ -1164,6 +1164,13 @@ class MultiIndex(Index):
 
     def __iter__(self) -> Iterator:
         return MissingPandasLikeMultiIndex.__iter__(self)
+
+    def map(
+        self,
+        mapper: Union[dict, Callable[[Any], Any], pd.Series] = None,
+        na_action: Optional[str] = None,
+    ) -> "Index":
+        return MissingPandasLikeMultiIndex.map(self, mapper, na_action)
 
 
 def _test() -> None:

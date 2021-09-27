@@ -240,17 +240,6 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
-  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
-    .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
-      "For example, Spark will throw an exception at runtime instead of returning null results " +
-      "when the inputs to a SQL operator/function are invalid." +
-      "For full details of this dialect, you can find them in the section \"ANSI Compliance\" of " +
-      "Spark's documentation. Some ANSI dialect features may be not from the ANSI SQL " +
-      "standard directly, but their behaviors align with ANSI SQL's style")
-    .version("3.0.0")
-    .booleanConf
-    .createWithDefault(false)
-
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
       "specified by their rule names and separated by comma. It is not guaranteed that all the " +
@@ -676,6 +665,13 @@ object SQLConf {
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
+
+  val ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN =
+    buildConf("spark.sql.adaptive.forceOptimizeSkewedJoin")
+      .doc("When true, force enable OptimizeSkewedJoin even if it introduces extra shuffle.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS =
     buildConf("spark.sql.adaptive.customCostEvaluatorClass")
@@ -1221,9 +1217,8 @@ object SQLConf {
     .createWithDefault(true)
 
   val GROUP_BY_ALIASES = buildConf("spark.sql.groupByAliases")
-    .doc("This configuration is only effective when ANSI mode is disabled. When it is true and " +
-      s"${ANSI_ENABLED.key} is false, aliases in a select list can be used in group by clauses. " +
-      "Otherwise, an analysis exception is thrown in the case.")
+    .doc("When true, aliases in a select list can be used in group by clauses. When false, " +
+      "an analysis exception is thrown in the case.")
     .version("2.2.0")
     .booleanConf
     .createWithDefault(true)
@@ -1586,6 +1581,22 @@ object SQLConf {
       .stringConf
       .createWithDefault("lz4")
 
+  /**
+   * Note: this is defined in `RocksDBConf.FORMAT_VERSION`. These two places should be updated
+   * together.
+   */
+  val STATE_STORE_ROCKSDB_FORMAT_VERSION =
+    buildConf("spark.sql.streaming.stateStore.rocksdb.formatVersion")
+      .internal()
+      .doc("Set the RocksDB format version. This will be stored in the checkpoint when starting " +
+        "a streaming query. The checkpoint will use this RocksDB format version in the entire " +
+        "lifetime of the query.")
+      .version("3.2.0")
+      .intConf
+      .checkValue(_ >= 0, "Must not be negative")
+      // 5 is the default table format version for RocksDB 6.20.3.
+      .createWithDefault(5)
+
   val STREAMING_AGGREGATION_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.aggregation.stateFormatVersion")
       .internal()
@@ -1856,6 +1867,13 @@ object SQLConf {
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
+
+  val COLLAPSE_PROJECT_ALWAYS_INLINE = buildConf("spark.sql.optimizer.collapseProjectAlwaysInline")
+    .doc("Whether to always collapse two adjacent projections and inline expressions even if " +
+      "it causes extra duplication.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
@@ -2547,6 +2565,17 @@ object SQLConf {
       .checkValues(StoreAssignmentPolicy.values.map(_.toString))
       .createWithDefault(StoreAssignmentPolicy.ANSI.toString)
 
+  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
+    .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
+      "For example, Spark will throw an exception at runtime instead of returning null results " +
+      "when the inputs to a SQL operator/function are invalid." +
+      "For full details of this dialect, you can find them in the section \"ANSI Compliance\" of " +
+      "Spark's documentation. Some ANSI dialect features may be not from the ANSI SQL " +
+      "standard directly, but their behaviors align with ANSI SQL's style")
+    .version("3.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
       .internal()
@@ -2632,7 +2661,6 @@ object SQLConf {
 
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
-      .internal()
       .doc("In SQL queries with a SORT followed by a LIMIT like " +
           "'SELECT x FROM t ORDER BY y LIMIT m', if m is under this threshold, do a top-K sort" +
           " in memory, otherwise do a global sort which spills to disk if necessary.")

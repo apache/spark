@@ -17,9 +17,9 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.IOException
+import java.io.{File, IOException}
 import java.lang.reflect.{InvocationTargetException, Modifier}
-import java.net.{URI, URLEncoder}
+import java.net.{URI, URL, URLEncoder}
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{TimeoutException, TimeUnit}
 
@@ -85,7 +85,10 @@ private[spark] class ApplicationMaster(
   private var metricsSystem: Option[MetricsSystem] = None
 
   private val userClassLoader = {
-    val urls = Client.getUserClasspathUrls(sparkConf, isClusterMode)
+    val classpath = Client.getUserClasspath(sparkConf)
+    val urls = classpath.map { entry =>
+      new URL("file:" + new File(entry.getPath()).getAbsolutePath())
+    }
 
     if (isClusterMode) {
       if (Client.isUserClassPathFirst(sparkConf, isDriver = true)) {
@@ -243,26 +246,31 @@ private[spark] class ApplicationMaster(
       // This shutdown hook should run *after* the SparkContext is shut down.
       val priority = ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY - 1
       ShutdownHookManager.addShutdownHook(priority) { () =>
-        val maxAppAttempts = client.getMaxRegAttempts(sparkConf, yarnConf)
-        val isLastAttempt = appAttemptId.getAttemptId() >= maxAppAttempts
+        try {
+          val maxAppAttempts = client.getMaxRegAttempts(sparkConf, yarnConf)
+          val isLastAttempt = appAttemptId.getAttemptId() >= maxAppAttempts
 
-        if (!finished) {
-          // The default state of ApplicationMaster is failed if it is invoked by shut down hook.
-          // This behavior is different compared to 1.x version.
-          // If user application is exited ahead of time by calling System.exit(N), here mark
-          // this application as failed with EXIT_EARLY. For a good shutdown, user shouldn't call
-          // System.exit(0) to terminate the application.
-          finish(finalStatus,
-            ApplicationMaster.EXIT_EARLY,
-            "Shutdown hook called before final status was reported.")
-        }
-
-        if (!unregistered) {
-          // we only want to unregister if we don't want the RM to retry
-          if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
-            unregister(finalStatus, finalMsg)
-            cleanupStagingDir(new Path(System.getenv("SPARK_YARN_STAGING_DIR")))
+          if (!finished) {
+            // The default state of ApplicationMaster is failed if it is invoked by shut down hook.
+            // This behavior is different compared to 1.x version.
+            // If user application is exited ahead of time by calling System.exit(N), here mark
+            // this application as failed with EXIT_EARLY. For a good shutdown, user shouldn't call
+            // System.exit(0) to terminate the application.
+            finish(finalStatus,
+              ApplicationMaster.EXIT_EARLY,
+              "Shutdown hook called before final status was reported.")
           }
+
+          if (!unregistered) {
+            // we only want to unregister if we don't want the RM to retry
+            if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
+              unregister(finalStatus, finalMsg)
+              cleanupStagingDir(new Path(System.getenv("SPARK_YARN_STAGING_DIR")))
+            }
+          }
+        } catch {
+          case e: Throwable =>
+            logWarning("Ignoring Exception while stopping ApplicationMaster from shutdown hook", e)
         }
       }
 
