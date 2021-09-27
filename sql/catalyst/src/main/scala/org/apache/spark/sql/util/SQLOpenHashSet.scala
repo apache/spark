@@ -81,32 +81,33 @@ object SQLOpenHashSet {
   def withNullCheckCode(
       arrayContainsNull: Boolean,
       setContainsNull: Boolean,
+      array: String,
+      index: String,
       hashSet: String,
       handleNotNull: (String, String) => String,
-      handleNull: String): (String, String) => String = {
-    (array: String, index: String) =>
-        if (arrayContainsNull) {
-          if (setContainsNull) {
-            s"""
-               |if ($array.isNullAt($index)) {
-               |  if (!$hashSet.containsNull()) {
-               |    $hashSet.addNull();
-               |    $handleNull
-               |  }
-               |} else {
-               |  ${handleNotNull(array, index)}
-               |}
-           """.stripMargin
-          } else {
-            s"""
-               |if (!$array.isNullAt($index)) {
-               | ${handleNotNull(array, index)}
-               |}
-           """.stripMargin
-          }
-        } else {
-          handleNotNull(array, index)
-        }
+      handleNull: String): String = {
+    if (arrayContainsNull) {
+      if (setContainsNull) {
+        s"""
+           |if ($array.isNullAt($index)) {
+           |  if (!$hashSet.containsNull()) {
+           |    $hashSet.addNull();
+           |    $handleNull
+           |  }
+           |} else {
+           |  ${handleNotNull(array, index)}
+           |}
+         """.stripMargin
+      } else {
+        s"""
+           |if (!$array.isNullAt($index)) {
+           | ${handleNotNull(array, index)}
+           |}
+         """.stripMargin
+      }
+    } else {
+      handleNotNull(array, index)
+    }
   }
 
   def withNaNCheckFunc(
