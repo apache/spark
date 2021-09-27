@@ -321,16 +321,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO =
-    buildConf("spark.sql.optimizer.dynamicPartitionPruning.fallbackFilterRatio")
-      .internal()
-      .doc("When statistics are not available or configured not to be used, this config will be " +
-        "used as the fallback filter ratio for computing the data size of the partitioned table " +
-        "after dynamic partition pruning, in order to evaluate if it is worth adding an extra " +
-        "subquery as the pruning filter if broadcast reuse is not applicable.")
-      .version("3.0.0")
-      .doubleConf
-      .createWithDefault(0.5)
+  val DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO = buildConf(
+    "spark.sql.optimizer.dynamicPartitionPruning.fallbackFilterRatio")
+    .internal()
+    .doc("When statistics are not available or configured not to be used, this config will be " +
+      "used as the fallback filter ratio for computing the data size of the partitioned table " +
+      "after dynamic partition pruning, in order to evaluate if it is worth adding an extra " +
+      "subquery as the pruning filter if broadcast reuse is not applicable.")
+    .version("3.0.0")
+    .doubleConf
+    .createWithDefault(0.5)
 
   val DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly")
@@ -341,17 +341,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO =
+  val DYNAMIC_PARTITON_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.pruningSideExtraFilterRatio")
-      .internal()
-      .doc("When filtering side doesn't support broadcast by join type, and doing DPP means " +
-        "running an extra query that may have significant overhead. This config will be used " +
-        "as the extra filter ratio for computing the data size of the pruning side after DPP, " +
-        "in order to evaluate if it is worth adding an extra subquery as the pruning filter.")
-      .version("3.2.0")
-      .doubleConf
-      .checkValue(ratio => ratio > 0.0 && ratio <= 1.0, "The ratio value must be in (0.0, 1.0].")
-      .createWithDefault(0.04)
+    .internal()
+    .doc("When filtering side doesn't support broadcast by join type, and doing DPP means " +
+      "running an extra query that may have significant overhead. This config will be used " +
+      "as the extra filter ratio for computing the data size of the pruning side after DPP, " +
+      "in order to evaluate if it is worth adding an extra subquery as the pruning filter.")
+    .version("3.2.0")
+    .doubleConf
+    .createWithDefault(0.04)
 
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
@@ -3550,7 +3549,7 @@ class SQLConf extends Serializable with Logging {
     getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
 
   def dynamicPartitionPruningPruningSideExtraFilterRatio: Double =
-    getConf(DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO)
+    getConf(DYNAMIC_PARTITON_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
