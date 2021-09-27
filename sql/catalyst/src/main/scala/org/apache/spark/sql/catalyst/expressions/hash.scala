@@ -18,14 +18,13 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal, RoundingMode}
-import java.security.{MessageDigest, NoSuchAlgorithmException}
 import java.util.concurrent.TimeUnit._
 import java.util.zip.CRC32
 
 import scala.annotation.tailrec
-import scala.math.BigInt
 
 import org.apache.commons.codec.digest.DigestUtils
+import org.apache.commons.codec.digest.MessageDigestAlgorithms
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -109,17 +108,8 @@ case class Sha2(left: Expression, right: Expression)
     val input = input1.asInstanceOf[Array[Byte]]
     bitLength match {
       case 224 =>
-        // DigestUtils doesn't support SHA-224 now
-        try {
-          val md = MessageDigest.getInstance("SHA-224")
-          val messageDigest = md.digest(input);
-          val hashText = BigInt(1, messageDigest).toString(16);
-          val paddedHashText = String.format("%56s", hashText).replace(" ", "0")
-          UTF8String.fromString(paddedHashText);
-        } catch {
-          // SHA-224 is not supported on the system, return null
-          case noa: NoSuchAlgorithmException => null
-        }
+        UTF8String.fromString(
+          new DigestUtils(MessageDigestAlgorithms.SHA_224).digestAsHex(input))
       case 256 | 0 =>
         UTF8String.fromString(DigestUtils.sha256Hex(input))
       case 384 =>
@@ -132,18 +122,12 @@ case class Sha2(left: Expression, right: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val digestUtils = classOf[DigestUtils].getName
+    val messageDigestAlgorithms = classOf[MessageDigestAlgorithms].getName
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
         if ($eval2 == 224) {
-          try {
-            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-224");
-            byte[] messageDigest = md.digest($eval1);
-            String hashText = new java.math.BigInteger(1, messageDigest).toString(16);
-            String paddedHashText = String.format("%56s", hashText).replace(' ', '0');
-            ${ev.value} = UTF8String.fromString(paddedHashText);
-          } catch (java.security.NoSuchAlgorithmException e) {
-            ${ev.isNull} = true;
-          }
+          ${ev.value} = UTF8String.fromString(
+                          new $digestUtils($messageDigestAlgorithms.SHA_224).digestAsHex($eval1));
         } else if ($eval2 == 256 || $eval2 == 0) {
           ${ev.value} =
             UTF8String.fromString($digestUtils.sha256Hex($eval1));
