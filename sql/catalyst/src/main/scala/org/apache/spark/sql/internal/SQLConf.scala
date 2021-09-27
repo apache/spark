@@ -30,8 +30,7 @@ import scala.util.control.NonFatal
 import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
-
-import org.apache.spark.{SparkConf, SparkContext, TaskContext}
+import org.apache.spark.{SparkConf, SparkContext, SparkNoSuchElementException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
@@ -4148,7 +4147,7 @@ class SQLConf extends Serializable with Logging {
   }
 
   /** Return the value of Spark SQL configuration property for the given key. */
-  @throws[NoSuchElementException]("if key is not set")
+  @throws[SparkNoSuchElementException]("if key is not set")
   def getConfString(key: String): String = {
     Option(settings.get(key)).
       orElse {

@@ -151,6 +151,9 @@
     "message" : [ "Invalid output mode: %s" ],
     "sqlState" : "42000"
   },
+  "KEY_IS_NOT_SET" : {
+    "message" : [ "%s is not set" ]
+  },
   "LOGICAL_HINT_OPERATOR_NOT_REMOVED_DURING_ANALYSIS" : {
     "message" : [ "Internal error: logical hint operator should have been removed during analysis" ]
   },

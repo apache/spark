@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkNoSuchElementException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -63,11 +64,11 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   /**
    * Returns the value of Spark runtime configuration property for the given key.
    *
-   * @throws java.util.NoSuchElementException if the key is not set and does not have a default
-   *                                          value
+   * @throws org.apache.spark.SparkNoSuchElementException if the key is not set and does not have
+   *                                    a default value
    * @since 2.0.0
    */
-  @throws[NoSuchElementException]("if the key is not set")
+  @throws[SparkNoSuchElementException]("if the key is not set")
   def get(key: String): String = {
     sqlConf.getConfString(key)
   }
