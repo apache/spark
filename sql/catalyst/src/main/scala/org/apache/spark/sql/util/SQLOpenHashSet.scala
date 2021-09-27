@@ -69,7 +69,7 @@ object SQLOpenHashSet {
     (array: ArrayData, index: Int) =>
       if (array.isNullAt(index)) {
         if (!hashSet.containsNull) {
-          hashSet.addNull
+          hashSet.addNull()
           handleNull()
         }
       } else {
@@ -126,7 +126,7 @@ object SQLOpenHashSet {
     (value: Any) =>
       if (isNaN(value)) {
         if (!hashSet.containsNaN) {
-          hashSet.addNaN
+          hashSet.addNaN()
           handleNaN(valueNaN)
         }
       } else {
