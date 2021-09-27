@@ -38,7 +38,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Utils, VersionUtils}
 
 class FileSuite extends SparkFunSuite with LocalSparkContext {
   var tempDir: File = _
@@ -137,9 +137,11 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
   // Hadoop "gzip" and "zstd" codecs require native library installed for sequence files
   // "snappy" codec does not work due to SPARK-36681.
-  Seq((new DefaultCodec(), "default"), (new BZip2Codec(), "bzip2"), (new Lz4Codec(), "lz4"))
-    .foreach { case (codec, codecName) =>
-      runSequenceFileCodecTest(codec, codecName)
+  val codecs = Seq((new DefaultCodec(), "default"), (new BZip2Codec(), "bzip2")) ++ {
+    if (VersionUtils.isHadoop3) Seq((new Lz4Codec(), "lz4")) else Seq()
+  }
+  codecs.foreach { case (codec, codecName) =>
+    runSequenceFileCodecTest(codec, codecName)
   }
 
   test("SequenceFile with writable key") {

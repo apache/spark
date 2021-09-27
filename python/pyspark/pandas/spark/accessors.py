@@ -20,7 +20,7 @@ Spark related features. Usually, the features here are missing in pandas
 but Spark has it.
 """
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, Callable, Generic, List, Optional, Union, cast
+from typing import TYPE_CHECKING, Callable, Generic, List, Optional, Union
 
 from pyspark import StorageLevel
 from pyspark.sql import Column, DataFrame as SparkDataFrame
@@ -743,7 +743,7 @@ class SparkFrameMethods(object):
         >>> df.to_table('%s.my_table' % db, partition_cols='date')
         """
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-            options = options.get("options")  # type: ignore
+            options = options.get("options")  # type: ignore[assignment]
 
         self._psdf.spark.frame(index_col=index_col).write.saveAsTable(
             name=name, format=format, mode=mode, partitionBy=partition_cols, **options
@@ -816,7 +816,7 @@ class SparkFrameMethods(object):
         >>> df.to_spark_io(path='%s/to_spark_io/foo.json' % path, format='json')
         """
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-            options = options.get("options")  # type: ignore
+            options = options.get("options")  # type: ignore[assignment]
 
         self._psdf.spark.frame(index_col=index_col).write.save(
             path=path, format=format, mode=mode, partitionBy=partition_cols, **options
@@ -941,8 +941,7 @@ class SparkFrameMethods(object):
                 "The output of the function [%s] should be of a "
                 "pyspark.sql.DataFrame; however, got [%s]." % (func, type(output))
             )
-        psdf = output.to_pandas_on_spark(index_col)  # type: ignore
-        return cast("ps.DataFrame", psdf)
+        return output.to_pandas_on_spark(index_col)
 
     def repartition(self, num_partitions: int) -> "ps.DataFrame":
         """

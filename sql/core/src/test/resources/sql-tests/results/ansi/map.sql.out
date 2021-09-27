@@ -7,7 +7,7 @@ select element_at(map(1, 'a', 2, 'b'), 5)
 -- !query schema
 struct<>
 -- !query output
-java.util.NoSuchElementException
+org.apache.spark.SparkNoSuchElementException
 Key 5 does not exist.
 
 
@@ -16,5 +16,5 @@ select map(1, 'a', 2, 'b')[5]
 -- !query schema
 struct<>
 -- !query output
-java.util.NoSuchElementException
+org.apache.spark.SparkNoSuchElementException
 Key 5 does not exist.

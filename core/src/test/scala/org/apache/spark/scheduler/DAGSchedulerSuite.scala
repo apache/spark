@@ -3961,7 +3961,9 @@ private class PushBasedClusterManager extends ExternalClusterManager {
 
   override def createTaskScheduler(
       sc: SparkContext,
-      masterURL: String): TaskScheduler = new TaskSchedulerImpl(sc, 1, isLocal = true)
+      masterURL: String): TaskScheduler = new TaskSchedulerImpl(sc, 1, isLocal = true) {
+    override def applicationAttemptId(): Option[String] = Some("1")
+  }
 
   override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {
     val sc = scheduler.asInstanceOf[TaskSchedulerImpl]

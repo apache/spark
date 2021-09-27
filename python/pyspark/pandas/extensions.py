@@ -59,7 +59,7 @@ class CachedAccessor(Generic[T]):
     ) -> Union[T, Type[T]]:
         if obj is None:
             return self._accessor
-        accessor_obj = self._accessor(obj)  # type: ignore
+        accessor_obj = self._accessor(obj)  # type: ignore[call-arg]
         object.__setattr__(obj, self._name, accessor_obj)
         return accessor_obj
 
