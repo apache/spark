@@ -2950,6 +2950,42 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pscov = psdf["s1"].cov(psdf["s2"], min_periods=4)
         self.assert_eq(pcov, pscov, almost=True)
 
+    def test_eq(self):
+        pser = pd.Series([1, 2, 3, 4, 5, 6], name="x")
+        psser = ps.from_pandas(pser)
+
+        # other = Series
+        self.assert_eq(pser.eq(pser), psser.eq(psser))
+        self.assert_eq(pser == pser, psser == psser)
+
+        # other = list
+        other = [np.nan, 1, 3, 4, np.nan, 6]
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+            self.assert_eq(pser.eq(other), psser.eq(other))
+            self.assert_eq(pser == other, psser == other)
+        else:
+            self.assert_eq(pser.eq(other).rename("x"), psser.eq(other))
+            self.assert_eq((pser == other).rename("x"), psser == other)
+
+        # other = tuple
+        other = (np.nan, 1, 3, 4, np.nan, 6)
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+            self.assert_eq(pser.eq(other), psser.eq(other))
+            self.assert_eq(pser == other, psser == other)
+        else:
+            self.assert_eq(pser.eq(other).rename("x"), psser.eq(other))
+            self.assert_eq((pser == other).rename("x"), psser == other)
+
+        # other = dict
+        other = {1: None, 2: None, 3: None, 4: None, np.nan: None, 6: None}
+        self.assert_eq(pser.eq(other), psser.eq(other))
+        self.assert_eq(pser == other, psser == other)
+
+        # other = set
+        other = {1, 2, 3, 4, np.nan, 6}
+        self.assert_eq(pser.eq(other), psser.eq(other))
+        self.assert_eq(pser == other, psser == other)
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.test_series import *  # noqa: F401

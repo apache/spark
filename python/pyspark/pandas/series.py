@@ -684,7 +684,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     koalas = CachedAccessor("koalas", PandasOnSparkSeriesMethods)
 
     # Comparison Operators
-    def eq(self, other: Any) -> bool:
+    def eq(self, other: Any) -> "Series":
         """
         Compare if the current value is equal to the other.
 
@@ -705,6 +705,22 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         c     True
         d    False
         Name: b, dtype: bool
+
+        Support for list-like Python object with same length
+
+        >>> df.a == [1, 3, 2, 4]
+        a     True
+        b    False
+        c    False
+        d     True
+        Name: a, dtype: bool
+
+        >>> df.a.eq([1, 3, 2, 4])
+        a     True
+        b    False
+        c    False
+        d     True
+        Name: a, dtype: bool
         """
         return self == other
 
