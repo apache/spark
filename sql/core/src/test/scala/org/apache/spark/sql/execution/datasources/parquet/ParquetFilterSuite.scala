@@ -1809,7 +1809,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   }
 
 
-  test("SPARK-XXXXX: filter pushdown - year-month interval") {
+  test("SPARK-36866: filter pushdown - year-month interval") {
     def months(m: Int): Period = Period.ofMonths(m)
     def monthsLit(m: Int): Literal = Literal(months(m))
     val data = (1 to 4).map(i => Tuple1(Option(months(i))))
