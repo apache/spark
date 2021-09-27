@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.vectorized;
 
-import org.apache.spark.annotation.Evolving;
+import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.types.*;
@@ -26,7 +26,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 /**
  * This class wraps an array of {@link ColumnVector} and provides a row view.
  */
-@Evolving
+@DeveloperApi
 public final class ColumnarBatchRow extends InternalRow {
   public int rowId;
   private final ColumnVector[] columns;
