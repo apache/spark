@@ -36,3 +36,8 @@ realpath () {
   echo "$(pwd -P)/"$TARGET_FILE""
 )
 }
+
+# See simple version normalization: http://stackoverflow.com/questions/16989598/bash-comparing-version-numbers
+version() {
+  echo "$@" | awk -F. '{ printf("%03d%03d%03d\n", $1,$2,$3); }';
+}
