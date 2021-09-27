@@ -21,8 +21,7 @@ SELF=$(cd $(dirname $0) && pwd)
 . "$SELF/util.sh"
 
 if [ -z "${JAVA_HOME}" -a "$(command -v javac)" ]; then
-  if [ "$(uname -s)" = "Darwin" -a \
-      $(version $(sw_vers -productVersion)) -ge $(version 10.5) ]; then
+  if [ "$(uname -s)" = "Darwin" ]; then
     export JAVA_HOME="$(/usr/libexec/java_home)"
   else
     export JAVA_HOME="$(dirname $(dirname $(realpath $(command -v javac))))"
@@ -105,6 +104,9 @@ install_app() {
     rm -f "${local_checksum}"
   fi
 }
+
+# See simple version normalization: http://stackoverflow.com/questions/16989598/bash-comparing-version-numbers
+function version { echo "$@" | awk -F. '{ printf("%03d%03d%03d\n", $1,$2,$3); }'; }
 
 # Determine the Maven version from the root pom.xml file and
 # install maven under the build/ folder if needed.
