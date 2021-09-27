@@ -80,6 +80,9 @@ object QueryExecutionListener {
     override def initialValue(): Long = -1L
   }
 
+  /**
+   * Execute actions with context fetching executionId. Internal to Spark.
+   */
   private[sql] def withExecutionId[T](executionId: Long)(body: => T): T = {
     try {
       localExecutionId.set(executionId)
