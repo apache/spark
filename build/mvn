@@ -21,7 +21,7 @@ SELF=$(cd $(dirname $0) && pwd)
 . "$SELF/util.sh"
 
 if [ -z "${JAVA_HOME}" -a "$(command -v javac)" ]; then
-  if [ x"$(uname -a | awk '{print $1}')" = xDarwin -a \
+  if [ "$(uname -s)" = "Darwin" -a \
       $(version $(sw_vers -productVersion)) -ge $(version 10.5) ]; then
     export JAVA_HOME="$(/usr/libexec/java_home)"
   else
