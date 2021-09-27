@@ -114,7 +114,7 @@ case class Sha2(left: Expression, right: Expression)
           val md = MessageDigest.getInstance("SHA-224")
           val messageDigest = md.digest(input);
           val hashText = BigInt(1, messageDigest).toString(16);
-          val paddedHashText = "0" * ((bitLength / 8) * 2 - hashText.length()) + hashText
+          val paddedHashText = String.format("%56s", hashText).replace(" ", "0")
           UTF8String.fromString(paddedHashText);
         } catch {
           // SHA-224 is not supported on the system, return null
