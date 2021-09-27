@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.{Locale, NoSuchElementException, Properties, TimeZone}
+import java.util.{Locale, Properties, TimeZone}
 import java.util
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -30,6 +30,7 @@ import scala.util.control.NonFatal
 import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.{SparkConf, SparkContext, SparkNoSuchElementException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
