@@ -3570,7 +3570,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitShowCurrentNamespace(
       ctx: ShowCurrentNamespaceContext) : LogicalPlan = withOrigin(ctx) {
-    ShowCurrentNamespace(None)
+    ShowCurrentNamespace()
   }
 
   /**

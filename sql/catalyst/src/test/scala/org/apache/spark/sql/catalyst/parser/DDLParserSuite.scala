@@ -2104,7 +2104,7 @@ class DDLParserSuite extends AnalysisTest {
   test("show current namespace") {
     comparePlans(
       parsePlan("SHOW CURRENT NAMESPACE"),
-      ShowCurrentNamespace(None))
+      ShowCurrentNamespace())
   }
 
   test("alter table: SerDe properties") {

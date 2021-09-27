@@ -330,7 +330,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       SetCatalogAndNamespaceExec(catalogManager, catalogName, ns) :: Nil
 
     case r: ShowCurrentNamespace =>
-      ShowCurrentNamespaceExec(r.output, r.catalogManager.get) :: Nil
+      ShowCurrentNamespaceExec(r.output, session.sessionState.catalogManager) :: Nil
 
     case r @ ShowTableProperties(rt: ResolvedTable, propertyKey, output) =>
       ShowTablePropertiesExec(output, rt.table, propertyKey) :: Nil
