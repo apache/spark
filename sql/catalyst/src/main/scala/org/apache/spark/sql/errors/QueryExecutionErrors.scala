@@ -72,23 +72,24 @@ object QueryExecutionErrors {
   }
 
   def logicalHintOperatorNotRemovedDuringAnalysisError(): Throwable = {
-    new SparkIllegalStateException(errorClass = "LOGICAL_HINT_OPERATOR_NOT_REMOVED_DURING_ANALYSIS",
-      messageParameters = Array.empty)
+    new SparkIllegalStateException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Array(
+        "Internal error: logical hint operator should have been removed during analysis"))
   }
 
   def cannotEvaluateExpressionError(expression: Expression): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "CANNOT_EVALUATE_EXPRESSION",
-      messageParameters = Array("", expression.toString))
+    new SparkUnsupportedOperationException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Array(s"Cannot evaluate expression: $expression"))
   }
 
   def cannotGenerateCodeForExpressionError(expression: Expression): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "CANNOT_GENERATE_CODE_FOR_EXPRESSION",
-      messageParameters = Array(expression.toString))
+    new SparkUnsupportedOperationException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Array(s"Cannot generate code for expression: $expression"))
   }
 
   def cannotTerminateGeneratorError(generator: UnresolvedGenerator): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "CANNOT_TERMINATE_GENERATOR",
-      messageParameters = Array(generator.toString))
+    new SparkUnsupportedOperationException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Array(s"Cannot terminate expression: $generator"))
   }
 
   def castingCauseOverflowError(t: Any, targetType: String): ArithmeticException = {
@@ -130,8 +131,8 @@ object QueryExecutionErrors {
 
   def evaluateUnevaluableAggregateUnsupportedError(
       methodName: String, unEvaluable: UnevaluableAggregate): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "CANNOT_EVALUATE_EXPRESSION",
-      messageParameters = Array(methodName + ": " + unEvaluable.toString))
+    new SparkUnsupportedOperationException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Array(s"Cannot evaluate expression: $methodName: $unEvaluable"))
   }
 
   def dataTypeUnsupportedError(dt: DataType): Throwable = {
@@ -279,7 +280,9 @@ object QueryExecutionErrors {
   }
 
   def methodNotDeclaredError(name: String): Throwable = {
-    new SparkNoSuchMethodException(errorClass = "MISSING_METHOD", Array(name))
+    new SparkNoSuchMethodException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Array(
+        s"""A method named "$name" is not declared in any enclosing class nor any supertype"""))
   }
 
   def constructorNotFoundError(cls: String): Throwable = {

@@ -46,6 +46,7 @@ class SparkException(
 
   override def getErrorClass: String = errorClass.orNull
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass.orNull)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass.orNull)
 }
 
 /**
@@ -85,6 +86,7 @@ private[spark] class SparkArithmeticException(errorClass: String, messageParamet
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }
 
 /**
@@ -98,6 +100,7 @@ private[spark] class SparkUnsupportedOperationException(
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }
 
 /**
@@ -112,6 +115,7 @@ private[spark] class SparkClassNotFoundException(
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }
 
 /**
@@ -126,6 +130,7 @@ private[spark] class SparkConcurrentModificationException(
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }
 
 /**
@@ -137,6 +142,7 @@ private[spark] class SparkDateTimeException(errorClass: String, messageParameter
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }
 
 /**
@@ -150,6 +156,7 @@ private[spark] class SparkFileAlreadyExistsException(
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }
 
 /**
@@ -163,6 +170,7 @@ private[spark] class SparkIllegalStateException(
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }
 
 /**
@@ -176,6 +184,7 @@ private[spark] class SparkFileNotFoundException(
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }
 
 /**
@@ -189,6 +198,7 @@ private[spark] class SparkNumberFormatException(
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }
 
 /**
@@ -202,6 +212,7 @@ private[spark] class SparkNoSuchMethodException(
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }
 
 /**
@@ -215,6 +226,7 @@ private[spark] class SparkIllegalArgumentException(
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }
 
 /**
@@ -228,6 +240,7 @@ private[spark] class SparkIndexOutOfBoundsException(
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }
 
 /**
@@ -241,6 +254,7 @@ private[spark] class SparkIOException(
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }
 
 private[spark] class SparkRuntimeException(
@@ -252,6 +266,7 @@ private[spark] class SparkRuntimeException(
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }
 
 /**
@@ -265,6 +280,7 @@ private[spark] class SparkSecurityException(
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }
 
 /**
@@ -278,6 +294,7 @@ private[spark] class SparkArrayIndexOutOfBoundsException(
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }
 
 /**
@@ -291,6 +308,7 @@ private[spark] class SparkSQLException(
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }
 
 /**
@@ -304,6 +322,7 @@ private[spark] class SparkNoSuchElementException(
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }
 
 /**
@@ -317,4 +336,5 @@ private[spark] class SparkSQLFeatureNotSupportedException(
 
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
 }

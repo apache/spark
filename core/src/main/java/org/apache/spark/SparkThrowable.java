@@ -39,4 +39,7 @@ public interface SparkThrowable {
   // Portable error identifier across SQL engines
   // If null, error class or SQLSTATE is not set
   String getSqlState();
+
+  // True if this error is an internal error.
+  boolean isInternalError();
 }

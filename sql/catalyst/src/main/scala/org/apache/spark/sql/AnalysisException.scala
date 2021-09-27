@@ -93,4 +93,5 @@ class AnalysisException protected[sql] (
 
   override def getErrorClass: String = errorClass.orNull
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass.orNull)
+  override def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass.orNull)
 }
