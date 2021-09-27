@@ -218,7 +218,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   /**
    * Returns whether an expression is likely to be selective in dynamic partition filtering.
    * 1. the predicate is selective.
-   * 2. the filtering predicate must not be subset of join key. In case it is, key then partition
+   * 2. the filtering predicate must not be subset of join key. In case it is, then partition
    * filter can be inferred statically in optimization phase, hence return false.
    */
   private def isLikelySelectiveWithInferFiltersEnabled(
