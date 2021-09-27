@@ -50,7 +50,7 @@ private[spark] object KubernetesExecutorBackend extends Logging {
     val createFn: (RpcEnv, Arguments, SparkEnv, ResourceProfile, String) =>
       CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env, resourceProfile, execId) =>
         new CoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, execId,
-        arguments.bindAddress, arguments.hostname, arguments.cores, Seq.empty,
+        arguments.bindAddress, arguments.hostname, arguments.cores,
         env, arguments.resourcesFileOpt, resourceProfile)
     }
     run(parseArguments(args, this.getClass.getCanonicalName.stripSuffix("$")), createFn)
