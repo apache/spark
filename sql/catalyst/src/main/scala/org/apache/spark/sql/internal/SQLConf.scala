@@ -321,16 +321,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO = buildConf(
-    "spark.sql.optimizer.dynamicPartitionPruning.fallbackFilterRatio")
-    .internal()
-    .doc("When statistics are not available or configured not to be used, this config will be " +
-      "used as the fallback filter ratio for computing the data size of the partitioned table " +
-      "after dynamic partition pruning, in order to evaluate if it is worth adding an extra " +
-      "subquery as the pruning filter if broadcast reuse is not applicable.")
-    .version("3.0.0")
-    .doubleConf
-    .createWithDefault(0.5)
+  val DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.fallbackFilterRatio")
+      .internal()
+      .doc("When statistics are not available or configured not to be used, this config will be " +
+        "used as the fallback filter ratio for computing the data size of the partitioned table " +
+        "after dynamic partition pruning, in order to evaluate if it is worth adding an extra " +
+        "subquery as the pruning filter if broadcast reuse is not applicable.")
+      .version("3.0.0")
+      .doubleConf
+      .createWithDefault(0.5)
 
   val DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly")

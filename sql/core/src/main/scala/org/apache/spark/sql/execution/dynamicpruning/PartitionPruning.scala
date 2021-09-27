@@ -161,7 +161,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
 
     val estimatePruningSideSize = filterRatio * partPlan.stats.sizeInBytes.toFloat
     val overhead = calculatePlanOverhead(otherPlan)
-      estimatePruningSideSize > overhead
+    estimatePruningSideSize > overhead
   }
 
   /**
