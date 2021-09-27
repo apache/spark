@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{LocalDate, LocalDateTime, ZoneId}
+import java.time.{LocalDate, LocalDateTime, Period, ZoneId}
 
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -1803,6 +1803,53 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           }
 
           AccumulatorContext.remove(accu.id)
+        }
+      }
+    }
+  }
+
+
+  test("SPARK-XXXXX: filter pushdown - year-month interval") {
+    def months(m: Int): Period = Period.ofMonths(m)
+    def monthsLit(m: Int): Literal = Literal(months(m))
+    val data = (1 to 4).map(i => Tuple1(Option(months(i))))
+    withNestedParquetDataFrame(data) { case (inputDF, colName, resultFun) =>
+      implicit val df: DataFrame = inputDF
+
+      val iAttr = df(colName).expr
+      assert(df(colName).expr.dataType === YearMonthIntervalType())
+
+      checkFilterPredicate(iAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+      checkFilterPredicate(iAttr.isNotNull, classOf[NotEq[_]],
+        (1 to 4).map(i => Row.apply(resultFun(months(i)))))
+
+      checkFilterPredicate(iAttr === monthsLit(1), classOf[Eq[_]], resultFun(months(1)))
+      checkFilterPredicate(iAttr <=> monthsLit(1), classOf[Eq[_]], resultFun(months(1)))
+      checkFilterPredicate(iAttr =!= monthsLit(1), classOf[NotEq[_]],
+        (2 to 4).map(i => Row.apply(resultFun(months(i)))))
+
+      checkFilterPredicate(iAttr < monthsLit(2), classOf[Lt[_]], resultFun(months(1)))
+      checkFilterPredicate(iAttr > monthsLit(3), classOf[Gt[_]], resultFun(months(4)))
+      checkFilterPredicate(iAttr <= monthsLit(1), classOf[LtEq[_]], resultFun(months(1)))
+      checkFilterPredicate(iAttr >= monthsLit(4), classOf[GtEq[_]], resultFun(months(4)))
+
+      checkFilterPredicate(monthsLit(1) === iAttr, classOf[Eq[_]], resultFun(months(1)))
+      checkFilterPredicate(monthsLit(1) <=> iAttr, classOf[Eq[_]], resultFun(months(1)))
+      checkFilterPredicate(monthsLit(2) > iAttr, classOf[Lt[_]], resultFun(months(1)))
+      checkFilterPredicate(monthsLit(3) < iAttr, classOf[Gt[_]], resultFun(months(4)))
+      checkFilterPredicate(monthsLit(1) >= iAttr, classOf[LtEq[_]], resultFun(months(1)))
+      checkFilterPredicate(monthsLit(4) <= iAttr, classOf[GtEq[_]], resultFun(months(4)))
+
+      checkFilterPredicate(!(iAttr < monthsLit(4)), classOf[GtEq[_]], resultFun(months(4)))
+      checkFilterPredicate(iAttr < monthsLit(2) || iAttr > monthsLit(3), classOf[Operators.Or],
+        Seq(Row(resultFun(months(1))), Row(resultFun(months(4)))))
+
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(
+            In(iAttr, Array(2, 3, 4, 5, 6, 7).map(monthsLit)),
+            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            Seq(Row(resultFun(months(2))), Row(resultFun(months(3))), Row(resultFun(months(4)))))
         }
       }
     }
