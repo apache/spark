@@ -655,16 +655,16 @@ class ClientSuite extends SparkFunSuite with Matchers {
       "$FOO" -> "BAR",
       "$F_O_O$FOO" -> "BarBAR",
       "${FOO}" -> "BAR",
-      "$FOO.$BAR" -> "BAR.",
+      "$FOO.baz$BAR" -> "BAR.baz",
       "{{FOO}}" -> "BAR",
       "{{FOO}}$FOO" -> "BARBAR",
-      "%FOO%" -> "%FOO%"
+      "%FOO%" -> "%FOO%",
+      """\$FOO\\\$FOO\${FOO}\\$FOO\\\\""" -> """$FOO\$FOO${FOO}\BAR\\"""
     ).foreach { case (input, expected) =>
       withClue(s"input string `$input`: ") {
-        assert(Client.replaceEnvVars(input, Map(
-          "F_O_O" -> "Bar",
-          "FOO" -> "BAR"
-        ), isWindows = false) === expected)
+        val replaced =
+          Client.replaceEnvVars(input, Map("F_O_O" -> "Bar", "FOO" -> "BAR"), isWindows = false)
+        assert(replaced === expected)
       }
     }
   }
@@ -673,16 +673,16 @@ class ClientSuite extends SparkFunSuite with Matchers {
     Map(
       "Foo%FOO%%BAR%" -> "FooBAR",
       "%FOO%" -> "BAR",
-      "%Foo%%FOO%" -> "BarBAR",
+      "%F_O_O%%FOO%" -> "BarBAR",
       "{{FOO}}%FOO%" -> "BARBAR",
       "$FOO" -> "$FOO",
-      "${FOO}" -> "${FOO}"
+      "${FOO}" -> "${FOO}",
+      "%%FOO%%%FOO%%%%%%FOO%" -> "%FOO%BAR%%BAR"
     ).foreach { case (input, expected) =>
       withClue(s"input string `$input`: ") {
-        assert(Client.replaceEnvVars(input, Map(
-          "Foo" -> "Bar",
-          "FOO" -> "BAR"
-        ), isWindows = true) === expected)
+        val replaced =
+          Client.replaceEnvVars(input, Map("F_O_O" -> "Bar", "FOO" -> "BAR"), isWindows = true)
+        assert(replaced === expected)
       }
     }
   }

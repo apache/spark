@@ -1506,9 +1506,9 @@ private[spark] object Client extends Logging {
   /**
    * Replace environment variables in a string according to the same rules [[Environment]]:
    * `$VAR_NAME` for Unix, `%VAR_NAME%` for Windows, and `{{VAR_NAME}}` for all OS.
-   * Note that this won't properly support escapes for `$` and `%` characters, e.g.
-   * `\$VAR_NAME` when `VAR_NAME=foo` will resolve to `\foo` (whereas in an actual shell it would
-   * be `$VAR_NAME` due to the backslash).
+   * This support escapes for `$` and `%` characters, e.g.
+   * `\$FOO` and `%%FOO%%` will be resolved to `$FOO` and `%FOO%`, respectively, instead of being
+   * treated as variable names.
    *
    * @param unresolvedString The unresolved string which may contain variable references.
    * @param env The System environment
@@ -1519,27 +1519,39 @@ private[spark] object Client extends Logging {
       unresolvedString: String,
       env: IMap[String, String],
       isWindows: Boolean = Shell.WINDOWS): String = {
-    val osSpecificPatterns = if (isWindows) {
-      Seq(
-        // Environment variable names can contain anything besides = and %
-        // Ref: https://docs.microsoft.com/en-us/windows/win32/procthread/environment-variables
-        "%([^=%]+)%".r("varname")
+    val osResolvedString = if (isWindows) {
+      // Environment variable names can contain anything besides = and %
+      // Ref: https://docs.microsoft.com/en-us/windows/win32/procthread/environment-variables
+      val windowsPattern = "(?:%%|%([^=%]+)%)".r
+      windowsPattern.replaceAllIn(unresolvedString, m =>
+        Regex.quoteReplacement(m.matched match {
+          case "%%" => "%"
+          case _ => env.getOrElse(m.group(1), "")
+        })
       )
     } else {
-      Seq(
-        // Environment variables are alphanumeric plus underscore, case-sensitive, can't start with
-        // a digit, based on Shell and Utilities volume of IEEE Std 1003.1-2001
-        // Ref: https://pubs.opengroup.org/onlinepubs/000095399/basedefs/xbd_chap08.html
-        "\\$([A-z_][A-z_0-9]*)".r("varname"),
-        "\\$\\{([A-z_][A-z_0-9]*)}".r("varname")
+      // Environment variables are alphanumeric plus underscore, case-sensitive, can't start with
+      // a digit, based on Shell and Utilities volume of IEEE Std 1003.1-2001
+      // Ref: https://pubs.opengroup.org/onlinepubs/000095399/basedefs/xbd_chap08.html
+      val unixPattern = """(?i)(?:\\\\|\\\$|\$([A-Z_][A-Z0-9_]*))|\$\{([A-Z_][A-Z0-9_]*)}""".r
+      unixPattern.replaceAllIn(unresolvedString, m =>
+        Regex.quoteReplacement(m.matched match {
+          case """\\""" => """\"""
+          case """\$""" => """$"""
+          case _ => m.subgroups.filterNot(_ == null).headOption match {
+            case Some(v) => env.getOrElse(v, "")
+            case None =>
+              // Note that this should never be reached and indicates a bug
+              throw new IllegalStateException(s"No valid capture group was found for match: $m")
+          }
+        })
       )
     }
+
     // {{...}} is a YARN thing and not OS-specific. Follow Unix shell naming conventions
-    (osSpecificPatterns :+ "\\{\\{([A-z_][A-z_0-9]*)}}".r("varname"))
-      .foldLeft(unresolvedString) { (inputStr, pattern) =>
-        pattern.replaceSomeIn(inputStr,
-          m => Some(Regex.quoteReplacement(env.getOrElse(m.group("varname"), ""))))
-      }
+    val yarnPattern = "(?i)\\{\\{([A-Z_][A-Z0-9_]*)}}".r
+    yarnPattern.replaceAllIn(osResolvedString,
+      m => Regex.quoteReplacement(env.getOrElse(m.group(1), "")))
   }
 
   private def getMainJarUri(mainJar: Option[String]): Option[URI] = {
