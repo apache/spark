@@ -1137,6 +1137,43 @@ class MultiIndex(Index):
         )
         return cast(MultiIndex, DataFrame(internal).index)
 
+    def equal_levels(self, other: "MultiIndex") -> bool:
+        """
+        Return True if the levels of both MultiIndex objects are the same
+
+        Notes
+        -----
+        This API can be expensive since it has logic to sort and compare the values of
+        all levels of indices that belong to MultiIndex.
+
+        Examples
+        --------
+        >>> from pyspark.pandas.config import set_option, reset_option
+        >>> set_option("compute.ops_on_diff_frames", True)
+
+        >>> psmidx1 = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        >>> psmidx2 = ps.MultiIndex.from_tuples([("b", "y"), ("a", "x"), ("c", "z")])
+        >>> psmidx1.equal_levels(psmidx2)
+        True
+
+        >>> psmidx2 = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "j")])
+        >>> psmidx1.equal_levels(psmidx2)
+        False
+
+        >>> reset_option("compute.ops_on_diff_frames")
+        """
+        nlevels = self.nlevels
+        if nlevels != other.nlevels:
+            return False
+
+        for nlevel in range(nlevels):
+            self_values = self.get_level_values(nlevel).unique().sort_values()
+            other_values = other.get_level_values(nlevel).unique().sort_values()
+            if not self_values.equals(other_values):
+                return False
+
+        return True
+
     @property
     def hasnans(self) -> bool:
         raise NotImplementedError("hasnans is not defined for MultiIndex")

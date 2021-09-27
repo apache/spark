@@ -2369,6 +2369,13 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             lambda: psidx.map({1: 1, 2: 2.0, 3: "three"}),
         )
 
+    def test_multiindex_equal_levels(self):
+        pmidx1 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        pmidx2 = pd.MultiIndex.from_tuples([("a", "x", "q"), ("b", "y", "w"), ("c", "z", "e")])
+        psmidx1 = ps.from_pandas(pmidx1)
+        psmidx2 = ps.from_pandas(pmidx2)
+        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.indexes.test_base import *  # noqa: F401
