@@ -110,9 +110,11 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
 
   override def processLine(line: String): Boolean = {
     inactivityTimeout.stopInactivityTimer()
-    val result = super.processLine(line)
-    inactivityTimeout.startInactivityTimer()
-    result
+    try {
+      super.processLine(line)
+    } finally {
+      inactivityTimeout.startInactivityTimer()
+    }
   }
 
   /** Available commands */
