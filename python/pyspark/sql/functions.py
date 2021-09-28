@@ -24,17 +24,21 @@ import warnings
 
 from pyspark import since, SparkContext
 from pyspark.rdd import PythonEvalType
-from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
+from pyspark.sql.column import (  # type: ignore[attr-defined]
+    Column,
+    _to_java_column,
+    _to_seq,
+    _create_column_from_literal
+)
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.types import StringType, DataType
+from pyspark.sql.types import ArrayType, DataType, StringType, StructType
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
-from pyspark.sql.udf import UserDefinedFunction, _create_udf  # noqa: F401
-from pyspark.sql.udf import _create_udf
+from pyspark.sql.udf import UserDefinedFunction, _create_udf  # type: ignore[attr-defined] # noqa: F401
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
 from pyspark.sql.utils import to_str
 
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, overload, Optional, Tuple, Union
 
 from pyspark.sql._typing import (
     ColumnOrName,
@@ -54,7 +58,7 @@ def _get_get_jvm_function(name: str, sc: SparkContext) -> Callable:
     Retrieves JVM function identified by name from
     Java gateway associated with sc.
     """
-    return getattr(sc._jvm.functions, name)
+    return getattr(sc._jvm.functions, name)  # type: ignore[attr-defined]
 
 
 def _invoke_function(name: str, *args: Any) -> Column:
@@ -62,7 +66,10 @@ def _invoke_function(name: str, *args: Any) -> Column:
     Invokes JVM function identified by name with args
     and wraps the result with :class:`~pyspark.sql.Column`.
     """
-    jf = _get_get_jvm_function(name, SparkContext._active_spark_context)
+    jf = _get_get_jvm_function(
+        name,
+        SparkContext._active_spark_context  # type: ignore[attr-defined]
+    )
     return Column(jf(*args))
 
 
@@ -74,7 +81,7 @@ def _invoke_function_over_column(name: str, col: ColumnOrName) -> Column:
     return _invoke_function(name, _to_java_column(col))
 
 
-def _invoke_binary_math_function(name: str, col1: ColumnOrName, col2: ColumnOrName) -> Column:
+def _invoke_binary_math_function(name: str, col1: Any, col2: Any) -> Column:
     """
     Invokes binary JVM math function identified by name
     and wraps the result with :class:`~pyspark.sql.Column`.
@@ -458,7 +465,7 @@ def floor(col: ColumnOrName) -> Column:
 
 
 @since(1.4)
-def log(col):
+def log(col: ColumnOrName) -> Column:
     """
     Computes the natural logarithm of the given value.
     """
@@ -844,7 +851,7 @@ def atan2(col1: ColumnOrName, col2: float) -> Column:
     ...
 
 
-def atan2(col1, col2):
+def atan2(col1: Union[ColumnOrName, float], col2: Union[ColumnOrName, float]) -> Column:
     """
     .. versionadded:: 1.4.0
 
@@ -883,7 +890,7 @@ def hypot(col1: ColumnOrName, col2: float) -> Column:
 
 
 @since(1.4)
-def hypot(col1, col2):
+def hypot(col1: Union[ColumnOrName, float], col2: Union[ColumnOrName, float]) -> Column:
     """
     Computes ``sqrt(a^2 + b^2)`` without intermediate overflow or underflow.
     """
@@ -906,7 +913,7 @@ def pow(col1: ColumnOrName, col2: float) -> Column:
 
 
 @since(1.4)
-def pow(col1, col2):
+def pow(col1: Union[ColumnOrName, float], col2: Union[ColumnOrName, float]) -> Column:
     """
     Returns the value of the first argument raised to the power of the second argument.
     """
@@ -998,7 +1005,7 @@ def approx_count_distinct(col: ColumnOrName, rsd: Optional[float] = None) -> Col
     >>> df.agg(approx_count_distinct(df.age).alias('distinct_ages')).collect()
     [Row(distinct_ages=2)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if rsd is None:
         jc = sc._jvm.functions.approx_count_distinct(_to_java_column(col))
     else:
@@ -1010,7 +1017,7 @@ def approx_count_distinct(col: ColumnOrName, rsd: Optional[float] = None) -> Col
 def broadcast(df: DataFrame) -> DataFrame:
     """Marks a DataFrame as small enough for use in broadcast joins."""
 
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return DataFrame(sc._jvm.functions.broadcast(df._jdf), df.sql_ctx)
 
 
@@ -1049,7 +1056,7 @@ def coalesce(*cols: ColumnOrName) -> Column:
     |null|   2|             0.0|
     +----+----+----------------+
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.coalesce(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
@@ -1068,7 +1075,7 @@ def corr(col1: ColumnOrName, col2: ColumnOrName) -> Column:
     >>> df.agg(corr("a", "b").alias('c')).collect()
     [Row(c=1.0)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.corr(_to_java_column(col1), _to_java_column(col2)))
 
 
@@ -1086,7 +1093,7 @@ def covar_pop(col1: ColumnOrName, col2: ColumnOrName) -> Column:
     >>> df.agg(covar_pop("a", "b").alias('c')).collect()
     [Row(c=0.0)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.covar_pop(_to_java_column(col1), _to_java_column(col2)))
 
 
@@ -1104,7 +1111,7 @@ def covar_samp(col1: ColumnOrName, col2: ColumnOrName) -> Column:
     >>> df.agg(covar_samp("a", "b").alias('c')).collect()
     [Row(c=0.0)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.covar_samp(_to_java_column(col1), _to_java_column(col2)))
 
 
@@ -1132,7 +1139,7 @@ def count_distinct(col: ColumnOrName, *cols: ColumnOrName) -> Column:
     >>> df.agg(count_distinct("age", "name").alias('c')).collect()
     [Row(c=2)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.count_distinct(_to_java_column(col), _to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
@@ -1150,7 +1157,7 @@ def first(col: ColumnOrName, ignorenulls: bool = False) -> Column:
     The function is non-deterministic because its results depends on the order of the
     rows which may be non-deterministic after a shuffle.
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.first(_to_java_column(col), ignorenulls)
     return Column(jc)
 
@@ -1173,7 +1180,7 @@ def grouping(col: ColumnOrName) -> Column:
     |  Bob|             0|       5|
     +-----+--------------+--------+
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.grouping(_to_java_column(col))
     return Column(jc)
 
@@ -1202,7 +1209,7 @@ def grouping_id(*cols: ColumnOrName) -> Column:
     |  Bob|            0|       5|
     +-----+-------------+--------+
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.grouping_id(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
@@ -1211,7 +1218,7 @@ def grouping_id(*cols: ColumnOrName) -> Column:
 def input_file_name() -> Column:
     """Creates a string column for the file name of the current Spark task.
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.input_file_name())
 
 
@@ -1226,7 +1233,7 @@ def isnan(col: ColumnOrName) -> Column:
     >>> df.select(isnan("a").alias("r1"), isnan(df.a).alias("r2")).collect()
     [Row(r1=False, r2=False), Row(r1=True, r2=True)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.isnan(_to_java_column(col)))
 
 
@@ -1241,7 +1248,7 @@ def isnull(col: ColumnOrName) -> Column:
     >>> df.select(isnull("a").alias("r1"), isnull(df.a).alias("r2")).collect()
     [Row(r1=False, r2=False), Row(r1=True, r2=True)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.isnull(_to_java_column(col)))
 
 
@@ -1258,7 +1265,7 @@ def last(col: ColumnOrName, ignorenulls: bool = False) -> Column:
     The function is non-deterministic because its results depends on the order of the
     rows which may be non-deterministic after a shuffle.
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.last(_to_java_column(col), ignorenulls)
     return Column(jc)
 
@@ -1285,7 +1292,7 @@ def monotonically_increasing_id() -> Column:
     >>> df0.select(monotonically_increasing_id().alias('id')).collect()
     [Row(id=0), Row(id=1), Row(id=2), Row(id=8589934592), Row(id=8589934593), Row(id=8589934594)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.monotonically_increasing_id())
 
 
@@ -1302,13 +1309,13 @@ def nanvl(col1: ColumnOrName, col2: ColumnOrName) -> Column:
     >>> df.select(nanvl("a", "b").alias("r1"), nanvl(df.a, df.b).alias("r2")).collect()
     [Row(r1=1.0, r2=1.0), Row(r1=2.0, r2=2.0)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.nanvl(_to_java_column(col1), _to_java_column(col2)))
 
 
 def percentile_approx(
     col: ColumnOrName,
-    percentage: Union[Column, float, List[float], tuple[float]],
+    percentage: Union[Column, float, List[float], Tuple[float]],
     accuracy: Union[Column, float] = 10000,
 ) -> Column:
     """Returns the approximate `percentile` of the numeric column `col` which is the smallest value
@@ -1346,7 +1353,7 @@ def percentile_approx(
      |-- key: long (nullable = true)
      |-- median: double (nullable = true)
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
 
     if isinstance(percentage, (list, tuple)):
         # A local list
@@ -1384,7 +1391,7 @@ def rand(seed: Optional[int] = None) -> Column:
     [Row(age=2, name='Alice', rand=2.4052597283576684),
      Row(age=5, name='Bob', rand=2.3913904055683974)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if seed is not None:
         jc = sc._jvm.functions.rand(seed)
     else:
@@ -1408,7 +1415,7 @@ def randn(seed: Optional[int] = None) -> Column:
     [Row(age=2, name='Alice', randn=1.1027054481455365),
     Row(age=5, name='Bob', randn=0.7400395449950132)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if seed is not None:
         jc = sc._jvm.functions.randn(seed)
     else:
@@ -1428,7 +1435,7 @@ def round(col: ColumnOrName, scale: int = 0) -> Column:
     >>> spark.createDataFrame([(2.5,)], ['a']).select(round('a', 0).alias('r')).collect()
     [Row(r=3.0)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.round(_to_java_column(col), scale))
 
 
@@ -1444,7 +1451,7 @@ def bround(col: ColumnOrName, scale: int = 0) -> Column:
     >>> spark.createDataFrame([(2.5,)], ['a']).select(bround('a', 0).alias('r')).collect()
     [Row(r=2.0)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.bround(_to_java_column(col), scale))
 
 
@@ -1470,7 +1477,7 @@ def shiftleft(col: ColumnOrName, numBits: int) -> Column:
     >>> spark.createDataFrame([(21,)], ['a']).select(shiftleft('a', 1).alias('r')).collect()
     [Row(r=42)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.shiftleft(_to_java_column(col), numBits))
 
 
@@ -1496,7 +1503,7 @@ def shiftright(col: ColumnOrName, numBits: int) -> Column:
     >>> spark.createDataFrame([(42,)], ['a']).select(shiftright('a', 1).alias('r')).collect()
     [Row(r=21)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.shiftRight(_to_java_column(col), numBits)
     return Column(jc)
 
@@ -1524,7 +1531,7 @@ def shiftrightunsigned(col: ColumnOrName, numBits: int) -> Column:
     >>> df.select(shiftrightunsigned('a', 1).alias('r')).collect()
     [Row(r=9223372036854775787)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.shiftRightUnsigned(_to_java_column(col), numBits)
     return Column(jc)
 
@@ -1543,7 +1550,7 @@ def spark_partition_id() -> Column:
     >>> df.repartition(1).select(spark_partition_id().alias("pid")).collect()
     [Row(pid=0), Row(pid=0)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.spark_partition_id())
 
 
@@ -1557,7 +1564,7 @@ def expr(str: str) -> Column:
     >>> df.select(expr("length(name)")).collect()
     [Row(length(name)=5), Row(length(name)=3)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.expr(str))
 
 
@@ -1578,7 +1585,7 @@ def struct(*cols: ColumnOrName) -> Column:
     >>> df.select(struct([df.age, df.name]).alias("struct")).collect()
     [Row(struct=Row(age=2, name='Alice')), Row(struct=Row(age=5, name='Bob'))]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]
     jc = sc._jvm.functions.struct(_to_seq(sc, cols, _to_java_column))
@@ -1600,7 +1607,7 @@ def greatest(*cols: ColumnOrName) -> Column:
     """
     if len(cols) < 2:
         raise ValueError("greatest should take at least two columns")
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.greatest(_to_seq(sc, cols, _to_java_column)))
 
 
@@ -1619,7 +1626,7 @@ def least(*cols: Column) -> Column:
     """
     if len(cols) < 2:
         raise ValueError("least should take at least two columns")
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.least(_to_seq(sc, cols, _to_java_column)))
 
 
@@ -1643,7 +1650,7 @@ def when(condition: Column, value: Any) -> Column:
     >>> df.select(when(df.age == 2, df.age + 1).alias("age")).collect()
     [Row(age=3), Row(age=None)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if not isinstance(condition, Column):
         raise TypeError("condition should be a Column")
     v = value._jc if isinstance(value, Column) else value
@@ -1651,7 +1658,7 @@ def when(condition: Column, value: Any) -> Column:
     return Column(jc)
 
 
-@overload
+@overload   # type: ignore[no-redef]
 def log(arg1: ColumnOrName) -> Column:
     ...
 
@@ -1661,7 +1668,7 @@ def log(arg1: float, arg2: ColumnOrName) -> Column:
     ...
 
 
-def log(arg1, arg2=None):
+def log(arg1: Union[ColumnOrName, float], arg2: Optional[ColumnOrName] = None) -> Column:
     """Returns the first argument-based logarithm of the second argument.
 
     If there is only one argument, then this takes the natural logarithm of the argument.
@@ -1676,7 +1683,7 @@ def log(arg1, arg2=None):
     >>> df.select(log(df.age).alias('e')).rdd.map(lambda l: str(l.e)[:7]).collect()
     ['0.69314', '1.60943']
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if arg2 is None:
         jc = sc._jvm.functions.log(_to_java_column(arg1))
     else:
@@ -1694,7 +1701,7 @@ def log2(col: ColumnOrName) -> Column:
     >>> spark.createDataFrame([(4,)], ['a']).select(log2('a').alias('log2')).collect()
     [Row(log2=2.0)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.log2(_to_java_column(col)))
 
 
@@ -1710,7 +1717,7 @@ def conv(col: ColumnOrName, fromBase: int, toBase: int) -> Column:
     >>> df.select(conv(df.n, 2, 16).alias('hex')).collect()
     [Row(hex='15')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.conv(_to_java_column(col), fromBase, toBase))
 
 
@@ -1726,7 +1733,7 @@ def factorial(col: ColumnOrName) -> Column:
     >>> df.select(factorial(df.n).alias('f')).collect()
     [Row(f=120)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.factorial(_to_java_column(col)))
 
 
@@ -1753,7 +1760,7 @@ def lag(
     default : optional
         default value
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.lag(_to_java_column(col), offset, default))
 
 
@@ -1778,7 +1785,7 @@ def lead(
     default : optional
         default value
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.lead(_to_java_column(col), offset, default))
 
 
@@ -1806,7 +1813,7 @@ def nth_value(
         indicates the Nth value should skip null in the
         determination of which row to use
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.nth_value(_to_java_column(col), offset, ignoreNulls))
 
 
@@ -1826,7 +1833,7 @@ def ntile(n: int) -> Column:
     n : int
         an integer
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.ntile(int(n)))
 
 
@@ -1838,7 +1845,7 @@ def current_date() -> Column:
     Returns the current date at the start of query evaluation as a :class:`DateType` column.
     All calls of current_date within the same query return the same value.
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.current_date())
 
 
@@ -1847,7 +1854,7 @@ def current_timestamp() -> Column:
     Returns the current timestamp at the start of query evaluation as a :class:`TimestampType`
     column. All calls of current_timestamp within the same query return the same value.
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.current_timestamp())
 
 
@@ -1873,7 +1880,7 @@ def date_format(date: ColumnOrName, format: str) -> Column:
     >>> df.select(date_format('dt', 'MM/dd/yyy').alias('date')).collect()
     [Row(date='04/08/2015')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.date_format(_to_java_column(date), format))
 
 
@@ -1889,7 +1896,7 @@ def year(col: ColumnOrName) -> Column:
     >>> df.select(year('dt').alias('year')).collect()
     [Row(year=2015)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.year(_to_java_column(col)))
 
 
@@ -1905,7 +1912,7 @@ def quarter(col: ColumnOrName) -> Column:
     >>> df.select(quarter('dt').alias('quarter')).collect()
     [Row(quarter=2)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.quarter(_to_java_column(col)))
 
 
@@ -1921,7 +1928,7 @@ def month(col: ColumnOrName) -> Column:
     >>> df.select(month('dt').alias('month')).collect()
     [Row(month=4)]
    """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.month(_to_java_column(col)))
 
 
@@ -1938,7 +1945,7 @@ def dayofweek(col: ColumnOrName) -> Column:
     >>> df.select(dayofweek('dt').alias('day')).collect()
     [Row(day=4)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.dayofweek(_to_java_column(col)))
 
 
@@ -1954,7 +1961,7 @@ def dayofmonth(col: ColumnOrName) -> Column:
     >>> df.select(dayofmonth('dt').alias('day')).collect()
     [Row(day=8)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.dayofmonth(_to_java_column(col)))
 
 
@@ -1970,7 +1977,7 @@ def dayofyear(col: ColumnOrName) -> Column:
     >>> df.select(dayofyear('dt').alias('day')).collect()
     [Row(day=98)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.dayofyear(_to_java_column(col)))
 
 
@@ -1986,7 +1993,7 @@ def hour(col: ColumnOrName) -> Column:
     >>> df.select(hour('ts').alias('hour')).collect()
     [Row(hour=13)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.hour(_to_java_column(col)))
 
 
@@ -2002,7 +2009,7 @@ def minute(col: ColumnOrName) -> Column:
     >>> df.select(minute('ts').alias('minute')).collect()
     [Row(minute=8)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.minute(_to_java_column(col)))
 
 
@@ -2018,7 +2025,7 @@ def second(col: ColumnOrName) -> Column:
     >>> df.select(second('ts').alias('second')).collect()
     [Row(second=15)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.second(_to_java_column(col)))
 
 
@@ -2036,7 +2043,7 @@ def weekofyear(col: ColumnOrName) -> Column:
     >>> df.select(weekofyear(df.dt).alias('week')).collect()
     [Row(week=15)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.weekofyear(_to_java_column(col)))
 
 
@@ -2052,7 +2059,7 @@ def date_add(start: ColumnOrName, days: int) -> Column:
     >>> df.select(date_add(df.dt, 1).alias('next_date')).collect()
     [Row(next_date=datetime.date(2015, 4, 9))]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.date_add(_to_java_column(start), days))
 
 
@@ -2068,7 +2075,7 @@ def date_sub(start: ColumnOrName, days: int) -> Column:
     >>> df.select(date_sub(df.dt, 1).alias('prev_date')).collect()
     [Row(prev_date=datetime.date(2015, 4, 7))]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.date_sub(_to_java_column(start), days))
 
 
@@ -2084,7 +2091,7 @@ def datediff(end: ColumnOrName, start: ColumnOrName) -> Column:
     >>> df.select(datediff(df.d2, df.d1).alias('diff')).collect()
     [Row(diff=32)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.datediff(_to_java_column(end), _to_java_column(start)))
 
 
@@ -2100,7 +2107,7 @@ def add_months(start: ColumnOrName, months: int) -> Column:
     >>> df.select(add_months(df.dt, 1).alias('next_month')).collect()
     [Row(next_month=datetime.date(2015, 5, 8))]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.add_months(_to_java_column(start), months))
 
 
@@ -2124,7 +2131,7 @@ def months_between(
     >>> df.select(months_between(df.date1, df.date2, False).alias('months')).collect()
     [Row(months=3.9495967741935485)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.months_between(
         _to_java_column(date1), _to_java_column(date2), roundOff))
 
@@ -2149,7 +2156,7 @@ def to_date(col: ColumnOrName, format: Optional[str] = None) -> Column:
     >>> df.select(to_date(df.t, 'yyyy-MM-dd HH:mm:ss').alias('date')).collect()
     [Row(date=datetime.date(1997, 2, 28))]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if format is None:
         jc = sc._jvm.functions.to_date(_to_java_column(col))
     else:
@@ -2167,7 +2174,7 @@ def to_timestamp(col: ColumnOrName, format: str) -> Column:
     ...
 
 
-def to_timestamp(col, format=None):
+def to_timestamp(col: ColumnOrName, format: Optional[str] = None) -> Column:
     """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.TimestampType`
     using the optionally specified format. Specify formats according to `datetime pattern`_.
     By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
@@ -2187,7 +2194,7 @@ def to_timestamp(col, format=None):
     >>> df.select(to_timestamp(df.t, 'yyyy-MM-dd HH:mm:ss').alias('dt')).collect()
     [Row(dt=datetime.datetime(1997, 2, 28, 10, 30))]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if format is None:
         jc = sc._jvm.functions.to_timestamp(_to_java_column(col))
     else:
@@ -2217,7 +2224,7 @@ def trunc(date: ColumnOrName, format: str) -> Column:
     >>> df.select(trunc(df.d, 'mon').alias('month')).collect()
     [Row(month=datetime.date(1997, 2, 1))]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.trunc(_to_java_column(date), format))
 
 
@@ -2245,7 +2252,7 @@ def date_trunc(format: str, timestamp: ColumnOrName) -> Column:
     >>> df.select(date_trunc('mon', df.t).alias('month')).collect()
     [Row(month=datetime.datetime(1997, 2, 1, 0, 0))]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.date_trunc(format, _to_java_column(timestamp)))
 
 
@@ -2264,7 +2271,7 @@ def next_day(date: ColumnOrName, dayOfWeek: str) -> Column:
     >>> df.select(next_day(df.d, 'Sun').alias('date')).collect()
     [Row(date=datetime.date(2015, 8, 2))]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.next_day(_to_java_column(date), dayOfWeek))
 
 
@@ -2280,7 +2287,7 @@ def last_day(date: ColumnOrName) -> Column:
     >>> df.select(last_day(df.d).alias('date')).collect()
     [Row(date=datetime.date(1997, 2, 28))]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.last_day(_to_java_column(date)))
 
 
@@ -2300,7 +2307,7 @@ def from_unixtime(timestamp: ColumnOrName, format: str = "yyyy-MM-dd HH:mm:ss") 
     [Row(ts='2015-04-08 00:00:00')]
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.from_unixtime(_to_java_column(timestamp), format))
 
 
@@ -2324,7 +2331,7 @@ def unix_timestamp(
     [Row(unix_time=1428476400)]
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if timestamp is None:
         return Column(sc._jvm.functions.unix_timestamp())
     return Column(sc._jvm.functions.unix_timestamp(_to_java_column(timestamp), format))
@@ -2370,7 +2377,7 @@ def from_utc_timestamp(timestamp: ColumnOrName, tz: ColumnOrName) -> Column:
     >>> df.select(from_utc_timestamp(df.ts, df.tz).alias('local_time')).collect()
     [Row(local_time=datetime.datetime(1997, 2, 28, 19, 30))]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if isinstance(tz, Column):
         tz = _to_java_column(tz)
     return Column(sc._jvm.functions.from_utc_timestamp(_to_java_column(timestamp), tz))
@@ -2416,7 +2423,7 @@ def to_utc_timestamp(timestamp: ColumnOrName, tz: ColumnOrName) -> Column:
     >>> df.select(to_utc_timestamp(df.ts, df.tz).alias('utc_time')).collect()
     [Row(utc_time=datetime.datetime(1997, 2, 28, 1, 30))]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if isinstance(tz, Column):
         tz = _to_java_column(tz)
     return Column(sc._jvm.functions.to_utc_timestamp(_to_java_column(timestamp), tz))
@@ -2440,7 +2447,7 @@ def timestamp_seconds(col: ColumnOrName) -> Column:
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
 
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.timestamp_seconds(_to_java_column(col)))
 
 
@@ -2478,11 +2485,11 @@ def window(
     ...          w.window.end.cast("string").alias("end"), "sum").collect()
     [Row(start='2016-03-11 09:00:05', end='2016-03-11 09:00:10', sum=1)]
     """
-    def check_string_field(field, fieldName):
+    def check_string_field(field, fieldName):  # type: ignore[no-untyped-def]
         if not field or type(field) is not str:
             raise TypeError("%s should be provided as a string" % fieldName)
 
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     time_col = _to_java_column(timeColumn)
     check_string_field(windowDuration, "windowDuration")
     if slideDuration and startTime:
@@ -2530,11 +2537,11 @@ def session_window(timeColumn: ColumnOrName, gapDuration: Union[Column, str]) ->
     ...          w.session_window.end.cast("string").alias("end"), "sum").collect()
     [Row(start='2016-03-11 09:00:07', end='2016-03-11 09:00:12', sum=1)]
     """
-    def check_field(field, fieldName):
+    def check_field(field: Union[Column, str], fieldName: str) -> None:
         if field is None or not isinstance(field, (str, Column)):
             raise TypeError("%s should be provided as a string or Column" % fieldName)
 
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     time_col = _to_java_column(timeColumn)
     check_field(gapDuration, "gapDuration")
     gap_duration = (
@@ -2560,7 +2567,7 @@ def crc32(col: ColumnOrName) -> Column:
     >>> spark.createDataFrame([('ABC',)], ['a']).select(crc32('a').alias('crc32')).collect()
     [Row(crc32=2743272264)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.crc32(_to_java_column(col)))
 
 
@@ -2574,7 +2581,7 @@ def md5(col: ColumnOrName) -> Column:
     >>> spark.createDataFrame([('ABC',)], ['a']).select(md5('a').alias('hash')).collect()
     [Row(hash='902fbdd2b1df0c4f70b4a5d23525e932')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.md5(_to_java_column(col))
     return Column(jc)
 
@@ -2589,7 +2596,7 @@ def sha1(col: ColumnOrName) -> Column:
     >>> spark.createDataFrame([('ABC',)], ['a']).select(sha1('a').alias('hash')).collect()
     [Row(hash='3c01bdbb26f358bab27f267924aa2c9a03fcfdb8')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.sha1(_to_java_column(col))
     return Column(jc)
 
@@ -2609,7 +2616,7 @@ def sha2(col: ColumnOrName, numBits: int) -> Column:
     >>> digests[1]
     Row(s='cd9fb1e148ccd8442e5aa74904cc73bf6fb54d1d54d333bd596aa9bb4bb4e961')
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.sha2(_to_java_column(col), numBits)
     return Column(jc)
 
@@ -2624,7 +2631,7 @@ def hash(*cols: ColumnOrName) -> Column:
     >>> spark.createDataFrame([('ABC',)], ['a']).select(hash('a').alias('hash')).collect()
     [Row(hash=-757602832)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.hash(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
@@ -2640,12 +2647,12 @@ def xxhash64(*cols: ColumnOrName) -> Column:
     >>> spark.createDataFrame([('ABC',)], ['a']).select(xxhash64('a').alias('hash')).collect()
     [Row(hash=4105715581806190027)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.xxhash64(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
 
-def assert_true(col: ColumnOrName, errMsg: Union[Column, str] = None) -> Column:
+def assert_true(col: ColumnOrName, errMsg: Optional[Union[Column, str]] = None) -> Column:
     """
     Returns null if the input column is true; throws an exception with the provided error message
     otherwise.
@@ -2664,7 +2671,7 @@ def assert_true(col: ColumnOrName, errMsg: Union[Column, str] = None) -> Column:
     >>> df.select(assert_true(df.a < df.b, 'error').alias('r')).collect()
     [Row(r=None)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if errMsg is None:
         return Column(sc._jvm.functions.assert_true(_to_java_column(col)))
     if not isinstance(errMsg, (str, Column)):
@@ -2690,7 +2697,7 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
             "errMsg should be a Column or a str, got {}".format(type(errMsg))
         )
 
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     errMsg = (
         _create_column_from_literal(errMsg)
         if isinstance(errMsg, str)
@@ -2778,7 +2785,7 @@ def concat_ws(sep: str, *cols: ColumnOrName) -> Column:
     >>> df.select(concat_ws('-', df.s, df.d).alias('s')).collect()
     [Row(s='abcd-123')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.concat_ws(sep, _to_seq(sc, cols, _to_java_column)))
 
 
@@ -2788,7 +2795,7 @@ def decode(col: ColumnOrName, charset: str) -> Column:
     Computes the first argument into a string from a binary using the provided character set
     (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.decode(_to_java_column(col), charset))
 
 
@@ -2798,7 +2805,7 @@ def encode(col: ColumnOrName, charset: str) -> Column:
     Computes the first argument into a binary from a string using the provided character set
     (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.encode(_to_java_column(col), charset))
 
 
@@ -2819,7 +2826,7 @@ def format_number(col: ColumnOrName, d: int) -> Column:
     >>> spark.createDataFrame([(5,)], ['a']).select(format_number('a', 4).alias('v')).collect()
     [Row(v='5.0000')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.format_number(_to_java_column(col), d))
 
 
@@ -2842,7 +2849,7 @@ def format_string(format: str, *cols: ColumnOrName) -> Column:
     >>> df.select(format_string('%d %s', df.a, df.b).alias('v')).collect()
     [Row(v='5 hello')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.format_string(format, _to_seq(sc, cols, _to_java_column)))
 
 
@@ -2862,7 +2869,7 @@ def instr(str: ColumnOrName, substr: str) -> Column:
     >>> df.select(instr(df.s, 'b').alias('s')).collect()
     [Row(s=2)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.instr(_to_java_column(str), substr))
 
 
@@ -2898,7 +2905,7 @@ def overlay(
     pos = _create_column_from_literal(pos) if isinstance(pos, int) else _to_java_column(pos)
     len = _create_column_from_literal(len) if isinstance(len, int) else _to_java_column(len)
 
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
 
     return Column(sc._jvm.functions.overlay(
         _to_java_column(src),
@@ -2909,7 +2916,7 @@ def overlay(
 
 
 def sentences(
-    col: ColumnOrName,
+    string: ColumnOrName,
     language: Optional[ColumnOrName] = None,
     country: Optional[ColumnOrName] = None,
 ) -> Column:
@@ -2943,7 +2950,7 @@ def sentences(
     if country is None:
         country = lit("")
 
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.sentences(
         _to_java_column(string),
         _to_java_column(language),
@@ -2969,7 +2976,7 @@ def substring(str: ColumnOrName, pos: int, len: int) -> Column:
     >>> df.select(substring(df.s, 1, 2).alias('s')).collect()
     [Row(s='ab')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.substring(_to_java_column(str), pos, len))
 
 
@@ -2990,7 +2997,7 @@ def substring_index(str: ColumnOrName, delim: str, count: int) -> Column:
     >>> df.select(substring_index(df.s, '.', -3).alias('s')).collect()
     [Row(s='b.c.d')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.substring_index(_to_java_column(str), delim, count))
 
 
@@ -3005,7 +3012,7 @@ def levenshtein(left: ColumnOrName, right: ColumnOrName) -> Column:
     >>> df0.select(levenshtein('l', 'r').alias('d')).collect()
     [Row(d=3)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.levenshtein(_to_java_column(left), _to_java_column(right))
     return Column(jc)
 
@@ -3036,7 +3043,7 @@ def locate(substr: str, str: ColumnOrName, pos: int = 1) -> Column:
     >>> df.select(locate('b', df.s, 1).alias('s')).collect()
     [Row(s=2)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.locate(substr, _to_java_column(str), pos))
 
 
@@ -3052,7 +3059,7 @@ def lpad(col: ColumnOrName, len: int, pad: str) -> Column:
     >>> df.select(lpad(df.s, 6, '#').alias('s')).collect()
     [Row(s='##abcd')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.lpad(_to_java_column(col), len, pad))
 
 
@@ -3068,7 +3075,7 @@ def rpad(col: ColumnOrName, len: int, pad: str) -> Column:
     >>> df.select(rpad(df.s, 6, '#').alias('s')).collect()
     [Row(s='abcd##')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.rpad(_to_java_column(col), len, pad))
 
 
@@ -3084,7 +3091,7 @@ def repeat(col: ColumnOrName, n: int) -> Column:
     >>> df.select(repeat(df.s, 3).alias('s')).collect()
     [Row(s='ababab')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.repeat(_to_java_column(col), n))
 
 
@@ -3121,7 +3128,7 @@ def split(str: ColumnOrName, pattern: str, limit: int = -1) -> Column:
     >>> df.select(split(df.s, '[ABC]', -1).alias('s')).collect()
     [Row(s=['one', 'two', 'three', ''])]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.split(_to_java_column(str), pattern, limit))
 
 
@@ -3143,7 +3150,7 @@ def regexp_extract(str: ColumnOrName, pattern: str, idx: int) -> Column:
     >>> df.select(regexp_extract('str', '(a+)(b)?(c)', 2).alias('d')).collect()
     [Row(d='')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.regexp_extract(_to_java_column(str), pattern, idx)
     return Column(jc)
 
@@ -3159,7 +3166,7 @@ def regexp_replace(str: ColumnOrName, pattern: str, replacement: str) -> Column:
     >>> df.select(regexp_replace('str', r'(\d+)', '--').alias('d')).collect()
     [Row(d='-----')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.regexp_replace(_to_java_column(str), pattern, replacement)
     return Column(jc)
 
@@ -3174,7 +3181,7 @@ def initcap(col: ColumnOrName) -> Column:
     >>> spark.createDataFrame([('ab cd',)], ['a']).select(initcap("a").alias('v')).collect()
     [Row(v='Ab Cd')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.initcap(_to_java_column(col)))
 
 
@@ -3190,7 +3197,7 @@ def soundex(col: ColumnOrName) -> Column:
     >>> df.select(soundex(df.name).alias("soundex")).collect()
     [Row(soundex='P362'), Row(soundex='U612')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.soundex(_to_java_column(col)))
 
 
@@ -3204,7 +3211,7 @@ def bin(col: ColumnOrName) -> Column:
     >>> df.select(bin(df.age).alias('c')).collect()
     [Row(c='10'), Row(c='101')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.bin(_to_java_column(col))
     return Column(jc)
 
@@ -3221,7 +3228,7 @@ def hex(col: ColumnOrName) -> Column:
     >>> spark.createDataFrame([('ABC', 3)], ['a', 'b']).select(hex('a'), hex('b')).collect()
     [Row(hex(a)='414243', hex(b)='3')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.hex(_to_java_column(col))
     return Column(jc)
 
@@ -3237,7 +3244,7 @@ def unhex(col: ColumnOrName) -> Column:
     >>> spark.createDataFrame([('414243',)], ['a']).select(unhex('a')).collect()
     [Row(unhex(a)=bytearray(b'ABC'))]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.unhex(_to_java_column(col)))
 
 
@@ -3253,7 +3260,7 @@ def length(col: ColumnOrName) -> Column:
     >>> spark.createDataFrame([('ABC ',)], ['a']).select(length('a').alias('length')).collect()
     [Row(length=4)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.length(_to_java_column(col)))
 
 
@@ -3323,7 +3330,7 @@ def translate(srcCol: ColumnOrName, matching: str, replace: str) -> Column:
     ...     .alias('r')).collect()
     [Row(r='1a2s3ae')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.translate(_to_java_column(srcCol), matching, replace))
 
 
@@ -3347,7 +3354,7 @@ def create_map(*cols: ColumnOrName) -> Column:
     >>> df.select(create_map([df.name, df.age]).alias("map")).collect()
     [Row(map={'Alice': 2}), Row(map={'Bob': 5})]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]
     jc = sc._jvm.functions.map(_to_seq(sc, cols, _to_java_column))
@@ -3376,7 +3383,7 @@ def map_from_arrays(col1: ColumnOrName, col2: ColumnOrName) -> Column:
     |{2 -> a, 5 -> b}|
     +----------------+
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.map_from_arrays(_to_java_column(col1), _to_java_column(col2)))
 
 
@@ -3398,7 +3405,7 @@ def array(*cols: ColumnOrName) -> Column:
     >>> df.select(array([df.age, df.age]).alias("arr")).collect()
     [Row(arr=[2, 2]), Row(arr=[5, 5])]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]
     jc = sc._jvm.functions.array(_to_seq(sc, cols, _to_java_column))
@@ -3427,7 +3434,7 @@ def array_contains(col: ColumnOrName, value: Any) -> Column:
     >>> df.select(array_contains(df.data, lit("a"))).collect()
     [Row(array_contains(data, a)=True), Row(array_contains(data, a)=False)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     value = value._jc if isinstance(value, Column) else value
     return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))
 
@@ -3446,7 +3453,7 @@ def arrays_overlap(a1: ColumnOrName, a2: ColumnOrName) -> Column:
     >>> df.select(arrays_overlap(df.x, df.y).alias("overlap")).collect()
     [Row(overlap=True), Row(overlap=False)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.arrays_overlap(_to_java_column(a1), _to_java_column(a2)))
 
 
@@ -3474,7 +3481,7 @@ def slice(
     >>> df.select(slice(df.x, 2, 2).alias("sliced")).collect()
     [Row(sliced=[2, 3]), Row(sliced=[5])]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.slice(
         _to_java_column(x),
         start._jc if isinstance(start, Column) else start,
@@ -3499,7 +3506,7 @@ def array_join(
     >>> df.select(array_join(df.data, ",", "NULL").alias("joined")).collect()
     [Row(joined='a,b,c'), Row(joined='a,NULL')]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if null_replacement is None:
         return Column(sc._jvm.functions.array_join(_to_java_column(col), delimiter))
     else:
@@ -3524,7 +3531,7 @@ def concat(*cols: ColumnOrName) -> Column:
     >>> df.select(concat(df.a, df.b, df.c).alias("arr")).collect()
     [Row(arr=[1, 2, 3, 4, 5]), Row(arr=None)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.concat(_to_seq(sc, cols, _to_java_column)))
 
 
@@ -3546,7 +3553,7 @@ def array_position(col: ColumnOrName, value: Any) -> Column:
     >>> df.select(array_position(df.data, "a")).collect()
     [Row(array_position(data, a)=3), Row(array_position(data, a)=0)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.array_position(_to_java_column(col), value))
 
 
@@ -3578,7 +3585,7 @@ def element_at(col: ColumnOrName, extraction: Any) -> Column:
     >>> df.select(element_at(df.data, lit("a"))).collect()
     [Row(element_at(data, a)=1.0), Row(element_at(data, a)=None)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.element_at(
         _to_java_column(col), lit(extraction)._jc))
 
@@ -3602,7 +3609,7 @@ def array_remove(col: ColumnOrName, element: Any) -> Column:
     >>> df.select(array_remove(df.data, 1)).collect()
     [Row(array_remove(data, 1)=[2, 3]), Row(array_remove(data, 1)=[])]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.array_remove(_to_java_column(col), element))
 
 
@@ -3623,7 +3630,7 @@ def array_distinct(col: ColumnOrName) -> Column:
     >>> df.select(array_distinct(df.data)).collect()
     [Row(array_distinct(data)=[1, 2, 3]), Row(array_distinct(data)=[4, 5])]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.array_distinct(_to_java_column(col)))
 
 
@@ -3648,7 +3655,7 @@ def array_intersect(col1: ColumnOrName, col2: ColumnOrName) -> Column:
     >>> df.select(array_intersect(df.c1, df.c2)).collect()
     [Row(array_intersect(c1, c2)=['a', 'c'])]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.array_intersect(_to_java_column(col1), _to_java_column(col2)))
 
 
@@ -3673,7 +3680,7 @@ def array_union(col1: ColumnOrName, col2: ColumnOrName) -> Column:
     >>> df.select(array_union(df.c1, df.c2)).collect()
     [Row(array_union(c1, c2)=['b', 'a', 'c', 'd', 'f'])]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.array_union(_to_java_column(col1), _to_java_column(col2)))
 
 
@@ -3698,7 +3705,7 @@ def array_except(col1: ColumnOrName, col2: ColumnOrName) -> Column:
     >>> df.select(array_except(df.c1, df.c2)).collect()
     [Row(array_except(c1, c2)=['b'])]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.array_except(_to_java_column(col1), _to_java_column(col2)))
 
 
@@ -3724,7 +3731,7 @@ def explode(col: ColumnOrName) -> Column:
     |  a|    b|
     +---+-----+
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.explode(_to_java_column(col))
     return Column(jc)
 
@@ -3751,7 +3758,7 @@ def posexplode(col: ColumnOrName) -> Column:
     |  0|  a|    b|
     +---+---+-----+
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.posexplode(_to_java_column(col))
     return Column(jc)
 
@@ -3790,7 +3797,7 @@ def explode_outer(col: ColumnOrName) -> Column:
     |  3|      null|null|
     +---+----------+----+
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.explode_outer(_to_java_column(col))
     return Column(jc)
 
@@ -3828,7 +3835,7 @@ def posexplode_outer(col: ColumnOrName) -> Column:
     |  3|      null|null|null|
     +---+----------+----+----+
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.posexplode_outer(_to_java_column(col))
     return Column(jc)
 
@@ -3855,7 +3862,7 @@ def get_json_object(col: ColumnOrName, path: str) -> Column:
     ...                   get_json_object(df.jstring, '$.f2').alias("c1") ).collect()
     [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.get_json_object(_to_java_column(col), path)
     return Column(jc)
 
@@ -3879,7 +3886,7 @@ def json_tuple(col: ColumnOrName, *fields: str) -> Column:
     >>> df.select(df.key, json_tuple(df.jstring, 'f1', 'f2')).collect()
     [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.json_tuple(_to_java_column(col), _to_seq(sc, fields))
     return Column(jc)
 
@@ -3939,7 +3946,7 @@ def from_json(
     [Row(json=[1, 2, 3])]
     """
 
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if isinstance(schema, DataType):
         schema = schema.json()
     elif isinstance(schema, Column):
@@ -3994,7 +4001,7 @@ def to_json(col: ColumnOrName, options: Optional[Dict[str, str]] = None) -> Colu
     [Row(json='["Alice","Bob"]')]
     """
 
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.to_json(_to_java_column(col), _options_to_str(options))
     return Column(jc)
 
@@ -4035,7 +4042,7 @@ def schema_of_json(json: ColumnOrName, options: Optional[Dict[str, str]] = None)
     else:
         raise TypeError("schema argument should be a column or string")
 
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.schema_of_json(col, _options_to_str(options))
     return Column(jc)
 
@@ -4072,7 +4079,7 @@ def schema_of_csv(csv: ColumnOrName, options: Optional[Dict[str, str]] = None) -
     else:
         raise TypeError("schema argument should be a column or string")
 
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.schema_of_csv(col, _options_to_str(options))
     return Column(jc)
 
@@ -4104,7 +4111,7 @@ def to_csv(col: ColumnOrName, options: Optional[Dict[str, str]] = None) -> Colum
     [Row(csv='2,Alice')]
     """
 
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     jc = sc._jvm.functions.to_csv(_to_java_column(col), _options_to_str(options))
     return Column(jc)
 
@@ -4126,7 +4133,7 @@ def size(col: ColumnOrName) -> Column:
     >>> df.select(size(df.data)).collect()
     [Row(size(data)=3), Row(size(data)=1), Row(size(data)=0)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.size(_to_java_column(col)))
 
 
@@ -4147,7 +4154,7 @@ def array_min(col: ColumnOrName) -> Column:
     >>> df.select(array_min(df.data).alias('min')).collect()
     [Row(min=1), Row(min=-1)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.array_min(_to_java_column(col)))
 
 
@@ -4168,7 +4175,7 @@ def array_max(col: ColumnOrName) -> Column:
     >>> df.select(array_max(df.data).alias('max')).collect()
     [Row(max=3), Row(max=10)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.array_max(_to_java_column(col)))
 
 
@@ -4195,7 +4202,7 @@ def sort_array(col: ColumnOrName, asc: bool = True) -> Column:
     >>> df.select(sort_array(df.data, asc=False).alias('r')).collect()
     [Row(r=[3, 2, 1, None]), Row(r=[1]), Row(r=[])]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.sort_array(_to_java_column(col), asc))
 
 
@@ -4217,7 +4224,7 @@ def array_sort(col: ColumnOrName) -> Column:
     >>> df.select(array_sort(df.data).alias('r')).collect()
     [Row(r=[1, 2, 3, None]), Row(r=[1]), Row(r=[])]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.array_sort(_to_java_column(col)))
 
 
@@ -4242,7 +4249,7 @@ def shuffle(col: ColumnOrName) -> Column:
     >>> df.select(shuffle(df.data).alias('s')).collect()  # doctest: +SKIP
     [Row(s=[3, 1, 5, 20]), Row(s=[20, None, 3, 1])]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.shuffle(_to_java_column(col)))
 
 
@@ -4266,7 +4273,7 @@ def reverse(col: ColumnOrName) -> Column:
     >>> df.select(reverse(df.data).alias('r')).collect()
     [Row(r=[3, 1, 2]), Row(r=[1]), Row(r=[])]
      """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.reverse(_to_java_column(col)))
 
 
@@ -4289,7 +4296,7 @@ def flatten(col: ColumnOrName) -> Column:
     >>> df.select(flatten(df.data).alias('r')).collect()
     [Row(r=[1, 2, 3, 4, 5, 6]), Row(r=None)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.flatten(_to_java_column(col)))
 
 
@@ -4315,7 +4322,7 @@ def map_keys(col: ColumnOrName) -> Column:
     |[1, 2]|
     +------+
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.map_keys(_to_java_column(col)))
 
 
@@ -4341,7 +4348,7 @@ def map_values(col: ColumnOrName) -> Column:
     |[a, b]|
     +------+
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.map_values(_to_java_column(col)))
 
 
@@ -4367,7 +4374,7 @@ def map_entries(col: ColumnOrName) -> Column:
     |[{1, a}, {2, b}]|
     +----------------+
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.map_entries(_to_java_column(col)))
 
 
@@ -4393,7 +4400,7 @@ def map_from_entries(col: ColumnOrName) -> Column:
     |{1 -> a, 2 -> b}|
     +----------------+
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.map_from_entries(_to_java_column(col)))
 
 
@@ -4409,7 +4416,7 @@ def array_repeat(col: ColumnOrName, count: Union[Column, int]) -> Column:
     >>> df.select(array_repeat(df.data, 3).alias('r')).collect()
     [Row(r=['ab', 'ab', 'ab'])]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.array_repeat(
         _to_java_column(col),
         _to_java_column(count) if isinstance(count, Column) else count
@@ -4435,7 +4442,7 @@ def arrays_zip(*cols: ColumnOrName) -> Column:
     >>> df.select(arrays_zip(df.vals1, df.vals2).alias('zipped')).collect()
     [Row(zipped=[Row(vals1=1, vals2=2), Row(vals1=2, vals2=3), Row(vals1=3, vals2=4)])]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.arrays_zip(_to_seq(sc, cols, _to_java_column)))
 
 
@@ -4460,7 +4467,7 @@ def map_concat(*cols: ColumnOrName) -> Column:
     |{1 -> a, 2 -> b, 3 -> c}|
     +------------------------+
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]
     jc = sc._jvm.functions.map_concat(_to_seq(sc, cols, _to_java_column))
@@ -4486,7 +4493,7 @@ def sequence(
     >>> df2.select(sequence('C1', 'C2', 'C3').alias('r')).collect()
     [Row(r=[4, 2, 0, -2, -4])]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if step is None:
         return Column(sc._jvm.functions.sequence(_to_java_column(start), _to_java_column(stop)))
     else:
@@ -4534,7 +4541,7 @@ def from_csv(
     [Row(csv=Row(s='abc'))]
     """
 
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if isinstance(schema, str):
         schema = _create_column_from_literal(schema)
     elif isinstance(schema, Column):
@@ -4555,7 +4562,7 @@ def _unresolved_named_lambda_variable(*name_parts: Any) -> Column:
     ----------
     name_parts : str
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     name_parts_seq = _to_seq(sc, name_parts)
     expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
     return Column(
@@ -4609,7 +4616,7 @@ def _create_lambda(f: Callable) -> Callable:
     """
     parameters = _get_lambda_parameters(f)
 
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
 
     argnames = ["x", "y", "z"]
@@ -4625,13 +4632,17 @@ def _create_lambda(f: Callable) -> Callable:
     if not isinstance(result, Column):
         raise ValueError("f should return Column, got {}".format(type(result)))
 
-    jexpr = result._jc.expr()
-    jargs = _to_seq(sc, [arg._jc.expr() for arg in args])
+    jexpr = result._jc.expr()  # type: ignore[operator]
+    jargs = _to_seq(sc, [arg._jc.expr() for arg in args])  # type: ignore[operator]
 
     return expressions.LambdaFunction(jexpr, jargs, False)
 
 
-def _invoke_higher_order_function(name: str, cols: List[ColumnOrName], funs: List[Callable]):
+def _invoke_higher_order_function(
+    name: str,
+    cols: List[ColumnOrName],
+    funs: List[Callable],
+) -> Column:
     """
     Invokes expression identified by name,
     (relative to ```org.apache.spark.sql.catalyst.expressions``)
@@ -4643,7 +4654,7 @@ def _invoke_higher_order_function(name: str, cols: List[ColumnOrName], funs: Lis
 
     :return: a Column
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
     expr = getattr(expressions, name)
 
@@ -4663,7 +4674,10 @@ def transform(col: ColumnOrName, f: Callable[[Column, Column], Column]) -> Colum
     ...
 
 
-def transform(col, f):
+def transform(
+    col: ColumnOrName,
+    f: Union[Callable[[Column], Column], Callable[[Column, Column], Column]],
+) -> Column:
     """
     Returns an array of elements after applying a transformation to each element in the input array.
 
@@ -4793,7 +4807,10 @@ def filter(col: ColumnOrName, f: Callable[[Column, Column], Column]) -> Column:
     ...
 
 
-def filter(col, f):
+def filter(
+    col: ColumnOrName,
+    f: Union[Callable[[Column], Column], Callable[[Column, Column], Column]],
+) -> Column:
     """
     Returns an array of elements for which a predicate holds in a given array.
 
@@ -5129,7 +5146,7 @@ def map_zip_with(
 
 # ---------------------- Partition transform functions --------------------------------
 
-def years(col):
+def years(col: ColumnOrName) -> Column:
     """
     Partition transform function: A transform for timestamps and dates
     to partition data into years.
@@ -5149,11 +5166,11 @@ def years(col):
     method of the `DataFrameWriterV2`.
 
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.years(_to_java_column(col)))
 
 
-def months(col):
+def months(col: ColumnOrName) -> Column:
     """
     Partition transform function: A transform for timestamps and dates
     to partition data into months.
@@ -5173,11 +5190,11 @@ def months(col):
     method of the `DataFrameWriterV2`.
 
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.months(_to_java_column(col)))
 
 
-def days(col):
+def days(col: ColumnOrName) -> Column:
     """
     Partition transform function: A transform for timestamps and dates
     to partition data into days.
@@ -5197,11 +5214,11 @@ def days(col):
     method of the `DataFrameWriterV2`.
 
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.days(_to_java_column(col)))
 
 
-def hours(col):
+def hours(col: ColumnOrName) -> Column:
     """
     Partition transform function: A transform for timestamps
     to partition data into hours.
@@ -5221,11 +5238,11 @@ def hours(col):
     method of the `DataFrameWriterV2`.
 
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.hours(_to_java_column(col)))
 
 
-def bucket(numBuckets, col):
+def bucket(numBuckets: Union[Column, int], col: ColumnOrName) -> Column:
     """
     Partition transform function: A transform for any type that partitions
     by a hash of the input column.
@@ -5250,7 +5267,7 @@ def bucket(numBuckets, col):
             "numBuckets should be a Column or an int, got {}".format(type(numBuckets))
         )
 
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     numBuckets = (
         _create_column_from_literal(numBuckets)
         if isinstance(numBuckets, int)
@@ -5270,7 +5287,7 @@ def udf(
 
 @overload
 def udf(
-    f: DataTypeOrString = None,
+    f: Optional[DataTypeOrString] = None,
 ) -> Callable[[Callable[..., Any]], UserDefinedFunctionLike]:
     ...
 
@@ -5283,7 +5300,10 @@ def udf(
     ...
 
 
-def udf(f=None, returnType=StringType()):
+def udf(
+    f: Optional[Union[Callable[..., Any], DataTypeOrString]] = None,
+    returnType: Optional[DataTypeOrString] = StringType(),
+) -> Union[UserDefinedFunctionLike, Callable[[Callable[..., Any]], UserDefinedFunctionLike]]:
     """Creates a user defined function (UDF).
 
     .. versionadded:: 1.3.0
@@ -5379,7 +5399,7 @@ def udf(f=None, returnType=StringType()):
                            evalType=PythonEvalType.SQL_BATCHED_UDF)
 
 
-def _test():
+def _test() -> None:
     import doctest
     from pyspark.sql import Row, SparkSession
     import pyspark.sql.functions
