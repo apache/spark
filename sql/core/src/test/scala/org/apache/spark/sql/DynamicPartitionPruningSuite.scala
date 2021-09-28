@@ -354,8 +354,7 @@ abstract class DynamicPartitionPruningSuiteBase
    */
   test("DPP triggers only for certain types of query") {
     withSQLConf(
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO.key -> "1") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
       Given("dynamic partition pruning disabled")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
         val df = sql(
@@ -1448,38 +1447,6 @@ abstract class DynamicPartitionPruningSuiteBase
         Row(1110, 3) ::
         Row(1120, 4) :: Nil
       )
-    }
-  }
-
-  test("SPARK-32855: Filtering side can not broadcast by join type") {
-    withSQLConf(
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO.key -> "1") {
-
-      val sqlStr =
-        """
-          |SELECT s.store_id,f. product_id FROM dim_store s
-          |LEFT JOIN fact_sk f
-          |ON f.store_id = s.store_id WHERE s.country = 'NL'
-          """.stripMargin
-
-      // DPP will only apply if disable reuseBroadcastOnly
-      Seq(true, false).foreach { reuseBroadcastOnly =>
-        withSQLConf(
-          SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> s"$reuseBroadcastOnly") {
-          val df = sql(sqlStr)
-          checkPartitionPruningPredicate(df, !reuseBroadcastOnly, false)
-        }
-      }
-
-      // DPP will only apply if left side can broadcast by size
-      Seq(1L, 100000L).foreach { threshold =>
-        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$threshold") {
-          val df = sql(sqlStr)
-          checkPartitionPruningPredicate(df, threshold > 10L, false)
-        }
-      }
     }
   }
 
