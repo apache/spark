@@ -1031,3 +1031,13 @@ case class UncacheTable(
 
   override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
 }
+
+/**
+ * The logical plan of the USE command.
+ */
+case class Use(name: LogicalPlan) extends UnaryCommand {
+  override def child: LogicalPlan = name
+  override protected def withNewChildInternal(newChild: LogicalPlan): Use = {
+    copy(name = newChild)
+  }
+}
