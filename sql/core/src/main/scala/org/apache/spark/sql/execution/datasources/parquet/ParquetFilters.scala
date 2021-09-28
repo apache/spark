@@ -186,6 +186,11 @@ class ParquetFilters(
     }.map(_.asInstanceOf[Integer]).orNull
   }
 
+  private def toLongValue(v: Any): JLong = v match {
+    case d: Duration => IntervalUtils.durationToMicros(d)
+    case l => l.asInstanceOf[JLong]
+  }
+
   private val makeEq:
     PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetBooleanType =>
@@ -193,7 +198,7 @@ class ParquetFilters(
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], v: Any) => FilterApi.eq(intColumn(n), toIntValue(v))
     case ParquetLongType =>
-      (n: Array[String], v: Any) => FilterApi.eq(longColumn(n), v.asInstanceOf[JLong])
+      (n: Array[String], v: Any) => FilterApi.eq(longColumn(n), toLongValue(v))
     case ParquetFloatType =>
       (n: Array[String], v: Any) => FilterApi.eq(floatColumn(n), v.asInstanceOf[JFloat])
     case ParquetDoubleType =>
@@ -243,7 +248,7 @@ class ParquetFilters(
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], v: Any) => FilterApi.notEq(intColumn(n), toIntValue(v))
     case ParquetLongType =>
-      (n: Array[String], v: Any) => FilterApi.notEq(longColumn(n), v.asInstanceOf[JLong])
+      (n: Array[String], v: Any) => FilterApi.notEq(longColumn(n), toLongValue(v))
     case ParquetFloatType =>
       (n: Array[String], v: Any) => FilterApi.notEq(floatColumn(n), v.asInstanceOf[JFloat])
     case ParquetDoubleType =>
@@ -290,7 +295,7 @@ class ParquetFilters(
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], v: Any) => FilterApi.lt(intColumn(n), toIntValue(v))
     case ParquetLongType =>
-      (n: Array[String], v: Any) => FilterApi.lt(longColumn(n), v.asInstanceOf[JLong])
+      (n: Array[String], v: Any) => FilterApi.lt(longColumn(n), toLongValue(v))
     case ParquetFloatType =>
       (n: Array[String], v: Any) => FilterApi.lt(floatColumn(n), v.asInstanceOf[JFloat])
     case ParquetDoubleType =>
@@ -327,7 +332,7 @@ class ParquetFilters(
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], v: Any) => FilterApi.ltEq(intColumn(n), toIntValue(v))
     case ParquetLongType =>
-      (n: Array[String], v: Any) => FilterApi.ltEq(longColumn(n), v.asInstanceOf[JLong])
+      (n: Array[String], v: Any) => FilterApi.ltEq(longColumn(n), toLongValue(v))
     case ParquetFloatType =>
       (n: Array[String], v: Any) => FilterApi.ltEq(floatColumn(n), v.asInstanceOf[JFloat])
     case ParquetDoubleType =>
@@ -364,7 +369,7 @@ class ParquetFilters(
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], v: Any) => FilterApi.gt(intColumn(n), toIntValue(v))
     case ParquetLongType =>
-      (n: Array[String], v: Any) => FilterApi.gt(longColumn(n), v.asInstanceOf[JLong])
+      (n: Array[String], v: Any) => FilterApi.gt(longColumn(n), toLongValue(v))
     case ParquetFloatType =>
       (n: Array[String], v: Any) => FilterApi.gt(floatColumn(n), v.asInstanceOf[JFloat])
     case ParquetDoubleType =>
@@ -401,7 +406,7 @@ class ParquetFilters(
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], v: Any) => FilterApi.gtEq(intColumn(n), toIntValue(v))
     case ParquetLongType =>
-      (n: Array[String], v: Any) => FilterApi.gtEq(longColumn(n), v.asInstanceOf[JLong])
+      (n: Array[String], v: Any) => FilterApi.gtEq(longColumn(n), toLongValue(v))
     case ParquetFloatType =>
       (n: Array[String], v: Any) => FilterApi.gtEq(floatColumn(n), v.asInstanceOf[JFloat])
     case ParquetDoubleType =>
@@ -445,7 +450,7 @@ class ParquetFilters(
 
     case ParquetLongType =>
       (n: Array[String], v: Array[Any], statistics: ParquetStatistics[_]) =>
-        v.map(_.asInstanceOf[JLong]).foreach(statistics.updateStats(_))
+        v.map(toLongValue).foreach(statistics.updateStats(_))
         FilterApi.and(
           FilterApi.gtEq(longColumn(n), statistics.genericGetMin().asInstanceOf[JLong]),
           FilterApi.ltEq(longColumn(n), statistics.genericGetMax().asInstanceOf[JLong]))
