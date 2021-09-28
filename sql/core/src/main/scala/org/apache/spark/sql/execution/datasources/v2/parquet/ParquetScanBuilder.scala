@@ -44,26 +44,30 @@ case class ParquetScanBuilder(
 
   lazy val pushedParquetFilters = {
     val sqlConf = sparkSession.sessionState.conf
-    val pushDownDate = sqlConf.parquetFilterPushDownDate
-    val pushDownTimestamp = sqlConf.parquetFilterPushDownTimestamp
-    val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
-    val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
-    val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
-    val isCaseSensitive = sqlConf.caseSensitiveAnalysis
-    val parquetSchema =
-      new SparkToParquetSchemaConverter(sparkSession.sessionState.conf).convert(readDataSchema())
-    val parquetFilters = new ParquetFilters(
-      parquetSchema,
-      pushDownDate,
-      pushDownTimestamp,
-      pushDownDecimal,
-      pushDownStringStartWith,
-      pushDownInFilterThreshold,
-      isCaseSensitive,
-      // The rebase mode doesn't matter here because the filters are used to determine
-      // whether they is convertible.
-      LegacyBehaviorPolicy.CORRECTED)
-    parquetFilters.convertibleFilters(pushedDataFilters).toArray
+    if (sqlConf.parquetFilterPushDown) {
+      val pushDownDate = sqlConf.parquetFilterPushDownDate
+      val pushDownTimestamp = sqlConf.parquetFilterPushDownTimestamp
+      val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
+      val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
+      val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
+      val isCaseSensitive = sqlConf.caseSensitiveAnalysis
+      val parquetSchema =
+        new SparkToParquetSchemaConverter(sparkSession.sessionState.conf).convert(readDataSchema())
+      val parquetFilters = new ParquetFilters(
+        parquetSchema,
+        pushDownDate,
+        pushDownTimestamp,
+        pushDownDecimal,
+        pushDownStringStartWith,
+        pushDownInFilterThreshold,
+        isCaseSensitive,
+        // The rebase mode doesn't matter here because the filters are used to determine
+        // whether they is convertible.
+        LegacyBehaviorPolicy.CORRECTED)
+      parquetFilters.convertibleFilters(pushedDataFilters).toArray
+    } else {
+      Array.empty[Filter]
+    }
   }
 
   override protected val supportsNestedSchemaPruning: Boolean = true
