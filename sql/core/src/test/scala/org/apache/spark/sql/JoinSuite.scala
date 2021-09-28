@@ -1410,63 +1410,38 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
 
       Seq("BROADCAST", "SHUFFLE_HASH").foreach {
         joinHint =>
-          val semiJoinDFs = Seq(
+          val semiJoinQueries = Seq(
             // No join condition, ignore duplicated key.
-            (sql(
-              s"SELECT /*+ $joinHint(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2 ON t1.c1 = t2.c1"),
+            (s"SELECT /*+ $joinHint(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2 ON t1.c1 = t2.c1",
               true),
             // Have join condition on build join key only, ignore duplicated key.
-            (sql(
-              s"""
-                  |SELECT /*+ $joinHint(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2
-                  |ON t1.c1 = t2.c1 AND CAST(t1.c2 * 2 AS STRING) != t2.c1
-               """.stripMargin),
+            (s"""
+                |SELECT /*+ $joinHint(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2
+                |ON t1.c1 = t2.c1 AND CAST(t1.c2 * 2 AS STRING) != t2.c1
+              """.stripMargin,
               true),
             // Have join condition on other build attribute beside join key, do not ignore
             // duplicated key.
-            (sql(
-              s"""
-                 |SELECT /*+ $joinHint(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2
-                 |ON t1.c1 = t2.c1 AND t1.c2 * 100 != t2.c2
-               """.stripMargin),
+            (s"""
+                |SELECT /*+ $joinHint(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2
+                |ON t1.c1 = t2.c1 AND t1.c2 * 100 != t2.c2
+              """.stripMargin,
               false)
           )
-          val antiJoinDFs = Seq(
-            // No join condition, ignore duplicated key.
-            (sql(
-              s"SELECT /*+ $joinHint(t2) */ t1.c1 FROM t1 LEFT ANTI JOIN t2 ON t1.c1 = t2.c1"),
-              true),
-            // Have join condition on build join key only, ignore duplicated key.
-            (sql(
-              s"""
-                 |SELECT /*+ $joinHint(t2) */ t1.c1 FROM t1 LEFT ANTI JOIN t2
-                 |ON t1.c1 = t2.c1 AND CAST(t1.c2 * 2 AS STRING) != t2.c1
-               """.stripMargin),
-              true),
-            // Have join condition on other build attribute beside join key, do not ignore
-            // duplicated key.
-            (sql(
-              s"""
-                 |SELECT /*+ $joinHint(t2) */ t1.c1 FROM t1 LEFT ANTI JOIN t2
-                 |ON t1.c1 = t2.c1 AND t1.c2 * 100 != t2.c2
-               """.stripMargin),
-              false)
-          )
-          semiJoinDFs.foreach {
-            case (df, _) => checkAnswer(df, Seq(Row("0"), Row("1"), Row("2"), Row("3"), Row("4")))
-          }
-          antiJoinDFs.foreach {
-            case (df, _) => checkAnswer(df, Seq(Row("5"), Row("6"), Row("7"), Row("8"), Row("9")))
-          }
-
-          (semiJoinDFs ++ antiJoinDFs).foreach {
-            case (df, ignoreDuplicatedKey) =>
-              assert(collect(df.queryExecution.executedPlan) {
-                case j: BroadcastHashJoinExec =>
-                  joinHint == "BROADCAST" && j.ignoreDuplicatedKey == ignoreDuplicatedKey
-                case j: ShuffledHashJoinExec =>
-                  joinHint == "SHUFFLE_HASH" && j.ignoreDuplicatedKey == ignoreDuplicatedKey
-              }.size == 1)
+          semiJoinQueries.foreach {
+            case (query, ignoreDuplicatedKey) =>
+              val semiJoinDF = sql(query)
+              val antiJoinDF = sql(query.replaceAll("SEMI", "ANTI"))
+              checkAnswer(semiJoinDF, Seq(Row("0"), Row("1"), Row("2"), Row("3"), Row("4")))
+              checkAnswer(antiJoinDF, Seq(Row("5"), Row("6"), Row("7"), Row("8"), Row("9")))
+              Seq(semiJoinDF, antiJoinDF).foreach { df =>
+                assert(collect(df.queryExecution.executedPlan) {
+                  case j: BroadcastHashJoinExec =>
+                    joinHint == "BROADCAST" && j.ignoreDuplicatedKey == ignoreDuplicatedKey
+                  case j: ShuffledHashJoinExec =>
+                    joinHint == "SHUFFLE_HASH" && j.ignoreDuplicatedKey == ignoreDuplicatedKey
+                }.size == 1)
+              }
           }
       }
     }
