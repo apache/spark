@@ -6000,6 +6000,14 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
             self.assert_eq(expected_pdf, psdf1.combine_first(psdf2))
 
+    def test_multi_index_dtypes(self):
+        arrays = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
+        idx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
+        pdf = pd.DataFrame(np.random.randn(4, 5), idx)
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(psdf.index.dtypes, pdf.index.dtypes)
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.test_dataframe import *  # noqa: F401

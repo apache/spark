@@ -375,6 +375,15 @@ class MultiIndex(Index):
     def name(self, name: Name) -> None:
         raise PandasNotImplementedError(class_name="pd.MultiIndex", property_name="name")
 
+    @property
+    def dtypes(self) -> Series:
+        return pd.Series(
+            [field.dtype for field in self._internal.index_fields],
+            index=pd.Index(
+                [name if len(name) > 1 else name[0] for name in self._internal.index_names]
+            ),
+        )
+
     def _verify_for_rename(self, name: List[Name]) -> List[Label]:  # type: ignore[override]
         if is_list_like(name):
             if self._internal.index_level != len(name):
