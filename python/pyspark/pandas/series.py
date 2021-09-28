@@ -47,7 +47,7 @@ import numpy as np
 import pandas as pd
 from pandas.core.accessor import CachedAccessor
 from pandas.io.formats.printing import pprint_thing
-from pandas.api.types import is_list_like, is_hashable
+from pandas.api.types import is_list_like, is_hashable, CategoricalDtype
 from pandas.tseries.frequencies import DateOffset
 from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
@@ -344,9 +344,9 @@ str_type = str
 
 
 if (3, 5) <= sys.version_info < (3, 7) and __name__ != "__main__":
-    from typing import GenericMeta  # type: ignore
+    from typing import GenericMeta  # type: ignore[attr-defined]
 
-    old_getitem = GenericMeta.__getitem__  # type: ignore
+    old_getitem = GenericMeta.__getitem__
 
     @no_type_check
     def new_getitem(self, params):
@@ -355,7 +355,7 @@ if (3, 5) <= sys.version_info < (3, 7) and __name__ != "__main__":
         else:
             return old_getitem(self, params)
 
-    GenericMeta.__getitem__ = new_getitem  # type: ignore
+    GenericMeta.__getitem__ = new_getitem
 
 
 class Series(Frame, IndexOpsMixin, Generic[T]):
@@ -1065,9 +1065,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     current = current.when(self.spark.column == SF.lit(to_replace), value)
 
             if hasattr(arg, "__missing__"):
-                tmp_val = arg[np._NoValue]  # type: ignore
+                tmp_val = arg[np._NoValue]  # type: ignore[attr-defined]
                 # Remove in case it's set in defaultdict.
-                del arg[np._NoValue]  # type: ignore
+                del arg[np._NoValue]  # type: ignore[attr-defined]
                 current = current.otherwise(SF.lit(tmp_val))
             else:
                 current = current.otherwise(SF.lit(None).cast(self.spark.data_type))
@@ -1963,7 +1963,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             if not isinstance(value, (float, int, str, bool)):
                 raise TypeError("Unsupported type %s" % type(value).__name__)
             if limit is not None:
-                raise ValueError("limit parameter for value is not support now")
+                raise NotImplementedError("limit parameter for value is not support now")
             scol = F.when(cond, value).otherwise(scol)
         else:
             if method in ["ffill", "pad"]:
@@ -2231,7 +2231,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             if level >= internal.index_level:
                 raise ValueError("'level' should be less than the number of indexes")
 
-            if is_name_like_tuple(index):  # type: ignore
+            if is_name_like_tuple(index):
                 index_list = [cast(Label, index)]
             elif is_name_like_value(index):
                 index_list = [(index,)]
@@ -3597,7 +3597,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise ValueError(msg)
 
         if self._internal.index_level > 1:
-            raise ValueError("rank do not support index now")
+            raise NotImplementedError("rank do not support MultiIndex now")
 
         if ascending:
             asc_func = lambda scol: scol.asc()
@@ -4098,7 +4098,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             pdf = sdf.limit(2).toPandas()
             length = len(pdf)
             if length == 1:
-                return pdf[internal.data_spark_column_names[0]].iloc[0]
+                val = pdf[internal.data_spark_column_names[0]].iloc[0]
+                if isinstance(self.dtype, CategoricalDtype):
+                    return self.dtype.categories[val]
+                else:
+                    return val
 
             item_string = name_like_string(item)
             sdf = sdf.withColumn(SPARK_DEFAULT_INDEX_NAME, SF.lit(str(item_string)))
@@ -6254,7 +6258,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         axis = validate_axis(axis)
         if axis == 1:
-            raise ValueError("Series does not support columns axis.")
+            raise NotImplementedError("Series does not support columns axis.")
 
         scol = sfun(self)
 
@@ -6309,7 +6313,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if hasattr(MissingPandasLikeSeries, item):
             property_or_func = getattr(MissingPandasLikeSeries, item)
             if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
+                return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
         raise AttributeError("'Series' object has no attribute '{}'".format(item))

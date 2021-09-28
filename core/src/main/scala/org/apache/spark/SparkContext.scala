@@ -645,20 +645,6 @@ class SparkContext(config: SparkConf) extends Logging {
     // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
     _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
-    // Post init
-    _taskScheduler.postStartHook()
-    if (isLocal) {
-      _env.metricsSystem.registerSource(Executor.executorSourceLocalModeOnly)
-    }
-    _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
-    _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
-    _env.metricsSystem.registerSource(new JVMCPUSource())
-    _executorMetricsSource.foreach(_.register(_env.metricsSystem))
-    _executorAllocationManager.foreach { e =>
-      _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
-    }
-    appStatusSource.foreach(_env.metricsSystem.registerSource(_))
-    _plugins.foreach(_.registerMetrics(applicationId))
     // Make sure the context is stopped if the user forgets about it. This avoids leaving
     // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
     // is killed, though.
@@ -673,6 +659,21 @@ class SparkContext(config: SparkConf) extends Logging {
           logWarning("Ignoring Exception while stopping SparkContext from shutdown hook", e)
       }
     }
+
+    // Post init
+    _taskScheduler.postStartHook()
+    if (isLocal) {
+      _env.metricsSystem.registerSource(Executor.executorSourceLocalModeOnly)
+    }
+    _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
+    _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
+    _env.metricsSystem.registerSource(new JVMCPUSource())
+    _executorMetricsSource.foreach(_.register(_env.metricsSystem))
+    _executorAllocationManager.foreach { e =>
+      _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
+    }
+    appStatusSource.foreach(_env.metricsSystem.registerSource(_))
+    _plugins.foreach(_.registerMetrics(applicationId))
   } catch {
     case NonFatal(e) =>
       logError("Error initializing SparkContext.", e)

@@ -955,7 +955,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         if isinstance(self, MultiIndex):
             raise NotImplementedError("notna is not defined for MultiIndex")
-        return (~self.isnull()).rename(self.name)  # type: ignore
+        return (~self.isnull()).rename(self.name)  # type: ignore[attr-defined]
 
     notna = notnull
 

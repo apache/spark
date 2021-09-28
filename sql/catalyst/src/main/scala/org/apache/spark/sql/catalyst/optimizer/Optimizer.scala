@@ -924,7 +924,8 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
           if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline) =>
         p2.copy(projectList = buildCleanedProjectList(p1.projectList, p2.projectList))
       case p @ Project(_, agg: Aggregate)
-          if canCollapseExpressions(p.projectList, agg.aggregateExpressions, alwaysInline) =>
+          if canCollapseExpressions(p.projectList, agg.aggregateExpressions, alwaysInline) &&
+             canCollapseAggregate(p, agg) =>
         agg.copy(aggregateExpressions = buildCleanedProjectList(
           p.projectList, agg.aggregateExpressions))
       case Project(l1, g @ GlobalLimit(_, limit @ LocalLimit(_, p2 @ Project(l2, _))))
@@ -980,6 +981,18 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
     case e: ExtractValue => isExtractOnly(e.children.head, ref)
     case a: Attribute => a.semanticEquals(ref)
     case _ => false
+  }
+
+  /**
+   * A project cannot be collapsed with an aggregate when there are correlated scalar
+   * subqueries in the project list, because currently we only allow correlated subqueries
+   * in aggregate if they are also part of the grouping expressions. Otherwise the plan
+   * after subquery rewrite will not be valid.
+   */
+  private def canCollapseAggregate(p: Project, a: Aggregate): Boolean = {
+    p.projectList.forall(_.collect {
+      case s: ScalarSubquery if s.outerAttrs.nonEmpty => s
+    }.isEmpty)
   }
 
   private def buildCleanedProjectList(

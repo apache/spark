@@ -29,6 +29,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark.SparkThrowableHelper._
+import org.apache.spark.util.Utils
 
 /**
  * Test suite for Spark Throwables.
@@ -73,7 +74,17 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   test("SQLSTATE invariants") {
     val sqlStates = errorClassToInfoMap.values.toSeq.flatMap(_.sqlState)
-    checkCondition(sqlStates, s => s.length == 5)
+    val errorClassReadMe = Utils.getSparkClassLoader.getResource("error/README.md")
+    val errorClassReadMeContents = IOUtils.toString(errorClassReadMe.openStream())
+    val sqlStateTableRegex =
+      "(?s)<!-- SQLSTATE table start -->(.+)<!-- SQLSTATE table stop -->".r
+    val sqlTable = sqlStateTableRegex.findFirstIn(errorClassReadMeContents).get
+    val sqlTableRows = sqlTable.split("\n").filter(_.startsWith("|")).drop(2)
+    val validSqlStates = sqlTableRows.map(_.slice(1, 6)).toSet
+    // Sanity check
+    assert(Set("07000", "42000", "HZ000").subsetOf(validSqlStates))
+    assert(validSqlStates.forall(_.length == 5), validSqlStates)
+    checkCondition(sqlStates, s => validSqlStates.contains(s))
   }
 
   test("Message format invariants") {

@@ -627,7 +627,7 @@ For example, suppose you would like to point log url link to Job History Server 
 
 <code>&#123;&#123;HTTP_SCHEME&#125;&#125;&lt;JHS_HOST&gt;:&lt;JHS_PORT&gt;/jobhistory/logs/&#123;&#123;NM_HOST&#125;&#125;:&#123;&#123;NM_PORT&#125;&#125;/&#123;&#123;CONTAINER_ID&#125;&#125;/&#123;&#123;CONTAINER_ID&#125;&#125;/&#123;&#123;USER&#125;&#125;/&#123;&#123;FILE_NAME&#125;&#125;?start=-4096</code>
 
-NOTE: you need to replace `<JHS_POST>` and `<JHS_PORT>` with actual value.
+NOTE: you need to replace `<JHS_HOST>` and `<JHS_PORT>` with actual value.
 
 # Resource Allocation and Configuration Overview
 

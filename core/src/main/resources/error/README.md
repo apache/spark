@@ -98,6 +98,7 @@ Spark only uses the standard-defined classes and subclasses, and does not use im
 
 The following SQLSTATEs are from ISO/IEC CD 9075-2.
 
+<!-- SQLSTATE table start -->
 |SQLSTATE|Class|Condition                                                   |Subclass|Subcondition                                                   |
 |--------|-----|------------------------------------------------------------|--------|---------------------------------------------------------------|
 |07000   |07   |dynamic SQL error                                           |000     |(no subclass)                                                  |
@@ -253,3 +254,4 @@ The following SQLSTATEs are from ISO/IEC CD 9075-2.
 |42000   |42   |syntax error or access rule violation                       |000     |(no subclass)                                                  |
 |44000   |44   |with check option violation                                 |000     |(no subclass)                                                  |
 |HZ000   |HZ   |remote database access                                      |000     |(no subclass)                                                  |
+<!-- SQLSTATE table stop -->

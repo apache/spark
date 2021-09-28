@@ -2689,10 +2689,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val m1 = intercept[AnalysisException] {
-        sql("SELECT struct(1 a) UNION ALL (SELECT struct(2 A))")
-      }.message
-      assert(m1.contains("Union can only be performed on tables with the compatible column types"))
+      // Union resolves nested columns by position too.
+      checkAnswer(sql("SELECT struct(1 a) UNION ALL (SELECT struct(2 A))"),
+        Row(Row(1)) :: Row(Row(2)) :: Nil)
 
       val m2 = intercept[AnalysisException] {
         sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")

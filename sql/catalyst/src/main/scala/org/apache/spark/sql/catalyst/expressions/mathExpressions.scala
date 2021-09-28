@@ -301,6 +301,29 @@ case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS") {
 
 @ExpressionDescription(
   usage = """
+    _FUNC_(expr) - Returns the secant of `expr`, as if computed by `1/java.lang.Math.cos`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - angle in radians
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(0);
+       1.0
+  """,
+  since = "3.3.0",
+  group = "math_funcs")
+case class Sec(child: Expression)
+  extends UnaryMathExpression((x: Double) => 1 / math.cos(x), "SEC") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"${ev.value} = 1 / java.lang.Math.cos($c);")
+  }
+  override protected def withNewChildInternal(newChild: Expression): Sec = copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = """
       _FUNC_(expr) - Returns the hyperbolic cosine of `expr`, as if computed by
         `java.lang.Math._FUNC_`.
   """,
@@ -653,6 +676,29 @@ case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "S
   group = "math_funcs")
 case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN") {
   override protected def withNewChildInternal(newChild: Expression): Sin = copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns the cosecant of `expr`, as if computed by `1/java.lang.Math.sin`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - angle in radians
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1);
+       1.1883951057781212
+  """,
+  since = "3.3.0",
+  group = "math_funcs")
+case class Csc(child: Expression)
+  extends UnaryMathExpression((x: Double) => 1 / math.sin(x), "CSC") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"${ev.value} = 1 / java.lang.Math.sin($c);")
+  }
+  override protected def withNewChildInternal(newChild: Expression): Csc = copy(child = newChild)
 }
 
 @ExpressionDescription(

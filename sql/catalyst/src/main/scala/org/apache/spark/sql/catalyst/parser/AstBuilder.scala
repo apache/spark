@@ -2527,7 +2527,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
             if (value.exists(Character.isLetter)) {
               throw QueryParsingErrors.invalidIntervalFormError(value, ctx)
             }
-            value
+            if (values(i).MINUS() == null) {
+              value
+            } else {
+              value.startsWith("-") match {
+                case true => value.replaceFirst("-", "")
+                case false => s"-$value"
+              }
+            }
           } else {
             values(i).getText
           }
@@ -3566,11 +3573,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[ShowCurrentNamespaceStatement]].
+   * Create a [[ShowCurrentNamespace]].
    */
   override def visitShowCurrentNamespace(
       ctx: ShowCurrentNamespaceContext) : LogicalPlan = withOrigin(ctx) {
-    ShowCurrentNamespaceStatement()
+    ShowCurrentNamespace()
   }
 
   /**

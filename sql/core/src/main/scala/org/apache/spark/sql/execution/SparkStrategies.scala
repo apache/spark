@@ -262,7 +262,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               // This join could be very slow or OOM
               val buildSide = getSmallerSide(left, right)
               Seq(joins.BroadcastNestedLoopJoinExec(
-                planLater(left), planLater(right), buildSide, joinType, nonEquiCond))
+                planLater(left), planLater(right), buildSide, joinType, j.condition))
             }
         }
 

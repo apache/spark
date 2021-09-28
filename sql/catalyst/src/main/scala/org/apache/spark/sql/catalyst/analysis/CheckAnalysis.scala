@@ -401,15 +401,26 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                     |the ${ordinalNumber(ti + 1)} table has ${child.output.length} columns
                   """.stripMargin.replace("\n", " ").trim())
               }
+              val isUnion = operator.isInstanceOf[Union]
+              val dataTypesAreCompatibleFn = if (isUnion) {
+                (dt1: DataType, dt2: DataType) =>
+                  !DataType.equalsStructurally(dt1, dt2, true)
+              } else {
+                // SPARK-18058: we shall not care about the nullability of columns
+                (dt1: DataType, dt2: DataType) =>
+                  TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty
+              }
+
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
-                if (TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty) {
+                if (dataTypesAreCompatibleFn(dt1, dt2)) {
                   failAnalysis(
                     s"""
-                      |${operator.nodeName} can only be performed on tables with the compatible
-                      |column types. ${dt1.catalogString} <> ${dt2.catalogString} at the
-                      |${ordinalNumber(ci)} column of the ${ordinalNumber(ti + 1)} table
+                       |${operator.nodeName} can only be performed on tables with the compatible
+                       |column types. The ${ordinalNumber(ci)} column of the
+                       |${ordinalNumber(ti + 1)} table is ${dt1.catalogString} type which is not
+                       |compatible with ${dt2.catalogString} at same column of first table
                     """.stripMargin.replace("\n", " ").trim())
                 }
               }
