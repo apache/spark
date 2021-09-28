@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-import _string  # type: ignore
+import _string  # type: ignore[import]
 from typing import Any, Dict, Optional, Union, List  # noqa: F401 (SPARK-34943)
 import inspect
 import pandas as pd
@@ -214,7 +214,7 @@ def _get_ipython_scope() -> Dict[str, Any]:
     in an IPython notebook environment.
     """
     try:
-        from IPython import get_ipython  # type: ignore
+        from IPython import get_ipython  # type: ignore[import]
 
         shell = get_ipython()
         return shell.user_ns

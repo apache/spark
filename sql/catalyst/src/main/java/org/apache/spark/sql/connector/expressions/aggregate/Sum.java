@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.FieldReference;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * An aggregate function that returns the summation of all the values in a group.
@@ -27,15 +27,15 @@ import org.apache.spark.sql.connector.expressions.FieldReference;
  */
 @Evolving
 public final class Sum implements AggregateFunc {
-  private final FieldReference column;
+  private final NamedReference column;
   private final boolean isDistinct;
 
-  public Sum(FieldReference column, boolean isDistinct) {
+  public Sum(NamedReference column, boolean isDistinct) {
     this.column = column;
     this.isDistinct = isDistinct;
   }
 
-  public FieldReference column() { return column; }
+  public NamedReference column() { return column; }
   public boolean isDistinct() { return isDistinct; }
 
   @Override

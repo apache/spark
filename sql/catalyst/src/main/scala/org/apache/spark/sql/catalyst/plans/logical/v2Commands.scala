@@ -639,7 +639,7 @@ case class RefreshTable(child: LogicalPlan) extends UnaryCommand {
 /**
  * The logical plan of the SHOW CURRENT NAMESPACE command.
  */
-case class ShowCurrentNamespace(catalogManager: CatalogManager) extends LeafCommand {
+case class ShowCurrentNamespace() extends LeafCommand {
   override val output: Seq[Attribute] = Seq(
     AttributeReference("catalog", StringType, nullable = false)(),
     AttributeReference("namespace", StringType, nullable = false)())
