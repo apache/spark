@@ -76,6 +76,4 @@ public final class TableIndex {
   Properties properties() {
     return properties;
   }
-
-  Properties columnProperties(NamedReference column) { return columnProperties.get(column); }
 }

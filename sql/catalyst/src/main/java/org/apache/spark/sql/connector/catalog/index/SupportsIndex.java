@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
- * Catalog methods for working with index
+ * Table methods for working with index
  *
  * @since 3.3.0
  */
@@ -43,27 +43,25 @@ public interface SupportsIndex extends Table {
    * @param columnProperties the properties of the columns on which index to be created
    * @param properties the properties of the index to be created
    * @throws IndexAlreadyExistsException If the index already exists (optional)
-   * @throws UnsupportedOperationException If create index is not a supported operation
    */
   void createIndex(String indexName,
       String indexType,
       NamedReference[] columns,
       Map<NamedReference, Properties>[] columnProperties,
       Properties properties)
-      throws IndexAlreadyExistsException, UnsupportedOperationException;
+      throws IndexAlreadyExistsException;
 
   /**
-   * drops the index with the given name.
+   * Drops the index with the given name.
    *
    * @param indexName the name of the index to be dropped.
    * @return true if the index is dropped
    * @throws NoSuchIndexException If the index does not exist (optional)
-   * @throws UnsupportedOperationException If drop index is not a supported operation
    */
-  boolean dropIndex(String indexName) throws NoSuchIndexException, UnsupportedOperationException;
+  boolean dropIndex(String indexName) throws NoSuchIndexException;
 
   /**
-   * Checks whether an index exists.
+   * Checks whether an index exists in this table.
    *
    * @param indexName the name of the index
    * @return true if the index exists, false otherwise
