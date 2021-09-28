@@ -15,21 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
+import org.apache.spark.sql.types.StringType
 
 /**
- * Physical plan node for showing current catalog/namespace.
+ * The command for `SHOW CURRENT NAMESPACE`.
  */
-case class ShowCurrentNamespaceExec(
-    output: Seq[Attribute],
-    catalogManager: CatalogManager)
-  extends LeafV2CommandExec {
-  override protected def run(): Seq[InternalRow] = {
-    Seq(toCatalystRow(catalogManager.currentCatalog.name, catalogManager.currentNamespace.quoted))
+case class ShowCurrentNamespaceCommand() extends LeafRunnableCommand {
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("catalog", StringType, nullable = false)(),
+    AttributeReference("namespace", StringType, nullable = false)())
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalogManager = sparkSession.sessionState.catalogManager
+    Seq(Row(catalogManager.currentCatalog.name, catalogManager.currentNamespace.quoted))
   }
 }

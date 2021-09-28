@@ -232,6 +232,14 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create a [[ShowCurrentNamespaceCommand]] logical command.
+   */
+  override def visitShowCurrentNamespace(
+      ctx: ShowCurrentNamespaceContext) : LogicalPlan = withOrigin(ctx) {
+    ShowCurrentNamespaceCommand()
+  }
+
+  /**
    * Converts a multi-part identifier to a TableIdentifier.
    *
    * If the multi-part identifier has too many parts, this will throw a ParseException.
