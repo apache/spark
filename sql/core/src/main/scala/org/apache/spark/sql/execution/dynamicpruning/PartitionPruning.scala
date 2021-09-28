@@ -164,11 +164,6 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     estimatePruningSideSize > overhead
   }
 
-  def canCollectFilteringQuery(plan: LogicalPlan): Boolean = {
-    plan.stats.sizeInBytes >= 0 &&
-      plan.stats.sizeInBytes <= conf.dynamicPartitionPruningFilteringQuerySizeThreshold
-  }
-
   /**
    * Calculates a heuristic overhead of a logical plan. Normally it returns the total
    * size in bytes of all scan relations. We don't count in-memory relation which uses
