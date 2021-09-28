@@ -469,11 +469,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         ignoreIfExists,
         replace)
 
-    case CreateFunction(ResolvedDBObjectName(catalog, name),
-        className, resources, ignoreIfExists, replace) if isSessionCatalog(catalog) =>
+    case CreateFunction(ResolvedFunc(identifier), className, resources, ignoreIfExists, replace) =>
+      val funcIdentifier = identifier.asFunctionIdentifier
       CreateFunctionCommand(
-        Some(catalog.name),
-        name.head,
+        funcIdentifier.database,
+        funcIdentifier.funcName,
         className,
         resources,
         false,
