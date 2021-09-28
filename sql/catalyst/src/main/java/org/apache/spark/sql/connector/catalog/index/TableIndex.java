@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.connector.catalog.index;
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.catalog.Identifier;
-import org.apache.spark.sql.connector.expressions.NamedReference;
-
 import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
+
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * Index in a table
@@ -34,7 +33,6 @@ import java.util.Properties;
 public final class TableIndex {
   private String indexName;
   private String indexType;
-  private Identifier table;
   private NamedReference[] columns;
   private Map<NamedReference, Properties> columnProperties = Collections.emptyMap();
   private Properties properties;
@@ -42,13 +40,11 @@ public final class TableIndex {
   public TableIndex(
       String indexName,
       String indexType,
-      Identifier table,
       NamedReference[] columns,
       Map<NamedReference, Properties> columnProperties,
       Properties properties) {
     this.indexName = indexName;
     this.indexType = indexType;
-    this.table = table;
     this.columns = columns;
     this.columnProperties = columnProperties;
     this.properties = properties;
@@ -63,11 +59,6 @@ public final class TableIndex {
    * @return the indexType of this Index.
    */
   String indexType() { return indexType; }
-
-  /**
-   * @return the table this Index is on.
-   */
-  Identifier table() { return table; }
 
   /**
    * @return the column(s) this Index is on. Could be multi columns (a multi-column index).

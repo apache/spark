@@ -23,9 +23,7 @@ import java.util.Properties;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchIndexException;
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
-import org.apache.spark.sql.connector.catalog.CatalogPlugin;
-import org.apache.spark.sql.connector.catalog.Identifier;
+import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
@@ -34,14 +32,13 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * @since 3.3.0
  */
 @Evolving
-public interface SupportsIndex extends CatalogPlugin {
+public interface SupportsIndex extends Table {
 
   /**
    * Creates an index.
    *
    * @param indexName the name of the index to be created
    * @param indexType the IndexType of the index to be created
-   * @param table the table on which index to be created
    * @param columns the columns on which index to be created
    * @param columnProperties the properties of the columns on which index to be created
    * @param properties the properties of the index to be created
@@ -50,7 +47,6 @@ public interface SupportsIndex extends CatalogPlugin {
    */
   void createIndex(String indexName,
       String indexType,
-      Identifier table,
       NamedReference[] columns,
       Map<NamedReference, Properties>[] columnProperties,
       Properties properties)
@@ -75,10 +71,7 @@ public interface SupportsIndex extends CatalogPlugin {
   boolean indexExists(String indexName);
 
   /**
-   * Lists all the indexes in a table.
-   *
-   * @param table the table to be checked on for indexes
-   * @throws NoSuchTableException
+   * Lists all the indexes in this table.
    */
-  TableIndex[] listIndexes(Identifier table) throws NoSuchTableException;
+  TableIndex[] listIndexes();
 }
