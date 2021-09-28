@@ -1,7 +1,7 @@
 {
   "ALTER_TABLE_WITH_DROP_PARTITION_AND_PURGE_UNSUPPORTED" : {
     "message" : [ "ALTER TABLE ... DROP PARTITION ... PURGE" ],
-    "sqlState" : "42000"
+    "sqlState" : "0A000"
   },
   "AMBIGUOUS_FIELD_NAME" : {
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
@@ -15,12 +15,14 @@
     "message" : [ "%s cannot be represented as Decimal(%s, %s)." ],
     "sqlState" : "22005"
   },
+  "CANNOT_CONVERT_HIVE_TABLE_TO_CATALOG_TABLE" : {
+    "message" : [ "%s, db: %s, table: %s" ]
+  },
   "CANNOT_EVALUATE_EXPRESSION" : {
     "message" : [ "Cannot evaluate expression: %s" ]
   },
-  "CANNOT_FETCH_TABLES_OF_DATABASE" : {
-    "message" : [ "Unable to fetch tables of db %s" ],
-    "sqlState" : "42000"
+  "CANNOT_FETCH_DATABASE_TABLES" : {
+    "message" : [ "Unable to fetch tables of db %s" ]
   },
   "CANNOT_GENERATE_CODE_FOR_EXPRESSION" : {
     "message" : [ "Cannot generate code for expression: %s" ]
@@ -47,10 +49,6 @@
   "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
-  "CONVERT_HIVE_TABLE_TO_CATALOG_TABLE" : {
-    "message" : [ "%s, db: %s, table: %s" ],
-    "sqlState" : "0A000"
-  },
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero" ],
     "sqlState" : "22012"
@@ -70,9 +68,8 @@
     "message" : [ "Failed to rename %s to %s as destination already exists" ],
     "sqlState" : "22023"
   },
-  "FAILED_RENAME_TEMP_FILE" : {
-    "message" : [ "Failed to rename temp file %s to %s as rename returned false" ],
-    "sqlState" : "42000"
+  "FAILED_RENAME_TEMPORARY_FILE" : {
+    "message" : [ "Failed to rename temp file %s to %s as rename returned false" ]
   },
   "FAILED_SET_ORIGINAL_PERMISSION_BACK" : {
     "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ]
@@ -138,9 +135,8 @@
   "LEGACY_METADATA_PATH_EXISTS" : {
     "message" : [ "Error: we detected a possible problem with the location of your \"_spark_metadata\" directory and you likely need to move it before restarting this query.", "Earlier version of Spark incorrectly escaped paths when writing out the \"_spark_metadata\" directory for structured streaming.", "While this was corrected in Spark 3.0, it appears that your query was started using an earlier version that incorrectly handled the \"_spark_metadata\" path.", "Correct \"_spark_metadata\" Directory: %s. Incorrect \"_spark_metadata\" Directory: %s", "Please move the data from the incorrect directory to the correct one, delete the incorrect directory, and then restart this query.", "If you believe you are receiving this message in error, you can disable it with the SQL conf %s." ]
   },
-  "LOAD_HIVE_CLIENT_CAUSES_NO_CLASS_DEF_FOUND" : {
-    "message" : [ "%s when creating Hive client using classpath: %s", "Please make sure that jars for your version of hive and hadoop are included in the paths passed to %s." ],
-    "sqlState" : "42000"
+  "LOAD_HIVE_CLIENT_CAUSES_NO_CLASS_DEFINITION_FOUND" : {
+    "message" : [ "%s when creating Hive client using classpath: %s", "Please make sure that jars for your version of hive and hadoop are included in the paths passed to %s." ]
   },
   "LOGICAL_HINT_OPERATOR_NOT_REMOVED_DURING_ANALYSIS" : {
     "message" : [ "Internal error: logical hint operator should have been removed during analysis" ]
@@ -156,6 +152,10 @@
     "message" : [ "A method named \"%s\" is not declared in any enclosing class nor any supertype" ],
     "sqlState" : "42000"
   },
+  "MISSING_PARTITION_COLUMN" : {
+    "message" : [ "Partition column %s not found in schema %s" ],
+    "sqlState" : "42000"
+  },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [ "Unknown static partition column: %s" ],
     "sqlState" : "42000"
@@ -166,10 +166,6 @@
   },
   "NON_PARTITION_COLUMN" : {
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
-    "sqlState" : "42000"
-  },
-  "PARTITION_COLUMN_NOT_FOUND_IN_SCHEMA" : {
-    "message" : [ "Partition column %s not found in schema %s" ],
     "sqlState" : "42000"
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
@@ -215,7 +211,8 @@
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_HIVE_METASTORE_VERSION" : {
-    "message" : [ "Unsupported Hive Metastore version (%s). Please set %s with a valid version." ]
+    "message" : [ "Unsupported Hive Metastore version (%s). Please set %s with a valid version." ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_LITERAL_TYPE" : {
     "message" : [ "Unsupported literal type %s %s" ],

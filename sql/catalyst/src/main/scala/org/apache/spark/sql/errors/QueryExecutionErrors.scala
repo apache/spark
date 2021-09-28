@@ -1302,7 +1302,7 @@ object QueryExecutionErrors {
   def convertHiveTableToCatalogTableError(
       e: SparkException, dbName: String, tableName: String): Throwable = {
     new SparkException(
-      errorClass = "CONVERT_HIVE_TABLE_TO_CATALOG_TABLE",
+      errorClass = "CANNOT_CONVERT_HIVE_TABLE_TO_CATALOG_TABLE",
       messageParameters = Array(e.getMessage, dbName, tableName), e)
   }
 
@@ -1361,13 +1361,13 @@ object QueryExecutionErrors {
       key: String,
       e: InvocationTargetException): Throwable = {
     new SparkClassNotFoundException(
-      errorClass = "LOAD_HIVE_CLIENT_CAUSES_NO_CLASS_DEF_FOUND",
+      errorClass = "LOAD_HIVE_CLIENT_CAUSES_NO_CLASS_DEFINITION_FOUND",
       messageParameters = Array(cnf.toString, execJars.mkString(", "), key), e)
   }
 
   def cannotFetchTablesOfDatabaseError(dbName: String, e: Exception): Throwable = {
     new SparkException(
-      errorClass = "CANNOT_FETCH_TABLES_OF_DATABASE",
+      errorClass = "CANNOT_FETCH DATABASE_TABLES",
       messageParameters = Array(dbName), e)
   }
 
@@ -1399,7 +1399,7 @@ object QueryExecutionErrors {
 
   def failedRenameTempFileError(srcPath: Path, dstPath: Path): Throwable = {
       new SparkIOException(
-        errorClass = "FAILED_RENAME_TEMP_FILE",
+        errorClass = "FAILED_RENAME_TEMPORARY_FILE",
         messageParameters = Array(srcPath.toString, dstPath.toString)
     )
   }
@@ -1415,7 +1415,7 @@ object QueryExecutionErrors {
 
   def partitionColumnNotFoundInSchemaError(col: String, schema: StructType): Throwable = {
     new SparkRuntimeException(
-      errorClass = "PARTITION_COLUMN_NOT_FOUND_IN_SCHEMA",
+      errorClass = "MISSING_PARTITION_COLUMN",
       messageParameters = Array(col, schema.toString), null)
   }
 
