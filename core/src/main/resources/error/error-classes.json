@@ -3,6 +3,31 @@
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
   },
+  "CANNOT_CAST_DATATYPE" : {
+    "message" : [ "Cannot cast %s to %s." ],
+    "sqlState" : "22005"
+  },
+  "CANNOT_CHANGE_DECIMAL_PRECISION" : {
+    "message" : [ "%s cannot be represented as Decimal(%s, %s)." ],
+    "sqlState" : "22005"
+  },
+  "CANNOT_EVALUATE_EXPRESSION" : {
+    "message" : [ "Cannot evaluate expression: %s" ]
+  },
+  "CANNOT_GENERATE_CODE_FOR_EXPRESSION" : {
+    "message" : [ "Cannot generate code for expression: %s" ]
+  },
+  "CANNOT_PARSE_DECIMAL" : {
+    "message" : [ "Cannot parse decimal" ],
+    "sqlState" : "42000"
+  },
+  "CANNOT_TERMINATE_GENERATOR" : {
+    "message" : [ "Cannot terminate expression: %s" ]
+  },
+  "CAST_CAUSES_OVERFLOW" : {
+    "message" : [ "Casting %s to %s causes overflow" ],
+    "sqlState" : "22005"
+  },
   "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
@@ -13,6 +38,9 @@
   "DUPLICATE_KEY" : {
     "message" : [ "Found duplicate keys '%s'" ],
     "sqlState" : "23000"
+  },
+  "FAILED_EXECUTE_UDF" : {
+    "message" : [ "Failed to execute user defined function (%s: (%s) => %s)" ]
   },
   "FAILED_RENAME_PATH" : {
     "message" : [ "Failed to rename %s to %s as destination already exists" ],
@@ -46,6 +74,9 @@
     "message" : [ "Index %s must be between 0 and the length of the ArrayData." ],
     "sqlState" : "22023"
   },
+  "INVALID_ARRAY_INDEX" : {
+    "message" : [ "Invalid index: %s, numElements: %s" ]
+  },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name %s is invalid: %s is not a struct." ],
     "sqlState" : "42000"
@@ -54,8 +85,18 @@
     "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]." ],
     "sqlState" : "22023"
   },
+  "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE" : {
+    "message" : [ "invalid input syntax for type numeric: %s" ],
+    "sqlState" : "42000"
+  },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
+  },
+  "LOGICAL_HINT_OPERATOR_NOT_REMOVED_DURING_ANALYSIS" : {
+    "message" : [ "Internal error: logical hint operator should have been removed during analysis" ]
+  },
+  "MAP_KEY_DOES_NOT_EXIST" : {
+    "message" : [ "Key %s does not exist." ]
   },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
@@ -85,6 +126,10 @@
     "message" : [ "Failed to rename as %s was not found" ],
     "sqlState" : "22023"
   },
+  "ROW_FROM_CSV_PARSER_NOT_EXPECTED" : {
+    "message" : [ "Expected one row from CSV parser." ],
+    "sqlState" : "42000"
+  },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
     "sqlState" : "22023"
@@ -96,9 +141,20 @@
     "message" : [ "Unrecognized SQL type %s" ],
     "sqlState" : "42000"
   },
+  "UNSUPPORTED_CHANGE_COLUMN" : {
+    "message" : [ "Please add an implementation for a column change here" ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_DATATYPE" : {
+    "message" : [ "Unsupported data type %s" ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_LITERAL_TYPE" : {
     "message" : [ "Unsupported literal type %s %s" ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID" : {
+    "message" : [ "%s does not implement simpleStringWithNodeId" ]
   },
   "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER" : {
     "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],

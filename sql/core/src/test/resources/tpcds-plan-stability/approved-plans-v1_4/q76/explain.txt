@@ -70,7 +70,7 @@ Condition : isnotnull(i_item_sk#5)
 
 (7) BroadcastExchange
 Input [2]: [i_item_sk#5, i_category#6]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#7]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#7]
 
 (8) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_item_sk#1]
@@ -97,7 +97,7 @@ Condition : isnotnull(d_date_sk#8)
 
 (13) BroadcastExchange
 Input [3]: [d_date_sk#8, d_year#9, d_qoy#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#11]
 
 (14) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_sold_date_sk#4]

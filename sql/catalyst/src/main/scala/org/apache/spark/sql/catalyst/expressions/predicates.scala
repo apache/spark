@@ -554,6 +554,16 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   @transient private[this] lazy val hasNull: Boolean = hset.contains(null)
+  @transient private[this] lazy val isNaN: Any => Boolean = child.dataType match {
+    case DoubleType => (value: Any) => java.lang.Double.isNaN(value.asInstanceOf[java.lang.Double])
+    case FloatType => (value: Any) => java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float])
+    case _ => (_: Any) => false
+  }
+  @transient private[this] lazy val hasNaN = child.dataType match {
+    case DoubleType | FloatType => set.exists(isNaN)
+    case _ => false
+  }
+
 
   override def nullable: Boolean = child.nullable || hasNull
 
@@ -562,6 +572,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   protected override def nullSafeEval(value: Any): Any = {
     if (set.contains(value)) {
       true
+    } else if (isNaN(value)) {
+      hasNaN
     } else if (hasNull) {
       null
     } else {
@@ -593,15 +605,34 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   private def genCodeWithSet(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
       val setTerm = ctx.addReferenceObj("set", set)
+
       val setIsNull = if (hasNull) {
         s"${ev.isNull} = !${ev.value};"
       } else {
         ""
       }
-      s"""
-         |${ev.value} = $setTerm.contains($c);
-         |$setIsNull
-       """.stripMargin
+
+      val isNaNCode = child.dataType match {
+        case DoubleType => Some((v: Any) => s"java.lang.Double.isNaN($v)")
+        case FloatType => Some((v: Any) => s"java.lang.Float.isNaN($v)")
+        case _ => None
+      }
+
+      if (hasNaN && isNaNCode.isDefined) {
+        s"""
+           |if ($setTerm.contains($c)) {
+           |  ${ev.value} = true;
+           |} else if (${isNaNCode.get(c)}) {
+           |  ${ev.value} = true;
+           |}
+           |$setIsNull
+         """.stripMargin
+      } else {
+        s"""
+           |${ev.value} = $setTerm.contains($c);
+           |$setIsNull
+         """.stripMargin
+      }
     })
   }
 

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.deploy
 
 import java.io.File
 import java.sql.Timestamp
@@ -25,33 +25,35 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
+import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.Utils
 
 trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
+
+  protected val defaultSparkSubmitTimeout: Span = 1.minute
 
   // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
   implicit val defaultSignaler: Signaler = ThreadSignaler
 
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
-  // This is copied from org.apache.spark.deploy.SparkSubmitSuite
   protected def runSparkSubmit(
       args: Seq[String],
       sparkHomeOpt: Option[String] = None,
+      timeout: Span = defaultSparkSubmitTimeout,
       isSparkTesting: Boolean = true): Unit = {
     val sparkHome = sparkHomeOpt.getOrElse(
       sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!")))
     val history = ArrayBuffer.empty[String]
     val sparkSubmit = if (Utils.isWindows) {
-      // On Windows, `ProcessBuilder.directory` does not change the current working directory.
-      new File("..\\..\\bin\\spark-submit.cmd").getAbsolutePath
+      new File(new File(sparkHome, "bin"), "spark-submit.cmd")
     } else {
-      "./bin/spark-submit"
+      new File(new File(sparkHome, "bin"), "spark-submit")
     }
-    val commands = Seq(sparkSubmit) ++ args
+    val commands = Seq(sparkSubmit.getCanonicalPath) ++ args
     val commandLine = commands.mkString("'", "' '", "'")
 
     val builder = new ProcessBuilder(commands: _*).directory(new File(sparkHome))
@@ -85,7 +87,7 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
     new ProcessOutputCapturer(process.getErrorStream, captureOutput("stderr")).start()
 
     try {
-      val exitCode = failAfter(300.seconds) { process.waitFor() }
+      val exitCode = failAfter(timeout) { process.waitFor() }
       if (exitCode != 0) {
         // include logs in output. Note that logging is async and may not have completed
         // at the time this exception is raised

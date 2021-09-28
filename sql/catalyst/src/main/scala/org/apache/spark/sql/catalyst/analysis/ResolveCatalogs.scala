@@ -88,9 +88,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         val namespace = if (ns.nonEmpty) Some(ns) else None
         SetCatalogAndNamespace(catalogManager, Some(catalog.name()), namespace)
       }
-
-    case ShowCurrentNamespaceStatement() =>
-      ShowCurrentNamespace(catalogManager)
   }
 
   object NonSessionCatalogAndTable {

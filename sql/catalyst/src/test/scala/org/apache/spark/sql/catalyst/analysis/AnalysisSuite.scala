@@ -921,23 +921,28 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     assertAnalysisError(r1,
       Seq("Union can only be performed on tables with the compatible column types. " +
-        "timestamp <> double at the second column of the second table"))
+        "The second column of the second table is timestamp type which is not compatible " +
+        "with double at same column of first table"))
 
     assertAnalysisError(r2,
       Seq("Union can only be performed on tables with the compatible column types. " +
-        "timestamp <> int at the third column of the second table"))
+        "The third column of the second table is timestamp type which is not compatible " +
+        "with int at same column of first table"))
 
     assertAnalysisError(r3,
       Seq("Union can only be performed on tables with the compatible column types. " +
-        "timestamp <> float at the 4th column of the second table"))
+        "The 4th column of the second table is timestamp type which is not compatible " +
+        "with float at same column of first table"))
 
     assertAnalysisError(r4,
       Seq("Except can only be performed on tables with the compatible column types. " +
-        "timestamp <> double at the second column of the second table"))
+        "The second column of the second table is timestamp type which is not compatible " +
+        "with double at same column of first table"))
 
     assertAnalysisError(r5,
       Seq("Intersect can only be performed on tables with the compatible column types. " +
-        "timestamp <> double at the second column of the second table"))
+        "The second column of the second table is timestamp type which is not compatible " +
+        "with double at same column of first table"))
   }
 
   test("SPARK-31975: Throw user facing error when use WindowFunction directly") {

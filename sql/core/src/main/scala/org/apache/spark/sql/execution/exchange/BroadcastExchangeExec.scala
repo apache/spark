@@ -113,7 +113,7 @@ case class BroadcastExchangeExec(
 
   @transient
   private lazy val maxBroadcastRows = mode match {
-    case HashedRelationBroadcastMode(key, _)
+    case HashedRelationBroadcastMode(key, _, _)
       // NOTE: LongHashedRelation is used for single key with LongType. This should be kept
       // consistent with HashedRelation.apply.
       if !(key.length == 1 && key.head.dataType == LongType) =>
