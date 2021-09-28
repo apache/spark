@@ -104,17 +104,18 @@ case class ScalarSubquery(
 }
 
 /**
- * The physical node of in-subquery. This is for Dynamic Partition Pruning only, as in-subquery
- * coming from the original query will always be converted to joins.
+ * The physical node of in-subquery. When this is used for Dynamic Partition Pruning, as the pruning
+ * happens at the driver side, we don't broadcast subquery result.
  */
 case class InSubqueryExec(
     child: Expression,
     plan: BaseSubqueryExec,
     exprId: ExprId,
-    private var resultBroadcast: Broadcast[Array[Any]] = null)
+    shouldBroadcast: Boolean = false,
+    private var resultBroadcast: Broadcast[Array[Any]] = null,
+    @transient private var result: Array[Any] = null)
   extends ExecSubqueryExpression with UnaryLike[Expression] {
 
-  @transient private var result: Array[Any] = _
   @transient private lazy val inSet = InSet(child, result.toSet)
 
   override def dataType: DataType = BooleanType
@@ -130,14 +131,17 @@ case class InSubqueryExec(
     } else {
       rows.map(_.get(0, child.dataType))
     }
-    resultBroadcast = plan.session.sparkContext.broadcast(result)
+    if (shouldBroadcast) {
+      resultBroadcast = plan.session.sparkContext.broadcast(result)
+    }
   }
 
-  def values(): Option[Array[Any]] = Option(resultBroadcast).map(_.value)
+  // This is used only by DPP where we don't need broadcast the result.
+  def values(): Option[Array[Any]] = Option(result)
 
   private def prepareResult(): Unit = {
-    require(resultBroadcast != null, s"$this has not finished")
-    if (result == null) {
+    require(result != null || resultBroadcast != null, s"$this has not finished")
+    if (result == null && resultBroadcast != null) {
       result = resultBroadcast.value
     }
   }
@@ -157,7 +161,8 @@ case class InSubqueryExec(
       child = child.canonicalized,
       plan = plan.canonicalized.asInstanceOf[BaseSubqueryExec],
       exprId = ExprId(0),
-      resultBroadcast = null)
+      resultBroadcast = null,
+      result = null)
   }
 
   override protected def withNewChildInternal(newChild: Expression): InSubqueryExec =
