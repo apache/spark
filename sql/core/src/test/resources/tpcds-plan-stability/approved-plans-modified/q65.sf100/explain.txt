@@ -153,7 +153,7 @@ Results [2]: [ss_store_sk#13, avg(revenue#21)#27 AS ave#28]
 
 (23) BroadcastExchange
 Input [2]: [ss_store_sk#13, ave#28]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#29]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#29]
 
 (24) BroadcastHashJoin [codegen id : 7]
 Left keys [1]: [ss_store_sk#2]
@@ -166,7 +166,7 @@ Input [5]: [ss_store_sk#2, ss_item_sk#1, revenue#11, ss_store_sk#13, ave#28]
 
 (26) BroadcastExchange
 Input [3]: [ss_store_sk#2, ss_item_sk#1, revenue#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#30]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#30]
 
 (27) Scan parquet default.store
 Output [2]: [s_store_sk#31, s_store_name#32]
@@ -193,7 +193,7 @@ Input [5]: [ss_store_sk#2, ss_item_sk#1, revenue#11, s_store_sk#31, s_store_name
 
 (32) BroadcastExchange
 Input [3]: [ss_item_sk#1, revenue#11, s_store_name#32]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#33]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#33]
 
 (33) Scan parquet default.item
 Output [5]: [i_item_sk#34, i_item_desc#35, i_current_price#36, i_wholesale_cost#37, i_brand#38]
@@ -252,7 +252,7 @@ Input [2]: [d_date_sk#6, d_month_seq#39]
 
 (43) BroadcastExchange
 Input [1]: [d_date_sk#6]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#40]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#40]
 
 Subquery:2 Hosting operator id = 11 Hosting Expression = ss_sold_date_sk#15 IN dynamicpruning#5
 

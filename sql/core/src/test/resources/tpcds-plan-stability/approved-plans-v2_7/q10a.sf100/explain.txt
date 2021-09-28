@@ -186,7 +186,7 @@ Input [2]: [ca_address_sk#19, ca_county#20]
 
 (33) BroadcastExchange
 Input [1]: [ca_address_sk#19]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#21]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#21]
 
 (34) BroadcastHashJoin [codegen id : 13]
 Left keys [1]: [c_current_addr_sk#3]
@@ -199,7 +199,7 @@ Input [3]: [c_current_cdemo_sk#2, c_current_addr_sk#3, ca_address_sk#19]
 
 (36) BroadcastExchange
 Input [1]: [c_current_cdemo_sk#2]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#22]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#22]
 
 (37) Scan parquet default.customer_demographics
 Output [9]: [cd_demo_sk#23, cd_gender#24, cd_marital_status#25, cd_education_status#26, cd_purchase_estimate#27, cd_credit_rating#28, cd_dep_count#29, cd_dep_employed_count#30, cd_dep_college_count#31]
@@ -276,7 +276,7 @@ Input [3]: [d_date_sk#8, d_year#42, d_moy#43]
 
 (50) BroadcastExchange
 Input [1]: [d_date_sk#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#44]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#44]
 
 Subquery:2 Hosting operator id = 14 Hosting Expression = ws_sold_date_sk#11 IN dynamicpruning#7
 

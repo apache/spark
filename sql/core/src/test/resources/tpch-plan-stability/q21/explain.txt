@@ -82,7 +82,7 @@ Input [2]: [l_orderkey#8, l_suppkey#9]
 
 (10) BroadcastExchange
 Input [2]: [l_orderkey#8, l_suppkey#9]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#10]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false,false), [id=#10]
 
 (11) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [l_orderkey#4]
@@ -109,7 +109,7 @@ Input [4]: [l_orderkey#11, l_suppkey#12, l_commitdate#13, l_receiptdate#14]
 
 (16) BroadcastExchange
 Input [2]: [l_orderkey#11, l_suppkey#12]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#15]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false,false), [id=#15]
 
 (17) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [l_orderkey#4]
@@ -118,7 +118,7 @@ Join condition: NOT (l_suppkey#12 = l_suppkey#5)
 
 (18) BroadcastExchange
 Input [2]: [l_orderkey#4, l_suppkey#5]
-Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false), [id=#16]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false,false), [id=#16]
 
 (19) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [s_suppkey#1]
@@ -149,7 +149,7 @@ Input [2]: [o_orderkey#17, o_orderstatus#18]
 
 (25) BroadcastExchange
 Input [1]: [o_orderkey#17]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#19]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false,false), [id=#19]
 
 (26) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [l_orderkey#4]
@@ -180,7 +180,7 @@ Input [2]: [n_nationkey#20, n_name#21]
 
 (32) BroadcastExchange
 Input [1]: [n_nationkey#20]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#22]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false,false), [id=#22]
 
 (33) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [s_nationkey#3]

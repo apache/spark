@@ -72,7 +72,8 @@ case class ShuffledHashJoinExec(
       buildBoundKeys,
       taskMemoryManager = context.taskMemoryManager(),
       // Full outer join needs support for NULL key in HashedRelation.
-      allowsNullKey = joinType == FullOuter)
+      allowsNullKey = joinType == FullOuter,
+      ignoresDuplicatedKey = ignoreDuplicatedKey)
     buildTime += NANOSECONDS.toMillis(System.nanoTime() - start)
     buildDataSize += relation.estimatedSize
     // This relation is usually used until the end of task.

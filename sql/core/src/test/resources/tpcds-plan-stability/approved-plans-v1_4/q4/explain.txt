@@ -140,7 +140,7 @@ Condition : isnotnull(ss_customer_sk#9)
 
 (7) BroadcastExchange
 Input [6]: [ss_customer_sk#9, ss_ext_discount_amt#10, ss_ext_sales_price#11, ss_ext_wholesale_cost#12, ss_ext_list_price#13, ss_sold_date_sk#14]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#16]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#16]
 
 (8) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [c_customer_sk#1]
@@ -216,7 +216,7 @@ Condition : isnotnull(ss_customer_sk#35)
 
 (23) BroadcastExchange
 Input [6]: [ss_customer_sk#35, ss_ext_discount_amt#36, ss_ext_sales_price#37, ss_ext_wholesale_cost#38, ss_ext_list_price#39, ss_sold_date_sk#40]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#42]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#42]
 
 (24) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [c_customer_sk#27]
@@ -259,7 +259,7 @@ Results [8]: [c_customer_id#28 AS customer_id#50, c_first_name#29 AS customer_fi
 
 (32) BroadcastExchange
 Input [8]: [customer_id#50, customer_first_name#51, customer_last_name#52, customer_preferred_cust_flag#53, customer_birth_country#54, customer_login#55, customer_email_address#56, year_total#57]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#58]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false,false), [id=#58]
 
 (33) BroadcastHashJoin [codegen id : 24]
 Left keys [1]: [customer_id#25]
@@ -297,7 +297,7 @@ Condition : isnotnull(cs_bill_customer_sk#67)
 
 (40) BroadcastExchange
 Input [6]: [cs_bill_customer_sk#67, cs_ext_discount_amt#68, cs_ext_sales_price#69, cs_ext_wholesale_cost#70, cs_ext_list_price#71, cs_sold_date_sk#72]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#73]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#73]
 
 (41) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [c_customer_sk#59]
@@ -344,7 +344,7 @@ Condition : (isnotnull(year_total#83) AND (year_total#83 > 0.000000))
 
 (50) BroadcastExchange
 Input [2]: [customer_id#82, year_total#83]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#84]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false,false), [id=#84]
 
 (51) BroadcastHashJoin [codegen id : 24]
 Left keys [1]: [customer_id#25]
@@ -386,7 +386,7 @@ Condition : isnotnull(cs_bill_customer_sk#93)
 
 (59) BroadcastExchange
 Input [6]: [cs_bill_customer_sk#93, cs_ext_discount_amt#94, cs_ext_sales_price#95, cs_ext_wholesale_cost#96, cs_ext_list_price#97, cs_sold_date_sk#98]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#99]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#99]
 
 (60) BroadcastHashJoin [codegen id : 14]
 Left keys [1]: [c_customer_sk#85]
@@ -429,7 +429,7 @@ Results [2]: [c_customer_id#86 AS customer_id#107, sum(CheckOverflow((promote_pr
 
 (68) BroadcastExchange
 Input [2]: [customer_id#107, year_total#108]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#109]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false,false), [id=#109]
 
 (69) BroadcastHashJoin [codegen id : 24]
 Left keys [1]: [customer_id#25]
@@ -471,7 +471,7 @@ Condition : isnotnull(ws_bill_customer_sk#118)
 
 (77) BroadcastExchange
 Input [6]: [ws_bill_customer_sk#118, ws_ext_discount_amt#119, ws_ext_sales_price#120, ws_ext_wholesale_cost#121, ws_ext_list_price#122, ws_sold_date_sk#123]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#124]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#124]
 
 (78) BroadcastHashJoin [codegen id : 18]
 Left keys [1]: [c_customer_sk#110]
@@ -518,7 +518,7 @@ Condition : (isnotnull(year_total#134) AND (year_total#134 > 0.000000))
 
 (87) BroadcastExchange
 Input [2]: [customer_id#133, year_total#134]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#135]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false,false), [id=#135]
 
 (88) BroadcastHashJoin [codegen id : 24]
 Left keys [1]: [customer_id#25]
@@ -560,7 +560,7 @@ Condition : isnotnull(ws_bill_customer_sk#144)
 
 (96) BroadcastExchange
 Input [6]: [ws_bill_customer_sk#144, ws_ext_discount_amt#145, ws_ext_sales_price#146, ws_ext_wholesale_cost#147, ws_ext_list_price#148, ws_sold_date_sk#149]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#150]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#150]
 
 (97) BroadcastHashJoin [codegen id : 22]
 Left keys [1]: [c_customer_sk#136]
@@ -603,7 +603,7 @@ Results [2]: [c_customer_id#137 AS customer_id#158, sum(CheckOverflow((promote_p
 
 (105) BroadcastExchange
 Input [2]: [customer_id#158, year_total#159]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#160]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false,false), [id=#160]
 
 (106) BroadcastHashJoin [codegen id : 24]
 Left keys [1]: [customer_id#25]
@@ -643,7 +643,7 @@ Condition : ((isnotnull(d_year#18) AND (d_year#18 = 2001)) AND isnotnull(d_date_
 
 (112) BroadcastExchange
 Input [2]: [d_date_sk#17, d_year#18]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#161]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#161]
 
 Subquery:2 Hosting operator id = 20 Hosting Expression = ss_sold_date_sk#40 IN dynamicpruning#41
 BroadcastExchange (116)
@@ -668,7 +668,7 @@ Condition : ((isnotnull(d_year#44) AND (d_year#44 = 2002)) AND isnotnull(d_date_
 
 (116) BroadcastExchange
 Input [2]: [d_date_sk#43, d_year#44]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#162]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#162]
 
 Subquery:3 Hosting operator id = 37 Hosting Expression = cs_sold_date_sk#72 IN dynamicpruning#15
 
