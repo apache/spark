@@ -21,15 +21,10 @@ A collections of builtin functions
 import sys
 import functools
 import warnings
-from typing import Any, Callable, Dict, List, overload, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, overload, Optional, Tuple, TYPE_CHECKING, Union
 
 from pyspark import since, SparkContext
 from pyspark.rdd import PythonEvalType
-from pyspark.sql._typing import (
-    ColumnOrName,
-    DataTypeOrString,
-    UserDefinedFunctionLike,
-)
 from pyspark.sql.column import (  # type: ignore[attr-defined]
     Column,
     _to_java_column,
@@ -43,6 +38,13 @@ from pyspark.sql.udf import UserDefinedFunction, _create_udf  # type: ignore[att
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
 from pyspark.sql.utils import to_str
+
+if TYPE_CHECKING:
+    from pyspark.sql._typing import (
+        ColumnOrName,
+        DataTypeOrString,
+        UserDefinedFunctionLike,
+    )
 
 
 # Note to developers: all of PySpark functions here take string as column names whenever possible.
@@ -72,7 +74,7 @@ def _invoke_function(name: str, *args: Any) -> Column:
     return Column(jf(*args))
 
 
-def _invoke_function_over_column(name: str, col: ColumnOrName) -> Column:
+def _invoke_function_over_column(name: str, col: "ColumnOrName") -> Column:
     """
     Invokes unary JVM function identified by name
     and wraps the result with :class:`~pyspark.sql.Column`.
@@ -132,7 +134,7 @@ column = col
 
 
 @since(1.3)
-def asc(col: ColumnOrName) -> Column:
+def asc(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the ascending order of the given column name.
     """
@@ -143,7 +145,7 @@ def asc(col: ColumnOrName) -> Column:
 
 
 @since(1.3)
-def desc(col: ColumnOrName) -> Column:
+def desc(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the descending order of the given column name.
     """
@@ -154,7 +156,7 @@ def desc(col: ColumnOrName) -> Column:
 
 
 @since(1.3)
-def sqrt(col: ColumnOrName) -> Column:
+def sqrt(col: "ColumnOrName") -> Column:
     """
     Computes the square root of the specified float value.
     """
@@ -162,7 +164,7 @@ def sqrt(col: ColumnOrName) -> Column:
 
 
 @since(1.3)
-def abs(col: ColumnOrName) -> Column:
+def abs(col: "ColumnOrName") -> Column:
     """
     Computes the absolute value.
     """
@@ -170,7 +172,7 @@ def abs(col: ColumnOrName) -> Column:
 
 
 @since(1.3)
-def max(col: ColumnOrName) -> Column:
+def max(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the maximum value of the expression in a group.
     """
@@ -178,7 +180,7 @@ def max(col: ColumnOrName) -> Column:
 
 
 @since(1.3)
-def min(col: ColumnOrName) -> Column:
+def min(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the minimum value of the expression in a group.
     """
@@ -186,7 +188,7 @@ def min(col: ColumnOrName) -> Column:
 
 
 @since(1.3)
-def count(col: ColumnOrName) -> Column:
+def count(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the number of items in a group.
     """
@@ -194,7 +196,7 @@ def count(col: ColumnOrName) -> Column:
 
 
 @since(1.3)
-def sum(col: ColumnOrName) -> Column:
+def sum(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the sum of all values in the expression.
     """
@@ -202,7 +204,7 @@ def sum(col: ColumnOrName) -> Column:
 
 
 @since(1.3)
-def avg(col: ColumnOrName) -> Column:
+def avg(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the average of the values in a group.
     """
@@ -210,7 +212,7 @@ def avg(col: ColumnOrName) -> Column:
 
 
 @since(1.3)
-def mean(col: ColumnOrName) -> Column:
+def mean(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the average of the values in a group.
     """
@@ -218,7 +220,7 @@ def mean(col: ColumnOrName) -> Column:
 
 
 @since(1.3)
-def sumDistinct(col: ColumnOrName) -> Column:
+def sumDistinct(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the sum of distinct values in the expression.
 
@@ -230,14 +232,14 @@ def sumDistinct(col: ColumnOrName) -> Column:
 
 
 @since(3.2)
-def sum_distinct(col: ColumnOrName) -> Column:
+def sum_distinct(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the sum of distinct values in the expression.
     """
     return _invoke_function_over_column("sum_distinct", col)
 
 
-def product(col: ColumnOrName) -> Column:
+def product(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the product of the values in a group.
 
@@ -265,7 +267,7 @@ def product(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("product", col)
 
 
-def acos(col: ColumnOrName) -> Column:
+def acos(col: "ColumnOrName") -> Column:
     """
     Computes inverse cosine of the input column.
 
@@ -279,7 +281,7 @@ def acos(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("acos", col)
 
 
-def acosh(col: ColumnOrName) -> Column:
+def acosh(col: "ColumnOrName") -> Column:
     """
     Computes inverse hyperbolic cosine of the input column.
 
@@ -292,7 +294,7 @@ def acosh(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("acosh", col)
 
 
-def asin(col: ColumnOrName) -> Column:
+def asin(col: "ColumnOrName") -> Column:
     """
     Computes inverse sine of the input column.
 
@@ -307,7 +309,7 @@ def asin(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("asin", col)
 
 
-def asinh(col: ColumnOrName) -> Column:
+def asinh(col: "ColumnOrName") -> Column:
     """
     Computes inverse hyperbolic sine of the input column.
 
@@ -320,7 +322,7 @@ def asinh(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("asinh", col)
 
 
-def atan(col: ColumnOrName) -> Column:
+def atan(col: "ColumnOrName") -> Column:
     """
     Compute inverse tangent of the input column.
 
@@ -334,7 +336,7 @@ def atan(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("atan", col)
 
 
-def atanh(col: ColumnOrName) -> Column:
+def atanh(col: "ColumnOrName") -> Column:
     """
     Computes inverse hyperbolic tangent of the input column.
 
@@ -348,7 +350,7 @@ def atanh(col: ColumnOrName) -> Column:
 
 
 @since(1.4)
-def cbrt(col: ColumnOrName) -> Column:
+def cbrt(col: "ColumnOrName") -> Column:
     """
     Computes the cube-root of the given value.
     """
@@ -356,14 +358,14 @@ def cbrt(col: ColumnOrName) -> Column:
 
 
 @since(1.4)
-def ceil(col: ColumnOrName) -> Column:
+def ceil(col: "ColumnOrName") -> Column:
     """
     Computes the ceiling of the given value.
     """
     return _invoke_function_over_column("ceil", col)
 
 
-def cos(col: ColumnOrName) -> Column:
+def cos(col: "ColumnOrName") -> Column:
     """
     Computes cosine of the input column.
 
@@ -382,7 +384,7 @@ def cos(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("cos", col)
 
 
-def cosh(col: ColumnOrName) -> Column:
+def cosh(col: "ColumnOrName") -> Column:
     """
     Computes hyperbolic cosine of the input column.
 
@@ -401,7 +403,7 @@ def cosh(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("cosh", col)
 
 
-def cot(col: ColumnOrName) -> Column:
+def cot(col: "ColumnOrName") -> Column:
     """
     Computes cotangent of the input column.
 
@@ -420,7 +422,7 @@ def cot(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("cot", col)
 
 
-def csc(col: ColumnOrName) -> Column:
+def csc(col: "ColumnOrName") -> Column:
     """
     Computes cosecant of the input column.
 
@@ -440,7 +442,7 @@ def csc(col: ColumnOrName) -> Column:
 
 
 @since(1.4)
-def exp(col: ColumnOrName) -> Column:
+def exp(col: "ColumnOrName") -> Column:
     """
     Computes the exponential of the given value.
     """
@@ -448,7 +450,7 @@ def exp(col: ColumnOrName) -> Column:
 
 
 @since(1.4)
-def expm1(col: ColumnOrName) -> Column:
+def expm1(col: "ColumnOrName") -> Column:
     """
     Computes the exponential of the given value minus one.
     """
@@ -456,7 +458,7 @@ def expm1(col: ColumnOrName) -> Column:
 
 
 @since(1.4)
-def floor(col: ColumnOrName) -> Column:
+def floor(col: "ColumnOrName") -> Column:
     """
     Computes the floor of the given value.
     """
@@ -464,7 +466,7 @@ def floor(col: ColumnOrName) -> Column:
 
 
 @since(1.4)
-def log(col: ColumnOrName) -> Column:
+def log(col: "ColumnOrName") -> Column:
     """
     Computes the natural logarithm of the given value.
     """
@@ -472,7 +474,7 @@ def log(col: ColumnOrName) -> Column:
 
 
 @since(1.4)
-def log10(col: ColumnOrName) -> Column:
+def log10(col: "ColumnOrName") -> Column:
     """
     Computes the logarithm of the given value in Base 10.
     """
@@ -480,7 +482,7 @@ def log10(col: ColumnOrName) -> Column:
 
 
 @since(1.4)
-def log1p(col: ColumnOrName) -> Column:
+def log1p(col: "ColumnOrName") -> Column:
     """
     Computes the natural logarithm of the given value plus one.
     """
@@ -488,7 +490,7 @@ def log1p(col: ColumnOrName) -> Column:
 
 
 @since(1.4)
-def rint(col: ColumnOrName) -> Column:
+def rint(col: "ColumnOrName") -> Column:
     """
     Returns the double value that is closest in value to the argument and
     is equal to a mathematical integer.
@@ -496,7 +498,7 @@ def rint(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("rint", col)
 
 
-def sec(col: ColumnOrName) -> Column:
+def sec(col: "ColumnOrName") -> Column:
     """
     Computes secant of the input column.
 
@@ -516,14 +518,14 @@ def sec(col: ColumnOrName) -> Column:
 
 
 @since(1.4)
-def signum(col: ColumnOrName) -> Column:
+def signum(col: "ColumnOrName") -> Column:
     """
     Computes the signum of the given value.
     """
     return _invoke_function_over_column("signum", col)
 
 
-def sin(col: ColumnOrName) -> Column:
+def sin(col: "ColumnOrName") -> Column:
     """
     Computes sine of the input column.
 
@@ -541,7 +543,7 @@ def sin(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("sin", col)
 
 
-def sinh(col: ColumnOrName) -> Column:
+def sinh(col: "ColumnOrName") -> Column:
     """
     Computes hyperbolic sine of the input column.
 
@@ -561,7 +563,7 @@ def sinh(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("sinh", col)
 
 
-def tan(col: ColumnOrName) -> Column:
+def tan(col: "ColumnOrName") -> Column:
     """
     Computes tangent of the input column.
 
@@ -580,7 +582,7 @@ def tan(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("tan", col)
 
 
-def tanh(col: ColumnOrName) -> Column:
+def tanh(col: "ColumnOrName") -> Column:
     """
     Computes hyperbolic tangent of the input column.
 
@@ -601,7 +603,7 @@ def tanh(col: ColumnOrName) -> Column:
 
 
 @since(1.4)
-def toDegrees(col: ColumnOrName) -> Column:
+def toDegrees(col: "ColumnOrName") -> Column:
     """
     .. deprecated:: 2.1.0
         Use :func:`degrees` instead.
@@ -611,7 +613,7 @@ def toDegrees(col: ColumnOrName) -> Column:
 
 
 @since(1.4)
-def toRadians(col: ColumnOrName) -> Column:
+def toRadians(col: "ColumnOrName") -> Column:
     """
     .. deprecated:: 2.1.0
         Use :func:`radians` instead.
@@ -621,7 +623,7 @@ def toRadians(col: ColumnOrName) -> Column:
 
 
 @since(1.4)
-def bitwiseNOT(col: ColumnOrName) -> Column:
+def bitwiseNOT(col: "ColumnOrName") -> Column:
     """
     Computes bitwise not.
 
@@ -633,7 +635,7 @@ def bitwiseNOT(col: ColumnOrName) -> Column:
 
 
 @since(3.2)
-def bitwise_not(col: ColumnOrName) -> Column:
+def bitwise_not(col: "ColumnOrName") -> Column:
     """
     Computes bitwise not.
     """
@@ -641,7 +643,7 @@ def bitwise_not(col: ColumnOrName) -> Column:
 
 
 @since(2.4)
-def asc_nulls_first(col: ColumnOrName) -> Column:
+def asc_nulls_first(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the ascending order of the given
     column name, and null values return before non-null values.
@@ -653,7 +655,7 @@ def asc_nulls_first(col: ColumnOrName) -> Column:
 
 
 @since(2.4)
-def asc_nulls_last(col: ColumnOrName) -> Column:
+def asc_nulls_last(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the ascending order of the given
     column name, and null values appear after non-null values.
@@ -665,7 +667,7 @@ def asc_nulls_last(col: ColumnOrName) -> Column:
 
 
 @since(2.4)
-def desc_nulls_first(col: ColumnOrName) -> Column:
+def desc_nulls_first(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the descending order of the given
     column name, and null values appear before non-null values.
@@ -677,7 +679,7 @@ def desc_nulls_first(col: ColumnOrName) -> Column:
 
 
 @since(2.4)
-def desc_nulls_last(col: ColumnOrName) -> Column:
+def desc_nulls_last(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the descending order of the given
     column name, and null values appear after non-null values.
@@ -689,7 +691,7 @@ def desc_nulls_last(col: ColumnOrName) -> Column:
 
 
 @since(1.6)
-def stddev(col: ColumnOrName) -> Column:
+def stddev(col: "ColumnOrName") -> Column:
     """
     Aggregate function: alias for stddev_samp.
     """
@@ -697,7 +699,7 @@ def stddev(col: ColumnOrName) -> Column:
 
 
 @since(1.6)
-def stddev_samp(col: ColumnOrName) -> Column:
+def stddev_samp(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the unbiased sample standard deviation of
     the expression in a group.
@@ -706,7 +708,7 @@ def stddev_samp(col: ColumnOrName) -> Column:
 
 
 @since(1.6)
-def stddev_pop(col: ColumnOrName) -> Column:
+def stddev_pop(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns population standard deviation of
     the expression in a group.
@@ -715,7 +717,7 @@ def stddev_pop(col: ColumnOrName) -> Column:
 
 
 @since(1.6)
-def variance(col: ColumnOrName) -> Column:
+def variance(col: "ColumnOrName") -> Column:
     """
     Aggregate function: alias for var_samp
     """
@@ -723,7 +725,7 @@ def variance(col: ColumnOrName) -> Column:
 
 
 @since(1.6)
-def var_samp(col: ColumnOrName) -> Column:
+def var_samp(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the unbiased sample variance of
     the values in a group.
@@ -732,7 +734,7 @@ def var_samp(col: ColumnOrName) -> Column:
 
 
 @since(1.6)
-def var_pop(col: ColumnOrName) -> Column:
+def var_pop(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the population variance of the values in a group.
     """
@@ -740,7 +742,7 @@ def var_pop(col: ColumnOrName) -> Column:
 
 
 @since(1.6)
-def skewness(col: ColumnOrName) -> Column:
+def skewness(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the skewness of the values in a group.
     """
@@ -748,14 +750,14 @@ def skewness(col: ColumnOrName) -> Column:
 
 
 @since(1.6)
-def kurtosis(col: ColumnOrName) -> Column:
+def kurtosis(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the kurtosis of the values in a group.
     """
     return _invoke_function_over_column("kurtosis", col)
 
 
-def collect_list(col: ColumnOrName) -> Column:
+def collect_list(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns a list of objects with duplicates.
 
@@ -775,7 +777,7 @@ def collect_list(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("collect_list", col)
 
 
-def collect_set(col: ColumnOrName) -> Column:
+def collect_set(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns a set of objects with duplicate elements eliminated.
 
@@ -795,7 +797,7 @@ def collect_set(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("collect_set", col)
 
 
-def degrees(col: ColumnOrName) -> Column:
+def degrees(col: "ColumnOrName") -> Column:
     """
     Converts an angle measured in radians to an approximately equivalent angle
     measured in degrees.
@@ -815,7 +817,7 @@ def degrees(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("degrees", col)
 
 
-def radians(col: ColumnOrName) -> Column:
+def radians(col: "ColumnOrName") -> Column:
     """
     Converts an angle measured in degrees to an approximately equivalent angle
     measured in radians.
@@ -836,21 +838,21 @@ def radians(col: ColumnOrName) -> Column:
 
 
 @overload
-def atan2(col1: ColumnOrName, col2: ColumnOrName) -> Column:
+def atan2(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     ...
 
 
 @overload
-def atan2(col1: float, col2: ColumnOrName) -> Column:
+def atan2(col1: float, col2: "ColumnOrName") -> Column:
     ...
 
 
 @overload
-def atan2(col1: ColumnOrName, col2: float) -> Column:
+def atan2(col1: "ColumnOrName", col2: float) -> Column:
     ...
 
 
-def atan2(col1: Union[ColumnOrName, float], col2: Union[ColumnOrName, float]) -> Column:
+def atan2(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) -> Column:
     """
     .. versionadded:: 1.4.0
 
@@ -874,22 +876,22 @@ def atan2(col1: Union[ColumnOrName, float], col2: Union[ColumnOrName, float]) ->
 
 
 @overload
-def hypot(col1: ColumnOrName, col2: ColumnOrName) -> Column:
+def hypot(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     ...
 
 
 @overload
-def hypot(col1: float, col2: ColumnOrName) -> Column:
+def hypot(col1: float, col2: "ColumnOrName") -> Column:
     ...
 
 
 @overload
-def hypot(col1: ColumnOrName, col2: float) -> Column:
+def hypot(col1: "ColumnOrName", col2: float) -> Column:
     ...
 
 
 @since(1.4)
-def hypot(col1: Union[ColumnOrName, float], col2: Union[ColumnOrName, float]) -> Column:
+def hypot(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) -> Column:
     """
     Computes ``sqrt(a^2 + b^2)`` without intermediate overflow or underflow.
     """
@@ -897,22 +899,22 @@ def hypot(col1: Union[ColumnOrName, float], col2: Union[ColumnOrName, float]) ->
 
 
 @overload
-def pow(col1: ColumnOrName, col2: ColumnOrName) -> Column:
+def pow(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     ...
 
 
 @overload
-def pow(col1: float, col2: ColumnOrName) -> Column:
+def pow(col1: float, col2: "ColumnOrName") -> Column:
     ...
 
 
 @overload
-def pow(col1: ColumnOrName, col2: float) -> Column:
+def pow(col1: "ColumnOrName", col2: float) -> Column:
     ...
 
 
 @since(1.4)
-def pow(col1: Union[ColumnOrName, float], col2: Union[ColumnOrName, float]) -> Column:
+def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) -> Column:
     """
     Returns the value of the first argument raised to the power of the second argument.
     """
@@ -977,7 +979,7 @@ def percent_rank() -> Column:
 
 
 @since(1.3)
-def approxCountDistinct(col: ColumnOrName, rsd: Optional[float] = None) -> Column:
+def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
     """
     .. deprecated:: 2.1.0
         Use :func:`approx_count_distinct` instead.
@@ -986,7 +988,7 @@ def approxCountDistinct(col: ColumnOrName, rsd: Optional[float] = None) -> Colum
     return approx_count_distinct(col, rsd)
 
 
-def approx_count_distinct(col: ColumnOrName, rsd: Optional[float] = None) -> Column:
+def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
     """Aggregate function: returns a new :class:`~pyspark.sql.Column` for approximate distinct count
     of column `col`.
 
@@ -1020,7 +1022,7 @@ def broadcast(df: DataFrame) -> DataFrame:
     return DataFrame(sc._jvm.functions.broadcast(df._jdf), df.sql_ctx)
 
 
-def coalesce(*cols: ColumnOrName) -> Column:
+def coalesce(*cols: "ColumnOrName") -> Column:
     """Returns the first column that is not null.
 
     .. versionadded:: 1.4.0
@@ -1060,7 +1062,7 @@ def coalesce(*cols: ColumnOrName) -> Column:
     return Column(jc)
 
 
-def corr(col1: ColumnOrName, col2: ColumnOrName) -> Column:
+def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """Returns a new :class:`~pyspark.sql.Column` for the Pearson Correlation Coefficient for
     ``col1`` and ``col2``.
 
@@ -1078,7 +1080,7 @@ def corr(col1: ColumnOrName, col2: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.corr(_to_java_column(col1), _to_java_column(col2)))
 
 
-def covar_pop(col1: ColumnOrName, col2: ColumnOrName) -> Column:
+def covar_pop(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """Returns a new :class:`~pyspark.sql.Column` for the population covariance of ``col1`` and
     ``col2``.
 
@@ -1096,7 +1098,7 @@ def covar_pop(col1: ColumnOrName, col2: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.covar_pop(_to_java_column(col1), _to_java_column(col2)))
 
 
-def covar_samp(col1: ColumnOrName, col2: ColumnOrName) -> Column:
+def covar_samp(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """Returns a new :class:`~pyspark.sql.Column` for the sample covariance of ``col1`` and
     ``col2``.
 
@@ -1114,7 +1116,7 @@ def covar_samp(col1: ColumnOrName, col2: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.covar_samp(_to_java_column(col1), _to_java_column(col2)))
 
 
-def countDistinct(col: ColumnOrName, *cols: ColumnOrName) -> Column:
+def countDistinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     """Returns a new :class:`~pyspark.sql.Column` for distinct count of ``col`` or ``cols``.
 
     An alias of :func:`count_distinct`, and it is encouraged to use :func:`count_distinct`
@@ -1125,7 +1127,7 @@ def countDistinct(col: ColumnOrName, *cols: ColumnOrName) -> Column:
     return count_distinct(col, *cols)
 
 
-def count_distinct(col: ColumnOrName, *cols: ColumnOrName) -> Column:
+def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
 
     .. versionadded:: 3.2.0
@@ -1143,7 +1145,7 @@ def count_distinct(col: ColumnOrName, *cols: ColumnOrName) -> Column:
     return Column(jc)
 
 
-def first(col: ColumnOrName, ignorenulls: bool = False) -> Column:
+def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     """Aggregate function: returns the first value in a group.
 
     The function by default returns the first values it sees. It will return the first non-null
@@ -1161,7 +1163,7 @@ def first(col: ColumnOrName, ignorenulls: bool = False) -> Column:
     return Column(jc)
 
 
-def grouping(col: ColumnOrName) -> Column:
+def grouping(col: "ColumnOrName") -> Column:
     """
     Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
     or not, returns 1 for aggregated or 0 for not aggregated in the result set.
@@ -1184,7 +1186,7 @@ def grouping(col: ColumnOrName) -> Column:
     return Column(jc)
 
 
-def grouping_id(*cols: ColumnOrName) -> Column:
+def grouping_id(*cols: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the level of grouping, equals to
 
@@ -1221,7 +1223,7 @@ def input_file_name() -> Column:
     return Column(sc._jvm.functions.input_file_name())
 
 
-def isnan(col: ColumnOrName) -> Column:
+def isnan(col: "ColumnOrName") -> Column:
     """An expression that returns true iff the column is NaN.
 
     .. versionadded:: 1.6.0
@@ -1236,7 +1238,7 @@ def isnan(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.isnan(_to_java_column(col)))
 
 
-def isnull(col: ColumnOrName) -> Column:
+def isnull(col: "ColumnOrName") -> Column:
     """An expression that returns true iff the column is null.
 
     .. versionadded:: 1.6.0
@@ -1251,7 +1253,7 @@ def isnull(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.isnull(_to_java_column(col)))
 
 
-def last(col: ColumnOrName, ignorenulls: bool = False) -> Column:
+def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     """Aggregate function: returns the last value in a group.
 
     The function by default returns the last values it sees. It will return the last non-null
@@ -1295,7 +1297,7 @@ def monotonically_increasing_id() -> Column:
     return Column(sc._jvm.functions.monotonically_increasing_id())
 
 
-def nanvl(col1: ColumnOrName, col2: ColumnOrName) -> Column:
+def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """Returns col1 if it is not NaN, or col2 if col1 is NaN.
 
     Both inputs should be floating point columns (:class:`DoubleType` or :class:`FloatType`).
@@ -1313,7 +1315,7 @@ def nanvl(col1: ColumnOrName, col2: ColumnOrName) -> Column:
 
 
 def percentile_approx(
-    col: ColumnOrName,
+    col: "ColumnOrName",
     percentage: Union[Column, float, List[float], Tuple[float]],
     accuracy: Union[Column, float] = 10000,
 ) -> Column:
@@ -1422,7 +1424,7 @@ def randn(seed: Optional[int] = None) -> Column:
     return Column(jc)
 
 
-def round(col: ColumnOrName, scale: int = 0) -> Column:
+def round(col: "ColumnOrName", scale: int = 0) -> Column:
     """
     Round the given value to `scale` decimal places using HALF_UP rounding mode if `scale` >= 0
     or at integral part when `scale` < 0.
@@ -1438,7 +1440,7 @@ def round(col: ColumnOrName, scale: int = 0) -> Column:
     return Column(sc._jvm.functions.round(_to_java_column(col), scale))
 
 
-def bround(col: ColumnOrName, scale: int = 0) -> Column:
+def bround(col: "ColumnOrName", scale: int = 0) -> Column:
     """
     Round the given value to `scale` decimal places using HALF_EVEN rounding mode if `scale` >= 0
     or at integral part when `scale` < 0.
@@ -1454,7 +1456,7 @@ def bround(col: ColumnOrName, scale: int = 0) -> Column:
     return Column(sc._jvm.functions.bround(_to_java_column(col), scale))
 
 
-def shiftLeft(col: ColumnOrName, numBits: int) -> Column:
+def shiftLeft(col: "ColumnOrName", numBits: int) -> Column:
     """Shift the given value numBits left.
 
     .. versionadded:: 1.5.0
@@ -1466,7 +1468,7 @@ def shiftLeft(col: ColumnOrName, numBits: int) -> Column:
     return shiftleft(col, numBits)
 
 
-def shiftleft(col: ColumnOrName, numBits: int) -> Column:
+def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
     """Shift the given value numBits left.
 
     .. versionadded:: 3.2.0
@@ -1480,7 +1482,7 @@ def shiftleft(col: ColumnOrName, numBits: int) -> Column:
     return Column(sc._jvm.functions.shiftleft(_to_java_column(col), numBits))
 
 
-def shiftRight(col: ColumnOrName, numBits: int) -> Column:
+def shiftRight(col: "ColumnOrName", numBits: int) -> Column:
     """(Signed) shift the given value numBits right.
 
     .. versionadded:: 1.5.0
@@ -1492,7 +1494,7 @@ def shiftRight(col: ColumnOrName, numBits: int) -> Column:
     return shiftright(col, numBits)
 
 
-def shiftright(col: ColumnOrName, numBits: int) -> Column:
+def shiftright(col: "ColumnOrName", numBits: int) -> Column:
     """(Signed) shift the given value numBits right.
 
     .. versionadded:: 3.2.0
@@ -1507,7 +1509,7 @@ def shiftright(col: ColumnOrName, numBits: int) -> Column:
     return Column(jc)
 
 
-def shiftRightUnsigned(col: ColumnOrName, numBits: int) -> Column:
+def shiftRightUnsigned(col: "ColumnOrName", numBits: int) -> Column:
     """Unsigned shift the given value numBits right.
 
     .. versionadded:: 1.5.0
@@ -1519,7 +1521,7 @@ def shiftRightUnsigned(col: ColumnOrName, numBits: int) -> Column:
     return shiftrightunsigned(col, numBits)
 
 
-def shiftrightunsigned(col: ColumnOrName, numBits: int) -> Column:
+def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
     """Unsigned shift the given value numBits right.
 
     .. versionadded:: 3.2.0
@@ -1567,7 +1569,7 @@ def expr(str: str) -> Column:
     return Column(sc._jvm.functions.expr(str))
 
 
-def struct(*cols: ColumnOrName) -> Column:
+def struct(*cols: "ColumnOrName") -> Column:
     """Creates a new struct column.
 
     .. versionadded:: 1.4.0
@@ -1591,7 +1593,7 @@ def struct(*cols: ColumnOrName) -> Column:
     return Column(jc)
 
 
-def greatest(*cols: ColumnOrName) -> Column:
+def greatest(*cols: "ColumnOrName") -> Column:
     """
     Returns the greatest value of the list of column names, skipping null values.
     This function takes at least 2 parameters. It will return null iff all parameters are null.
@@ -1658,16 +1660,16 @@ def when(condition: Column, value: Any) -> Column:
 
 
 @overload   # type: ignore[no-redef]
-def log(arg1: ColumnOrName) -> Column:
+def log(arg1: "ColumnOrName") -> Column:
     ...
 
 
 @overload
-def log(arg1: float, arg2: ColumnOrName) -> Column:
+def log(arg1: float, arg2: "ColumnOrName") -> Column:
     ...
 
 
-def log(arg1: Union[ColumnOrName, float], arg2: Optional[ColumnOrName] = None) -> Column:
+def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = None) -> Column:
     """Returns the first argument-based logarithm of the second argument.
 
     If there is only one argument, then this takes the natural logarithm of the argument.
@@ -1690,7 +1692,7 @@ def log(arg1: Union[ColumnOrName, float], arg2: Optional[ColumnOrName] = None) -
     return Column(jc)
 
 
-def log2(col: ColumnOrName) -> Column:
+def log2(col: "ColumnOrName") -> Column:
     """Returns the base-2 logarithm of the argument.
 
     .. versionadded:: 1.5.0
@@ -1704,7 +1706,7 @@ def log2(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.log2(_to_java_column(col)))
 
 
-def conv(col: ColumnOrName, fromBase: int, toBase: int) -> Column:
+def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
     """
     Convert a number in a string column from one base to another.
 
@@ -1720,7 +1722,7 @@ def conv(col: ColumnOrName, fromBase: int, toBase: int) -> Column:
     return Column(sc._jvm.functions.conv(_to_java_column(col), fromBase, toBase))
 
 
-def factorial(col: ColumnOrName) -> Column:
+def factorial(col: "ColumnOrName") -> Column:
     """
     Computes the factorial of the given value.
 
@@ -1739,7 +1741,7 @@ def factorial(col: ColumnOrName) -> Column:
 # ---------------  Window functions ------------------------
 
 def lag(
-    col: ColumnOrName, offset: int = 1, default: Optional[Any] = None
+    col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None
 ) -> Column:
     """
     Window function: returns the value that is `offset` rows before the current row, and
@@ -1764,7 +1766,7 @@ def lag(
 
 
 def lead(
-    col: ColumnOrName, offset: int = 1, default: Optional[Any] = None
+    col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None
 ) -> Column:
     """
     Window function: returns the value that is `offset` rows after the current row, and
@@ -1789,7 +1791,7 @@ def lead(
 
 
 def nth_value(
-    col: ColumnOrName, offset: int, ignoreNulls: Optional[bool] = False
+    col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = False
 ) -> Column:
     """
     Window function: returns the value that is the `offset`\\th row of the window frame
@@ -1857,7 +1859,7 @@ def current_timestamp() -> Column:
     return Column(sc._jvm.functions.current_timestamp())
 
 
-def date_format(date: ColumnOrName, format: str) -> Column:
+def date_format(date: "ColumnOrName", format: str) -> Column:
     """
     Converts a date/timestamp/string to a value of string in the format specified by the date
     format given by the second argument.
@@ -1883,7 +1885,7 @@ def date_format(date: ColumnOrName, format: str) -> Column:
     return Column(sc._jvm.functions.date_format(_to_java_column(date), format))
 
 
-def year(col: ColumnOrName) -> Column:
+def year(col: "ColumnOrName") -> Column:
     """
     Extract the year of a given date as integer.
 
@@ -1899,7 +1901,7 @@ def year(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.year(_to_java_column(col)))
 
 
-def quarter(col: ColumnOrName) -> Column:
+def quarter(col: "ColumnOrName") -> Column:
     """
     Extract the quarter of a given date as integer.
 
@@ -1915,7 +1917,7 @@ def quarter(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.quarter(_to_java_column(col)))
 
 
-def month(col: ColumnOrName) -> Column:
+def month(col: "ColumnOrName") -> Column:
     """
     Extract the month of a given date as integer.
 
@@ -1931,7 +1933,7 @@ def month(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.month(_to_java_column(col)))
 
 
-def dayofweek(col: ColumnOrName) -> Column:
+def dayofweek(col: "ColumnOrName") -> Column:
     """
     Extract the day of the week of a given date as integer.
     Ranges from 1 for a Sunday through to 7 for a Saturday
@@ -1948,7 +1950,7 @@ def dayofweek(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.dayofweek(_to_java_column(col)))
 
 
-def dayofmonth(col: ColumnOrName) -> Column:
+def dayofmonth(col: "ColumnOrName") -> Column:
     """
     Extract the day of the month of a given date as integer.
 
@@ -1964,7 +1966,7 @@ def dayofmonth(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.dayofmonth(_to_java_column(col)))
 
 
-def dayofyear(col: ColumnOrName) -> Column:
+def dayofyear(col: "ColumnOrName") -> Column:
     """
     Extract the day of the year of a given date as integer.
 
@@ -1980,7 +1982,7 @@ def dayofyear(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.dayofyear(_to_java_column(col)))
 
 
-def hour(col: ColumnOrName) -> Column:
+def hour(col: "ColumnOrName") -> Column:
     """
     Extract the hours of a given date as integer.
 
@@ -1996,7 +1998,7 @@ def hour(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.hour(_to_java_column(col)))
 
 
-def minute(col: ColumnOrName) -> Column:
+def minute(col: "ColumnOrName") -> Column:
     """
     Extract the minutes of a given date as integer.
 
@@ -2012,7 +2014,7 @@ def minute(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.minute(_to_java_column(col)))
 
 
-def second(col: ColumnOrName) -> Column:
+def second(col: "ColumnOrName") -> Column:
     """
     Extract the seconds of a given date as integer.
 
@@ -2028,7 +2030,7 @@ def second(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.second(_to_java_column(col)))
 
 
-def weekofyear(col: ColumnOrName) -> Column:
+def weekofyear(col: "ColumnOrName") -> Column:
     """
     Extract the week number of a given date as integer.
     A week is considered to start on a Monday and week 1 is the first week with more than 3 days,
@@ -2046,7 +2048,7 @@ def weekofyear(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.weekofyear(_to_java_column(col)))
 
 
-def date_add(start: ColumnOrName, days: int) -> Column:
+def date_add(start: "ColumnOrName", days: int) -> Column:
     """
     Returns the date that is `days` days after `start`
 
@@ -2062,7 +2064,7 @@ def date_add(start: ColumnOrName, days: int) -> Column:
     return Column(sc._jvm.functions.date_add(_to_java_column(start), days))
 
 
-def date_sub(start: ColumnOrName, days: int) -> Column:
+def date_sub(start: "ColumnOrName", days: int) -> Column:
     """
     Returns the date that is `days` days before `start`
 
@@ -2078,7 +2080,7 @@ def date_sub(start: ColumnOrName, days: int) -> Column:
     return Column(sc._jvm.functions.date_sub(_to_java_column(start), days))
 
 
-def datediff(end: ColumnOrName, start: ColumnOrName) -> Column:
+def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
     """
     Returns the number of days from `start` to `end`.
 
@@ -2094,7 +2096,7 @@ def datediff(end: ColumnOrName, start: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.datediff(_to_java_column(end), _to_java_column(start)))
 
 
-def add_months(start: ColumnOrName, months: int) -> Column:
+def add_months(start: "ColumnOrName", months: int) -> Column:
     """
     Returns the date that is `months` months after `start`
 
@@ -2111,7 +2113,7 @@ def add_months(start: ColumnOrName, months: int) -> Column:
 
 
 def months_between(
-    date1: ColumnOrName, date2: ColumnOrName, roundOff: bool = True
+    date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool = True
 ) -> Column:
     """
     Returns number of months between dates date1 and date2.
@@ -2135,7 +2137,7 @@ def months_between(
         _to_java_column(date1), _to_java_column(date2), roundOff))
 
 
-def to_date(col: ColumnOrName, format: Optional[str] = None) -> Column:
+def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.DateType`
     using the optionally specified format. Specify formats according to `datetime pattern`_.
     By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
@@ -2164,16 +2166,16 @@ def to_date(col: ColumnOrName, format: Optional[str] = None) -> Column:
 
 
 @overload
-def to_timestamp(col: ColumnOrName) -> Column:
+def to_timestamp(col: "ColumnOrName") -> Column:
     ...
 
 
 @overload
-def to_timestamp(col: ColumnOrName, format: str) -> Column:
+def to_timestamp(col: "ColumnOrName", format: str) -> Column:
     ...
 
 
-def to_timestamp(col: ColumnOrName, format: Optional[str] = None) -> Column:
+def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.TimestampType`
     using the optionally specified format. Specify formats according to `datetime pattern`_.
     By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
@@ -2201,7 +2203,7 @@ def to_timestamp(col: ColumnOrName, format: Optional[str] = None) -> Column:
     return Column(jc)
 
 
-def trunc(date: ColumnOrName, format: str) -> Column:
+def trunc(date: "ColumnOrName", format: str) -> Column:
     """
     Returns date truncated to the unit specified by the format.
 
@@ -2227,7 +2229,7 @@ def trunc(date: ColumnOrName, format: str) -> Column:
     return Column(sc._jvm.functions.trunc(_to_java_column(date), format))
 
 
-def date_trunc(format: str, timestamp: ColumnOrName) -> Column:
+def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
     """
     Returns timestamp truncated to the unit specified by the format.
 
@@ -2255,7 +2257,7 @@ def date_trunc(format: str, timestamp: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.date_trunc(format, _to_java_column(timestamp)))
 
 
-def next_day(date: ColumnOrName, dayOfWeek: str) -> Column:
+def next_day(date: "ColumnOrName", dayOfWeek: str) -> Column:
     """
     Returns the first date which is later than the value of the date column.
 
@@ -2274,7 +2276,7 @@ def next_day(date: ColumnOrName, dayOfWeek: str) -> Column:
     return Column(sc._jvm.functions.next_day(_to_java_column(date), dayOfWeek))
 
 
-def last_day(date: ColumnOrName) -> Column:
+def last_day(date: "ColumnOrName") -> Column:
     """
     Returns the last day of the month which the given date belongs to.
 
@@ -2290,7 +2292,7 @@ def last_day(date: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.last_day(_to_java_column(date)))
 
 
-def from_unixtime(timestamp: ColumnOrName, format: str = "yyyy-MM-dd HH:mm:ss") -> Column:
+def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss") -> Column:
     """
     Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
     representing the timestamp of that moment in the current system time zone in the given
@@ -2311,7 +2313,7 @@ def from_unixtime(timestamp: ColumnOrName, format: str = "yyyy-MM-dd HH:mm:ss") 
 
 
 def unix_timestamp(
-    timestamp: Optional[ColumnOrName] = None, format: str = 'yyyy-MM-dd HH:mm:ss'
+    timestamp: Optional["ColumnOrName"] = None, format: str = 'yyyy-MM-dd HH:mm:ss'
 ) -> Column:
     """
     Convert time string with given pattern ('yyyy-MM-dd HH:mm:ss', by default)
@@ -2336,7 +2338,7 @@ def unix_timestamp(
     return Column(sc._jvm.functions.unix_timestamp(_to_java_column(timestamp), format))
 
 
-def from_utc_timestamp(timestamp: ColumnOrName, tz: ColumnOrName) -> Column:
+def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     """
     This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
     takes a timestamp which is timezone-agnostic, and interprets it as a timestamp in UTC, and
@@ -2382,7 +2384,7 @@ def from_utc_timestamp(timestamp: ColumnOrName, tz: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.from_utc_timestamp(_to_java_column(timestamp), tz))
 
 
-def to_utc_timestamp(timestamp: ColumnOrName, tz: ColumnOrName) -> Column:
+def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     """
     This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
     takes a timestamp which is timezone-agnostic, and interprets it as a timestamp in the given
@@ -2428,7 +2430,7 @@ def to_utc_timestamp(timestamp: ColumnOrName, tz: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.to_utc_timestamp(_to_java_column(timestamp), tz))
 
 
-def timestamp_seconds(col: ColumnOrName) -> Column:
+def timestamp_seconds(col: "ColumnOrName") -> Column:
     """
     .. versionadded:: 3.1.0
 
@@ -2451,7 +2453,7 @@ def timestamp_seconds(col: ColumnOrName) -> Column:
 
 
 def window(
-    timeColumn: ColumnOrName,
+    timeColumn: "ColumnOrName",
     windowDuration: str,
     slideDuration: Optional[str] = None,
     startTime: Optional[str] = None,
@@ -2506,7 +2508,7 @@ def window(
     return Column(res)
 
 
-def session_window(timeColumn: ColumnOrName, gapDuration: Union[Column, str]) -> Column:
+def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) -> Column:
     """
     Generates session window given a timestamp specifying column.
     Session window is one of dynamic windows, which means the length of window is varying
@@ -2554,7 +2556,7 @@ def session_window(timeColumn: ColumnOrName, gapDuration: Union[Column, str]) ->
 
 # ---------------------------- misc functions ----------------------------------
 
-def crc32(col: ColumnOrName) -> Column:
+def crc32(col: "ColumnOrName") -> Column:
     """
     Calculates the cyclic redundancy check value  (CRC32) of a binary column and
     returns the value as a bigint.
@@ -2570,7 +2572,7 @@ def crc32(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.crc32(_to_java_column(col)))
 
 
-def md5(col: ColumnOrName) -> Column:
+def md5(col: "ColumnOrName") -> Column:
     """Calculates the MD5 digest and returns the value as a 32 character hex string.
 
     .. versionadded:: 1.5.0
@@ -2585,7 +2587,7 @@ def md5(col: ColumnOrName) -> Column:
     return Column(jc)
 
 
-def sha1(col: ColumnOrName) -> Column:
+def sha1(col: "ColumnOrName") -> Column:
     """Returns the hex string result of SHA-1.
 
     .. versionadded:: 1.5.0
@@ -2600,7 +2602,7 @@ def sha1(col: ColumnOrName) -> Column:
     return Column(jc)
 
 
-def sha2(col: ColumnOrName, numBits: int) -> Column:
+def sha2(col: "ColumnOrName", numBits: int) -> Column:
     """Returns the hex string result of SHA-2 family of hash functions (SHA-224, SHA-256, SHA-384,
     and SHA-512). The numBits indicates the desired bit length of the result, which must have a
     value of 224, 256, 384, 512, or 0 (which is equivalent to 256).
@@ -2620,7 +2622,7 @@ def sha2(col: ColumnOrName, numBits: int) -> Column:
     return Column(jc)
 
 
-def hash(*cols: ColumnOrName) -> Column:
+def hash(*cols: "ColumnOrName") -> Column:
     """Calculates the hash code of given columns, and returns the result as an int column.
 
     .. versionadded:: 2.0.0
@@ -2635,7 +2637,7 @@ def hash(*cols: ColumnOrName) -> Column:
     return Column(jc)
 
 
-def xxhash64(*cols: ColumnOrName) -> Column:
+def xxhash64(*cols: "ColumnOrName") -> Column:
     """Calculates the hash code of given columns using the 64-bit variant of the xxHash algorithm,
     and returns the result as a long column.
 
@@ -2651,7 +2653,7 @@ def xxhash64(*cols: ColumnOrName) -> Column:
     return Column(jc)
 
 
-def assert_true(col: ColumnOrName, errMsg: Optional[Union[Column, str]] = None) -> Column:
+def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:
     """
     Returns null if the input column is true; throws an exception with the provided error message
     otherwise.
@@ -2708,7 +2710,7 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
 # ---------------------- String/Binary functions ------------------------------
 
 @since(1.5)
-def upper(col: ColumnOrName) -> Column:
+def upper(col: "ColumnOrName") -> Column:
     """
     Converts a string expression to upper case.
     """
@@ -2716,7 +2718,7 @@ def upper(col: ColumnOrName) -> Column:
 
 
 @since(1.5)
-def lower(col: ColumnOrName) -> Column:
+def lower(col: "ColumnOrName") -> Column:
     """
     Converts a string expression to lower case.
     """
@@ -2724,7 +2726,7 @@ def lower(col: ColumnOrName) -> Column:
 
 
 @since(1.5)
-def ascii(col: ColumnOrName) -> Column:
+def ascii(col: "ColumnOrName") -> Column:
     """
     Computes the numeric value of the first character of the string column.
     """
@@ -2732,7 +2734,7 @@ def ascii(col: ColumnOrName) -> Column:
 
 
 @since(1.5)
-def base64(col: ColumnOrName) -> Column:
+def base64(col: "ColumnOrName") -> Column:
     """
     Computes the BASE64 encoding of a binary column and returns it as a string column.
     """
@@ -2740,7 +2742,7 @@ def base64(col: ColumnOrName) -> Column:
 
 
 @since(1.5)
-def unbase64(col: ColumnOrName) -> Column:
+def unbase64(col: "ColumnOrName") -> Column:
     """
     Decodes a BASE64 encoded string column and returns it as a binary column.
     """
@@ -2748,7 +2750,7 @@ def unbase64(col: ColumnOrName) -> Column:
 
 
 @since(1.5)
-def ltrim(col: ColumnOrName) -> Column:
+def ltrim(col: "ColumnOrName") -> Column:
     """
     Trim the spaces from left end for the specified string value.
     """
@@ -2756,7 +2758,7 @@ def ltrim(col: ColumnOrName) -> Column:
 
 
 @since(1.5)
-def rtrim(col: ColumnOrName) -> Column:
+def rtrim(col: "ColumnOrName") -> Column:
     """
     Trim the spaces from right end for the specified string value.
     """
@@ -2764,14 +2766,14 @@ def rtrim(col: ColumnOrName) -> Column:
 
 
 @since(1.5)
-def trim(col: ColumnOrName) -> Column:
+def trim(col: "ColumnOrName") -> Column:
     """
     Trim the spaces from both ends for the specified string column.
     """
     return _invoke_function_over_column("trim", col)
 
 
-def concat_ws(sep: str, *cols: ColumnOrName) -> Column:
+def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     """
     Concatenates multiple input string columns together into a single string column,
     using the given separator.
@@ -2789,7 +2791,7 @@ def concat_ws(sep: str, *cols: ColumnOrName) -> Column:
 
 
 @since(1.5)
-def decode(col: ColumnOrName, charset: str) -> Column:
+def decode(col: "ColumnOrName", charset: str) -> Column:
     """
     Computes the first argument into a string from a binary using the provided character set
     (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
@@ -2799,7 +2801,7 @@ def decode(col: ColumnOrName, charset: str) -> Column:
 
 
 @since(1.5)
-def encode(col: ColumnOrName, charset: str) -> Column:
+def encode(col: "ColumnOrName", charset: str) -> Column:
     """
     Computes the first argument into a binary from a string using the provided character set
     (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
@@ -2808,7 +2810,7 @@ def encode(col: ColumnOrName, charset: str) -> Column:
     return Column(sc._jvm.functions.encode(_to_java_column(col), charset))
 
 
-def format_number(col: ColumnOrName, d: int) -> Column:
+def format_number(col: "ColumnOrName", d: int) -> Column:
     """
     Formats the number X to a format like '#,--#,--#.--', rounded to d decimal places
     with HALF_EVEN round mode, and returns the result as a string.
@@ -2829,7 +2831,7 @@ def format_number(col: ColumnOrName, d: int) -> Column:
     return Column(sc._jvm.functions.format_number(_to_java_column(col), d))
 
 
-def format_string(format: str, *cols: ColumnOrName) -> Column:
+def format_string(format: str, *cols: "ColumnOrName") -> Column:
     """
     Formats the arguments in printf-style and returns the result as a string column.
 
@@ -2852,7 +2854,7 @@ def format_string(format: str, *cols: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.format_string(format, _to_seq(sc, cols, _to_java_column)))
 
 
-def instr(str: ColumnOrName, substr: str) -> Column:
+def instr(str: "ColumnOrName", substr: str) -> Column:
     """
     Locate the position of the first occurrence of substr column in the given string.
     Returns null if either of the arguments are null.
@@ -2873,8 +2875,8 @@ def instr(str: ColumnOrName, substr: str) -> Column:
 
 
 def overlay(
-    src: ColumnOrName,
-    replace: ColumnOrName,
+    src: "ColumnOrName",
+    replace: "ColumnOrName",
     pos: Union[Column, int],
     len: Union[Column, int] = 1,
 ) -> Column:
@@ -2915,9 +2917,9 @@ def overlay(
 
 
 def sentences(
-    string: ColumnOrName,
-    language: Optional[ColumnOrName] = None,
-    country: Optional[ColumnOrName] = None,
+    string: "ColumnOrName",
+    language: Optional["ColumnOrName"] = None,
+    country: Optional["ColumnOrName"] = None,
 ) -> Column:
     """
     Splits a string into arrays of sentences, where each sentence is an array of words.
@@ -2957,7 +2959,7 @@ def sentences(
     ))
 
 
-def substring(str: ColumnOrName, pos: int, len: int) -> Column:
+def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
     """
     Substring starts at `pos` and is of length `len` when str is String type or
     returns the slice of byte array that starts at `pos` in byte and is of length `len`
@@ -2979,7 +2981,7 @@ def substring(str: ColumnOrName, pos: int, len: int) -> Column:
     return Column(sc._jvm.functions.substring(_to_java_column(str), pos, len))
 
 
-def substring_index(str: ColumnOrName, delim: str, count: int) -> Column:
+def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
     """
     Returns the substring from string str before count occurrences of the delimiter delim.
     If count is positive, everything the left of the final delimiter (counting from left) is
@@ -3000,7 +3002,7 @@ def substring_index(str: ColumnOrName, delim: str, count: int) -> Column:
     return Column(sc._jvm.functions.substring_index(_to_java_column(str), delim, count))
 
 
-def levenshtein(left: ColumnOrName, right: ColumnOrName) -> Column:
+def levenshtein(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     """Computes the Levenshtein distance of the two given strings.
 
     .. versionadded:: 1.5.0
@@ -3016,7 +3018,7 @@ def levenshtein(left: ColumnOrName, right: ColumnOrName) -> Column:
     return Column(jc)
 
 
-def locate(substr: str, str: ColumnOrName, pos: int = 1) -> Column:
+def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
     """
     Locate the position of the first occurrence of substr in a string column, after position pos.
 
@@ -3046,7 +3048,7 @@ def locate(substr: str, str: ColumnOrName, pos: int = 1) -> Column:
     return Column(sc._jvm.functions.locate(substr, _to_java_column(str), pos))
 
 
-def lpad(col: ColumnOrName, len: int, pad: str) -> Column:
+def lpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     """
     Left-pad the string column to width `len` with `pad`.
 
@@ -3062,7 +3064,7 @@ def lpad(col: ColumnOrName, len: int, pad: str) -> Column:
     return Column(sc._jvm.functions.lpad(_to_java_column(col), len, pad))
 
 
-def rpad(col: ColumnOrName, len: int, pad: str) -> Column:
+def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     """
     Right-pad the string column to width `len` with `pad`.
 
@@ -3078,7 +3080,7 @@ def rpad(col: ColumnOrName, len: int, pad: str) -> Column:
     return Column(sc._jvm.functions.rpad(_to_java_column(col), len, pad))
 
 
-def repeat(col: ColumnOrName, n: int) -> Column:
+def repeat(col: "ColumnOrName", n: int) -> Column:
     """
     Repeats a string column n times, and returns it as a new string column.
 
@@ -3094,7 +3096,7 @@ def repeat(col: ColumnOrName, n: int) -> Column:
     return Column(sc._jvm.functions.repeat(_to_java_column(col), n))
 
 
-def split(str: ColumnOrName, pattern: str, limit: int = -1) -> Column:
+def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
     """
     Splits str around matches of the given pattern.
 
@@ -3131,7 +3133,7 @@ def split(str: ColumnOrName, pattern: str, limit: int = -1) -> Column:
     return Column(sc._jvm.functions.split(_to_java_column(str), pattern, limit))
 
 
-def regexp_extract(str: ColumnOrName, pattern: str, idx: int) -> Column:
+def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     r"""Extract a specific group matched by a Java regex, from the specified string column.
     If the regex did not match, or the specified group did not match, an empty string is returned.
 
@@ -3154,7 +3156,7 @@ def regexp_extract(str: ColumnOrName, pattern: str, idx: int) -> Column:
     return Column(jc)
 
 
-def regexp_replace(str: ColumnOrName, pattern: str, replacement: str) -> Column:
+def regexp_replace(str: "ColumnOrName", pattern: str, replacement: str) -> Column:
     r"""Replace all substrings of the specified string value that match regexp with rep.
 
     .. versionadded:: 1.5.0
@@ -3170,7 +3172,7 @@ def regexp_replace(str: ColumnOrName, pattern: str, replacement: str) -> Column:
     return Column(jc)
 
 
-def initcap(col: ColumnOrName) -> Column:
+def initcap(col: "ColumnOrName") -> Column:
     """Translate the first letter of each word to upper case in the sentence.
 
     .. versionadded:: 1.5.0
@@ -3184,7 +3186,7 @@ def initcap(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.initcap(_to_java_column(col)))
 
 
-def soundex(col: ColumnOrName) -> Column:
+def soundex(col: "ColumnOrName") -> Column:
     """
     Returns the SoundEx encoding for a string
 
@@ -3200,7 +3202,7 @@ def soundex(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.soundex(_to_java_column(col)))
 
 
-def bin(col: ColumnOrName) -> Column:
+def bin(col: "ColumnOrName") -> Column:
     """Returns the string representation of the binary value of the given column.
 
     .. versionadded:: 1.5.0
@@ -3215,7 +3217,7 @@ def bin(col: ColumnOrName) -> Column:
     return Column(jc)
 
 
-def hex(col: ColumnOrName) -> Column:
+def hex(col: "ColumnOrName") -> Column:
     """Computes hex value of the given column, which could be :class:`pyspark.sql.types.StringType`,
     :class:`pyspark.sql.types.BinaryType`, :class:`pyspark.sql.types.IntegerType` or
     :class:`pyspark.sql.types.LongType`.
@@ -3232,7 +3234,7 @@ def hex(col: ColumnOrName) -> Column:
     return Column(jc)
 
 
-def unhex(col: ColumnOrName) -> Column:
+def unhex(col: "ColumnOrName") -> Column:
     """Inverse of hex. Interprets each pair of characters as a hexadecimal number
     and converts to the byte representation of number.
 
@@ -3247,7 +3249,7 @@ def unhex(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.unhex(_to_java_column(col)))
 
 
-def length(col: ColumnOrName) -> Column:
+def length(col: "ColumnOrName") -> Column:
     """Computes the character length of string data or number of bytes of binary data.
     The length of character data includes the trailing spaces. The length of binary data
     includes binary zeros.
@@ -3263,7 +3265,7 @@ def length(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.length(_to_java_column(col)))
 
 
-def octet_length(col: ColumnOrName) -> Column:
+def octet_length(col: "ColumnOrName") -> Column:
     """
     Calculates the byte length for the specified string column.
 
@@ -3289,7 +3291,7 @@ def octet_length(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("octet_length", col)
 
 
-def bit_length(col: ColumnOrName) -> Column:
+def bit_length(col: "ColumnOrName") -> Column:
     """
     Calculates the bit length for the specified string column.
 
@@ -3315,7 +3317,7 @@ def bit_length(col: ColumnOrName) -> Column:
     return _invoke_function_over_column("bit_length", col)
 
 
-def translate(srcCol: ColumnOrName, matching: str, replace: str) -> Column:
+def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
     """A function translate any character in the `srcCol` by a character in `matching`.
     The characters in `replace` is corresponding to the characters in `matching`.
     The translate will happen when any character in the string matching with the character
@@ -3335,7 +3337,7 @@ def translate(srcCol: ColumnOrName, matching: str, replace: str) -> Column:
 
 # ---------------------- Collection functions ------------------------------
 
-def create_map(*cols: ColumnOrName) -> Column:
+def create_map(*cols: "ColumnOrName") -> Column:
     """Creates a new map column.
 
     .. versionadded:: 2.0.0
@@ -3360,7 +3362,7 @@ def create_map(*cols: ColumnOrName) -> Column:
     return Column(jc)
 
 
-def map_from_arrays(col1: ColumnOrName, col2: ColumnOrName) -> Column:
+def map_from_arrays(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """Creates a new map from two arrays.
 
     .. versionadded:: 2.4.0
@@ -3386,7 +3388,7 @@ def map_from_arrays(col1: ColumnOrName, col2: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.map_from_arrays(_to_java_column(col1), _to_java_column(col2)))
 
 
-def array(*cols: ColumnOrName) -> Column:
+def array(*cols: "ColumnOrName") -> Column:
     """Creates a new array column.
 
     .. versionadded:: 1.4.0
@@ -3411,7 +3413,7 @@ def array(*cols: ColumnOrName) -> Column:
     return Column(jc)
 
 
-def array_contains(col: ColumnOrName, value: Any) -> Column:
+def array_contains(col: "ColumnOrName", value: Any) -> Column:
     """
     Collection function: returns null if the array is null, true if the array contains the
     given value, and false otherwise.
@@ -3438,7 +3440,7 @@ def array_contains(col: ColumnOrName, value: Any) -> Column:
     return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))
 
 
-def arrays_overlap(a1: ColumnOrName, a2: ColumnOrName) -> Column:
+def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
     """
     Collection function: returns true if the arrays contain any common non-null element; if not,
     returns null if both the arrays are non-empty and any of them contains a null element; returns
@@ -3457,7 +3459,7 @@ def arrays_overlap(a1: ColumnOrName, a2: ColumnOrName) -> Column:
 
 
 def slice(
-    x: ColumnOrName, start: Union[Column, int], length: Union[Column, int]
+    x: "ColumnOrName", start: Union[Column, int], length: Union[Column, int]
 ) -> Column:
     """
     Collection function: returns an array containing  all the elements in `x` from index `start`
@@ -3489,7 +3491,7 @@ def slice(
 
 
 def array_join(
-    col: ColumnOrName, delimiter: str, null_replacement: Optional[str] = None
+    col: "ColumnOrName", delimiter: str, null_replacement: Optional[str] = None
 ) -> Column:
     """
     Concatenates the elements of `column` using the `delimiter`. Null values are replaced with
@@ -3513,7 +3515,7 @@ def array_join(
             _to_java_column(col), delimiter, null_replacement))
 
 
-def concat(*cols: ColumnOrName) -> Column:
+def concat(*cols: "ColumnOrName") -> Column:
     """
     Concatenates multiple input columns together into a single column.
     The function works with strings, binary and compatible array columns.
@@ -3534,7 +3536,7 @@ def concat(*cols: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.concat(_to_seq(sc, cols, _to_java_column)))
 
 
-def array_position(col: ColumnOrName, value: Any) -> Column:
+def array_position(col: "ColumnOrName", value: Any) -> Column:
     """
     Collection function: Locates the position of the first occurrence of the given value
     in the given array. Returns null if either of the arguments are null.
@@ -3556,7 +3558,7 @@ def array_position(col: ColumnOrName, value: Any) -> Column:
     return Column(sc._jvm.functions.array_position(_to_java_column(col), value))
 
 
-def element_at(col: ColumnOrName, extraction: Any) -> Column:
+def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     """
     Collection function: Returns element of array at given index in extraction if col is array.
     Returns value for the given key in extraction if col is map.
@@ -3589,7 +3591,7 @@ def element_at(col: ColumnOrName, extraction: Any) -> Column:
         _to_java_column(col), lit(extraction)._jc))
 
 
-def array_remove(col: ColumnOrName, element: Any) -> Column:
+def array_remove(col: "ColumnOrName", element: Any) -> Column:
     """
     Collection function: Remove all elements that equal to element from the given array.
 
@@ -3612,7 +3614,7 @@ def array_remove(col: ColumnOrName, element: Any) -> Column:
     return Column(sc._jvm.functions.array_remove(_to_java_column(col), element))
 
 
-def array_distinct(col: ColumnOrName) -> Column:
+def array_distinct(col: "ColumnOrName") -> Column:
     """
     Collection function: removes duplicate values from the array.
 
@@ -3633,7 +3635,7 @@ def array_distinct(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.array_distinct(_to_java_column(col)))
 
 
-def array_intersect(col1: ColumnOrName, col2: ColumnOrName) -> Column:
+def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Collection function: returns an array of the elements in the intersection of col1 and col2,
     without duplicates.
@@ -3658,7 +3660,7 @@ def array_intersect(col1: ColumnOrName, col2: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.array_intersect(_to_java_column(col1), _to_java_column(col2)))
 
 
-def array_union(col1: ColumnOrName, col2: ColumnOrName) -> Column:
+def array_union(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Collection function: returns an array of the elements in the union of col1 and col2,
     without duplicates.
@@ -3683,7 +3685,7 @@ def array_union(col1: ColumnOrName, col2: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.array_union(_to_java_column(col1), _to_java_column(col2)))
 
 
-def array_except(col1: ColumnOrName, col2: ColumnOrName) -> Column:
+def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Collection function: returns an array of the elements in col1 but not in col2,
     without duplicates.
@@ -3708,7 +3710,7 @@ def array_except(col1: ColumnOrName, col2: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.array_except(_to_java_column(col1), _to_java_column(col2)))
 
 
-def explode(col: ColumnOrName) -> Column:
+def explode(col: "ColumnOrName") -> Column:
     """
     Returns a new row for each element in the given array or map.
     Uses the default column name `col` for elements in the array and
@@ -3735,7 +3737,7 @@ def explode(col: ColumnOrName) -> Column:
     return Column(jc)
 
 
-def posexplode(col: ColumnOrName) -> Column:
+def posexplode(col: "ColumnOrName") -> Column:
     """
     Returns a new row for each element with position in the given array or map.
     Uses the default column name `pos` for position, and `col` for elements in the
@@ -3762,7 +3764,7 @@ def posexplode(col: ColumnOrName) -> Column:
     return Column(jc)
 
 
-def explode_outer(col: ColumnOrName) -> Column:
+def explode_outer(col: "ColumnOrName") -> Column:
     """
     Returns a new row for each element in the given array or map.
     Unlike explode, if the array/map is null or empty then null is produced.
@@ -3801,7 +3803,7 @@ def explode_outer(col: ColumnOrName) -> Column:
     return Column(jc)
 
 
-def posexplode_outer(col: ColumnOrName) -> Column:
+def posexplode_outer(col: "ColumnOrName") -> Column:
     """
     Returns a new row for each element with position in the given array or map.
     Unlike posexplode, if the array/map is null or empty then the row (null, null) is produced.
@@ -3839,7 +3841,7 @@ def posexplode_outer(col: ColumnOrName) -> Column:
     return Column(jc)
 
 
-def get_json_object(col: ColumnOrName, path: str) -> Column:
+def get_json_object(col: "ColumnOrName", path: str) -> Column:
     """
     Extracts json object from a json string based on json path specified, and returns json string
     of the extracted json object. It will return null if the input json string is invalid.
@@ -3866,7 +3868,7 @@ def get_json_object(col: ColumnOrName, path: str) -> Column:
     return Column(jc)
 
 
-def json_tuple(col: ColumnOrName, *fields: str) -> Column:
+def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     """Creates a new row for a json column according to the given field names.
 
     .. versionadded:: 1.6.0
@@ -3891,7 +3893,7 @@ def json_tuple(col: ColumnOrName, *fields: str) -> Column:
 
 
 def from_json(
-    col: ColumnOrName,
+    col: "ColumnOrName",
     schema: Union[ArrayType, StructType, Column, str],
     options: Optional[Dict[str, str]] = None,
 ) -> Column:
@@ -3954,7 +3956,7 @@ def from_json(
     return Column(jc)
 
 
-def to_json(col: ColumnOrName, options: Optional[Dict[str, str]] = None) -> Column:
+def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Converts a column containing a :class:`StructType`, :class:`ArrayType` or a :class:`MapType`
     into a JSON string. Throws an exception, in the case of an unsupported type.
@@ -4005,7 +4007,7 @@ def to_json(col: ColumnOrName, options: Optional[Dict[str, str]] = None) -> Colu
     return Column(jc)
 
 
-def schema_of_json(json: ColumnOrName, options: Optional[Dict[str, str]] = None) -> Column:
+def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Parses a JSON string and infers its schema in DDL format.
 
@@ -4046,7 +4048,7 @@ def schema_of_json(json: ColumnOrName, options: Optional[Dict[str, str]] = None)
     return Column(jc)
 
 
-def schema_of_csv(csv: ColumnOrName, options: Optional[Dict[str, str]] = None) -> Column:
+def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Parses a CSV string and infers its schema in DDL format.
 
@@ -4083,7 +4085,7 @@ def schema_of_csv(csv: ColumnOrName, options: Optional[Dict[str, str]] = None) -
     return Column(jc)
 
 
-def to_csv(col: ColumnOrName, options: Optional[Dict[str, str]] = None) -> Column:
+def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Converts a column containing a :class:`StructType` into a CSV string.
     Throws an exception, in the case of an unsupported type.
@@ -4115,7 +4117,7 @@ def to_csv(col: ColumnOrName, options: Optional[Dict[str, str]] = None) -> Colum
     return Column(jc)
 
 
-def size(col: ColumnOrName) -> Column:
+def size(col: "ColumnOrName") -> Column:
     """
     Collection function: returns the length of the array or map stored in the column.
 
@@ -4136,7 +4138,7 @@ def size(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.size(_to_java_column(col)))
 
 
-def array_min(col: ColumnOrName) -> Column:
+def array_min(col: "ColumnOrName") -> Column:
     """
     Collection function: returns the minimum value of the array.
 
@@ -4157,7 +4159,7 @@ def array_min(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.array_min(_to_java_column(col)))
 
 
-def array_max(col: ColumnOrName) -> Column:
+def array_max(col: "ColumnOrName") -> Column:
     """
     Collection function: returns the maximum value of the array.
 
@@ -4178,7 +4180,7 @@ def array_max(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.array_max(_to_java_column(col)))
 
 
-def sort_array(col: ColumnOrName, asc: bool = True) -> Column:
+def sort_array(col: "ColumnOrName", asc: bool = True) -> Column:
     """
     Collection function: sorts the input array in ascending or descending order according
     to the natural ordering of the array elements. Null elements will be placed at the beginning
@@ -4205,7 +4207,7 @@ def sort_array(col: ColumnOrName, asc: bool = True) -> Column:
     return Column(sc._jvm.functions.sort_array(_to_java_column(col), asc))
 
 
-def array_sort(col: ColumnOrName) -> Column:
+def array_sort(col: "ColumnOrName") -> Column:
     """
     Collection function: sorts the input array in ascending order. The elements of the input array
     must be orderable. Null elements will be placed at the end of the returned array.
@@ -4227,7 +4229,7 @@ def array_sort(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.array_sort(_to_java_column(col)))
 
 
-def shuffle(col: ColumnOrName) -> Column:
+def shuffle(col: "ColumnOrName") -> Column:
     """
     Collection function: Generates a random permutation of the given array.
 
@@ -4252,7 +4254,7 @@ def shuffle(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.shuffle(_to_java_column(col)))
 
 
-def reverse(col: ColumnOrName) -> Column:
+def reverse(col: "ColumnOrName") -> Column:
     """
     Collection function: returns a reversed string or an array with reverse order of elements.
 
@@ -4276,7 +4278,7 @@ def reverse(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.reverse(_to_java_column(col)))
 
 
-def flatten(col: ColumnOrName) -> Column:
+def flatten(col: "ColumnOrName") -> Column:
     """
     Collection function: creates a single array from an array of arrays.
     If a structure of nested arrays is deeper than two levels,
@@ -4299,7 +4301,7 @@ def flatten(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.flatten(_to_java_column(col)))
 
 
-def map_keys(col: ColumnOrName) -> Column:
+def map_keys(col: "ColumnOrName") -> Column:
     """
     Collection function: Returns an unordered array containing the keys of the map.
 
@@ -4325,7 +4327,7 @@ def map_keys(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.map_keys(_to_java_column(col)))
 
 
-def map_values(col: ColumnOrName) -> Column:
+def map_values(col: "ColumnOrName") -> Column:
     """
     Collection function: Returns an unordered array containing the values of the map.
 
@@ -4351,7 +4353,7 @@ def map_values(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.map_values(_to_java_column(col)))
 
 
-def map_entries(col: ColumnOrName) -> Column:
+def map_entries(col: "ColumnOrName") -> Column:
     """
     Collection function: Returns an unordered array of all entries in the given map.
 
@@ -4377,7 +4379,7 @@ def map_entries(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.map_entries(_to_java_column(col)))
 
 
-def map_from_entries(col: ColumnOrName) -> Column:
+def map_from_entries(col: "ColumnOrName") -> Column:
     """
     Collection function: Returns a map created from the given array of entries.
 
@@ -4403,7 +4405,7 @@ def map_from_entries(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.map_from_entries(_to_java_column(col)))
 
 
-def array_repeat(col: ColumnOrName, count: Union[Column, int]) -> Column:
+def array_repeat(col: "ColumnOrName", count: Union[Column, int]) -> Column:
     """
     Collection function: creates an array containing a column repeated count times.
 
@@ -4422,7 +4424,7 @@ def array_repeat(col: ColumnOrName, count: Union[Column, int]) -> Column:
     ))
 
 
-def arrays_zip(*cols: ColumnOrName) -> Column:
+def arrays_zip(*cols: "ColumnOrName") -> Column:
     """
     Collection function: Returns a merged array of structs in which the N-th struct contains all
     N-th values of input arrays.
@@ -4445,7 +4447,7 @@ def arrays_zip(*cols: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.arrays_zip(_to_seq(sc, cols, _to_java_column)))
 
 
-def map_concat(*cols: ColumnOrName) -> Column:
+def map_concat(*cols: "ColumnOrName") -> Column:
     """Returns the union of all the given maps.
 
     .. versionadded:: 2.4.0
@@ -4474,7 +4476,7 @@ def map_concat(*cols: ColumnOrName) -> Column:
 
 
 def sequence(
-    start: ColumnOrName, stop: ColumnOrName, step: Optional[ColumnOrName] = None
+    start: "ColumnOrName", stop: "ColumnOrName", step: Optional["ColumnOrName"] = None
 ) -> Column:
     """
     Generate a sequence of integers from `start` to `stop`, incrementing by `step`.
@@ -4501,7 +4503,7 @@ def sequence(
 
 
 def from_csv(
-    col: ColumnOrName,
+    col: "ColumnOrName",
     schema: Union[StructType, Column, str],
     options: Optional[Dict[str, str]] = None,
 ) -> Column:
@@ -4639,7 +4641,7 @@ def _create_lambda(f: Callable) -> Callable:
 
 def _invoke_higher_order_function(
     name: str,
-    cols: List[ColumnOrName],
+    cols: List["ColumnOrName"],
     funs: List[Callable],
 ) -> Column:
     """
@@ -4664,17 +4666,17 @@ def _invoke_higher_order_function(
 
 
 @overload
-def transform(col: ColumnOrName, f: Callable[[Column], Column]) -> Column:
+def transform(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
     ...
 
 
 @overload
-def transform(col: ColumnOrName, f: Callable[[Column, Column], Column]) -> Column:
+def transform(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
     ...
 
 
 def transform(
-    col: ColumnOrName,
+    col: "ColumnOrName",
     f: Union[Callable[[Column], Column], Callable[[Column, Column], Column]],
 ) -> Column:
     """
@@ -4725,7 +4727,7 @@ def transform(
     return _invoke_higher_order_function("ArrayTransform", [col], [f])
 
 
-def exists(col: ColumnOrName, f: Callable[[Column], Column]) -> Column:
+def exists(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
     """
     Returns whether a predicate holds for one or more elements in the array.
 
@@ -4757,7 +4759,7 @@ def exists(col: ColumnOrName, f: Callable[[Column], Column]) -> Column:
     return _invoke_higher_order_function("ArrayExists", [col], [f])
 
 
-def forall(col: ColumnOrName, f: Callable[[Column], Column]) -> Column:
+def forall(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
     """
     Returns whether a predicate holds for every element in the array.
 
@@ -4797,17 +4799,17 @@ def forall(col: ColumnOrName, f: Callable[[Column], Column]) -> Column:
 
 
 @overload
-def filter(col: ColumnOrName, f: Callable[[Column], Column]) -> Column:
+def filter(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
     ...
 
 
 @overload
-def filter(col: ColumnOrName, f: Callable[[Column, Column], Column]) -> Column:
+def filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
     ...
 
 
 def filter(
-    col: ColumnOrName,
+    col: "ColumnOrName",
     f: Union[Callable[[Column], Column], Callable[[Column, Column], Column]],
 ) -> Column:
     """
@@ -4857,8 +4859,8 @@ def filter(
 
 
 def aggregate(
-    col: ColumnOrName,
-    initialValue: ColumnOrName,
+    col: "ColumnOrName",
+    initialValue: "ColumnOrName",
     merge: Callable[[Column, Column], Column],
     finish: Optional[Callable[[Column], Column]] = None,
 ) -> Column:
@@ -4935,8 +4937,8 @@ def aggregate(
 
 
 def zip_with(
-    left: ColumnOrName,
-    right: ColumnOrName,
+    left: "ColumnOrName",
+    right: "ColumnOrName",
     f: Callable[[Column, Column], Column],
 ) -> Column:
     """
@@ -4985,7 +4987,7 @@ def zip_with(
 
 
 def transform_keys(
-    col: ColumnOrName, f: Callable[[Column, Column], Column]
+    col: "ColumnOrName", f: Callable[[Column, Column], Column]
 ) -> Column:
     """
     Applies a function to every key-value pair in a map and returns
@@ -5024,7 +5026,7 @@ def transform_keys(
 
 
 def transform_values(
-    col: ColumnOrName, f: Callable[[Column, Column], Column]
+    col: "ColumnOrName", f: Callable[[Column, Column], Column]
 ) -> Column:
     """
     Applies a function to every key-value pair in a map and returns
@@ -5062,7 +5064,7 @@ def transform_values(
     return _invoke_higher_order_function("TransformValues", [col], [f])
 
 
-def map_filter(col: ColumnOrName, f: Callable[[Column, Column], Column]) -> Column:
+def map_filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
     """
     Returns a map whose key-value pairs satisfy a predicate.
 
@@ -5099,8 +5101,8 @@ def map_filter(col: ColumnOrName, f: Callable[[Column, Column], Column]) -> Colu
 
 
 def map_zip_with(
-    col1: ColumnOrName,
-    col2: ColumnOrName,
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
     f: Callable[[Column, Column, Column], Column],
 ) -> Column:
     """
@@ -5145,7 +5147,7 @@ def map_zip_with(
 
 # ---------------------- Partition transform functions --------------------------------
 
-def years(col: ColumnOrName) -> Column:
+def years(col: "ColumnOrName") -> Column:
     """
     Partition transform function: A transform for timestamps and dates
     to partition data into years.
@@ -5169,7 +5171,7 @@ def years(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.years(_to_java_column(col)))
 
 
-def months(col: ColumnOrName) -> Column:
+def months(col: "ColumnOrName") -> Column:
     """
     Partition transform function: A transform for timestamps and dates
     to partition data into months.
@@ -5193,7 +5195,7 @@ def months(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.months(_to_java_column(col)))
 
 
-def days(col: ColumnOrName) -> Column:
+def days(col: "ColumnOrName") -> Column:
     """
     Partition transform function: A transform for timestamps and dates
     to partition data into days.
@@ -5217,7 +5219,7 @@ def days(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.days(_to_java_column(col)))
 
 
-def hours(col: ColumnOrName) -> Column:
+def hours(col: "ColumnOrName") -> Column:
     """
     Partition transform function: A transform for timestamps
     to partition data into hours.
@@ -5241,7 +5243,7 @@ def hours(col: ColumnOrName) -> Column:
     return Column(sc._jvm.functions.hours(_to_java_column(col)))
 
 
-def bucket(numBuckets: Union[Column, int], col: ColumnOrName) -> Column:
+def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     """
     Partition transform function: A transform for any type that partitions
     by a hash of the input column.
@@ -5279,30 +5281,30 @@ def bucket(numBuckets: Union[Column, int], col: ColumnOrName) -> Column:
 
 @overload
 def udf(
-    f: Callable[..., Any], returnType: DataTypeOrString = StringType()
-) -> UserDefinedFunctionLike:
+    f: Callable[..., Any], returnType: "DataTypeOrString" = StringType()
+) -> "UserDefinedFunctionLike":
     ...
 
 
 @overload
 def udf(
-    f: Optional[DataTypeOrString] = None,
-) -> Callable[[Callable[..., Any]], UserDefinedFunctionLike]:
+    f: Optional["DataTypeOrString"] = None,
+) -> Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]:
     ...
 
 
 @overload
 def udf(
     *,
-    returnType: DataTypeOrString = StringType(),
-) -> Callable[[Callable[..., Any]], UserDefinedFunctionLike]:
+    returnType: "DataTypeOrString" = StringType(),
+) -> Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]:
     ...
 
 
 def udf(
-    f: Optional[Union[Callable[..., Any], DataTypeOrString]] = None,
-    returnType: Optional[DataTypeOrString] = StringType(),
-) -> Union[UserDefinedFunctionLike, Callable[[Callable[..., Any]], UserDefinedFunctionLike]]:
+    f: Optional[Union[Callable[..., Any], "DataTypeOrString"]] = None,
+    returnType: Optional["DataTypeOrString"] = StringType(),
+) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
     """Creates a user defined function (UDF).
 
     .. versionadded:: 1.3.0
