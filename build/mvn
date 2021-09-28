@@ -23,7 +23,7 @@ SELF=$(cd $(dirname $0) && pwd)
 if [ -z "${JAVA_HOME}" -a "$(command -v javac)" ]; then
   if [ "$(uname -s)" = "Darwin" ]; then
     # For some versions of macOS, "/usr/bin/javac" is a real file instead of a symbolic link,
-    # so the java home may be set to path "/usr" improperly.
+    # so the JAVA_HOME may be set to path "/usr" improperly.
     # And following command is the appropriate way of getting java home on macOS.
     export JAVA_HOME="$(/usr/libexec/java_home)"
   else
