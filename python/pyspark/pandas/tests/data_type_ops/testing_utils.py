@@ -61,6 +61,14 @@ class TestCasesUtils(object):
     def numeric_df_cols(self):
         return self.numeric_pdf.columns
 
+    @property
+    def integral_pdf(self):
+        return pd.DataFrame({"this": [1, 2, 3], "that": [2, 2, 1]})
+
+    @property
+    def integral_psdf(self):
+        return ps.from_pandas(self.integral_pdf)
+
     # TODO(SPARK-36031): Merge self.numeric_w_nan_p(s)df into self.numeric_p(s)df
     @property
     def numeric_w_nan_pdf(self):

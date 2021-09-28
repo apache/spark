@@ -184,12 +184,6 @@
       <artifactId>htmlunit-driver</artifactId>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>com.github.rdblue</groupId>
-      <artifactId>brotli-codec</artifactId>
-      <version>0.1.1</version>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>

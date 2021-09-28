@@ -307,7 +307,7 @@ case class Union(
     children.map(_.output).transpose.map { attrs =>
       val firstAttr = attrs.head
       val nullable = attrs.exists(_.nullable)
-      val newDt = attrs.map(_.dataType).reduce(StructType.merge)
+      val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
       if (firstAttr.dataType == newDt) {
         firstAttr.withNullability(nullable)
       } else {
@@ -327,7 +327,7 @@ case class Union(
         child.output.length == children.head.output.length &&
         // compare the data types with the first child
         child.output.zip(children.head.output).forall {
-          case (l, r) => l.dataType.sameType(r.dataType)
+          case (l, r) => DataType.equalsStructurally(l.dataType, r.dataType, true)
         })
     children.length > 1 && !(byName || allowMissingCol) && childrenResolved && allChildrenCompatible
   }

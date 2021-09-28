@@ -96,7 +96,7 @@ Condition : (isnotnull(cc_call_center_sk#9) AND isnotnull(cc_name#10))
 
 (10) BroadcastExchange
 Input [2]: [cc_call_center_sk#9, cc_name#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#11]
 
 (11) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [cs_call_center_sk#1]
@@ -304,6 +304,6 @@ Condition : ((((d_year#7 = 1999) OR ((d_year#7 = 1998) AND (d_moy#8 = 12))) OR (
 
 (56) BroadcastExchange
 Input [3]: [d_date_sk#6, d_year#7, d_moy#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#48]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#48]
 
 

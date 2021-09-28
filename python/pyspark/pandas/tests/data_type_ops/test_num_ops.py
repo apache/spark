@@ -309,6 +309,33 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assertRaises(TypeError, lambda: True | psser)
             self.assertRaises(TypeError, lambda: False | psser)
 
+    def test_xor(self):
+        pdf, psdf = self.integral_pdf, self.integral_psdf
+        pser, other_pser = pdf["this"], pdf["that"]
+        psser, other_psser = psdf["this"], psdf["that"]
+
+        self.assert_eq(pser ^ other_pser, psser ^ other_psser)
+        self.assert_eq(pser ^ 2, psser ^ 2)
+        self.assert_eq(pser ^ 3, psser ^ 3)
+        self.assert_eq(pser ^ False, psser ^ False)
+        self.assert_eq(pser ^ True, psser ^ True)
+
+        with self.assertRaisesRegex(TypeError, "XOR can not be applied to given types."):
+            psser ^ "a"
+            psser ^ None
+
+        with option_context("compute.ops_on_diff_frames", True):
+            pser, other_pser = self.integral_pdf["this"], self.pdf["bool"]
+            psser, other_psser = self.integral_psdf["this"], self.psdf["bool"]
+
+            self.assert_eq(pser ^ other_pser, psser ^ other_psser)
+
+    def test_rxor(self):
+        pser, psser = self.pdf["int"], self.psdf["int"]
+        self.assert_eq(True ^ pser, True ^ psser)
+        self.assert_eq(False ^ pser, False ^ psser)
+        self.assert_eq(1 ^ pser, 1 ^ psser)
+
     def test_from_to_pandas(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
@@ -526,6 +553,37 @@ class IntegralExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.intergral_extension_pser_psser_pairs:
                 self.check_extension(pser >= pser, (psser >= psser).sort_index())
+
+    def test_xor(self):
+        for psser in self.intergral_extension_pssers:
+            self.assertRaisesRegex(
+                TypeError,
+                "XOR can not be applied to given types.",
+                lambda: psser ^ 1,
+            )
+            self.assertRaisesRegex(
+                TypeError,
+                "XOR can not be applied to given types.",
+                lambda: psser ^ psser,
+            )
+            self.assertRaisesRegex(
+                TypeError,
+                "XOR can not be applied to given types.",
+                lambda: psser ^ False,
+            )
+
+    def test_rxor(self):
+        for psser in self.intergral_extension_pssers:
+            self.assertRaisesRegex(
+                TypeError,
+                "XOR can not be applied to given types.",
+                lambda: 1 ^ psser,
+            )
+            self.assertRaisesRegex(
+                TypeError,
+                "XOR can not be applied to given types.",
+                lambda: False ^ psser,
+            )
 
 
 @unittest.skipIf(

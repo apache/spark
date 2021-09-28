@@ -106,7 +106,7 @@ Input [2]: [hd_demo_sk#10, hd_buy_potential#11]
 
 (8) BroadcastExchange
 Input [1]: [hd_demo_sk#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#12]
 
 (9) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [cs_bill_hdemo_sk#3]
@@ -137,7 +137,7 @@ Input [2]: [cd_demo_sk#13, cd_marital_status#14]
 
 (15) BroadcastExchange
 Input [1]: [cd_demo_sk#13]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#15]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#15]
 
 (16) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [cs_bill_cdemo_sk#2]
@@ -164,7 +164,7 @@ Condition : (isnotnull(d_date#17) AND isnotnull(d_date_sk#16))
 
 (21) BroadcastExchange
 Input [2]: [d_date_sk#16, d_date#17]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#18]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#18]
 
 (22) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [cs_ship_date_sk#1]
@@ -265,7 +265,7 @@ Condition : isnotnull(w_warehouse_sk#32)
 
 (44) BroadcastExchange
 Input [2]: [w_warehouse_sk#32, w_warehouse_name#33]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#34]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#34]
 
 (45) BroadcastHashJoin [codegen id : 13]
 Left keys [1]: [inv_warehouse_sk#29]
@@ -309,7 +309,7 @@ Condition : isnotnull(p_promo_sk#36)
 
 (54) BroadcastExchange
 Input [1]: [p_promo_sk#36]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#37]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#37]
 
 (55) BroadcastHashJoin [codegen id : 16]
 Left keys [1]: [cs_promo_sk#5]
@@ -421,7 +421,7 @@ Input [4]: [d_date_sk#23, d_date#24, d_week_seq#25, d_year#50]
 
 (75) BroadcastExchange
 Input [3]: [d_date_sk#23, d_date#24, d_week_seq#25]
-Arguments: HashedRelationBroadcastMode(List(cast(input[2, int, true] as bigint)),false), [id=#51]
+Arguments: HashedRelationBroadcastMode(List(cast(input[2, int, true] as bigint)),false,false), [id=#51]
 
 (76) Scan parquet default.date_dim
 Output [2]: [d_date_sk#26, d_week_seq#52]
@@ -448,6 +448,6 @@ Input [5]: [d_date_sk#23, d_date#24, d_week_seq#25, d_date_sk#26, d_week_seq#52]
 
 (81) BroadcastExchange
 Input [4]: [d_date_sk#23, d_date#24, d_week_seq#25, d_date_sk#26]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#53]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#53]
 
 
