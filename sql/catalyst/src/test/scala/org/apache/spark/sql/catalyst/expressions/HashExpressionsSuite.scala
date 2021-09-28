@@ -60,6 +60,8 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("sha2") {
+    checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(224)),
+      "107c5072b799c4771f328304cfe1ebb375eb6ea7f35a3aa753836fad")
     checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(256)),
       DigestUtils.sha256Hex("ABC"))
     checkEvaluation(Sha2(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType), Literal(384)),
