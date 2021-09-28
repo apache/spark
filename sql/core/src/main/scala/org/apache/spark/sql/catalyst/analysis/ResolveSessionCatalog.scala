@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -451,31 +451,34 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       val funcIdentifier = identifier.asFunctionIdentifier
       DropFunctionCommand(funcIdentifier.database, funcIdentifier.funcName, ifExists, isTemp)
 
-    case CreateFunction(UnresolvedDBObjectName(nameParts, _),
-      className, resources, isTemp, ignoreIfExists, replace) =>
-      if (isTemp) {
-        // temp func doesn't belong to any catalog and we shouldn't resolve catalog in the name.
-        val database = if (nameParts.length > 2) {
-          throw QueryCompilationErrors.unsupportedFunctionNameError(nameParts.quoted)
-        } else if (nameParts.length == 2) {
-          Some(nameParts.head)
-        } else {
-          None
-        }
-        CreateFunctionCommand(
-          database,
-          nameParts.last,
-          className,
-          resources,
-          isTemp,
-          ignoreIfExists,
-          replace)
+    case CreateTempFunction(nameParts, className, resources, ignoreIfExists, replace) =>
+      // temp func doesn't belong to any catalog and we shouldn't resolve catalog in the name.
+      val database = if (nameParts.length > 2) {
+        throw QueryCompilationErrors.unsupportedFunctionNameError(nameParts.quoted)
+      } else if (nameParts.length == 2) {
+        Some(nameParts.head)
       } else {
-        val FunctionIdentifier(function, database) =
-          parseSessionCatalogFunctionIdentifier(nameParts)
-        CreateFunctionCommand(database, function, className, resources, isTemp, ignoreIfExists,
-          replace)
+        None
       }
+      CreateFunctionCommand(
+        database,
+        nameParts.last,
+        className,
+        resources,
+        true,
+        ignoreIfExists,
+        replace)
+
+    case CreateFunction(ResolvedDBObjectName(catalog, name),
+        className, resources, ignoreIfExists, replace) if isSessionCatalog(catalog) =>
+      CreateFunctionCommand(
+        Some(catalog.name),
+        name.head,
+        className,
+        resources,
+        false,
+        ignoreIfExists,
+        replace)
 
     case RefreshFunction(ResolvedFunc(identifier)) =>
       // Fallback to v1 command

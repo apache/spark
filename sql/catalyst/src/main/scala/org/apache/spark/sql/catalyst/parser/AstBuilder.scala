@@ -4469,15 +4469,23 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
 
     val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
-    CreateFunction(
-      UnresolvedDBObjectName(
+    if (ctx.TEMPORARY != null) {
+      CreateTempFunction(
         functionIdentifier,
-        isNamespace = false),
-      string(ctx.className),
-      resources.toSeq,
-      ctx.TEMPORARY != null,
-      ctx.EXISTS != null,
-      ctx.REPLACE != null)
+        string(ctx.className),
+        resources.toSeq,
+        ctx.EXISTS != null,
+        ctx.REPLACE != null)
+    } else {
+      CreateFunction(
+        UnresolvedDBObjectName(
+          functionIdentifier,
+          isNamespace = false),
+        string(ctx.className),
+        resources.toSeq,
+        ctx.EXISTS != null,
+        ctx.REPLACE != null)
+    }
   }
 
   override def visitRefreshFunction(ctx: RefreshFunctionContext): LogicalPlan = withOrigin(ctx) {

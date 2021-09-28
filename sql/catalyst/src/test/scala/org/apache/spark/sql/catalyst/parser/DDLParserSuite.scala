@@ -2390,41 +2390,40 @@ class DDLParserSuite extends AnalysisTest {
 
   test("CREATE FUNCTION") {
     parseCompare("CREATE FUNCTION a as 'fun'",
-      CreateFunction(UnresolvedDBObjectName(Seq("a"), false), "fun", Seq(), false, false, false))
+      CreateFunction(UnresolvedDBObjectName(Seq("a"), false), "fun", Seq(), false, false))
 
     parseCompare("CREATE FUNCTION a.b.c as 'fun'",
       CreateFunction(UnresolvedDBObjectName(
-        Seq("a", "b", "c"), false), "fun", Seq(), false, false, false))
+        Seq("a", "b", "c"), false), "fun", Seq(), false, false))
 
     parseCompare("CREATE OR REPLACE FUNCTION a.b.c as 'fun'",
       CreateFunction(UnresolvedDBObjectName(
-        Seq("a", "b", "c"), false), "fun", Seq(), false, false, true))
+        Seq("a", "b", "c"), false), "fun", Seq(), false, true))
 
     parseCompare("CREATE TEMPORARY FUNCTION a.b.c as 'fun'",
-      CreateFunction(UnresolvedDBObjectName(Seq("a", "b", "c"), false),
-        "fun", Seq(), true, false, false))
+      CreateTempFunction(Seq("a", "b", "c"), "fun", Seq(), false, false))
 
     parseCompare("CREATE FUNCTION IF NOT EXISTS a.b.c as 'fun'",
       CreateFunction(UnresolvedDBObjectName(Seq("a", "b", "c"), false),
-        "fun", Seq(), false, true, false))
+        "fun", Seq(), true, false))
 
     parseCompare("CREATE FUNCTION a as 'fun' USING JAR 'j'",
       CreateFunction(UnresolvedDBObjectName(Seq("a"), false),
-        "fun", Seq(FunctionResource(JarResource, "j")), false, false, false))
+        "fun", Seq(FunctionResource(JarResource, "j")), false, false))
 
     parseCompare("CREATE FUNCTION a as 'fun' USING ARCHIVE 'a'",
       CreateFunction(UnresolvedDBObjectName(
-        Seq("a"), false), "fun", Seq(FunctionResource(ArchiveResource, "a")), false, false, false))
+        Seq("a"), false), "fun", Seq(FunctionResource(ArchiveResource, "a")), false, false))
 
     parseCompare("CREATE FUNCTION a as 'fun' USING FILE 'f'",
       CreateFunction(UnresolvedDBObjectName(
-        Seq("a"), false), "fun", Seq(FunctionResource(FileResource, "f")), false, false, false))
+        Seq("a"), false), "fun", Seq(FunctionResource(FileResource, "f")), false, false))
 
     parseCompare("CREATE FUNCTION a as 'fun' USING JAR 'j', ARCHIVE 'a', FILE 'f'",
       CreateFunction(UnresolvedDBObjectName(
         Seq("a"), false), "fun", Seq(FunctionResource(JarResource, "j"),
         FunctionResource(ArchiveResource, "a"), FunctionResource(FileResource, "f")),
-        false, false, false))
+        false, false))
 
     intercept("CREATE FUNCTION a as 'fun' USING OTHER 'o'",
       "Operation not allowed: CREATE FUNCTION with resource type 'other'")

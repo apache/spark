@@ -696,13 +696,23 @@ case class DescribeFunction(child: LogicalPlan, isExtended: Boolean) extends Una
 }
 
 /**
+ * The logical plan of the CREATE TEMPORARY FUNCTION command.
+ */
+case class CreateTempFunction(
+    nameParts: Seq[String],
+    className: String,
+    resources: Seq[FunctionResource],
+    ifExists: Boolean,
+    replace: Boolean) extends LeafCommand {
+}
+
+/**
  * The logical plan of the CREATE FUNCTION command.
  */
 case class CreateFunction(
     child: LogicalPlan,
     className: String,
     resources: Seq[FunctionResource],
-    isTemp: Boolean,
     ifExists: Boolean,
     replace: Boolean) extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): CreateFunction =
