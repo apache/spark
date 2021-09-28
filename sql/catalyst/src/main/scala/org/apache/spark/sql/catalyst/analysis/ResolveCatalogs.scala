@@ -80,8 +80,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         writeOptions = c.writeOptions,
         orCreate = c.orCreate)
 
-    case UseStatement(isNamespaceSet, nameParts) =>
-      if (isNamespaceSet) {
+    case Use(UnresolvedDBObjectName(nameParts, isNamespace)) =>
+      if (isNamespace) {
         SetCatalogAndNamespace(catalogManager, None, Some(nameParts))
       } else {
         val CatalogAndNamespace(catalog, ns) = nameParts
