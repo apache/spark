@@ -4286,7 +4286,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create or replace a view. This creates a [[CreateViewStatement]]
+   * Create or replace a view. This creates a [[CreateView]] command.
    *
    * For example:
    * {{{
@@ -4329,8 +4329,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     } else {
       LocalTempView
     }
-    CreateViewStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
+    CreateView(
+      UnresolvedDBObjectName(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        isNamespace = false),
       userSpecifiedColumns,
       visitCommentSpecList(ctx.commentSpec()),
       properties,

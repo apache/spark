@@ -398,8 +398,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         originalText,
         query)
 
-    case CreateViewStatement(
-      tbl, userSpecifiedColumns, comment, properties,
+    case CreateView(UnresolvedDBObjectName(tbl, _), userSpecifiedColumns, comment, properties,
       originalText, child, allowExisting, replace, viewType) =>
 
       val v1TableName = if (viewType != PersistedView) {

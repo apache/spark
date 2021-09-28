@@ -2205,8 +2205,8 @@ class DDLParserSuite extends AnalysisTest {
     val v1 = "CREATE VIEW view1 AS SELECT * FROM tab1"
     val parsed1 = parsePlan(v1)
 
-    val expected1 = CreateViewStatement(
-      Seq("view1"),
+    val expected1 = CreateView(
+      UnresolvedDBObjectName(Seq("view1"), false),
       Seq.empty[(String, Option[String])],
       None,
       Map.empty[String, String],
@@ -2220,8 +2220,8 @@ class DDLParserSuite extends AnalysisTest {
     val v2 = "CREATE TEMPORARY VIEW a.b.c AS SELECT * FROM tab1"
     val parsed2 = parsePlan(v2)
 
-    val expected2 = CreateViewStatement(
-      Seq("a", "b", "c"),
+    val expected2 = CreateView(
+      UnresolvedDBObjectName(Seq("a", "b", "c"), false),
       Seq.empty[(String, Option[String])],
       None,
       Map.empty[String, String],
@@ -2243,8 +2243,8 @@ class DDLParserSuite extends AnalysisTest {
         |AS SELECT * FROM tab1
       """.stripMargin
     val parsed1 = parsePlan(v1)
-    val expected1 = CreateViewStatement(
-      Seq("view1"),
+    val expected1 = CreateView(
+      UnresolvedDBObjectName(Seq("view1"), false),
       Seq("col1" -> None, "col3" -> Some("hello")),
       Some("BLABLA"),
       Map("prop1Key" -> "prop1Val"),
@@ -2263,8 +2263,8 @@ class DDLParserSuite extends AnalysisTest {
         |AS SELECT * FROM tab1
       """.stripMargin
     val parsed2 = parsePlan(v2)
-    val expected2 = CreateViewStatement(
-      Seq("a", "b", "c"),
+    val expected2 = CreateView(
+      UnresolvedDBObjectName(Seq("a", "b", "c"), false),
       Seq("col1" -> None, "col3" -> Some("hello")),
       Some("BLABLA"),
       Map(),
