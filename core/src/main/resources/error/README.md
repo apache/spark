@@ -40,8 +40,6 @@ Throw with arbitrary error message:
         with SparkThrowable {
         
       def getErrorClass: String = errorClass
-      def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
-      def isInternalError: Boolean = SparkThrowableHelper.isInternalError(errorClass)
     }
 
 Throw with error class and message parameters:
