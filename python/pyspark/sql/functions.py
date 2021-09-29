@@ -21,7 +21,18 @@ A collections of builtin functions
 import sys
 import functools
 import warnings
-from typing import Any, Callable, Dict, List, overload, Optional, Tuple, TYPE_CHECKING, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    overload,
+    Optional,
+    Tuple,
+    TYPE_CHECKING,
+    Union,
+    ValuesView
+)
 
 from pyspark import since, SparkContext
 from pyspark.rdd import PythonEvalType
@@ -96,7 +107,7 @@ def _invoke_binary_math_function(name: str, col1: Any, col2: Any) -> Column:
     )
 
 
-def _options_to_str(options: Optional[Any] = None) -> dict:
+def _options_to_str(options: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
     if options:
         return {key: to_str(value) for (key, value) in options.items()}
     return {}
@@ -4573,7 +4584,7 @@ def _unresolved_named_lambda_variable(*name_parts: Any) -> Column:
     )
 
 
-def _get_lambda_parameters(f: Callable) -> Any:
+def _get_lambda_parameters(f: Callable) -> ValuesView:
     import inspect
 
     signature = inspect.signature(f)
