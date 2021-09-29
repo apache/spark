@@ -579,6 +579,7 @@ case class DataSource(
       checkEmptyGlobPath, checkFilesExist, enableGlobbing = globPaths)
   }
 
+  // TODO: Remove the Set below once all the built-in datasources support ANSI interval types
   private val writeAllowedSources: Set[Class[_]] =
     Set(classOf[ParquetFileFormat], classOf[CSVFileFormat])
 
