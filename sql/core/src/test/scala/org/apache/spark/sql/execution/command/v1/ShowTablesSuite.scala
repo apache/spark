@@ -105,7 +105,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
         false -> "PARTITION(YEAR = 2015, Month = 1)"
       ).foreach { case (caseSensitive, partitionSpec) =>
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-          val df = sql(s"SHOW TABLE EXTENDED LIKE 'part_table' $partitionSpec")
+          val df = sql(s"SHOW TABLE EXTENDED IN ns LIKE 'part_table' $partitionSpec")
           val information = df.select("information").first().getString(0)
           assert(information.contains("Partition Values: [year=2015, month=1]"))
         }
@@ -149,7 +149,6 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
       }
     }
   }
-
 
   test("show table in a not existing namespace") {
     val msg = intercept[NoSuchDatabaseException] {
