@@ -139,7 +139,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
     }
   }
 
-  test("speculation summary") {
+  test("SPARK-36038: speculation summary") {
     val store = new InMemoryStore()
     store.write(newSpeculationSummaryData(stageId, attemptId))
 
@@ -155,7 +155,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
     }
   }
 
-  test("speculation summary without any task completed") {
+  test("SPARK-36038: speculation summary without any task completed") {
     val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
     val statusStore = AppStatusStore.createLiveStore(conf)
 
@@ -176,7 +176,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
     assert(statusStore.speculationSummary(0, 0).isDefined)
   }
 
-  test("speculation summary for unknown stages" +
+  test("SPARK-36038: speculation summary for unknown stages" +
       " like SKIPPED stages should not fail with NoSuchElementException") {
     val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
     val statusStore = AppStatusStore.createLiveStore(conf)
