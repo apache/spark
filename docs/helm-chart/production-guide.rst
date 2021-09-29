@@ -95,8 +95,14 @@ Alternatively, create a kubernetes Secret and use ``webserverSecretKeySecretName
 
 .. code-block:: yaml
 
-    webserverSecretKey: my-webserver-secret
+    webserverSecretKeySecretName: my-webserver-secret
     # where the random key is under `webserver-secret-key` in the k8s Secret
+
+Example to create a kubernetes Secret from ``kubectl``:
+
+.. code-block:: bash
+
+    kubectl create secret generic my-webserver-secret --from-literal="webserver-secret-key=$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
 
 Extending and customizing Airflow Image
 ---------------------------------------
