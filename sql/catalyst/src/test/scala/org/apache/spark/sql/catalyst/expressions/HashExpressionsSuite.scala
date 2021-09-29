@@ -62,13 +62,19 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("sha2") {
     checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(224)),
       "107c5072b799c4771f328304cfe1ebb375eb6ea7f35a3aa753836fad")
+    checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(0)),
+      DigestUtils.sha256Hex("ABC"))
     checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(256)),
       DigestUtils.sha256Hex("ABC"))
     checkEvaluation(Sha2(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType), Literal(384)),
       DigestUtils.sha384Hex(Array[Byte](1, 2, 3, 4, 5, 6)))
+    checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(512)),
+      DigestUtils.sha512Hex("ABC"))
     // unsupported bit length
     checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal(1024)), null)
+    // null input and valid bit length
     checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal(512)), null)
+    // valid input and null bit length
     checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)),
       Literal.create(null, IntegerType)), null)
     checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal.create(null, IntegerType)), null)
