@@ -359,7 +359,7 @@ object QueryExecutionErrors {
   }
 
   def unableToDeletePartitionPathError(partitionPath: Path, e: IOException): Throwable = {
-    new SparkException("CANNOT_DELETE_PARTITION", Array(partitionPath.toString), e)
+    new SparkException("CANNOT_DELETE_PARTITION_PATH", Array(partitionPath.toString), e)
   }
 
   def unableToDropTableAsFailedToDeleteDirectoryError(
@@ -375,11 +375,11 @@ object QueryExecutionErrors {
   }
 
   def unableToCreatePartitionPathError(partitionPath: Path, e: IOException): Throwable = {
-    new SparkException("CANNOT_CREATE_PARTITION", Array(partitionPath.toString), e)
+    new SparkException("CANNOT_CREATE_PARTITION_PATH", Array(partitionPath.toString), e)
   }
 
   def unableToRenamePartitionPathError(oldPartPath: Path, e: IOException): Throwable = {
-    new SparkException("CANNOT_RENAME_PARTITION", Array(oldPartPath.toString), e)
+    new SparkException("CANNOT_RENAME_PARTITION_PATH", Array(oldPartPath.toString), e)
   }
 
   def methodNotImplementedError(methodName: String): Throwable = {

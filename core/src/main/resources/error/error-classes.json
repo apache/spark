@@ -18,10 +18,10 @@
   "CANNOT_CREATE_OBJECT_DUE_TO_FAILED_DIRECTORY_CREATION" : {
     "message" : [ "Unable to CREATE %s %s as failed to create its directory %s." ]
   },
-  "CANNOT_CREATE_PARTITION" : {
+  "CANNOT_CREATE_PARTITION_PATH" : {
     "message" : [ "Unable to create partition path %s" ]
   },
-  "CANNOT_DELETE_PARTITION" : {
+  "CANNOT_DELETE_PARTITION_PATH" : {
     "message" : [ "Unable to delete partition path %s" ]
   },
   "CANNOT_DROP_OBJECT_DUE_TO_FAILED_DIRECTORY_DELETION" : {
@@ -37,7 +37,7 @@
     "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"
   },
-  "CANNOT_RENAME_PARTITION" : {
+  "CANNOT_RENAME_PARTITION_PATH" : {
     "message" : [ "Unable to rename partition path %s" ]
   },
   "CANNOT_RENAME_TABLE_DUE_TO_FAILED_DIRECTORY_RENAMING" : {
