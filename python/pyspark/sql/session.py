@@ -651,7 +651,7 @@ class SparkSession(SparkConversionMixin):
         self,
         data: Union[
             "RDD[Union[DateTimeLiteral, LiteralType, DecimalLiteral]]",
-            Iterable[Union["DateTimeLiteral", "LiteralType", "DecimalLiteral", "RowLike"]],
+            Iterable[Union["DateTimeLiteral", "LiteralType", "DecimalLiteral"]],
         ],
         schema: Union[AtomicType, str],
         verifySchema: bool = ...,
