@@ -50,7 +50,7 @@ class NullDownPropagationSuite extends PlanTest with ExpressionEvalHelper {
     comparePlans(actual, correctAnswer)
   }
 
-  test("Using IsNull(UnaryExpression(input)) == IsNull(input) rules") {
+  test("Using IsNull(e(inputs)) == IsNull(input1) or IsNull(input2) ... rules") {
     checkCondition(IsNull(Not('e)), IsNull('e))
     checkCondition(IsNotNull(Not('e)), IsNotNull('e))
     checkCondition(IsNull('a > 'b), Or(IsNull('a), IsNull('b)))

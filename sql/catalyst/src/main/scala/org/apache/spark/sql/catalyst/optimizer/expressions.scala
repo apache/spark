@@ -874,7 +874,6 @@ object NullDownPropagation extends Rule[LogicalPlan] {
   private def supportedNullIntolerant(e: NullIntolerant): Boolean = (e match {
     case _: Not => true
     case _: GreaterThan | _: GreaterThanOrEqual | _: LessThan | _: LessThanOrEqual => true
-    // TODO support more NullIntolerant expressions
     case _ => false
   }) && e.children.nonEmpty
 
