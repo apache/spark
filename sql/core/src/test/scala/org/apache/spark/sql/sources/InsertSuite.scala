@@ -1054,6 +1054,49 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       }
     }
   }
+
+  test("Allow insert overwrite same table with static partition in dynamic" +
+    "partition overwrite mode.") {
+    Seq(PartitionOverwriteMode.DYNAMIC.toString,
+      PartitionOverwriteMode.STATIC.toString).foreach( mode => {
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> mode) {
+        withTable("insertTable") {
+          sql(
+            """
+              |CREATE TABLE insertTable(i int, part int) USING PARQUET
+              |PARTITIONED BY (part)
+            """.stripMargin)
+
+          sql("INSERT INTO TABLE insertTable PARTITION(part=1) SELECT 1")
+          checkAnswer(spark.table("insertTable"), Row(1, 1))
+
+          sql("INSERT INTO TABLE insertTable PARTITION(part=2) SELECT 2")
+          checkAnswer(spark.table("insertTable"), Row(1, 1) :: Row(2, 2) :: Nil)
+
+          if (mode == PartitionOverwriteMode.DYNAMIC.toString) {
+            sql(
+              """
+                |INSERT OVERWRITE TABLE insertTable PARTITION(part=1)
+                |SELECT i + 1 FROM insertTable WHERE part = 1
+              """.stripMargin)
+            checkAnswer(spark.table("insertTable"), Row(2, 1) :: Row(2, 2) :: Nil)
+          } else {
+            val message = intercept[AnalysisException] {
+              sql(
+                """
+                  |INSERT OVERWRITE TABLE insertTable PARTITION(part=1)
+                  |SELECT i + 1 FROM insertTable WHERE part = 1
+                """.stripMargin)
+            }.getMessage
+            assert(
+              message.contains("Cannot overwrite a path that is also being read from."),
+              "INSERT OVERWRITE to a table while querying it should not be allowed.")
+          }
+        }
+      }
+    })
+  }
+
 }
 
 class FileExistingTestFileSystem extends RawLocalFileSystem {
