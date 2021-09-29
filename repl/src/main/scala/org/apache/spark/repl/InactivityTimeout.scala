@@ -32,8 +32,11 @@ class InactivityTimeout(inactivityTimeoutMs: Long) extends Logging {
     override def run(): Unit = {
       logError(s"Inactivity timeout of $inactivityTimeoutMs ms reached - closing shell")
       if (!Utils.isTesting) {
-        Option(sparkContext).foreach(_.stop)
-        System.exit(1)
+        try {
+          Option(sparkContext).foreach(_.stop)
+        } finally {
+          System.exit(1)
+        }
       }
     }
   }
