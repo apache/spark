@@ -33,6 +33,9 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
+/**
+ * Test suite for the filtering ratio policy used to trigger dynamic partition pruning (DPP).
+ */
 abstract class DynamicPartitionPruningSuiteBase
     extends QueryTest
     with SQLTestUtils
@@ -1369,11 +1372,7 @@ abstract class DynamicPartitionPruningSuiteBase
   }
 }
 
-
-/**
- * Test suite for the filtering ratio policy used to trigger dynamic partition pruning (DPP).
- */
-abstract class DSDynamicPartitionPruningSuiteBase
+abstract class DynamicPartitionPruningDataSourceSuiteBase
     extends DynamicPartitionPruningSuiteBase
     with SharedSparkSession {
   import testImplicits._
@@ -1522,7 +1521,7 @@ abstract class DSDynamicPartitionPruningSuiteBase
   }
 }
 
-abstract class DynamicPartitionPruningV1Suite extends DSDynamicPartitionPruningSuiteBase {
+abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDataSourceSuiteBase {
 
   import testImplicits._
 
@@ -1616,7 +1615,7 @@ class DynamicPartitionPruningV1SuiteAEOff extends DynamicPartitionPruningV1Suite
 class DynamicPartitionPruningV1SuiteAEOn extends DynamicPartitionPruningV1Suite
   with EnableAdaptiveExecutionSuite
 
-abstract class DynamicPartitionPruningV2Suite extends DSDynamicPartitionPruningSuiteBase {
+abstract class DynamicPartitionPruningV2Suite extends DynamicPartitionPruningDataSourceSuiteBase {
   override protected def runAnalyzeColumnCommands: Boolean = false
 
   override protected def initState(): Unit = {
