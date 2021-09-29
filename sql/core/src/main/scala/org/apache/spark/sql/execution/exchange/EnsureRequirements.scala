@@ -78,23 +78,29 @@ case class EnsureRequirements(
     if (childrenIndexes.length > 1) {
       val specs = childrenIndexes.map(i =>
         i -> children(i).outputPartitioning.createShuffleSpec(
-          conf.numShufflePartitions,
+          requiredChildDistributions(i).requiredNumPartitions.getOrElse(conf.numShufflePartitions),
           requiredChildDistributions(i))
       ).toMap
 
-      // one or more children have requirement on others for shuffle, so we need to check
-      // compatibility and come up a common partitioning for them
+      // Find out the shuffle spec that gives better parallelism.
+      //
+      // NOTE: this is not optimal for the case when there are more than 2 children. Consider:
+      //   (10, 10, 11)
+      // it's better to pick 10 in this case since we only need to shuffle one side - we'd need to
+      // shuffle two sides if we pick 11.
+      //
+      // However this should be sufficient for now since in Spark nodes with multiple children
+      // always have exactly 2 children.
       val bestSpec = specs.values.maxBy(_.numPartitions)
 
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
         case ((child, _), idx) if !childrenIndexes.contains(idx) =>
           child
         case ((child, dist), idx) =>
-          // pick the best candidate from the requirements and use that to re-shuffle other
-          // children if necessary
           if (bestSpec.isCompatibleWith(specs(idx))) {
             child
           } else {
+            // Use the best spec to create a new partitioning to re-shuffle this child
             val newPartitioning = bestSpec.createPartitioning(dist)
             child match {
               case ShuffleExchangeExec(_, c, so) => ShuffleExchangeExec(newPartitioning, c, so)

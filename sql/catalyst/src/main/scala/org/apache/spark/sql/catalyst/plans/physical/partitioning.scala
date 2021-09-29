@@ -155,12 +155,10 @@ trait Partitioning {
    * shuffle shall be introduced.
    *
    * @param defaultNumPartitions the default number of partitions to use when creating a new
-   *                             partitioning from the spec
+   *                             partitioning using this spec
    * @param distribution the required distribution for this partitioning
    */
-  final def createShuffleSpec(
-      defaultNumPartitions: Int,
-      distribution: Distribution): ShuffleSpec =
+  final def createShuffleSpec(defaultNumPartitions: Int, distribution: Distribution): ShuffleSpec =
     distribution match {
       case AllTuples =>
         SinglePartitionShuffleSpec
@@ -300,8 +298,13 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
   override def createShuffleSpec0(
       defaultNumPartitions: Int,
       distribution: ClusteredDistribution): ShuffleSpec = {
-    val numPartitions = distribution.requiredNumPartitions.getOrElse(defaultNumPartitions)
-    RangeShuffleSpec(numPartitions, distribution)
+    // Since range partitioning is not even compatible with itself, we need to treat it especially.
+    // For instance, if left hand side is HashPartitioning(_, 100), while right hand side is
+    // RangePartitioning(_, 150), we should probably only shuffle the right hand side.
+    // However, if `spark.sql.shuffle.partitions` is 200, we should probably shuffle both sides.
+    //
+    // To achieve this, here we use the default number of partitions instead of `numPartitions`.
+    RangeShuffleSpec(defaultNumPartitions, distribution)
   }
 
   override protected def withNewChildrenInternal(
@@ -351,10 +354,8 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
       distribution: ClusteredDistribution): ShuffleSpec = {
     require(satisfies(distribution), "createShuffleSpec should only be called after satisfies " +
         "check is successful.")
-    val eligible = partitionings
-        .filter(_.satisfies(distribution))
-        .map(_.createShuffleSpec(defaultNumPartitions, distribution))
-    ShuffleSpecCollection(eligible)
+    val filtered = partitionings.filter(_.satisfies(distribution))
+    ShuffleSpecCollection(filtered.map(_.createShuffleSpec(defaultNumPartitions, distribution)))
   }
 
   override def toString: String = {
@@ -388,7 +389,7 @@ case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
  *   1. Comparing with specs from other children of the operator and check if they are compatible.
  *      When two specs are compatible, we can say their data are co-partitioned, and Spark will
  *      potentially able to eliminate shuffle if necessary.
- *   2. Creating a partitioning that can be used to re-partition another child, so that to make it
+ *   1. Creating a partitioning that can be used to re-partition another child, so that to make it
  *      having a compatible partitioning as this node.
  */
 trait ShuffleSpec {
@@ -442,7 +443,11 @@ case class RangeShuffleSpec(
     numPartitions: Int,
     distribution: ClusteredDistribution) extends ShuffleSpec {
 
-  override def isCompatibleWith(other: ShuffleSpec): Boolean = false
+  override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
+    case SinglePartitionShuffleSpec => numPartitions == 1
+    case ShuffleSpecCollection(specs) => specs.exists(isCompatibleWith)
+    case _ => false
+  }
 
   override def createPartitioning0(clustering: Seq[Expression]): Partitioning =
     HashPartitioning(clustering, numPartitions)
@@ -459,9 +464,11 @@ case class HashShuffleSpec(
       partitioning.numPartitions == 1
     case HashShuffleSpec(otherPartitioning, otherDistribution) =>
       // we need to check:
-      //  1. both partitioning have the same number of expressions
-      //  2. each corresponding expression in both partitioning is used in the same positions
-      //     of the corresponding distribution.
+      //  1. both partitioning have the same number of partitions
+      //  2. both partitioning have the same number of expressions
+      //  3. each pair of expression from both has overlapping positions in their
+      //     corresponding distributions.
+      partitioning.numPartitions == otherPartitioning.numPartitions &&
       partitioning.expressions.length == otherPartitioning.expressions.length && {
         val otherHashKeyPositions = createHashKeyPositions(
           otherDistribution.clustering, otherPartitioning.expressions)
@@ -501,13 +508,14 @@ case class HashShuffleSpec(
 
 case class ShuffleSpecCollection(specs: Seq[ShuffleSpec]) extends ShuffleSpec {
   override def isCompatibleWith(other: ShuffleSpec): Boolean = {
-    specs.exists(_.isCompatibleWith(this))
+    specs.exists(_.isCompatibleWith(other))
   }
 
   override def createPartitioning0(clustering: Seq[Expression]): Partitioning = {
-    // choose the spec with the max number of partitions for better parallelism
-    specs.maxBy(_.numPartitions).createPartitioning0(clustering)
+    // as we only consider # of partitions as the cost now, it doesn't matter which one we choose
+    // since they should all have the same # of partitions.
+    specs.head.createPartitioning0(clustering)
   }
 
-  override def numPartitions: Int = specs.maxBy(_.numPartitions).numPartitions
+  override def numPartitions: Int = specs.head.numPartitions
 }

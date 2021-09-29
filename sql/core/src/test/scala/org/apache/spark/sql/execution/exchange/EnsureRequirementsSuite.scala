@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.exchange
 
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, PartitioningCollection}
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{DummySparkPlan, SortExec}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
@@ -137,15 +137,27 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-35703: should have no shuffle when clustering keys are subset of join keys") {
+  test("SPARK-35703: successful compatibility check with HashShuffleSpec") {
     val plan1 = DummySparkPlan(
       outputPartitioning = HashPartitioning(exprA :: Nil, 5))
     val plan2 = DummySparkPlan(
       outputPartitioning = HashPartitioning(exprB :: Nil, 5))
 
-    val smjExec1 = SortMergeJoinExec(
+    var smjExec = SortMergeJoinExec(
+      exprA :: Nil, exprB :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+      SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _),
+      SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _), _) =>
+        assert(leftKeys === Seq(exprA))
+        assert(rightKeys === Seq(exprB))
+      case other => fail(other.toString)
+    }
+
+    // should also work if both partition keys are subset of their corresponding cluster keys
+    smjExec = SortMergeJoinExec(
       exprA :: exprB :: Nil, exprB :: exprC :: Nil, Inner, None, plan1, plan2)
-    EnsureRequirements.apply(smjExec1) match {
+    EnsureRequirements.apply(smjExec) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
         SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _),
         SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _), _) =>
@@ -154,9 +166,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       case other => fail(other.toString)
     }
 
-    val smjExec2 = SortMergeJoinExec(
+    smjExec = SortMergeJoinExec(
       exprB :: exprA :: Nil, exprC :: exprB :: Nil, Inner, None, plan1, plan2)
-    EnsureRequirements.apply(smjExec2) match {
+    EnsureRequirements.apply(smjExec) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
         SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _),
         SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _), _) =>
@@ -166,7 +178,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-35703: compatibility with duplicated keys") {
+  test("SPARK-35703: successful compatibility check with HashShuffleSpec and duplicate keys") {
     var plan1 = DummySparkPlan(
       outputPartitioning = HashPartitioning(exprA :: exprB :: Nil, 5))
     var plan2 = DummySparkPlan(
@@ -228,7 +240,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-35703: re-partition the other join side, basic case") {
+  test("SPARK-35703: incompatible & repartitioning with HashShuffleSpec") {
     var plan1 = DummySparkPlan(
       outputPartitioning = HashPartitioning(exprA :: Nil, 10))
     var plan2 = DummySparkPlan(
@@ -280,8 +292,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-35703: re-partition the other join side, with duplicated keys") {
-    // with duplicate keys
+  test("SPARK-35703: incompatible & repartitioning with HashShuffleSpec and duplicate keys") {
     var plan1 = DummySparkPlan(
       outputPartitioning = HashPartitioning(exprA :: exprB :: exprA :: Nil, 10))
     var plan2 = DummySparkPlan(
@@ -311,6 +322,139 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         assert(leftKeys === Seq(exprA, exprB, exprB))
         assert(rightKeys === Seq(exprA, exprC, exprD))
         assert(p.expressions == Seq(exprA, exprC, exprA))
+      case other => fail(other.toString)
+    }
+  }
+
+  test("SPARK-35703: successful compatibility check with other specs") {
+    var plan1 = DummySparkPlan(outputPartitioning = SinglePartition)
+    var plan2 = DummySparkPlan(outputPartitioning = SinglePartition)
+    var smjExec = SortMergeJoinExec(
+      exprA :: exprB :: Nil, exprC :: exprD :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+      SortExec(_, _, DummySparkPlan(_, _, SinglePartition, _, _), _),
+      SortExec(_, _, DummySparkPlan(_, _, SinglePartition, _, _), _), _) =>
+      case other => fail(other.toString)
+    }
+
+    plan1 = DummySparkPlan(outputPartitioning = SinglePartition)
+    plan2 = DummySparkPlan(outputPartitioning = HashPartitioning(exprC :: exprD :: Nil, 1))
+    smjExec = SortMergeJoinExec(
+      exprA :: exprB :: Nil, exprC :: exprD :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+      SortExec(_, _, DummySparkPlan(_, _, SinglePartition, _, _), _),
+      SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _), _) =>
+      case other => fail(other.toString)
+    }
+
+    plan1 = DummySparkPlan(outputPartitioning = PartitioningCollection(Seq(
+        HashPartitioning(Seq(exprA), 10), HashPartitioning(Seq(exprA, exprB), 10))))
+    plan2 = DummySparkPlan(outputPartitioning = HashPartitioning(Seq(exprC, exprD), 10))
+    smjExec = SortMergeJoinExec(
+      exprA :: exprB :: Nil, exprC :: exprD :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+      SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _),
+      SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _), _) =>
+      case other => fail(other.toString)
+    }
+  }
+
+  test("SPARK-35703: incompatible & repartitioning with other specs") {
+    var plan1 = DummySparkPlan(outputPartitioning = SinglePartition)
+    var plan2 = DummySparkPlan(outputPartitioning = RangePartitioning(
+      Seq(SortOrder.apply(exprC, Ascending, sameOrderExpressions = Seq.empty)), 1))
+    var smjExec = SortMergeJoinExec(
+      exprA :: exprB :: Nil, exprC :: exprD :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+      SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _), _),
+      SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
+        assert(left.numPartitions == conf.numShufflePartitions)
+        assert(right.numPartitions == conf.numShufflePartitions)
+      case other => fail(other.toString)
+    }
+
+    plan1 = DummySparkPlan(outputPartitioning = HashPartitioning(Seq(exprA, exprB), 10))
+    plan2 = DummySparkPlan(outputPartitioning = RangePartitioning(
+      Seq(SortOrder.apply(exprC, Ascending, sameOrderExpressions = Seq.empty)), 5))
+    smjExec = SortMergeJoinExec(
+      exprA :: exprB :: Nil, exprC :: exprD :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+      SortExec(_, _, DummySparkPlan(_, _, left: HashPartitioning, _, _), _),
+      SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
+        assert(left.numPartitions == 10)
+        assert(right.numPartitions == 10)
+        assert(right.expressions == Seq(exprC, exprD))
+      case other => fail(other.toString)
+    }
+
+    plan1 = DummySparkPlan(outputPartitioning = HashPartitioning(Seq(exprA), 1))
+    plan2 = DummySparkPlan(outputPartitioning = RangePartitioning(
+      Seq(SortOrder.apply(exprC, Ascending, sameOrderExpressions = Seq.empty)), 1))
+    smjExec = SortMergeJoinExec(
+      exprA :: exprB :: Nil, exprC :: exprD :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+      SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _), _),
+      SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
+        assert(left.numPartitions == conf.numShufflePartitions)
+        assert(right.numPartitions == conf.numShufflePartitions)
+        assert(right.expressions == Seq(exprC, exprD))
+      case other => fail(other.toString)
+    }
+
+    plan1 = DummySparkPlan(outputPartitioning = RangePartitioning(
+      Seq(SortOrder.apply(exprA, Ascending, sameOrderExpressions = Seq.empty)), 1))
+    plan2 = DummySparkPlan(outputPartitioning = RangePartitioning(
+      Seq(SortOrder.apply(exprD, Ascending, sameOrderExpressions = Seq.empty)), 1))
+    smjExec = SortMergeJoinExec(
+      exprA :: exprB :: Nil, exprC :: exprD :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+      SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _), _),
+      SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
+        assert(left.numPartitions == conf.numShufflePartitions)
+        assert(left.expressions == Seq(exprA, exprB))
+        assert(right.numPartitions == conf.numShufflePartitions)
+        assert(right.expressions == Seq(exprC, exprD))
+      case other => fail(other.toString)
+    }
+
+    plan1 = DummySparkPlan(outputPartitioning = PartitioningCollection(Seq(
+      HashPartitioning(Seq(exprA), 10), HashPartitioning(Seq(exprB), 10))))
+    plan2 = DummySparkPlan(outputPartitioning = PartitioningCollection(Seq(
+      HashPartitioning(Seq(exprC), 10), HashPartitioning(Seq(exprD), 10))))
+    smjExec = SortMergeJoinExec(
+      exprA :: exprB :: exprC :: exprD :: Nil, exprA :: exprB :: exprC :: exprD :: Nil,
+      Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+      SortExec(_, _, DummySparkPlan(_, _, left: PartitioningCollection, _, _), _),
+      SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
+        assert(left.numPartitions == 10)
+        assert(right.numPartitions == 10)
+        assert(right.expressions == Seq(exprA))
+      case other => fail(other.toString)
+    }
+
+    plan1 = DummySparkPlan(outputPartitioning = PartitioningCollection(Seq(
+      HashPartitioning(Seq(exprA), 10), HashPartitioning(Seq(exprB), 10))))
+    plan2 = DummySparkPlan(outputPartitioning = PartitioningCollection(Seq(
+      HashPartitioning(Seq(exprC), 20), HashPartitioning(Seq(exprD), 20))))
+    smjExec = SortMergeJoinExec(
+      exprA :: exprB :: exprC :: exprD :: Nil, exprA :: exprB :: exprC :: exprD :: Nil,
+      Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+      SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _), _),
+      SortExec(_, _, DummySparkPlan(_, _, right: PartitioningCollection, _, _), _), _) =>
+        assert(left.numPartitions == 20)
+        assert(left.expressions == Seq(exprC))
+        assert(right.numPartitions == 20)
       case other => fail(other.toString)
     }
   }
