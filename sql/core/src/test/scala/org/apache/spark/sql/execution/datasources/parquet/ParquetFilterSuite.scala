@@ -2041,7 +2041,7 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
     }
   }
 
-  test("SPARK-XXXXX: Don't show pushed filters when filters pushdown is disabled") {
+  test("SPARK-36889: Respect disabling of filters pushdown for DSv2 by explain") {
     import testImplicits._
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false") {
       withTempPath { path =>
