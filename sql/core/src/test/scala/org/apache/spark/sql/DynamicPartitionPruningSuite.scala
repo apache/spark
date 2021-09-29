@@ -471,8 +471,8 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("no stats and selective predicate with the size of dim too large")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0.02") {
+          SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0.02") {
         withTable("fact_aux") {
           sql(
             """
@@ -503,7 +503,7 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("no stats and selective predicate with the size of dim too large but cached")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
+          SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         withTable("fact_aux") {
           withTempView("cached_dim_store") {
             sql(
@@ -551,8 +551,8 @@ abstract class DynamicPartitionPruningSuiteBase
 
         checkAnswer(df,
           Row(1010, 1, 10, 2) ::
-            Row(1020, 1, 10, 2) ::
-            Row(1000, 1, 10, 1) :: Nil
+          Row(1020, 1, 10, 2) ::
+          Row(1000, 1, 10, 1) :: Nil
         )
       }
     }
@@ -1486,6 +1486,7 @@ abstract class DynamicPartitionPruningSuiteBase
 abstract class DynamicPartitionPruningDataSourceSuiteBase
     extends DynamicPartitionPruningSuiteBase
     with SharedSparkSession {
+
   import testImplicits._
 
   test("no partition pruning when the build side is a stream") {
