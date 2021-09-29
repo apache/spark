@@ -39,9 +39,9 @@ abstract class DynamicPartitionPruningSuiteBase
     with GivenWhenThen
     with AdaptiveSparkPlanHelper {
 
-  import testImplicits._
-
   val tableFormat: String = "parquet"
+
+  import testImplicits._
 
   protected def initState(): Unit = {}
   protected def runAnalyzeColumnCommands: Boolean = true
