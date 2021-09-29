@@ -19,13 +19,19 @@
 Type-specific codes between pandas and PyArrow. Also contains some utils to correct
 pandas instances during the type conversion.
 """
+from typing import Optional, TYPE_CHECKING
 
 from pyspark.sql.types import BooleanType, ByteType, ShortType, IntegerType, LongType, \
     FloatType, DoubleType, DecimalType, StringType, BinaryType, DateType, TimestampType, \
-    TimestampNTZType, ArrayType, MapType, StructType, StructField, NullType
+    TimestampNTZType, ArrayType, MapType, StructType, StructField, NullType, DataType
+
+if TYPE_CHECKING:
+    import pyarrow as pa
+
+    from pyspark.sql.pandas._typing import SeriesLike as PandasSeriesLike
 
 
-def to_arrow_type(dt):
+def to_arrow_type(dt: DataType) -> "pa.DataType":
     """ Convert Spark data type to pyarrow type
     """
     from distutils.version import LooseVersion
@@ -81,7 +87,7 @@ def to_arrow_type(dt):
     return arrow_type
 
 
-def to_arrow_schema(schema):
+def to_arrow_schema(schema: StructType) -> "pa.Schema":
     """ Convert a schema from Spark to Arrow
     """
     import pyarrow as pa
@@ -90,14 +96,14 @@ def to_arrow_schema(schema):
     return pa.schema(fields)
 
 
-def from_arrow_type(at, prefer_timestamp_ntz=False):
+def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> DataType:
     """ Convert pyarrow type to Spark data type.
     """
     from distutils.version import LooseVersion
     import pyarrow as pa
     import pyarrow.types as types
     if types.is_boolean(at):
-        spark_type = BooleanType()
+        spark_type = BooleanType()  # type: DataType
     elif types.is_int8(at):
         spark_type = ByteType()
     elif types.is_int16(at):
@@ -147,7 +153,7 @@ def from_arrow_type(at, prefer_timestamp_ntz=False):
     return spark_type
 
 
-def from_arrow_schema(arrow_schema):
+def from_arrow_schema(arrow_schema: "pa.Schema") -> StructType:
     """ Convert schema from Arrow to Spark.
     """
     return StructType(
@@ -155,7 +161,7 @@ def from_arrow_schema(arrow_schema):
          for field in arrow_schema])
 
 
-def _get_local_timezone():
+def _get_local_timezone() -> str:
     """ Get local timezone using pytz with environment variable, or dateutil.
 
     If there is a 'TZ' environment variable, pass it to pandas to use pytz and use it as timezone
@@ -170,7 +176,7 @@ def _get_local_timezone():
     return os.environ.get('TZ', 'dateutil/:')
 
 
-def _check_series_localize_timestamps(s, timezone):
+def _check_series_localize_timestamps(s: "PandasSeriesLike", timezone: str) -> "PandasSeriesLike":
     """
     Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone.
 
@@ -200,7 +206,9 @@ def _check_series_localize_timestamps(s, timezone):
         return s
 
 
-def _check_series_convert_timestamps_internal(s, timezone):
+def _check_series_convert_timestamps_internal(
+    s: "PandasSeriesLike", timezone: str
+) -> "PandasSeriesLike":
     """
     Convert a tz-naive timestamp in the specified timezone or local timezone to UTC normalized for
     Spark internal storage
@@ -260,7 +268,9 @@ def _check_series_convert_timestamps_internal(s, timezone):
         return s
 
 
-def _check_series_convert_timestamps_localize(s, from_timezone, to_timezone):
+def _check_series_convert_timestamps_localize(
+    s: "PandasSeriesLike", from_timezone: Optional[str], to_timezone: Optional[str]
+) -> "PandasSeriesLike":
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone
 
@@ -296,7 +306,9 @@ def _check_series_convert_timestamps_localize(s, from_timezone, to_timezone):
         return s
 
 
-def _check_series_convert_timestamps_local_tz(s, timezone):
+def _check_series_convert_timestamps_local_tz(
+    s: "PandasSeriesLike", timezone: str
+) -> "PandasSeriesLike":
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone
 
@@ -314,7 +326,9 @@ def _check_series_convert_timestamps_local_tz(s, timezone):
     return _check_series_convert_timestamps_localize(s, None, timezone)
 
 
-def _check_series_convert_timestamps_tz_local(s, timezone):
+def _check_series_convert_timestamps_tz_local(
+    s: "PandasSeriesLike", timezone: str
+) -> "PandasSeriesLike":
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone
 
@@ -332,7 +346,7 @@ def _check_series_convert_timestamps_tz_local(s, timezone):
     return _check_series_convert_timestamps_localize(s, timezone, None)
 
 
-def _convert_map_items_to_dict(s):
+def _convert_map_items_to_dict(s: "PandasSeriesLike") -> "PandasSeriesLike":
     """
     Convert a series with items as list of (key, value), as made from an Arrow column of map type,
     to dict for compatibility with non-arrow MapType columns.
@@ -342,7 +356,7 @@ def _convert_map_items_to_dict(s):
     return s.apply(lambda m: None if m is None else {k: v for k, v in m})
 
 
-def _convert_dict_to_map_items(s):
+def _convert_dict_to_map_items(s: "PandasSeriesLike") -> "PandasSeriesLike":
     """
     Convert a series of dictionaries to list of (key, value) pairs to match expected data
     for Arrow column of map type.
