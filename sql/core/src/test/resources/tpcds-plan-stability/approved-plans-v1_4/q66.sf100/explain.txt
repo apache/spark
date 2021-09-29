@@ -88,7 +88,7 @@ Input [2]: [sm_ship_mode_sk#9, sm_carrier#10]
 
 (8) BroadcastExchange
 Input [1]: [sm_ship_mode_sk#9]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#11]
 
 (9) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ws_ship_mode_sk#2]
@@ -119,7 +119,7 @@ Input [2]: [t_time_sk#12, t_time#13]
 
 (15) BroadcastExchange
 Input [1]: [t_time_sk#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#14]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#14]
 
 (16) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ws_sold_time_sk#1]
@@ -158,7 +158,7 @@ Condition : isnotnull(w_warehouse_sk#18)
 
 (24) BroadcastExchange
 Input [7]: [w_warehouse_sk#18, w_warehouse_name#19, w_warehouse_sq_ft#20, w_city#21, w_county#22, w_state#23, w_country#24]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#25]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#25]
 
 (25) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ws_warehouse_sk#3]
@@ -290,7 +290,7 @@ Results [44]: [w_warehouse_name#19, w_warehouse_sq_ft#20, w_city#21, w_county#22
 
 (52) TakeOrderedAndProject
 Input [44]: [w_warehouse_name#19, w_warehouse_sq_ft#20, w_city#21, w_county#22, w_state#23, w_country#24, ship_carriers#147, year#148, jan_sales#520, feb_sales#521, mar_sales#522, apr_sales#523, may_sales#524, jun_sales#525, jul_sales#526, aug_sales#527, sep_sales#528, oct_sales#529, nov_sales#530, dec_sales#531, jan_sales_per_sq_foot#532, feb_sales_per_sq_foot#533, mar_sales_per_sq_foot#534, apr_sales_per_sq_foot#535, may_sales_per_sq_foot#536, jun_sales_per_sq_foot#537, jul_sales_per_sq_foot#538, aug_sales_per_sq_foot#539, sep_sales_per_sq_foot#540, oct_sales_per_sq_foot#541, nov_sales_per_sq_foot#542, dec_sales_per_sq_foot#543, jan_net#544, feb_net#545, mar_net#546, apr_net#547, may_net#548, jun_net#549, jul_net#550, aug_net#551, sep_net#552, oct_net#553, nov_net#554, dec_net#555]
-Arguments: 100, [w_warehouse_name#19 ASC NULLS FIRST], [w_warehouse_name#19, w_warehouse_sq_ft#20, w_city#21, w_county#22, w_state#23, w_country#24, ship_carriers#147, year#148, jan_sales#520, feb_sales#521, mar_sales#522, apr_sales#523, may_sales#524, jun_sales#525, jul_sales#526, aug_sales#527, sep_sales#528, oct_sales#529, nov_sales#530, dec_sales#531, jan_sales_per_sq_foot#532, feb_sales_per_sq_foot#533, mar_sales_per_sq_foot#534, apr_sales_per_sq_foot#535, ... 20 more fields]
+Arguments: 100, [w_warehouse_name#19 ASC NULLS FIRST], [w_warehouse_name#19, w_warehouse_sq_ft#20, w_city#21, w_county#22, w_state#23, w_country#24, ship_carriers#147, year#148, jan_sales#520, feb_sales#521, mar_sales#522, apr_sales#523, may_sales#524, jun_sales#525, jul_sales#526, aug_sales#527, sep_sales#528, oct_sales#529, nov_sales#530, dec_sales#531, jan_sales_per_sq_foot#532, feb_sales_per_sq_foot#533, mar_sales_per_sq_foot#534, apr_sales_per_sq_foot#535, may_sales_per_sq_foot#536, jun_sales_per_sq_foot#537, jul_sales_per_sq_foot#538, aug_sales_per_sq_foot#539, sep_sales_per_sq_foot#540, oct_sales_per_sq_foot#541, nov_sales_per_sq_foot#542, dec_sales_per_sq_foot#543, jan_net#544, feb_net#545, mar_net#546, apr_net#547, may_net#548, jun_net#549, jul_net#550, aug_net#551, sep_net#552, oct_net#553, nov_net#554, dec_net#555]
 
 ===== Subqueries =====
 
@@ -317,7 +317,7 @@ Condition : ((isnotnull(d_year#16) AND (d_year#16 = 2001)) AND isnotnull(d_date_
 
 (56) BroadcastExchange
 Input [3]: [d_date_sk#15, d_year#16, d_moy#17]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#556]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#556]
 
 Subquery:2 Hosting operator id = 30 Hosting Expression = cs_sold_date_sk#179 IN dynamicpruning#8
 

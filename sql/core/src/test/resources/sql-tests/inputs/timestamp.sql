@@ -22,6 +22,9 @@ SELECT make_timestamp(1, 1, 1, 1, 1, 1);
 SELECT make_timestamp(1, 1, 1, 1, 1, 60);
 SELECT make_timestamp(1, 1, 1, 1, 1, 61);
 SELECT make_timestamp(1, 1, 1, 1, 1, null);
+SELECT make_timestamp(1, 1, 1, 1, 1, 59.999999);
+SELECT make_timestamp(1, 1, 1, 1, 1, 99.999999);
+SELECT make_timestamp(1, 1, 1, 1, 1, 999.999999);
 
 -- [SPARK-31710] TIMESTAMP_SECONDS, TIMESTAMP_MILLISECONDS and TIMESTAMP_MICROSECONDS that always create timestamp_ltz
 select TIMESTAMP_SECONDS(1230219000),TIMESTAMP_SECONDS(-1230219000),TIMESTAMP_SECONDS(null);

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2.parquet
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownFilters}
+import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
@@ -35,7 +35,7 @@ case class ParquetScanBuilder(
     schema: StructType,
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
-  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) with SupportsPushDownFilters {
+  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
   lazy val hadoopConf = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
@@ -44,36 +44,35 @@ case class ParquetScanBuilder(
 
   lazy val pushedParquetFilters = {
     val sqlConf = sparkSession.sessionState.conf
-    val pushDownDate = sqlConf.parquetFilterPushDownDate
-    val pushDownTimestamp = sqlConf.parquetFilterPushDownTimestamp
-    val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
-    val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
-    val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
-    val isCaseSensitive = sqlConf.caseSensitiveAnalysis
-    val parquetSchema =
-      new SparkToParquetSchemaConverter(sparkSession.sessionState.conf).convert(readDataSchema())
-    val parquetFilters = new ParquetFilters(
-      parquetSchema,
-      pushDownDate,
-      pushDownTimestamp,
-      pushDownDecimal,
-      pushDownStringStartWith,
-      pushDownInFilterThreshold,
-      isCaseSensitive,
-      // The rebase mode doesn't matter here because the filters are used to determine
-      // whether they is convertible.
-      LegacyBehaviorPolicy.CORRECTED)
-    parquetFilters.convertibleFilters(this.filters).toArray
+    if (sqlConf.parquetFilterPushDown) {
+      val pushDownDate = sqlConf.parquetFilterPushDownDate
+      val pushDownTimestamp = sqlConf.parquetFilterPushDownTimestamp
+      val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
+      val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
+      val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
+      val isCaseSensitive = sqlConf.caseSensitiveAnalysis
+      val parquetSchema =
+        new SparkToParquetSchemaConverter(sparkSession.sessionState.conf).convert(readDataSchema())
+      val parquetFilters = new ParquetFilters(
+        parquetSchema,
+        pushDownDate,
+        pushDownTimestamp,
+        pushDownDecimal,
+        pushDownStringStartWith,
+        pushDownInFilterThreshold,
+        isCaseSensitive,
+        // The rebase mode doesn't matter here because the filters are used to determine
+        // whether they is convertible.
+        LegacyBehaviorPolicy.CORRECTED)
+      parquetFilters.convertibleFilters(pushedDataFilters).toArray
+    } else {
+      Array.empty[Filter]
+    }
   }
 
   override protected val supportsNestedSchemaPruning: Boolean = true
 
-  private var filters: Array[Filter] = Array.empty
-
-  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
-    this.filters = filters
-    this.filters
-  }
+  override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = dataFilters
 
   // Note: for Parquet, the actual filter push down happens in [[ParquetPartitionReaderFactory]].
   // It requires the Parquet physical schema to determine whether a filter is convertible.
@@ -82,6 +81,6 @@ case class ParquetScanBuilder(
 
   override def build(): Scan = {
     ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, readDataSchema(),
-      readPartitionSchema(), pushedParquetFilters, options)
+      readPartitionSchema(), pushedParquetFilters, options, partitionFilters, dataFilters)
   }
 }

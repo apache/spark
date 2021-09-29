@@ -512,12 +512,13 @@ case class DataSource(
       physicalPlan: SparkPlan,
       metrics: Map[String, SQLMetric]): BaseRelation = {
     val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(data, outputColumnNames)
-    disallowWritingIntervals(outputColumns.map(_.dataType))
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
+        disallowWritingIntervals(outputColumns.map(_.dataType), forbidAnsiIntervals = true)
         dataSource.createRelation(
           sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
       case format: FileFormat =>
+        disallowWritingIntervals(outputColumns.map(_.dataType), forbidAnsiIntervals = false)
         val cmd = planForWritingFileFormat(format, mode, data)
         val resolvedPartCols = cmd.partitionColumns.map { col =>
           // The partition columns created in `planForWritingFileFormat` should always be
@@ -547,11 +548,12 @@ case class DataSource(
    * Returns a logical plan to write the given [[LogicalPlan]] out to this [[DataSource]].
    */
   def planForWriting(mode: SaveMode, data: LogicalPlan): LogicalPlan = {
-    disallowWritingIntervals(data.schema.map(_.dataType))
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
+        disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = true)
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
+        disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = false)
         DataSource.validateSchema(data.schema)
         planForWritingFileFormat(format, mode, data)
       case _ =>
@@ -577,8 +579,11 @@ case class DataSource(
       checkEmptyGlobPath, checkFilesExist, enableGlobbing = globPaths)
   }
 
-  private def disallowWritingIntervals(dataTypes: Seq[DataType]): Unit = {
-    dataTypes.foreach(TypeUtils.invokeOnceForInterval(_) {
+  private def disallowWritingIntervals(
+      dataTypes: Seq[DataType],
+      forbidAnsiIntervals: Boolean): Unit = {
+    val isParquet = providingClass == classOf[ParquetFileFormat]
+    dataTypes.foreach(TypeUtils.invokeOnceForInterval(_, forbidAnsiIntervals || !isParquet) {
       throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()
     })
   }

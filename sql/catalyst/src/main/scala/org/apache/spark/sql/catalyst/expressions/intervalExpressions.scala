@@ -227,7 +227,7 @@ case class DivideInterval(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(years, months, weeks, days, hours, mins, secs) - Make interval from years, months, weeks, days, hours, mins and secs.",
+  usage = "_FUNC_([years[, months[, weeks[, days[, hours[, mins[, secs]]]]]]]) - Make interval from years, months, weeks, days, hours, mins and secs.",
   arguments = """
     Arguments:
       * years - the number of years, positive or negative
@@ -360,7 +360,7 @@ case class MakeInterval(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(days, hours, mins, secs) - Make DayTimeIntervalType duration from days, hours, mins and secs.",
+  usage = "_FUNC_([days[, hours[, mins[, secs]]]]) - Make DayTimeIntervalType duration from days, hours, mins and secs.",
   arguments = """
     Arguments:
       * days - the number of days, positive or negative
@@ -372,6 +372,8 @@ case class MakeInterval(
     Examples:
       > SELECT _FUNC_(1, 12, 30, 01.001001);
        1 12:30:01.001001000
+      > SELECT _FUNC_(2);
+       2 00:00:00.000000000
       > SELECT _FUNC_(100, null, 3);
        NULL
   """,
@@ -436,7 +438,7 @@ case class MakeDTInterval(
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(years, months) - Make year-month interval from years, months.",
+  usage = "_FUNC_([years[, months]]) - Make year-month interval from years, months.",
   arguments = """
     Arguments:
       * years - the number of years, positive or negative
@@ -450,6 +452,8 @@ case class MakeDTInterval(
        1-0
       > SELECT _FUNC_(-1, 1);
        -0-11
+      > SELECT _FUNC_(2);
+       2-0
   """,
   since = "3.2.0",
   group = "datetime_funcs")

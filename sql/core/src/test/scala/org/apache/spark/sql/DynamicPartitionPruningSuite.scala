@@ -182,11 +182,11 @@ abstract class DynamicPartitionPruningSuiteBase
     val plan = df.queryExecution.executedPlan
     val dpExprs = collectDynamicPruningExpressions(plan)
     val hasSubquery = dpExprs.exists {
-      case InSubqueryExec(_, _: SubqueryExec, _, _) => true
+      case InSubqueryExec(_, _: SubqueryExec, _, _, _, _) => true
       case _ => false
     }
     val subqueryBroadcast = dpExprs.collect {
-      case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _) => b
+      case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _, _, _) => b
     }
 
     val hasFilter = if (withSubquery) "Should" else "Shouldn't"
@@ -239,7 +239,7 @@ abstract class DynamicPartitionPruningSuiteBase
     df.collect()
 
     val buf = collectDynamicPruningExpressions(df.queryExecution.executedPlan).collect {
-      case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _) =>
+      case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _, _, _) =>
         b.index
     }
     assert(buf.distinct.size == n)
@@ -354,8 +354,7 @@ abstract class DynamicPartitionPruningSuiteBase
    */
   test("DPP triggers only for certain types of query") {
     withSQLConf(
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO.key -> "1") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
       Given("dynamic partition pruning disabled")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
         val df = sql(
@@ -467,31 +466,69 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("no stats and selective predicate with the size of dim too large")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
-        sql(
-          """
-            |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
-            |FROM fact_sk f WHERE store_id < 5
-          """.stripMargin)
-          .write
-          .partitionBy("store_id")
-          .saveAsTable("fact_aux")
+          SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
+        withTable("fact_aux") {
+          sql(
+            """
+              |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
+              |FROM fact_sk f WHERE store_id < 5
+            """.stripMargin)
+            .write
+            .partitionBy("store_id")
+            .saveAsTable("fact_aux")
 
-        val df = sql(
-          """
-            |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
-            |FROM fact_aux f JOIN dim_store s
-            |ON f.store_id = s.store_id WHERE s.country = 'US'
-          """.stripMargin)
+          val df = sql(
+            """
+              |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
+              |FROM fact_aux f JOIN dim_store s
+              |ON f.store_id = s.store_id WHERE s.country = 'US'
+            """.stripMargin)
 
-        checkPartitionPruningPredicate(df, false, false)
+          checkPartitionPruningPredicate(df, false, false)
 
-        checkAnswer(df,
-          Row(1070, 2, 10, 4) ::
-          Row(1080, 3, 20, 4) ::
-          Row(1090, 3, 10, 4) ::
-          Row(1100, 3, 10, 4) :: Nil
-        )
+          checkAnswer(df,
+            Row(1070, 2, 10, 4) ::
+              Row(1080, 3, 20, 4) ::
+              Row(1090, 3, 10, 4) ::
+              Row(1100, 3, 10, 4) :: Nil
+          )
+        }
+      }
+
+      Given("no stats and selective predicate with the size of dim too large but cached")
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
+        withTable("fact_aux") {
+          withTempView("cached_dim_store") {
+            sql(
+              """
+                |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
+                |FROM fact_sk f WHERE store_id < 5
+              """.stripMargin)
+              .write
+              .partitionBy("store_id")
+              .saveAsTable("fact_aux")
+
+            spark.table("dim_store").cache()
+              .createOrReplaceTempView("cached_dim_store")
+
+            val df = sql(
+              """
+                |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
+                |FROM fact_aux f JOIN cached_dim_store s
+                |ON f.store_id = s.store_id WHERE s.country = 'US'
+              """.stripMargin)
+
+            checkPartitionPruningPredicate(df, true, false)
+
+            checkAnswer(df,
+              Row(1070, 2, 10, 4) ::
+                Row(1080, 3, 20, 4) ::
+                Row(1090, 3, 10, 4) ::
+                Row(1100, 3, 10, 4) :: Nil
+            )
+          }
+        }
       }
 
       Given("no stats and selective predicate with the size of dim small")
@@ -1413,38 +1450,6 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("SPARK-32855: Filtering side can not broadcast by join type") {
-    withSQLConf(
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO.key -> "1") {
-
-      val sqlStr =
-        """
-          |SELECT s.store_id,f. product_id FROM dim_store s
-          |LEFT JOIN fact_sk f
-          |ON f.store_id = s.store_id WHERE s.country = 'NL'
-          """.stripMargin
-
-      // DPP will only apply if disable reuseBroadcastOnly
-      Seq(true, false).foreach { reuseBroadcastOnly =>
-        withSQLConf(
-          SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> s"$reuseBroadcastOnly") {
-          val df = sql(sqlStr)
-          checkPartitionPruningPredicate(df, !reuseBroadcastOnly, false)
-        }
-      }
-
-      // DPP will only apply if left side can broadcast by size
-      Seq(1L, 100000L).foreach { threshold =>
-        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$threshold") {
-          val df = sql(sqlStr)
-          checkPartitionPruningPredicate(df, threshold > 10L, false)
-        }
-      }
-    }
-  }
-
   test("SPARK-34637: DPP side broadcast query stage is created firstly") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
       val df = sql(
@@ -1490,6 +1495,20 @@ abstract class DynamicPartitionPruningSuiteBase
         |""".stripMargin)
 
     checkAnswer(df, Row(3, 2) :: Row(3, 2) :: Row(3, 2) :: Row(3, 2) :: Nil)
+  }
+
+  test("SPARK-36444: Remove OptimizeSubqueries from batch of PartitionPruning") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      val df = sql(
+        """
+          |SELECT date_id, product_id FROM fact_sk f
+          |JOIN (select store_id + 3 as new_store_id from dim_store where country = 'US') s
+          |ON f.store_id = s.new_store_id
+        """.stripMargin)
+
+      checkPartitionPruningPredicate(df, false, true)
+      checkAnswer(df, Row(1150, 1) :: Row(1130, 4) :: Row(1140, 4) :: Nil)
+    }
   }
 }
 

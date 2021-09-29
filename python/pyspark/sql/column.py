@@ -507,6 +507,26 @@ class Column(object):
     >>> df.filter(df.name.like('Al%')).collect()
     [Row(age=2, name='Alice')]
     """
+    _ilike_doc = """
+    SQL ILIKE expression (case insensitive LIKE). Returns a boolean :class:`Column`
+    based on a case insensitive match.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    other : str
+        a SQL LIKE pattern
+
+    See Also
+    --------
+    pyspark.sql.Column.rlike
+
+    Examples
+    --------
+    >>> df.filter(df.name.ilike('%Ice')).collect()
+    [Row(age=2, name='Alice')]
+    """
     _startswith_doc = """
     String starts with. Returns a boolean :class:`Column` based on a string match.
 
@@ -541,6 +561,7 @@ class Column(object):
     contains = _bin_op("contains", _contains_doc)
     rlike = _bin_op("rlike", _rlike_doc)
     like = _bin_op("like", _like_doc)
+    ilike = _bin_op("ilike", _ilike_doc)
     startswith = _bin_op("startsWith", _startswith_doc)
     endswith = _bin_op("endsWith", _endswith_doc)
 

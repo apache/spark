@@ -26,7 +26,6 @@ import pandas as pd
 import pyspark.pandas as ps
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.indexes import (
-    MissingPandasLikeCategoricalIndex,
     MissingPandasLikeDatetimeIndex,
     MissingPandasLikeIndex,
     MissingPandasLikeMultiIndex,
@@ -406,6 +405,14 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             (psidx1 + 1).symmetric_difference(psidx2).sort_values(),
             (pidx1 + 1).symmetric_difference(pidx2).sort_values(),
         )
+        self.assert_eq(
+            (psidx1 ^ psidx2).sort_values(),
+            (pidx1 ^ pidx2).sort_values(),
+        )
+        self.assert_eq(
+            psidx1.symmetric_difference(psidx2, result_name="result").sort_values(),
+            pidx1.symmetric_difference(pidx2, result_name="result").sort_values(),
+        )
 
         pmidx1 = pd.MultiIndex(
             [["lama", "cow", "falcon"], ["speed", "weight", "length"]],
@@ -515,29 +522,6 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             ):
                 getattr(psdf.set_index("c").index, name)()
 
-        # CategoricalIndex functions
-        missing_functions = inspect.getmembers(
-            MissingPandasLikeCategoricalIndex, inspect.isfunction
-        )
-        unsupported_functions = [
-            name for (name, type_) in missing_functions if type_.__name__ == "unsupported_function"
-        ]
-        for name in unsupported_functions:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError,
-                "method.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
-            ):
-                getattr(psdf.set_index("d").index, name)()
-
-        deprecated_functions = [
-            name for (name, type_) in missing_functions if type_.__name__ == "deprecated_function"
-        ]
-        for name in deprecated_functions:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError, "method.*Index.*{}.*is deprecated".format(name)
-            ):
-                getattr(psdf.set_index("d").index, name)()
-
         # Index properties
         missing_properties = inspect.getmembers(
             MissingPandasLikeIndex, lambda o: isinstance(o, property)
@@ -607,22 +591,6 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
                 "property.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
                 getattr(psdf.set_index("c").index, name)
-
-        # CategoricalIndex properties
-        missing_properties = inspect.getmembers(
-            MissingPandasLikeCategoricalIndex, lambda o: isinstance(o, property)
-        )
-        unsupported_properties = [
-            name
-            for (name, type_) in missing_properties
-            if type_.fget.__name__ == "unsupported_property"
-        ]
-        for name in unsupported_properties:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError,
-                "property.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
-            ):
-                getattr(psdf.set_index("d").index, name)
 
     def test_index_has_duplicates(self):
         indexes = [("a", "b", "c"), ("a", "a", "c"), (1, 3, 3), (1, 2, 3)]
@@ -1410,6 +1378,11 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(psmidx.unique().sort_values(), pmidx.unique().sort_values())
         self.assert_eq(psmidx.unique().sort_values(), pmidx.unique().sort_values())
 
+        with self.assertRaisesRegex(
+            IndexError, "Too many levels: Index has only 1 level, -2 is not a valid level number"
+        ):
+            psidx.unique(level=-2)
+
     def test_asof(self):
         # Increasing values
         pidx = pd.Index(["2013-12-31", "2014-01-02", "2014-01-03"])
@@ -1935,6 +1908,8 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             psmidx.intersection(4)
         with self.assertRaisesRegex(TypeError, "other must be a MultiIndex or a list of tuples"):
             psmidx.intersection(ps.Series([3, 4, 5, 6]))
+        with self.assertRaisesRegex(TypeError, "other must be a MultiIndex or a list of tuples"):
+            psmidx.intersection([("c", "z"), ["d", "w"]])
         with self.assertRaisesRegex(ValueError, "Index data must be 1-dimensional"):
             psidx.intersection(ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]}))
         with self.assertRaisesRegex(ValueError, "Index data must be 1-dimensional"):
@@ -2226,6 +2201,10 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         with self.assertRaisesRegex(IndexError, err_msg):
             psmidx.insert(4, ("b", "y"))
 
+        err_msg = "index -4 is out of bounds for axis 0 with size 3"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psmidx.insert(-4, ("b", "y"))
+
     def test_astype(self):
         pidx = pd.Index([10, 20, 15, 30, 45], name="x")
         psidx = ps.Index(pidx)
@@ -2408,6 +2387,22 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             TypeError,
             lambda: psidx.map({1: 1, 2: 2.0, 3: "three"}),
         )
+
+    def test_to_numpy(self):
+        pidx = pd.Index([1, 2, 3, 4])
+        psidx = ps.from_pandas(pidx)
+
+        self.assert_eq(pidx.to_numpy(copy=True), psidx.to_numpy(copy=True))
+
+    def test_drop_level(self):
+        tuples = [(1, "red"), (1, "blue"), (2, "red"), (2, "green")]
+        pmidx = pd.MultiIndex.from_tuples(tuples)
+        psmidx = ps.from_pandas(pmidx)
+
+        with self.assertRaisesRegex(
+            IndexError, "Too many levels: Index has only 2 levels, -3 is not a valid level number"
+        ):
+            psmidx.droplevel(-3)
 
 
 if __name__ == "__main__":

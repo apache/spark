@@ -18,37 +18,39 @@ TakeOrderedAndProject [item_id,ss_item_rev,ss_dev,cs_item_rev,cs_dev,ws_item_rev
                                   ColumnarToRow
                                     InputAdapter
                                       Scan parquet default.store_sales [ss_item_sk,ss_ext_sales_price,ss_sold_date_sk]
+                                        SubqueryBroadcast [d_date_sk] #1
+                                          BroadcastExchange #2
+                                            WholeStageCodegen (2)
+                                              Project [d_date_sk]
+                                                BroadcastHashJoin [d_date,d_date]
+                                                  Filter [d_date_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.date_dim [d_date_sk,d_date]
+                                                  InputAdapter
+                                                    BroadcastExchange #3
+                                                      WholeStageCodegen (1)
+                                                        Project [d_date]
+                                                          Filter [d_week_seq]
+                                                            Subquery #2
+                                                              WholeStageCodegen (1)
+                                                                Project [d_week_seq]
+                                                                  Filter [d_date]
+                                                                    ColumnarToRow
+                                                                      InputAdapter
+                                                                        Scan parquet default.date_dim [d_date,d_week_seq]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet default.date_dim [d_date,d_week_seq]
                                 InputAdapter
-                                  BroadcastExchange #2
+                                  BroadcastExchange #4
                                     WholeStageCodegen (1)
                                       Filter [i_item_sk,i_item_id]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.item [i_item_sk,i_item_id]
                             InputAdapter
-                              BroadcastExchange #3
-                                WholeStageCodegen (3)
-                                  Project [d_date_sk]
-                                    BroadcastHashJoin [d_date,d_date]
-                                      Filter [d_date_sk]
-                                        ColumnarToRow
-                                          InputAdapter
-                                            Scan parquet default.date_dim [d_date_sk,d_date]
-                                      InputAdapter
-                                        BroadcastExchange #4
-                                          WholeStageCodegen (2)
-                                            Project [d_date]
-                                              Filter [d_week_seq]
-                                                Subquery #1
-                                                  WholeStageCodegen (1)
-                                                    Project [d_week_seq]
-                                                      Filter [d_date]
-                                                        ColumnarToRow
-                                                          InputAdapter
-                                                            Scan parquet default.date_dim [d_date,d_week_seq]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.date_dim [d_date,d_week_seq]
+                              ReusedExchange [d_date_sk] #2
             InputAdapter
               BroadcastExchange #5
                 WholeStageCodegen (9)
@@ -66,10 +68,11 @@ TakeOrderedAndProject [item_id,ss_item_rev,ss_dev,cs_item_rev,cs_dev,ws_item_rev
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.catalog_sales [cs_item_sk,cs_ext_sales_price,cs_sold_date_sk]
+                                              ReusedSubquery [d_date_sk] #1
                                       InputAdapter
-                                        ReusedExchange [i_item_sk,i_item_id] #2
+                                        ReusedExchange [i_item_sk,i_item_id] #4
                                   InputAdapter
-                                    ReusedExchange [d_date_sk] #3
+                                    ReusedExchange [d_date_sk] #2
         InputAdapter
           BroadcastExchange #7
             WholeStageCodegen (14)
@@ -87,7 +90,8 @@ TakeOrderedAndProject [item_id,ss_item_rev,ss_dev,cs_item_rev,cs_dev,ws_item_rev
                                     ColumnarToRow
                                       InputAdapter
                                         Scan parquet default.web_sales [ws_item_sk,ws_ext_sales_price,ws_sold_date_sk]
+                                          ReusedSubquery [d_date_sk] #1
                                   InputAdapter
-                                    ReusedExchange [i_item_sk,i_item_id] #2
+                                    ReusedExchange [i_item_sk,i_item_id] #4
                               InputAdapter
-                                ReusedExchange [d_date_sk] #3
+                                ReusedExchange [d_date_sk] #2

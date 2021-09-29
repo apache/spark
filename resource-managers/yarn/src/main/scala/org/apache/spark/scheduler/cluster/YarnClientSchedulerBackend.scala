@@ -21,7 +21,7 @@ import java.io.InterruptedIOException
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.yarn.api.records.YarnApplicationState
+import org.apache.hadoop.yarn.api.records.{FinalApplicationStatus, YarnApplicationState}
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments, YarnAppReport}
@@ -122,6 +122,14 @@ private[spark] class YarnClientSchedulerBackend(
         }
         allowInterrupt = false
         sc.stop()
+        state match {
+          case FinalApplicationStatus.FAILED | FinalApplicationStatus.KILLED
+            if conf.get(AM_CLIENT_MODE_EXIT_ON_ERROR) =>
+            logWarning(s"ApplicationMaster finished with status ${state}, " +
+              s"SparkContext should exit with code 1.")
+            System.exit(1)
+          case _ =>
+        }
       } catch {
         case _: InterruptedException | _: InterruptedIOException =>
           logInfo("Interrupting monitor thread")

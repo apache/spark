@@ -291,10 +291,13 @@ case class ReplaceTableAsSelect(
  * The logical plan of the CREATE NAMESPACE command.
  */
 case class CreateNamespace(
-    catalog: SupportsNamespaces,
-    namespace: Seq[String],
+    name: LogicalPlan,
     ifNotExists: Boolean,
-    properties: Map[String, String]) extends LeafCommand
+    properties: Map[String, String]) extends UnaryCommand {
+  override def child: LogicalPlan = name
+  override protected def withNewChildInternal(newChild: LogicalPlan): CreateNamespace =
+    copy(name = newChild)
+}
 
 /**
  * The logical plan of the DROP NAMESPACE command.
@@ -631,15 +634,6 @@ case class SetCatalogAndNamespace(
 case class RefreshTable(child: LogicalPlan) extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): RefreshTable =
     copy(child = newChild)
-}
-
-/**
- * The logical plan of the SHOW CURRENT NAMESPACE command.
- */
-case class ShowCurrentNamespace(catalogManager: CatalogManager) extends LeafCommand {
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("catalog", StringType, nullable = false)(),
-    AttributeReference("namespace", StringType, nullable = false)())
 }
 
 /**

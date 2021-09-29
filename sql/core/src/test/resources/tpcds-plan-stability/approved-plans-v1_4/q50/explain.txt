@@ -61,7 +61,7 @@ Condition : ((isnotnull(sr_ticket_number#8) AND isnotnull(sr_item_sk#6)) AND isn
 
 (7) BroadcastExchange
 Input [4]: [sr_item_sk#6, sr_customer_sk#7, sr_ticket_number#8, sr_returned_date_sk#9]
-Arguments: HashedRelationBroadcastMode(List(input[2, int, false], input[0, int, false], input[1, int, false]),false), [id=#11]
+Arguments: HashedRelationBroadcastMode(List(input[2, int, false], input[0, int, false], input[1, int, false]),false,false), [id=#11]
 
 (8) BroadcastHashJoin [codegen id : 5]
 Left keys [3]: [ss_ticket_number#4, ss_item_sk#1, ss_customer_sk#2]
@@ -88,7 +88,7 @@ Condition : isnotnull(s_store_sk#12)
 
 (13) BroadcastExchange
 Input [11]: [s_store_sk#12, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#23]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#23]
 
 (14) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_store_sk#3]
@@ -115,7 +115,7 @@ Condition : isnotnull(d_date_sk#24)
 
 (19) BroadcastExchange
 Input [1]: [d_date_sk#24]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#25]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#25]
 
 (20) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_sold_date_sk#5]
@@ -190,6 +190,6 @@ Input [3]: [d_date_sk#26, d_year#48, d_moy#49]
 
 (33) BroadcastExchange
 Input [1]: [d_date_sk#26]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#50]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#50]
 
 

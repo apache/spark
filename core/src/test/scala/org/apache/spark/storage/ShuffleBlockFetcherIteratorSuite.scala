@@ -315,7 +315,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     hostLocalBlocks.foreach { case (blockId, buf) =>
       doReturn(buf)
         .when(blockManager)
-        .getHostLocalShuffleData(meq(blockId.asInstanceOf[ShuffleBlockId]), any())
+        .getHostLocalShuffleData(meq(blockId), any())
     }
     val hostLocalDirs = Map("test-host-local-client-1" -> Array("local-dir"))
     // returning local dir for hostLocalBmId

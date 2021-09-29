@@ -1820,6 +1820,8 @@ Some of them are as follows.
 
 - Distinct operations on streaming Datasets are not supported.
 
+- Deduplication operation is not supported after aggregation on a streaming Datasets.
+
 - Sorting operations are supported on streaming Datasets only after an aggregation and in Complete Output Mode.
 
 - Few types of outer joins on streaming Datasets are not supported. See the
@@ -2747,6 +2749,15 @@ Here are the different kinds of triggers that are supported.
     </td>
   </tr>
   <tr>
+    <td><b>Available-now micro-batch</b></td>
+    <td>
+        Similar to queries one-time micro-batch trigger, the query will process all the available data and then
+        stop on its own. The difference is that, it will process the data in (possibly) multiple micro-batches
+        based on the source options (e.g. <code>maxFilesPerTrigger</code> for file source), which will result
+        in better query scalability.
+    </td>
+  </tr>
+  <tr>
     <td><b>Continuous with fixed checkpoint interval</b><br/><i>(experimental)</i></td>
     <td>
         The query will be executed in the new low-latency, continuous processing mode. Read more
@@ -2780,6 +2791,12 @@ df.writeStream
   .trigger(Trigger.Once())
   .start()
 
+// Available-now trigger
+df.writeStream
+  .format("console")
+  .trigger(Trigger.AvailableNow())
+  .start()
+
 // Continuous trigger with one-second checkpointing interval
 df.writeStream
   .format("console")
@@ -2810,6 +2827,12 @@ df.writeStream
 df.writeStream
   .format("console")
   .trigger(Trigger.Once())
+  .start();
+
+// Available-now trigger
+df.writeStream
+  .format("console")
+  .trigger(Trigger.AvailableNow())
   .start();
 
 // Continuous trigger with one-second checkpointing interval
@@ -3464,7 +3487,7 @@ the effect of the change is not well-defined. For all of them:
 
   - *Streaming aggregation*: For example, `sdf.groupBy("a").agg(...)`. Any change in number or type of grouping keys or aggregates is not allowed.
 
-  - *Streaming deduplication*: For example, `sdf.dropDuplicates("a")`. Any change in number or type of grouping keys or aggregates is not allowed.
+  - *Streaming deduplication*: For example, `sdf.dropDuplicates("a")`. Any change in number or type of deduplicating columns is not allowed.
 
   - *Stream-stream join*: For example, `sdf1.join(sdf2, ...)` (i.e. both inputs are generated with `sparkSession.readStream`). Changes
     in the schema or equi-joining columns are not allowed. Changes in join type (outer or inner) are not allowed. Other changes in the join condition are ill-defined.
