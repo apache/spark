@@ -323,6 +323,7 @@ class Catalog(object):
         >>> spark.table("my_table").collect()
         [Row(_1=1, _2=1)]
         >>> spark.catalog.dropTempView("my_table")
+        True
         >>> spark.table("my_table") # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
@@ -343,6 +344,7 @@ class Catalog(object):
         >>> spark.table("global_temp.my_table").collect()
         [Row(_1=1, _2=1)]
         >>> spark.catalog.dropGlobalTempView("my_table")
+        True
         >>> spark.table("global_temp.my_table") # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
