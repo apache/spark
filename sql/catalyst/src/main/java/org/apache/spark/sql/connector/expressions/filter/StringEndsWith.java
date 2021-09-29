@@ -15,23 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.test
+package org.apache.spark.sql.connector.expressions.filter;
 
-import java.io.{InputStream, IOException}
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.unsafe.types.UTF8String;
 
-import scala.sys.process.BasicIO
+/**
+ * A filter that evaluates to {@code true} iff the {@code column} evaluates to
+ * a string that ends with {@code value}.
+ *
+ * @since 3.3.0
+ */
+@Evolving
+public final class StringEndsWith extends StringPredicate {
 
-object ProcessTestUtils {
-  class ProcessOutputCapturer(stream: InputStream, capture: String => Unit) extends Thread {
-    this.setDaemon(true)
-
-    override def run(): Unit = {
-      try {
-        BasicIO.processFully(capture)(stream)
-      } catch { case _: IOException =>
-        // Ignores the IOException thrown when the process termination, which closes the input
-        // stream abruptly.
-      }
-    }
+  public StringEndsWith(NamedReference column, UTF8String value) {
+    super(column, value);
   }
+
+  @Override
+  public String toString() { return "STRING_ENDS_WITH(" + column.describe() + ", " + value + ")"; }
 }

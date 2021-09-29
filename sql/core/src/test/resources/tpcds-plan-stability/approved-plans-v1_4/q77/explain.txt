@@ -129,7 +129,7 @@ Condition : isnotnull(s_store_sk#7)
 
 (10) BroadcastExchange
 Input [1]: [s_store_sk#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#8]
 
 (11) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_store_sk#1]
@@ -217,7 +217,7 @@ Results [3]: [s_store_sk#23, MakeDecimal(sum(UnscaledValue(sr_return_amt#19))#29
 
 (28) BroadcastExchange
 Input [3]: [s_store_sk#23, returns#31, profit_loss#32]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#33]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#33]
 
 (29) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [s_store_sk#7]
@@ -362,7 +362,7 @@ Condition : isnotnull(wp_web_page_sk#74)
 
 (59) BroadcastExchange
 Input [1]: [wp_web_page_sk#74]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#75]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#75]
 
 (60) BroadcastHashJoin [codegen id : 17]
 Left keys [1]: [ws_web_page_sk#69]
@@ -450,7 +450,7 @@ Results [3]: [wp_web_page_sk#90, MakeDecimal(sum(UnscaledValue(wr_return_amt#86)
 
 (77) BroadcastExchange
 Input [3]: [wp_web_page_sk#90, returns#98, profit_loss#99]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#100]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#100]
 
 (78) BroadcastHashJoin [codegen id : 22]
 Left keys [1]: [wp_web_page_sk#74]
@@ -519,7 +519,7 @@ Input [2]: [d_date_sk#6, d_date#127]
 
 (90) BroadcastExchange
 Input [1]: [d_date_sk#6]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#128]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#128]
 
 Subquery:2 Hosting operator id = 16 Hosting Expression = sr_returned_date_sk#21 IN dynamicpruning#5
 

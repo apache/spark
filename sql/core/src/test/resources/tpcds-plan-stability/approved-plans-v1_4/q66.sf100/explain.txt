@@ -88,7 +88,7 @@ Input [2]: [sm_ship_mode_sk#9, sm_carrier#10]
 
 (8) BroadcastExchange
 Input [1]: [sm_ship_mode_sk#9]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#11]
 
 (9) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ws_ship_mode_sk#2]
@@ -119,7 +119,7 @@ Input [2]: [t_time_sk#12, t_time#13]
 
 (15) BroadcastExchange
 Input [1]: [t_time_sk#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#14]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#14]
 
 (16) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ws_sold_time_sk#1]
@@ -158,7 +158,7 @@ Condition : isnotnull(w_warehouse_sk#18)
 
 (24) BroadcastExchange
 Input [7]: [w_warehouse_sk#18, w_warehouse_name#19, w_warehouse_sq_ft#20, w_city#21, w_county#22, w_state#23, w_country#24]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#25]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#25]
 
 (25) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ws_warehouse_sk#3]
@@ -317,7 +317,7 @@ Condition : ((isnotnull(d_year#16) AND (d_year#16 = 2001)) AND isnotnull(d_date_
 
 (56) BroadcastExchange
 Input [3]: [d_date_sk#15, d_year#16, d_moy#17]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#556]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#556]
 
 Subquery:2 Hosting operator id = 30 Hosting Expression = cs_sold_date_sk#179 IN dynamicpruning#8
 

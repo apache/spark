@@ -336,6 +336,54 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
             lambda: read_delta("fake_path", version="0", timestamp="2021-06-22"),
         )
 
+    def test_to_numeric(self):
+        pser = pd.Series(["1", "2", None, "4", "hello"])
+        psser = ps.from_pandas(pser)
+
+        # "coerce" and "raise" with Series that contains un-parsable data.
+        self.assert_eq(
+            pd.to_numeric(pser, errors="coerce"), ps.to_numeric(psser, errors="coerce"), almost=True
+        )
+
+        # "raise" with Series that contains parsable data only.
+        pser = pd.Series(["1", "2", None, "4", "5.0"])
+        psser = ps.from_pandas(pser)
+
+        self.assert_eq(
+            pd.to_numeric(pser, errors="raise"), ps.to_numeric(psser, errors="raise"), almost=True
+        )
+
+        # "coerce", "ignore" and "raise" with non-Series.
+        data = ["1", "2", None, "4", "hello"]
+        self.assert_eq(pd.to_numeric(data, errors="coerce"), ps.to_numeric(data, errors="coerce"))
+        self.assert_eq(pd.to_numeric(data, errors="ignore"), ps.to_numeric(data, errors="ignore"))
+
+        self.assertRaisesRegex(
+            ValueError,
+            'Unable to parse string "hello"',
+            lambda: ps.to_numeric(data, errors="raise"),
+        )
+
+        # "raise" with non-Series that contains parsable data only.
+        data = ["1", "2", None, "4", "5.0"]
+
+        self.assert_eq(
+            pd.to_numeric(data, errors="raise"), ps.to_numeric(data, errors="raise"), almost=True
+        )
+
+        # Wrong string for `errors` parameter.
+        self.assertRaisesRegex(
+            ValueError,
+            "invalid error value specified",
+            lambda: ps.to_numeric(psser, errors="errors"),
+        )
+        # NotImplementedError
+        self.assertRaisesRegex(
+            NotImplementedError,
+            "'ignore' is not implemented yet, when the `arg` is Series.",
+            lambda: ps.to_numeric(psser, errors="ignore"),
+        )
+
 
 if __name__ == "__main__":
     import unittest

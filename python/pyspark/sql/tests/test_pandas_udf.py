@@ -16,6 +16,7 @@
 #
 
 import unittest
+import datetime
 
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
 from pyspark.sql.types import DoubleType, StructType, StructField, LongType
@@ -238,6 +239,23 @@ class PandasUDFTests(ReusedSQLTestCase):
         # Disabling safe type check, let Arrow do the cast anyway.
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
             df.withColumn('udf', udf('id')).collect()
+
+    def test_pandas_udf_timestamp_ntz(self):
+        # SPARK-36626: Test TimestampNTZ in pandas UDF
+        @pandas_udf(returnType="timestamp_ntz")
+        def noop(s):
+            assert s.iloc[0] == datetime.datetime(1970, 1, 1, 0, 0)
+            return s
+
+        with self.sql_conf({"spark.sql.session.timeZone": "Asia/Hong_Kong"}):
+            df = (self.spark
+                  .createDataFrame(
+                      [(datetime.datetime(1970, 1, 1, 0, 0),)], schema="dt timestamp_ntz")
+                  .select(noop("dt").alias("dt")))
+
+            df.selectExpr("assert_true('1970-01-01 00:00:00' == CAST(dt AS STRING))").collect()
+            self.assertEqual(df.schema[0].dataType.typeName(), "timestamp_ntz")
+            self.assertEqual(df.first()[0], datetime.datetime(1970, 1, 1, 0, 0))
 
 
 if __name__ == "__main__":

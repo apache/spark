@@ -88,7 +88,7 @@ Condition : ((isnotnull(ca_state#14) AND (ca_state#14 = GA)) AND isnotnull(ca_ad
 
 (7) BroadcastExchange
 Input [12]: [ca_address_sk#7, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#19]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#19]
 
 (8) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [c_current_addr_sk#3]
@@ -305,7 +305,7 @@ Condition : isnotnull((avg(ctr_total_return) * 1.2)#49)
 
 (54) BroadcastExchange
 Input [2]: [(avg(ctr_total_return) * 1.2)#49, ctr_state#36#50]
-Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [id=#51]
+Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false,false), [id=#51]
 
 (55) BroadcastHashJoin [codegen id : 20]
 Left keys [1]: [ctr_state#36]
@@ -350,7 +350,7 @@ Input [2]: [d_date_sk#26, d_year#52]
 
 (62) BroadcastExchange
 Input [1]: [d_date_sk#26]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#53]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#53]
 
 Subquery:2 Hosting operator id = 35 Hosting Expression = cr_returned_date_sk#24 IN dynamicpruning#25
 

@@ -65,6 +65,18 @@ select interval +'-1-1' year to month;
 select interval - '1 2:3:4.001' day to second;
 select interval +'1 2:3:4.001' day to second;
 select interval -'-1 2:3:4.001' day to second;
+select interval -'1' year;
+select interval -'-1' year;
+select interval -'11' month;
+select interval -'-11' month;
+select interval -'1' day;
+select interval -'-1' day;
+select interval -'23' hour;
+select interval -'-23' hour;
+select interval -'59' minute;
+select interval -'-59' minute;
+select interval -'59' second;
+select interval -'-59' second;
 
 -- make intervals
 select make_interval(1);

@@ -463,7 +463,7 @@ Condition : ((isnotnull(d_year#7) AND (d_year#7 = 2001)) AND isnotnull(d_date_sk
 
 (83) BroadcastExchange
 Input [2]: [d_date_sk#6, d_year#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#93]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#93]
 
 Subquery:2 Hosting operator id = 22 Hosting Expression = ss_sold_date_sk#28 IN dynamicpruning#29
 BroadcastExchange (87)
@@ -488,7 +488,7 @@ Condition : ((isnotnull(d_year#31) AND (d_year#31 = 2002)) AND isnotnull(d_date_
 
 (87) BroadcastExchange
 Input [2]: [d_date_sk#30, d_year#31]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#94]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#94]
 
 Subquery:3 Hosting operator id = 40 Hosting Expression = ws_sold_date_sk#53 IN dynamicpruning#5
 

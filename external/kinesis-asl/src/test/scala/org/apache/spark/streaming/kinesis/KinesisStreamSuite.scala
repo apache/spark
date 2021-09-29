@@ -95,7 +95,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
   }
 
   test("RDD generation") {
-    val inputStream = KinesisInputDStream.builder.
+    val kinesisStream = KinesisInputDStream.builder.
       streamingContext(ssc).
       checkpointAppName(appName).
       streamName("dummyStream").
@@ -105,9 +105,8 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       storageLevel(StorageLevel.MEMORY_AND_DISK_2).
       kinesisCredentials(BasicCredentials(dummyAWSAccessKey, dummyAWSSecretKey)).
       build()
-    assert(inputStream.isInstanceOf[KinesisInputDStream[Array[Byte]]])
+    assert(kinesisStream.isInstanceOf[KinesisInputDStream[Array[Byte]]])
 
-    val kinesisStream = inputStream.asInstanceOf[KinesisInputDStream[Array[Byte]]]
     val time = Time(1000)
 
     // Generate block info data for testing

@@ -73,7 +73,7 @@ Condition : ((isnotnull(sr_customer_sk#9) AND isnotnull(sr_item_sk#8)) AND isnot
 
 (7) BroadcastExchange
 Input [5]: [sr_item_sk#8, sr_customer_sk#9, sr_ticket_number#10, sr_return_quantity#11, sr_returned_date_sk#12]
-Arguments: HashedRelationBroadcastMode(List(input[1, int, false], input[0, int, false], input[2, int, false]),false), [id=#14]
+Arguments: HashedRelationBroadcastMode(List(input[1, int, false], input[0, int, false], input[2, int, false]),false,false), [id=#14]
 
 (8) BroadcastHashJoin [codegen id : 8]
 Left keys [3]: [ss_customer_sk#2, ss_item_sk#1, ss_ticket_number#4]
@@ -101,7 +101,7 @@ Condition : (isnotnull(cs_bill_customer_sk#15) AND isnotnull(cs_item_sk#16))
 
 (13) BroadcastExchange
 Input [4]: [cs_bill_customer_sk#15, cs_item_sk#16, cs_quantity#17, cs_sold_date_sk#18]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, false] as bigint), 32) | (cast(input[1, int, false] as bigint) & 4294967295))),false), [id=#19]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, false] as bigint), 32) | (cast(input[1, int, false] as bigint) & 4294967295))),false,false), [id=#19]
 
 (14) BroadcastHashJoin [codegen id : 8]
 Left keys [2]: [sr_customer_sk#9, sr_item_sk#8]
@@ -164,7 +164,7 @@ Condition : isnotnull(s_store_sk#23)
 
 (28) BroadcastExchange
 Input [2]: [s_store_sk#23, s_state#24]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#25]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#25]
 
 (29) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ss_store_sk#3]
@@ -191,7 +191,7 @@ Condition : isnotnull(i_item_sk#26)
 
 (34) BroadcastExchange
 Input [3]: [i_item_sk#26, i_item_id#27, i_item_desc#28]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#29]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#29]
 
 (35) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ss_item_sk#1]
@@ -254,7 +254,7 @@ Input [2]: [d_date_sk#20, d_quarter_name#88]
 
 (45) BroadcastExchange
 Input [1]: [d_date_sk#20]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#89]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#89]
 
 Subquery:2 Hosting operator id = 4 Hosting Expression = sr_returned_date_sk#12 IN dynamicpruning#13
 BroadcastExchange (50)
@@ -284,7 +284,7 @@ Input [2]: [d_date_sk#21, d_quarter_name#90]
 
 (50) BroadcastExchange
 Input [1]: [d_date_sk#21]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#91]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#91]
 
 Subquery:3 Hosting operator id = 10 Hosting Expression = cs_sold_date_sk#18 IN dynamicpruning#13
 

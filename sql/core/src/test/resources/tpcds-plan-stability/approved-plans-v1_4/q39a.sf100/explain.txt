@@ -91,7 +91,7 @@ Condition : isnotnull(i_item_sk#8)
 
 (10) BroadcastExchange
 Input [1]: [i_item_sk#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#9]
 
 (11) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [inv_item_sk#1]
@@ -118,7 +118,7 @@ Condition : isnotnull(w_warehouse_sk#10)
 
 (16) BroadcastExchange
 Input [2]: [w_warehouse_sk#10, w_warehouse_name#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#12]
 
 (17) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [inv_warehouse_sk#2]
@@ -149,7 +149,7 @@ Results [5]: [w_warehouse_sk#10, i_item_sk#8, d_moy#7, stddev_samp(cast(inv_quan
 
 (22) Filter [codegen id : 5]
 Input [5]: [w_warehouse_sk#10, i_item_sk#8, d_moy#7, stdev#26, mean#27]
-Condition : ((isnotnull(mean#27) AND isnotnull(stdev#26)) AND (NOT (mean#27 = 0.0) AND ((stdev#26 / mean#27) > 1.0)))
+Condition : ((isnotnull(stdev#26) AND isnotnull(mean#27)) AND (NOT coalesce((mean#27 = 0.0), false) AND ((stdev#26 / mean#27) > 1.0)))
 
 (23) Project [codegen id : 5]
 Output [5]: [w_warehouse_sk#10, i_item_sk#8, d_moy#7, mean#27, CASE WHEN (mean#27 = 0.0) THEN null ELSE (stdev#26 / mean#27) END AS cov#28]
@@ -234,7 +234,7 @@ Results [5]: [w_warehouse_sk#38, i_item_sk#37, d_moy#36, stddev_samp(cast(inv_qu
 
 (41) Filter [codegen id : 11]
 Input [5]: [w_warehouse_sk#38, i_item_sk#37, d_moy#36, stdev#26, mean#27]
-Condition : ((isnotnull(mean#27) AND isnotnull(stdev#26)) AND (NOT (mean#27 = 0.0) AND ((stdev#26 / mean#27) > 1.0)))
+Condition : ((isnotnull(stdev#26) AND isnotnull(mean#27)) AND (NOT coalesce((mean#27 = 0.0), false) AND ((stdev#26 / mean#27) > 1.0)))
 
 (42) Project [codegen id : 11]
 Output [5]: [w_warehouse_sk#38, i_item_sk#37, d_moy#36, mean#27 AS mean#51, CASE WHEN (mean#27 = 0.0) THEN null ELSE (stdev#26 / mean#27) END AS cov#52]
@@ -291,7 +291,7 @@ Input [3]: [d_date_sk#6, d_year#55, d_moy#7]
 
 (52) BroadcastExchange
 Input [2]: [d_date_sk#6, d_moy#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#56]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#56]
 
 Subquery:2 Hosting operator id = 26 Hosting Expression = inv_date_sk#33 IN dynamicpruning#34
 BroadcastExchange (57)
@@ -321,6 +321,6 @@ Input [3]: [d_date_sk#35, d_year#57, d_moy#36]
 
 (57) BroadcastExchange
 Input [2]: [d_date_sk#35, d_moy#36]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#58]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#58]
 
 

@@ -90,7 +90,7 @@ Condition : ((isnotnull(ps_partkey#5) AND isnotnull(ps_supplycost#7)) AND isnotn
 
 (8) BroadcastExchange
 Input [3]: [ps_partkey#5, ps_suppkey#6, ps_supplycost#7]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#8]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false,false), [id=#8]
 
 (9) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [p_partkey#1]
@@ -131,7 +131,7 @@ Condition : (isnotnull(s_suppkey#12) AND isnotnull(s_nationkey#13))
 
 (17) BroadcastExchange
 Input [2]: [s_suppkey#12, s_nationkey#13]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#14]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false,false), [id=#14]
 
 (18) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ps_suppkey#10]
@@ -158,7 +158,7 @@ Condition : (isnotnull(n_nationkey#15) AND isnotnull(n_regionkey#16))
 
 (23) BroadcastExchange
 Input [2]: [n_nationkey#15, n_regionkey#16]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#17]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false,false), [id=#17]
 
 (24) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [s_nationkey#13]
@@ -189,7 +189,7 @@ Input [2]: [r_regionkey#18, r_name#19]
 
 (30) BroadcastExchange
 Input [1]: [r_regionkey#18]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#20]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false,false), [id=#20]
 
 (31) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [n_regionkey#16]
@@ -224,7 +224,7 @@ Condition : isnotnull(min(ps_supplycost)#25)
 
 (37) BroadcastExchange
 Input [2]: [min(ps_supplycost)#25, ps_partkey#9]
-Arguments: HashedRelationBroadcastMode(List(input[0, decimal(10,0), false], input[1, bigint, true]),false), [id=#26]
+Arguments: HashedRelationBroadcastMode(List(input[0, decimal(10,0), false], input[1, bigint, true]),false,false), [id=#26]
 
 (38) BroadcastHashJoin [codegen id : 10]
 Left keys [2]: [ps_supplycost#7, p_partkey#1]
@@ -251,7 +251,7 @@ Condition : (isnotnull(s_suppkey#27) AND isnotnull(s_nationkey#30))
 
 (43) BroadcastExchange
 Input [7]: [s_suppkey#27, s_name#28, s_address#29, s_nationkey#30, s_phone#31, s_acctbal#32, s_comment#33]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#34]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false,false), [id=#34]
 
 (44) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [ps_suppkey#6]
@@ -278,7 +278,7 @@ Condition : (isnotnull(n_nationkey#35) AND isnotnull(n_regionkey#37))
 
 (49) BroadcastExchange
 Input [3]: [n_nationkey#35, n_name#36, n_regionkey#37]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#38]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false,false), [id=#38]
 
 (50) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [s_nationkey#30]
