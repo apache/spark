@@ -285,6 +285,7 @@ Input [3]: [d_date_sk#8, d_year#46, d_moy#47]
 (51) BroadcastExchange
 Input [1]: [d_date_sk#8]
 <<<<<<< HEAD
+<<<<<<< HEAD
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#50]
 =======
 <<<<<<< HEAD
@@ -293,6 +294,9 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#48]
 >>>>>>> 7190faa7a9 (update manifest files)
 >>>>>>> 10c61d45bc (update manifest files)
+=======
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#48]
+>>>>>>> 1afa00695f (fix after rebase)
 
 Subquery:2 Hosting operator id = 23 Hosting Expression = sr_returned_date_sk#22 IN dynamicpruning#23
 BroadcastExchange (56)
@@ -321,6 +325,7 @@ Output [1]: [d_date_sk#24]
 Input [3]: [d_date_sk#24, d_year#49, d_moy#50]
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 (59) BroadcastExchange
 Input [1]: [d_date_sk#25]
 <<<<<<< HEAD
@@ -339,10 +344,11 @@ Output [2]: [d_date_sk#33, d_year#54]
 =======
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#53]
 =======
+=======
+>>>>>>> 1afa00695f (fix after rebase)
 (56) BroadcastExchange
 Input [1]: [d_date_sk#24]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#51]
->>>>>>> 7190faa7a9 (update manifest files)
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#51]
 
 Subquery:3 Hosting operator id = 33 Hosting Expression = cs_sold_date_sk#29 IN dynamicpruning#30
 BroadcastExchange (61)
@@ -372,6 +378,7 @@ Output [1]: [d_date_sk#31]
 Input [2]: [d_date_sk#31, d_year#52]
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 (64) BroadcastExchange
 Input [1]: [d_date_sk#33]
 <<<<<<< HEAD
@@ -384,5 +391,10 @@ Input [1]: [d_date_sk#31]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#53]
 >>>>>>> 7190faa7a9 (update manifest files)
 >>>>>>> 10c61d45bc (update manifest files)
+=======
+(61) BroadcastExchange
+Input [1]: [d_date_sk#31]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#53]
+>>>>>>> 1afa00695f (fix after rebase)
 
 
