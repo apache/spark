@@ -228,7 +228,7 @@ jobs:
     name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20210730
+      image: dongjoon/apache-spark-github-action-image:20210930
     strategy:
       fail-fast: false
       matrix:
@@ -326,7 +326,7 @@ jobs:
     name: "Build modules: sparkr"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20210602
+      image: dongjoon/apache-spark-github-action-image:20210930
     env:
       HADOOP_PROFILE: ${{ needs.configure-jobs.outputs.hadoop }}
       HIVE_PROFILE: hive2.3
@@ -391,8 +391,9 @@ jobs:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
       PYSPARK_DRIVER_PYTHON: python3.9
+      PYSPARK_PYTHON: python3.9
     container:
-      image: dongjoon/apache-spark-github-action-image:20210602
+      image: dongjoon/apache-spark-github-action-image:20210930
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
