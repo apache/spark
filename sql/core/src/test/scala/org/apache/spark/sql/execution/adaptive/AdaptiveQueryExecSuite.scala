@@ -1723,7 +1723,7 @@ class AdaptiveQueryExecSuite
 
     Seq(true, false).foreach { combineUnionEnabled =>
       val combineUnionConfig = if (combineUnionEnabled) {
-        "" -> ""
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ""
       } else {
         SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
           "org.apache.spark.sql.catalyst.optimizer.CombineUnions"
@@ -1748,9 +1748,9 @@ class AdaptiveQueryExecSuite
                 |UNION ALL
                 |SELECT * FROM t2
               """.stripMargin),
-            1,
-            1,
-            1 + 4)
+            numUnion = 1,
+            numShuffleReader = 1,
+            numPartition = 1 + 4)
 
           checkResultPartition(
             sql("""
@@ -1760,9 +1760,9 @@ class AdaptiveQueryExecSuite
                 |UNION ALL
                 |SELECT * FROM t1
               """.stripMargin),
-            if (combineUnionEnabled) 1 else 2,
-            1,
-            1 + 4 + 2)
+            numUnion = if (combineUnionEnabled) 1 else 2,
+            numShuffleReader = 1,
+            numPartition = 1 + 4 + 2)
 
           checkResultPartition(
             sql("""
@@ -1772,16 +1772,16 @@ class AdaptiveQueryExecSuite
                 |UNION ALL
                 |SELECT * FROM t1
               """.stripMargin),
-            if (combineUnionEnabled) 1 else 2,
-            3,
-            1 + 1 + 2)
+            numUnion = if (combineUnionEnabled) 1 else 2,
+            numShuffleReader = 3,
+            numPartition = 1 + 1 + 2)
 
           // negative test
           checkResultPartition(
             sql("SELECT * FROM t1 UNION ALL SELECT * FROM t2"),
-            if (combineUnionEnabled) 1 else 1,
-            0,
-            2 + 4
+            numUnion = if (combineUnionEnabled) 1 else 1,
+            numShuffleReader = 0,
+            numPartition = 2 + 4
           )
         }
       }
