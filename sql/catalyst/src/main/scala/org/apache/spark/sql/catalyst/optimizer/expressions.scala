@@ -866,7 +866,8 @@ object NullPropagation extends Rule[LogicalPlan] {
  */
 object NullDownPropagation extends Rule[LogicalPlan] {
   // Not all NullIntolerant can be propagated
-  // E.g. should return false if the expression may return null for non-null inputs.
+  // Return false if the expression may return null without non-null inputs.
+  // E.g. Cast is NullIntolerant; however, cast('Infinity' as integer) returns true
   // Cannot apply to `ExtractValue` as the query planner uses the trait to resolve the columns.
   // E.g. the planner may resolve column `a` to `a#123`, then IsNull(a#123) cannot be optimized
   // Cannot apply to `EqualTo` as applying this optimization is too disruptive for some tests.
