@@ -259,6 +259,7 @@ Column APIs
     Column.eqNullSafe
     Column.getField
     Column.getItem
+    Column.ilike
     Column.isNotNull
     Column.isNull
     Column.isin
