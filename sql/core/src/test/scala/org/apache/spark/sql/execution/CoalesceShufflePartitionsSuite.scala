@@ -410,6 +410,8 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
 
       QueryTest.checkAnswer(resultDf, Seq((0), (1), (2), (3)).map(i => Row(i)))
 
+      // Shuffle partition coalescing of the join is performed independent of the non-grouping
+      // aggregate on the other side of the union.
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
       assert(

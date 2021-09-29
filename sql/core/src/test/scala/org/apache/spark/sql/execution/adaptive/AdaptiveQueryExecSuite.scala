@@ -1708,17 +1708,17 @@ class AdaptiveQueryExecSuite
   test("SPARK-34980: Support coalesce partition through union") {
     def checkResultPartition(
         df: Dataset[Row],
-        unionNumber: Int,
-        shuffleReaderNumber: Int,
-        partitionNumber: Int): Unit = {
+        numUnion: Int,
+        numShuffleReader: Int,
+        numPartition: Int): Unit = {
       df.collect()
       assert(collect(df.queryExecution.executedPlan) {
         case u: UnionExec => u
-      }.size == unionNumber)
+      }.size == numUnion)
       assert(collect(df.queryExecution.executedPlan) {
         case r: AQEShuffleReadExec => r
-      }.size === shuffleReaderNumber)
-      assert(df.rdd.partitions.length === partitionNumber)
+      }.size === numShuffleReader)
+      assert(df.rdd.partitions.length === numPartition)
     }
 
     Seq(true, false).foreach { combineUnionEnabled =>
@@ -1730,11 +1730,11 @@ class AdaptiveQueryExecSuite
       }
       // advisory partition size 1048576 has no special meaning, just a big enough value
       withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
-        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1048576",
-        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
-        SQLConf.SHUFFLE_PARTITIONS.key -> "10",
-        combineUnionConfig) {
+          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+          SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1048576",
+          SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+          SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+          combineUnionConfig) {
         withTempView("t1", "t2") {
           spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 2)
             .toDF().createOrReplaceTempView("t1")
@@ -1748,7 +1748,7 @@ class AdaptiveQueryExecSuite
                 |UNION ALL
                 |SELECT * FROM t2
               """.stripMargin),
-            if (combineUnionEnabled) 1 else 1,
+            1,
             1,
             1 + 4)
 
@@ -1766,17 +1766,15 @@ class AdaptiveQueryExecSuite
 
           checkResultPartition(
             sql("""
-                |SELECT key, count(*) FROM t1 GROUP BY key
-                |UNION ALL
-                |SELECT * FROM t2
-                |UNION ALL
-                |SELECT * FROM t1
+                |SELECT /*+ merge(t2) */ t1.key, t2.key FROM t1 JOIN t2 ON t1.key = t2.key
                 |UNION ALL
                 |SELECT key, count(*) FROM t2 GROUP BY key
+                |UNION ALL
+                |SELECT * FROM t1
               """.stripMargin),
-            if (combineUnionEnabled) 1 else 3,
-            2,
-            1 + 4 + 2 + 1)
+            if (combineUnionEnabled) 1 else 2,
+            3,
+            1 + 1 + 2)
 
           // negative test
           checkResultPartition(

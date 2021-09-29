@@ -75,8 +75,6 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
       conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE)
     }
 
-    val specsMap = mutable.HashMap.empty[Int, Seq[ShufflePartitionSpec]]
-
     // Sub-plans under the Union operator can be coalesced independently, so we can divide them
     // into independent "coalesce groups", and all shuffle stages within each group have to be
     // coalesced together.
@@ -99,6 +97,7 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
       }
     }
 
+    val specsMap = mutable.HashMap.empty[Int, Seq[ShufflePartitionSpec]]
     // Coalesce partitions for each coalesce group independently.
     coalesceGroups.zip(minNumPartitionsByGroup).foreach { case (shuffleStages, minNumPartitions) =>
       val newPartitionSpecs = ShufflePartitionsUtil.coalescePartitions(
