@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -453,37 +453,40 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case CreateTempFunction(nameParts, className, resources, ignoreIfExists, replace) =>
       // temp func doesn't belong to any catalog and we shouldn't resolve catalog in the name.
-      val database = if (nameParts.length > 2) {
-        throw QueryCompilationErrors.unsupportedFunctionNameError(nameParts.quoted)
-      } else if (nameParts.length == 2) {
-        Some(nameParts.head)
-      } else {
-        None
-      }
-      CreateFunctionCommand(
-        database,
-        nameParts.last,
-        className,
-        resources,
-        true,
-        ignoreIfExists,
-        replace)
+      callCreateFunctionCommand(nameParts, className, resources, true, ignoreIfExists, replace)
 
-    case CreateFunction(ResolvedFunc(identifier), className, resources, ignoreIfExists, replace) =>
-      val funcIdentifier = identifier.asFunctionIdentifier
-      CreateFunctionCommand(
-        funcIdentifier.database,
-        funcIdentifier.funcName,
-        className,
-        resources,
-        false,
-        ignoreIfExists,
-        replace)
+    case CreateFunction(ResolvedDBObjectName(catalog, nameParts),
+        className, resources, ignoreIfExists, replace) if isSessionCatalog(catalog) =>
+      callCreateFunctionCommand(nameParts, className, resources, false, ignoreIfExists, replace)
 
     case RefreshFunction(ResolvedFunc(identifier)) =>
       // Fallback to v1 command
       val funcIdentifier = identifier.asFunctionIdentifier
       RefreshFunctionCommand(funcIdentifier.database, funcIdentifier.funcName)
+  }
+
+  private def callCreateFunctionCommand(
+      nameParts: Seq[String],
+      className: String,
+      resources: Seq[FunctionResource],
+      isTemp: Boolean,
+      ignoreIfExists: Boolean,
+      replace: Boolean) = {
+    val database = if (nameParts.length > 2) {
+      throw QueryCompilationErrors.unsupportedFunctionNameError(nameParts.quoted)
+    } else if (nameParts.length == 2) {
+      Some(nameParts.head)
+    } else {
+      None
+    }
+    CreateFunctionCommand(
+      database,
+      nameParts.last,
+      className,
+      resources,
+      isTemp,
+      ignoreIfExists,
+      replace)
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = tableName match {

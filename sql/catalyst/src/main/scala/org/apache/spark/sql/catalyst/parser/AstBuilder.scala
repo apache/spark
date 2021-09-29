@@ -4478,7 +4478,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         ctx.REPLACE != null)
     } else {
       CreateFunction(
-        UnresolvedFunc(functionIdentifier),
+        UnresolvedDBObjectName(
+          functionIdentifier,
+          isNamespace = true),
         string(ctx.className),
         resources.toSeq,
         ctx.EXISTS != null,
