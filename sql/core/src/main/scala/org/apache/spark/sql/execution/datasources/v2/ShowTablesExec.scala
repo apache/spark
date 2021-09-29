@@ -22,8 +22,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
-import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.LeafExecNode
 
 /**
@@ -33,7 +33,8 @@ case class ShowTablesExec(
     output: Seq[Attribute],
     catalog: TableCatalog,
     namespace: Seq[String],
-    pattern: Option[String]) extends V2CommandExec with LeafExecNode {
+    pattern: Option[String],
+    listTempViews: Option[String] => Seq[Identifier]) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
 
@@ -42,6 +43,10 @@ case class ShowTablesExec(
       if (pattern.map(StringUtils.filterPattern(Seq(table.name()), _).nonEmpty).getOrElse(true)) {
         rows += toCatalystRow(table.namespace().quoted, table.name(), false)
       }
+    }
+
+    listTempViews(pattern).map { tempView =>
+      rows += toCatalystRow(tempView.namespace().quoted, tempView.name(), true)
     }
 
     rows.toSeq

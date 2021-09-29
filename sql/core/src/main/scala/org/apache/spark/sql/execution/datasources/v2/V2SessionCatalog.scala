@@ -52,7 +52,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
     namespace match {
       case Array(db) =>
         catalog
-          .listTables(db)
+          .listTables(db, pattern = "*", includeLocalTempViews = false)
           .map(ident => Identifier.of(Array(ident.database.getOrElse("")), ident.table))
           .toArray
       case _ =>

@@ -1908,7 +1908,9 @@ class DataSourceV2SQLSuite
   test("rename table by ALTER VIEW") {
     withTable("testcat.ns1.new") {
       sql("CREATE TABLE testcat.ns1.ns2.old USING foo AS SELECT id, data FROM source")
-      checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq(Row("ns1.ns2", "old", false)))
+      checkAnswer(
+        sql("SHOW TABLES FROM testcat.ns1.ns2"),
+        Seq(Row("ns1.ns2", "old", false), Row("", "source", true), Row("", "source2", true)))
 
       val e = intercept[AnalysisException] {
         sql("ALTER VIEW testcat.ns1.ns2.old RENAME TO ns1.new")
