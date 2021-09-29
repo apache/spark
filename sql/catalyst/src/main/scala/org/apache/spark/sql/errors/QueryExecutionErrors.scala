@@ -443,7 +443,7 @@ object QueryExecutionErrors {
   def streamedOperatorUnsupportedByDataSourceError(
       className: String, operator: String): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_STREAMED_OPERATOR_BY_DATASOURCE",
+      errorClass = "UNSUPPORTED_STREAMED_OPERATOR_BY_DATA_SOURCE",
       messageParameters = Array(className, operator))
   }
 
@@ -455,7 +455,7 @@ object QueryExecutionErrors {
 
   def failedToFindDataSourceError(provider: String, error: Throwable): Throwable = {
     new SparkClassNotFoundException(
-      errorClass = "FAILED_FIND_DATASOURCE",
+      errorClass = "FAILED_FIND_DATA_SOURCE",
       messageParameters = Array(provider), error)
   }
 
@@ -480,14 +480,16 @@ object QueryExecutionErrors {
   def sparkUpgradeInReadingDatesError(
       format: String, config: String, option: String): SparkUpgradeException = {
     new SparkUpgradeException(
-      errorClass = "CANNOT_UPGRADE_IN_READING_DATES",
-      messageParameters = Array("3.0", format, config, option, config, option))
+      version = "3.0",
+      errorClass = "READING_AMBIGUOUS_DATES_AFTER_UPGRADE",
+      messageParameters = Array(format, config, option, config, option), null)
   }
 
   def sparkUpgradeInWritingDatesError(format: String, config: String): SparkUpgradeException = {
     new SparkUpgradeException(
-      errorClass = "CANNOT_UPGRADE_IN_WRITING_DATES",
-      messageParameters = Array("3.0", format, config, config))
+      version = "3.0",
+      errorClass = "WRITING_AMBIGUOUS_DATES_AFTER_UPGRADE",
+      messageParameters = Array(format, config, config), null)
   }
 
   def buildReaderUnsupportedForFileFormatError(format: String): Throwable = {
@@ -504,7 +506,7 @@ object QueryExecutionErrors {
 
   def taskFailedWhileWritingRowsError(cause: Throwable): Throwable = {
     new SparkException(
-      errorClass = "TASK_FAILED_WRITING_ROWS",
+      errorClass = "FAILED_TASK_WHILE_WRITING_ROWS",
       messageParameters = Array.empty, cause)
   }
 
@@ -517,18 +519,18 @@ object QueryExecutionErrors {
   def unsupportedSaveModeError(saveMode: String, pathExists: Boolean): Throwable = {
     new SparkIllegalStateException(
       errorClass = "UNSUPPORTED_SAVE_MODE",
-      messageParameters = Array(saveMode + " (" + pathExists.toString + ")"))
+      messageParameters = Array(saveMode, pathExists.toString))
   }
 
   def cannotClearOutputDirectoryError(staticPrefixPath: Path): Throwable = {
     new SparkIOException(
-      errorClass = "CANNOT_CLEAR_SOME_DIRECTORY",
+      errorClass = "CANNOT_CLEAR_DIRECTORY",
       messageParameters = Array("output", staticPrefixPath.toString))
   }
 
   def cannotClearPartitionDirectoryError(path: Path): Throwable = {
     new SparkIOException(
-      errorClass = "CANNOT_CLEAR_SOME_DIRECTORY",
+      errorClass = "CANNOT_CLEAR_DIRECTORY",
       messageParameters = Array("partition", path.toString))
   }
 
@@ -548,7 +550,7 @@ object QueryExecutionErrors {
   def fallbackV1RelationReportsInconsistentSchemaError(
       v2Schema: StructType, v1Schema: StructType): Throwable = {
     new SparkIllegalArgumentException(
-      errorClass = "FAILED_FALLBACK_V1_BECAUSE_OF_INCONSISTENT_SCHEMA",
+      errorClass = "INTERNAL_ERROR",
       messageParameters = Array(v2Schema.sql, v1Schema.sql))
   }
 
@@ -926,21 +928,24 @@ object QueryExecutionErrors {
 
   def failToParseDateTimeInNewParserError(s: String, e: Throwable): Throwable = {
     new SparkUpgradeException(
-      errorClass = "FAILED_PARSE_DATETIME_IN_NEW_PARSER",
-      messageParameters = Array("3.0", s, SQLConf.LEGACY_TIME_PARSER_POLICY.key), e)
+      version = "3.0",
+      errorClass = "FAILED_PARSE_DATE_TIME_AFTER_UPGRADE",
+      messageParameters = Array(s, SQLConf.LEGACY_TIME_PARSER_POLICY.key), e)
   }
 
   def failToFormatDateTimeInNewFormatterError(
       resultCandidate: String, e: Throwable): Throwable = {
     new SparkUpgradeException(
-      errorClass = "FAILED_FORMAT_DATETIME_IN_NEW_FORMATTER",
-      messageParameters = Array("3.0", resultCandidate, SQLConf.LEGACY_TIME_PARSER_POLICY.key), e)
+      version = "3.0",
+      errorClass = "FAILED_FORMAT_DATE_TIME_AFTER_UPGRADE",
+      messageParameters = Array(resultCandidate, SQLConf.LEGACY_TIME_PARSER_POLICY.key), e)
   }
 
   def failToRecognizePatternAfterUpgradeError(pattern: String, e: Throwable): Throwable = {
     new SparkUpgradeException(
-      errorClass = "FAILED_RECOGNIZE_PATTERN_AFTER_UPGRADE",
-      messageParameters = Array("3.0", pattern, SQLConf.LEGACY_TIME_PARSER_POLICY.key), e)
+      version = "3.0",
+      errorClass = "FAILED_RECOGNIZE_DATE_TIME_PATTERN_AFTER_UPGRADE",
+      messageParameters = Array(pattern, SQLConf.LEGACY_TIME_PARSER_POLICY.key), e)
   }
 
   def failToRecognizePatternError(pattern: String, e: Throwable): Throwable = {

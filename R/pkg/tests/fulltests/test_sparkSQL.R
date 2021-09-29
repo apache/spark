@@ -3891,8 +3891,7 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
   # It makes sure that we can omit path argument in write.df API and then it calls
   # DataFrameWriter.save() without path.
   expect_error(write.df(df, source = "csv"),
-              paste("Error in save : org.apache.spark.SparkIllegalArgumentException:",
-                    "Expected exactly one path to be specified"))
+              "Error in save : illegal argument - Expected exactly one path to be specified")
   expect_error(write.json(df, jsonPath),
               "Error in json : analysis error - path file:.*already exists")
   expect_error(write.text(df, jsonPath),

@@ -840,6 +840,15 @@ captureJVMException <- function(e, method) {
     # Extract the first message of JVM exception.
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
     stop(rmsg, "illegal argument - ", first, call. = FALSE)
+  } else if (any(grepl("org.apache.spark.SparkIllegalArgumentException: ",
+                       stacktrace, fixed = TRUE))) {
+    msg <- strsplit(stacktrace, "org.apache.spark.SparkIllegalArgumentException: ",
+                    fixed = TRUE)[[1]]
+    # Extract "Error in ..." message.
+    rmsg <- msg[1]
+    # Extract the first message of JVM exception.
+    first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
+    stop(rmsg, "illegal argument - ", first, call. = FALSE)
   } else if (any(grepl("org.apache.spark.sql.AnalysisException: ", stacktrace, fixed = TRUE))) {
     msg <- strsplit(stacktrace, "org.apache.spark.sql.AnalysisException: ", fixed = TRUE)[[1]]
     # Extract "Error in ..." message.
