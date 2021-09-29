@@ -579,11 +579,15 @@ case class DataSource(
       checkEmptyGlobPath, checkFilesExist, enableGlobbing = globPaths)
   }
 
+  private val writeAllowedSources: Set[Class[_]] =
+    Set(classOf[ParquetFileFormat], classOf[CSVFileFormat])
+
   private def disallowWritingIntervals(
       dataTypes: Seq[DataType],
       forbidAnsiIntervals: Boolean): Unit = {
-    val isParquet = providingClass == classOf[ParquetFileFormat]
-    dataTypes.foreach(TypeUtils.invokeOnceForInterval(_, forbidAnsiIntervals || !isParquet) {
+    val isWriteAllowedSource = writeAllowedSources(providingClass)
+    dataTypes.foreach(
+      TypeUtils.invokeOnceForInterval(_, forbidAnsiIntervals || !isWriteAllowedSource) {
       throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()
     })
   }

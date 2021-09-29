@@ -22,7 +22,7 @@ import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, StandardOpenOption}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{Instant, LocalDate, LocalDateTime}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 import java.util.Locale
 import java.util.zip.GZIPOutputStream
 
@@ -2515,6 +2515,25 @@ abstract class CSVSuite
               if (isLegacy) null else LocalDateTime.of(2021, 10, 1, 0, 0, 0)),
             Row(LocalDate.of(2021, 8, 18), Instant.parse("2021-08-18T21:44:30Z"),
               if (isLegacy) null else LocalDateTime.of(2021, 8, 18, 21, 44, 30, 123000000))))
+      }
+    }
+  }
+
+  test("SPARK-36831: Support reading and writing ANSI intervals") {
+    Seq(
+      YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
+      DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
+    ).foreach { case (it, f) =>
+      val data = (1 to 10).map(i => Row(i, f(i)))
+      val schema = StructType(Array(StructField("d", IntegerType, false),
+        StructField("i", it, false)))
+      withTempPath { file =>
+        val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+        df.write.csv(file.getCanonicalPath)
+        val df2 = spark.read.csv(file.getCanonicalPath)
+        checkAnswer(df2, df.select($"d".cast(StringType), $"i".cast(StringType)).collect().toSeq)
+        val df3 = spark.read.schema(schema).csv(file.getCanonicalPath)
+        checkAnswer(df3, df.collect().toSeq)
       }
     }
   }
