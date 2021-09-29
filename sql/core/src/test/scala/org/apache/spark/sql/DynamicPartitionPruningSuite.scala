@@ -173,15 +173,14 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-
   /**
    * Check if the query plan has a partition pruning filter inserted as
    * a subquery duplicate or as a custom broadcast exchange.
    */
   def checkPartitionPruningPredicate(
-    df: DataFrame,
-    withSubquery: Boolean,
-    withBroadcast: Boolean): Unit = {
+      df: DataFrame,
+      withSubquery: Boolean,
+      withBroadcast: Boolean): Unit = {
     df.collect()
 
     val plan = df.queryExecution.executedPlan
@@ -496,9 +495,9 @@ abstract class DynamicPartitionPruningSuiteBase
 
         checkAnswer(df,
           Row(1030, 2, 10, 3) ::
-            Row(1040, 2, 50, 3) ::
-            Row(1050, 2, 50, 3) ::
-            Row(1060, 2, 50, 3) :: Nil
+          Row(1040, 2, 50, 3) ::
+          Row(1050, 2, 50, 3) ::
+          Row(1060, 2, 50, 3) :: Nil
         )
       }
 
@@ -516,7 +515,7 @@ abstract class DynamicPartitionPruningSuiteBase
 
         checkAnswer(df,
           Row(1010, 1, 10, 2) ::
-            Row(1020, 1, 10, 2) :: Nil
+          Row(1020, 1, 10, 2) :: Nil
         )
       }
     }
@@ -1140,9 +1139,9 @@ abstract class DynamicPartitionPruningSuiteBase
 
       checkAnswer(df,
         Row(1000, 1, 1, 10) ::
-          Row(1010, 2, 1, 10) ::
-          Row(1020, 2, 1, 10) ::
-          Row(1030, 3, 2, 10) :: Nil
+        Row(1010, 2, 1, 10) ::
+        Row(1020, 2, 1, 10) ::
+        Row(1030, 3, 2, 10) :: Nil
       )
     }
 
@@ -1160,9 +1159,9 @@ abstract class DynamicPartitionPruningSuiteBase
 
       checkAnswer(df,
         Row(1000, 1, 1, 10) ::
-          Row(1010, 2, 1, 10) ::
-          Row(1020, 2, 1, 10) ::
-          Row(1030, 3, 2, 10) :: Nil
+        Row(1010, 2, 1, 10) ::
+        Row(1020, 2, 1, 10) ::
+        Row(1030, 3, 2, 10) :: Nil
       )
     }
   }
@@ -1189,9 +1188,9 @@ abstract class DynamicPartitionPruningSuiteBase
 
             checkAnswer(df,
               Row(1030, 2, 10, 3) ::
-                Row(1040, 2, 50, 3) ::
-                Row(1050, 2, 50, 3) ::
-                Row(1060, 2, 50, 3) :: Nil
+              Row(1040, 2, 50, 3) ::
+              Row(1050, 2, 50, 3) ::
+              Row(1060, 2, 50, 3) :: Nil
             )
           }
         }
@@ -1278,9 +1277,9 @@ abstract class DynamicPartitionPruningSuiteBase
 
       checkAnswer(df,
         Row(1030, 2) ::
-          Row(1040, 2) ::
-          Row(1050, 2) ::
-          Row(1060, 2) :: Nil
+        Row(1040, 2) ::
+        Row(1050, 2) ::
+        Row(1060, 2) :: Nil
       )
     }
   }
@@ -1298,15 +1297,15 @@ abstract class DynamicPartitionPruningSuiteBase
 
       checkAnswer(df,
         Row(1030, 2) ::
-          Row(1040, 2) ::
-          Row(1050, 2) ::
-          Row(1060, 2) ::
-          Row(1070, 2) ::
-          Row(1080, 3) ::
-          Row(1090, 3) ::
-          Row(1100, 3) ::
-          Row(1110, 3) ::
-          Row(1120, 4) :: Nil
+        Row(1040, 2) ::
+        Row(1050, 2) ::
+        Row(1060, 2) ::
+        Row(1070, 2) ::
+        Row(1080, 3) ::
+        Row(1090, 3) ::
+        Row(1100, 3) ::
+        Row(1110, 3) ::
+        Row(1120, 4) :: Nil
       )
     }
   }
