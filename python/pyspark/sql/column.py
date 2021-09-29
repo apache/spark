@@ -510,7 +510,7 @@ class Column(object):
     _ilike_doc = """
     SQL ILIKE expression (case insensitive LIKE). Returns a boolean :class:`Column`
     based on a case insensitive match.
-    
+
     .. versionadded:: 3.3.0
 
     Parameters
