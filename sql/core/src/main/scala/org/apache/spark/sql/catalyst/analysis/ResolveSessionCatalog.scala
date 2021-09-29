@@ -456,8 +456,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       callCreateFunctionCommand(nameParts, className, resources, true, ignoreIfExists, replace)
 
     case CreateFunction(ResolvedDBObjectName(catalog, nameParts),
-        className, resources, ignoreIfExists, replace) if isSessionCatalog(catalog) =>
-      callCreateFunctionCommand(nameParts, className, resources, false, ignoreIfExists, replace)
+        className, resources, ignoreIfExists, replace) =>
+      if (isSessionCatalog(catalog)) {
+        callCreateFunctionCommand(nameParts, className, resources, false, ignoreIfExists, replace)
+      } else {
+        throw QueryCompilationErrors.functionUnsupportedInV2CatalogError()
+      }
 
     case RefreshFunction(ResolvedFunc(identifier)) =>
       // Fallback to v1 command
