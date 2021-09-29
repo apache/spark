@@ -125,7 +125,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   private def isParquetProperty(key: String) =
     key.startsWith("parquet.") || key.contains(".parquet.")
 
-  def convert(relation: HiveTableRelation): LogicalRelation = {
+  def convert(relation: HiveTableRelation, isWrite: Boolean): LogicalRelation = {
     val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
 
     // Consider table and storage properties. For properties existing in both sides, storage
@@ -134,7 +134,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       val options = relation.tableMeta.properties.filterKeys(isParquetProperty).toMap ++
         relation.tableMeta.storage.properties + (ParquetOptions.MERGE_SCHEMA ->
         SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString)
-        convertToLogicalRelation(relation, options, classOf[ParquetFileFormat], "parquet")
+        convertToLogicalRelation(relation, options, classOf[ParquetFileFormat], "parquet", isWrite)
     } else {
       val options = relation.tableMeta.properties.filterKeys(isOrcProperty).toMap ++
         relation.tableMeta.storage.properties
@@ -143,13 +143,15 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           relation,
           options,
           classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat],
-          "orc")
+          "orc",
+          isWrite)
       } else {
         convertToLogicalRelation(
           relation,
           options,
           classOf[org.apache.spark.sql.hive.orc.OrcFileFormat],
-          "orc")
+          "orc",
+          isWrite)
       }
     }
   }
@@ -158,7 +160,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       relation: HiveTableRelation,
       options: Map[String, String],
       fileFormatClass: Class[_ <: FileFormat],
-      fileType: String): LogicalRelation = {
+      fileType: String,
+      isWrite: Boolean): LogicalRelation = {
     val metastoreSchema = relation.tableMeta.schema
     val tableIdentifier =
       QualifiedTableName(relation.tableMeta.database, relation.tableMeta.identifier.table)
@@ -166,6 +169,14 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val lazyPruningEnabled = sparkSession.sqlContext.conf.manageFilesourcePartitions
     val tablePath = new Path(relation.tableMeta.location)
     val fileFormat = fileFormatClass.getConstructor().newInstance()
+    val bucketSpec = relation.tableMeta.bucketSpec
+    val (hiveOptions, hiveBucketSpec) =
+      if (isWrite) {
+        (options.updated(BucketingUtils.optionForHiveCompatibleBucketWrite, "true"),
+          bucketSpec)
+      } else {
+        (options, None)
+      }
 
     val result = if (relation.isPartitioned) {
       val partitionSchema = relation.tableMeta.partitionSchema
@@ -207,16 +218,16 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             }
           }
 
-          val updatedTable = inferIfNeeded(relation, options, fileFormat, Option(fileIndex))
+          val updatedTable = inferIfNeeded(relation, hiveOptions, fileFormat, Option(fileIndex))
 
           // Spark SQL's data source table now support static and dynamic partition insert. Source
           // table converted from Hive table should always use dynamic.
-          val enableDynamicPartition = options.updated("partitionOverwriteMode", "dynamic")
+          val enableDynamicPartition = hiveOptions.updated("partitionOverwriteMode", "dynamic")
           val fsRelation = HadoopFsRelation(
             location = fileIndex,
             partitionSchema = partitionSchema,
             dataSchema = updatedTable.dataSchema,
-            bucketSpec = None,
+            bucketSpec = hiveBucketSpec,
             fileFormat = fileFormat,
             options = enableDynamicPartition)(sparkSession = sparkSession)
           val created = LogicalRelation(fsRelation, updatedTable)
@@ -236,17 +247,17 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           fileFormatClass,
           None)
         val logicalRelation = cached.getOrElse {
-          val updatedTable = inferIfNeeded(relation, options, fileFormat)
+          val updatedTable = inferIfNeeded(relation, hiveOptions, fileFormat)
           val created =
             LogicalRelation(
               DataSource(
                 sparkSession = sparkSession,
                 paths = rootPath.toString :: Nil,
                 userSpecifiedSchema = Option(updatedTable.dataSchema),
-                bucketSpec = None,
+                bucketSpec = hiveBucketSpec,
                 // Do not interpret the 'path' option at all when tables are read using the Hive
                 // source, since the URIs will already have been read from the table's LOCATION.
-                options = options.filter { case (k, _) => !k.equalsIgnoreCase("path") },
+                options = hiveOptions.filter { case (k, _) => !k.equalsIgnoreCase("path") },
                 className = fileType).resolveRelation(),
               table = updatedTable)
 

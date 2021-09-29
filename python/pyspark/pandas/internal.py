@@ -740,7 +740,7 @@ class InternalFrame(object):
             ]
 
         assert all(
-            isinstance(ops.dtype, Dtype.__args__)  # type: ignore
+            isinstance(ops.dtype, Dtype.__args__)  # type: ignore[attr-defined]
             and (
                 ops.dtype == np.dtype("object")
                 or as_spark_type(ops.dtype, raise_error=False) is not None
@@ -758,7 +758,7 @@ class InternalFrame(object):
         self._index_fields = index_fields  # type: List[InternalField]
 
         assert all(
-            isinstance(ops.dtype, Dtype.__args__)  # type: ignore
+            isinstance(ops.dtype, Dtype.__args__)  # type: ignore[attr-defined]
             and (
                 ops.dtype == np.dtype("object")
                 or as_spark_type(ops.dtype, raise_error=False) is not None
@@ -908,7 +908,7 @@ class InternalFrame(object):
         """
         if len(sdf.columns) > 0:
             return SparkDataFrame(
-                sdf._jdf.toDF().withSequenceColumn(column_name),  # type: ignore
+                sdf._jdf.toDF().withSequenceColumn(column_name),  # type: ignore[operator]
                 sdf.sql_ctx,
             )
         else:
@@ -1452,7 +1452,7 @@ class InternalFrame(object):
             name if name is None or isinstance(name, tuple) else (name,) for name in columns.names
         ]  # type: List[Optional[Label]]
 
-        prefer_timestamp_ntz = is_timestamp_ntz_preferred()  # type: ignore
+        prefer_timestamp_ntz = is_timestamp_ntz_preferred()
 
         (
             pdf,

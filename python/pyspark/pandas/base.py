@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd  # noqa: F401
 from pandas.api.types import is_list_like, CategoricalDtype
 from pyspark.sql import functions as F, Column, Window
-from pyspark.sql.types import LongType
+from pyspark.sql.types import LongType, BooleanType
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex
@@ -427,6 +427,12 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     def __ror__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.ror(self, other)
+
+    def __xor__(self, other: Any) -> SeriesOrIndex:
+        return self._dtype_op.xor(self, other)
+
+    def __rxor__(self, other: Any) -> SeriesOrIndex:
+        return self._dtype_op.rxor(self, other)
 
     def __len__(self) -> int:
         return len(self._psdf)
@@ -867,7 +873,13 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             )
 
         values = values.tolist() if isinstance(values, np.ndarray) else list(values)
-        return self._with_new_scol(self.spark.column.isin([SF.lit(v) for v in values]))
+
+        other = [SF.lit(v) for v in values]
+        scol = self.spark.column.isin(other)
+        field = self._internal.data_fields[0].copy(
+            dtype=np.dtype("bool"), spark_type=BooleanType(), nullable=False
+        )
+        return self._with_new_scol(scol=F.coalesce(scol, F.lit(False)), field=field)
 
     def isnull(self: IndexOpsLike) -> IndexOpsLike:
         """
@@ -943,7 +955,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         if isinstance(self, MultiIndex):
             raise NotImplementedError("notna is not defined for MultiIndex")
-        return (~self.isnull()).rename(self.name)  # type: ignore
+        return (~self.isnull()).rename(self.name)  # type: ignore[attr-defined]
 
     notna = notnull
 

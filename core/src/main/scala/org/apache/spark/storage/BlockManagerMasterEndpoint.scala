@@ -117,12 +117,20 @@ class BlockManagerMasterEndpoint(
 
     case _updateBlockInfo @
         UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
-      val isSuccess = updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size)
-      context.reply(isSuccess)
-      // SPARK-30594: we should not post `SparkListenerBlockUpdated` when updateBlockInfo
-      // returns false since the block info would be updated again later.
-      if (isSuccess) {
-        listenerBus.post(SparkListenerBlockUpdated(BlockUpdatedInfo(_updateBlockInfo)))
+
+      @inline def handleResult(success: Boolean): Unit = {
+        // SPARK-30594: we should not post `SparkListenerBlockUpdated` when updateBlockInfo
+        // returns false since the block info would be updated again later.
+        if (success) {
+          listenerBus.post(SparkListenerBlockUpdated(BlockUpdatedInfo(_updateBlockInfo)))
+        }
+        context.reply(success)
+      }
+
+      if (blockId.isShuffle) {
+        updateShuffleBlockInfo(blockId, blockManagerId).foreach(handleResult)
+      } else {
+        handleResult(updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size))
       }
 
     case GetLocations(blockId) =>
@@ -568,6 +576,33 @@ class BlockManagerMasterEndpoint(
     id
   }
 
+ private def updateShuffleBlockInfo(blockId: BlockId, blockManagerId: BlockManagerId)
+    : Future[Boolean] = {
+   blockId match {
+     case ShuffleIndexBlockId(shuffleId, mapId, _) =>
+       // SPARK-36782: Invoke `MapOutputTracker.updateMapOutput` within the thread
+       // `dispatcher-BlockManagerMaster` could lead to the deadlock when
+       // `MapOutputTracker.serializeOutputStatuses` broadcasts the serialized mapstatues under
+       // the acquired write lock. The broadcast block would report its status to
+       // `BlockManagerMasterEndpoint`, while the `BlockManagerMasterEndpoint` is occupied by
+       // `updateMapOutput` since it's waiting for the write lock. Thus, we use `Future` to call
+       // `updateMapOutput` in a separate thread to avoid the deadlock.
+       Future {
+         // We need to update this at index file because there exists the index-only block
+         logDebug(s"Received shuffle index block update for ${shuffleId} ${mapId}, updating.")
+         mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
+         true
+       }
+     case ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int) =>
+       logDebug(s"Received shuffle data block update for ${shuffleId} ${mapId}, ignore.")
+       Future.successful(true)
+     case _ =>
+       logDebug(s"Unexpected shuffle block type ${blockId}" +
+         s"as ${blockId.getClass().getSimpleName()}")
+       Future.successful(false)
+   }
+ }
+
   private def updateBlockInfo(
       blockManagerId: BlockManagerId,
       blockId: BlockId,
@@ -575,23 +610,6 @@ class BlockManagerMasterEndpoint(
       memSize: Long,
       diskSize: Long): Boolean = {
     logDebug(s"Updating block info on master ${blockId} for ${blockManagerId}")
-
-    if (blockId.isShuffle) {
-      blockId match {
-        case ShuffleIndexBlockId(shuffleId, mapId, _) =>
-          // We need to update this at index file because there exists the index-only block
-          logDebug(s"Received shuffle index block update for ${shuffleId} ${mapId}, updating.")
-          mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
-          return true
-        case ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int) =>
-          logDebug(s"Received shuffle data block update for ${shuffleId} ${mapId}, ignore.")
-          return true
-        case _ =>
-          logDebug(s"Unexpected shuffle block type ${blockId}" +
-            s"as ${blockId.getClass().getSimpleName()}")
-          return false
-      }
-    }
 
     if (!blockManagerInfo.contains(blockManagerId)) {
       if (blockManagerId.isDriver && !isLocal) {

@@ -69,7 +69,7 @@ Input [5]: [s_store_sk#1, s_store_name#2, s_market_id#3, s_state#4, s_zip#5]
 
 (5) BroadcastExchange
 Input [4]: [s_store_sk#1, s_store_name#2, s_state#4, s_zip#5]
-Arguments: HashedRelationBroadcastMode(List(input[3, string, true]),false), [id=#6]
+Arguments: HashedRelationBroadcastMode(List(input[3, string, true]),false,false), [id=#6]
 
 (6) Scan parquet default.customer_address
 Output [4]: [ca_address_sk#7, ca_state#8, ca_zip#9, ca_country#10]
@@ -96,7 +96,7 @@ Input [8]: [s_store_sk#1, s_store_name#2, s_state#4, s_zip#5, ca_address_sk#7, c
 
 (11) BroadcastExchange
 Input [6]: [s_store_sk#1, s_store_name#2, s_state#4, ca_address_sk#7, ca_state#8, ca_country#10]
-Arguments: HashedRelationBroadcastMode(List(input[3, int, true], upper(input[5, string, true])),false), [id=#11]
+Arguments: HashedRelationBroadcastMode(List(input[3, int, true], upper(input[5, string, true])),false,false), [id=#11]
 
 (12) Scan parquet default.customer
 Output [5]: [c_customer_sk#12, c_current_addr_sk#13, c_first_name#14, c_last_name#15, c_birth_country#16]
@@ -123,7 +123,7 @@ Input [11]: [s_store_sk#1, s_store_name#2, s_state#4, ca_address_sk#7, ca_state#
 
 (17) BroadcastExchange
 Input [7]: [s_store_sk#1, s_store_name#2, s_state#4, ca_state#8, c_customer_sk#12, c_first_name#14, c_last_name#15]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, true] as bigint), 32) | (cast(input[4, int, true] as bigint) & 4294967295))),false), [id=#17]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, true] as bigint), 32) | (cast(input[4, int, true] as bigint) & 4294967295))),false,false), [id=#17]
 
 (18) Scan parquet default.store_sales
 Output [6]: [ss_item_sk#18, ss_customer_sk#19, ss_store_sk#20, ss_ticket_number#21, ss_net_paid#22, ss_sold_date_sk#23]
@@ -168,7 +168,7 @@ Condition : ((isnotnull(i_color#27) AND (i_color#27 = pale                )) AND
 
 (27) BroadcastExchange
 Input [6]: [i_item_sk#24, i_current_price#25, i_size#26, i_color#27, i_units#28, i_manager_id#29]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#30]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#30]
 
 (28) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_item_sk#18]

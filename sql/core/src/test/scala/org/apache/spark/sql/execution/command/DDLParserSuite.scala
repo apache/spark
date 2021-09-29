@@ -48,6 +48,12 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     comparePlans(plan, expected, checkAnalysis = false)
   }
 
+  test("show current namespace") {
+    comparePlans(
+      parser.parsePlan("SHOW CURRENT NAMESPACE"),
+      ShowCurrentNamespaceCommand())
+  }
+
   test("alter database - property values must be set") {
     assertUnsupported(
       sql = "ALTER DATABASE my_db SET DBPROPERTIES('key_without_value', 'key_with_value'='x')",

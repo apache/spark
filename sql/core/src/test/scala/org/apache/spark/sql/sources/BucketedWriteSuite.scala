@@ -19,10 +19,10 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.functions._
@@ -136,10 +136,13 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
     (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
   }
 
-  def tableDir: File = {
-    val identifier = spark.sessionState.sqlParser.parseTableIdentifier("bucketed_table")
+  def tableDir(table: String = "bucketed_table"): File = {
+    val identifier = spark.sessionState.sqlParser.parseTableIdentifier(table)
     new File(spark.sessionState.catalog.defaultTablePath(identifier))
   }
+
+  private def bucketIdExpression(expressions: Seq[Expression], numBuckets: Int): Expression =
+    HashPartitioning(expressions, numBuckets).partitionIdExpression
 
   /**
    * A helper method to check the bucket write functionality in low level, i.e. check the written
@@ -147,18 +150,21 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
    * files are written to, and the format of data(parquet, json, etc.), and the bucketing
    * information.
    */
-  private def testBucketing(
+  protected def testBucketing(
       dataDir: File,
       source: String,
       numBuckets: Int,
       bucketCols: Seq[String],
-      sortCols: Seq[String] = Nil): Unit = {
+      sortCols: Seq[String] = Nil,
+      inputDF: DataFrame = df,
+      bucketIdExpression: (Seq[Expression], Int) => Expression = bucketIdExpression,
+      getBucketIdFromFileName: String => Option[Int] = BucketingUtils.getBucketId): Unit = {
     val allBucketFiles = dataDir.listFiles().filterNot(f =>
       f.getName.startsWith(".") || f.getName.startsWith("_")
     )
 
     for (bucketFile <- allBucketFiles) {
-      val bucketId = BucketingUtils.getBucketId(bucketFile.getName).getOrElse {
+      val bucketId = getBucketIdFromFileName(bucketFile.getName).getOrElse {
         fail(s"Unable to find the related bucket files.")
       }
 
@@ -167,7 +173,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
       val selectedColumns = (bucketCols ++ sortCols).distinct
       // We may lose the type information after write(e.g. json format doesn't keep schema
       // information), here we get the types from the original dataframe.
-      val types = df.select(selectedColumns.map(col): _*).schema.map(_.dataType)
+      val types = inputDF.select(selectedColumns.map(col): _*).schema.map(_.dataType)
       val columns = selectedColumns.zip(types).map {
         case (colName, dt) => col(colName).cast(dt)
       }
@@ -188,7 +194,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
       val qe = readBack.select(bucketCols.map(col): _*).queryExecution
       val rows = qe.toRdd.map(_.copy()).collect()
       val getBucketId = UnsafeProjection.create(
-        HashPartitioning(qe.analyzed.output, numBuckets).partitionIdExpression :: Nil,
+        bucketIdExpression(qe.analyzed.output, numBuckets) :: Nil,
         qe.analyzed.output)
 
       for (row <- rows) {
@@ -208,7 +214,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
           .saveAsTable("bucketed_table")
 
         for (i <- 0 until 5) {
-          testBucketing(new File(tableDir, s"i=$i"), source, 8, Seq("j", "k"))
+          testBucketing(new File(tableDir(), s"i=$i"), source, 8, Seq("j", "k"))
         }
       }
     }
@@ -225,7 +231,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
           .saveAsTable("bucketed_table")
 
         for (i <- 0 until 5) {
-          testBucketing(new File(tableDir, s"i=$i"), source, 8, Seq("j"), Seq("k"))
+          testBucketing(new File(tableDir(), s"i=$i"), source, 8, Seq("j"), Seq("k"))
         }
       }
     }
@@ -255,7 +261,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
           .bucketBy(8, "i", "j")
           .saveAsTable("bucketed_table")
 
-        testBucketing(tableDir, source, 8, Seq("i", "j"))
+        testBucketing(tableDir(), source, 8, Seq("i", "j"))
       }
     }
   }
@@ -269,7 +275,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
           .sortBy("k")
           .saveAsTable("bucketed_table")
 
-        testBucketing(tableDir, source, 8, Seq("i", "j"), Seq("k"))
+        testBucketing(tableDir(), source, 8, Seq("i", "j"), Seq("k"))
       }
     }
   }
@@ -286,7 +292,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
             .saveAsTable("bucketed_table")
 
           for (i <- 0 until 5) {
-            testBucketing(new File(tableDir, s"i=$i"), source, 8, Seq("j", "k"))
+            testBucketing(new File(tableDir(), s"i=$i"), source, 8, Seq("j", "k"))
           }
         }
       }

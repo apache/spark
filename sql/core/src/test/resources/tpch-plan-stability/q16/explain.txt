@@ -58,7 +58,7 @@ Input [2]: [s_suppkey#3, s_comment#4]
 
 (8) BroadcastExchange
 Input [1]: [s_suppkey#3]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),true), [id=#5]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),true,true), [id=#5]
 
 (9) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ps_suppkey#2]
@@ -81,7 +81,7 @@ Condition : (((((isnotnull(p_brand#7) AND isnotnull(p_type#8)) AND NOT (p_brand#
 
 (13) BroadcastExchange
 Input [4]: [p_partkey#6, p_brand#7, p_type#8, p_size#9]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#11]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false,false), [id=#11]
 
 (14) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ps_partkey#1]

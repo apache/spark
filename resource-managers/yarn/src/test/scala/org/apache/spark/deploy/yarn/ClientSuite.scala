@@ -19,7 +19,6 @@ package org.apache.spark.deploy.yarn
 
 import java.io.{File, FileInputStream, FileNotFoundException, FileOutputStream}
 import java.net.URI
-import java.nio.file.Paths
 import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
 
@@ -582,40 +581,6 @@ class ClientSuite extends SparkFunSuite with Matchers {
         }
       }
     }
-  }
-
-  test("SPARK-35672: test Client.getUserClasspathUrls") {
-    val gatewayRootPath = "/local/matching/replace"
-    val replacementRootPath = "/replaced/path"
-    val conf = new SparkConf()
-        .set(SECONDARY_JARS, Seq(
-          s"local:$gatewayRootPath/foo.jar",
-          "local:/local/not/matching/replace/foo.jar",
-          "file:/absolute/file/path/foo.jar",
-          s"$gatewayRootPath/but-not-actually-local/foo.jar",
-          "/absolute/path/foo.jar",
-          "relative/path/foo.jar"
-        ))
-        .set(GATEWAY_ROOT_PATH, gatewayRootPath)
-        .set(REPLACEMENT_ROOT_PATH, replacementRootPath)
-
-    def assertUserClasspathUrls(cluster: Boolean, expectedReplacementPath: String): Unit = {
-      val expectedUrls = Seq(
-        Paths.get(APP_JAR_NAME).toAbsolutePath.toUri.toString,
-        s"file:$expectedReplacementPath/foo.jar",
-        "file:/local/not/matching/replace/foo.jar",
-        "file:/absolute/file/path/foo.jar",
-        // since this path wasn't a local URI, it should never be replaced
-        s"file:$gatewayRootPath/but-not-actually-local/foo.jar",
-        "file:/absolute/path/foo.jar",
-        Paths.get("relative/path/foo.jar").toAbsolutePath.toUri.toString
-      ).map(URI.create(_).toURL).toArray
-      assert(Client.getUserClasspathUrls(conf, cluster) === expectedUrls)
-    }
-    // assert that no replacement happens when cluster = false by expecting the replacement
-    // path to be the same as the original path
-    assertUserClasspathUrls(cluster = false, gatewayRootPath)
-    assertUserClasspathUrls(cluster = true, replacementRootPath)
   }
 
   private val matching = Seq(

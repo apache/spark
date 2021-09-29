@@ -852,10 +852,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 3.3.0
    */
-  def ilike(literal: String): Column = withExpr {
-    ILike(expr, lit(literal).expr, '\\',
-      Like(Lower(expr), Lower(lit(literal).expr), '\\'))
-  }
+  def ilike(literal: String): Column = withExpr { new ILike(expr, lit(literal).expr) }
 
   /**
    * An expression that gets an item at position `ordinal` out of an array,

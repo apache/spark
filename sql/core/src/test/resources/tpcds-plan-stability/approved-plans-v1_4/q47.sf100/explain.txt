@@ -96,7 +96,7 @@ Condition : ((isnotnull(s_store_sk#9) AND isnotnull(s_store_name#10)) AND isnotn
 
 (10) BroadcastExchange
 Input [3]: [s_store_sk#9, s_store_name#10, s_company_name#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#12]
 
 (11) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_store_sk#2]
@@ -304,6 +304,6 @@ Condition : ((((d_year#7 = 1999) OR ((d_year#7 = 1998) AND (d_moy#8 = 12))) OR (
 
 (56) BroadcastExchange
 Input [3]: [d_date_sk#6, d_year#7, d_moy#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#51]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#51]
 
 

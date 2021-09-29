@@ -15,23 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.test
+package org.apache.spark.sql.connector.expressions.filter;
 
-import java.io.{InputStream, IOException}
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Literal;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
-import scala.sys.process.BasicIO
+/**
+ * Performs equality comparison, similar to {@link EqualTo}. However, this differs from
+ * {@link EqualTo} in that it returns {@code true} (rather than NULL) if both inputs are NULL,
+ * and {@code false} (rather than NULL) if one of the input is NULL and the other is not NULL.
+ *
+ * @since 3.3.0
+ */
+@Evolving
+public final class EqualNullSafe extends BinaryComparison {
 
-object ProcessTestUtils {
-  class ProcessOutputCapturer(stream: InputStream, capture: String => Unit) extends Thread {
-    this.setDaemon(true)
-
-    override def run(): Unit = {
-      try {
-        BasicIO.processFully(capture)(stream)
-      } catch { case _: IOException =>
-        // Ignores the IOException thrown when the process termination, which closes the input
-        // stream abruptly.
-      }
-    }
+  public EqualNullSafe(NamedReference column, Literal<?> value) {
+    super(column, value);
   }
+
+  @Override
+  public String toString() { return this.column.describe() + " <=> " + value.describe(); }
 }
