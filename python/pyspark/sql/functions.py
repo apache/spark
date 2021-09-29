@@ -2878,7 +2878,7 @@ def overlay(
     src: "ColumnOrName",
     replace: "ColumnOrName",
     pos: Union[Column, int],
-    len: Union[Column, int] = 1,
+    len: Union[Column, int] = -1,
 ) -> Column:
     """
     Overlay the specified portion of `src` with `replace`,
