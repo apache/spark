@@ -56,7 +56,7 @@ class Catalog(object):
     @since(2.0)
     def setCurrentDatabase(self, dbName: str) -> None:
         """Sets the current default database in this session."""
-        self._jcatalog.setCurrentDatabase(dbName)
+        return self._jcatalog.setCurrentDatabase(dbName)
 
     @since(2.0)
     def listDatabases(self) -> List[Database]:
