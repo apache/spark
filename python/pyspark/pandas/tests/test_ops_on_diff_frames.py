@@ -1871,20 +1871,6 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assert_eq(pser.eq(other).rename("x"), psser.eq(other).sort_index())
             self.assert_eq((pser == other).rename("x"), (psser == other).sort_index())
 
-        # other = list with the different length
-        other = [np.nan, 1, 3, 4, np.nan]
-        with self.assertRaisesRegex(ValueError, "Lengths must be equal"):
-            psser.eq(other)
-        with self.assertRaisesRegex(ValueError, "Lengths must be equal"):
-            psser == other
-
-        # other = tuple with the different length
-        other = (np.nan, 1, 3, 4, np.nan)
-        with self.assertRaisesRegex(ValueError, "Lengths must be equal"):
-            psser.eq(other)
-        with self.assertRaisesRegex(ValueError, "Lengths must be equal"):
-            psser == other
-
 
 class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
     @classmethod

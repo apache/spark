@@ -395,16 +395,16 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     # comparison operators
     def __eq__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
         if isinstance(other, (list, tuple)):
-            with ps.option_context("compute.ordered_head", True):
-                pindex_ops = self.head(len(other) + 1)._to_internal_pandas()  # type: ignore
-                if len(pindex_ops) != len(other):
-                    raise ValueError("Lengths must be equal")
-                return ps.from_pandas(pindex_ops == other)  # type: ignore
+            if len(self) != len(other):
+                raise ValueError("Lengths must be equal")
+            name = self._internal.spark_column_name_for(self.spark.column)
+            other = ps.Series(other, name=name)
+            return self == other
         # pandas always returns False for all items with dict and set.
         elif isinstance(other, (dict, set)):
             return self != self
         else:
-            return column_op(Column.__eq__)(self, other)
+            return self._dtype_op.eq(self, other)
 
     def __ne__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
         return self._dtype_op.ne(self, other)

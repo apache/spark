@@ -705,22 +705,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         c     True
         d    False
         Name: b, dtype: bool
-
-        Support for list-like Python object with same length
-
-        >>> df.a == [1, 3, 2, 4]
-        a     True
-        b    False
-        c    False
-        d     True
-        Name: a, dtype: bool
-
-        >>> df.a.eq([1, 3, 2, 4])
-        a     True
-        b    False
-        c    False
-        d     True
-        Name: a, dtype: bool
         """
         return self == other
 

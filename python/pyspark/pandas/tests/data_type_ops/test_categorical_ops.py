@@ -259,7 +259,7 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         )
         self.assertRaisesRegex(
             TypeError,
-            "The operation can not be applied to list",
+            "Cannot compare a Categorical with the given type",
             lambda: ordered_psser == [1, 2, 3],
         )
 
