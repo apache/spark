@@ -16,7 +16,7 @@
 #
 
 from distutils.version import LooseVersion
-from functools import partial
+from functools import partial, reduce
 from typing import Any, Callable, Iterator, List, Optional, Tuple, Union, cast, no_type_check
 
 import pandas as pd
@@ -1141,11 +1141,6 @@ class MultiIndex(Index):
         """
         Return True if the levels of both MultiIndex objects are the same
 
-        Notes
-        -----
-        This API can be expensive since it has logic to sort and compare the values of
-        all levels of indices that belong to MultiIndex.
-
         Examples
         --------
         >>> from pyspark.pandas.config import set_option, reset_option
@@ -1166,13 +1161,22 @@ class MultiIndex(Index):
         if nlevels != other.nlevels:
             return False
 
+        self_sdf = self._internal.spark_frame
+        other_sdf = other._internal.spark_frame
+        subtract_list = []
         for nlevel in range(nlevels):
-            self_values = self.get_level_values(nlevel).unique().sort_values()
-            other_values = other.get_level_values(nlevel).unique().sort_values()
-            if not self_values.equals(other_values):
-                return False
+            self_index_scol = self._internal.index_spark_columns[nlevel]
+            other_index_scol = other._internal.index_spark_columns[nlevel]
+            self_subtract_other = self_sdf.select(self_index_scol).subtract(
+                other_sdf.select(other_index_scol)
+            )
+            subtract_list.append(self_subtract_other)
 
-        return True
+        unioned_subtracts = reduce(lambda x, y: x.union(y), subtract_list)
+        if len(unioned_subtracts.head(1)) == 0:
+            return True
+        else:
+            return False
 
     @property
     def hasnans(self) -> bool:
