@@ -50,7 +50,7 @@ class Catalog(object):
     @since(2.0)
     def setCurrentDatabase(self, dbName):
         """Sets the current default database in this session."""
-        return self._jcatalog.setCurrentDatabase(dbName)
+        self._jcatalog.setCurrentDatabase(dbName)
 
     @since(2.0)
     def listDatabases(self):
@@ -328,7 +328,7 @@ class Catalog(object):
             ...
         AnalysisException: ...
         """
-        self._jcatalog.dropTempView(viewName)
+        return self._jcatalog.dropTempView(viewName)
 
     def dropGlobalTempView(self, viewName):
         """Drops the global temporary view with the given view name in the catalog.
@@ -348,7 +348,7 @@ class Catalog(object):
             ...
         AnalysisException: ...
         """
-        self._jcatalog.dropGlobalTempView(viewName)
+        return self._jcatalog.dropGlobalTempView(viewName)
 
     def registerFunction(self, name, f, returnType=None):
         """An alias for :func:`spark.udf.register`.
