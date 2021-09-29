@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.dynamicpruning
 
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
@@ -70,6 +71,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
               None
             }
           case _ => None
+        }
+      case (resExp, l: HiveTableRelation) =>
+        if (resExp.references.subsetOf(AttributeSet(l.partitionCols))) {
+          return Some(l)
+        } else {
+          None
         }
       case (resExp, r @ DataSourceV2ScanRelation(_, scan: SupportsRuntimeFiltering, _)) =>
         val filterAttrs = V2ExpressionUtils.resolveRefs[Attribute](scan.filterAttributes, r)
