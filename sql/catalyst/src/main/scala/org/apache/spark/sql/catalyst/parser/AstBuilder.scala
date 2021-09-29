@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import java.util.Locale
+import java.util.{List, Locale}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -2785,9 +2785,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitTablePropertyList(
       ctx: TablePropertyListContext): Map[String, String] = withOrigin(ctx) {
-    val properties = ctx.tableProperty.asScala.map { property =>
-      val key = visitTablePropertyKey(property.key)
-      val value = visitTablePropertyValue(property.value)
+    getProperties(ctx.property, ctx)
+  }
+
+  private def getProperties(
+      propertyConext: List[PropertyContext],
+      ctx: ParserRuleContext) : Map[String, String] = {
+    val properties = propertyConext.asScala.map { property =>
+      val key = visitPropertyKey(property.key)
+      val value = visitPropertyValue(property.value)
       key -> value
     }
     // Check for duplicate property names.
@@ -2800,12 +2806,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   def visitPropertyKeyValues(ctx: TablePropertyListContext): Map[String, String] = {
     val props = visitTablePropertyList(ctx)
+    checkKeys(props, ctx)
+    props
+  }
+
+  private def checkKeys(props: Map[String, String], ctx: ParserRuleContext) = {
     val badKeys = props.collect { case (key, null) => key }
     if (badKeys.nonEmpty) {
       operationNotAllowed(
         s"Values must be specified for key(s): ${badKeys.mkString("[", ",", "]")}", ctx)
     }
-    props
   }
 
   /**
@@ -2822,11 +2832,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * A table property key can either be String or a collection of dot separated elements. This
+   * A property key can either be String or a collection of dot separated elements. This
    * function extracts the property key based on whether its a string literal or a table property
    * identifier.
    */
-  override def visitTablePropertyKey(key: TablePropertyKeyContext): String = {
+  override def visitPropertyKey(key: PropertyKeyContext): String = {
     if (key.STRING != null) {
       string(key.STRING)
     } else {
@@ -2835,10 +2845,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * A table property value can be String, Integer, Boolean or Decimal. This function extracts
+   * A property value can be String, Integer, Boolean or Decimal. This function extracts
    * the property value based on whether its a string, integer, boolean or decimal literal.
    */
-  override def visitTablePropertyValue(value: TablePropertyValueContext): String = {
+  override def visitPropertyValue(value: PropertyValueContext): String = {
     if (value == null) {
       null
     } else if (value.STRING != null) {
@@ -4329,7 +4339,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       ctx: ShowTblPropertiesContext): LogicalPlan = withOrigin(ctx) {
     ShowTableProperties(
       createUnresolvedTableOrView(ctx.table, "SHOW TBLPROPERTIES"),
-      Option(ctx.key).map(visitTablePropertyKey))
+      Option(ctx.key).map(visitPropertyKey))
   }
 
   /**
@@ -4402,6 +4412,53 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case _ => string(ctx.STRING)
     }
     CommentOnTable(createUnresolvedTable(ctx.multipartIdentifier, "COMMENT ON TABLE"), comment)
+  }
+
+  /**
+   * Create an index, returning a [[CreateIndex]] logical plan.
+   * For example:
+   * {{{
+   *   CREATE [index_type] INDEX [IF NOT EXISTS] index_name ON [TABLE] table_name
+   *   (column_name [ , ... ])[OPTIONS index_property_name = index_property_value [ , ...]]
+   * }}}
+   */
+  override def visitCreateIndex(ctx: CreateIndexContext): LogicalPlan = withOrigin(ctx) {
+    val indexName = ctx.identifier.getText
+    val indexType = if (ctx.indexType == null) "" else ctx.indexType.getText
+    val columns = ctx.columns.multipartIdentifierProperty.asScala
+      .map(x => (x.multipartIdentifier.getText)).toSeq
+    val columnsProperties = ctx.columns.multipartIdentifierProperty.asScala
+      .map(x => (Option(x.options).map(visitIndexPropertyKeyValues).getOrElse(Map.empty)))
+    val options = Option(ctx.options).map(visitIndexPropertyKeyValues).getOrElse(Map.empty)
+
+    CreateIndex(
+      UnresolvedDBObjectName(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        isNamespace = true),
+      indexName,
+      indexType,
+      ctx.EXISTS != null,
+      columns.map(FieldReference(_).asInstanceOf[FieldReference]),
+      columnsProperties,
+      options)
+  }
+
+  /**
+   * Convert a index property list into a key-value map.
+   */
+  override def visitIndexPropertyList(
+      ctx: IndexPropertyListContext): Map[String, String] = withOrigin(ctx) {
+    val temp = ctx.property
+    getProperties(ctx.property, ctx)
+  }
+
+  /**
+   * Parse a key-value map from a [[IndexPropertyListContext]], assuming all values are specified.
+   */
+  def visitIndexPropertyKeyValues(ctx: IndexPropertyListContext): Map[String, String] = {
+    val props = visitIndexPropertyList(ctx)
+    checkKeys(props, ctx)
+    props
   }
 
   private def alterViewTypeMismatchHint: Option[String] = Some("Please use ALTER TABLE instead.")

@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-import java.sql.{Connection, DriverManager}
+import java.sql.{Connection, DriverManager, SQLFeatureNotSupportedException}
 import java.util.Properties
 
 import org.apache.log4j.Level
@@ -423,6 +423,30 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           " TBLPROPERTIES('ENGINE'='tableEngineName')")
       }.cause.get.getMessage
       assert(m.contains("\"TABLEENGINENAME\" not found"))
+    }
+  }
+
+  test("CREATE INDEX") {
+    withTable("h2.test.new_table") {
+      sql("CREATE TABLE h2.test.new_table(col1 INT, col2 STRING)")
+      val e1 = intercept[SQLFeatureNotSupportedException] {
+        sql("CREATE index i1 ON h2.test.new_table (col1)")
+      }.getMessage
+      assert(e1.contains("IndexName i1"))
+      assert(e1.contains("indexType "))
+      assert(e1.contains("columns ArrayBuffer(col1)"))
+
+      val e2 = intercept[SQLFeatureNotSupportedException] {
+        sql("CREATE BLOOM_FILTER_INDEX index i1 ON h2.test.new_table" +
+          " (col1 OPTIONS (fpp=0.1, numItems=10000000)," +
+          " col2 OPTIONS (fpp=0.2, numItems=20000000)) OPTIONS (fpp=0.3, numItems=30000000) ")
+      }.getMessage
+      assert(e2.contains("IndexName i1"))
+      assert(e2.contains("indexType BLOOM_FILTER_INDEX"))
+      assert(e2.contains("columns ArrayBuffer(col1, col2)"))
+      assert(e2.contains("columnProperties ArrayBuffer(" +
+        "Map(fpp -> 0.1, numItems -> 10000000), Map(fpp -> 0.2, numItems -> 20000000))"))
+      assert(e2.contains("properties Map(fpp -> 0.3, numItems -> 30000000)"))
     }
   }
 }
