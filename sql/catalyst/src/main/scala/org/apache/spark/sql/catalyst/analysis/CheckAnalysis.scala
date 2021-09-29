@@ -249,6 +249,20 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               s"join condition '${condition.sql}' " +
                 s"of type ${condition.dataType.catalogString} is not a boolean.")
 
+          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _)
+              if condition.dataType != BooleanType =>
+            failAnalysis(
+              s"join condition '${condition.sql}' " +
+                s"of type ${condition.dataType.catalogString} is not a boolean.")
+
+          case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion)) =>
+            if (!toleranceAssertion.foldable) {
+              failAnalysis("Input argument tolerance must be a constant.")
+            }
+            if (!toleranceAssertion.eval().asInstanceOf[Boolean]) {
+              failAnalysis("Input argument tolerance must be non-negative.")
+            }
+
           case a @ Aggregate(groupingExprs, aggregateExprs, child) =>
             def isAggregateExpression(expr: Expression): Boolean = {
               expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
@@ -505,6 +519,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                """.stripMargin)
+
+          case j: AsOfJoin if !j.duplicateResolved =>
+            val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
+            failAnalysis(
+              s"""
+                 |Failure when resolving conflicting references in AsOfJoin:
+                 |$plan
+                 |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+                 |""".stripMargin)
 
           // TODO: although map type is not orderable, technically map type should be able to be
           // used in equality comparison, remove this type check once we support it.

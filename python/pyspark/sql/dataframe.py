@@ -1357,6 +1357,123 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             jdf = self._jdf.join(other._jdf, on, how)
         return DataFrame(jdf, self.sql_ctx)
 
+    # TODO(SPARK-22947): Fix the DataFrame API.
+    def _joinAsOf(
+        self,
+        other,
+        leftAsOfColumn,
+        rightAsOfColumn,
+        on=None,
+        how=None,
+        *,
+        tolerance=None,
+        allowExactMatches=True,
+        direction="backward",
+    ):
+        """
+        Perform an as-of join.
+
+        This is similar to a left-join except that we match on nearest
+        key rather than equal keys.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Right side of the join
+        leftAsOfColumn : str or :class:`Column`
+            a string for the as-of join column name, or a Column
+        rightAsOfColumn : str or :class:`Column`
+            a string for the as-of join column name, or a Column
+        on : str, list or :class:`Column`, optional
+            a string for the join column name, a list of column names,
+            a join expression (Column), or a list of Columns.
+            If `on` is a string or a list of strings indicating the name of the join column(s),
+            the column(s) must exist on both sides, and this performs an equi-join.
+        how : str, optional
+            default ``inner``. Must be one of: ``inner`` and ``left``.
+        tolerance : :class:`Column`, optional
+            an asof tolerance within this range; must be compatible
+            with the merge index.
+        allowExactMatches : bool, optional
+            default ``True``.
+        direction : str, optional
+            default ``backward``. Must be one of: ``backward``, ``forward``, and ``nearest``.
+
+        Examples
+        --------
+        The following performs an as-of join between ``left`` and ``right``.
+
+        >>> left = spark.createDataFrame([(1, "a"), (5, "b"), (10,  "c")], ["a", "left_val"])
+        >>> right = spark.createDataFrame([(1, 1), (2, 2), (3, 3), (6, 6), (7, 7)],
+        ...                               ["a", "right_val"])
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a"
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
+        [Row(a=1, left_val='a', right_val=1),
+         Row(a=5, left_val='b', right_val=3),
+         Row(a=10, left_val='c', right_val=7)]
+
+        >>> from pyspark.sql import functions as F
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", tolerance=F.lit(1)
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
+        [Row(a=1, left_val='a', right_val=1)]
+
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", how="left", tolerance=F.lit(1)
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
+        [Row(a=1, left_val='a', right_val=1),
+         Row(a=5, left_val='b', right_val=None),
+         Row(a=10, left_val='c', right_val=None)]
+
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", allowExactMatches=False
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
+        [Row(a=5, left_val='b', right_val=3),
+         Row(a=10, left_val='c', right_val=7)]
+
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", direction="forward"
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
+        [Row(a=1, left_val='a', right_val=1),
+         Row(a=5, left_val='b', right_val=6)]
+        """
+        if isinstance(leftAsOfColumn, str):
+            leftAsOfColumn = self[leftAsOfColumn]
+        left_as_of_jcol = leftAsOfColumn._jc
+        if isinstance(rightAsOfColumn, str):
+            rightAsOfColumn = other[rightAsOfColumn]
+        right_as_of_jcol = rightAsOfColumn._jc
+
+        if on is not None and not isinstance(on, list):
+            on = [on]
+
+        if on is not None:
+            if isinstance(on[0], str):
+                on = self._jseq(on)
+            else:
+                assert isinstance(on[0], Column), "on should be Column or list of Column"
+                on = reduce(lambda x, y: x.__and__(y), on)
+                on = on._jc
+
+        if how is None:
+            how = "inner"
+        assert isinstance(how, str), "how should be a string"
+
+        if tolerance is not None:
+            assert isinstance(tolerance, Column), "tolerance should be Column"
+            tolerance = tolerance._jc
+
+        jdf = self._jdf.joinAsOf(
+            other._jdf,
+            left_as_of_jcol, right_as_of_jcol,
+            on,
+            how, tolerance, allowExactMatches, direction
+        )
+        return DataFrame(jdf, self.sql_ctx)
+
     def sortWithinPartitions(self, *cols, **kwargs):
         """Returns a new :class:`DataFrame` with each partition sorted by the specified column(s).
 
