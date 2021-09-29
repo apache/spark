@@ -1527,14 +1527,14 @@ object QueryExecutionErrors {
 
   def unsupportedOperationExceptionError(): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_OPERATION_EXCEPTION",
+      errorClass = "UNSUPPORTED_OPERATION",
       messageParameters = Array.empty
     )
   }
 
   def nullLiteralsCannotBeCastedError(name: String): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "NULL_LITERALS_CANNOT_BE_CASTED",
+      errorClass = "CANNOT_CAST_NULL_LITERALS",
       messageParameters = Array(name)
     )
   }
@@ -1565,7 +1565,7 @@ object QueryExecutionErrors {
 
   def primitiveTypesNotSupportedError(): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "PRIMITIVE_TYPES_NOT_SUPPORTED",
+      errorClass = "UNSUPPORTED_PRIMITIVE_TYPES",
       messageParameters = Array.empty
     )
   }
@@ -1595,66 +1595,66 @@ object QueryExecutionErrors {
       path: Path,
       e: Throwable): Throwable = {
     new SparkSecurityException(
-      errorClass = "FAIL_TO_SET_ORIGINAL_PERMISSION_BACK",
+      errorClass = "FAIL_SET_ORIGINAL_PERMISSION_BACK",
       messageParameters = Array(permission.toString, path.toString, e.getMessage))
   }
 
   def failToSetOriginalACLBackError(aclEntries: String, path: Path, e: Throwable): Throwable = {
     new SparkSecurityException(
-      errorClass = "FAIL_TO_SET_ORIGINAL_ACL_BACK_ERROR",
+      errorClass = "FAIL_SET_ORIGINAL_ACL_BACK",
       messageParameters = Array(aclEntries, path.toString, e.getMessage))
   }
 
   def multiFailuresInStageMaterializationError(error: Throwable): Throwable = {
     new SparkException(
-      errorClass = "MULTI_FAILURES_IN_STAGE_MATERIALIZATION_ERROR",
+      errorClass = "MULTI_FAILURES_IN_STAGE_MATERIALIZATION",
       messageParameters = Array.empty, error)
   }
 
   def unrecognizedCompressionSchemaTypeIDError(typeId: Int): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "UNRECOGNIZED_COMPRESSION_SCHEMA_TYPE_ID_ERROR",
+      errorClass = "UNRECOGNIZED_COMPRESSION_SCHEMA_TYPE_ID",
       messageParameters = Array(typeId.toString)
     )
   }
 
   def getParentLoggerNotImplementedError(className: String): Throwable = {
     new SparkSQLFeatureNotSupportedException(
-      errorClass = "GET_PARENT_LOGGER_NOT_IMPLEMENTED_ERROR",
+      errorClass = "GET_PARENT_LOGGER_NOT_IMPLEMENTED",
       messageParameters = Array(className)
     )
   }
 
   def cannotCreateParquetConverterForTypeError(t: DecimalType, parquetType: String): Throwable = {
     new SparkRuntimeException(
-      errorClass = "CANNOT_CREATE_PARQUET_CONVERTER_FOR_TYPE_ERROR",
+      errorClass = "CANNOT_CREATE_PARQUET_CONVERTER_FOR_TYPE",
       messageParameters = Array(t.typeName, parquetType))
   }
 
   def cannotCreateParquetConverterForDecimalTypeError(
       t: DecimalType, parquetType: String): Throwable = {
     new SparkRuntimeException(
-      errorClass = "CANNOT_CREATE_PARQUET_CONVERTER_FOR_DECIMAL_TYPE_ERROR",
+      errorClass = "CANNOT_CREATE_PARQUET_CONVERTER_FOR_DECIMAL_TYPE",
       messageParameters = Array(t.json, parquetType))
   }
 
   def cannotCreateParquetConverterForDataTypeError(
       t: DataType, parquetType: String): Throwable = {
     new SparkRuntimeException(
-      errorClass = "CANNOT_CREATE_PARQUET_CONVERTER_FOR_DATATYPE_ERROR",
+      errorClass = "CANNOT_CREATE_PARQUET_CONVERTER_FOR_DATATYPE",
       messageParameters = Array(t.json, parquetType))
   }
 
   def cannotAddMultiPartitionsOnNonatomicPartitionTableError(tableName: String): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "CANNOT_ADD_MULTI_PARTITIONS_ON_NONATOMIC_PARTITION_TABLE_ERROR",
+      errorClass = "CANNOT_ADD_MULTI_PARTITIONS_ON_NONATOMIC_PARTITION_TABLE",
       messageParameters = Array(tableName)
     )
   }
 
   def userSpecifiedSchemaUnsupportedByDataSourceError(provider: TableProvider): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "USER_SPECIFIED_SCHEMA_UNSUPPORTED_BY_DATASOURCE_ERROR",
+      errorClass = "UNSUPPORTED_USER_SPECIFIED_SCHEMA",
       messageParameters = Array(provider.getClass.getSimpleName))
   }
 

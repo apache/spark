@@ -11,6 +11,10 @@
     "message" : [ "Cannot cast %s to %s." ],
     "sqlState" : "22005"
   },
+  "CANNOT_CAST_NULL_LITERALS" : {
+    "message" : [ "null literals can't be casted to %s" ],
+    "sqlState" : "22018"
+  },
   "CANNOT_CHANGE_DECIMAL_PRECISION" : {
     "message" : [ "%s cannot be represented as Decimal(%s, %s)." ],
     "sqlState" : "22005"
@@ -66,11 +70,11 @@
     "message" : [ "Failed to rename %s to %s as destination already exists" ],
     "sqlState" : "22023"
   },
-  "FAIL_TO_SET_ORIGINAL_ACL_BACK" : {
+  "FAIL_SET_ORIGINAL_ACL_BACK" : {
     "message" : [ "Failed to set original ACL %s back to the created path: %s. Exception: %s" ],
     "sqlState" : "42000"
   },
-  "FAIL_TO_SET_ORIGINAL_PERMISSION_BACK" : {
+  "FAIL_SET_ORIGINAL_PERMISSION_BACK" : {
     "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ],
     "sqlState" : "42000"
   },
@@ -161,10 +165,6 @@
     "message" : [ "%s is not an UserDefinedType. Please make sure registering an UserDefinedType for %s" ],
     "sqlState" : "42000"
   },
-  "NULL_LITERALS_CANNOT_BE_CASTED" : {
-    "message" : [ "null literals can't be casted to %s" ],
-    "sqlState" : "22018"
-  },
   "ONLY_SUPPORT_DATA_SOURCES_PROVIDING_FILE_FORMAT" : {
     "message" : [ "Only Data Sources providing FileFormat are supported: %s" ],
     "sqlState" : "0A000"
@@ -172,10 +172,6 @@
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
     "sqlState" : "42000"
-  },
-  "PRIMITIVE_TYPES_NOT_SUPPORTED" : {
-    "message" : [ "Primitive types are not supported." ],
-    "sqlState" : "0A000"
   },
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [ "Failed to rename as %s was not found" ],
@@ -219,6 +215,10 @@
   "UNSUPPORTED_OPERATION" : {
     "message" : [ "" ]
   },
+  "UNSUPPORTED_PRIMITIVE_TYPES" : {
+    "message" : [ "Primitive types are not supported." ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID" : {
     "message" : [ "%s does not implement simpleStringWithNodeId" ]
   },
@@ -226,7 +226,7 @@
     "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],
     "sqlState" : "0A000"
   },
-  "USER_SPECIFIED_SCHEMA_UNSUPPORTED_BY_DATASOURCE" : {
+  "UNSUPPORTED_USER_SPECIFIED_SCHEMA" : {
     "message" : [ "%s source does not support user-specified schema." ],
     "sqlState" : "0A000"
   },
