@@ -677,7 +677,8 @@ class ClientSuite extends SparkFunSuite with Matchers {
       "{{FOO}}%FOO%" -> "BARBAR",
       "$FOO" -> "$FOO",
       "${FOO}" -> "${FOO}",
-      "%%FOO%%%FOO%%%%%%FOO%" -> "%FOO%BAR%%BAR"
+      "%%FOO%%%FOO%%%%%%FOO%" -> "%FOO%BAR%%BAR",
+      "%FOO%^^^%FOO^%^FOO^^^^%FOO%" -> "BAR^%FOO%^FOO^^BAR"
     ).foreach { case (input, expected) =>
       withClue(s"input string `$input`: ") {
         val replaced =

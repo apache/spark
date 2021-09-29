@@ -1507,43 +1507,42 @@ private[spark] object Client extends Logging {
    * Replace environment variables in a string according to the same rules as [[Environment]]:
    * `$VAR_NAME` for Unix, `%VAR_NAME%` for Windows, and `{{VAR_NAME}}` for all OS.
    * This support escapes for `$` and `%` characters, e.g.
-   * `\$FOO` and `%%FOO%%` will be resolved to `$FOO` and `%FOO%`, respectively, instead of being
-   * treated as variable names.
+   * `\$FOO`, `^%FOO^%`, and `%%FOO%%` will be resolved to `$FOO`, `%FOO%`, and `%FOO%`,
+   * respectively, instead of being treated as variable names. Note that Unix variable naming
+   * conventions (alphanumeric plus underscore, case-sensitive, can't start with a digit) are
+   * used for both Unix and Windows, following the convention of Hadoop's [[Shell]]
+   * (see specifically [[Shell.getEnvironmentVariableRegex]]).
    *
    * @param unresolvedString The unresolved string which may contain variable references.
    * @param env The System environment
    * @param isWindows True iff running in a Windows environment
    * @return The input string with variables replaced with their values from `env`
+   * @see [[https://pubs.opengroup.org/onlinepubs/000095399/basedefs/xbd_chap08.html Environment Variables (IEEE Std 1003.1-2017)]]
+   * @see [[https://en.wikibooks.org/wiki/Windows_Batch_Scripting#Quoting_and_escaping Windows Batch Scripting | Quoting and Escaping]]
    */
   def replaceEnvVars(
       unresolvedString: String,
       env: IMap[String, String],
       isWindows: Boolean = Shell.WINDOWS): String = {
     val osResolvedString = if (isWindows) {
-      // Environment variable names can contain anything besides = and %
-      // Ref: https://docs.microsoft.com/en-us/windows/win32/procthread/environment-variables
-      val windowsPattern = "(?:%%|%([^=%]+)%)".r
+      // ^% or %% can both be used as escapes for Windows
+      val windowsPattern = """(?i)(?:\^\^|\^%|%%|%([A-Z_][A-Z0-9_]*)%)""".r
       windowsPattern.replaceAllIn(unresolvedString, m =>
         Regex.quoteReplacement(m.matched match {
+          case "^^" => "^"
+          case "^%" => "%"
           case "%%" => "%"
           case _ => env.getOrElse(m.group(1), "")
         })
       )
     } else {
-      // Environment variables are alphanumeric plus underscore, case-sensitive, can't start with
-      // a digit, based on Shell and Utilities volume of IEEE Std 1003.1-2001
-      // Ref: https://pubs.opengroup.org/onlinepubs/000095399/basedefs/xbd_chap08.html
-      val unixPattern = """(?i)(?:\\\\|\\\$|\$([A-Z_][A-Z0-9_]*))|\$\{([A-Z_][A-Z0-9_]*)}""".r
+      val unixPattern = """(?i)(?:\\\\|\\\$|\$([A-Z_][A-Z0-9_]*)|\$\{([A-Z_][A-Z0-9_]*)})""".r
       unixPattern.replaceAllIn(unresolvedString, m =>
         Regex.quoteReplacement(m.matched match {
           case """\\""" => """\"""
           case """\$""" => """$"""
-          case _ => m.subgroups.filterNot(_ == null).headOption match {
-            case Some(v) => env.getOrElse(v, "")
-            case None =>
-              // Note that this should never be reached and indicates a bug
-              throw new IllegalStateException(s"No valid capture group was found for match: $m")
-          }
+          case str if str.startsWith("${") => env.getOrElse(m.group(2), "")
+          case _ => env.getOrElse(m.group(1), "")
         })
       )
     }
@@ -1554,7 +1553,7 @@ private[spark] object Client extends Logging {
     // has the same net result. YARN doesn't state what characters are valid here, so use the
     // Unix naming conventions, which are more restrictive (and thus more cross-platform).
     // Ref: Javadoc for org.apache.hadoop.yarn.api.ApplicationConstants.Environment.$$()
-    val yarnPattern = "(?i)\\{\\{([A-Z_][A-Z0-9_]*)}}".r
+    val yarnPattern = """(?i)\{\{([A-Z_][A-Z0-9_]*)}}""".r
     yarnPattern.replaceAllIn(osResolvedString,
       m => Regex.quoteReplacement(env.getOrElse(m.group(1), "")))
   }
