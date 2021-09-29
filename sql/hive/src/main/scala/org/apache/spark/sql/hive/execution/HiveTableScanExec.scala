@@ -216,7 +216,7 @@ case class HiveTableScanExec(
         BindReferences.bindReference(pred, relation.partitionCols)
       }
 
-      val ret = boundPruningPredForDynamic match {
+      boundPruningPredForDynamic match {
         case None => prunedPartitions
         case Some(shouldKeep) => prunedPartitions.filter { part =>
           val dataTypes = relation.partitionCols.map(_.dataType)
@@ -225,11 +225,10 @@ case class HiveTableScanExec(
 
           // Only partitioned values are needed here, since the predicate has already been bound to
           // partition key attribute references.
-          val row = InternalRow.fromSeq(castedValues)
+          val row: InternalRow = InternalRow.fromSeq(castedValues)
           shouldKeep.eval(row).asInstanceOf[Boolean]
         }
       }
-      ret
     } else {
       prunedPartitions
     }
