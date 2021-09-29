@@ -54,11 +54,8 @@ __all__ = ["SparkSession"]
 
 def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
 
-    def toDF(
-        self: "RDD[RowLike]",
-        schema: Optional[Union[List[str], Tuple[str, ...]]] = None,
-        sampleRatio: Optional[float] = None
-    ) -> DataFrame:
+    @no_type_check
+    def toDF(self, schema=None, sampleRatio=None):
         """
         Converts current :class:`RDD` into a :class:`DataFrame`
 
@@ -85,9 +82,7 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
         >>> rdd.toDF().collect()
         [Row(name='Alice', age=1)]
         """
-        return sparkSession.createDataFrame(  # type: ignore[call-overload]
-            self, schema, sampleRatio
-        )
+        return sparkSession.createDataFrame(self, schema, sampleRatio)
 
     RDD.toDF = toDF  # type: ignore[assignment]
 
