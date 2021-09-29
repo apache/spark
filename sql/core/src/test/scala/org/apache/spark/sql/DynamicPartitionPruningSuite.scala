@@ -610,9 +610,9 @@ abstract class DynamicPartitionPruningSuiteBase
 
       checkAnswer(df,
         Row(1030, 2, 3) ::
-        Row(1040, 2, 3) ::
-        Row(1050, 2, 3) ::
-        Row(1060, 2, 3) :: Nil
+          Row(1040, 2, 3) ::
+          Row(1050, 2, 3) ::
+          Row(1060, 2, 3) :: Nil
       )
     }
 
@@ -636,9 +636,9 @@ abstract class DynamicPartitionPruningSuiteBase
 
       checkAnswer(df,
         Row(1030, 2, 3) ::
-        Row(1040, 2, 3) ::
-        Row(1050, 2, 3) ::
-        Row(1060, 2, 3) :: Nil
+          Row(1040, 2, 3) ::
+          Row(1050, 2, 3) ::
+          Row(1060, 2, 3) :: Nil
       )
     }
   }
