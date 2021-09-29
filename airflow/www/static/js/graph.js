@@ -141,12 +141,10 @@ function draw() {
       expandGroup(nodeId, node);
       draw();
       focusGroup(nodeId);
-    } else if (nodeId in tasks) {
+    } else if (nodeId in taskInstances) {
       // A task node
       const task = tasks[nodeId];
-      let tryNumber;
-      if (nodeId in taskInstances) tryNumber = taskInstances[nodeId].try_number;
-      else tryNumber = 0;
+      const tryNumber = taskInstances[nodeId].try_number || 0;
 
       if (task.task_type === 'SubDagOperator') callModal(nodeId, executionDate, task.extra_links, tryNumber, true);
       else callModal(nodeId, executionDate, task.extra_links, tryNumber, undefined);
@@ -472,7 +470,8 @@ function updateNodesStates(tis) {
     if (!elem) {
       return;
     }
-    elem.setAttribute('class', `node enter ${getNodeState(nodeId, tis)}`);
+    const classes = `node enter ${getNodeState(nodeId, tis)}`;
+    elem.setAttribute('class', classes);
     elem.setAttribute('data-toggle', 'tooltip');
 
     const taskId = nodeId;
@@ -485,6 +484,7 @@ function updateNodesStates(tis) {
         tt = groupTooltip(node, tis);
       } else if (taskId in tasks) {
         tt = taskNoInstanceTooltip(taskId, tasks[taskId]);
+        elem.setAttribute('class', `${classes} not-allowed`);
       }
       if (tt) taskTip.show(tt, evt.target); // taskTip is defined in graph.html
     };
