@@ -579,11 +579,16 @@ case class DataSource(
       checkEmptyGlobPath, checkFilesExist, enableGlobbing = globPaths)
   }
 
+  // TODO: Remove the Set below once all the built-in datasources support ANSI interval types
+  private val writeAllowedSources: Set[Class[_]] =
+    Set(classOf[ParquetFileFormat], classOf[CSVFileFormat])
+
   private def disallowWritingIntervals(
       dataTypes: Seq[DataType],
       forbidAnsiIntervals: Boolean): Unit = {
-    val isParquet = providingClass == classOf[ParquetFileFormat]
-    dataTypes.foreach(TypeUtils.invokeOnceForInterval(_, forbidAnsiIntervals || !isParquet) {
+    val isWriteAllowedSource = writeAllowedSources(providingClass)
+    dataTypes.foreach(
+      TypeUtils.invokeOnceForInterval(_, forbidAnsiIntervals || !isWriteAllowedSource) {
       throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()
     })
   }
