@@ -1504,7 +1504,7 @@ private[spark] object Client extends Logging {
   }
 
   /**
-   * Replace environment variables in a string according to the same rules [[Environment]]:
+   * Replace environment variables in a string according to the same rules as [[Environment]]:
    * `$VAR_NAME` for Unix, `%VAR_NAME%` for Windows, and `{{VAR_NAME}}` for all OS.
    * This support escapes for `$` and `%` characters, e.g.
    * `\$FOO` and `%%FOO%%` will be resolved to `$FOO` and `%FOO%`, respectively, instead of being
@@ -1548,7 +1548,12 @@ private[spark] object Client extends Logging {
       )
     }
 
-    // {{...}} is a YARN thing and not OS-specific. Follow Unix shell naming conventions
+    // YARN uses `{{...}}` to represent OS-agnostic variable expansion strings. Normally the
+    // NodeManager would replace this string with an OS-specific replacement before launching
+    // the container. Here, it gets directly treated as an additional expansion string, which
+    // has the same net result. YARN doesn't state what characters are valid here, so use the
+    // Unix naming conventions, which are more restrictive (and thus more cross-platform).
+    // Ref: Javadoc for org.apache.hadoop.yarn.api.ApplicationConstants.Environment.$$()
     val yarnPattern = "(?i)\\{\\{([A-Z_][A-Z0-9_]*)}}".r
     yarnPattern.replaceAllIn(osResolvedString,
       m => Regex.quoteReplacement(env.getOrElse(m.group(1), "")))
