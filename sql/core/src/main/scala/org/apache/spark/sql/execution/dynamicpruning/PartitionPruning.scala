@@ -54,8 +54,8 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Searches for a table scan that can be filtered for a given column in a logical plan.
    *
-   * This methods tries to find either a v1 partitioned scan for a given partition column or
-   * a v2 scan that support runtime filtering on a given attribute.
+   * This methods tries to find either a v1 or Hive serde partitioned scan for a given
+   * partition column or a v2 scan that support runtime filtering on a given attribute.
    */
   def getFilterableTableScan(a: Expression, plan: LogicalPlan): Option[LogicalPlan] = {
     val srcInfo: Option[(Expression, LogicalPlan)] = findExpressionAndTrackLineageDown(a, plan)

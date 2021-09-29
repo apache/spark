@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{AQEPropagateEmptyRelation, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
+import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
@@ -76,115 +76,6 @@ abstract class DynamicPartitionPruningHiveScanSuite
         checkPartitionPruningPredicate(df, true, false)
 
         checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
-      }
-    }
-  }
-
-  /**
-   * The filtering policy has a fallback when the stats are unavailable
-   */
-  test("filtering ratio policy fallback") {
-    withSQLConf(
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false",
-      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName) {
-      Given("no stats and selective predicate")
-      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
-        val df = sql(
-          """
-            |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_sk f
-            |JOIN dim_store s
-            |ON f.store_id = s.store_id WHERE s.country LIKE '%C_%'
-          """.stripMargin)
-
-        checkPartitionPruningPredicate(df, true, false)
-      }
-
-      Given("no stats and selective predicate with the size of dim too large")
-      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
-        withTable("fact_aux") {
-          sql(
-            """
-              |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
-              |FROM fact_sk f WHERE store_id < 5
-            """.stripMargin)
-            .write
-            .partitionBy("store_id")
-            .saveAsTable("fact_aux")
-
-          val df = sql(
-            """
-              |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
-              |FROM fact_aux f JOIN dim_store s
-              |ON f.store_id = s.store_id WHERE s.country = 'US'
-            """.stripMargin)
-
-          checkPartitionPruningPredicate(df, true, false)
-
-          checkAnswer(df,
-            Row(1070, 2, 10, 4) ::
-              Row(1080, 3, 20, 4) ::
-              Row(1090, 3, 10, 4) ::
-              Row(1100, 3, 10, 4) :: Nil
-          )
-        }
-      }
-
-      Given("no stats and selective predicate with the size of dim too large but cached")
-      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
-        withTable("fact_aux") {
-          withTempView("cached_dim_store") {
-            sql(
-              """
-                |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
-                |FROM fact_sk f WHERE store_id < 5
-              """.stripMargin)
-              .write
-              .partitionBy("store_id")
-              .saveAsTable("fact_aux")
-
-            spark.table("dim_store").cache()
-              .createOrReplaceTempView("cached_dim_store")
-
-            val df = sql(
-              """
-                |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
-                |FROM fact_aux f JOIN cached_dim_store s
-                |ON f.store_id = s.store_id WHERE s.country = 'US'
-              """.stripMargin)
-
-            checkPartitionPruningPredicate(df, true, false)
-
-            checkAnswer(df,
-              Row(1070, 2, 10, 4) ::
-                Row(1080, 3, 20, 4) ::
-                Row(1090, 3, 10, 4) ::
-                Row(1100, 3, 10, 4) :: Nil
-            )
-          }
-        }
-      }
-
-      Given("no stats and selective predicate with the size of dim small")
-      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
-        val df = sql(
-          """
-            |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_sk f
-            |JOIN dim_store s
-            |ON f.store_id = s.store_id WHERE s.country = 'NL'
-          """.stripMargin)
-
-        checkPartitionPruningPredicate(df, true, false)
-
-        checkAnswer(df,
-          Row(1010, 1, 10, 2) ::
-            Row(1020, 1, 10, 2) ::
-            Row(1000, 1, 10, 1) :: Nil
-        )
       }
     }
   }
