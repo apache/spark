@@ -2754,9 +2754,9 @@
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
             <!--
-              TODO: SPARK-36796 Changing -Xmx4g to -Xmx5g
+              TODO: SPARK-36796 change -Xmx4g to -Xmx5g
                because `SPARK-36464: size returns correct positive number even with over 2GB data` will oom with JDK 17,
-               should revert this after SPARK-36900
+               should revert this change after SPARK-36900
               -->
             <argLine>-ea -Xmx5g -Xss4m -XX:MaxMetaspaceSize=2g -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraJavaTestArgs} -Dio.netty.tryReflectionSetAccessible=true</argLine>
             <stderr/>
