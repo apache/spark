@@ -2968,20 +2968,6 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser.eq(other), psser.eq(other))
         self.assert_eq(pser == other, psser == other)
 
-        # other = list with the different length
-        other = [np.nan, 1, 3, 4, np.nan]
-        with self.assertRaisesRegex(ValueError, "Lengths must be equal"):
-            psser.eq(other)
-        with self.assertRaisesRegex(ValueError, "Lengths must be equal"):
-            psser == other
-
-        # other = tuple with the different length
-        other = (np.nan, 1, 3, 4, np.nan)
-        with self.assertRaisesRegex(ValueError, "Lengths must be equal"):
-            psser.eq(other)
-        with self.assertRaisesRegex(ValueError, "Lengths must be equal"):
-            psser == other
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.test_series import *  # noqa: F401

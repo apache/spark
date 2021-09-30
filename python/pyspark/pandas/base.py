@@ -395,11 +395,79 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     # comparison operators
     def __eq__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
         if isinstance(other, (list, tuple)):
-            if len(self) != len(other):
-                raise ValueError("Lengths must be equal")
-            name = self._internal.spark_column_name_for(self.spark.column)
-            other = ps.Series(other, name=name)
-            return self == other
+            from pyspark.pandas.series import first_series
+
+            sdf = self._internal.spark_frame
+            structed_scol = F.struct(
+                sdf[NATURAL_ORDER_COLUMN_NAME],
+                *self._internal.index_spark_columns,
+                self.spark.column
+            )
+            # The size of the list is expected to be small.
+            collected_structed_scol = F.collect_list(structed_scol)
+            # Sort the array by NATURAL_ORDER_COLUMN so that we can guarantee the order.
+            collected_structed_scol = F.array_sort(collected_structed_scol)
+            other_values_scol = F.array([F.lit(x) for x in other])  # type: ignore
+            index_scol_names = self._internal.index_spark_column_names
+            scol_name = self._internal.spark_column_name_for(self._internal.column_labels[0])
+            # Compare the values of self and other by using zip_with function.
+            cond = F.zip_with(
+                collected_structed_scol,
+                other_values_scol,
+                lambda x, y: F.struct(
+                    *[
+                        x[index_scol_name].alias(index_scol_name)
+                        for index_scol_name in index_scol_names
+                    ],
+                    F.when(
+                        F.assert_true(
+                            # If the comparing result is null,
+                            # that means the length of `self` and `other` is not the same.
+                            (x[scol_name] == y).isNotNull(),
+                            "Lengths must be equal",
+                        ).isNull(),
+                        x[scol_name] == y,
+                    ).alias(scol_name)
+                ),
+            ).alias(scol_name)
+            # 1. `sdf_new` here looks like the below (the first field of each set is Index):
+            # +----------------------------------------------------------+
+            # |0                                                         |
+            # +----------------------------------------------------------+
+            # |[{0, false}, {1, true}, {2, false}, {3, true}, {4, false}]|
+            # +----------------------------------------------------------+
+            sdf_new = sdf.select(cond)
+            # 2. `sdf_new` after the explode looks like the below:
+            # +----------+
+            # |       col|
+            # +----------+
+            # |{0, false}|
+            # | {1, true}|
+            # |{2, false}|
+            # | {3, true}|
+            # |{4, false}|
+            # +----------+
+            sdf_new = sdf_new.select(F.explode(scol_name))
+            # 3. Here, the final `sdf_new` looks like the below:
+            # +-----------------+-----+
+            # |__index_level_0__|    0|
+            # +-----------------+-----+
+            # |                0|false|
+            # |                1| true|
+            # |                2|false|
+            # |                3| true|
+            # |                4|false|
+            # +-----------------+-----+
+            sdf_new = sdf_new.select("col.*")
+            internal = self._internal.copy(
+                spark_frame=sdf_new,
+                index_spark_columns=[
+                    scol_for(sdf_new, index_scol_name) for index_scol_name in index_scol_names
+                ],
+                data_spark_columns=[scol_for(sdf_new, scol_name)],
+                data_fields=[InternalField.from_struct_field(sdf_new.select(scol_name).schema[0])],
+            )
+            return first_series(ps.DataFrame(internal))
         # pandas always returns False for all items with dict and set.
         elif isinstance(other, (dict, set)):
             return self != self
