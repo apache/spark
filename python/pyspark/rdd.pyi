@@ -445,7 +445,7 @@ class RDD(Generic[T]):
     @overload
     def toDF(
         self: RDD[RowLike],
-        schema: Optional[List[str]] = ...,
+        schema: Optional[Union[List[str], Tuple[str, ...]]] = ...,
         sampleRatio: Optional[float] = ...,
     ) -> DataFrame: ...
     @overload
