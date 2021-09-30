@@ -725,6 +725,9 @@ setGeneric("like", function(x, ...) { standardGeneric("like") })
 #' @rdname columnfunctions
 setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
 
+#' @rdname columnfunctions
+setGeneric("ilike", function(x, ...) { standardGeneric("ilike") })
+
 #' @rdname startsWith
 setGeneric("startsWith", function(x, prefix) { standardGeneric("startsWith") })
 
