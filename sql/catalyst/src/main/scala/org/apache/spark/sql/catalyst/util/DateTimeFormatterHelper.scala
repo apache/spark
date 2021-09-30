@@ -323,6 +323,10 @@ private object DateTimeFormatterHelper {
             (isParsing && unsupportedLettersForParsing.contains(c))) {
             throw new IllegalArgumentException(s"Illegal pattern character: $c")
           }
+          // SPARK-36796: `select date_format('2018-11-17 13:33:33.333', 'B')` failed with Java 8,
+          // but use Java 17 will return `in the afternoon` because 'B' is used to represent
+          // `Pattern letters to output a day period` in Java 17 and disabled it here for
+          // compatibility with Java 8 behavior.
           for (c <- patternPart if unknownPatternLetters.contains(c)) {
             throw new IllegalArgumentException(s"Unknown pattern letter: $c")
           }
