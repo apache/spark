@@ -84,7 +84,7 @@ case class DataSource(
     catalogTable: Option[CatalogTable] = None) extends Logging {
 
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
-
+  //获取驱动类
   lazy val providingClass: Class[_] =
     DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
   lazy val sourceInfo: SourceInfo = sourceSchema()
