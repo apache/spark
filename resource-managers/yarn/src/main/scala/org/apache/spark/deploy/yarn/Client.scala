@@ -1480,6 +1480,7 @@ private[spark] object Client extends Logging {
    * Returns a list of local, absolute file URLs representing the user classpath. Note that this
    * must be executed on the same host which will access the URLs, as it will resolve relative
    * paths based on the current working directory, as well as environment variables.
+   * See SPARK-35672 for discussion of why it is necessary to do environment variable substitution.
    *
    * @param conf Spark configuration.
    * @param useClusterPath Whether to use the 'cluster' path when resolving paths with the
@@ -1503,6 +1504,7 @@ private[spark] object Client extends Logging {
     }
   }
 
+  // scalastyle:off line.size.limit
   /**
    * Replace environment variables in a string according to the same rules as [[Environment]]:
    * `$VAR_NAME` for Unix, `%VAR_NAME%` for Windows, and `{{VAR_NAME}}` for all OS.
@@ -1520,6 +1522,7 @@ private[spark] object Client extends Logging {
    * @see [[https://pubs.opengroup.org/onlinepubs/000095399/basedefs/xbd_chap08.html Environment Variables (IEEE Std 1003.1-2017)]]
    * @see [[https://en.wikibooks.org/wiki/Windows_Batch_Scripting#Quoting_and_escaping Windows Batch Scripting | Quoting and Escaping]]
    */
+  // scalastyle:on line.size.limit
   def replaceEnvVars(
       unresolvedString: String,
       env: IMap[String, String],
@@ -1550,8 +1553,7 @@ private[spark] object Client extends Logging {
     // YARN uses `{{...}}` to represent OS-agnostic variable expansion strings. Normally the
     // NodeManager would replace this string with an OS-specific replacement before launching
     // the container. Here, it gets directly treated as an additional expansion string, which
-    // has the same net result. YARN doesn't state what characters are valid here, so use the
-    // Unix naming conventions, which are more restrictive (and thus more cross-platform).
+    // has the same net result.
     // Ref: Javadoc for org.apache.hadoop.yarn.api.ApplicationConstants.Environment.$$()
     val yarnPattern = """(?i)\{\{([A-Z_][A-Z0-9_]*)}}""".r
     yarnPattern.replaceAllIn(osResolvedString,
