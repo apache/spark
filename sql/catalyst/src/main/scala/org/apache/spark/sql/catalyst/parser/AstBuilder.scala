@@ -4418,8 +4418,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Create an index, returning a [[CreateIndex]] logical plan.
    * For example:
    * {{{
-   *   CREATE [index_type] INDEX [IF NOT EXISTS] index_name ON [TABLE] table_name
-   *   (column_name [ , ... ])[OPTIONS index_property_name = index_property_value [ , ...]]
+   * CREATE [index_type] INDEX [index_name] ON [TABLE] table_name (column_index_property_list)
+   *   [OPTIONS indexPropertyList]
+   *   column_index_property_list: column_name [OPTIONS(indexPropertyList)]  [ ,  . . . ]
+   *   indexPropertyList: index_property_name = index_property_value [ ,  . . . ]
    * }}}
    */
   override def visitCreateIndex(ctx: CreateIndexContext): LogicalPlan = withOrigin(ctx) {
@@ -4428,7 +4430,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val columns = ctx.columns.multipartIdentifierProperty.asScala
       .map(x => (x.multipartIdentifier.getText)).toSeq
     val columnsProperties = ctx.columns.multipartIdentifierProperty.asScala
-      .map(x => (Option(x.options).map(visitIndexPropertyKeyValues).getOrElse(Map.empty)))
+      .map(x => (Option(x.options).map(visitIndexPropertyKeyValues).getOrElse(Map.empty))).toSeq
     val options = Option(ctx.options).map(visitIndexPropertyKeyValues).getOrElse(Map.empty)
 
     CreateIndex(
