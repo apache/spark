@@ -62,7 +62,7 @@ object JavaModuleUtils {
   def supplementJava17ModuleOptsIfNeeded(args: Seq[String]): Seq[String] = {
 
     def supplementModuleOpts(buffer: mutable.Buffer[String], key: String): Unit = {
-      val index = buffer.indexWhere(_.startsWith(s"$key}="))
+      val index = buffer.indexWhere(_.startsWith(s"$key="))
       if (index != -1) {
         buffer.update(index, buffer(index) + JavaModuleUtils.defaultModuleOptions())
       } else {
