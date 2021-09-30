@@ -33,7 +33,13 @@ from pyspark.sql.udf import UDFRegistration  # noqa: F401
 from pyspark.sql.utils import install_exception_handler
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import UserDefinedFunctionLike, RowLike, DateTimeLiteral, LiteralType, DecimalLiteral
+    from pyspark.sql._typing import (
+        UserDefinedFunctionLike,
+        RowLike,
+        DateTimeLiteral,
+        LiteralType,
+        DecimalLiteral
+    )
     from pyspark.sql.types import DataType, AtomicType, StructType
     from pyspark.sql.pandas._typing import DataFrameLike
     from pyspark.sql.streaming import DataStreamReader, StreamingQueryManager
@@ -243,7 +249,12 @@ class SQLContext(object):  # type: ignore[no-redef]
         """
         return self.sparkSession.range(start, end, step, numPartitions)
 
-    def registerFunction(self, name: str, f: Callable[..., Any], returnType: DataType = None) -> UserDefinedFunctionLike:  # type: ignore[assignment]
+    def registerFunction(
+        self,
+        name: str,
+        f: Callable[..., Any],
+        returnType: DataType = None  # type: ignore[assignment]
+    ) -> UserDefinedFunctionLike:
         """An alias for :func:`spark.udf.register`.
         See :meth:`pyspark.sql.UDFRegistration.register`.
 
@@ -258,7 +269,12 @@ class SQLContext(object):  # type: ignore[no-redef]
         )
         return self.sparkSession.udf.register(name, f, returnType)
 
-    def registerJavaFunction(self, name: str, javaClassName: str, returnType: Optional[DataType] = None) -> None:
+    def registerJavaFunction(
+        self,
+        name: str,
+        javaClassName: str,
+        returnType: Optional[DataType] = None
+    ) -> None:
         """An alias for :func:`spark.udf.registerJavaFunction`.
         See :meth:`pyspark.sql.UDFRegistration.registerJavaFunction`.
 
@@ -274,7 +290,7 @@ class SQLContext(object):  # type: ignore[no-redef]
         return self.sparkSession.udf.registerJavaFunction(name, javaClassName, returnType)
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession
-    def _inferSchema(self, rdd, samplingRatio=None): # type: ignore[no-untyped-def]
+    def _inferSchema(self, rdd, samplingRatio=None):  # type: ignore[no-untyped-def]
         """
         Infer schema from an RDD of Row or tuple.
 
@@ -453,7 +469,8 @@ class SQLContext(object):  # type: ignore[no-redef]
             ...
         Py4JJavaError: ...
         """
-        return self.sparkSession.createDataFrame(data, schema, samplingRatio, verifySchema)  # type: ignore[call-overload]
+        return self.sparkSession.createDataFrame(  # type: ignore[call-overload]
+            data, schema, samplingRatio, verifySchema)
 
     def registerDataFrameAsTable(self, df: DataFrame, tableName: str) -> None:
         """Registers the given :class:`DataFrame` as a temporary table in the catalog.
@@ -687,15 +704,21 @@ class HiveContext(SQLContext):
 
     """
 
-    def __init__(self, sparkContext: SparkContext, jhiveContext: Optional[JavaObject] = None) -> None:
+    def __init__(
+        self,
+        sparkContext: SparkContext,
+        jhiveContext: Optional[JavaObject] = None
+    ) -> None:
         warnings.warn(
             "HiveContext is deprecated in Spark 2.0.0. Please use " +
             "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
             FutureWarning
         )
         if jhiveContext is None:
-            sparkContext._conf.set("spark.sql.catalogImplementation", "hive")  # type: ignore[attr-defined]
-            sparkSession = SparkSession.builder._sparkContext(sparkContext).getOrCreate()  # type: ignore[attr-defined]
+            sparkContext._conf.set(  # type: ignore[attr-defined]
+                "spark.sql.catalogImplementation", "hive")
+            sparkSession = SparkSession.builder._sparkContext(  # type: ignore[attr-defined]
+                sparkContext).getOrCreate()
         else:
             sparkSession = SparkSession(sparkContext, jhiveContext.sparkSession())
         SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)
