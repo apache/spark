@@ -45,17 +45,23 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         convertTableProperties(c),
         ignoreIfExists = c.ifNotExists)
 
-    case c @ CreateTableAsSelectStatement(
-         NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _, _) =>
+    case c @ CreateTableAsSelect(
+      UnresolvedDBObjectName(
+         NonSessionCatalogAndTable(catalog, name), _), _, _, _, _, _, _, _, _, _, _, _) =>
       CreateTableAsSelect(
-        catalog.asTableCatalog,
-        tbl.asIdentifier,
+        ResolvedDBObjectName(catalog, name),
         // convert the bucket spec and add it as a transform
         c.partitioning ++ c.bucketSpec.map(_.asTransform),
-        c.asSelect,
+        c.query,
         convertTableProperties(c),
-        writeOptions = c.writeOptions,
-        ignoreIfExists = c.ifNotExists)
+        c.bucketSpec,
+        c.provider,
+        c.options,
+        c.location,
+        c.comment,
+        c.serdeInfo,
+        c.external,
+        c.ignoreIfExists)
 
     case c @ ReplaceTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>

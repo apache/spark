@@ -457,6 +457,23 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
             create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
+          case create: V2CreateTablePlanX =>
+            val references = create.partitioning.flatMap(_.references).toSet
+            val badReferences = references.map(_.fieldNames).flatMap { column =>
+              create.tableSchema.findNestedField(column) match {
+                case Some(_) =>
+                  None
+                case _ =>
+                  Some(s"${column.quoted} is missing or is in a map or array")
+              }
+            }
+
+            if (badReferences.nonEmpty) {
+              failAnalysis(s"Invalid partitioning: ${badReferences.mkString(", ")}")
+            }
+
+            create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
+
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 

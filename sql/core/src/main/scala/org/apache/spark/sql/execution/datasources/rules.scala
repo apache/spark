@@ -18,13 +18,13 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
-
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -229,6 +229,51 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       val schema = create.tableSchema
       val partitioning = create.partitioning
       val identifier = create.tableName
+      val isCaseSensitive = conf.caseSensitiveAnalysis
+      // Check that columns are not duplicated in the schema
+      val flattenedSchema = SchemaUtils.explodeNestedFieldNames(schema)
+      SchemaUtils.checkColumnNameDuplication(
+        flattenedSchema,
+        s"in the table definition of $identifier",
+        isCaseSensitive)
+
+      // Check that columns are not duplicated in the partitioning statement
+      SchemaUtils.checkTransformDuplication(
+        partitioning, "in the partitioning", isCaseSensitive)
+
+      if (schema.isEmpty) {
+        if (partitioning.nonEmpty) {
+          throw QueryCompilationErrors.specifyPartitionNotAllowedWhenTableSchemaNotDefinedError()
+        }
+
+        create
+      } else {
+        // Resolve and normalize partition columns as necessary
+        val resolver = conf.resolver
+        val normalizedPartitions = partitioning.map {
+          case transform: RewritableTransform =>
+            val rewritten = transform.references().map { ref =>
+              // Throws an exception if the reference cannot be resolved
+              val position = SchemaUtils.findColumnPosition(ref.fieldNames(), schema, resolver)
+              FieldReference(SchemaUtils.getColumnName(position, schema))
+            }
+            transform.withReferences(rewritten)
+          case other => other
+        }
+
+        create.withPartitioning(normalizedPartitions)
+      }
+
+    case create: V2CreateTablePlanX if create.childrenResolved =>
+      val schema = create.tableSchema
+      val partitioning = create.partitioning
+      val name = create.name.asInstanceOf[ResolvedDBObjectName].nameParts
+      val identifier = if (name.length == 2) {
+        Identifier.of(Array(name(0)), name(1))
+      } else {
+        Identifier.of(Array.empty, name(0))
+      }
+
       val isCaseSensitive = conf.caseSensitiveAnalysis
       // Check that columns are not duplicated in the schema
       val flattenedSchema = SchemaUtils.explodeNestedFieldNames(schema)

@@ -3447,9 +3447,20 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           ctx)
 
       case Some(query) =>
-        CreateTableAsSelectStatement(
-          table, query, partitioning, bucketSpec, properties, provider, options, location, comment,
-          writeOptions = Map.empty, serdeInfo, external = external, ifNotExists = ifNotExists)
+        CreateTableAsSelect(
+          UnresolvedDBObjectName(table, isNamespace = false),
+          partitioning,
+          query,
+          properties,
+          writeOptions = Map.empty,
+          bucketSpec,
+          provider,
+          options,
+          location,
+          comment,
+          serdeInfo,
+          external = external,
+          ignoreIfExists = ifNotExists)
 
       case _ =>
         // Note: table schema includes both the table columns list and the partition columns

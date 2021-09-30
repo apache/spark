@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, UnresolvedException}
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
@@ -189,6 +190,18 @@ trait V2CreateTablePlan extends LogicalPlan {
   def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan
 }
 
+trait V2CreateTablePlanX extends LogicalPlan {
+  def name: LogicalPlan
+  def partitioning: Seq[Transform]
+  def tableSchema: StructType
+
+  /**
+   * Creates a copy of this node with the new partitioning transforms. This method is used to
+   * rewrite the partition transforms normalized according to the table schema.
+   */
+  def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlanX
+}
+
 /**
  * Create a new table with a v2 catalog.
  */
@@ -208,13 +221,18 @@ case class CreateV2Table(
  * Create a new table from a select query with a v2 catalog.
  */
 case class CreateTableAsSelect(
-    catalog: TableCatalog,
-    tableName: Identifier,
+    name: LogicalPlan,
     partitioning: Seq[Transform],
     query: LogicalPlan,
     properties: Map[String, String],
-    writeOptions: Map[String, String],
-    ignoreIfExists: Boolean) extends UnaryCommand with V2CreateTablePlan {
+    bucketSpec: Option[BucketSpec],
+    provider: Option[String],
+    options: Map[String, String],
+    location: Option[String],
+    comment: Option[String],
+    serdeInfo: Option[SerdeInfo],
+    external: Boolean,
+    ignoreIfExists: Boolean) extends UnaryCommand with V2CreateTablePlanX {
 
   override def tableSchema: StructType = query.schema
   override def child: LogicalPlan = query
@@ -226,7 +244,7 @@ case class CreateTableAsSelect(
     references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
   }
 
-  override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
+  override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlanX = {
     this.copy(partitioning = rewritten)
   }
 

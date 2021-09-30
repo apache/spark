@@ -143,29 +143,6 @@ case class CreateTableStatement(
     ifNotExists: Boolean) extends LeafParsedStatement
 
 /**
- * A CREATE TABLE AS SELECT command, as parsed from SQL.
- */
-case class CreateTableAsSelectStatement(
-    tableName: Seq[String],
-    asSelect: LogicalPlan,
-    partitioning: Seq[Transform],
-    bucketSpec: Option[BucketSpec],
-    properties: Map[String, String],
-    provider: Option[String],
-    options: Map[String, String],
-    location: Option[String],
-    comment: Option[String],
-    writeOptions: Map[String, String],
-    serde: Option[SerdeInfo],
-    external: Boolean,
-    ifNotExists: Boolean) extends UnaryParsedStatement {
-
-  override def child: LogicalPlan = asSelect
-  override protected def withNewChildInternal(newChild: LogicalPlan): CreateTableAsSelectStatement =
-    copy(asSelect = newChild)
-}
-
-/**
  * A CREATE VIEW statement, as parsed from SQL.
  */
 case class CreateViewStatement(

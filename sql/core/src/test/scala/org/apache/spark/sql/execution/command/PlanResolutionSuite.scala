@@ -26,7 +26,7 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedFieldName, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedDBObjectName, ResolvedFieldName, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{AnsiCast, AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, CatalogV2Util, Identifier, Table, TableCapability, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -598,10 +598,13 @@ class PlanResolutionSuite extends AnalysisTest {
 
     parseAndResolve(sql) match {
       case ctas: CreateTableAsSelect =>
-        assert(ctas.catalog.name == "testcat")
-        assert(ctas.tableName == Identifier.of(Array("mydb"), "table_name"))
-        assert(ctas.properties == expectedProperties)
-        assert(ctas.writeOptions.isEmpty)
+        assert(ctas.name.asInstanceOf[ResolvedDBObjectName].catalog.name == "testcat")
+        assert(
+          ctas.name.asInstanceOf[ResolvedDBObjectName].nameParts.mkString(".") ==
+            Identifier.of(Array("mydb"), "table_name"))
+        val props = CatalogV2Util.convertTableProperties(ctas)
+        assert(props == expectedProperties)
+        assert(ctas.options.isEmpty)
         assert(ctas.partitioning.isEmpty)
         assert(ctas.ignoreIfExists)
 
@@ -633,10 +636,12 @@ class PlanResolutionSuite extends AnalysisTest {
 
     parseAndResolve(sql, withDefault = true) match {
       case ctas: CreateTableAsSelect =>
-        assert(ctas.catalog.name == "testcat")
-        assert(ctas.tableName == Identifier.of(Array("mydb"), "table_name"))
-        assert(ctas.properties == expectedProperties)
-        assert(ctas.writeOptions.isEmpty)
+        assert(ctas.name.asInstanceOf[ResolvedDBObjectName].catalog.name == "testcat")
+        assert(ctas.name.asInstanceOf[ResolvedDBObjectName].nameParts.mkString(".") ==
+          Identifier.of(Array("mydb"), "table_name"))
+        val props = CatalogV2Util.convertTableProperties(ctas)
+        assert(props == expectedProperties)
+        assert(ctas.options.isEmpty)
         assert(ctas.partitioning.isEmpty)
         assert(ctas.ignoreIfExists)
 
@@ -666,10 +671,13 @@ class PlanResolutionSuite extends AnalysisTest {
 
     parseAndResolve(sql) match {
       case ctas: CreateTableAsSelect =>
-        assert(ctas.catalog.name == CatalogManager.SESSION_CATALOG_NAME)
-        assert(ctas.tableName == Identifier.of(Array("mydb"), "page_view"))
-        assert(ctas.properties == expectedProperties)
-        assert(ctas.writeOptions.isEmpty)
+        assert(ctas.name.asInstanceOf[ResolvedDBObjectName].catalog.name ==
+          CatalogManager.SESSION_CATALOG_NAME)
+        assert(ctas.name.asInstanceOf[ResolvedDBObjectName].nameParts.mkString(".") ==
+          Identifier.of(Array("mydb"), "page_view"))
+        val props = CatalogV2Util.convertTableProperties(ctas)
+        assert(props == expectedProperties)
+        assert(ctas.options.isEmpty)
         assert(ctas.partitioning.isEmpty)
         assert(ctas.ignoreIfExists)
 

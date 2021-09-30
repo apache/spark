@@ -719,8 +719,8 @@ class DDLParserSuite extends AnalysisTest {
     parsedPlan match {
       case create: CreateTableStatement if newTableToken == "CREATE" =>
         assert(create.ifNotExists == expectedIfNotExists)
-      case ctas: CreateTableAsSelectStatement if newTableToken == "CREATE" =>
-        assert(ctas.ifNotExists == expectedIfNotExists)
+      case ctas: CreateTableAsSelect if newTableToken == "CREATE" =>
+        assert(ctas.ignoreIfExists == expectedIfNotExists)
       case replace: ReplaceTableStatement if newTableToken == "REPLACE" =>
       case replace: ReplaceTableAsSelectStatement if newTableToken == "REPLACE" =>
       case other =>
@@ -2469,10 +2469,10 @@ class DDLParserSuite extends AnalysisTest {
             replace.location,
             replace.comment,
             replace.serde)
-        case ctas: CreateTableAsSelectStatement =>
+        case ctas: CreateTableAsSelect =>
           TableSpec(
-            ctas.tableName,
-            Some(ctas.asSelect).filter(_.resolved).map(_.schema),
+            ctas.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
+            Some(ctas.query).filter(_.resolved).map(_.schema),
             ctas.partitioning,
             ctas.bucketSpec,
             ctas.properties,
@@ -2480,7 +2480,7 @@ class DDLParserSuite extends AnalysisTest {
             ctas.options,
             ctas.location,
             ctas.comment,
-            ctas.serde,
+            ctas.serdeInfo,
             ctas.external)
         case rtas: ReplaceTableAsSelectStatement =>
           TableSpec(

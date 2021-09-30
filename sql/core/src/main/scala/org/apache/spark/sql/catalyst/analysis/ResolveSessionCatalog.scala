@@ -179,26 +179,30 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           ignoreIfExists = c.ifNotExists)
       }
 
-    case c @ CreateTableAsSelectStatement(
-         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _, _) =>
+    case c @ CreateTableAsSelect(UnresolvedDBObjectName(
+         SessionCatalogAndTable(catalog, name), _), _, _, _, _, _, _, _, _, _, _, _) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
-        c.provider, c.options, c.location, c.serde, ctas = true)
+        c.provider, c.options, c.location, c.serdeInfo, ctas = true)
       if (!isV2Provider(provider)) {
-        val tableDesc = buildCatalogTable(tbl.asTableIdentifier, new StructType,
+        val tableDesc = buildCatalogTable(name.asTableIdentifier, new StructType,
           c.partitioning, c.bucketSpec, c.properties, provider, c.location,
           c.comment, storageFormat, c.external)
-        val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-        CreateTable(tableDesc, mode, Some(c.asSelect))
+        val mode = if (c.ignoreIfExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+        CreateTable(tableDesc, mode, Some(c.query))
       } else {
         CreateTableAsSelect(
-          catalog.asTableCatalog,
-          tbl.asIdentifier,
-          // convert the bucket spec and add it as a transform
+          ResolvedDBObjectName(catalog, name),
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
-          c.asSelect,
+          c.query,
           convertTableProperties(c),
-          writeOptions = c.writeOptions,
-          ignoreIfExists = c.ifNotExists)
+          c.bucketSpec,
+          c.provider,
+          c.options,
+          c.location,
+          c.comment,
+          c.serdeInfo,
+          c.external,
+          c.ignoreIfExists)
       }
 
     case RefreshTable(ResolvedV1TableIdentifier(ident)) =>
