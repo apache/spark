@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.InferFiltersFromConstraints
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
+import org.apache.spark.sql.execution.ExplainMode
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -2036,6 +2037,18 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
 
         case _ =>
           throw new AnalysisException("Can not match ParquetTable in the query.")
+      }
+    }
+  }
+
+  test("SPARK-36889: Respect disabling of filters pushdown for DSv2 by explain") {
+    import testImplicits._
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false") {
+      withTempPath { path =>
+        Seq(1, 2).toDF("c0").write.parquet(path.getAbsolutePath)
+        val readback = spark.read.parquet(path.getAbsolutePath).where("c0 == 1")
+        val explain = readback.queryExecution.explainString(ExplainMode.fromString("extended"))
+        assert(explain.contains("PushedFilters: []"))
       }
     }
   }

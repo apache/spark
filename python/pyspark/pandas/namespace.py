@@ -73,6 +73,7 @@ from pyspark.pandas.utils import (
     align_diff_frames,
     default_session,
     is_name_like_tuple,
+    is_name_like_value,
     name_like_string,
     same_anchor,
     scol_for,
@@ -83,11 +84,13 @@ from pyspark.pandas.internal import (
     InternalFrame,
     DEFAULT_SERIES_NAME,
     HIDDEN_COLUMNS,
+    SPARK_INDEX_NAME_FORMAT,
 )
 from pyspark.pandas.series import Series, first_series
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.indexes import Index, DatetimeIndex
+from pyspark.pandas.indexes.multi import MultiIndex
 
 
 __all__ = [
@@ -115,6 +118,7 @@ __all__ = [
     "read_sql",
     "read_json",
     "merge",
+    "merge_asof",
     "to_numeric",
     "broadcast",
     "read_orc",
@@ -2745,6 +2749,499 @@ def merge(
         right_index=right_index,
         suffixes=suffixes,
     )
+
+
+def merge_asof(
+    left: Union[DataFrame, Series],
+    right: Union[DataFrame, Series],
+    on: Optional[Name] = None,
+    left_on: Optional[Name] = None,
+    right_on: Optional[Name] = None,
+    left_index: bool = False,
+    right_index: bool = False,
+    by: Optional[Union[Name, List[Name]]] = None,
+    left_by: Optional[Union[Name, List[Name]]] = None,
+    right_by: Optional[Union[Name, List[Name]]] = None,
+    suffixes: Tuple[str, str] = ("_x", "_y"),
+    tolerance: Optional[Any] = None,
+    allow_exact_matches: bool = True,
+    direction: str = "backward",
+) -> DataFrame:
+    """
+    Perform an asof merge.
+
+    This is similar to a left-join except that we match on nearest
+    key rather than equal keys.
+
+    For each row in the left DataFrame:
+
+      - A "backward" search selects the last row in the right DataFrame whose
+        'on' key is less than or equal to the left's key.
+
+      - A "forward" search selects the first row in the right DataFrame whose
+        'on' key is greater than or equal to the left's key.
+
+      - A "nearest" search selects the row in the right DataFrame whose 'on'
+        key is closest in absolute distance to the left's key.
+
+    Optionally match on equivalent keys with 'by' before searching with 'on'.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    left : DataFrame or named Series
+    right : DataFrame or named Series
+    on : label
+        Field name to join on. Must be found in both DataFrames.
+        The data MUST be ordered. Furthermore this must be a numeric column,
+        such as datetimelike, integer, or float. On or left_on/right_on
+        must be given.
+    left_on : label
+        Field name to join on in left DataFrame.
+    right_on : label
+        Field name to join on in right DataFrame.
+    left_index : bool
+        Use the index of the left DataFrame as the join key.
+    right_index : bool
+        Use the index of the right DataFrame as the join key.
+    by : column name or list of column names
+        Match on these columns before performing merge operation.
+    left_by : column name
+        Field names to match on in the left DataFrame.
+    right_by : column name
+        Field names to match on in the right DataFrame.
+    suffixes : 2-length sequence (tuple, list, ...)
+        Suffix to apply to overlapping column names in the left and right
+        side, respectively.
+    tolerance : int or Timedelta, optional, default None
+        Select asof tolerance within this range; must be compatible
+        with the merge index.
+    allow_exact_matches : bool, default True
+
+        - If True, allow matching with the same 'on' value
+          (i.e. less-than-or-equal-to / greater-than-or-equal-to)
+        - If False, don't match the same 'on' value
+          (i.e., strictly less-than / strictly greater-than).
+
+    direction : 'backward' (default), 'forward', or 'nearest'
+        Whether to search for prior, subsequent, or closest matches.
+
+    Returns
+    -------
+    merged : DataFrame
+
+    See Also
+    --------
+    merge : Merge with a database-style join.
+    merge_ordered : Merge with optional filling/interpolation.
+
+    Examples
+    --------
+    >>> left = ps.DataFrame({"a": [1, 5, 10], "left_val": ["a", "b", "c"]})
+    >>> left
+        a left_val
+    0   1        a
+    1   5        b
+    2  10        c
+
+    >>> right = ps.DataFrame({"a": [1, 2, 3, 6, 7], "right_val": [1, 2, 3, 6, 7]})
+    >>> right
+       a  right_val
+    0  1          1
+    1  2          2
+    2  3          3
+    3  6          6
+    4  7          7
+
+    >>> ps.merge_asof(left, right, on="a").sort_values("a").reset_index(drop=True)
+        a left_val  right_val
+    0   1        a          1
+    1   5        b          3
+    2  10        c          7
+
+    >>> ps.merge_asof(
+    ...     left,
+    ...     right,
+    ...     on="a",
+    ...     allow_exact_matches=False
+    ... ).sort_values("a").reset_index(drop=True)
+        a left_val  right_val
+    0   1        a        NaN
+    1   5        b        3.0
+    2  10        c        7.0
+
+    >>> ps.merge_asof(
+    ...     left,
+    ...     right,
+    ...     on="a",
+    ...     direction="forward"
+    ... ).sort_values("a").reset_index(drop=True)
+        a left_val  right_val
+    0   1        a        1.0
+    1   5        b        6.0
+    2  10        c        NaN
+
+    >>> ps.merge_asof(
+    ...     left,
+    ...     right,
+    ...     on="a",
+    ...     direction="nearest"
+    ... ).sort_values("a").reset_index(drop=True)
+        a left_val  right_val
+    0   1        a          1
+    1   5        b          6
+    2  10        c          7
+
+    We can use indexed DataFrames as well.
+
+    >>> left = ps.DataFrame({"left_val": ["a", "b", "c"]}, index=[1, 5, 10])
+    >>> left
+       left_val
+    1         a
+    5         b
+    10        c
+
+    >>> right = ps.DataFrame({"right_val": [1, 2, 3, 6, 7]}, index=[1, 2, 3, 6, 7])
+    >>> right
+       right_val
+    1          1
+    2          2
+    3          3
+    6          6
+    7          7
+
+    >>> ps.merge_asof(left, right, left_index=True, right_index=True).sort_index()
+       left_val  right_val
+    1         a          1
+    5         b          3
+    10        c          7
+
+    Here is a real-world times-series example
+
+    >>> quotes = ps.DataFrame(
+    ...     {
+    ...         "time": [
+    ...             pd.Timestamp("2016-05-25 13:30:00.023"),
+    ...             pd.Timestamp("2016-05-25 13:30:00.023"),
+    ...             pd.Timestamp("2016-05-25 13:30:00.030"),
+    ...             pd.Timestamp("2016-05-25 13:30:00.041"),
+    ...             pd.Timestamp("2016-05-25 13:30:00.048"),
+    ...             pd.Timestamp("2016-05-25 13:30:00.049"),
+    ...             pd.Timestamp("2016-05-25 13:30:00.072"),
+    ...             pd.Timestamp("2016-05-25 13:30:00.075")
+    ...         ],
+    ...         "ticker": [
+    ...                "GOOG",
+    ...                "MSFT",
+    ...                "MSFT",
+    ...                "MSFT",
+    ...                "GOOG",
+    ...                "AAPL",
+    ...                "GOOG",
+    ...                "MSFT"
+    ...            ],
+    ...            "bid": [720.50, 51.95, 51.97, 51.99, 720.50, 97.99, 720.50, 52.01],
+    ...            "ask": [720.93, 51.96, 51.98, 52.00, 720.93, 98.01, 720.88, 52.03]
+    ...     }
+    ... )
+    >>> quotes
+                         time ticker     bid     ask
+    0 2016-05-25 13:30:00.023   GOOG  720.50  720.93
+    1 2016-05-25 13:30:00.023   MSFT   51.95   51.96
+    2 2016-05-25 13:30:00.030   MSFT   51.97   51.98
+    3 2016-05-25 13:30:00.041   MSFT   51.99   52.00
+    4 2016-05-25 13:30:00.048   GOOG  720.50  720.93
+    5 2016-05-25 13:30:00.049   AAPL   97.99   98.01
+    6 2016-05-25 13:30:00.072   GOOG  720.50  720.88
+    7 2016-05-25 13:30:00.075   MSFT   52.01   52.03
+
+    >>> trades = ps.DataFrame(
+    ...        {
+    ...            "time": [
+    ...                pd.Timestamp("2016-05-25 13:30:00.023"),
+    ...                pd.Timestamp("2016-05-25 13:30:00.038"),
+    ...                pd.Timestamp("2016-05-25 13:30:00.048"),
+    ...                pd.Timestamp("2016-05-25 13:30:00.048"),
+    ...                pd.Timestamp("2016-05-25 13:30:00.048")
+    ...            ],
+    ...            "ticker": ["MSFT", "MSFT", "GOOG", "GOOG", "AAPL"],
+    ...            "price": [51.95, 51.95, 720.77, 720.92, 98.0],
+    ...            "quantity": [75, 155, 100, 100, 100]
+    ...        }
+    ...    )
+    >>> trades
+                         time ticker   price  quantity
+    0 2016-05-25 13:30:00.023   MSFT   51.95        75
+    1 2016-05-25 13:30:00.038   MSFT   51.95       155
+    2 2016-05-25 13:30:00.048   GOOG  720.77       100
+    3 2016-05-25 13:30:00.048   GOOG  720.92       100
+    4 2016-05-25 13:30:00.048   AAPL   98.00       100
+
+    By default we are taking the asof of the quotes
+
+    >>> ps.merge_asof(
+    ...    trades, quotes, on="time", by="ticker"
+    ... ).sort_values(["time", "ticker", "price"]).reset_index(drop=True)
+                         time ticker   price  quantity     bid     ask
+    0 2016-05-25 13:30:00.023   MSFT   51.95        75   51.95   51.96
+    1 2016-05-25 13:30:00.038   MSFT   51.95       155   51.97   51.98
+    2 2016-05-25 13:30:00.048   AAPL   98.00       100     NaN     NaN
+    3 2016-05-25 13:30:00.048   GOOG  720.77       100  720.50  720.93
+    4 2016-05-25 13:30:00.048   GOOG  720.92       100  720.50  720.93
+
+    We only asof within 2ms between the quote time and the trade time
+
+    >>> ps.merge_asof(
+    ...     trades,
+    ...     quotes,
+    ...     on="time",
+    ...     by="ticker",
+    ...     tolerance=F.expr("INTERVAL 2 MILLISECONDS")  # pd.Timedelta("2ms")
+    ... ).sort_values(["time", "ticker", "price"]).reset_index(drop=True)
+                         time ticker   price  quantity     bid     ask
+    0 2016-05-25 13:30:00.023   MSFT   51.95        75   51.95   51.96
+    1 2016-05-25 13:30:00.038   MSFT   51.95       155     NaN     NaN
+    2 2016-05-25 13:30:00.048   AAPL   98.00       100     NaN     NaN
+    3 2016-05-25 13:30:00.048   GOOG  720.77       100  720.50  720.93
+    4 2016-05-25 13:30:00.048   GOOG  720.92       100  720.50  720.93
+
+    We only asof within 10ms between the quote time and the trade time
+    and we exclude exact matches on time. However *prior* data will
+    propagate forward
+
+    >>> ps.merge_asof(
+    ...     trades,
+    ...     quotes,
+    ...     on="time",
+    ...     by="ticker",
+    ...     tolerance=F.expr("INTERVAL 10 MILLISECONDS"),  # pd.Timedelta("10ms")
+    ...     allow_exact_matches=False
+    ... ).sort_values(["time", "ticker", "price"]).reset_index(drop=True)
+                         time ticker   price  quantity     bid     ask
+    0 2016-05-25 13:30:00.023   MSFT   51.95        75     NaN     NaN
+    1 2016-05-25 13:30:00.038   MSFT   51.95       155   51.97   51.98
+    2 2016-05-25 13:30:00.048   AAPL   98.00       100     NaN     NaN
+    3 2016-05-25 13:30:00.048   GOOG  720.77       100     NaN     NaN
+    4 2016-05-25 13:30:00.048   GOOG  720.92       100     NaN     NaN
+    """
+
+    def to_list(os: Optional[Union[Name, List[Name]]]) -> List[Label]:
+        if os is None:
+            return []
+        elif is_name_like_tuple(os):
+            return [os]  # type: ignore
+        elif is_name_like_value(os):
+            return [(os,)]
+        else:
+            return [o if is_name_like_tuple(o) else (o,) for o in os]
+
+    if isinstance(left, Series):
+        left = left.to_frame()
+    if isinstance(right, Series):
+        right = right.to_frame()
+
+    if on:
+        if left_on or right_on:
+            raise ValueError(
+                'Can only pass argument "on" OR "left_on" and "right_on", '
+                "not a combination of both."
+            )
+        left_as_of_names = list(map(left._internal.spark_column_name_for, to_list(on)))
+        right_as_of_names = list(map(right._internal.spark_column_name_for, to_list(on)))
+    else:
+        if left_index:
+            if isinstance(left.index, MultiIndex):
+                raise ValueError("left can only have one index")
+            left_as_of_names = left._internal.index_spark_column_names
+        else:
+            left_as_of_names = list(map(left._internal.spark_column_name_for, to_list(left_on)))
+        if right_index:
+            if isinstance(right.index, MultiIndex):
+                raise ValueError("right can only have one index")
+            right_as_of_names = right._internal.index_spark_column_names
+        else:
+            right_as_of_names = list(map(right._internal.spark_column_name_for, to_list(right_on)))
+
+        if left_as_of_names and not right_as_of_names:
+            raise ValueError("Must pass right_on or right_index=True")
+        if right_as_of_names and not left_as_of_names:
+            raise ValueError("Must pass left_on or left_index=True")
+        if not left_as_of_names and not right_as_of_names:
+            common = list(left.columns.intersection(right.columns))
+            if len(common) == 0:
+                raise ValueError(
+                    "No common columns to perform merge on. Merge options: "
+                    "left_on=None, right_on=None, left_index=False, right_index=False"
+                )
+            left_as_of_names = list(map(left._internal.spark_column_name_for, to_list(common)))
+            right_as_of_names = list(map(right._internal.spark_column_name_for, to_list(common)))
+
+    if len(left_as_of_names) != 1:
+        raise ValueError("can only asof on a key for left")
+    if len(right_as_of_names) != 1:
+        raise ValueError("can only asof on a key for right")
+
+    if by:
+        if left_by or right_by:
+            raise ValueError('Can only pass argument "on" OR "left_by" and "right_by".')
+        left_join_on_names = list(map(left._internal.spark_column_name_for, to_list(by)))
+        right_join_on_names = list(map(right._internal.spark_column_name_for, to_list(by)))
+    else:
+        left_join_on_names = list(map(left._internal.spark_column_name_for, to_list(left_by)))
+        right_join_on_names = list(map(right._internal.spark_column_name_for, to_list(right_by)))
+
+        if left_join_on_names and not right_join_on_names:
+            raise ValueError("missing right_by")
+        if right_join_on_names and not left_join_on_names:
+            raise ValueError("missing left_by")
+        if len(left_join_on_names) != len(right_join_on_names):
+            raise ValueError("left_by and right_by must be same length")
+
+    # We should distinguish the name to avoid ambiguous column name after merging.
+    right_prefix = "__right_"
+    right_as_of_names = [right_prefix + right_as_of_name for right_as_of_name in right_as_of_names]
+    right_join_on_names = [
+        right_prefix + right_join_on_name for right_join_on_name in right_join_on_names
+    ]
+
+    left_as_of_name = left_as_of_names[0]
+    right_as_of_name = right_as_of_names[0]
+
+    def resolve(internal: InternalFrame, side: str) -> InternalFrame:
+        rename = lambda col: "__{}_{}".format(side, col)
+        internal = internal.resolved_copy
+        sdf = internal.spark_frame
+        sdf = sdf.select(
+            *[
+                scol_for(sdf, col).alias(rename(col))
+                for col in sdf.columns
+                if col not in HIDDEN_COLUMNS
+            ],
+            *HIDDEN_COLUMNS
+        )
+        return internal.copy(
+            spark_frame=sdf,
+            index_spark_columns=[
+                scol_for(sdf, rename(col)) for col in internal.index_spark_column_names
+            ],
+            index_fields=[field.copy(name=rename(field.name)) for field in internal.index_fields],
+            data_spark_columns=[
+                scol_for(sdf, rename(col)) for col in internal.data_spark_column_names
+            ],
+            data_fields=[field.copy(name=rename(field.name)) for field in internal.data_fields],
+        )
+
+    left_internal = left._internal.resolved_copy
+    right_internal = resolve(right._internal, "right")
+
+    left_table = left_internal.spark_frame.alias("left_table")
+    right_table = right_internal.spark_frame.alias("right_table")
+
+    left_as_of_column = scol_for(left_table, left_as_of_name)
+    right_as_of_column = scol_for(right_table, right_as_of_name)
+
+    if left_join_on_names:
+        left_join_on_columns = [scol_for(left_table, label) for label in left_join_on_names]
+        right_join_on_columns = [scol_for(right_table, label) for label in right_join_on_names]
+        on = reduce(
+            lambda l, r: l & r,
+            [l == r for l, r in zip(left_join_on_columns, right_join_on_columns)],
+        )
+    else:
+        on = None
+
+    if tolerance is not None and not isinstance(tolerance, Column):
+        tolerance = SF.lit(tolerance)
+
+    as_of_joined_table = left_table._joinAsOf(
+        right_table,
+        leftAsOfColumn=left_as_of_column,
+        rightAsOfColumn=right_as_of_column,
+        on=on,
+        how="left",
+        tolerance=tolerance,
+        allowExactMatches=allow_exact_matches,
+        direction=direction,
+    )
+
+    # Unpack suffixes tuple for convenience
+    left_suffix = suffixes[0]
+    right_suffix = suffixes[1]
+
+    # Append suffixes to columns with the same name to avoid conflicts later
+    duplicate_columns = set(left_internal.column_labels) & set(right_internal.column_labels)
+
+    exprs = []
+    data_columns = []
+    column_labels = []
+
+    left_scol_for = lambda label: scol_for(
+        as_of_joined_table, left_internal.spark_column_name_for(label)
+    )
+    right_scol_for = lambda label: scol_for(
+        as_of_joined_table, right_internal.spark_column_name_for(label)
+    )
+
+    for label in left_internal.column_labels:
+        col = left_internal.spark_column_name_for(label)
+        scol = left_scol_for(label)
+        if label in duplicate_columns:
+            spark_column_name = left_internal.spark_column_name_for(label)
+            if spark_column_name in (left_as_of_names + left_join_on_names) and (
+                (right_prefix + spark_column_name) in (right_as_of_names + right_join_on_names)
+            ):
+                pass
+            else:
+                col = col + left_suffix
+                scol = scol.alias(col)
+                label = tuple([str(label[0]) + left_suffix] + list(label[1:]))
+        exprs.append(scol)
+        data_columns.append(col)
+        column_labels.append(label)
+    for label in right_internal.column_labels:
+        # recover `right_prefix` here.
+        col = right_internal.spark_column_name_for(label)[len(right_prefix) :]
+        scol = right_scol_for(label).alias(col)
+        if label in duplicate_columns:
+            spark_column_name = left_internal.spark_column_name_for(label)
+            if spark_column_name in left_as_of_names + left_join_on_names and (
+                (right_prefix + spark_column_name) in right_as_of_names + right_join_on_names
+            ):
+                continue
+            else:
+                col = col + right_suffix
+                scol = scol.alias(col)
+                label = tuple([str(label[0]) + right_suffix] + list(label[1:]))
+        exprs.append(scol)
+        data_columns.append(col)
+        column_labels.append(label)
+
+    # Retain indices if they are used for joining
+    if left_index or right_index:
+        index_spark_column_names = [
+            SPARK_INDEX_NAME_FORMAT(i) for i in range(len(left_internal.index_spark_column_names))
+        ]
+        left_index_scols = [
+            scol.alias(name)
+            for scol, name in zip(left_internal.index_spark_columns, index_spark_column_names)
+        ]
+        exprs.extend(left_index_scols)
+        index_names = left_internal.index_names
+    else:
+        index_spark_column_names = []
+        index_names = []
+
+    selected_columns = as_of_joined_table.select(*exprs)
+
+    internal = InternalFrame(
+        spark_frame=selected_columns,
+        index_spark_columns=[scol_for(selected_columns, col) for col in index_spark_column_names],
+        index_names=index_names,
+        column_labels=column_labels,
+        data_spark_columns=[scol_for(selected_columns, col) for col in data_columns],
+    )
+    return DataFrame(internal)
 
 
 @no_type_check
