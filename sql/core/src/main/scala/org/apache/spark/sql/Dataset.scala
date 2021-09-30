@@ -83,18 +83,24 @@ private[sql] object Dataset {
  * A Dataset is a strongly typed collection of domain-specific objects that can be transformed
  * in parallel using functional or relational operations. Each Dataset also has an untyped view
  * called a `DataFrame`, which is a Dataset of [[Row]].
+ * 数据集是特定领域对象的强类型集合，可以使用函数或关系操作并行转换。
+ * 每个数据集还有一个无类型视图，称为“DataFrame”，它是一个 [[Row]] 的数据集。
  *
  * Operations available on Datasets are divided into transformations and actions. Transformations
  * are the ones that produce new Datasets, and actions are the ones that trigger computation and
  * return results. Example transformations include map, filter, select, and aggregate (`groupBy`).
  * Example actions count, show, or writing data out to file systems.
- *
+ *数据集上可用的操作分为转换和操作。转换是产生新数据集的那些，而action算子是触发计算和返回结果的那些。
+ *示例转换包括映射、过滤器、选择和聚合（`groupBy`）。
+ *示例操作计数、显示或将数据写入文件系统。
  * Datasets are "lazy", i.e. computations are only triggered when an action is invoked. Internally,
  * a Dataset represents a logical plan that describes the computation required to produce the data.
  * When an action is invoked, Spark's query optimizer optimizes the logical plan and generates a
  * physical plan for efficient execution in a parallel and distributed manner. To explore the
  * logical plan as well as optimized physical plan, use the `explain` function.
- *
+ * 数据集是“懒惰的”，即只有在调用action算子时才会触发计算。在内部，数据集表示描述生成数据所需的计算的逻辑计划。
+ * 当一个action被调用时，Spark 的查询优化器会优化逻辑计划并生成一个物理计划，以便以并行和分布式的方式高效执行。
+ * 要探索逻辑计划以及优化的物理计划，请使用“解释”功能。
  * To efficiently support domain-specific objects, an [[Encoder]] is required. The encoder maps
  * the domain specific type `T` to Spark's internal type system. For example, given a class `Person`
  * with two fields, `name` (string) and `age` (int), an encoder is used to tell Spark to generate
@@ -102,6 +108,12 @@ private[sql] object Dataset {
  * often has much lower memory footprint as well as are optimized for efficiency in data processing
  * (e.g. in a columnar format). To understand the internal binary representation for data, use the
  * `schema` function.
+ *要有效地支持域特定对象，需要 [编码器]。编码器将域特定类型"T"映射到 Spark 的内部类型系统。
+ * 例如，给定具有两个字段的类"人"（"名称"（字符串）和"年龄"（int），
+ * 编码器用于告诉 Spark 在运行时生成代码，以便将"人"对象序列化为二进制结构。
+ * 这种二进制结构通常具有更低的内存足迹，并针对数据处理效率（例如列格式）进行了优化。
+ * 要了解数据的内部二进制表示，请使用"架构"功能。
+ *
  *
  * There are typically two ways to create a Dataset. The most common way is by pointing Spark
  * to some files on storage systems, using the `read` function available on a `SparkSession`.

@@ -1166,6 +1166,8 @@ class CodeAndComment(val body: String, val comment: collection.Map[String, Strin
  * A base class for generators of byte code to perform expression evaluation.  Includes a set of
  * helpers for referring to Catalyst types and building trees that perform evaluation of individual
  * expressions.
+ * 用于执行表达式评估的字节码生成器的基类。
+ * 包括一组帮助程序，用于引用 Catalyst 类型和构建执行单个表达式求值的树。
  */
 abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Logging {
 

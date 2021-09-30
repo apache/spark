@@ -21,9 +21,11 @@ abstract class Predicate {
 
 /**
  * Generates bytecode that evaluates a boolean [[Expression]] on a given input [[InternalRow]].
+ * 生成对给定输入 [[InternalRow]] 计算布尔值 [[Expression]] 的字节码。
  */
 object GeneratePredicate extends CodeGenerator[Expression, Predicate] {
 
+  //canonicalize 规范化
   protected def canonicalize(in: Expression): Expression = ExpressionCanonicalizer.execute(in)
 
   protected def bind(in: Expression, inputSchema: Seq[Attribute]): Expression =

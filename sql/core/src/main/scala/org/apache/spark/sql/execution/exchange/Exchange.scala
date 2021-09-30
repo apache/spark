@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * Base class for operators that exchange data among multiple threads or processes.
- *
+ * 在多个线程或进程之间交换数据的运算符的基类。
  * Exchanges are the key class of operators that enable parallelism. Although the implementation
  * differs significantly, the concept is similar to the exchange operator described in
  * "Volcano -- An Extensible and Parallel Query Evaluation System" by Goetz Graefe.

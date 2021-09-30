@@ -231,7 +231,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
 /**
  * Physical plan for sampling the dataset.
- *
+ *采样数据集的物理计划。
  * @param lowerBound Lower-bound of the sampling probability (usually 0.0)
  * @param upperBound Upper-bound of the sampling probability. The expected fraction sampled
  *                   will be ub - lb.
@@ -597,7 +597,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
 /**
  * Physical plan for unioning two plans, without a distinct. This is UNION ALL in SQL.
- *
+ *结合两个计划的物理计划，没有明显的区别。这是 SQL 中的 UNION ALL。
  * If we change how this is implemented physically, we'd need to update
  * [[org.apache.spark.sql.catalyst.plans.logical.Union.maxRowsPerPartition]].
  */
@@ -662,6 +662,7 @@ object CoalesceExec {
 
 /**
  * Physical plan for a subquery.
+ * 子查询的物理计划
  */
 case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
 

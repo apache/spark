@@ -28,6 +28,7 @@ import org.apache.spark.sql.sources.v2.reader._
 
 /**
  * Physical plan node for scanning a batch of data from a data source.
+ * 用于从数据源扫描一批数据的物理计划节点。
  */
 case class DataSourceV2ScanExec(
     output: Seq[AttributeReference],

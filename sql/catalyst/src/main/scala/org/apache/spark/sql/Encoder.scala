@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
 package org.apache.spark.sql
 
@@ -24,13 +8,13 @@ import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.sql.types._
 
 /**
- * :: Experimental ::
+ * :: Experimental(实验性的) ::
  * Used to convert a JVM object of type `T` to and from the internal Spark SQL representation.
- *
+ * 用于将类型为“T”的 JVM 对象与内部 Spark SQL 表示形式相互转换。
  * == Scala ==
  * Encoders are generally created automatically through implicits from a `SparkSession`, or can be
  * explicitly created by calling static methods on [[Encoders]].
- *
+ * 编码器通常通过来自 `SparkSession` 的隐式自动创建，或者可以通过调用 [[Encoders]] 上的静态方法显式创建
  * {{{
  *   import spark.implicits._
  *
@@ -62,7 +46,7 @@ import org.apache.spark.sql.types._
  * == Implementation ==
  *  - Encoders are not required to be thread-safe and thus they do not need to use locks to guard
  *    against concurrent access if they reuse internal buffers to improve performance.
- *
+ * 编码器不需要是线程安全的，因此如果它们重用内部缓冲区来提高性能，则不需要使用锁来防止并发访问
  * @since 1.6.0
  */
 @Experimental
