@@ -2130,6 +2130,8 @@ test_that("higher order functions", {
       expr("transform(xs, (x, i) -> CASE WHEN ((i % 2.0) = 0.0) THEN x ELSE (- x) END)"),
     array_exists("vs", function(v) rlike(v, "FAILED")) ==
       expr("exists(vs, v -> (v RLIKE 'FAILED'))"),
+    array_exists("vs", function(v) ilike(v, "failed")) ==
+      expr("exists(vs, v -> (v ILIKE 'failed'))"),
     array_forall("xs", function(x) x > 0) ==
       expr("forall(xs, x -> x > 0)"),
     array_filter("xs", function(x, i) x > 0 | i %% 2 == 0) ==
