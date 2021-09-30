@@ -235,8 +235,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     val df = sql("select ifnull(id, 'x'), nullif(id, 'x'), nvl(id, 'x'), nvl2(id, 'x', 'y') " +
       "from range(2)")
     checkKeywordsExistsInExplain(df,
-      "Project [coalesce(cast(id#xL as string), x) AS ifnull(id, x)#x, " +
-        "id#xL AS nullif(id, x)#xL, coalesce(cast(id#xL as string), x) AS nvl(id, x)#x, " +
+      "Project [cast(id#xL as string) AS ifnull(id, x)#x, " +
+        "id#xL AS nullif(id, x)#xL, cast(id#xL as string) AS nvl(id, x)#x, " +
         "x AS nvl2(id, x, y)#x]")
   }
 
@@ -460,7 +460,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
           "parquet" ->
             "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "orc" ->
-            "|PushedFilters: \\[.*\\(id\\), .*\\(value\\), .*\\(id,1\\), .*\\(value,2\\)\\]",
+            "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "csv" ->
             "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "json" ->
@@ -527,16 +527,16 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
 class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuite {
   import testImplicits._
 
-  test("Explain formatted") {
+  test("SPARK-35884: Explain Formatted") {
     val df1 = Seq((1, 2), (2, 3)).toDF("k", "v1")
     val df2 = Seq((2, 3), (1, 1)).toDF("k", "v2")
     val testDf = df1.join(df2, "k").groupBy("k").agg(count("v1"), sum("v1"), avg("v2"))
     // trigger the final plan for AQE
     testDf.collect()
-    // AdaptiveSparkPlan (13)
+    // AdaptiveSparkPlan (21)
     // +- == Final Plan ==
     //    * HashAggregate (12)
-    //    +- CustomShuffleReader (11)
+    //    +- AQEShuffleRead (11)
     //       +- ShuffleQueryStage (10)
     //          +- Exchange (9)
     //             +- * HashAggregate (8)
@@ -547,30 +547,108 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
     //                         +- BroadcastExchange (4)
     //                            +- * Project (3)
     //                               +- * LocalTableScan (2)
+    // +- == Initial Plan ==
+    //    HashAggregate (20)
+    //    +- Exchange (19)
+    //       +- HashAggregate (18)
+    //          +- Project (17)
+    //             +- BroadcastHashJoin Inner BuildRight (16)
+    //                :- Project (14)
+    //                :  +- LocalTableScan (13)
+    //                +- BroadcastExchange (15)
+    //                   +- Project (3)
+    //                      +- LocalTableScan (2)
     checkKeywordsExistsInExplain(
       testDf,
       FormattedMode,
-      s"""
-         |(5) BroadcastQueryStage
-         |Output [2]: [k#x, v2#x]
-         |Arguments: 0
-         |""".stripMargin,
-      s"""
-         |(10) ShuffleQueryStage
-         |Output [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
-         |Arguments: 1
-         |""".stripMargin,
-      s"""
-         |(11) CustomShuffleReader
-         |Input [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
-         |Arguments: coalesced
-         |""".stripMargin,
-      s"""
-         |(13) AdaptiveSparkPlan
-         |Output [4]: [k#x, count(v1)#xL, sum(v1)#xL, avg(v2)#x]
-         |Arguments: isFinalPlan=true
-         |""".stripMargin
+      """
+        |(5) BroadcastQueryStage
+        |Output [2]: [k#x, v2#x]
+        |Arguments: 0""".stripMargin,
+      """
+        |(10) ShuffleQueryStage
+        |Output [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
+        |Arguments: 1""".stripMargin,
+      """
+        |(11) AQEShuffleRead
+        |Input [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
+        |Arguments: coalesced
+        |""".stripMargin,
+      """
+        |(16) BroadcastHashJoin
+        |Left keys [1]: [k#x]
+        |Right keys [1]: [k#x]
+        |Join condition: None
+        |""".stripMargin,
+      """
+        |(19) Exchange
+        |Input [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
+        |""".stripMargin,
+      """
+        |(21) AdaptiveSparkPlan
+        |Output [4]: [k#x, count(v1)#xL, sum(v1)#xL, avg(v2)#x]
+        |Arguments: isFinalPlan=true
+        |""".stripMargin
     )
+    checkKeywordsNotExistsInExplain(testDf, FormattedMode, "unknown")
+  }
+
+  test("SPARK-35884: Explain should only display one plan before AQE takes effect") {
+    val df = (0 to 10).toDF("id").where('id > 5)
+    val modes = Seq(SimpleMode, ExtendedMode, CostMode, FormattedMode)
+    modes.foreach { mode =>
+      checkKeywordsExistsInExplain(df, mode, "AdaptiveSparkPlan")
+      checkKeywordsNotExistsInExplain(df, mode, "Initial Plan", "Current Plan")
+    }
+    df.collect()
+    modes.foreach { mode =>
+      checkKeywordsExistsInExplain(df, mode, "Initial Plan", "Final Plan")
+      checkKeywordsNotExistsInExplain(df, mode, "unknown")
+    }
+  }
+
+  test("SPARK-35884: Explain formatted with subquery") {
+    withTempView("t1", "t2") {
+      spark.range(100).select('id % 10 as "key", 'id as "value").createOrReplaceTempView("t1")
+      spark.range(10).createOrReplaceTempView("t2")
+      val query =
+        """
+          |SELECT key, value FROM t1
+          |JOIN t2 ON t1.key = t2.id
+          |WHERE value > (SELECT MAX(id) FROM t2)
+          |""".stripMargin
+      val df = sql(query).toDF()
+      df.collect()
+      checkKeywordsExistsInExplain(df, FormattedMode,
+        """
+          |(2) Filter [codegen id : 2]
+          |Input [1]: [id#xL]
+          |Condition : ((id#xL > Subquery subquery#x, [id=#x]) AND isnotnull((id#xL % 10)))
+          |""".stripMargin,
+        """
+          |(6) BroadcastQueryStage
+          |Output [1]: [id#xL]
+          |Arguments: 0""".stripMargin,
+        """
+          |(12) AdaptiveSparkPlan
+          |Output [2]: [key#xL, value#xL]
+          |Arguments: isFinalPlan=true
+          |""".stripMargin,
+        """
+          |Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery subquery#x, [id=#x]
+          |""".stripMargin,
+        """
+          |(16) ShuffleQueryStage
+          |Output [1]: [max#xL]
+          |Arguments: 0""".stripMargin,
+        """
+          |(20) AdaptiveSparkPlan
+          |Output [1]: [max(id)#xL]
+          |Arguments: isFinalPlan=true
+          |""".stripMargin
+      )
+      checkKeywordsNotExistsInExplain(df, FormattedMode, "unknown")
+    }
   }
 
   test("SPARK-35133: explain codegen should work with AQE") {
@@ -597,6 +675,52 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
           assert(normalizedOutput.contains(expectedCodegenText))
         }
       }
+    }
+  }
+
+  test("SPARK-32986: Bucketed scan info should be a part of explain string") {
+    withTable("t1", "t2") {
+      Seq((1, 2), (2, 3)).toDF("i", "j").write.bucketBy(8, "i").saveAsTable("t1")
+      Seq(2, 3).toDF("i").write.bucketBy(8, "i").saveAsTable("t2")
+      val df1 = spark.table("t1")
+      val df2 = spark.table("t2")
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+        checkKeywordsExistsInExplain(
+          df1.join(df2, df1("i") === df2("i")),
+          "Bucketed: true")
+      }
+
+      withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
+        checkKeywordsExistsInExplain(
+          df1.join(df2, df1("i") === df2("i")),
+          "Bucketed: false (disabled by configuration)")
+      }
+
+      checkKeywordsExistsInExplain(df1, "Bucketed: false (disabled by query planner)" )
+
+      checkKeywordsExistsInExplain(
+        df1.select("j"),
+        "Bucketed: false (bucket column(s) not read)")
+    }
+  }
+
+  test("SPARK-36795: Node IDs should not be duplicated when InMemoryRelation present") {
+    withTempView("t1", "t2") {
+      Seq(1).toDF("k").write.saveAsTable("t1")
+      Seq(1).toDF("key").write.saveAsTable("t2")
+      spark.sql("SELECT * FROM t1").persist()
+      val query = "SELECT * FROM (SELECT * FROM t1) join t2 " +
+        "ON k = t2.key"
+      val df = sql(query).toDF()
+
+      val inMemoryRelationRegex = """InMemoryRelation \(([0-9]+)\)""".r
+      val columnarToRowRegex = """ColumnarToRow \(([0-9]+)\)""".r
+      val explainString = getNormalizedExplain(df, FormattedMode)
+      val inMemoryRelationNodeId = inMemoryRelationRegex.findAllIn(explainString).group(1)
+      val columnarToRowNodeId = columnarToRowRegex.findAllIn(explainString).group(1)
+
+      assert(inMemoryRelationNodeId != columnarToRowNodeId)
     }
   }
 }

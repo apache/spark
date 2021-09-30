@@ -50,7 +50,7 @@ class Catalog(object):
     @since(2.0)
     def setCurrentDatabase(self, dbName):
         """Sets the current default database in this session."""
-        return self._jcatalog.setCurrentDatabase(dbName)
+        self._jcatalog.setCurrentDatabase(dbName)
 
     @since(2.0)
     def listDatabases(self):
@@ -64,6 +64,32 @@ class Catalog(object):
                 description=jdb.description(),
                 locationUri=jdb.locationUri()))
         return databases
+
+    def databaseExists(self, dbName):
+        """Check if the database with the specified name exists.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        dbName : str
+             name of the database to check existence
+
+        Returns
+        -------
+        bool
+            Indicating whether the database exists
+
+        Examples
+        --------
+        >>> spark.catalog.databaseExists("test_new_database")
+        False
+        >>> df = spark.sql("CREATE DATABASE test_new_database")
+        >>> spark.catalog.databaseExists("test_new_database")
+        True
+        >>> df = spark.sql("DROP DATABASE test_new_database")
+        """
+        return self._jcatalog.databaseExists(dbName)
 
     @since(2.0)
     def listTables(self, dbName=None):
@@ -106,6 +132,34 @@ class Catalog(object):
                 isTemporary=jfunction.isTemporary()))
         return functions
 
+    def functionExists(self, functionName, dbName=None):
+        """Check if the function with the specified name exists.
+        This can either be a temporary function or a function.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        functionName : str
+            name of the function to check existence
+        dbName : str, optional
+            name of the database to check function existence in.
+            If no database is specified, the current database is used
+
+        Returns
+        -------
+        bool
+            Indicating whether the function exists
+
+        Examples
+        --------
+        >>> spark.catalog.functionExists("unexisting_function")
+        False
+        """
+        if dbName is None:
+            dbName = self.currentDatabase()
+        return self._jcatalog.functionExists(dbName, functionName)
+
     def listColumns(self, tableName, dbName=None):
         """Returns a list of columns for the given table/view in the specified database.
 
@@ -132,6 +186,61 @@ class Catalog(object):
                 isPartition=jcolumn.isPartition(),
                 isBucket=jcolumn.isBucket()))
         return columns
+
+    def tableExists(self, tableName, dbName=None):
+        """Check if the table or view with the specified name exists.
+        This can either be a temporary view or a table/view.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        tableName : str
+                    name of the table to check existence
+        dbName : str, optional
+                 name of the database to check table existence in.
+                 If no database is specified, the current database is used
+
+        Returns
+        -------
+        bool
+            Indicating whether the table/view exists
+
+        Examples
+        --------
+
+        This function can check if a table is defined or not:
+
+        >>> spark.catalog.tableExists("unexisting_table")
+        False
+        >>> df = spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
+        >>> spark.catalog.tableExists("tab1")
+        True
+        >>> df = spark.sql("DROP TABLE tab1")
+        >>> spark.catalog.tableExists("unexisting_table")
+        False
+
+        It also works for views:
+
+        >>> spark.catalog.tableExists("view1")
+        False
+        >>> df = spark.sql("CREATE VIEW view1 AS SELECT 1")
+        >>> spark.catalog.tableExists("view1")
+        True
+        >>> df = spark.sql("DROP VIEW view1")
+        >>> spark.catalog.tableExists("view1")
+        False
+
+        And also for temporary views:
+
+        >>> df = spark.sql("CREATE TEMPORARY VIEW view1 AS SELECT 1")
+        >>> spark.catalog.tableExists("view1")
+        True
+        >>> df = spark.sql("DROP VIEW view1")
+        >>> spark.catalog.tableExists("view1")
+        False
+        """
+        return self._jcatalog.tableExists(dbName, tableName)
 
     def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
         """Creates a table based on the dataset in a data source.
@@ -214,12 +323,13 @@ class Catalog(object):
         >>> spark.table("my_table").collect()
         [Row(_1=1, _2=1)]
         >>> spark.catalog.dropTempView("my_table")
+        True
         >>> spark.table("my_table") # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
         AnalysisException: ...
         """
-        self._jcatalog.dropTempView(viewName)
+        return self._jcatalog.dropTempView(viewName)
 
     def dropGlobalTempView(self, viewName):
         """Drops the global temporary view with the given view name in the catalog.
@@ -234,12 +344,13 @@ class Catalog(object):
         >>> spark.table("global_temp.my_table").collect()
         [Row(_1=1, _2=1)]
         >>> spark.catalog.dropGlobalTempView("my_table")
+        True
         >>> spark.table("global_temp.my_table") # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
         AnalysisException: ...
         """
-        self._jcatalog.dropGlobalTempView(viewName)
+        return self._jcatalog.dropGlobalTempView(viewName)
 
     def registerFunction(self, name, f, returnType=None):
         """An alias for :func:`spark.udf.register`.

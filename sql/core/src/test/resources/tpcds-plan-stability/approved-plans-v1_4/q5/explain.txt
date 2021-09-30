@@ -143,7 +143,7 @@ Condition : isnotnull(s_store_sk#23)
 
 (16) BroadcastExchange
 Input [2]: [s_store_sk#23, s_store_id#24]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#25]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#25]
 
 (17) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [store_sk#6]
@@ -170,7 +170,7 @@ Input [5]: [s_store_id#24, sum#30, sum#31, sum#32, sum#33]
 Keys [1]: [s_store_id#24]
 Functions [4]: [sum(UnscaledValue(sales_price#8)), sum(UnscaledValue(return_amt#10)), sum(UnscaledValue(profit#9)), sum(UnscaledValue(net_loss#11))]
 Aggregate Attributes [4]: [sum(UnscaledValue(sales_price#8))#35, sum(UnscaledValue(return_amt#10))#36, sum(UnscaledValue(profit#9))#37, sum(UnscaledValue(net_loss#11))#38]
-Results [5]: [MakeDecimal(sum(UnscaledValue(sales_price#8))#35,17,2) AS sales#39, MakeDecimal(sum(UnscaledValue(return_amt#10))#36,17,2) AS RETURNS#40, CheckOverflow((promote_precision(cast(MakeDecimal(sum(UnscaledValue(profit#9))#37,17,2) as decimal(18,2))) - promote_precision(cast(MakeDecimal(sum(UnscaledValue(net_loss#11))#38,17,2) as decimal(18,2)))), DecimalType(18,2), true) AS profit#41, store channel AS channel#42, concat(store, s_store_id#24) AS id#43]
+Results [5]: [MakeDecimal(sum(UnscaledValue(sales_price#8))#35,17,2) AS sales#39, MakeDecimal(sum(UnscaledValue(return_amt#10))#36,17,2) AS returns#40, CheckOverflow((promote_precision(cast(MakeDecimal(sum(UnscaledValue(profit#9))#37,17,2) as decimal(18,2))) - promote_precision(cast(MakeDecimal(sum(UnscaledValue(net_loss#11))#38,17,2) as decimal(18,2)))), DecimalType(18,2), true) AS profit#41, store channel AS channel#42, concat(store, s_store_id#24) AS id#43]
 
 (22) Scan parquet default.catalog_sales
 Output [4]: [cs_catalog_page_sk#44, cs_ext_sales_price#45, cs_net_profit#46, cs_sold_date_sk#47]
@@ -240,7 +240,7 @@ Condition : isnotnull(cp_catalog_page_sk#65)
 
 (37) BroadcastExchange
 Input [2]: [cp_catalog_page_sk#65, cp_catalog_page_id#66]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#67]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#67]
 
 (38) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [page_sk#48]
@@ -267,7 +267,7 @@ Input [5]: [cp_catalog_page_id#66, sum#72, sum#73, sum#74, sum#75]
 Keys [1]: [cp_catalog_page_id#66]
 Functions [4]: [sum(UnscaledValue(sales_price#50)), sum(UnscaledValue(return_amt#52)), sum(UnscaledValue(profit#51)), sum(UnscaledValue(net_loss#53))]
 Aggregate Attributes [4]: [sum(UnscaledValue(sales_price#50))#77, sum(UnscaledValue(return_amt#52))#78, sum(UnscaledValue(profit#51))#79, sum(UnscaledValue(net_loss#53))#80]
-Results [5]: [MakeDecimal(sum(UnscaledValue(sales_price#50))#77,17,2) AS sales#81, MakeDecimal(sum(UnscaledValue(return_amt#52))#78,17,2) AS RETURNS#82, CheckOverflow((promote_precision(cast(MakeDecimal(sum(UnscaledValue(profit#51))#79,17,2) as decimal(18,2))) - promote_precision(cast(MakeDecimal(sum(UnscaledValue(net_loss#53))#80,17,2) as decimal(18,2)))), DecimalType(18,2), true) AS profit#83, catalog channel AS channel#84, concat(catalog_page, cp_catalog_page_id#66) AS id#85]
+Results [5]: [MakeDecimal(sum(UnscaledValue(sales_price#50))#77,17,2) AS sales#81, MakeDecimal(sum(UnscaledValue(return_amt#52))#78,17,2) AS returns#82, CheckOverflow((promote_precision(cast(MakeDecimal(sum(UnscaledValue(profit#51))#79,17,2) as decimal(18,2))) - promote_precision(cast(MakeDecimal(sum(UnscaledValue(net_loss#53))#80,17,2) as decimal(18,2)))), DecimalType(18,2), true) AS profit#83, catalog channel AS channel#84, concat(catalog_page, cp_catalog_page_id#66) AS id#85]
 
 (43) Scan parquet default.web_sales
 Output [4]: [ws_web_site_sk#86, ws_ext_sales_price#87, ws_net_profit#88, ws_sold_date_sk#89]
@@ -300,7 +300,7 @@ Input [5]: [wr_item_sk#96, wr_order_number#97, wr_return_amt#98, wr_net_loss#99,
 
 (49) BroadcastExchange
 Input [5]: [wr_item_sk#96, wr_order_number#97, wr_return_amt#98, wr_net_loss#99, wr_returned_date_sk#100]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, true] as bigint), 32) | (cast(input[1, int, true] as bigint) & 4294967295))),false), [id=#101]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, true] as bigint), 32) | (cast(input[1, int, true] as bigint) & 4294967295))),false,false), [id=#101]
 
 (50) Scan parquet default.web_sales
 Output [4]: [ws_item_sk#102, ws_web_site_sk#103, ws_order_number#104, ws_sold_date_sk#105]
@@ -359,7 +359,7 @@ Condition : isnotnull(web_site_sk#113)
 
 (63) BroadcastExchange
 Input [2]: [web_site_sk#113, web_site_id#114]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#115]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#115]
 
 (64) BroadcastHashJoin [codegen id : 18]
 Left keys [1]: [wsr_web_site_sk#90]
@@ -386,12 +386,12 @@ Input [5]: [web_site_id#114, sum#120, sum#121, sum#122, sum#123]
 Keys [1]: [web_site_id#114]
 Functions [4]: [sum(UnscaledValue(sales_price#92)), sum(UnscaledValue(return_amt#94)), sum(UnscaledValue(profit#93)), sum(UnscaledValue(net_loss#95))]
 Aggregate Attributes [4]: [sum(UnscaledValue(sales_price#92))#125, sum(UnscaledValue(return_amt#94))#126, sum(UnscaledValue(profit#93))#127, sum(UnscaledValue(net_loss#95))#128]
-Results [5]: [MakeDecimal(sum(UnscaledValue(sales_price#92))#125,17,2) AS sales#129, MakeDecimal(sum(UnscaledValue(return_amt#94))#126,17,2) AS RETURNS#130, CheckOverflow((promote_precision(cast(MakeDecimal(sum(UnscaledValue(profit#93))#127,17,2) as decimal(18,2))) - promote_precision(cast(MakeDecimal(sum(UnscaledValue(net_loss#95))#128,17,2) as decimal(18,2)))), DecimalType(18,2), true) AS profit#131, web channel AS channel#132, concat(web_site, web_site_id#114) AS id#133]
+Results [5]: [MakeDecimal(sum(UnscaledValue(sales_price#92))#125,17,2) AS sales#129, MakeDecimal(sum(UnscaledValue(return_amt#94))#126,17,2) AS returns#130, CheckOverflow((promote_precision(cast(MakeDecimal(sum(UnscaledValue(profit#93))#127,17,2) as decimal(18,2))) - promote_precision(cast(MakeDecimal(sum(UnscaledValue(net_loss#95))#128,17,2) as decimal(18,2)))), DecimalType(18,2), true) AS profit#131, web channel AS channel#132, concat(web_site, web_site_id#114) AS id#133]
 
 (69) Union
 
 (70) Expand [codegen id : 20]
-Input [5]: [sales#39, RETURNS#40, profit#41, channel#42, id#43]
+Input [5]: [sales#39, returns#40, profit#41, channel#42, id#43]
 Arguments: [[sales#39, returns#40, profit#41, channel#42, id#43, 0], [sales#39, returns#40, profit#41, channel#42, null, 1], [sales#39, returns#40, profit#41, null, null, 3]], [sales#39, returns#40, profit#41, channel#134, id#135, spark_grouping_id#136]
 
 (71) HashAggregate [codegen id : 20]
@@ -446,7 +446,7 @@ Input [2]: [d_date_sk#22, d_date#156]
 
 (79) BroadcastExchange
 Input [1]: [d_date_sk#22]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#157]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#157]
 
 Subquery:2 Hosting operator id = 5 Hosting Expression = sr_returned_date_sk#15 IN dynamicpruning#5
 

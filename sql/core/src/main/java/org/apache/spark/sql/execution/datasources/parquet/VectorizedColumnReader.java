@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
 import java.time.ZoneId;
+import java.util.PrimitiveIterator;
 
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.bytes.BytesInput;
@@ -74,6 +75,12 @@ public class VectorizedColumnReader {
    */
   private final ParquetReadState readState;
 
+  /**
+   * The index for the first row in the current page, among all rows across all pages in the
+   * column chunk for this reader. If there is no column index, the value is 0.
+   */
+  private long pageFirstRowIndex;
+
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
   private final LogicalTypeAnnotation logicalTypeAnnotation;
@@ -83,12 +90,13 @@ public class VectorizedColumnReader {
       ColumnDescriptor descriptor,
       LogicalTypeAnnotation logicalTypeAnnotation,
       PageReader pageReader,
+      PrimitiveIterator.OfLong rowIndexes,
       ZoneId convertTz,
       String datetimeRebaseMode,
       String int96RebaseMode) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
-    this.readState = new ParquetReadState(descriptor.getMaxDefinitionLevel());
+    this.readState = new ParquetReadState(descriptor.getMaxDefinitionLevel(), rowIndexes);
     this.logicalTypeAnnotation = logicalTypeAnnotation;
     this.updaterFactory = new ParquetVectorUpdaterFactory(
         logicalTypeAnnotation, convertTz, datetimeRebaseMode, int96RebaseMode);
@@ -151,18 +159,19 @@ public class VectorizedColumnReader {
       // page.
       dictionaryIds = column.reserveDictionaryIds(total);
     }
-    readState.resetForBatch(total);
+    readState.resetForNewBatch(total);
     while (readState.valuesToReadInBatch > 0) {
-      // Compute the number of values we want to read in this page.
       if (readState.valuesToReadInPage == 0) {
         int pageValueCount = readPage();
-        readState.resetForPage(pageValueCount);
+        readState.resetForNewPage(pageValueCount, pageFirstRowIndex);
       }
       PrimitiveType.PrimitiveTypeName typeName =
           descriptor.getPrimitiveType().getPrimitiveTypeName();
       if (isCurrentPageDictionaryEncoded) {
         // Save starting offset in case we need to decode dictionary IDs.
         int startOffset = readState.offset;
+        // Save starting row index so we can check if we need to eagerly decode dict ids later
+        long startRowId = readState.rowId;
 
         // Read and decode dictionary ids.
         defColumn.readIntegers(readState, dictionaryIds, column,
@@ -170,10 +179,12 @@ public class VectorizedColumnReader {
 
         // TIMESTAMP_MILLIS encoded as INT64 can't be lazily decoded as we need to post process
         // the values to add microseconds precision.
-        if (column.hasDictionary() || (startOffset == 0 && isLazyDecodingSupported(typeName))) {
+        if (column.hasDictionary() || (startRowId == pageFirstRowIndex &&
+            isLazyDecodingSupported(typeName))) {
           // Column vector supports lazy decoding of dictionary values so just set the dictionary.
-          // We can't do this if rowId != 0 AND the column doesn't have a dictionary (i.e. some
-          // non-dictionary encoded values have already been added).
+          // We can't do this if startRowId is not the first row index in the page AND the column
+          // doesn't have a dictionary (i.e. some non-dictionary encoded values have already been
+          // added).
           PrimitiveType primitiveType = descriptor.getPrimitiveType();
 
           // We need to make sure that we initialize the right type for the dictionary otherwise
@@ -213,6 +224,8 @@ public class VectorizedColumnReader {
 
   private int readPage() {
     DataPage page = pageReader.readPage();
+    this.pageFirstRowIndex = page.getFirstRowIndex().orElse(0L);
+
     return page.accept(new DataPage.Visitor<Integer>() {
       @Override
       public Integer visit(DataPageV1 dataPageV1) {
@@ -268,7 +281,6 @@ public class VectorizedColumnReader {
   }
 
   private int readPageV1(DataPageV1 page) throws IOException {
-    // Initialize the decoders.
     if (page.getDlEncoding() != Encoding.RLE && descriptor.getMaxDefinitionLevel() != 0) {
       throw new UnsupportedOperationException("Unsupported encoding: " + page.getDlEncoding());
     }

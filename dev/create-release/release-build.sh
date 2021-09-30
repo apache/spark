@@ -22,7 +22,7 @@ SELF=$(cd $(dirname $0) && pwd)
 
 function exit_with_usage {
   cat << EOF
-usage: release-build.sh <package|docs|publish-snapshot|publish-release>
+usage: release-build.sh <package|docs|publish-snapshot|publish-release|finalize>
 Creates build deliverables from a Spark commit.
 
 Top level targets are
@@ -30,6 +30,7 @@ Top level targets are
   docs: Build docs and commit them to dist.apache.org/repos/dist/dev/spark/
   publish-snapshot: Publish snapshot release to Apache snapshots
   publish-release: Publish a release to Apache release repo
+  finalize: Finalize the release after an RC passes vote
 
 All other inputs are environment variables
 
@@ -83,6 +84,7 @@ export LANG=C.UTF-8
 GIT_REF=${GIT_REF:-master}
 
 RELEASE_STAGING_LOCATION="https://dist.apache.org/repos/dist/dev/spark"
+RELEASE_LOCATION="https://dist.apache.org/repos/dist/release/spark"
 
 GPG="gpg -u $GPG_KEY --no-tty --batch --pinentry-mode loopback"
 NEXUS_ROOT=https://repository.apache.org/service/local/staging
@@ -91,6 +93,71 @@ BASE_DIR=$(pwd)
 
 init_java
 init_maven_sbt
+
+if [[ "$1" == "finalize" ]]; then
+  if [[ -z "$PYPI_PASSWORD" ]]; then
+    error 'The environment variable PYPI_PASSWORD is not set. Exiting.'
+  fi
+
+  git config --global user.name "$GIT_NAME"
+  git config --global user.email "$GIT_EMAIL"
+
+  # Create the git tag for the new release
+  echo "Creating the git tag for the new release"
+  rm -rf spark
+  git clone "https://$ASF_USERNAME:$ASF_PASSWORD@$ASF_SPARK_REPO" -b master
+  cd spark
+  git tag "v$RELEASE_VERSION" "$RELEASE_TAG"
+  git push origin "v$RELEASE_VERSION"
+  cd ..
+  rm -rf spark
+  echo "git tag v$RELEASE_VERSION created"
+
+  # download PySpark binary from the dev directory and upload to PyPi.
+  echo "Uploading PySpark to PyPi"
+  svn co --depth=empty "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-bin" svn-spark
+  cd svn-spark
+  svn update "pyspark-$RELEASE_VERSION.tar.gz"
+  svn update "pyspark-$RELEASE_VERSION.tar.gz.asc"
+  TWINE_USERNAME=spark-upload TWINE_PASSWORD="$PYPI_PASSWORD" twine upload \
+    --repository-url https://upload.pypi.org/legacy/ \
+    "pyspark-$RELEASE_VERSION.tar.gz" \
+    "pyspark-$RELEASE_VERSION.tar.gz.asc"
+  cd ..
+  rm -rf svn-spark
+  echo "PySpark uploaded"
+
+  # download the docs from the dev directory and upload it to spark-website
+  echo "Uploading docs to spark-website"
+  svn co "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-docs" docs
+  git clone "https://$ASF_USERNAME:$ASF_PASSWORD@gitbox.apache.org/repos/asf/spark-website.git" -b asf-site
+  mv docs/_site "spark-website/site/docs/$RELEASE_VERSION"
+  cd spark-website
+  git add site/docs/$RELEASE_VERSION
+  git commit -m "Add docs for Apache Spark $RELEASE_VERSION"
+  git push origin HEAD:asf-site
+  cd ..
+  rm -rf spark-website
+  svn rm --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Remove RC artifacts" --no-auth-cache \
+    "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-docs"
+  echo "docs uploaded"
+
+  # Moves the binaries from dev directory to release directory.
+  echo "Moving Spark binaries to the release directory"
+  svn mv --username "$ASF_USERNAME" --password "$ASF_PASSWORD" -m"Apache Spark $RELEASE_VERSION" \
+    --no-auth-cache "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-bin" "$RELEASE_LOCATION/spark-$RELEASE_VERSION"
+  echo "Spark binaries moved"
+
+  # Update the KEYS file.
+  echo "Sync'ing KEYS"
+  svn co --depth=files "$RELEASE_LOCATION" svn-spark
+  curl "$RELEASE_STAGING_LOCATION/KEYS" > svn-spark/KEYS
+  (cd svn-spark && svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Update KEYS")
+  echo "KEYS sync'ed"
+  rm -rf svn-spark
+
+  exit 0
+fi
 
 rm -rf spark
 git clone "$ASF_REPO"
@@ -110,10 +177,7 @@ fi
 
 # Depending on the version being built, certain extra profiles need to be activated, and
 # different versions of Scala are supported.
-BASE_PROFILES="-Pmesos -Pyarn"
-if [[ $SPARK_VERSION > "2.3" ]]; then
-  BASE_PROFILES="$BASE_PROFILES -Pkubernetes"
-fi
+BASE_PROFILES="-Pmesos -Pyarn -Pkubernetes"
 
 PUBLISH_SCALA_2_13=1
 SCALA_2_13_PROFILES="-Pscala-2.13"
@@ -121,14 +185,8 @@ if [[ $SPARK_VERSION < "3.2" ]]; then
   PUBLISH_SCALA_2_13=0
 fi
 
-PUBLISH_SCALA_2_12=0
+PUBLISH_SCALA_2_12=1
 SCALA_2_12_PROFILES="-Pscala-2.12"
-if [[ $SPARK_VERSION < "3.0." ]]; then
-  SCALA_2_12_PROFILES="-Pscala-2.12 -Pflume"
-fi
-if [[ $SPARK_VERSION > "2.4" ]]; then
-  PUBLISH_SCALA_2_12=1
-fi
 
 # Hive-specific profiles for some builds
 HIVE_PROFILES="-Phive -Phive-thriftserver"
@@ -162,19 +220,16 @@ git clean -d -f -x
 rm -f .gitignore
 cd ..
 
-export MAVEN_OPTS="-Xmx12g"
+export MAVEN_OPTS="-Xss128m -Xmx12g"
 
 if [[ "$1" == "package" ]]; then
   # Source and binary tarballs
   echo "Packaging release source tarballs"
   cp -r spark spark-$SPARK_VERSION
 
-  # For source release in v2.4+, exclude copy of binary license/notice
-  if [[ $SPARK_VERSION > "2.4" ]]; then
-    rm -f spark-$SPARK_VERSION/LICENSE-binary
-    rm -f spark-$SPARK_VERSION/NOTICE-binary
-    rm -rf spark-$SPARK_VERSION/licenses-binary
-  fi
+  rm -f spark-$SPARK_VERSION/LICENSE-binary
+  rm -f spark-$SPARK_VERSION/NOTICE-binary
+  rm -rf spark-$SPARK_VERSION/licenses-binary
 
   tar cvzf spark-$SPARK_VERSION.tgz --exclude spark-$SPARK_VERSION/.git spark-$SPARK_VERSION
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour --output spark-$SPARK_VERSION.tgz.asc \
@@ -270,11 +325,7 @@ if [[ "$1" == "package" ]]; then
   BINARY_PKGS_ARGS["hadoop3.2"]="-Phadoop-3.2 $HIVE_PROFILES"
   if ! is_dry_run; then
     BINARY_PKGS_ARGS["without-hadoop"]="-Phadoop-provided"
-    if [[ $SPARK_VERSION < "3.0." ]]; then
-      BINARY_PKGS_ARGS["hadoop2.6"]="-Phadoop-2.6 $HIVE_PROFILES"
-    else
-      BINARY_PKGS_ARGS["hadoop2.7"]="-Phadoop-2.7 $HIVE_PROFILES"
-    fi
+    BINARY_PKGS_ARGS["hadoop2.7"]="-Phadoop-2.7 $HIVE_PROFILES"
   fi
 
   declare -A BINARY_PKGS_EXTRA
@@ -470,4 +521,4 @@ fi
 
 cd ..
 rm -rf spark
-echo "ERROR: expects to be called with 'package', 'docs', 'publish-release' or 'publish-snapshot'"
+echo "ERROR: expects to be called with 'package', 'docs', 'publish-release', 'publish-snapshot' or 'finalize'"

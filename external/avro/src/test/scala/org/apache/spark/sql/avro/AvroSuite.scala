@@ -25,7 +25,7 @@ import java.util.{Locale, UUID}
 
 import scala.collection.JavaConverters._
 
-import org.apache.avro.{AvroTypeException, Schema}
+import org.apache.avro.{AvroTypeException, Schema, SchemaBuilder}
 import org.apache.avro.Schema.{Field, Type}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.file.{DataFileReader, DataFileWriter}
@@ -1103,6 +1103,43 @@ abstract class AvroSuite
     }
   }
 
+  test("SPARK-34365: support reading renamed schema using positionalFieldMatching") {
+    val renamedSchema = new StructType()
+      .add("foo", StringType)
+      .add("foo_map", MapType(StringType, IntegerType))
+    val dfLoaded = spark
+      .read
+      .option("positionalFieldMatching", true.toString)
+      .schema(renamedSchema)
+      .format("avro")
+      .load(testAvro)
+    assert(dfLoaded.schema === renamedSchema)
+    val expectedDf = spark.read.format("avro").load(testAvro).select("string", "simple_map")
+    assert(dfLoaded.select($"foo".as("string"), $"foo_map".as("simple_map")).collect().toSet ===
+      expectedDf.collect().toSet)
+  }
+
+  test("SPARK-34365: support writing with renamed schema using positionalFieldMatching") {
+    withTempDir { tempDir =>
+      val avroSchema = SchemaBuilder.record("renamed").fields()
+        .requiredString("foo")
+        .name("foo_map").`type`(Schema.createMap(Schema.create(Schema.Type.INT))).noDefault()
+        .endRecord()
+      val expectedDf = spark.read.format("avro").load(testAvro).select("string", "simple_map")
+      val savePath = s"$tempDir/save"
+      expectedDf.write
+        .option("avroSchema", avroSchema.toString)
+        .option("positionalFieldMatching", true.toString)
+        .format("avro")
+        .save(savePath)
+      val reloadedDf = spark.read.format("avro").load(savePath)
+      assert(reloadedDf.schema ===
+        new StructType().add("foo", StringType).add("foo_map", MapType(StringType, IntegerType)))
+      assert(reloadedDf.select($"foo".as("string"), $"foo_map".as("simple_map")).collect().toSet ===
+        expectedDf.collect().toSet)
+    }
+  }
+
   test("unsupported nullable avro type") {
     val catalystSchema =
       StructType(Seq(
@@ -1365,8 +1402,7 @@ abstract class AvroSuite
         val e = intercept[SparkException] {
           df.write.option("avroSchema", avroSchema).format("avro").save(s"$tempDir/save2")
         }
-        assertExceptionMsg[IncompatibleSchemaException](e,
-          "Cannot find field 'FOO' in Avro schema at top-level record")
+        assertExceptionMsg[IncompatibleSchemaException](e, "Cannot find field 'FOO' in Avro schema")
       }
     }
   }
@@ -2121,6 +2157,36 @@ abstract class AvroSuite
       }
     }
   }
+
+  test("SPARK-33865: CREATE TABLE DDL with avro should check col name") {
+    withTable("test_ddl") {
+      withView("v") {
+        spark.range(1).createTempView("v")
+        withTempDir { dir =>
+          val e = intercept[AnalysisException] {
+            sql(
+              s"""
+                 |CREATE TABLE test_ddl USING AVRO
+                 |LOCATION '${dir}'
+                 |AS SELECT ID, IF(ID=1,1,0) FROM v""".stripMargin)
+          }.getMessage
+          assert(e.contains("Column name \"(IF((ID = 1), 1, 0))\" contains invalid character(s)."))
+        }
+
+        withTempDir { dir =>
+          spark.sql(
+            s"""
+               |CREATE TABLE test_ddl USING AVRO
+               |LOCATION '${dir}'
+               |AS SELECT ID, IF(ID=1,ID,0) AS A, ABS(ID) AS B
+               |FROM v""".stripMargin)
+          val expectedSchema = StructType(Seq(StructField("ID", LongType, true),
+            StructField("A", LongType, true), StructField("B", LongType, true)))
+          assert(spark.table("test_ddl").schema == expectedSchema)
+        }
+      }
+    }
+  }
 }
 
 class AvroV1Suite extends AvroSuite {
@@ -2128,6 +2194,28 @@ class AvroV1Suite extends AvroSuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
+
+  test("SPARK-36271: V1 insert should check schema field name too") {
+    withView("v") {
+      spark.range(1).createTempView("v")
+      withTempDir { dir =>
+        val e = intercept[AnalysisException] {
+          sql("SELECT ID, IF(ID=1,1,0) FROM v").write.mode(SaveMode.Overwrite)
+            .format("avro").save(dir.getCanonicalPath)
+        }.getMessage
+        assert(e.contains("Column name \"(IF((ID = 1), 1, 0))\" contains invalid character(s)."))
+      }
+
+      withTempDir { dir =>
+        val e = intercept[AnalysisException] {
+          sql("SELECT NAMED_STRUCT('(IF((ID = 1), 1, 0))', IF(ID=1,ID,0)) AS col1 FROM v")
+            .write.mode(SaveMode.Overwrite)
+            .format("avro").save(dir.getCanonicalPath)
+        }.getMessage
+        assert(e.contains("Column name \"(IF((ID = 1), 1, 0))\" contains invalid character(s)."))
+      }
+    }
+  }
 }
 
 class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
@@ -2162,7 +2250,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       }.isEmpty)
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan) => f
+        case BatchScanExec(_, f: AvroScan, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.nonEmpty)
@@ -2195,7 +2283,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       assert(filterCondition.isDefined)
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan) => f
+        case BatchScanExec(_, f: AvroScan, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.isEmpty)
@@ -2276,7 +2364,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
             .where("value = 'a'")
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: AvroScan) => f
+            case BatchScanExec(_, f: AvroScan, _) => f
           }
           assert(fileScan.nonEmpty)
           if (filtersPushdown) {

@@ -26,7 +26,7 @@ import com.univocity.parsers.csv.CsvParser
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
-import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
+import org.apache.spark.sql.catalyst.expressions.{Cast, EmptyRow, ExprUtils, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -88,13 +88,19 @@ class UnivocityParser(
   private val noRows = None
 
   private lazy val timestampFormatter = TimestampFormatter(
-    options.timestampFormat,
+    options.timestampFormatInRead,
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+  private lazy val timestampNTZFormatter = TimestampFormatter(
+    options.timestampFormatInRead,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
   private lazy val dateFormatter = DateFormatter(
-    options.dateFormat,
+    options.dateFormatInRead,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
@@ -196,6 +202,11 @@ class UnivocityParser(
         }
       }
 
+    case _: TimestampNTZType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        timestampNTZFormatter.parseWithoutTimeZone(datum)
+      }
+
     case _: DateType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
         try {
@@ -215,6 +226,16 @@ class UnivocityParser(
     case CalendarIntervalType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
         IntervalUtils.safeStringToInterval(UTF8String.fromString(datum))
+      }
+
+    case ym: YearMonthIntervalType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        Cast(Literal(datum), ym).eval(EmptyRow)
+      }
+
+    case dt: DayTimeIntervalType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        Cast(Literal(datum), dt).eval(EmptyRow)
       }
 
     case udt: UserDefinedType[_] =>

@@ -183,6 +183,10 @@ class DataTypeSuite extends SparkFunSuite {
     assert(!arrayType.existsRecursively(_.isInstanceOf[IntegerType]))
   }
 
+  test("SPARK-36224: Backwards compatibility test for NullType.json") {
+    assert(DataType.fromJson("\"null\"") == NullType)
+  }
+
   def checkDataTypeFromJson(dataType: DataType): Unit = {
     test(s"from Json - $dataType") {
       assert(DataType.fromJson(dataType.json) === dataType)
@@ -198,6 +202,7 @@ class DataTypeSuite extends SparkFunSuite {
   }
 
   checkDataTypeFromJson(NullType)
+  checkDataTypeFromDDL(NullType)
 
   checkDataTypeFromJson(BooleanType)
   checkDataTypeFromDDL(BooleanType)
@@ -316,7 +321,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(DecimalType.SYSTEM_DEFAULT, 16)
   checkDefaultSize(DateType, 4)
   checkDefaultSize(TimestampType, 8)
-  checkDefaultSize(TimestampWithoutTZType, 8)
+  checkDefaultSize(TimestampNTZType, 8)
   checkDefaultSize(StringType, 20)
   checkDefaultSize(BinaryType, 100)
   checkDefaultSize(ArrayType(DoubleType, true), 8)
@@ -424,6 +429,7 @@ class DataTypeSuite extends SparkFunSuite {
     i => StructField(s"col$i", IntegerType, nullable = true)
   })
 
+  checkCatalogString(NullType)
   checkCatalogString(BooleanType)
   checkCatalogString(ByteType)
   checkCatalogString(ShortType)

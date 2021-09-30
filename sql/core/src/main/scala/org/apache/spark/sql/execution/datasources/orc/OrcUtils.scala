@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -85,10 +86,44 @@ object OrcUtils extends Logging {
   }
 
   private def toCatalystSchema(schema: TypeDescription): StructType = {
+    import TypeDescription.Category
+
+    def toCatalystType(orcType: TypeDescription): DataType = {
+      orcType.getCategory match {
+        case Category.STRUCT => toStructType(orcType)
+        case Category.LIST => toArrayType(orcType)
+        case Category.MAP => toMapType(orcType)
+        case _ => CatalystSqlParser.parseDataType(orcType.toString)
+      }
+    }
+
+    def toStructType(orcType: TypeDescription): StructType = {
+      val fieldNames = orcType.getFieldNames.asScala
+      val fieldTypes = orcType.getChildren.asScala
+      val fields = new ArrayBuffer[StructField]()
+      fieldNames.zip(fieldTypes).foreach {
+        case (fieldName, fieldType) =>
+          val catalystType = toCatalystType(fieldType)
+          fields += StructField(fieldName, catalystType)
+      }
+      StructType(fields.toSeq)
+    }
+
+    def toArrayType(orcType: TypeDescription): ArrayType = {
+      val elementType = orcType.getChildren.get(0)
+      ArrayType(toCatalystType(elementType))
+    }
+
+    def toMapType(orcType: TypeDescription): MapType = {
+      val Seq(keyType, valueType) = orcType.getChildren.asScala.toSeq
+      val catalystKeyType = toCatalystType(keyType)
+      val catalystValueType = toCatalystType(valueType)
+      MapType(catalystKeyType, catalystValueType)
+    }
+
     // The Spark query engine has not completely supported CHAR/VARCHAR type yet, and here we
     // replace the orc CHAR/VARCHAR with STRING type.
-    CharVarcharUtils.replaceCharVarcharWithStringInSchema(
-      CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType])
+    CharVarcharUtils.replaceCharVarcharWithStringInSchema(toStructType(schema))
   }
 
   def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
@@ -258,5 +293,28 @@ object OrcUtils extends Logging {
     }
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
     resultSchemaString
+  }
+
+  /**
+   * Checks if `dataType` supports columnar reads.
+   *
+   * @param dataType Data type of the orc files.
+   * @param nestedColumnEnabled True if columnar reads is enabled for nested column types.
+   * @return Returns true if data type supports columnar reads.
+   */
+  def supportColumnarReads(
+      dataType: DataType,
+      nestedColumnEnabled: Boolean): Boolean = {
+    dataType match {
+      case _: AtomicType => true
+      case st: StructType if nestedColumnEnabled =>
+        st.forall(f => supportColumnarReads(f.dataType, nestedColumnEnabled))
+      case ArrayType(elementType, _) if nestedColumnEnabled =>
+        supportColumnarReads(elementType, nestedColumnEnabled)
+      case MapType(keyType, valueType, _) if nestedColumnEnabled =>
+        supportColumnarReads(keyType, nestedColumnEnabled) &&
+          supportColumnarReads(valueType, nestedColumnEnabled)
+      case _ => false
+    }
   }
 }

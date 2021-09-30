@@ -921,23 +921,28 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     assertAnalysisError(r1,
       Seq("Union can only be performed on tables with the compatible column types. " +
-        "timestamp <> double at the second column of the second table"))
+        "The second column of the second table is timestamp type which is not compatible " +
+        "with double at same column of first table"))
 
     assertAnalysisError(r2,
       Seq("Union can only be performed on tables with the compatible column types. " +
-        "timestamp <> int at the third column of the second table"))
+        "The third column of the second table is timestamp type which is not compatible " +
+        "with int at same column of first table"))
 
     assertAnalysisError(r3,
       Seq("Union can only be performed on tables with the compatible column types. " +
-        "timestamp <> float at the 4th column of the second table"))
+        "The 4th column of the second table is timestamp type which is not compatible " +
+        "with float at same column of first table"))
 
     assertAnalysisError(r4,
       Seq("Except can only be performed on tables with the compatible column types. " +
-        "timestamp <> double at the second column of the second table"))
+        "The second column of the second table is timestamp type which is not compatible " +
+        "with double at same column of first table"))
 
     assertAnalysisError(r5,
       Seq("Intersect can only be performed on tables with the compatible column types. " +
-        "timestamp <> double at the second column of the second table"))
+        "The second column of the second table is timestamp type which is not compatible " +
+        "with double at same column of first table"))
   }
 
   test("SPARK-31975: Throw user facing error when use WindowFunction directly") {
@@ -952,7 +957,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-32237: Hint in CTE") {
-    val plan = With(
+    val plan = UnresolvedWith(
       Project(
         Seq(UnresolvedAttribute("cte.a")),
         UnresolvedRelation(TableIdentifier("cte"))
@@ -1114,5 +1119,31 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       """.stripMargin),
       Seq("grouping_id() can only be used with GroupingSets/Cube/Rollup"),
       false)
+  }
+
+  test("SPARK-36275: Resolve aggregate functions should work with nested fields") {
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT c.x, SUM(c.y)
+        |FROM VALUES NAMED_STRUCT('x', 'A', 'y', 1), NAMED_STRUCT('x', 'A', 'y', 2) AS t(c)
+        |GROUP BY c.x
+        |HAVING c.x > 1
+        |""".stripMargin))
+
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT c.x, SUM(c.y)
+        |FROM VALUES NAMED_STRUCT('x', 'A', 'y', 1), NAMED_STRUCT('x', 'A', 'y', 2) AS t(c)
+        |GROUP BY c.x
+        |ORDER BY c.x
+        |""".stripMargin))
+
+    assertAnalysisError(parsePlan(
+     """
+        |SELECT c.x
+        |FROM VALUES NAMED_STRUCT('x', 'A', 'y', 1), NAMED_STRUCT('x', 'A', 'y', 2) AS t(c)
+        |GROUP BY c.x
+        |ORDER BY c.x + c.y
+        |""".stripMargin), "cannot resolve 'c.y' given input columns: [x]" :: Nil)
   }
 }

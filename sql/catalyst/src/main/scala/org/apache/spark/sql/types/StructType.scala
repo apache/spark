@@ -27,6 +27,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
+import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.util.{truncatedString, StringUtils}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -317,66 +318,69 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   private[sql] def findNestedField(
       fieldNames: Seq[String],
       includeCollections: Boolean = false,
-      resolver: Resolver = _ == _): Option[(Seq[String], StructField)] = {
-    def prettyFieldName(nameParts: Seq[String]): String = {
-      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-      nameParts.quoted
-    }
+      resolver: Resolver = _ == _,
+      context: Origin = Origin()): Option[(Seq[String], StructField)] = {
 
     def findField(
         struct: StructType,
         searchPath: Seq[String],
         normalizedPath: Seq[String]): Option[(Seq[String], StructField)] = {
-      searchPath.headOption.flatMap { searchName =>
-        val found = struct.fields.filter(f => resolver(searchName, f.name))
-        if (found.length > 1) {
-          val names = found.map(f => prettyFieldName(normalizedPath :+ f.name))
-            .mkString("[", ", ", " ]")
-          throw QueryCompilationErrors.ambiguousFieldNameError(
-            prettyFieldName(normalizedPath :+ searchName), names)
-        } else if (found.isEmpty) {
-          None
+      assert(searchPath.nonEmpty)
+      val searchName = searchPath.head
+      val found = struct.fields.filter(f => resolver(searchName, f.name))
+      if (found.length > 1) {
+        throw QueryCompilationErrors.ambiguousFieldNameError(fieldNames, found.length, context)
+      } else if (found.isEmpty) {
+        None
+      } else {
+        val field = found.head
+        val currentPath = normalizedPath :+ field.name
+        val newSearchPath = searchPath.tail
+        if (newSearchPath.isEmpty) {
+          Some(normalizedPath -> field)
         } else {
-          val field = found.head
-          (searchPath.tail, field.dataType, includeCollections) match {
-            case (Seq(), _, _) =>
-              Some(normalizedPath -> field)
+          (newSearchPath, field.dataType) match {
+            case (_, s: StructType) =>
+              findField(s, newSearchPath, currentPath)
 
-            case (names, struct: StructType, _) =>
-              findField(struct, names, normalizedPath :+ field.name)
+            case _ if !includeCollections =>
+              throw QueryCompilationErrors.invalidFieldName(fieldNames, currentPath, context)
 
-            case (_, _, false) =>
-              None // types nested in maps and arrays are not used
+            case (Seq("key", rest @ _*), MapType(keyType, _, _)) =>
+              findFieldInCollection(keyType, false, rest, currentPath, "key")
 
-            case (Seq("key"), MapType(keyType, _, _), true) =>
-              // return the key type as a struct field to include nullability
-              Some((normalizedPath :+ field.name) -> StructField("key", keyType, nullable = false))
+            case (Seq("value", rest @ _*), MapType(_, valueType, isNullable)) =>
+              findFieldInCollection(valueType, isNullable, rest, currentPath, "value")
 
-            case (Seq("key", names @ _*), MapType(struct: StructType, _, _), true) =>
-              findField(struct, names, normalizedPath ++ Seq(field.name, "key"))
-
-            case (Seq("value"), MapType(_, valueType, isNullable), true) =>
-              // return the value type as a struct field to include nullability
-              Some((normalizedPath :+ field.name) ->
-                StructField("value", valueType, nullable = isNullable))
-
-            case (Seq("value", names @ _*), MapType(_, struct: StructType, _), true) =>
-              findField(struct, names, normalizedPath ++ Seq(field.name, "value"))
-
-            case (Seq("element"), ArrayType(elementType, isNullable), true) =>
-              // return the element type as a struct field to include nullability
-              Some((normalizedPath :+ field.name) ->
-                StructField("element", elementType, nullable = isNullable))
-
-            case (Seq("element", names @ _*), ArrayType(struct: StructType, _), true) =>
-              findField(struct, names, normalizedPath ++ Seq(field.name, "element"))
+            case (Seq("element", rest @ _*), ArrayType(elementType, isNullable)) =>
+              findFieldInCollection(elementType, isNullable, rest, currentPath, "element")
 
             case _ =>
-              None
+              throw QueryCompilationErrors.invalidFieldName(fieldNames, currentPath, context)
           }
         }
       }
     }
+
+    def findFieldInCollection(
+        dt: DataType,
+        nullable: Boolean,
+        searchPath: Seq[String],
+        normalizedPath: Seq[String],
+        collectionFieldName: String): Option[(Seq[String], StructField)] = {
+      if (searchPath.isEmpty) {
+        Some(normalizedPath -> StructField(collectionFieldName, dt, nullable))
+      } else {
+        val newPath = normalizedPath :+ collectionFieldName
+        dt match {
+          case s: StructType =>
+            findField(s, searchPath, newPath)
+          case _ =>
+            throw QueryCompilationErrors.invalidFieldName(fieldNames, newPath, context)
+        }
+      }
+    }
+
     findField(this, fieldNames, Nil)
   }
 
@@ -555,52 +559,81 @@ object StructType extends AbstractDataType {
       case _ => dt
     }
 
+  /**
+   * This leverages `merge` to merge data types for UNION operator by specializing
+   * the handling of struct types to follow UNION semantics.
+   */
+  private[sql] def unionLikeMerge(left: DataType, right: DataType): DataType =
+    mergeInternal(left, right, (s1: StructType, s2: StructType) => {
+      val leftFields = s1.fields
+      val rightFields = s2.fields
+      require(leftFields.size == rightFields.size, "To merge nullability, " +
+        "two structs must have same number of fields.")
+
+      val newFields = leftFields.zip(rightFields).map {
+        case (leftField, rightField) =>
+          leftField.copy(
+            dataType = unionLikeMerge(leftField.dataType, rightField.dataType),
+            nullable = leftField.nullable || rightField.nullable)
+      }.toSeq
+      StructType(newFields)
+    })
+
   private[sql] def merge(left: DataType, right: DataType): DataType =
+    mergeInternal(left, right, (s1: StructType, s2: StructType) => {
+      val leftFields = s1.fields
+      val rightFields = s2.fields
+      val newFields = mutable.ArrayBuffer.empty[StructField]
+
+      val rightMapped = fieldsMap(rightFields)
+      leftFields.foreach {
+        case leftField @ StructField(leftName, leftType, leftNullable, _) =>
+          rightMapped.get(leftName)
+            .map { case rightField @ StructField(rightName, rightType, rightNullable, _) =>
+              try {
+                leftField.copy(
+                  dataType = merge(leftType, rightType),
+                  nullable = leftNullable || rightNullable)
+              } catch {
+                case NonFatal(e) =>
+                  throw QueryExecutionErrors.failedMergingFieldsError(leftName, rightName, e)
+              }
+            }
+            .orElse {
+              Some(leftField)
+            }
+            .foreach(newFields += _)
+      }
+
+      val leftMapped = fieldsMap(leftFields)
+      rightFields
+        .filterNot(f => leftMapped.get(f.name).nonEmpty)
+        .foreach { f =>
+          newFields += f
+        }
+
+      StructType(newFields.toSeq)
+    })
+
+  private def mergeInternal(
+      left: DataType,
+      right: DataType,
+      mergeStruct: (StructType, StructType) => StructType): DataType =
     (left, right) match {
       case (ArrayType(leftElementType, leftContainsNull),
       ArrayType(rightElementType, rightContainsNull)) =>
         ArrayType(
-          merge(leftElementType, rightElementType),
+          mergeInternal(leftElementType, rightElementType, mergeStruct),
           leftContainsNull || rightContainsNull)
 
       case (MapType(leftKeyType, leftValueType, leftContainsNull),
       MapType(rightKeyType, rightValueType, rightContainsNull)) =>
         MapType(
-          merge(leftKeyType, rightKeyType),
-          merge(leftValueType, rightValueType),
+          mergeInternal(leftKeyType, rightKeyType, mergeStruct),
+          mergeInternal(leftValueType, rightValueType, mergeStruct),
           leftContainsNull || rightContainsNull)
 
-      case (StructType(leftFields), StructType(rightFields)) =>
-        val newFields = mutable.ArrayBuffer.empty[StructField]
-
-        val rightMapped = fieldsMap(rightFields)
-        leftFields.foreach {
-          case leftField @ StructField(leftName, leftType, leftNullable, _) =>
-            rightMapped.get(leftName)
-              .map { case rightField @ StructField(rightName, rightType, rightNullable, _) =>
-                try {
-                  leftField.copy(
-                    dataType = merge(leftType, rightType),
-                    nullable = leftNullable || rightNullable)
-                } catch {
-                  case NonFatal(e) =>
-                    throw QueryExecutionErrors.failedMergingFieldsError(leftName, rightName, e)
-                }
-              }
-              .orElse {
-                Some(leftField)
-              }
-              .foreach(newFields += _)
-        }
-
-        val leftMapped = fieldsMap(leftFields)
-        rightFields
-          .filterNot(f => leftMapped.get(f.name).nonEmpty)
-          .foreach { f =>
-            newFields += f
-          }
-
-        StructType(newFields.toSeq)
+      case (s1: StructType, s2: StructType) => mergeStruct(s1, s2)
 
       case (DecimalType.Fixed(leftPrecision, leftScale),
         DecimalType.Fixed(rightPrecision, rightScale)) =>
@@ -619,6 +652,12 @@ object StructType extends AbstractDataType {
 
       case (leftUdt: UserDefinedType[_], rightUdt: UserDefinedType[_])
         if leftUdt.userClass == rightUdt.userClass => leftUdt
+
+      case (YearMonthIntervalType(lstart, lend), YearMonthIntervalType(rstart, rend)) =>
+        YearMonthIntervalType(Math.min(lstart, rstart).toByte, Math.max(lend, rend).toByte)
+
+      case (DayTimeIntervalType(lstart, lend), DayTimeIntervalType(rstart, rend)) =>
+        DayTimeIntervalType(Math.min(lstart, rstart).toByte, Math.max(lend, rend).toByte)
 
       case (leftType, rightType) if leftType == rightType =>
         leftType

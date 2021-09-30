@@ -60,10 +60,17 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         |    "watermark" : "2016-12-05T20:54:20.827Z"
         |  },
         |  "stateOperators" : [ {
+        |    "operatorName" : "op1",
         |    "numRowsTotal" : 0,
         |    "numRowsUpdated" : 1,
+        |    "allUpdatesTimeMs" : 1,
+        |    "numRowsRemoved" : 2,
+        |    "allRemovalsTimeMs" : 34,
+        |    "commitTimeMs" : 23,
         |    "memoryUsedBytes" : 3,
         |    "numRowsDroppedByWatermark" : 0,
+        |    "numShufflePartitions" : 2,
+        |    "numStateStoreInstances" : 2,
         |    "customMetrics" : {
         |      "loadedMapCacheHitCount" : 1,
         |      "loadedMapCacheMissCount" : 0,
@@ -112,10 +119,17 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
          |    "total" : 0
          |  },
          |  "stateOperators" : [ {
+         |    "operatorName" : "op2",
          |    "numRowsTotal" : 0,
          |    "numRowsUpdated" : 1,
+         |    "allUpdatesTimeMs" : 1,
+         |    "numRowsRemoved" : 2,
+         |    "allRemovalsTimeMs" : 34,
+         |    "commitTimeMs" : 23,
          |    "memoryUsedBytes" : 2,
-         |    "numRowsDroppedByWatermark" : 0
+         |    "numRowsDroppedByWatermark" : 0,
+         |    "numShufflePartitions" : 2,
+         |    "numStateStoreInstances" : 2
          |  } ],
          |  "sources" : [ {
          |    "description" : "source",
@@ -323,8 +337,10 @@ object StreamingQueryStatusAndProgressSuite {
       "min" -> "2016-12-05T20:54:20.827Z",
       "avg" -> "2016-12-05T20:54:20.827Z",
       "watermark" -> "2016-12-05T20:54:20.827Z").asJava),
-    stateOperators = Array(new StateOperatorProgress(
-      numRowsTotal = 0, numRowsUpdated = 1, memoryUsedBytes = 3, numRowsDroppedByWatermark = 0,
+    stateOperators = Array(new StateOperatorProgress(operatorName = "op1",
+      numRowsTotal = 0, numRowsUpdated = 1, allUpdatesTimeMs = 1, numRowsRemoved = 2,
+      allRemovalsTimeMs = 34, commitTimeMs = 23, memoryUsedBytes = 3, numRowsDroppedByWatermark = 0,
+      numShufflePartitions = 2, numStateStoreInstances = 2,
       customMetrics = new java.util.HashMap(Map("stateOnCurrentVersionSizeBytes" -> 2L,
         "loadedMapCacheHitCount" -> 1L, "loadedMapCacheMissCount" -> 0L)
         .mapValues(long2Long).toMap.asJava)
@@ -356,8 +372,10 @@ object StreamingQueryStatusAndProgressSuite {
     durationMs = new java.util.HashMap(Map("total" -> 0L).mapValues(long2Long).toMap.asJava),
     // empty maps should be handled correctly
     eventTime = new java.util.HashMap(Map.empty[String, String].asJava),
-    stateOperators = Array(new StateOperatorProgress(
-      numRowsTotal = 0, numRowsUpdated = 1, memoryUsedBytes = 2, numRowsDroppedByWatermark = 0)),
+    stateOperators = Array(new StateOperatorProgress(operatorName = "op2",
+      numRowsTotal = 0, numRowsUpdated = 1, allUpdatesTimeMs = 1, numRowsRemoved = 2,
+      allRemovalsTimeMs = 34, commitTimeMs = 23, memoryUsedBytes = 2, numRowsDroppedByWatermark = 0,
+      numShufflePartitions = 2, numStateStoreInstances = 2)),
     sources = Array(
       new SourceProgress(
         description = "source",

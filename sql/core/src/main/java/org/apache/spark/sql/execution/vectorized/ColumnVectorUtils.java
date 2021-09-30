@@ -94,7 +94,7 @@ public class ColumnVectorUtils {
         col.getChild(1).putLongs(0, capacity, c.microseconds);
       } else if (t instanceof DateType) {
         col.putInts(0, capacity, row.getInt(fieldIdx));
-      } else if (t instanceof TimestampType) {
+      } else if (t instanceof TimestampType || t instanceof TimestampNTZType) {
         col.putLongs(0, capacity, row.getLong(fieldIdx));
       } else {
         throw new RuntimeException(String.format("DataType %s is not supported" +

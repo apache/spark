@@ -46,8 +46,8 @@ import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.util.LongAccumulator;
-import static org.apache.spark.sql.functions.col;
-import static org.apache.spark.sql.functions.expr;
+
+import static org.apache.spark.sql.functions.*;
 import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaDatasetSuite implements Serializable {
@@ -158,6 +158,57 @@ public class JavaDatasetSuite implements Serializable {
 
     int reduced = ds.reduce((ReduceFunction<Integer>) (v1, v2) -> v1 + v2);
     Assert.assertEquals(6, reduced);
+  }
+
+  @Test
+  public void testInitialStateFlatMapGroupsWithState() {
+    List<String> data = Arrays.asList("a", "foo", "bar");
+    Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
+    Dataset<Tuple2<Integer, Long>> initialStateDS = spark.createDataset(
+      Arrays.asList(new Tuple2<Integer, Long>(2, 2L)),
+      Encoders.tuple(Encoders.INT(), Encoders.LONG())
+    );
+
+    KeyValueGroupedDataset<Integer, Tuple2<Integer, Long>> kvInitStateDS =
+      initialStateDS.groupByKey(
+        (MapFunction<Tuple2<Integer, Long>, Integer>) f -> f._1, Encoders.INT());
+
+    KeyValueGroupedDataset<Integer, Long> kvInitStateMappedDS = kvInitStateDS.mapValues(
+      (MapFunction<Tuple2<Integer, Long>, Long>) f -> f._2,
+      Encoders.LONG()
+    );
+
+    KeyValueGroupedDataset<Integer, String> grouped =
+      ds.groupByKey((MapFunction<String, Integer>) String::length, Encoders.INT());
+
+    Dataset<String> flatMapped2 = grouped.flatMapGroupsWithState(
+      (FlatMapGroupsWithStateFunction<Integer, String, Long, String>) (key, values, s) -> {
+        StringBuilder sb = new StringBuilder(key.toString());
+        while (values.hasNext()) {
+          sb.append(values.next());
+        }
+        return Collections.singletonList(sb.toString()).iterator();
+      },
+      OutputMode.Append(),
+      Encoders.LONG(),
+      Encoders.STRING(),
+      GroupStateTimeout.NoTimeout(),
+      kvInitStateMappedDS);
+
+    Assert.assertEquals(asSet("1a", "2", "3foobar"), toSet(flatMapped2.collectAsList()));
+    Dataset<String> mapped2 = grouped.mapGroupsWithState(
+      (MapGroupsWithStateFunction<Integer, String, Long, String>) (key, values, s) -> {
+        StringBuilder sb = new StringBuilder(key.toString());
+        while (values.hasNext()) {
+          sb.append(values.next());
+        }
+        return sb.toString();
+      },
+      Encoders.LONG(),
+      Encoders.STRING(),
+      GroupStateTimeout.NoTimeout(),
+      kvInitStateMappedDS);
+    Assert.assertEquals(asSet("1a", "2", "3foobar"), toSet(mapped2.collectAsList()));
   }
 
   @Test
@@ -337,6 +388,60 @@ public class JavaDatasetSuite implements Serializable {
       Encoders.STRING());
 
     Assert.assertEquals(asSet("1a#2", "3foobar#6", "5#10"), toSet(cogrouped.collectAsList()));
+  }
+
+  @Test
+  public void testObservation() {
+    // SPARK-34806: tests the Observation Java API and Dataset.observe(Observation, Column, Column*)
+    Observation namedObservation = new Observation("named");
+    Observation unnamedObservation = new Observation();
+
+    Dataset<Long> df = spark
+      .range(100)
+      .observe(
+        namedObservation,
+        min(col("id")).as("min_val"),
+        max(col("id")).as("max_val"),
+        sum(col("id")).as("sum_val"),
+        count(when(pmod(col("id"), lit(2)).$eq$eq$eq(0), 1)).as("num_even")
+      )
+      .observe(
+        unnamedObservation,
+        avg(col("id")).cast("int").as("avg_val")
+      );
+
+    df.collect();
+    Map<String, Object> namedMetrics = null;
+    Map<String, Object> unnamedMetrics = null;
+
+    try {
+      namedMetrics = namedObservation.getAsJava();
+      unnamedMetrics = unnamedObservation.getAsJava();
+    } catch (InterruptedException e) {
+      Assert.fail();
+    }
+    Map<String, Object> expectedNamedMetrics = new HashMap<String, Object>() {{
+      put("min_val", 0L);
+      put("max_val", 99L);
+      put("sum_val", 4950L);
+      put("num_even", 50L);
+    }};
+    Assert.assertEquals(expectedNamedMetrics, namedMetrics);
+
+    Map<String, Object> expectedUnnamedMetrics = new HashMap<String, Object>() {{
+      put("avg_val", 49);
+    }};
+    Assert.assertEquals(expectedUnnamedMetrics, unnamedMetrics);
+
+    // we can get the result multiple times
+    try {
+      namedMetrics = namedObservation.getAsJava();
+      unnamedMetrics = unnamedObservation.getAsJava();
+    } catch (InterruptedException e) {
+      Assert.fail();
+    }
+    Assert.assertEquals(expectedNamedMetrics, namedMetrics);
+    Assert.assertEquals(expectedUnnamedMetrics, unnamedMetrics);
   }
 
   @Test
@@ -1496,7 +1601,7 @@ public class JavaDatasetSuite implements Serializable {
     A("www.elgoog.com"),
     B("www.google.com");
 
-    private String url;
+    private final String url;
 
     MyEnum(String url) {
       this.url = url;
@@ -1504,10 +1609,6 @@ public class JavaDatasetSuite implements Serializable {
 
     public String getUrl() {
       return url;
-    }
-
-    public void setUrl(String url) {
-      this.url = url;
     }
   }
 
@@ -1601,7 +1702,7 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  public class CircularReference3Bean implements Serializable {
+  public static class CircularReference3Bean implements Serializable {
     private CircularReference3Bean[] child;
 
     public CircularReference3Bean[] getChild() {

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Cast}
 import org.apache.spark.sql.catalyst.expressions.objects.{DecodeUsingSerializer, EncodeUsingSerializer}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -115,9 +116,9 @@ object Encoders {
 
   /**
    * Creates an encoder that serializes instances of the `java.time.LocalDateTime` class
-   * to the internal representation of nullable Catalyst's DateType.
+   * to the internal representation of nullable Catalyst's TimestampNTZType.
    *
-   * @since 3.2.0
+   * @since 3.3.0
    */
   def LOCALDATETIME: Encoder[java.time.LocalDateTime] = ExpressionEncoder()
 
@@ -224,16 +225,14 @@ object Encoders {
   /** Throws an exception if T is not a public class. */
   private def validatePublicClass[T: ClassTag](): Unit = {
     if (!Modifier.isPublic(classTag[T].runtimeClass.getModifiers)) {
-      throw new UnsupportedOperationException(
-        s"${classTag[T].runtimeClass.getName} is not a public class. " +
-          "Only public classes are supported.")
+      throw QueryExecutionErrors.notPublicClassError(classTag[T].runtimeClass.getName)
     }
   }
 
   /** A way to construct encoders using generic serializers. */
   private def genericSerializer[T: ClassTag](useKryo: Boolean): Encoder[T] = {
     if (classTag[T].runtimeClass.isPrimitive) {
-      throw new UnsupportedOperationException("Primitive types are not supported.")
+      throw QueryExecutionErrors.primitiveTypesNotSupportedError()
     }
 
     validatePublicClass[T]()

@@ -87,7 +87,7 @@ Condition : (isnotnull(s_store_sk#6) AND isnotnull(s_zip#8))
 
 (10) BroadcastExchange
 Input [3]: [s_store_sk#6, s_store_name#7, s_zip#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#9]
 
 (11) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ss_store_sk#1]
@@ -145,7 +145,7 @@ Input [2]: [c_current_addr_sk#13, c_preferred_cust_flag#14]
 
 (23) BroadcastExchange
 Input [1]: [c_current_addr_sk#13]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#15]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#15]
 
 (24) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ca_address_sk#11]
@@ -184,7 +184,7 @@ Input [2]: [ca_zip#20, cnt#21]
 
 (31) BroadcastExchange
 Input [1]: [ca_zip#20]
-Arguments: HashedRelationBroadcastMode(List(coalesce(input[0, string, true], ), isnull(input[0, string, true])),false), [id=#22]
+Arguments: HashedRelationBroadcastMode(List(coalesce(input[0, string, true], ), isnull(input[0, string, true])),false,true), [id=#22]
 
 (32) BroadcastHashJoin [codegen id : 6]
 Left keys [2]: [coalesce(substr(ca_zip#10, 1, 5), ), isnull(substr(ca_zip#10, 1, 5))]
@@ -215,7 +215,7 @@ Results [1]: [ca_zip#23]
 
 (37) BroadcastExchange
 Input [1]: [ca_zip#23]
-Arguments: HashedRelationBroadcastMode(List(substr(input[0, string, true], 1, 2)),false), [id=#25]
+Arguments: HashedRelationBroadcastMode(List(substr(input[0, string, true], 1, 2)),false,false), [id=#25]
 
 (38) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [substr(s_zip#8, 1, 2)]
@@ -278,6 +278,6 @@ Input [3]: [d_date_sk#5, d_year#31, d_qoy#32]
 
 (48) BroadcastExchange
 Input [1]: [d_date_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#33]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#33]
 
 

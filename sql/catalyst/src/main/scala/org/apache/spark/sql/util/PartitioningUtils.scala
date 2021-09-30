@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.util
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
 import org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CharType, StructType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -42,7 +42,7 @@ private[sql] object PartitioningUtils {
     val rawSchema = CharVarcharUtils.getRawSchema(partCols)
     val normalizedPartSpec = partitionSpec.toSeq.map { case (key, value) =>
       val normalizedFiled = rawSchema.find(f => resolver(f.name, key)).getOrElse {
-        throw new AnalysisException(s"$key is not a valid partition column in table $tblName.")
+        throw QueryCompilationErrors.invalidPartitionColumnKeyInTableError(key, tblName)
       }
 
       val normalizedVal =
@@ -92,10 +92,8 @@ private[sql] object PartitioningUtils {
       partitionColumnNames: Seq[String]): Unit = {
     val defined = partitionColumnNames.sorted
     if (spec.keys.toSeq.sorted != defined) {
-      throw new AnalysisException(
-        s"Partition spec is invalid. The spec (${spec.keys.mkString(", ")}) must match " +
-        s"the partition spec (${partitionColumnNames.mkString(", ")}) defined in " +
-        s"table '$tableName'")
+      throw QueryCompilationErrors.invalidPartitionSpecError(spec.keys.mkString(", "),
+        partitionColumnNames, tableName)
     }
   }
 }

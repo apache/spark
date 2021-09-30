@@ -400,12 +400,15 @@ public class UTF8StringSuite {
   public void split() {
     UTF8String[] negativeAndZeroLimitCase =
       new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi"), fromString("")};
-    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), 0),
-      negativeAndZeroLimitCase));
-    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), -1),
-      negativeAndZeroLimitCase));
-    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), 2),
-      new UTF8String[]{fromString("ab"), fromString("def,ghi,")}));
+    assertArrayEquals(
+      negativeAndZeroLimitCase,
+      fromString("ab,def,ghi,").split(fromString(","), 0));
+    assertArrayEquals(
+      negativeAndZeroLimitCase,
+      fromString("ab,def,ghi,").split(fromString(","), -1));
+    assertArrayEquals(
+      new UTF8String[]{fromString("ab"), fromString("def,ghi,")},
+      fromString("ab,def,ghi,").split(fromString(","), 2));
   }
 
   @Test
@@ -852,8 +855,8 @@ public class UTF8StringSuite {
     };
     byte[] c = new byte[1];
 
-    for (int i = 0; i < wrongFirstBytes.length; ++i) {
-      c[0] = (byte)wrongFirstBytes[i];
+    for (int wrongFirstByte : wrongFirstBytes) {
+      c[0] = (byte) wrongFirstByte;
       assertEquals(1, fromBytes(c).numChars());
     }
   }

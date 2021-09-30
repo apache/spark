@@ -105,6 +105,7 @@ Spark {{site.SPARK_VERSION}} works with Python 3.6+. It can use the standard CPy
 so C libraries like NumPy can be used. It also works with PyPy 2.3+.
 
 Python 2, 3.4 and 3.5 supports were removed in Spark 3.1.0.
+Python 3.6 support is deprecated in Spark 3.2.0.
 
 Spark applications in Python can either be run with the `bin/spark-submit` script which includes Spark at runtime, or by including it in your setup.py as:
 
@@ -177,8 +178,8 @@ JavaSparkContext sc = new JavaSparkContext(conf);
 
 <div data-lang="python"  markdown="1">
 
-The first thing a Spark program must do is to create a [SparkContext](api/python/pyspark.html#pyspark.SparkContext) object, which tells Spark
-how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/python/pyspark.html#pyspark.SparkConf) object
+The first thing a Spark program must do is to create a [SparkContext](api/python/reference/api/pyspark.SparkContext.html#pyspark.SparkContext) object, which tells Spark
+how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/python/reference/api/pyspark.SparkConf.html#pyspark.SparkConf) object
 that contains information about your application.
 
 {% highlight python %}
@@ -240,12 +241,12 @@ For a complete list of options, run `spark-shell --help`. Behind the scenes,
 In the PySpark shell, a special interpreter-aware SparkContext is already created for you, in the
 variable called `sc`. Making your own SparkContext will not work. You can set which master the
 context connects to using the `--master` argument, and you can add Python .zip, .egg or .py files
-to the runtime path by passing a comma-separated list to `--py-files`. You can also add dependencies
+to the runtime path by passing a comma-separated list to `--py-files`. For third-party Python dependencies,
+see [Python Package Management](api/python/user_guide/python_packaging.html). You can also add dependencies
 (e.g. Spark Packages) to your shell session by supplying a comma-separated list of Maven coordinates
 to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. Sonatype)
-can be passed to the `--repositories` argument. Any Python dependencies a Spark package has (listed in
-the requirements.txt of that package) must be manually installed using `pip` when necessary.
-For example, to run `bin/pyspark` on exactly four cores, use:
+can be passed to the `--repositories` argument. For example, to run
+`bin/pyspark` on exactly four cores, use:
 
 {% highlight bash %}
 $ ./bin/pyspark --master local[4]
@@ -948,7 +949,7 @@ The following table lists some of the common transformations supported by Spark.
 RDD API doc
 ([Scala](api/scala/org/apache/spark/rdd/RDD.html),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
- [Python](api/python/pyspark.html#pyspark.RDD),
+ [Python](api/python/reference/api/pyspark.RDD.html#pyspark.RDD),
  [R](api/R/index.html))
 and pair RDD functions doc
 ([Scala](api/scala/org/apache/spark/rdd/PairRDDFunctions.html),
@@ -1062,7 +1063,7 @@ The following table lists some of the common actions supported by Spark. Refer t
 RDD API doc
 ([Scala](api/scala/org/apache/spark/rdd/RDD.html),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
- [Python](api/python/pyspark.html#pyspark.RDD),
+ [Python](api/python/reference/api/pyspark.RDD.html#pyspark.RDD),
  [R](api/R/index.html))
 
 and pair RDD functions doc
@@ -1210,7 +1211,7 @@ replicate it across nodes.
 These levels are set by passing a
 `StorageLevel` object ([Scala](api/scala/org/apache/spark/storage/StorageLevel.html),
 [Java](api/java/index.html?org/apache/spark/storage/StorageLevel.html),
-[Python](api/python/pyspark.html#pyspark.StorageLevel))
+[Python](api/python/reference/api/pyspark.StorageLevel.html#pyspark.StorageLevel))
 to `persist()`. The `cache()` method is a shorthand for using the default storage level,
 which is `StorageLevel.MEMORY_ONLY` (store deserialized objects in memory). The full set of
 storage levels is:
@@ -1515,7 +1516,7 @@ Accumulator<id=0, value=0>
 {% endhighlight %}
 
 While this code used the built-in support for accumulators of type Int, programmers can also
-create their own types by subclassing [AccumulatorParam](api/python/pyspark.html#pyspark.AccumulatorParam).
+create their own types by subclassing [AccumulatorParam](api/python/reference/api/pyspark.AccumulatorParam.html#pyspark.AccumulatorParam).
 The AccumulatorParam interface has two methods: `zero` for providing a "zero value" for your data
 type, and `addInPlace` for adding two values together. For example, supposing we had a `Vector` class
 representing mathematical vectors, we could write:

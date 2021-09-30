@@ -23,7 +23,7 @@ import org.scalatest.Tag
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
+import org.apache.spark.sql.catalyst.analysis.{GetViewColumnByNameAndOrdinal, SimpleAnalyzer}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -130,6 +130,13 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
           splitConjunctivePredicates(condition.get).map(rewriteBinaryComparison)
             .sortBy(_.hashCode()).reduce(And)
         Join(left, right, newJoinType, Some(newCondition), hint)
+      case Project(projectList, child) =>
+        val projList = projectList.map { e =>
+          e.transformUp {
+            case g: GetViewColumnByNameAndOrdinal => g.copy(viewDDL = None)
+          }
+        }.asInstanceOf[Seq[NamedExpression]]
+        Project(projList, child)
     }
   }
 

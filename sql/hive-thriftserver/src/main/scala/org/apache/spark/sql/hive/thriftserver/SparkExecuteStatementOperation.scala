@@ -121,7 +121,7 @@ private[hive] class SparkExecuteStatementOperation(
           false,
           timeFormatters)
       case _: ArrayType | _: StructType | _: MapType | _: UserDefinedType[_] |
-          _: YearMonthIntervalType | _: DayTimeIntervalType | _: TimestampWithoutTZType =>
+          _: AnsiIntervalType | _: TimestampNTZType =>
         to += toHiveString((from.get(ordinal), dataTypes(ordinal)), false, timeFormatters)
     }
   }
@@ -185,11 +185,12 @@ private[hive] class SparkExecuteStatementOperation(
 
   override def runInternal(): Unit = {
     setState(OperationState.PENDING)
-    logInfo(s"Submitting query '$statement' with $statementId")
+    val redactedStatement = SparkUtils.redact(sqlContext.conf.stringRedactionPattern, statement)
+    logInfo(s"Submitting query '$redactedStatement' with $statementId")
     HiveThriftServer2.eventManager.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
-      statement,
+      redactedStatement,
       statementId,
       parentSession.getUsername)
     setHasResultSet(true) // avoid no resultset for async run
@@ -375,11 +376,10 @@ object SparkExecuteStatementOperation {
   def getTableSchema(structType: StructType): TableSchema = {
     val schema = structType.map { field =>
       val attrTypeString = field.dataType match {
-        case NullType => "void"
         case CalendarIntervalType => StringType.catalogString
         case _: YearMonthIntervalType => "interval_year_month"
         case _: DayTimeIntervalType => "interval_day_time"
-        case _: TimestampWithoutTZType => "timestamp"
+        case _: TimestampNTZType => "timestamp"
         case other => other.catalogString
       }
       new FieldSchema(field.name, attrTypeString, field.getComment.getOrElse(""))

@@ -587,12 +587,8 @@ object Decimal {
     }
   }
 
-  private def calculatePrecision(bigDecimal: JavaBigDecimal): Int = {
-    if (bigDecimal.scale < 0) {
+  private def numDigitsInIntegralPart(bigDecimal: JavaBigDecimal): Int = {
       bigDecimal.precision - bigDecimal.scale
-    } else {
-      bigDecimal.precision
-    }
   }
 
   private def stringToJavaBigDecimal(str: UTF8String): JavaBigDecimal = {
@@ -606,7 +602,7 @@ object Decimal {
       val bigDecimal = stringToJavaBigDecimal(str)
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
       // For example: Decimal("6.0790316E+25569151")
-      if (calculatePrecision(bigDecimal) > DecimalType.MAX_PRECISION) {
+      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION) {
         null
       } else {
         Decimal(bigDecimal)
@@ -622,7 +618,7 @@ object Decimal {
       val bigDecimal = stringToJavaBigDecimal(str)
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
       // For example: Decimal("6.0790316E+25569151")
-      if (calculatePrecision(bigDecimal) > DecimalType.MAX_PRECISION) {
+      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION) {
         throw QueryExecutionErrors.outOfDecimalTypeRangeError(str)
       } else {
         Decimal(bigDecimal)

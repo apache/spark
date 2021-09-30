@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, stringToInterval}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{DataTypeTestUtils, DayTimeIntervalType, Decimal, DecimalType, YearMonthIntervalType}
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, numericTypes, yearMonthIntervalTypes}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -325,7 +325,6 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkException(days = Int.MaxValue)
   }
 
-  // TODO(SPARK-35778): Check multiply/divide of year-month intervals of any fields by numeric
   test("SPARK-34824: multiply year-month interval by numeric") {
     Seq(
       (Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
@@ -361,7 +360,6 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  // TODO(SPARK-35728): Check multiply/divide of day-time intervals of any fields by numeric
   test("SPARK-34850: multiply day-time interval by numeric") {
     Seq(
       (Duration.ofHours(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
@@ -397,7 +395,6 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  // TODO(SPARK-35778): Check multiply/divide of year-month intervals of any fields by numeric
   test("SPARK-34868: divide year-month interval by numeric") {
     Seq(
       (Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
@@ -433,7 +430,6 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  // TODO(SPARK-35728): Check multiply/divide of day-time intervals of any fields by numeric
   test("SPARK-34875: divide day-time interval by numeric") {
     Seq(
       (Duration.ofDays(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
@@ -534,5 +530,135 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkImplicitEvaluation(MakeYMInterval(Literal(1L), Literal(-1L)), 11)
     checkImplicitEvaluation(MakeYMInterval(Literal(1d), Literal(-1L)), 11)
     checkImplicitEvaluation(MakeYMInterval(Literal(1.1), Literal(-1L)), 11)
+  }
+
+  test("SPARK-35728: Check multiply/divide of day-time intervals of any fields by numeric") {
+    Seq(
+      ((Duration.ofMinutes(0), 10),
+        Array(Duration.ofDays(0), Duration.ofHours(0), Duration.ofMinutes(0),
+          Duration.ofSeconds(0), Duration.ofHours(0), Duration.ofMinutes(0),
+          Duration.ofSeconds(0), Duration.ofMinutes(0), Duration.ofSeconds(0),
+          Duration.ofSeconds(0)),
+        Array(Duration.ofDays(0), Duration.ofHours(0), Duration.ofMinutes(0),
+          Duration.ofSeconds(0), Duration.ofHours(0), Duration.ofMinutes(0),
+          Duration.ofSeconds(0), Duration.ofMinutes(0), Duration.ofSeconds(0),
+          Duration.ofSeconds(0))),
+      ((Duration.ofSeconds(86400 + 3600 + 60 + 1), 1L),
+        Array(Duration.ofSeconds(86400), Duration.ofSeconds(90000),
+          Duration.ofSeconds(90060), Duration.ofSeconds(90061),
+          Duration.ofSeconds(90000), Duration.ofSeconds(90060),
+          Duration.ofSeconds(90061), Duration.ofSeconds(90060),
+          Duration.ofSeconds(90061), Duration.ofSeconds(90061)),
+        Array(Duration.ofSeconds(86400), Duration.ofSeconds(90000),
+          Duration.ofSeconds(90060), Duration.ofSeconds(90061),
+          Duration.ofSeconds(90000), Duration.ofSeconds(90060),
+          Duration.ofSeconds(90061), Duration.ofSeconds(90060),
+          Duration.ofSeconds(90061), Duration.ofSeconds(90061))),
+      ((Duration.ofSeconds(86400 + 3600 + 60 + 1), -1.toByte),
+        Array(Duration.ofSeconds(-86400), Duration.ofSeconds(-90000),
+          Duration.ofSeconds(-90060), Duration.ofSeconds(-90061),
+          Duration.ofSeconds(-90000), Duration.ofSeconds(-90060),
+          Duration.ofSeconds(-90061), Duration.ofSeconds(-90060),
+          Duration.ofSeconds(-90061), Duration.ofSeconds(-90061)),
+        Array(Duration.ofSeconds(-86400), Duration.ofSeconds(-90000),
+          Duration.ofSeconds(-90060), Duration.ofSeconds(-90061),
+          Duration.ofSeconds(-90000), Duration.ofSeconds(-90060),
+          Duration.ofSeconds(-90061), Duration.ofSeconds(-90060),
+          Duration.ofSeconds(-90061), Duration.ofSeconds(-90061))),
+      ((Duration.ofSeconds(86400 + 3600 + 60 + 1), 0.3d),
+        Array(Duration.ofSeconds(288000), Duration.ofSeconds(300000),
+          Duration.ofSeconds(300200), Duration.ofNanos(300203333333000L),
+          Duration.ofSeconds(300000), Duration.ofSeconds(300200),
+          Duration.ofNanos(300203333333000L), Duration.ofSeconds(300200),
+          Duration.ofNanos(300203333333000L), Duration.ofNanos(300203333333000L)),
+        Array(Duration.ofSeconds(25920), Duration.ofSeconds(27000),
+          Duration.ofSeconds(27018), Duration.ofMillis(27018300),
+          Duration.ofSeconds(27000), Duration.ofSeconds(27018),
+          Duration.ofMillis(27018300), Duration.ofSeconds(27018),
+          Duration.ofMillis(27018300), Duration.ofMillis(27018300))),
+      ((Duration.of(-1000, ChronoUnit.MICROS), 0.3f),
+        Array(Duration.ofSeconds(0), Duration.ofSeconds(0),
+          Duration.ofSeconds(0), Duration.ofNanos(-3333000L),
+          Duration.ofSeconds(0), Duration.ofSeconds(0),
+          Duration.ofNanos(-3333000L), Duration.ofSeconds(0),
+          Duration.ofNanos(-3333000L), Duration.ofNanos(-3333000L)),
+        Array(Duration.ofSeconds(0), Duration.ofSeconds(0),
+          Duration.ofSeconds(0), Duration.ofNanos(-300000),
+          Duration.ofSeconds(0), Duration.ofSeconds(0),
+          Duration.ofNanos(-300000), Duration.ofSeconds(0),
+          Duration.ofNanos(-300000), Duration.ofNanos(-300000))),
+      ((Duration.ofDays(9999), 0.0001d),
+        Array(Duration.ofSeconds(8639136000000L), Duration.ofSeconds(8639136000000L),
+          Duration.ofSeconds(8639136000000L), Duration.ofSeconds(8639136000000L),
+          Duration.ofSeconds(8639136000000L), Duration.ofSeconds(8639136000000L),
+          Duration.ofSeconds(8639136000000L), Duration.ofSeconds(8639136000000L),
+          Duration.ofSeconds(8639136000000L), Duration.ofSeconds(8639136000000L)),
+        Array(Duration.ofMillis(86391360), Duration.ofMillis(86391360),
+          Duration.ofMillis(86391360), Duration.ofMillis(86391360),
+          Duration.ofMillis(86391360), Duration.ofMillis(86391360),
+          Duration.ofMillis(86391360), Duration.ofMillis(86391360),
+          Duration.ofMillis(86391360), Duration.ofMillis(86391360))),
+      ((Duration.ofDays(9999), BigDecimal(0.0001)),
+        Array(Duration.ofSeconds(8639136000000L), Duration.ofSeconds(8639136000000L),
+          Duration.ofSeconds(8639136000000L), Duration.ofSeconds(8639136000000L),
+          Duration.ofSeconds(8639136000000L), Duration.ofSeconds(8639136000000L),
+          Duration.ofSeconds(8639136000000L), Duration.ofSeconds(8639136000000L),
+          Duration.ofSeconds(8639136000000L), Duration.ofSeconds(8639136000000L)),
+        Array(Duration.ofMillis(86391360), Duration.ofMillis(86391360),
+          Duration.ofMillis(86391360), Duration.ofMillis(86391360),
+          Duration.ofMillis(86391360), Duration.ofMillis(86391360),
+          Duration.ofMillis(86391360), Duration.ofMillis(86391360),
+          Duration.ofMillis(86391360), Duration.ofMillis(86391360)))
+    ).foreach { case ((duration, num), divideExpected, multiplyExpected) =>
+      DataTypeTestUtils.dayTimeIntervalTypes.zip(divideExpected)
+        .foreach { case (dt, result) =>
+          checkEvaluation(DivideDTInterval(Literal.create(duration, dt), Literal(num)), result)
+        }
+      DataTypeTestUtils.dayTimeIntervalTypes.zip(multiplyExpected)
+        .foreach { case (dt, result) =>
+          checkEvaluation(MultiplyDTInterval(Literal.create(duration, dt), Literal(num)), result)
+        }
+    }
+  }
+
+  test("SPARK-35778: Check multiply/divide of year-month intervals of any fields by numeric") {
+    Seq(
+      ((Period.ofMonths(0), 10),
+        Array(Period.ofMonths(0), Period.ofMonths(0), Period.ofMonths(0)),
+        Array(Period.ofMonths(0), Period.ofMonths(0), Period.ofMonths(0))),
+      ((Period.ofMonths(13), 1),
+        Array(Period.ofMonths(13), Period.ofMonths(12), Period.ofMonths(13)),
+        Array(Period.ofMonths(13), Period.ofMonths(12), Period.ofMonths(13))),
+      ((Period.ofMonths(-200), 1),
+        Array(Period.ofMonths(-200), Period.ofMonths(-192), Period.ofMonths(-200)),
+        Array(Period.ofMonths(-200), Period.ofMonths(-192), Period.ofMonths(-200))),
+      ((Period.ofYears(100), -1.toByte),
+        Array(Period.ofMonths(-1200), Period.ofMonths(-1200), Period.ofMonths(-1200)),
+        Array(Period.ofMonths(-1200), Period.ofMonths(-1200), Period.ofMonths(-1200))),
+      ((Period.ofYears(1), 2.toShort),
+        Array(Period.ofMonths(6), Period.ofMonths(6), Period.ofMonths(6)),
+        Array(Period.ofMonths(24), Period.ofMonths(24), Period.ofMonths(24))),
+      ((Period.ofYears(-1), -3),
+        Array(Period.ofMonths(4), Period.ofMonths(4), Period.ofMonths(4)),
+        Array(Period.ofMonths(36), Period.ofMonths(36), Period.ofMonths(36))),
+      ((Period.ofMonths(-1000), 0.5f),
+        Array(Period.ofMonths(-2000), Period.ofMonths(-1992), Period.ofMonths(-2000)),
+        Array(Period.ofMonths(-500), Period.ofMonths(-498), Period.ofMonths(-500))),
+      ((Period.ofYears(1000), 100d),
+        Array(Period.ofYears(10), Period.ofYears(10), Period.ofYears(10)),
+        Array(Period.ofMonths(1200000), Period.ofMonths(1200000), Period.ofMonths(1200000))),
+      ((Period.ofMonths(2), BigDecimal(0.1)),
+        Array(Period.ofMonths(20), Period.ofMonths(0), Period.ofMonths(20)),
+        Array(Period.ofMonths(0), Period.ofMonths(0), Period.ofMonths(0)))
+    ).foreach { case ((period, num), divideExpected, multiplyExpected) =>
+      DataTypeTestUtils.yearMonthIntervalTypes.zip(divideExpected)
+        .foreach { case (dt, result) =>
+          checkEvaluation(DivideYMInterval(Literal.create(period, dt), Literal(num)), result)
+        }
+      DataTypeTestUtils.yearMonthIntervalTypes.zip(multiplyExpected)
+        .foreach { case (dt, result) =>
+          checkEvaluation(MultiplyYMInterval(Literal.create(period, dt), Literal(num)), result)
+        }
+    }
   }
 }

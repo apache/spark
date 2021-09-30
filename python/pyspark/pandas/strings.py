@@ -1183,7 +1183,9 @@ class StringMethods(object):
         dtype: object
         """
         # type hint does not support to specify array type yet.
-        @pandas_udf(returnType=ArrayType(StringType(), containsNull=True))  # type: ignore
+        @pandas_udf(  # type: ignore[call-overload]
+            returnType=ArrayType(StringType(), containsNull=True)
+        )
         def pudf(s: pd.Series) -> pd.Series:
             return s.str.findall(pat, flags)
 
@@ -2055,7 +2057,7 @@ class StringMethods(object):
         # type hint does not support to specify array type yet.
         return_type = ArrayType(StringType(), containsNull=True)
 
-        @pandas_udf(returnType=return_type)  # type: ignore
+        @pandas_udf(returnType=return_type)  # type: ignore[call-overload]
         def pudf(s: pd.Series) -> pd.Series:
             return s.str.split(pat, n)
 
@@ -2202,7 +2204,7 @@ class StringMethods(object):
         # type hint does not support to specify array type yet.
         return_type = ArrayType(StringType(), containsNull=True)
 
-        @pandas_udf(returnType=return_type)  # type: ignore
+        @pandas_udf(returnType=return_type)  # type: ignore[call-overload]
         def pudf(s: pd.Series) -> pd.Series:
             return s.str.rsplit(pat, n)
 

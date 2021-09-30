@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, ResolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsPartitionManagement}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * Physical plan node for dropping partitions of table.
@@ -53,8 +54,8 @@ case class DropPartitionExec(
         val atomicTable = table.asAtomicPartitionable
         if (purge) atomicTable.purgePartitions(idents) else atomicTable.dropPartitions(idents)
       case _ =>
-        throw new UnsupportedOperationException(
-          s"Nonatomic partition table ${table.name()} can not drop multiple partitions.")
+        throw QueryExecutionErrors.cannotDropMultiPartitionsOnNonatomicPartitionTableError(
+          table.name())
     }
     if (isTableAltered) refreshCache()
     Seq.empty

@@ -175,7 +175,7 @@ final class MutableAny extends MutableValue {
   override def boxed: Any = if (isNull) null else value
   override def update(v: Any): Unit = {
     isNull = false
-    value = v.asInstanceOf[Any]
+    value = v
   }
   override def copy(): MutableAny = {
     val newCopy = new MutableAny
@@ -196,7 +196,7 @@ final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGen
     // We use INT for DATE and YearMonthIntervalType internally
     case IntegerType | DateType | _: YearMonthIntervalType => new MutableInt
     // We use Long for Timestamp, Timestamp without time zone and DayTimeInterval internally
-    case LongType | TimestampType | TimestampWithoutTZType | _: DayTimeIntervalType =>
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
       new MutableLong
     case FloatType => new MutableFloat
     case DoubleType => new MutableDouble

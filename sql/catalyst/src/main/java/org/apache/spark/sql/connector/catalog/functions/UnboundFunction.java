@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.connector.catalog.functions;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.StructType;
 
 /**
  * Represents a user-defined function that is not bound to input types.
+ *
+ * @since 3.2.0
  */
+@Evolving
 public interface UnboundFunction extends Function {
 
   /**

@@ -154,8 +154,8 @@ public abstract class MemoryConsumer {
     }
     taskMemoryManager.showMemoryUsage();
     // checkstyle.off: RegexpSinglelineJava
-    throw new SparkOutOfMemoryError("Unable to acquire " + required + " bytes of memory, got " +
-      got);
+    throw new SparkOutOfMemoryError("UNABLE_TO_ACQUIRE_MEMORY",
+            new String[]{Long.toString(required), Long.toString(got)});
     // checkstyle.on: RegexpSinglelineJava
   }
 }

@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
 
 /**
@@ -61,8 +61,8 @@ case class InsertIntoDataSourceDirCommand(
 
     val isFileFormat = classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
     if (!isFileFormat) {
-      throw new SparkException(
-        "Only Data Sources providing FileFormat are supported: " + dataSource.providingClass)
+      throw QueryExecutionErrors.onlySupportDataSourcesProvidingFileFormatError(
+        dataSource.providingClass.toString)
     }
 
     val saveMode = if (overwrite) SaveMode.Overwrite else SaveMode.ErrorIfExists
