@@ -1451,8 +1451,8 @@ private[spark] object MapOutputTracker extends Logging {
     // TODO: SPARK-35036: Instead of reading map blocks in case of AQE with Push based shuffle,
     // TODO: improve push based shuffle to read partial merged blocks satisfying the start/end
     // TODO: map indexes
-    if (mergeStatuses.exists(_.nonEmpty) && startMapIndex == 0
-      && endMapIndex == mapStatuses.length && endPartition - startPartition == 1) {
+    if (mergeStatuses.exists(_.nonEmpty) && mergeStatuses.exists(_.exists(_ != null))
+      && startMapIndex == 0 && endMapIndex == mapStatuses.length) {
       // We have MergeStatus and full range of mapIds are requested so return a merged block.
       val numMaps = mapStatuses.length
       mergeStatuses.get.zipWithIndex.slice(startPartition, endPartition).foreach {
