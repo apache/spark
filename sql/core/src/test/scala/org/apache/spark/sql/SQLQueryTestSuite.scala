@@ -503,6 +503,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       }
     }
 
+    // SPARK-36796: `select format_string('%0$s', 'Hello')` in `postgreSQL/text.sql` has different
+    // behavior between Java 8 and Java 17, but it seems that the behavior of Java 17 is expected:
+    // `PostgreSQL throw ERROR:  format specifies argument 0, but arguments are numbered from 1`,
+    // so do independent verification here.
     if (JavaModuleUtils.isJavaVersionAtLeast17) {
       val jdk17SpecialCases = Set("postgreSQL/text.sql")
       cases.map {
