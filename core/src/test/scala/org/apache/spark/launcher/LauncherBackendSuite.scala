@@ -27,7 +27,7 @@ import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark._
 import org.apache.spark.internal.config.UI.UI_ENABLED
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{JavaModuleUtils, Utils}
 
 class LauncherBackendSuite extends SparkFunSuite with Matchers {
 
@@ -46,7 +46,7 @@ class LauncherBackendSuite extends SparkFunSuite with Matchers {
   private def testWithMaster(master: String): Unit = {
     val env = new java.util.HashMap[String, String]()
     env.put("SPARK_PRINT_LAUNCH_COMMAND", "1")
-    val handle = new SparkLauncher(env)
+    val launcher = new SparkLauncher(env)
       .setSparkHome(sys.props("spark.test.home"))
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
       .setConf(UI_ENABLED.key, "false")
@@ -54,7 +54,14 @@ class LauncherBackendSuite extends SparkFunSuite with Matchers {
       .setMaster(master)
       .setAppResource(SparkLauncher.NO_RESOURCE)
       .setMainClass(TestApp.getClass.getName().stripSuffix("$"))
-      .startApplication()
+
+    if(JavaModuleUtils.isJavaVersionAtLeast17) {
+      launcher.setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,
+        s"${JavaModuleUtils.defaultModuleOptions()} -Dtest.appender=console")
+    } else {
+      launcher.setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, s"-Dtest.appender=console")
+    }
+    val handle = launcher.startApplication()
 
     try {
       eventually(timeout(30.seconds), interval(100.milliseconds)) {

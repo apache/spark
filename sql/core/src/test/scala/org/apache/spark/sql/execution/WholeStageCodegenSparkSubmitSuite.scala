@@ -40,15 +40,15 @@ class WholeStageCodegenSparkSubmitSuite extends SparkSubmitTestUtils
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
 
     // HotSpot JVM specific: Set up a local cluster with the driver/executor using mismatched
-    // settings of UseCompressedOops JVM option.
+    // settings of UseCompressedClassPointers JVM option.
     val argsForSparkSubmit = Seq(
       "--class", WholeStageCodegenSparkSubmitSuite.getClass.getName.stripSuffix("$"),
       "--master", "local-cluster[1,1,1024]",
       "--driver-memory", "1g",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
-      "--conf", "spark.driver.extraJavaOptions=-XX:-UseCompressedOops",
-      "--conf", "spark.executor.extraJavaOptions=-XX:+UseCompressedOops",
+      "--conf", "spark.driver.extraJavaOptions=-XX:-UseCompressedClassPointers",
+      "--conf", "spark.executor.extraJavaOptions=-XX:+UseCompressedClassPointers",
       "--conf", "spark.sql.adaptive.enabled=false",
       unusedJar.toString)
     runSparkSubmit(argsForSparkSubmit, timeout = 3.minutes)

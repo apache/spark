@@ -280,6 +280,7 @@ private object DateTimeFormatterHelper {
   // 2.4, the SimpleDateFormat uses Monday as the first day of week.
   final val weekBasedLetters = Set('Y', 'W', 'w', 'u', 'e', 'c')
   final val unsupportedLetters = Set('A', 'n', 'N', 'p')
+  final val unknownPatternLetters: Set[Char] = Set('B')
   // The quarter fields will also be parsed strangely, e.g. when the pattern contains `yMd` and can
   // be directly resolved then the `q` do check for whether the month is valid, but if the date
   // fields is incomplete, e.g. `yM`, the checking will be bypassed.
@@ -321,6 +322,9 @@ private object DateTimeFormatterHelper {
           for (c <- patternPart if unsupportedLetters.contains(c) ||
             (isParsing && unsupportedLettersForParsing.contains(c))) {
             throw new IllegalArgumentException(s"Illegal pattern character: $c")
+          }
+          for (c <- patternPart if unknownPatternLetters.contains(c)) {
+            throw new IllegalArgumentException(s"Unknown pattern letter: $c")
           }
           for (style <- unsupportedPatternLengths if patternPart.contains(style)) {
             throw new IllegalArgumentException(s"Too many pattern letters: ${style.head}")

@@ -149,6 +149,24 @@ object SparkBuild extends PomBuild {
     out
   }
 
+  val extraJavaTestArgs = if (profiles.contains("jdk-17")) {
+    Set("--add-opens java.base/java.nio=ALL-UNNAMED",
+      "--add-opens java.base/sun.nio.ch=ALL-UNNAMED",
+      "--add-opens java.base/java.lang.invoke=ALL-UNNAMED",
+      "--add-opens java.base/java.nio=ALL-UNNAMED",
+      "--add-opens java.base/sun.nio.ch=ALL-UNNAMED",
+      "--add-opens java.base/java.lang.invoke=ALL-UNNAMED",
+      "--add-opens java.base/java.util=ALL-UNNAMED",
+      "--add-opens java.base/sun.security.action=ALL-UNNAMED",
+      "--add-opens java.base/sun.util.calendar=ALL-UNNAMED",
+      "--add-opens java.base/java.lang=ALL-UNNAMED",
+      "--add-opens java.base/sun.nio.cs=ALL-UNNAMED",
+      "--add-opens java.base/java.net=ALL-UNNAMED",
+      "--add-opens java.base/java.io=ALL-UNNAMED",
+      "--add-opens java.base/java.util.concurrent=ALL-UNNAMED",
+      "--add-exports java.base/jdk.internal.util.random=ALL-UNNAMED").mkString(" ", " ", " ")
+  } else ""
+
   // Return a cached scalastyle task for a given configuration (usually Compile or Test)
   private def cachedScalaStyle(config: Configuration) = Def.task {
     val logger = streams.value.log
@@ -1127,7 +1145,7 @@ object TestSettings {
     // SPARK-29282 This is for consistency between JDK8 and JDK11.
     (Test / javaOptions) ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
-      s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads -XX:ReservedCodeCacheSize=128m"
+      s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads -XX:ReservedCodeCacheSize=128m $extraJavaTestArgs"
         .split(" ").toSeq
     },
     javaOptions ++= {

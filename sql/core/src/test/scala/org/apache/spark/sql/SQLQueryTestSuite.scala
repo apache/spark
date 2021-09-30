@@ -34,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{JavaModuleUtils, Utils}
 
 /**
  * End-to-end test cases for SQL queries.
@@ -476,7 +476,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   }
 
   protected lazy val listTestCases: Seq[TestCase] = {
-    listFilesRecursively(new File(inputFilePath)).flatMap { file =>
+    val cases = listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
@@ -502,6 +502,16 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }
     }
+
+    if (JavaModuleUtils.isJavaVersionAtLeast17)) {
+      val jdk17SpecialCases = Set("postgreSQL/text.sql")
+      cases.map {
+        case PgSQLTestCase(name, inputFile, resultFile) if jdk17SpecialCases.contains(name) =>
+          val replaceFile = resultFile.replace(name, s"$name-jdk17")
+          PgSQLTestCase(name, inputFile, replaceFile)
+        case other => other
+      }
+    } else cases
   }
 
   /** Returns all the files (not directories) in a directory, recursively. */
