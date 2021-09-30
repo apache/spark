@@ -55,8 +55,8 @@ from pyspark.resource.requests import (  # noqa: F401
 from pyspark.resource.profile import ResourceProfile
 from pyspark.statcounter import StatCounter
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.types import StructType
-from pyspark.sql._typing import RowLike
+from pyspark.sql.types import AtomicType, StructType
+from pyspark.sql._typing import DateTimeLiteral, LiteralType, DecimalLiteral, RowLike
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 T = TypeVar("T")
@@ -451,6 +451,11 @@ class RDD(Generic[T]):
     @overload
     def toDF(
         self: RDD[RowLike], schema: Optional[Union[StructType, str]] = ...
+    ) -> DataFrame: ...
+    @overload
+    def toDF(
+        self: RDD[Union[DateTimeLiteral, LiteralType, DecimalLiteral]],
+        schema: Union[AtomicType, str],
     ) -> DataFrame: ...
 
 class RDDBarrier(Generic[T]):
