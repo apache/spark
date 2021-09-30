@@ -17,19 +17,29 @@
 
 import sys
 import warnings
+from typing import Optional, Union, Callable, Any, Iterable, List, Tuple, overload
 
-from pyspark import since, _NoValue
-from pyspark.sql.session import _monkey_patch_RDD, SparkSession
+from pyspark.rdd import RDD
+from pyspark.sql._typing import UserDefinedFunctionLike, RowLike, DateTimeLiteral, LiteralType, DecimalLiteral
+from pyspark.sql.context import SQLContext  # type: ignore[attr-defined]
+
+from py4j.java_gateway import JavaObject  # type: ignore[import]
+
+from pyspark import since, _NoValue  # type: ignore[attr-defined]
+from pyspark.context import SparkContext
+from pyspark.sql.pandas._typing import DataFrameLike
+from pyspark.sql.session import _monkey_patch_RDD, SparkSession  # type: ignore[attr-defined]
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
-from pyspark.sql.streaming import DataStreamReader
+from pyspark.sql.streaming import DataStreamReader, StreamingQueryManager
+from pyspark.sql.types import DataType, AtomicType, StructType
 from pyspark.sql.udf import UDFRegistration  # noqa: F401
 from pyspark.sql.utils import install_exception_handler
 
 __all__ = ["SQLContext", "HiveContext"]
 
 
-class SQLContext(object):
+class SQLContext(object):  # type: ignore[no-redef]
     """The entry point for working with structured data (rows and columns) in Spark, in Spark 1.x.
 
     As of Spark 2.0, this is replaced by :class:`SparkSession`. However, we are keeping the class
@@ -72,7 +82,12 @@ class SQLContext(object):
 
     _instantiatedContext = None
 
-    def __init__(self, sparkContext, sparkSession=None, jsqlContext=None):
+    def __init__(
+        self,
+        sparkContext: SparkContext,
+        sparkSession: Optional[SparkSession] = None,
+        jsqlContext: Optional[JavaObject] = None
+    ) -> None:
         if sparkSession is None:
             warnings.warn(
                 "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
@@ -80,12 +95,12 @@ class SQLContext(object):
             )
 
         self._sc = sparkContext
-        self._jsc = self._sc._jsc
-        self._jvm = self._sc._jvm
+        self._jsc = self._sc._jsc  # type: ignore[attr-defined]
+        self._jvm = self._sc._jvm  # type: ignore[attr-defined]
         if sparkSession is None:
             sparkSession = SparkSession.builder.getOrCreate()
         if jsqlContext is None:
-            jsqlContext = sparkSession._jwrapped
+            jsqlContext = sparkSession._jwrapped  # type: ignore[attr-defined]
         self.sparkSession = sparkSession
         self._jsqlContext = jsqlContext
         _monkey_patch_RDD(self.sparkSession)
@@ -95,7 +110,7 @@ class SQLContext(object):
             SQLContext._instantiatedContext = self
 
     @property
-    def _ssql_ctx(self):
+    def _ssql_ctx(self):  # type: ignore[no-untyped-def]
         """Accessor for the JVM Spark SQL context.
 
         Subclasses can override this property to provide their own
@@ -104,12 +119,12 @@ class SQLContext(object):
         return self._jsqlContext
 
     @property
-    def _conf(self):
+    def _conf(self):  # type: ignore[no-untyped-def]
         """Accessor for the JVM SQL-specific configurations"""
         return self.sparkSession._jsparkSession.sessionState().conf()
 
     @classmethod
-    def getOrCreate(cls, sc):
+    def getOrCreate(cls: type, sc: SparkContext) -> SQLContext:
         """
         Get the existing SQLContext or create a new one with given SparkContext.
 
@@ -127,15 +142,15 @@ class SQLContext(object):
             FutureWarning
         )
 
-        if (cls._instantiatedContext is None
+        if (cls._instantiatedContext is None  # type: ignore[attr-defined]
                 or SQLContext._instantiatedContext._sc._jsc is None):
-            jsqlContext = sc._jvm.SparkSession.builder().sparkContext(
-                sc._jsc.sc()).getOrCreate().sqlContext()
+            jsqlContext = sc._jvm.SparkSession.builder().sparkContext(  # type: ignore[attr-defined]
+                sc._jsc.sc()).getOrCreate().sqlContext()  # type: ignore[attr-defined]
             sparkSession = SparkSession(sc, jsqlContext.sparkSession())
             cls(sc, sparkSession, jsqlContext)
-        return cls._instantiatedContext
+        return cls._instantiatedContext  # type: ignore[attr-defined]
 
-    def newSession(self):
+    def newSession(self) -> SQLContext:
         """
         Returns a new SQLContext as new session, that has separate SQLConf,
         registered temporary views and UDFs, but shared SparkContext and
@@ -145,14 +160,14 @@ class SQLContext(object):
         """
         return self.__class__(self._sc, self.sparkSession.newSession())
 
-    def setConf(self, key, value):
+    def setConf(self, key: str, value: Union[bool, int, str]) -> None:
         """Sets the given Spark SQL configuration property.
 
         .. versionadded:: 1.3.0
         """
-        self.sparkSession.conf.set(key, value)
+        self.sparkSession.conf.set(key, value)  # type: ignore[arg-type]
 
-    def getConf(self, key, defaultValue=_NoValue):
+    def getConf(self, key: str, defaultValue: Optional[str] = _NoValue) -> str:
         """Returns the value of Spark SQL configuration property for the given key.
 
         If the key is not set and defaultValue is set, return
@@ -174,7 +189,7 @@ class SQLContext(object):
         return self.sparkSession.conf.get(key, defaultValue)
 
     @property
-    def udf(self):
+    def udf(self) -> UDFRegistration:
         """Returns a :class:`UDFRegistration` for UDF registration.
 
         .. versionadded:: 1.3.1
@@ -185,7 +200,13 @@ class SQLContext(object):
         """
         return self.sparkSession.udf
 
-    def range(self, start, end=None, step=1, numPartitions=None):
+    def range(
+        self,
+        start: int,
+        end: Optional[int] = None,
+        step: int = 1,
+        numPartitions: Optional[int] = None
+    ) -> DataFrame:
         """
         Create a :class:`DataFrame` with single :class:`pyspark.sql.types.LongType` column named
         ``id``, containing elements in a range from ``start`` to ``end`` (exclusive) with
@@ -220,7 +241,7 @@ class SQLContext(object):
         """
         return self.sparkSession.range(start, end, step, numPartitions)
 
-    def registerFunction(self, name, f, returnType=None):
+    def registerFunction(self, name: str, f: Callable[..., Any], returnType: DataType = None) -> UserDefinedFunctionLike:  # type: ignore[assignment]
         """An alias for :func:`spark.udf.register`.
         See :meth:`pyspark.sql.UDFRegistration.register`.
 
@@ -235,7 +256,7 @@ class SQLContext(object):
         )
         return self.sparkSession.udf.register(name, f, returnType)
 
-    def registerJavaFunction(self, name, javaClassName, returnType=None):
+    def registerJavaFunction(self, name: str, javaClassName: str, returnType: Optional[DataType] = None) -> None:
         """An alias for :func:`spark.udf.registerJavaFunction`.
         See :meth:`pyspark.sql.UDFRegistration.registerJavaFunction`.
 
@@ -251,7 +272,7 @@ class SQLContext(object):
         return self.sparkSession.udf.registerJavaFunction(name, javaClassName, returnType)
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession
-    def _inferSchema(self, rdd, samplingRatio=None):
+    def _inferSchema(self, rdd, samplingRatio=None): # type: ignore[no-untyped-def]
         """
         Infer schema from an RDD of Row or tuple.
 
@@ -268,7 +289,67 @@ class SQLContext(object):
         """
         return self.sparkSession._inferSchema(rdd, samplingRatio)
 
-    def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True):
+    @overload  # type: ignore[misc]
+    def createDataFrame(
+        self,
+        data: Union[RDD[RowLike], Iterable[RowLike]],
+        samplingRatio: Optional[float] = ...,
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def createDataFrame(
+        self,
+        data: Union[RDD[RowLike], Iterable[RowLike]],
+        schema: Union[List[str], Tuple[str, ...]] = ...,
+        verifySchema: bool = ...,
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def createDataFrame(
+        self,
+        data: Union[
+            RDD[Union[DateTimeLiteral, LiteralType, DecimalLiteral]],
+            Iterable[Union[DateTimeLiteral, LiteralType, DecimalLiteral]],
+        ],
+        schema: Union[AtomicType, str],
+        verifySchema: bool = ...,
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def createDataFrame(
+        self,
+        data: Union[RDD[RowLike], Iterable[RowLike]],
+        schema: Union[StructType, str],
+        verifySchema: bool = ...,
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def createDataFrame(
+        self, data: DataFrameLike, samplingRatio: Optional[float] = ...
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def createDataFrame(
+        self,
+        data: DataFrameLike,
+        schema: Union[StructType, str],
+        verifySchema: bool = ...,
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def createDataFrame(
+        self,
+        data: Union[RDD[RowLike], Iterable[RowLike]],
+        schema: Union[List[str], Tuple[str, ...]] = None,  # type: ignore[assignment]
+        samplingRatio: Optional[float] = None,
+        verifySchema: bool = True
+    ) -> DataFrame:
         """
         Creates a :class:`DataFrame` from an :class:`RDD`, a list or a :class:`pandas.DataFrame`.
 
@@ -370,9 +451,9 @@ class SQLContext(object):
             ...
         Py4JJavaError: ...
         """
-        return self.sparkSession.createDataFrame(data, schema, samplingRatio, verifySchema)
+        return self.sparkSession.createDataFrame(data, schema, samplingRatio, verifySchema)  # type: ignore[call-overload]
 
-    def registerDataFrameAsTable(self, df, tableName):
+    def registerDataFrameAsTable(self, df: DataFrame, tableName: str) -> None:
         """Registers the given :class:`DataFrame` as a temporary table in the catalog.
 
         Temporary tables exist only during the lifetime of this instance of :class:`SQLContext`.
@@ -385,7 +466,7 @@ class SQLContext(object):
         """
         df.createOrReplaceTempView(tableName)
 
-    def dropTempTable(self, tableName):
+    def dropTempTable(self, tableName: str) -> None:
         """ Remove the temporary table from catalog.
 
         .. versionadded:: 1.6.0
@@ -397,7 +478,14 @@ class SQLContext(object):
         """
         self.sparkSession.catalog.dropTempView(tableName)
 
-    def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
+    def createExternalTable(
+        self,
+        tableName: str,
+        path: Optional[str] = None,
+        source: Optional[str] = None,
+        schema: Optional[StructType] = None,
+        **options: str
+    ) -> DataFrame:
         """Creates an external table based on the dataset in a data source.
 
         It returns the DataFrame associated with the external table.
@@ -415,10 +503,10 @@ class SQLContext(object):
         -------
         :class:`DataFrame`
         """
-        return self.sparkSession.catalog.createExternalTable(
+        return self.sparkSession.catalog.createExternalTable(  # type: ignore[attr-defined]
             tableName, path, source, schema, **options)
 
-    def sql(self, sqlQuery):
+    def sql(self, sqlQuery: str) -> DataFrame:
         """Returns a :class:`DataFrame` representing the result of the given query.
 
         .. versionadded:: 1.0.0
@@ -436,7 +524,7 @@ class SQLContext(object):
         """
         return self.sparkSession.sql(sqlQuery)
 
-    def table(self, tableName):
+    def table(self, tableName: str) -> DataFrame:
         """Returns the specified table or view as a :class:`DataFrame`.
 
         .. versionadded:: 1.0.0
@@ -454,7 +542,7 @@ class SQLContext(object):
         """
         return self.sparkSession.table(tableName)
 
-    def tables(self, dbName=None):
+    def tables(self, dbName: Optional[str] = None) -> DataFrame:
         """Returns a :class:`DataFrame` containing names of tables in the given database.
 
         If ``dbName`` is not specified, the current database will be used.
@@ -485,7 +573,7 @@ class SQLContext(object):
         else:
             return DataFrame(self._ssql_ctx.tables(dbName), self)
 
-    def tableNames(self, dbName=None):
+    def tableNames(self, dbName: Optional[str] = None) -> List[str]:
         """Returns a list of names of tables in the database ``dbName``.
 
         .. versionadded:: 1.3.0
@@ -512,22 +600,22 @@ class SQLContext(object):
             return [name for name in self._ssql_ctx.tableNames(dbName)]
 
     @since(1.0)
-    def cacheTable(self, tableName):
+    def cacheTable(self, tableName: str) -> None:
         """Caches the specified table in-memory."""
         self._ssql_ctx.cacheTable(tableName)
 
     @since(1.0)
-    def uncacheTable(self, tableName):
+    def uncacheTable(self, tableName: str) -> None:
         """Removes the specified table from the in-memory cache."""
         self._ssql_ctx.uncacheTable(tableName)
 
     @since(1.3)
-    def clearCache(self):
+    def clearCache(self) -> None:
         """Removes all cached tables from the in-memory cache. """
         self._ssql_ctx.clearCache()
 
     @property
-    def read(self):
+    def read(self) -> DataFrameReader:
         """
         Returns a :class:`DataFrameReader` that can be used to read data
         in as a :class:`DataFrame`.
@@ -541,7 +629,7 @@ class SQLContext(object):
         return DataFrameReader(self)
 
     @property
-    def readStream(self):
+    def readStream(self) -> DataStreamReader:
         """
         Returns a :class:`DataStreamReader` that can be used to read data streams
         as a streaming :class:`DataFrame`.
@@ -563,7 +651,7 @@ class SQLContext(object):
         return DataStreamReader(self)
 
     @property
-    def streams(self):
+    def streams(self) -> StreamingQueryManager:
         """Returns a :class:`StreamingQueryManager` that allows managing all the
         :class:`StreamingQuery` StreamingQueries active on `this` context.
 
@@ -597,21 +685,21 @@ class HiveContext(SQLContext):
 
     """
 
-    def __init__(self, sparkContext, jhiveContext=None):
+    def __init__(self, sparkContext: SparkContext, jhiveContext: Optional[JavaObject] = None) -> None:
         warnings.warn(
             "HiveContext is deprecated in Spark 2.0.0. Please use " +
             "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
             FutureWarning
         )
         if jhiveContext is None:
-            sparkContext._conf.set("spark.sql.catalogImplementation", "hive")
-            sparkSession = SparkSession.builder._sparkContext(sparkContext).getOrCreate()
+            sparkContext._conf.set("spark.sql.catalogImplementation", "hive")  # type: ignore[attr-defined]
+            sparkSession = SparkSession.builder._sparkContext(sparkContext).getOrCreate()  # type: ignore[attr-defined]
         else:
             sparkSession = SparkSession(sparkContext, jhiveContext.sparkSession())
         SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)
 
     @classmethod
-    def _createForTesting(cls, sparkContext):
+    def _createForTesting(cls, sparkContext):   # type: ignore[no-untyped-def]
         """(Internal use only) Create a new HiveContext for testing.
 
         All test code that touches HiveContext *must* go through this method. Otherwise,
@@ -622,7 +710,7 @@ class HiveContext(SQLContext):
         jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(jsc, False)
         return cls(sparkContext, jtestHive)
 
-    def refreshTable(self, tableName):
+    def refreshTable(self, tableName: str) -> None:
         """Invalidate and refresh all the cached the metadata of the given
         table. For performance reasons, Spark SQL or the external data source
         library it uses might cache certain metadata about a table, such as the
@@ -632,7 +720,7 @@ class HiveContext(SQLContext):
         self._ssql_ctx.refreshTable(tableName)
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     import tempfile
