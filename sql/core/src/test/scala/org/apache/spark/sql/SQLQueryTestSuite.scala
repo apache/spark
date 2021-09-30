@@ -503,7 +503,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       }
     }
 
-    if (JavaModuleUtils.isJavaVersionAtLeast17)) {
+    if (JavaModuleUtils.isJavaVersionAtLeast17) {
       val jdk17SpecialCases = Set("postgreSQL/text.sql")
       cases.map {
         case PgSQLTestCase(name, inputFile, resultFile) if jdk17SpecialCases.contains(name) =>
