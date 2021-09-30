@@ -517,6 +517,7 @@ Functions
     second
     sentences
     sequence
+    session_window
     sha1
     sha2
     shiftleft
