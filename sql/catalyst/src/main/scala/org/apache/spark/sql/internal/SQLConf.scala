@@ -559,7 +559,7 @@ object SQLConf {
         s"fetch request only happen when '${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
         s"'${COALESCE_PARTITIONS_ENABLED.key}' are both true. This feature also depends " +
         "on a relocatable serializer, the concatenation support codec in use, the new version " +
-        "shuffle fetch protocol and io encryption is disabled.")
+        "shuffle fetch protocol, io encryption is disabled and push based shuffle is disabled.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)

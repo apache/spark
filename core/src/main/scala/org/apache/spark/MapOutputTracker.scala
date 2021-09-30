@@ -1452,7 +1452,7 @@ private[spark] object MapOutputTracker extends Logging {
     // TODO: improve push based shuffle to read partial merged blocks satisfying the start/end
     // TODO: map indexes
     if (mergeStatuses.exists(_.nonEmpty) && startMapIndex == 0
-      && endMapIndex == mapStatuses.length) {
+      && endMapIndex == mapStatuses.length && endPartition - startPartition == 1) {
       // We have MergeStatus and full range of mapIds are requested so return a merged block.
       val numMaps = mapStatuses.length
       mergeStatuses.get.zipWithIndex.slice(startPartition, endPartition).foreach {

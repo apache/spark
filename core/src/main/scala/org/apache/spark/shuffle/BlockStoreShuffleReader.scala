@@ -53,15 +53,19 @@ private[spark] class BlockStoreShuffleReader[K, C](
     val useOldFetchProtocol = conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)
     // SPARK-34790: Fetching continuous blocks in batch is incompatible with io encryption.
     val ioEncryption = conf.get(config.IO_ENCRYPTION_ENABLED)
+    // SPARK-36892: Disable batch fetch for a shuffle when push based shuffle is enabled
+    val pushBasedShuffle = dep.shuffleMergeEnabled
 
     val doBatchFetch = shouldBatchFetch && serializerRelocatable &&
-      (!compressed || codecConcatenation) && !useOldFetchProtocol && !ioEncryption
+      (!compressed || codecConcatenation) && !useOldFetchProtocol &&
+      !ioEncryption && !pushBasedShuffle
     if (shouldBatchFetch && !doBatchFetch) {
       logDebug("The feature tag of continuous shuffle block fetching is set to true, but " +
         "we can not enable the feature because other conditions are not satisfied. " +
         s"Shuffle compress: $compressed, serializer relocatable: $serializerRelocatable, " +
         s"codec concatenation: $codecConcatenation, use old shuffle fetch protocol: " +
-        s"$useOldFetchProtocol, io encryption: $ioEncryption.")
+        s"$useOldFetchProtocol, io encryption: $ioEncryption, " +
+        s"push based shuffle: $pushBasedShuffle")
     }
     doBatchFetch
   }
