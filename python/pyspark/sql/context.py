@@ -24,13 +24,14 @@ from typing import Optional, Union, Callable, Any, Iterable, List, Tuple, overlo
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark import since, _NoValue  # type: ignore[attr-defined]
-from pyspark.context import SparkContext
-from pyspark.rdd import RDD
-from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession  # type: ignore[attr-defined]
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.readwriter import DataFrameReader
+from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.udf import UDFRegistration  # noqa: F401
 from pyspark.sql.utils import install_exception_handler
+from pyspark.context import SparkContext
+from pyspark.rdd import RDD
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import (
@@ -42,7 +43,7 @@ if TYPE_CHECKING:
     )
     from pyspark.sql.types import DataType, AtomicType, StructType
     from pyspark.sql.pandas._typing import DataFrameLike
-    from pyspark.sql.streaming import DataStreamReader, StreamingQueryManager
+    from pyspark.sql.streaming import StreamingQueryManager
 
 __all__ = ["SQLContext", "HiveContext"]
 
