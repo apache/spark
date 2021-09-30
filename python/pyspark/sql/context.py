@@ -17,24 +17,26 @@
 
 import sys
 import warnings
-from typing import Optional, Union, Callable, Any, Iterable, List, Tuple, overload
+from typing import Optional, Union, Callable, Any, Iterable, List, Tuple, overload, TYPE_CHECKING
 
 from pyspark.rdd import RDD
-from pyspark.sql._typing import UserDefinedFunctionLike, RowLike, DateTimeLiteral, LiteralType, DecimalLiteral
 from pyspark.sql.context import SQLContext  # type: ignore[attr-defined]
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark import since, _NoValue  # type: ignore[attr-defined]
 from pyspark.context import SparkContext
-from pyspark.sql.pandas._typing import DataFrameLike
+from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession  # type: ignore[attr-defined]
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.readwriter import DataFrameReader
-from pyspark.sql.streaming import DataStreamReader, StreamingQueryManager
-from pyspark.sql.types import DataType, AtomicType, StructType
-from pyspark.sql.udf import UDFRegistration  # noqa: F401
 from pyspark.sql.utils import install_exception_handler
+
+if TYPE_CHECKING:
+    from pyspark.sql._typing import UserDefinedFunctionLike, RowLike, DateTimeLiteral, LiteralType, DecimalLiteral
+    from pyspark.sql.types import DataType, AtomicType, StructType
+    from pyspark.sql.pandas._typing import DataFrameLike
+    from pyspark.sql.streaming import DataStreamReader, StreamingQueryManager
+    from pyspark.sql.udf import UDFRegistration  # noqa: F401
 
 __all__ = ["SQLContext", "HiveContext"]
 
