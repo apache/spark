@@ -4428,7 +4428,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val indexName = ctx.identifier.getText
     val indexType = if (ctx.indexType == null) "" else ctx.indexType.getText
     val columns = ctx.columns.multipartIdentifierProperty.asScala
-      .map(x => (x.multipartIdentifier.getText)).toSeq
+      .map(_.multipartIdentifier.getText).toSeq
     val columnsProperties = ctx.columns.multipartIdentifierProperty.asScala
       .map(x => (Option(x.options).map(visitIndexPropertyKeyValues).getOrElse(Map.empty))).toSeq
     val options = Option(ctx.options).map(visitIndexPropertyKeyValues).getOrElse(Map.empty)

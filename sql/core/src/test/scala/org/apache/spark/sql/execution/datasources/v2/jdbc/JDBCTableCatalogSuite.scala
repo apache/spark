@@ -437,12 +437,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       assert(e1.contains("columns ArrayBuffer(col1)"))
 
       val e2 = intercept[SQLFeatureNotSupportedException] {
-        sql("CREATE BLOOM_FILTER_INDEX index i1 ON h2.test.new_table" +
+        sql("CREATE index i1 ON h2.test.new_table" +
           " (col1 OPTIONS (fpp=0.1, numItems=10000000)," +
           " col2 OPTIONS (fpp=0.2, numItems=20000000)) OPTIONS (fpp=0.3, numItems=30000000) ")
       }.getMessage
       assert(e2.contains("IndexName i1"))
-      assert(e2.contains("indexType BLOOM_FILTER_INDEX"))
       assert(e2.contains("columns ArrayBuffer(col1, col2)"))
       assert(e2.contains("columnProperties ArrayBuffer(" +
         "Map(fpp -> 0.1, numItems -> 10000000), Map(fpp -> 0.2, numItems -> 20000000))"))
