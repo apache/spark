@@ -1445,32 +1445,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
     val ymDF = sql("select interval 3 years -3 month")
     checkAnswer(ymDF, Row(Period.of(2, 9, 0)))
-    withTempPath(f => {
-      val e = intercept[AnalysisException] {
-        ymDF.write.json(f.getCanonicalPath)
-      }
-      e.message.contains("Cannot save interval data type into external storage")
-    })
 
     val dtDF = sql("select interval 5 days 8 hours 12 minutes 50 seconds")
     checkAnswer(dtDF, Row(Duration.ofDays(5).plusHours(8).plusMinutes(12).plusSeconds(50)))
-    withTempPath(f => {
-      val e = intercept[AnalysisException] {
-        dtDF.write.json(f.getCanonicalPath)
-      }
-      e.message.contains("Cannot save interval data type into external storage")
-    })
 
     withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
       val df = sql("select interval 3 years -3 month 7 week 123 microseconds")
       checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123)))
-      withTempPath(f => {
-        // Currently we don't yet support saving out values of interval data type.
-        val e = intercept[AnalysisException] {
-          df.write.json(f.getCanonicalPath)
-        }
-        e.message.contains("Cannot save interval data type into external storage")
-      })
     }
   }
 
