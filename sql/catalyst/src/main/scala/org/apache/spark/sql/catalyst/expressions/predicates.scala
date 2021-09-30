@@ -27,7 +27,9 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
-
+/**
+ * InterpretedPredicate  解释谓词
+ */
 object InterpretedPredicate {
   def create(expression: Expression, inputSchema: Seq[Attribute]): InterpretedPredicate =
     create(BindReferences.bindReference(expression, inputSchema))

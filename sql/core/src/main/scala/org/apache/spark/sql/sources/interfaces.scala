@@ -170,11 +170,13 @@ trait CreatableRelationProvider {
  * be able to produce the schema of their data in the form of a `StructType`. Concrete
  * implementation should inherit from one of the descendant `Scan` classes, which define various
  * abstract methods for execution.
- *
+ *表示具有已知Schema的元组集合。扩展 BaseRelation 的类必须能够以“StructType”的形式生成其数据的模式。
+ * 具体的实现应该继承自后代的 Scan 类之一，这些类定义了各种抽象的执行方法。
  * BaseRelations must also define an equality function that only returns true when the two
  * instances will return the same data. This equality function is used when determining when
  * it is safe to substitute cached results for a given relation.
- *
+ *BaseRelations 还必须定义一个相等函数，该函数仅在两个实例返回相同数据时才返回 true。
+ * 在确定何时可以安全地替换给定关系的缓存结果时，将使用此相等函数。
  * @since 1.3.0
  */
 @Stable

@@ -41,8 +41,9 @@ import org.apache.spark.util.ThreadUtils
 
 /**
  * The base class for physical operators.
- *
+ * 物理运算符的基类。
  * The naming convention is that physical operators end with "Exec" suffix, e.g. [[ProjectExec]].
+ * 命名约定是物理运算符以“Exec”后缀结尾，例如 ProjectExec
  */
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
 
@@ -435,6 +436,10 @@ object UnaryExecNode {
   }
 }
 
+/**
+ * 一元执行节点,共有约37种
+ * 节点的作用主要是对 RDD 进行转换操作
+ */
 trait UnaryExecNode extends SparkPlan {
   def child: SparkPlan
 

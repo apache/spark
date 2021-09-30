@@ -129,7 +129,9 @@ case class LogicalRDD(
   )
 }
 
-/** Physical plan node for scanning data from an RDD of InternalRow. */
+/** Physical plan node for scanning data from an RDD of InternalRow.
+ * 用于从 InternalRow 的 RDD 扫描数据的物理计划节点。
+ * */
 case class RDDScanExec(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],

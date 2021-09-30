@@ -80,11 +80,15 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 }
 
 
-/** Physical plan for Filter. */
+/** Physical plan for Filter.
+ * 过滤器的物理计划。
+ * PredicateHelper 谓词助手
+ * */
 case class FilterExec(condition: Expression, child: SparkPlan)
   extends UnaryExecNode with CodegenSupport with PredicateHelper {
 
   // Split out all the IsNotNulls from condition.
+  //split Conjunctive Predicates 拆分连接谓词
   private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
     case IsNotNull(a) => isNullIntolerant(a) && a.references.subsetOf(child.outputSet)
     case _ => false
