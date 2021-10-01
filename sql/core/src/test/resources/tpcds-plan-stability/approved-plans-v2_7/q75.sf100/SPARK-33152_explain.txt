@@ -163,7 +163,7 @@ Input [6]: [i_item_sk#7, i_brand_id#8, i_class_id#9, i_category_id#10, i_categor
 
 (8) BroadcastExchange
 Input [5]: [i_item_sk#7, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#13]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#13]
 
 (9) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [cs_item_sk#1]
@@ -712,7 +712,7 @@ Condition : ((isnotnull(d_year#15) AND (d_year#15 = 2002)) AND isnotnull(d_date_
 
 (131) BroadcastExchange
 Input [2]: [d_date_sk#14, d_year#15]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#143]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#143]
 
 Subquery:2 Hosting operator id = 24 Hosting Expression = ss_sold_date_sk#29 IN dynamicpruning#6
 
@@ -741,7 +741,7 @@ Condition : ((isnotnull(d_year#90) AND (d_year#90 = 2001)) AND isnotnull(d_date_
 
 (135) BroadcastExchange
 Input [2]: [d_date_sk#89, d_year#90]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#144]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#144]
 
 Subquery:5 Hosting operator id = 86 Hosting Expression = ss_sold_date_sk#100 IN dynamicpruning#83
 
