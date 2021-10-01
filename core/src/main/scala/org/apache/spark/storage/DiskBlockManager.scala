@@ -208,7 +208,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
    * permission to create directories under application local directories.
    */
   private def createLocalDirsForMergedShuffleBlocks(): Unit = {
-    if (Utils.isPushBasedShuffleEnabled(conf)) {
+    if (Utils.isPushBasedShuffleEnabled(conf, false)) {
       // Will create the merge_manager directory only if it doesn't exist under the local dir.
       Utils.getConfiguredLocalDirs(conf).foreach { rootDir =>
         try {

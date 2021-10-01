@@ -2603,17 +2603,18 @@ private[spark] object Utils extends Logging {
    *   - IO encryption disabled
    *   - serializer(such as KryoSerializer) supports relocation of serialized objects
    */
-  def isPushBasedShuffleEnabled(conf: SparkConf): Boolean = {
+  def isPushBasedShuffleEnabled(conf: SparkConf, checkSerializer: Boolean = true): Boolean = {
     val pushBasedShuffleEnabled = conf.get(PUSH_BASED_SHUFFLE_ENABLED)
     if (pushBasedShuffleEnabled) {
-      val serializer = Utils.classForName(conf.get(SERIALIZER)).getConstructor(classOf[SparkConf])
-        .newInstance(conf).asInstanceOf[Serializer]
+      val serializer = Option(SparkEnv.get).map(_.serializer)
+        .getOrElse(Utils.classForName(conf.get(SERIALIZER)).getConstructor(classOf[SparkConf])
+          .newInstance(conf).asInstanceOf[Serializer])
       val canDoPushBasedShuffle = conf.get(IS_TESTING).getOrElse(false) ||
         (conf.get(SHUFFLE_SERVICE_ENABLED) &&
           conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn" &&
           // TODO: [SPARK-36744] needs to support IO encryption for push-based shuffle
           !conf.get(IO_ENCRYPTION_ENABLED) &&
-          serializer.supportsRelocationOfSerializedObjects)
+          (if (checkSerializer) serializer.supportsRelocationOfSerializedObjects else true))
 
       if (!canDoPushBasedShuffle) {
         logWarning("Push-based shuffle can only be enabled when the application is submitted " +

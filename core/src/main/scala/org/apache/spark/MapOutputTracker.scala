@@ -1126,7 +1126,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   val mergeStatuses: Map[Int, Array[MergeStatus]] =
     new ConcurrentHashMap[Int, Array[MergeStatus]]().asScala
 
-  private val fetchMergeResult = Utils.isPushBasedShuffleEnabled(conf)
+  private lazy val fetchMergeResult = Utils.isPushBasedShuffleEnabled(conf)
 
   /**
    * A [[KeyLock]] whose key is a shuffle id to ensure there is only one thread fetching
