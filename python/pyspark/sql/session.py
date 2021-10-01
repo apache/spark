@@ -126,7 +126,7 @@ class SparkSession(SparkConversionMixin):
         """
 
         _lock = RLock()
-        _options = {}  # type: Dict[str, Any]
+        _options: Dict[str, Any] = {}
         _sc = None
 
         @overload
@@ -584,7 +584,7 @@ class SparkSession(SparkConversionMixin):
         if schema is None or isinstance(schema, (list, tuple)):
             struct = self._inferSchemaFromList(data, names=schema)
             converter = _create_converter(struct)
-            tupled_data = map(converter, data)  # type: Iterable[Tuple]
+            tupled_data: Iterable[Tuple] = map(converter, data)
             if isinstance(schema, (list, tuple)):
                 for i, name in enumerate(schema):
                     struct.fields[i].name = name
