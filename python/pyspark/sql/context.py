@@ -308,7 +308,7 @@ class SQLContext(object):  # type: ignore[no-redef]
         """
         return self.sparkSession._inferSchema(rdd, samplingRatio)
 
-    @overload  # type: ignore[misc]
+    @overload
     def createDataFrame(
         self,
         data: Union[RDD[RowLike], Iterable[RowLike]],
@@ -361,8 +361,7 @@ class SQLContext(object):  # type: ignore[no-redef]
     ) -> DataFrame:
         ...
 
-    @overload
-    def createDataFrame(
+    def createDataFrame(  # type: ignore[misc]
         self,
         data: Union[RDD[RowLike], Iterable[RowLike]],
         schema: Union[List[str], Tuple[str, ...]] = None,  # type: ignore[assignment]
