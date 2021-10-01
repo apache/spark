@@ -376,15 +376,19 @@ class DataTypeOps(object, metaclass=ABCMeta):
                         x[index_scol_name].alias(index_scol_name)
                         for index_scol_name in index_scol_names
                     ],
-                    F.when(
-                        F.assert_true(
-                            # If the comparing result is null,
-                            # that means the length of `left` and `right` is not the same.
-                            (x[scol_name] == y).isNotNull(),
-                            "Lengths must be equal",
-                        ).isNull(),
-                        x[scol_name] == y,
-                    ).alias(scol_name)
+                    F.when(x[scol_name].isNull() | y.isNull(), False)
+                    .otherwise(
+                        F.when(
+                            F.assert_true(
+                                # If the comparing result is null,
+                                # that means the length of `left` and `right` is not the same.
+                                (x[scol_name] == y).isNotNull(),
+                                "Lengths must be equal",
+                            ).isNull(),
+                            x[scol_name] == y,
+                        )
+                    )
+                    .alias(scol_name)
                 ),
             ).alias(scol_name)
             # 1. `sdf_new` here looks like the below (the first field of each set is Index):
