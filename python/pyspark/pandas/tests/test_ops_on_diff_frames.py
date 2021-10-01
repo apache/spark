@@ -1853,24 +1853,6 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser.eq(pandas_other), psser.eq(pandas_on_spark_other).sort_index())
         self.assert_eq(pser == pandas_other, (psser == pandas_on_spark_other).sort_index())
 
-        # other = list
-        other = [np.nan, 1, 3, 4, np.nan, 6]
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
-            self.assert_eq(pser.eq(other), psser.eq(other).sort_index())
-            self.assert_eq(pser == other, (psser == other).sort_index())
-        else:
-            self.assert_eq(pser.eq(other).rename("x"), psser.eq(other).sort_index())
-            self.assert_eq((pser == other).rename("x"), (psser == other).sort_index())
-
-        # other = tuple
-        other = (np.nan, 1, 3, 4, np.nan, 6)
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
-            self.assert_eq(pser.eq(other), psser.eq(other).sort_index())
-            self.assert_eq(pser == other, (psser == other).sort_index())
-        else:
-            self.assert_eq(pser.eq(other).rename("x"), psser.eq(other).sort_index())
-            self.assert_eq((pser == other).rename("x"), (psser == other).sort_index())
-
 
 class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
     @classmethod
