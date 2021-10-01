@@ -119,9 +119,6 @@ case class EnsureRequirements(
           }
       }
 
-      val childrenNumPartitions =
-        childrenIndexes.map(children(_).outputPartitioning.numPartitions).toSet
-
       // Get the number of partitions which is explicitly required by the distributions.
       val requiredNumPartitions = {
         val numPartitionsSet = childrenIndexes.flatMap {
@@ -137,10 +134,18 @@ case class EnsureRequirements(
       // 1. We should avoid shuffling these children.
       // 2. We should have a reasonable parallelism.
       val nonShuffleChildrenNumPartitions =
-        childrenIndexes.map(children).filterNot(_.isInstanceOf[ShuffleExchangeExec])
+      childrenIndexes.map(children).filterNot(_.isInstanceOf[ShuffleExchangeExec])
           .map(_.outputPartitioning.numPartitions)
-      val expectedChildrenNumPartitions =
-        if (shuffleSpecs.nonEmpty && nonShuffleChildrenNumPartitions.nonEmpty) {
+
+      // If there was no `Exchange` in children before the above processing on shuffle specs,
+      // but new `Exchange` was added, then it could be two cases (assuming the node is binary):
+      //   1. one child A is shuffled matching the partitioning of the other child B, in which
+      //     case we shouldn't consider `conf.numShufflePartitions` and shuffle B as well. See
+      //     SPARK-32767 for the reasoning.
+      //   2. both children are re-shuffled, in which case they'll have the same number of
+      //     partitions as guaranteed by the above procedure, so nothing to do here.
+      if (shuffleSpecs.nonEmpty && nonShuffleChildrenNumPartitions.nonEmpty) {
+        val expectedChildrenNumPartitions =
           if (nonShuffleChildrenNumPartitions.length == childrenIndexes.length) {
             // Here we pick the max number of partitions among these non-shuffle children.
             nonShuffleChildrenNumPartitions.max
@@ -151,26 +156,24 @@ case class EnsureRequirements(
             // expected number of shuffle partitions.
             math.max(nonShuffleChildrenNumPartitions.max, conf.defaultNumShufflePartitions)
           }
-        } else {
-          childrenNumPartitions.max
-        }
 
-      val targetNumPartitions = requiredNumPartitions.getOrElse(expectedChildrenNumPartitions)
+        val targetNumPartitions = requiredNumPartitions.getOrElse(expectedChildrenNumPartitions)
 
-      children = children.zip(requiredChildDistributions).zipWithIndex.map {
-        case ((child, distribution), index) if childrenIndexes.contains(index) =>
-          if (child.outputPartitioning.numPartitions == targetNumPartitions) {
-            child
-          } else {
-            val defaultPartitioning = distribution.createPartitioning(targetNumPartitions)
-            child match {
-              // If child is an exchange, we replace it with a new one having defaultPartitioning.
-              case ShuffleExchangeExec(_, c, _) => ShuffleExchangeExec(defaultPartitioning, c)
-              case _ => ShuffleExchangeExec(defaultPartitioning, child)
+        children = children.zip(requiredChildDistributions).zipWithIndex.map {
+          case ((child, distribution), index) if childrenIndexes.contains(index) =>
+            if (child.outputPartitioning.numPartitions == targetNumPartitions) {
+              child
+            } else {
+              val defaultPartitioning = distribution.createPartitioning(targetNumPartitions)
+              child match {
+                // If child is an exchange, we replace it with a new one having defaultPartitioning.
+                case ShuffleExchangeExec(_, c, _) => ShuffleExchangeExec(defaultPartitioning, c)
+                case _ => ShuffleExchangeExec(defaultPartitioning, child)
+              }
             }
-          }
 
-        case ((child, _), _) => child
+          case ((child, _), _) => child
+        }
       }
     }
 

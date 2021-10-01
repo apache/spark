@@ -569,6 +569,26 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           assert(right.numPartitions == 11)
         case other => fail(other.toString)
       }
+
+      // if both sides already have shuffle, we won't consider `conf.numShufflePartitions`
+      plan3 = ShuffleExchangeExec(
+        outputPartitioning = HashPartitioning(exprA :: exprB :: Nil, 5),
+        child = DummySparkPlan())
+      val plan4 = ShuffleExchangeExec(
+        outputPartitioning = HashPartitioning(exprC :: exprD :: Nil, 7),
+        child = DummySparkPlan())
+      smjExec = SortMergeJoinExec(
+        exprA :: exprB :: Nil, exprC :: exprD :: Nil, Inner, None, plan3, plan4)
+      EnsureRequirements.apply(smjExec) match {
+        case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
+          assert(leftKeys === Seq(exprA, exprB))
+          assert(rightKeys === Seq(exprC, exprD))
+          assert(left.numPartitions == 7)
+          assert(right.numPartitions == 7)
+        case other => fail(other.toString)
+      }
     }
   }
 }
