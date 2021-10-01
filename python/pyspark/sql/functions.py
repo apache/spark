@@ -18,6 +18,7 @@
 """
 A collections of builtin functions
 """
+import inspect
 import sys
 import functools
 import warnings
@@ -4585,8 +4586,6 @@ def _unresolved_named_lambda_variable(*name_parts: Any) -> Column:
 
 
 def _get_lambda_parameters(f: Callable) -> ValuesView[inspect.Parameter]:
-    import inspect
-
     signature = inspect.signature(f)
     parameters = signature.parameters.values()
 
