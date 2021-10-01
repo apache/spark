@@ -1141,6 +1141,8 @@ class MultiIndex(Index):
         """
         Return True if the levels of both MultiIndex objects are the same
 
+        .. versionadded:: 3.3.0
+
         Examples
         --------
         >>> psmidx1 = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
