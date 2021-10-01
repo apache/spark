@@ -1221,10 +1221,12 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 return cast(Union[Series, DataFrame], psser_or_psdf)
 
             if len(grouped) <= 1:
-                warnings.warn(
-                    "The amount of data for return type inference might not be large enough. "
-                    "Consider increasing an option `compute.shortcut_limit`."
-                )
+                with warnings.catch_warnings():
+                    warnings.simplefilter("always")
+                    warnings.warn(
+                        "The amount of data for return type inference might not be large enough. "
+                        "Consider increasing an option `compute.shortcut_limit`."
+                    )
 
             if isinstance(psser_or_psdf, Series):
                 should_return_series = True
