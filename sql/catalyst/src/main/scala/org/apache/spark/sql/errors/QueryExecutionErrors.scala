@@ -267,7 +267,7 @@ object QueryExecutionErrors {
   }
 
   def customCollectionClsNotResolvedError(): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "NOT_RESOLVED",
+    new SparkUnsupportedOperationException(errorClass = "CUSTOM_COLLECTION_CLASS_NOT_RESOLVED",
       messageParameters = Array.empty)
   }
 
@@ -301,7 +301,7 @@ object QueryExecutionErrors {
   }
 
   def notExpectedUnresolvedEncoderError(attr: AttributeReference): Throwable = {
-    new SparkRuntimeException(errorClass = "UNEXPECTED_UNRESOLVED_ENCODER",
+    new SparkRuntimeException(errorClass = "EXPECTED_UNRESOLVED_ENCODER",
       messageParameters = Array(attr.toString))
   }
 
@@ -331,12 +331,12 @@ object QueryExecutionErrors {
   }
 
   def unsupportedRoundingMode(roundMode: BigDecimal.RoundingMode.Value): Throwable = {
-    new SparkRuntimeException(errorClass = "UNSUPPORTED_ROUNDING",
+    new SparkRuntimeException(errorClass = "UNSUPPORTED_ROUNDING_MODE",
       messageParameters = Array(roundMode.toString))
   }
 
   def resolveCannotHandleNestedSchema(plan: LogicalPlan): Throwable = {
-    new SparkRuntimeException(errorClass = "RESOLVE_CANNOT_HANDLE_NESTED_SCHEMA",
+    new SparkRuntimeException(errorClass = "CANNOT_RESOLVE_NESTED_SCHEMA",
       messageParameters = Array(plan.toString))
   }
 
@@ -346,12 +346,12 @@ object QueryExecutionErrors {
   }
 
   def fieldCannotBeNullMsg(index: Int, fieldName: String): String = {
-    SparkThrowableHelper.getMessage(errorClass = "FIELD_CANNOT_BE_NULL",
+    SparkThrowableHelper.getMessage(errorClass = "ROW_FIELD_CANNOT_BE_NULL",
       messageParameters = Array(index.toString, fieldName))
   }
 
   def fieldCannotBeNullError(index: Int, fieldName: String): RuntimeException = {
-    new SparkRuntimeException(errorClass = "FIELD_CANNOT_BE_NULL",
+    new SparkRuntimeException(errorClass = "ROW_FIELD_CANNOT_BE_NULL",
       messageParameters = Array(index.toString, fieldName))
   }
 
