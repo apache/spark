@@ -1126,6 +1126,10 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   val mergeStatuses: Map[Int, Array[MergeStatus]] =
     new ConcurrentHashMap[Int, Array[MergeStatus]]().asScala
 
+  // This must be lazy to ensure that it is initialized when the first task is run and not at
+  // executor startup time. At startup time, user-added libraries may not have been 
+  // downloaded to the executor, causing `isPushBasedShuffleEnabled` to fail when it tries to
+  // instantiate a serializer. See the followup to SPARK-36705 for more details.
   private lazy val fetchMergeResult = Utils.isPushBasedShuffleEnabled(conf, isDriver = false)
 
   /**
