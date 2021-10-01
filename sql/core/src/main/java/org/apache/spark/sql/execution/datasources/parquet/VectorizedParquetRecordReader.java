@@ -22,6 +22,7 @@ import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.column.ColumnDescriptor;
@@ -166,6 +167,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     initializeInternal();
   }
 
+  @VisibleForTesting
   @Override
   public void initialize(
       MessageType fileSchema,

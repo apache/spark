@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.parquet.column.page.PageReadStore;
 import scala.Option;
 
@@ -90,8 +91,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       .builder(configuration)
       .withRange(split.getStart(), split.getStart() + split.getLength())
       .build();
-    ParquetFileReader fileReader =new ParquetFileReader(
-      HadoopInputFile.fromPath(file, configuration), options);
+    ParquetFileReader fileReader = new ParquetFileReader(
+        HadoopInputFile.fromPath(file, configuration), options);
     this.reader = new ParquetRowGroupReaderImpl(fileReader);
     this.fileSchema = fileReader.getFileMetaData().getSchema();
     Map<String, String> fileMetadata = fileReader.getFileMetaData().getKeyValueMetaData();
@@ -186,6 +187,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.totalRowCount = fileReader.getFilteredRecordCount();
   }
 
+  @VisibleForTesting
   protected void initialize(
       MessageType fileSchema,
       MessageType requestedSchema,
@@ -270,5 +272,4 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       }
     }
   }
-
 }

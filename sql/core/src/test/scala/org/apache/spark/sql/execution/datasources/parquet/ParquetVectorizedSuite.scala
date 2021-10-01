@@ -199,69 +199,69 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
       firstRowIndexesOpt: Option[Seq[Long]],
       rangesOpt: Option[Seq[(Long, Long)]],
       pageSizes: Seq[Int],
-      expected: Seq[String],
+      expectedValues: Seq[String],
       batchSize: Int,
-      actual: Seq[String] = VALUES,
+      inputValues: Seq[String] = VALUES,
       dictionaryEnabled: Boolean = false): Unit = {
-    assert(pageSizes.sum == actual.length)
+    assert(pageSizes.sum == inputValues.length)
     firstRowIndexesOpt.foreach(a => assert(pageSizes.length == a.length))
 
-    val isRequiredStr = if (!expected.contains(null)) "required" else "optional"
+    val isRequiredStr = if (!expectedValues.contains(null)) "required" else "optional"
     val parquetSchema: MessageType = MessageTypeParser.parseMessageType(
       s"""message root {
          | $isRequiredStr binary a(UTF8);
          |}
          |""".stripMargin
     )
-    val maxDef = if (actual.contains(null)) 1 else 0
+    val maxDef = if (inputValues.contains(null)) 1 else 0
     val ty = parquetSchema.asGroupType().getType("a").asPrimitiveType()
     val cd = new ColumnDescriptor(Seq("a").toArray, ty, 0, maxDef)
-    val rls = Array.fill[Int](actual.length)(0)
-    val dls = actual.map(v => if (v == null) 0 else 1)
+    val repetitionLevels = Array.fill[Int](inputValues.length)(0)
+    val definitionLevels = inputValues.map(v => if (v == null) 0 else 1)
 
-    val memPageStore = new MemPageStore(expected.length)
+    val memPageStore = new MemPageStore(expectedValues.length)
 
     var i = 0
     val pageFirstRowIndexes = ArrayBuffer.empty[Long]
     pageSizes.foreach { size =>
       pageFirstRowIndexes += i
-      writeDataPage(cd, memPageStore, rls.slice(i, i + size), dls.slice(i, i + size),
-        actual.slice(i, i + size), maxDef, dictionaryEnabled)
+      writeDataPage(cd, memPageStore, repetitionLevels.slice(i, i + size),
+        definitionLevels.slice(i, i + size), inputValues.slice(i, i + size), maxDef,
+        dictionaryEnabled)
       i += size
     }
 
-    checkAnswer(expected.length, parquetSchema,
+    checkAnswer(expectedValues.length, parquetSchema,
       TestPageReadStore(memPageStore, firstRowIndexesOpt.getOrElse(pageFirstRowIndexes).toSeq,
-        rangesOpt), expected.map(i => Row(i)), batchSize)
+        rangesOpt), expectedValues.map(i => Row(i)), batchSize)
   }
 
   /**
-   * Write a single data page using repetition levels (`rls`), definition levels (`dls`) and
-   * values (`values`) provided.
+   * Write a single data page using repetition levels, definition levels and values provided.
    *
-   * Note that this requires `rls`, `dls` and `values` to have the same number of elements. For
-   * null values, the corresponding slots in `values` will be skipped.
+   * Note that this requires `repetitionLevels`, `definitionLevels` and `values` to have the same
+   * number of elements. For null values, the corresponding slots in `values` will be skipped.
    */
   private def writeDataPage(
-      cd: ColumnDescriptor,
+      columnDesc: ColumnDescriptor,
       pageWriteStore: PageWriteStore,
-      rls: Seq[Int],
-      dls: Seq[Int],
+      repetitionLevels: Seq[Int],
+      definitionLevels: Seq[Int],
       values: Seq[Any],
-      maxDl: Int,
+      maxDefinitionLevel: Int,
       dictionaryEnabled: Boolean = false): Unit = {
     val columnWriterStore = new ColumnWriteStoreV1(pageWriteStore,
       ParquetProperties.builder()
           .withPageSize(4096)
           .withDictionaryEncoding(dictionaryEnabled)
           .build())
-    val columnWriter = columnWriterStore.getColumnWriter(cd)
+    val columnWriter = columnWriterStore.getColumnWriter(columnDesc)
 
-    rls.zip(dls).zipWithIndex.foreach { case ((rl, dl), i) =>
-      if (dl < maxDl) {
+    repetitionLevels.zip(definitionLevels).zipWithIndex.foreach { case ((rl, dl), i) =>
+      if (dl < maxDefinitionLevel) {
         columnWriter.writeNull(rl, dl)
       } else {
-        cd.getPrimitiveType.getPrimitiveTypeName match {
+        columnDesc.getPrimitiveType.getPrimitiveTypeName match {
           case PrimitiveTypeName.INT32 =>
             columnWriter.write(values(i).asInstanceOf[Int], rl, dl)
           case PrimitiveTypeName.INT64 =>
@@ -276,7 +276,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
             columnWriter.write(Binary.fromString(values(i).asInstanceOf[String]), rl, dl)
           case _ =>
             throw new IllegalStateException(s"Unexpected type: " +
-                s"${cd.getPrimitiveType.getPrimitiveTypeName}")
+                s"${columnDesc.getPrimitiveType.getPrimitiveTypeName}")
         }
       }
       columnWriterStore.endRecord()
@@ -330,9 +330,9 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
           case ArrayType(_, _) =>
             val elements = row.getArray(i)
             if (elements == null) "null"
-            else "[" + elements.array.mkString(", ") + "]"
+            else elements.array.mkString("[", ", ", "]")
           case _ =>
-            throw new IllegalStateException(s"Unsupported data type: ${f.dataType}")
+            throw new IllegalArgumentException(s"Unsupported data type: ${f.dataType}")
         }
       }
       fieldStrings.mkString(", ")
@@ -356,19 +356,19 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
   }
 
   private case class TestPageReadStore(
-      original: PageReadStore,
+      wrapped: PageReadStore,
       firstRowIndexes: Seq[Long],
-      rangesOpt: Option[Seq[(Long, Long)]] = None) extends PageReadStore {
+      rowIndexRangesOpt: Option[Seq[(Long, Long)]] = None) extends PageReadStore {
 
     override def getPageReader(descriptor: ColumnDescriptor): PageReader = {
-      val originalReader = original.getPageReader(descriptor)
+      val originalReader = wrapped.getPageReader(descriptor)
       TestPageReader(originalReader, firstRowIndexes)
     }
 
-    override def getRowCount: Long = original.getRowCount
+    override def getRowCount: Long = wrapped.getRowCount
 
     override def getRowIndexes: Optional[PrimitiveIterator.OfLong] = {
-      rangesOpt.map { ranges =>
+      rowIndexRangesOpt.map { ranges =>
         Optional.of(new PrimitiveIterator.OfLong {
           private var currentRangeIdx: Int = 0
           private var currentRowIdx: Long = -1
