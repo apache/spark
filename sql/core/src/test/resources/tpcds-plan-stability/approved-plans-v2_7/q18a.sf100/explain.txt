@@ -192,7 +192,7 @@ Input [4]: [cd_demo_sk#11, cd_gender#12, cd_education_status#13, cd_dep_count#14
 
 (8) BroadcastExchange
 Input [2]: [cd_demo_sk#11, cd_dep_count#14]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#15]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#15]
 
 (9) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [cs_bill_cdemo_sk#2]
@@ -231,7 +231,7 @@ Condition : isnotnull(i_item_sk#17)
 
 (17) BroadcastExchange
 Input [2]: [i_item_sk#17, i_item_id#18]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#19]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#19]
 
 (18) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [cs_item_sk#3]
@@ -284,7 +284,7 @@ Condition : (ca_state#28 IN (ND,WI,AL,NC,OK,MS,TN) AND isnotnull(ca_address_sk#2
 
 (29) BroadcastExchange
 Input [4]: [ca_address_sk#26, ca_county#27, ca_state#28, ca_country#29]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#30]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#30]
 
 (30) BroadcastHashJoin [codegen id : 7]
 Left keys [1]: [c_current_addr_sk#23]
@@ -410,7 +410,7 @@ Condition : (ca_state#28 IN (ND,WI,AL,NC,OK,MS,TN) AND isnotnull(ca_address_sk#2
 
 (57) BroadcastExchange
 Input [3]: [ca_address_sk#26, ca_state#28, ca_country#29]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#85]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#85]
 
 (58) BroadcastHashJoin [codegen id : 21]
 Left keys [1]: [c_current_addr_sk#23]
@@ -525,7 +525,7 @@ Input [3]: [ca_address_sk#26, ca_state#28, ca_country#29]
 
 (83) BroadcastExchange
 Input [2]: [ca_address_sk#26, ca_country#29]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#132]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#132]
 
 (84) BroadcastHashJoin [codegen id : 35]
 Left keys [1]: [c_current_addr_sk#23]
@@ -672,7 +672,7 @@ Input [2]: [ca_address_sk#26, ca_state#28]
 
 (116) BroadcastExchange
 Input [1]: [ca_address_sk#26]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#180]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#180]
 
 (117) BroadcastHashJoin [codegen id : 46]
 Left keys [1]: [c_current_addr_sk#23]
@@ -685,7 +685,7 @@ Input [5]: [c_customer_sk#21, c_current_cdemo_sk#22, c_current_addr_sk#23, c_bir
 
 (119) BroadcastExchange
 Input [3]: [c_customer_sk#21, c_current_cdemo_sk#22, c_birth_year#25]
-Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [id=#181]
+Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false,false), [id=#181]
 
 (120) Scan parquet default.customer_demographics
 Output [1]: [cd_demo_sk#32]
@@ -712,7 +712,7 @@ Input [4]: [c_customer_sk#21, c_current_cdemo_sk#22, c_birth_year#25, cd_demo_sk
 
 (125) BroadcastExchange
 Input [2]: [c_customer_sk#21, c_birth_year#25]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#182]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#182]
 
 (126) BroadcastHashJoin [codegen id : 49]
 Left keys [1]: [cs_bill_customer_sk#1]
@@ -808,7 +808,7 @@ Condition : isnotnull(i_item_sk#17)
 
 (146) BroadcastExchange
 Input [1]: [i_item_sk#17]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#229]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#229]
 
 (147) BroadcastHashJoin [codegen id : 57]
 Left keys [1]: [cs_item_sk#3]
@@ -885,7 +885,7 @@ Input [2]: [d_date_sk#16, d_year#277]
 
 (161) BroadcastExchange
 Input [1]: [d_date_sk#16]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#278]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#278]
 
 Subquery:2 Hosting operator id = 99 Hosting Expression = cs_sold_date_sk#9 IN dynamicpruning#10
 

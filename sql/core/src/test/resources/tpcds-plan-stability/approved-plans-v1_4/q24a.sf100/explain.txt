@@ -84,7 +84,7 @@ Condition : ((isnotnull(i_color#10) AND (i_color#10 = pale                )) AND
 
 (8) BroadcastExchange
 Input [6]: [i_item_sk#7, i_current_price#8, i_size#9, i_color#10, i_units#11, i_manager_id#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#13]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#13]
 
 (9) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [ss_item_sk#1]
@@ -197,7 +197,7 @@ Input [5]: [s_store_sk#25, s_store_name#26, s_market_id#27, s_state#28, s_zip#29
 
 (34) BroadcastExchange
 Input [4]: [s_store_sk#25, s_store_name#26, s_state#28, s_zip#29]
-Arguments: HashedRelationBroadcastMode(List(input[3, string, true]),false), [id=#30]
+Arguments: HashedRelationBroadcastMode(List(input[3, string, true]),false,false), [id=#30]
 
 (35) Scan parquet default.customer_address
 Output [3]: [ca_state#31, ca_zip#32, ca_country#33]
@@ -224,7 +224,7 @@ Input [7]: [s_store_sk#25, s_store_name#26, s_state#28, s_zip#29, ca_state#31, c
 
 (40) BroadcastExchange
 Input [5]: [s_store_sk#25, s_store_name#26, s_state#28, ca_state#31, ca_country#33]
-Arguments: HashedRelationBroadcastMode(List(input[0, int, true], upper(input[4, string, true])),false), [id=#34]
+Arguments: HashedRelationBroadcastMode(List(input[0, int, true], upper(input[4, string, true])),false,false), [id=#34]
 
 (41) BroadcastHashJoin [codegen id : 12]
 Left keys [2]: [ss_store_sk#3, c_birth_country#18]
@@ -365,7 +365,7 @@ Input [5]: [s_store_sk#25, s_store_name#26, s_market_id#27, s_state#28, s_zip#29
 
 (58) BroadcastExchange
 Input [4]: [s_store_sk#25, s_store_name#26, s_state#28, s_zip#29]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#49]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#49]
 
 (59) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [ss_store_sk#3]

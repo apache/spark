@@ -44,14 +44,6 @@
   "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
-  "DATA_TYPE_UNSUPPORTED" : {
-    "message" : [ "Data type '%s' is not supported." ],
-    "sqlState" : "0A000"
-  },
-  "DDL_UNSUPPORTED" : {
-    "message" : [ "DDL '%s' is not supported." ],
-    "sqlState" : "0A000"
-  },
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero" ],
     "sqlState" : "22012"
@@ -62,7 +54,7 @@
   },
   "EMPTY_OPTION" : {
     "message" : [ "Option `%s` can not be empty." ],
-    "sqlState" : "08006"
+    "sqlState" : "22023"
   },
   "FAILED_EXECUTE_UDF" : {
     "message" : [ "Failed to execute user defined function (%s: (%s) => %s)" ]
@@ -111,6 +103,9 @@
     "message" : [ "The input filter of %s should be fully convertible." ],
     "sqlState" : "42000"
   },
+  "INTERNAL_ERROR" : {
+    "message" : [ "%s" ]
+  },
   "INVALID_ARRAY_INDEX" : {
     "message" : [ "Invalid index: %s, numElements: %s" ]
   },
@@ -137,9 +132,6 @@
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
   },
-  "LOGICAL_HINT_OPERATOR_NOT_REMOVED_DURING_ANALYSIS" : {
-    "message" : [ "Internal error: logical hint operator should have been removed during analysis" ]
-  },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist." ]
   },
@@ -158,10 +150,6 @@
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [ "Unknown static partition column: %s" ],
     "sqlState" : "42000"
-  },
-  "NESTED_ARRAYS_UNSUPPORTED" : {
-    "message" : [ "Nested arrays unsupported" ],
-    "sqlState" : "0A000"
   },
   "NON_LITERAL_PIVOT_VALUES" : {
     "message" : [ "Literal expressions required for pivot values, found '%s'" ],
@@ -206,12 +194,20 @@
     "message" : [ "Unsupported data type %s" ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_DDL" : {
+    "message" : [ "DDL '%s' is not supported." ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_JDBC_TYPE" : {
     "message" : [ "Unsupported type %s" ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_LITERAL_TYPE" : {
     "message" : [ "Unsupported literal type %s %s" ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_NESTED_ARRAYS" : {
+    "message" : [ "Nested arrays unsupported" ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_OPERATION_FOR_DATA_TYPE" : {

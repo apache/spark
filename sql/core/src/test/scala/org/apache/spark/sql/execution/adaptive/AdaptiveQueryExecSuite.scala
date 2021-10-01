@@ -27,7 +27,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{CollectLimitExec, CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{CollectLimitExec, CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnaryExecNode, UnionExec}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
@@ -1702,6 +1702,89 @@ class AdaptiveQueryExecSuite
       checkNoCoalescePartitions(df.repartition($"key"), REPARTITION_BY_COL)
       // partition size [1140, 1119]
       checkNoCoalescePartitions(df.sort($"key"), ENSURE_REQUIREMENTS)
+    }
+  }
+
+  test("SPARK-34980: Support coalesce partition through union") {
+    def checkResultPartition(
+        df: Dataset[Row],
+        numUnion: Int,
+        numShuffleReader: Int,
+        numPartition: Int): Unit = {
+      df.collect()
+      assert(collect(df.queryExecution.executedPlan) {
+        case u: UnionExec => u
+      }.size == numUnion)
+      assert(collect(df.queryExecution.executedPlan) {
+        case r: AQEShuffleReadExec => r
+      }.size === numShuffleReader)
+      assert(df.rdd.partitions.length === numPartition)
+    }
+
+    Seq(true, false).foreach { combineUnionEnabled =>
+      val combineUnionConfig = if (combineUnionEnabled) {
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ""
+      } else {
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.CombineUnions"
+      }
+      // advisory partition size 1048576 has no special meaning, just a big enough value
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+          SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1048576",
+          SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+          SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+          combineUnionConfig) {
+        withTempView("t1", "t2") {
+          spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 2)
+            .toDF().createOrReplaceTempView("t1")
+          spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 4)
+            .toDF().createOrReplaceTempView("t2")
+
+          // positive test that could be coalesced
+          checkResultPartition(
+            sql("""
+                |SELECT key, count(*) FROM t1 GROUP BY key
+                |UNION ALL
+                |SELECT * FROM t2
+              """.stripMargin),
+            numUnion = 1,
+            numShuffleReader = 1,
+            numPartition = 1 + 4)
+
+          checkResultPartition(
+            sql("""
+                |SELECT key, count(*) FROM t1 GROUP BY key
+                |UNION ALL
+                |SELECT * FROM t2
+                |UNION ALL
+                |SELECT * FROM t1
+              """.stripMargin),
+            numUnion = if (combineUnionEnabled) 1 else 2,
+            numShuffleReader = 1,
+            numPartition = 1 + 4 + 2)
+
+          checkResultPartition(
+            sql("""
+                |SELECT /*+ merge(t2) */ t1.key, t2.key FROM t1 JOIN t2 ON t1.key = t2.key
+                |UNION ALL
+                |SELECT key, count(*) FROM t2 GROUP BY key
+                |UNION ALL
+                |SELECT * FROM t1
+              """.stripMargin),
+            numUnion = if (combineUnionEnabled) 1 else 2,
+            numShuffleReader = 3,
+            numPartition = 1 + 1 + 2)
+
+          // negative test
+          checkResultPartition(
+            sql("SELECT * FROM t1 UNION ALL SELECT * FROM t2"),
+            numUnion = if (combineUnionEnabled) 1 else 1,
+            numShuffleReader = 0,
+            numPartition = 2 + 4
+          )
+        }
+      }
     }
   }
 

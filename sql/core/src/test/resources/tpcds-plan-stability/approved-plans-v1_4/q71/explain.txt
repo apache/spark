@@ -59,7 +59,7 @@ Input [4]: [i_item_sk#1, i_brand_id#2, i_brand#3, i_manager_id#4]
 
 (5) BroadcastExchange
 Input [3]: [i_item_sk#1, i_brand_id#2, i_brand#3]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#5]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#5]
 
 (6) Scan parquet default.web_sales
 Output [4]: [ws_sold_time_sk#6, ws_item_sk#7, ws_ext_sales_price#8, ws_sold_date_sk#9]
@@ -173,7 +173,7 @@ Input [4]: [t_time_sk#31, t_hour#32, t_minute#33, t_meal_time#34]
 
 (31) BroadcastExchange
 Input [3]: [t_time_sk#31, t_hour#32, t_minute#33]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#35]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#35]
 
 (32) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [time_sk#14]
@@ -240,7 +240,7 @@ Input [3]: [d_date_sk#11, d_year#44, d_moy#45]
 
 (43) BroadcastExchange
 Input [1]: [d_date_sk#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#46]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#46]
 
 Subquery:2 Hosting operator id = 12 Hosting Expression = cs_sold_date_sk#18 IN dynamicpruning#10
 

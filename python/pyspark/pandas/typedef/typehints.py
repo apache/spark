@@ -158,13 +158,15 @@ def as_spark_type(
     if sys.version_info >= (3, 8) and LooseVersion(np.__version__) >= LooseVersion("1.21"):
         if (
             hasattr(tpe, "__origin__")
-            and tpe.__origin__ is np.ndarray  # type: ignore
+            and tpe.__origin__ is np.ndarray  # type: ignore[union-attr]
             and hasattr(tpe, "__args__")
-            and len(tpe.__args__) > 1  # type: ignore
+            and len(tpe.__args__) > 1  # type: ignore[union-attr]
         ):
             # numpy.typing.NDArray
             return types.ArrayType(
-                as_spark_type(tpe.__args__[1].__args__[0], raise_error=raise_error)  # type: ignore
+                as_spark_type(
+                    tpe.__args__[1].__args__[0], raise_error=raise_error  # type: ignore[union-attr]
+                )
             )
 
     if isinstance(tpe, np.dtype) and tpe == np.dtype("object"):
@@ -172,8 +174,12 @@ def as_spark_type(
     # ArrayType
     elif tpe in (np.ndarray,):
         return types.ArrayType(types.StringType())
-    elif hasattr(tpe, "__origin__") and issubclass(tpe.__origin__, list):  # type: ignore
-        element_type = as_spark_type(tpe.__args__[0], raise_error=raise_error)  # type: ignore
+    elif hasattr(tpe, "__origin__") and issubclass(
+        tpe.__origin__, list  # type: ignore[union-attr]
+    ):
+        element_type = as_spark_type(
+            tpe.__args__[0], raise_error=raise_error  # type: ignore[union-attr]
+        )
         if element_type is None:
             return None
         return types.ArrayType(element_type)
@@ -658,7 +664,7 @@ def create_type_for_series_type(param: Any) -> Type[SeriesType]:
     else:
         new_class = param.type if isinstance(param, np.dtype) else param
 
-    return SeriesType[new_class]  # type: ignore
+    return SeriesType[new_class]  # type: ignore[valid-type]
 
 
 # TODO: Remove this variadic-generic hack by tuple once ww drop Python up to 3.9.
@@ -705,10 +711,10 @@ def create_tuple_for_frame_type(params: Any) -> object:
 # TODO(SPARK-36708): numpy.typing (numpy 1.21+) support for nested types.
 def extract_types(params: Any) -> Tuple:
     origin = params
-    if isinstance(params, zip):  # type: ignore
+    if isinstance(params, zip):
         # Example:
         #   DataFrame[zip(pdf.columns, pdf.dtypes)]
-        params = tuple(slice(name, tpe) for name, tpe in params)  # type: ignore
+        params = tuple(slice(name, tpe) for name, tpe in params)  # type: ignore[misc, has-type]
 
     if isinstance(params, Iterable):
         params = tuple(params)
@@ -765,7 +771,7 @@ def extract_types(params: Any) -> Tuple:
             isinstance(data_types, list)
             and len(data_types) >= 1
             and isinstance(data_types[0], tuple)
-        ):  # type: ignore
+        ):
             # Example:
             #   DataFrame[("index", int), [("id", int), ("A", int)]]
             data_types = zip((name for name, _ in data_types), (tpe for _, tpe in data_types))

@@ -2378,6 +2378,29 @@ def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
 
     .. versionadded:: 2.0.0
 
+    Parameters
+    ----------
+    timeColumn : :class:`~pyspark.sql.Column`
+        The column or the expression to use as the timestamp for windowing by time.
+        The time column must be of TimestampType.
+    windowDuration : str
+        A string specifying the width of the window, e.g. `10 minutes`,
+        `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
+        valid duration identifiers. Note that the duration is a fixed length of
+        time, and does not vary over time according to a calendar. For example,
+        `1 day` always means 86,400,000 milliseconds, not a calendar day.
+    slideDuration : str, optional
+        A new window will be generated every `slideDuration`. Must be less than
+        or equal to the `windowDuration`. Check
+        `org.apache.spark.unsafe.types.CalendarInterval` for valid duration
+        identifiers. This duration is likewise absolute, and does not vary
+        according to a calendar.
+    startTime : str, optional
+        The offset with respect to 1970-01-01 00:00:00 UTC with which to start
+        window intervals. For example, in order to have hourly tumbling windows that
+        start 15 minutes past the hour, e.g. 12:15-13:15, 13:15-14:15... provide
+        `startTime` as `15 minutes`.
+
     Examples
     --------
     >>> df = spark.createDataFrame([("2016-03-11 09:00:07", 1)]).toDF("date", "val")
@@ -2425,7 +2448,19 @@ def session_window(timeColumn, gapDuration):
     input row.
     The output column will be a struct called 'session_window' by default with the nested columns
     'start' and 'end', where 'start' and 'end' will be of :class:`pyspark.sql.types.TimestampType`.
+
     .. versionadded:: 3.2.0
+
+    Parameters
+    ----------
+    timeColumn : :class:`~pyspark.sql.Column`
+        The column or the expression to use as the timestamp for windowing by time.
+        The time column must be of TimestampType.
+    gapDuration : :class:`~pyspark.sql.Column` or str
+        A column or string specifying the timeout of the session. It could be static value,
+        e.g. `10 minutes`, `1 second`, or an expression/UDF that specifies gap
+        duration dynamically based on the input row.
+
     Examples
     --------
     >>> df = spark.createDataFrame([("2016-03-11 09:00:07", 1)]).toDF("date", "val")

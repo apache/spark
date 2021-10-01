@@ -85,7 +85,7 @@ Input [2]: [item_cnt#13, i_manufact#5]
 
 (14) BroadcastExchange
 Input [1]: [i_manufact#5]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#14]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false,false), [id=#14]
 
 (15) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [i_manufact#2]

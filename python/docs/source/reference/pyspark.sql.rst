@@ -259,6 +259,7 @@ Column APIs
     Column.eqNullSafe
     Column.getField
     Column.getItem
+    Column.ilike
     Column.isNotNull
     Column.isNull
     Column.isin
@@ -516,6 +517,7 @@ Functions
     second
     sentences
     sequence
+    session_window
     sha1
     sha2
     shiftleft
