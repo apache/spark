@@ -784,7 +784,7 @@ private[spark] class ApplicationMaster(
    */
   private class AMEndpoint(override val rpcEnv: RpcEnv, driver: RpcEndpointRef)
     extends RpcEndpoint with Logging {
-    private var shutdown = false
+    private var makeShutdown = false
     private val clientModeTreatDisconnectAsFailed =
       sparkConf.get(AM_CLIENT_MODE_TREAT_DISCONNECT_AS_FAILED)
 
@@ -805,7 +805,7 @@ private[spark] class ApplicationMaster(
       case UpdateDelegationTokens(tokens) =>
         SparkHadoopUtil.get.addDelegationTokens(tokens, sparkConf)
 
-      case Shutdown => shutdown = true
+      case Shutdown => makeShutdown = true
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -848,7 +848,7 @@ private[spark] class ApplicationMaster(
       // In cluster mode or unmanaged am case, do not rely on the disassociated event to exit
       // This avoids potentially reporting incorrect exit codes if the driver fails
       if (!(isClusterMode || sparkConf.get(YARN_UNMANAGED_AM))) {
-        if (shutdown || !clientModeTreatDisconnectAsFailed) {
+        if (makeShutdown || !clientModeTreatDisconnectAsFailed) {
           logInfo(s"Driver terminated or disconnected! Shutting down. $remoteAddress")
           finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
         } else {
