@@ -2603,12 +2603,13 @@ private[spark] object Utils extends Logging {
    *   - IO encryption disabled
    *   - serializer(such as KryoSerializer) supports relocation of serialized objects
    */
-  def isPushBasedShuffleEnabled(conf: SparkConf, checkSerializer: Boolean = true): Boolean = {
+  def isPushBasedShuffleEnabled(conf: SparkConf,
+      isDriver: Boolean,
+      checkSerializer: Boolean = true): Boolean = {
     val pushBasedShuffleEnabled = conf.get(PUSH_BASED_SHUFFLE_ENABLED)
     if (pushBasedShuffleEnabled) {
       lazy val serializer = Option(SparkEnv.get).map(_.serializer)
-        .getOrElse(Utils.classForName(conf.get(SERIALIZER)).getConstructor(classOf[SparkConf])
-          .newInstance(conf).asInstanceOf[Serializer])
+        .getOrElse(instantiateClassFromConf[Serializer](SERIALIZER, conf, isDriver))
       val canDoPushBasedShuffle = conf.get(IS_TESTING).getOrElse(false) ||
         (conf.get(SHUFFLE_SERVICE_ENABLED) &&
           conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn" &&
@@ -2626,6 +2627,34 @@ private[spark] object Utils extends Logging {
     } else {
       false
     }
+  }
+
+  // Create an instance of the class with the given name, possibly initializing it with our conf
+  def instantiateClass[T](className: String, conf: SparkConf, isDriver: Boolean): T = {
+    val cls = Utils.classForName(className)
+    // Look for a constructor taking a SparkConf and a boolean isDriver, then one taking just
+    // SparkConf, then one taking no arguments
+    try {
+      cls.getConstructor(classOf[SparkConf], java.lang.Boolean.TYPE)
+        .newInstance(conf, java.lang.Boolean.valueOf(isDriver))
+        .asInstanceOf[T]
+    } catch {
+      case _: NoSuchMethodException =>
+        try {
+          cls.getConstructor(classOf[SparkConf]).newInstance(conf).asInstanceOf[T]
+        } catch {
+          case _: NoSuchMethodException =>
+            cls.getConstructor().newInstance().asInstanceOf[T]
+        }
+    }
+  }
+
+  // Create an instance of the class named by the given SparkConf property
+  // if the property is not set, possibly initializing it with our conf
+  def instantiateClassFromConf[T](propertyName: ConfigEntry[String],
+      conf: SparkConf,
+      isDriver: Boolean): T = {
+    instantiateClass[T](conf.get(propertyName), conf, isDriver)
   }
 
   /**
