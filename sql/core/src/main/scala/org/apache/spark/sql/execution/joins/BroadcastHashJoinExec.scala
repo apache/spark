@@ -60,7 +60,8 @@ case class BroadcastHashJoinExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    val mode = HashedRelationBroadcastMode(buildBoundKeys, isNullAwareAntiJoin)
+    val mode = HashedRelationBroadcastMode(
+      buildBoundKeys, isNullAwareAntiJoin, ignoreDuplicatedKey)
     buildSide match {
       case BuildLeft =>
         BroadcastDistribution(mode) :: UnspecifiedDistribution :: Nil

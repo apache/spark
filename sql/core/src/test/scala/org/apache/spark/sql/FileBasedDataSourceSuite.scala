@@ -382,7 +382,9 @@ class FileBasedDataSourceSuite extends QueryTest
             msg.toLowerCase(Locale.ROOT).contains(msg2))
         }
 
-        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+        withSQLConf(
+          SQLConf.USE_V1_SOURCE_LIST.key -> useV1List,
+          SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
           // write path
           Seq("csv", "json", "parquet", "orc").foreach { format =>
             val msg = intercept[AnalysisException] {

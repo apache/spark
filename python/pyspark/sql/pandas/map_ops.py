@@ -15,8 +15,14 @@
 # limitations under the License.
 #
 import sys
+from typing import Union, TYPE_CHECKING
 
 from pyspark.rdd import PythonEvalType
+from pyspark.sql.types import StructType
+
+if TYPE_CHECKING:
+    from pyspark.sql.dataframe import DataFrame
+    from pyspark.sql.pandas._typing import PandasMapIterFunction
 
 
 class PandasMapOpsMixin(object):
@@ -25,7 +31,9 @@ class PandasMapOpsMixin(object):
     can use this class.
     """
 
-    def mapInPandas(self, func, schema):
+    def mapInPandas(
+        self, func: "PandasMapIterFunction", schema: Union[StructType, str]
+    ) -> "DataFrame":
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
         function that takes and outputs a pandas DataFrame, and returns the result as a
@@ -79,11 +87,11 @@ class PandasMapOpsMixin(object):
         udf = pandas_udf(
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF)
         udf_column = udf(*[self[col] for col in self.columns])
-        jdf = self._jdf.mapInPandas(udf_column._jc.expr())
+        jdf = self._jdf.mapInPandas(udf_column._jc.expr())  # type: ignore[operator]
         return DataFrame(jdf, self.sql_ctx)
 
 
-def _test():
+def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.pandas.map_ops

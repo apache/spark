@@ -78,3 +78,6 @@ class PartitionsAlreadyExistException(message: String) extends AnalysisException
 
 class FunctionAlreadyExistsException(db: String, func: String)
   extends AnalysisException(s"Function '$func' already exists in database '$db'")
+
+class IndexAlreadyExistsException(indexName: String, table: Identifier)
+  extends AnalysisException(s"Index '$indexName' already exists in table ${table.quoted}")

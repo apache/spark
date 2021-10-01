@@ -265,7 +265,8 @@ private[parquet] class ParquetRowConverter(
           override def addInt(value: Int): Unit =
             updater.setLong(Integer.toUnsignedLong(value))
         }
-      case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType =>
+      case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType |
+        _: AnsiIntervalType =>
         new ParquetPrimitiveConverter(updater)
 
       case ByteType =>

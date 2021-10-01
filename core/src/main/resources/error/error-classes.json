@@ -111,6 +111,9 @@
     "message" : [ "The input external row cannot be null." ],
     "sqlState" : "42000"
   },
+  "INTERNAL_ERROR" : {
+    "message" : [ "%s" ]
+  },
   "INVALID_ARRAY_INDEX" : {
     "message" : [ "Invalid index: %s, numElements: %s" ]
   },
@@ -130,18 +133,11 @@
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ],
     "sqlState" : "42000"
   },
-  "LOGICAL_HINT_OPERATOR_NOT_REMOVED_DURING_ANALYSIS" : {
-    "message" : [ "Internal error: logical hint operator should have been removed during analysis" ]
-  },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist." ]
   },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
-    "sqlState" : "42000"
-  },
-  "MISSING_METHOD" : {
-    "message" : [ "A method named \"%s\" is not declared in any enclosing class nor any supertype" ],
     "sqlState" : "42000"
   },
   "MISSING_STATIC_PARTITION_COLUMN" : {

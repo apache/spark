@@ -23,7 +23,11 @@ import numpy as np
 
 from pyspark import SparkContext
 from pyspark.sql import functions as F
-from pyspark.sql.column import Column, _to_java_column, _create_column_from_literal  # type: ignore
+from pyspark.sql.column import (  # type: ignore[attr-defined]
+    Column,
+    _to_java_column,
+    _create_column_from_literal,
+)
 from pyspark.sql.types import (
     ByteType,
     FloatType,
@@ -36,7 +40,7 @@ def repeat(col: Column, n: Union[int, Column]) -> Column:
     """
     Repeats a string column n times, and returns it as a new string column.
     """
-    sc = SparkContext._active_spark_context  # type: ignore
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     n = _to_java_column(n) if isinstance(n, Column) else _create_column_from_literal(n)
     return _call_udf(sc, "repeat", _to_java_column(col), n)
 

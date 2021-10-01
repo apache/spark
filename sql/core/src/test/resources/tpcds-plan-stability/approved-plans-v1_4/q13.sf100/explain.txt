@@ -66,7 +66,7 @@ Condition : (isnotnull(cd_demo_sk#12) AND ((((cd_marital_status#13 = M) AND (cd_
 
 (7) BroadcastExchange
 Input [3]: [cd_demo_sk#12, cd_marital_status#13, cd_education_status#14]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#15]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#15]
 
 (8) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [ss_cdemo_sk#1]
@@ -93,7 +93,7 @@ Condition : (isnotnull(hd_demo_sk#16) AND (((hd_dep_count#17 = 3) OR (hd_dep_cou
 
 (13) BroadcastExchange
 Input [2]: [hd_demo_sk#16, hd_dep_count#17]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#18]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#18]
 
 (14) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [ss_hdemo_sk#2]
@@ -132,7 +132,7 @@ Condition : isnotnull(s_store_sk#20)
 
 (22) BroadcastExchange
 Input [1]: [s_store_sk#20]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#21]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#21]
 
 (23) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [ss_store_sk#4]
@@ -163,7 +163,7 @@ Input [3]: [ca_address_sk#22, ca_state#23, ca_country#24]
 
 (29) BroadcastExchange
 Input [2]: [ca_address_sk#22, ca_state#23]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#25]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#25]
 
 (30) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [ss_addr_sk#3]
@@ -222,6 +222,6 @@ Input [2]: [d_date_sk#19, d_year#49]
 
 (39) BroadcastExchange
 Input [1]: [d_date_sk#19]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#50]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#50]
 
 
