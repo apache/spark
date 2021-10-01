@@ -2606,7 +2606,7 @@ private[spark] object Utils extends Logging {
   def isPushBasedShuffleEnabled(conf: SparkConf, checkSerializer: Boolean = true): Boolean = {
     val pushBasedShuffleEnabled = conf.get(PUSH_BASED_SHUFFLE_ENABLED)
     if (pushBasedShuffleEnabled) {
-      val serializer = Option(SparkEnv.get).map(_.serializer)
+      lazy val serializer = Option(SparkEnv.get).map(_.serializer)
         .getOrElse(Utils.classForName(conf.get(SERIALIZER)).getConstructor(classOf[SparkConf])
           .newInstance(conf).asInstanceOf[Serializer])
       val canDoPushBasedShuffle = conf.get(IS_TESTING).getOrElse(false) ||
