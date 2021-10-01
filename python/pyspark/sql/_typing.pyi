@@ -42,6 +42,8 @@ AtomicDataTypeOrString = Union[pyspark.sql.types.AtomicType, str]
 DataTypeOrString = Union[pyspark.sql.types.DataType, str]
 OptionalPrimitiveType = Optional[PrimitiveType]
 
+AtomicValue = TypeVar("AtomicValue", DateTimeLiteral, DecimalLiteral, bool, str, int, float)
+
 RowLike = TypeVar("RowLike", List[Any], Tuple[Any, ...], pyspark.sql.types.Row)
 
 class SupportsOpen(Protocol):

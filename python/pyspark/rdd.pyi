@@ -56,7 +56,7 @@ from pyspark.resource.profile import ResourceProfile
 from pyspark.statcounter import StatCounter
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import AtomicType, StructType
-from pyspark.sql._typing import DateTimeLiteral, LiteralType, DecimalLiteral, RowLike
+from pyspark.sql._typing import DateTimeLiteral, DecimalLiteral, RowLike, AtomicValue
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 T = TypeVar("T")
@@ -454,7 +454,7 @@ class RDD(Generic[T]):
     ) -> DataFrame: ...
     @overload
     def toDF(
-        self: RDD[Union[DateTimeLiteral, LiteralType, DecimalLiteral]],
+        self: RDD[AtomicValue],
         schema: Union[AtomicType, str],
     ) -> DataFrame: ...
 
