@@ -77,4 +77,3 @@ Functions [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#3 as d
 Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#3 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#4 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true))#20]
 Results [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#3 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#4 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true))#20 AS revenue#21]
 
-

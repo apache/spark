@@ -219,4 +219,3 @@ Arguments: rangepartitioning(nation#23 ASC NULLS FIRST, o_year#24 DESC NULLS LAS
 Input [3]: [nation#23, o_year#24, sum_profit#32]
 Arguments: [nation#23 ASC NULLS FIRST, o_year#24 DESC NULLS LAST], true, 0
 
-
