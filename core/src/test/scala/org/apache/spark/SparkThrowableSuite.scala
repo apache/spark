@@ -160,4 +160,21 @@ class SparkThrowableSuite extends SparkFunSuite {
         assert(false)
     }
   }
+
+  test("Try catching internal SparkError") {
+    try {
+      throw new SparkException(
+        errorClass = "INTERNAL_ERROR",
+        messageParameters = Array("this is an internal error"),
+        cause = null
+      )
+    } catch {
+      case e: SparkThrowable =>
+        assert(e.isInternalError)
+        assert(e.getSqlState == null)
+      case _: Throwable =>
+        // Should not end up here
+        assert(false)
+    }
+  }
 }
