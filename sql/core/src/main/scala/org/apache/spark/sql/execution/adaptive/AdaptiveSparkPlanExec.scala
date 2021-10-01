@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.bucketing.DisableUnnecessaryBucketedScan
 import org.apache.spark.sql.execution.exchange._
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -81,6 +82,14 @@ case class AdaptiveSparkPlanExec(
   }
 
   @transient private val planChangeLogger = new PlanChangeLogger[SparkPlan]()
+
+  override lazy val metrics = Map(
+    "reOptimize duration" ->
+      SQLMetrics.createTimingMetric(sparkContext, "reOptimize duration"),
+    "createQueryStages duration" ->
+      SQLMetrics.createTimingMetric(sparkContext, "createQueryStages duration"),
+    "generate explainString duration" ->
+      SQLMetrics.createTimingMetric(sparkContext, "generate explainString duration"))
 
   // The logical plan optimizer for re-optimizing the current logical plan.
   @transient private val optimizer = new AQEOptimizer(conf)
@@ -183,6 +192,9 @@ case class AdaptiveSparkPlanExec(
       inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
   }
 
+  @transient
+  private val tracker = new AdaptiveExecutionTracker
+
   @volatile private var currentPhysicalPlan = initialPlan
 
   private var isFinalPlan = false
@@ -231,7 +243,9 @@ case class AdaptiveSparkPlanExec(
       // Use inputPlan logicalLink here in case some top level physical nodes may be removed
       // during `initialPlan`
       var currentLogicalPlan = inputPlan.logicalLink.get
-      var result = createQueryStages(currentPhysicalPlan)
+      var result = tracker.measureTime("createQueryStages") {
+        createQueryStages(currentPhysicalPlan)
+      }
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
       val errors = new mutable.ArrayBuffer[Throwable]()
       var stagesToReplace = Seq.empty[QueryStageExec]
@@ -300,7 +314,9 @@ case class AdaptiveSparkPlanExec(
         // plans are updated, we can clear the query stage list because at this point the two plans
         // are semantically and physically in sync again.
         val logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
-        val (newPhysicalPlan, newLogicalPlan) = reOptimize(logicalPlan)
+        val (newPhysicalPlan, newLogicalPlan) = tracker.measureTime("reOptimize") {
+          reOptimize(logicalPlan)
+        }
         val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
         val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
         if (newCost < origCost ||
@@ -334,7 +350,12 @@ case class AdaptiveSparkPlanExec(
     if (!isSubquery && currentPhysicalPlan.find(_.subqueries.nonEmpty).isDefined) {
       getExecutionId.foreach(onUpdatePlan(_, Seq.empty))
     }
+    getExecutionId.foreach({ execId =>
+      updateMetrics(execId)
+    })
     logOnLevel(s"Final plan: $currentPhysicalPlan")
+    logDebug(s"Time spent in various phases of AdaptiveSparkPlanExec " +
+      s"${tracker.actionTime.asScala.toMap.mkString("ms \n")}ms")
   }
 
   override def executeCollect(): Array[InternalRow] = {
@@ -706,7 +727,9 @@ case class AdaptiveSparkPlanExec(
       val planDescriptionMode = ExplainMode.fromString(conf.uiExplainMode)
       context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
         executionId,
-        context.qe.explainString(planDescriptionMode),
+        tracker.measureTime("explainString") {
+          context.qe.explainString(planDescriptionMode)
+        },
         SparkPlanInfo.fromSparkPlan(context.qe.executedPlan)))
     }
   }
@@ -738,6 +761,18 @@ case class AdaptiveSparkPlanExec(
       se
     }
     throw e
+  }
+
+  private def updateMetrics(execId: Long) = {
+    metrics("reOptimize duration").set(tracker.actionTime.get("reOptimize"))
+    metrics("createQueryStages duration").set(tracker.actionTime.get("createQueryStages"))
+    metrics("generate explainString duration").set(tracker.actionTime.get("generate explainString"))
+
+    val v = metrics.filter(!_._2.isZero())
+    if (v.nonEmpty) {
+      // only send an update if there is something to report
+      SQLMetrics.postDriverMetricUpdates(sparkContext, execId.toString, v.values.toSeq)
+    }
   }
 }
 
@@ -795,6 +830,26 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
    */
   val stageCache: TrieMap[SparkPlan, QueryStageExec] =
     new TrieMap[SparkPlan, QueryStageExec]()
+}
+
+/**
+ * Simple utility for tracking duration of various adaptive execution optimizations
+ */
+private class AdaptiveExecutionTracker {
+  val actionTime = new java.util.HashMap[String, Long]
+
+  def measureTime[T](action: String)(f: => T): T = {
+    val startTime = System.currentTimeMillis()
+    val ret = f
+    val endTime = System.currentTimeMillis()
+    if (actionTime.containsKey(action)) {
+      val oldTime = actionTime.get(action)
+      actionTime.put(action, oldTime + (endTime - startTime))
+    } else {
+      actionTime.put(action, endTime - startTime)
+    }
+    ret
+  }
 }
 
 /**

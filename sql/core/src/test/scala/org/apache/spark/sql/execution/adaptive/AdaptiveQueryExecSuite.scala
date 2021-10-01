@@ -2192,6 +2192,27 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("Adaptive tracker test") {
+    val t = new AdaptiveExecutionTracker
+    t.measureTime("p1") {
+      Thread.sleep(1)
+    }
+
+    assert(t.actionTime.get("p1") > 0)
+  }
+
+  test("Adaptive tracker contains expected aqe actions") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val df = spark.sql(
+        " (SELECT min(b) FROM testData join testData2 ON key = a where value = '1')")
+      val adaptiveMetrics =
+        df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].metrics
+      assert(adaptiveMetrics("reOptimize duration") != null)
+      assert(adaptiveMetrics("createQueryStages duration") != null)
+      assert(adaptiveMetrics("generate explainString duration") != null)
+    }
+  }
 }
 
 /**
