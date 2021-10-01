@@ -196,7 +196,7 @@ private[spark] class BlockManager(
     // Only perform cleanup if an external service is not serving our shuffle files.
     val deleteFilesOnStop =
       !externalShuffleServiceEnabled || isDriver
-    new DiskBlockManager(conf, deleteFilesOnStop, isDriver)
+    new DiskBlockManager(conf, deleteFilesOnStop = deleteFilesOnStop, isDriver = isDriver)
   }
 
   // Visible for testing
