@@ -91,7 +91,17 @@ case class EnsureRequirements(
       //
       // However this should be sufficient for now since in Spark nodes with multiple children
       // always have exactly 2 children.
-      val bestSpec = specs.values.maxBy(_.numPartitions)
+      //
+      // Also when choosing the spec, we should consider those children with no `Exchange` node
+      // first. For instance, if we have:
+      //   A: (No_Exchange, 100) <---> B: (Exchange, 120)
+      // it's better to pick A and change B to (Exchange, 100) instead of picking B and insert a
+      // new shuffle for A.
+      val (shuffleSpecs, noShuffleSpecs) = specs.partition {
+        case (k, _) => children(k).isInstanceOf[ShuffleExchangeExec]
+      }
+      val bestSpec = (if (noShuffleSpecs.nonEmpty) noShuffleSpecs else specs)
+          .values.maxBy(_.numPartitions)
 
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
         case ((child, _), idx) if !childrenIndexes.contains(idx) =>
@@ -108,12 +118,10 @@ case class EnsureRequirements(
             }
           }
       }
-    }
 
-    val childrenNumPartitions =
-      childrenIndexes.map(children(_).outputPartitioning.numPartitions).toSet
+      val childrenNumPartitions =
+        childrenIndexes.map(children(_).outputPartitioning.numPartitions).toSet
 
-    if (childrenNumPartitions.size > 1) {
       // Get the number of partitions which is explicitly required by the distributions.
       val requiredNumPartitions = {
         val numPartitionsSet = childrenIndexes.flatMap {
@@ -131,20 +139,21 @@ case class EnsureRequirements(
       val nonShuffleChildrenNumPartitions =
         childrenIndexes.map(children).filterNot(_.isInstanceOf[ShuffleExchangeExec])
           .map(_.outputPartitioning.numPartitions)
-      val expectedChildrenNumPartitions = if (nonShuffleChildrenNumPartitions.nonEmpty) {
-        if (nonShuffleChildrenNumPartitions.length == childrenIndexes.length) {
-          // Here we pick the max number of partitions among these non-shuffle children.
-          nonShuffleChildrenNumPartitions.max
+      val expectedChildrenNumPartitions =
+        if (shuffleSpecs.nonEmpty && nonShuffleChildrenNumPartitions.nonEmpty) {
+          if (nonShuffleChildrenNumPartitions.length == childrenIndexes.length) {
+            // Here we pick the max number of partitions among these non-shuffle children.
+            nonShuffleChildrenNumPartitions.max
+          } else {
+            // Here we pick the max number of partitions among these non-shuffle children as the
+            // expected number of shuffle partitions. However, if it's smaller than
+            // `conf.numShufflePartitions`, we pick `conf.numShufflePartitions` as the
+            // expected number of shuffle partitions.
+            math.max(nonShuffleChildrenNumPartitions.max, conf.defaultNumShufflePartitions)
+          }
         } else {
-          // Here we pick the max number of partitions among these non-shuffle children as the
-          // expected number of shuffle partitions. However, if it's smaller than
-          // `conf.numShufflePartitions`, we pick `conf.numShufflePartitions` as the
-          // expected number of shuffle partitions.
-          math.max(nonShuffleChildrenNumPartitions.max, conf.defaultNumShufflePartitions)
+          childrenNumPartitions.max
         }
-      } else {
-        childrenNumPartitions.max
-      }
 
       val targetNumPartitions = requiredNumPartitions.getOrElse(expectedChildrenNumPartitions)
 
