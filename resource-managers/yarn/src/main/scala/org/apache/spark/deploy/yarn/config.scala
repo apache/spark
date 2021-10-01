@@ -54,17 +54,15 @@ package object config extends Logging {
 
   private[spark] val AM_CLIENT_MODE_TREAT_DISCONNECT_AS_FAILED =
     ConfigBuilder("spark.yarn.am.clientModeTreatDisconnectAsFailed")
-      .doc("In managed yarn-client mode, when am disconnect with driver, " +
-        "am will finish application with SUCCESS final status since in " +
-        "interactive command line application user always directly kill the driver " +
-        "such as spark-sql, spark-shell etc.., but when there is network issue cause am " +
-        "disconnected with driver, YarnClientSchedulerBackend.MonitorThread will " +
-        "get application report from RM that this application is finished with " +
-        "SUCCESS final status then call SparkContext.stop() cause application exit " +
-        "with exit code 0. The caller side will get exitcode(0) and then think this application " +
-        "as succeed and won't rerun. " +
-        "When true, am will finish application as FAILED final status " +
-        "when am lose connection with driver in client mode.")
+      .doc("Treat yarn-client unclean disconnects as failures. In yarn-client mode, normally the " +
+        "application will always finish with a final status of SUCCESS because in some cases, " +
+        "it is not possible to know if the Application was terminated intentionally by the user " +
+        "or if there was a real error. This config changes that behavior such that " +
+        "if the Application Master disconnects from the driver uncleanly (ie without the proper" +
+        " shutdown handshake) the application will terminate with a final status of FAILED. " +
+        "This will allow the caller to decide if it was truly a failure. Note that " +
+        "if this config is set and the user just terminate the client application badly " +
+        "it may show a status of FAILED when it wasn't really FAILED.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(false)

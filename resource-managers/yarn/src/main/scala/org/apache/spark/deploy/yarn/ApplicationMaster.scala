@@ -852,7 +852,7 @@ private[spark] class ApplicationMaster(
           logInfo(s"Driver terminated or disconnected! Shutting down. $remoteAddress")
           finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
         } else {
-          logError(s"Application Master lose connection with driver! Shutting down. $remoteAddress")
+          logError(s"Application Master lost connection with driver! Shutting down. $remoteAddress")
           finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_DISCONNECTED)
         }
       }
