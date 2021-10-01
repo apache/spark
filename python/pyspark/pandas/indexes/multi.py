@@ -16,7 +16,7 @@
 #
 
 from distutils.version import LooseVersion
-from functools import partial
+from functools import partial, reduce
 from typing import Any, Callable, Iterator, List, Optional, Tuple, Union, cast, no_type_check
 
 import pandas as pd
@@ -1136,6 +1136,41 @@ class MultiIndex(Index):
             index_fields=index_fields,
         )
         return cast(MultiIndex, DataFrame(internal).index)
+
+    def equal_levels(self, other: "MultiIndex") -> bool:
+        """
+        Return True if the levels of both MultiIndex objects are the same
+
+        .. versionadded:: 3.3.0
+
+        Examples
+        --------
+        >>> psmidx1 = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        >>> psmidx2 = ps.MultiIndex.from_tuples([("b", "y"), ("a", "x"), ("c", "z")])
+        >>> psmidx1.equal_levels(psmidx2)
+        True
+
+        >>> psmidx2 = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "j")])
+        >>> psmidx1.equal_levels(psmidx2)
+        False
+        """
+        nlevels = self.nlevels
+        if nlevels != other.nlevels:
+            return False
+
+        self_sdf = self._internal.spark_frame
+        other_sdf = other._internal.spark_frame
+        subtract_list = []
+        for nlevel in range(nlevels):
+            self_index_scol = self._internal.index_spark_columns[nlevel]
+            other_index_scol = other._internal.index_spark_columns[nlevel]
+            self_subtract_other = self_sdf.select(self_index_scol).subtract(
+                other_sdf.select(other_index_scol)
+            )
+            subtract_list.append(self_subtract_other)
+
+        unioned_subtracts = reduce(lambda x, y: x.union(y), subtract_list)
+        return len(unioned_subtracts.head(1)) == 0
 
     @property
     def hasnans(self) -> bool:
