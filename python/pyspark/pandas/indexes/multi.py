@@ -1170,10 +1170,7 @@ class MultiIndex(Index):
             subtract_list.append(self_subtract_other)
 
         unioned_subtracts = reduce(lambda x, y: x.union(y), subtract_list)
-        if len(unioned_subtracts.head(1)) == 0:
-            return True
-        else:
-            return False
+        return len(unioned_subtracts.head(1)) == 0
 
     @property
     def hasnans(self) -> bool:
