@@ -102,7 +102,8 @@ case class ParquetScanBuilder(
       val (column, aggType) = agg match {
         case max: Max => (max.column, "max")
         case min: Min => (min.column, "min")
-        case _ => throw new IllegalArgumentException("Unexpected type of AggregateFunc")
+        case _ =>
+          throw new IllegalArgumentException(s"Unexpected type of AggregateFunc ${agg.describe}")
       }
 
       if (isPartitionCol(column)) {

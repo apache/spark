@@ -155,14 +155,15 @@ object ParquetUtils {
    */
   private[sql] def createAggInternalRowFromFooter(
       footer: ParquetMetadata,
+      filePath: String,
       dataSchema: StructType,
       partitionSchema: StructType,
       aggregation: Aggregation,
       aggSchema: StructType,
       datetimeRebaseMode: LegacyBehaviorPolicy.Value,
       isCaseSensitive: Boolean): InternalRow = {
-    val (primitiveTypes, values) =
-      getPushedDownAggResult(footer, dataSchema, partitionSchema, aggregation, isCaseSensitive)
+    val (primitiveTypes, values) = getPushedDownAggResult(
+      footer, filePath, dataSchema, partitionSchema, aggregation, isCaseSensitive)
 
     val builder = Types.buildMessage
     primitiveTypes.foreach(t => builder.addField(t))
@@ -171,8 +172,8 @@ object ParquetUtils {
     val schemaConverter = new ParquetToSparkSchemaConverter
     val converter = new ParquetRowConverter(schemaConverter, parquetSchema, aggSchema,
       None, datetimeRebaseMode, LegacyBehaviorPolicy.CORRECTED, NoopUpdater)
-    val primitiveTypeName = primitiveTypes.map(_.getPrimitiveTypeName)
-    primitiveTypeName.zipWithIndex.foreach {
+    val primitiveTypeNames = primitiveTypes.map(_.getPrimitiveTypeName)
+    primitiveTypeNames.zipWithIndex.foreach {
       case (PrimitiveType.PrimitiveTypeName.BOOLEAN, i) =>
         val v = values(i).asInstanceOf[Boolean]
         converter.getConverter(i).asPrimitiveConverter.addBoolean(v)
@@ -195,7 +196,7 @@ object ParquetUtils {
         val v = values(i).asInstanceOf[Binary]
         converter.getConverter(i).asPrimitiveConverter.addBinary(v)
       case (_, i) =>
-        throw new SparkException("Unexpected parquet type name: " + primitiveTypeName(i))
+        throw new SparkException("Unexpected parquet type name: " + primitiveTypeNames(i))
     }
     converter.currentRecord
   }
@@ -211,6 +212,7 @@ object ParquetUtils {
    */
   private[sql] def createAggColumnarBatchFromFooter(
       footer: ParquetMetadata,
+      filePath: String,
       dataSchema: StructType,
       partitionSchema: StructType,
       aggregation: Aggregation,
@@ -220,6 +222,7 @@ object ParquetUtils {
       isCaseSensitive: Boolean): ColumnarBatch = {
     val row = createAggInternalRowFromFooter(
       footer,
+      filePath,
       dataSchema,
       partitionSchema,
       aggregation,
@@ -246,6 +249,7 @@ object ParquetUtils {
    */
   private[sql] def getPushedDownAggResult(
       footer: ParquetMetadata,
+      filePath: String,
       dataSchema: StructType,
       partitionSchema: StructType,
       aggregation: Aggregation,
@@ -270,7 +274,7 @@ object ParquetUtils {
             val colName = max.column.fieldNames.head
             index = dataSchema.fieldNames.toList.indexOf(colName)
             schemaName = "max(" + colName + ")"
-            val currentMax = getCurrentBlockMaxOrMin(blockMetaData, index, true)
+            val currentMax = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, true)
             if (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0) {
               value = currentMax
             }
@@ -278,7 +282,7 @@ object ParquetUtils {
             val colName = min.column.fieldNames.head
             index = dataSchema.fieldNames.toList.indexOf(colName)
             schemaName = "min(" + colName + ")"
-            val currentMin = getCurrentBlockMaxOrMin(blockMetaData, index, false)
+            val currentMin = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, false)
             if (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0) {
               value = currentMin
             }
@@ -294,7 +298,7 @@ object ParquetUtils {
             if (!isPartitionCol) {
               index = dataSchema.fieldNames.toList.indexOf(count.column.fieldNames.head)
               // Count(*) includes the null values, but Count(colName) doesn't.
-              rowCount -= getNumNulls(blockMetaData, index)
+              rowCount -= getNumNulls(filePath, blockMetaData, index)
             }
           case _: CountStar =>
             schemaName = "count(*)"
@@ -324,25 +328,28 @@ object ParquetUtils {
    * @return the Max or Min value
    */
   private def getCurrentBlockMaxOrMin(
+      filePath: String,
       columnChunkMetaData: util.List[ColumnChunkMetaData],
       i: Int,
       isMax: Boolean): Any = {
     val statistics = columnChunkMetaData.get(i).getStatistics
     if (!statistics.hasNonNullValue) {
-      throw new UnsupportedOperationException("No min/max found for Parquet file, Set SQLConf" +
-        s" ${PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key} to false and execute again")
+      throw new UnsupportedOperationException(s"No min/max found for Parquet file $filePath. " +
+        s"Set SQLConf ${PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key} to false and execute again")
     } else {
       if (isMax) statistics.genericGetMax else statistics.genericGetMin
     }
   }
 
   private def getNumNulls(
+      filePath: String,
       columnChunkMetaData: util.List[ColumnChunkMetaData],
       i: Int): Long = {
     val statistics = columnChunkMetaData.get(i).getStatistics
     if (!statistics.isNumNullsSet) {
-      throw new UnsupportedOperationException("Number of nulls not set for Parquet file." +
-        s" Set SQLConf ${PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key} to false and execute again")
+      throw new UnsupportedOperationException(s"Number of nulls not set for Parquet file" +
+        s" $filePath. Set SQLConf ${PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key} to false and execute" +
+        s" again")
     }
     statistics.getNumNulls;
   }

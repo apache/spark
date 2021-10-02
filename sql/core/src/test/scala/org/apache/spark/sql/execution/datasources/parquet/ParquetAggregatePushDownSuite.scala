@@ -445,8 +445,6 @@ abstract class ParquetAggregatePushDownSuite
               "Spark SQL".getBytes, 222.toShort, 113, 9223372036854775807L, 0.25.toFloat, 0.85D,
               12345.678, ("2021-01-01").date)))
 
-            val testCountStar = sql("SELECT count(*) FROM test")
-
             val testCount = sql("SELECT count(StringCol), count(BooleanCol)," +
               " count(ByteCol), count(BinaryCol), count(ShortCol), count(IntegerCol)," +
               " count(LongCol), count(FloatCol), count(DoubleCol)," +
