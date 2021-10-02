@@ -61,7 +61,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
         "we can not enable the feature because other conditions are not satisfied. " +
         s"Shuffle compress: $compressed, serializer relocatable: $serializerRelocatable, " +
         s"codec concatenation: $codecConcatenation, use old shuffle fetch protocol: " +
-        s"$useOldFetchProtocol, io encryption: $ioEncryption")
+        s"$useOldFetchProtocol, io encryption: $ioEncryption.")
     }
     doBatchFetch
   }
