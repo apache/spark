@@ -36,7 +36,7 @@ trait DockerIntegrationFunSuite extends SparkFunSuite {
   /** Run the test if environment variable is set or ignore the test */
   override def test(testName: String, testTags: Tag*)(testBody: => Any)
     (implicit pos: Position): Unit = {
-    if (shouldRunTests) {
+    if (true) {
       super.test(testName, testTags: _*)(testBody)
     } else {
       ignore(s"$testName [enable by setting env var $envVarNameForEnablingTests=1]")(testBody)
@@ -45,7 +45,7 @@ trait DockerIntegrationFunSuite extends SparkFunSuite {
 
   /** Run the give body of code only if Kinesis tests are enabled */
   def runIfTestsEnabled(message: String)(body: => Unit): Unit = {
-    if (shouldRunTests) {
+    if (true) {
       body
     } else {
       ignore(s"$message [enable by setting env var $envVarNameForEnablingTests=1]")(())

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, Driver, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.time.{Instant, LocalDate}
+import java.util
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -37,6 +38,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
 import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.internal.SQLConf
@@ -1028,5 +1030,44 @@ object JdbcUtils extends Logging {
     } finally {
       statement.close()
     }
+  }
+
+  def executeQuery(conn: Connection, options: JDBCOptions, sql: String): ResultSet = {
+    val statement = conn.createStatement
+    try {
+      statement.setQueryTimeout(options.queryTimeout)
+      statement.executeQuery(sql)
+    } finally {
+      statement.close()
+    }
+  }
+
+  /**
+   * Create an index.
+   */
+  def createIndex(
+      conn: Connection,
+      indexName: String,
+      indexType: String,
+      tableName: String,
+      columns: Array[NamedReference],
+      columnsProperties: Array[util.Map[NamedReference, util.Properties]],
+      properties: util.Properties,
+      options: JDBCOptions): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    executeStatement(conn, options,
+      dialect.createIndex(indexName, indexType, tableName, columns, columnsProperties, properties))
+  }
+
+  /**
+   * Check if an index exists
+   */
+  def indexExists(
+      conn: Connection,
+      indexName: String,
+      tableName: String,
+      options: JDBCOptions): Boolean = {
+    val dialect = JdbcDialects.get(options.url)
+    dialect.indexExists(conn, indexName, tableName, options)
   }
 }

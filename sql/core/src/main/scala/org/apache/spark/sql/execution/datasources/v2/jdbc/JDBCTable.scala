@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
+import java.sql.Connection
 import java.util
 
 import scala.collection.JavaConverters._
@@ -23,13 +24,15 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOptions)
-  extends Table with SupportsRead with SupportsWrite {
+  extends Table with SupportsRead with SupportsWrite with SupportsIndex {
 
   override def name(): String = ident.toString
 
@@ -47,5 +50,40 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
     val mergedOptions = new JdbcOptionsInWrite(
       jdbcOptions.parameters.originalMap ++ info.options.asCaseSensitiveMap().asScala)
     JDBCWriteBuilder(schema, mergedOptions)
+  }
+
+  override def createIndex(
+      indexName: String,
+      indexType: String,
+      columns: Array[NamedReference],
+      columnsProperties: Array[util.Map[NamedReference, util.Properties]],
+      properties: util.Properties): Unit = {
+    withConnection { conn =>
+      JdbcUtils.createIndex(
+        conn, indexName, indexType, name, columns, columnsProperties, properties, jdbcOptions)
+    }
+  }
+
+  override def indexExists(indexName: String): Boolean = {
+    withConnection { conn =>
+      JdbcUtils.indexExists(conn, indexName, name, jdbcOptions)
+    }
+  }
+
+  override def dropIndex(indexName: String): Boolean = {
+    throw new UnsupportedOperationException("dropIndex is not supported yet")
+  }
+
+  override def listIndexes(): Array[TableIndex] = {
+    throw new UnsupportedOperationException("listIndexes is not supported yet")
+  }
+
+  private def withConnection[T](f: Connection => T): T = {
+    val conn = JdbcUtils.createConnectionFactory(jdbcOptions)()
+    try {
+      f(conn)
+    } finally {
+      conn.close()
+    }
   }
 }
