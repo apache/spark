@@ -272,7 +272,7 @@ object SparkEnv extends Logging {
       conf.set(DRIVER_PORT, rpcEnv.address.port)
     }
 
-    val serializer = Utils.instantiateClassFromConf[Serializer](SERIALIZER, conf, isDriver)
+    val serializer = Utils.instantiateSerializerFromConf[Serializer](SERIALIZER, conf, isDriver)
     logDebug(s"Using serializer: ${serializer.getClass}")
 
     val serializerManager = new SerializerManager(serializer, conf, ioEncryptionKey)
@@ -311,7 +311,8 @@ object SparkEnv extends Logging {
     val shuffleMgrName = conf.get(config.SHUFFLE_MANAGER)
     val shuffleMgrClass =
       shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase(Locale.ROOT), shuffleMgrName)
-    val shuffleManager = Utils.instantiateClass[ShuffleManager](shuffleMgrClass, conf, isDriver)
+    val shuffleManager = Utils.instantiateSerializerOrShuffleManager[ShuffleManager](
+      shuffleMgrClass, conf, isDriver)
 
     val memoryManager: MemoryManager = UnifiedMemoryManager(conf, numUsableCores)
 
@@ -344,8 +345,7 @@ object SparkEnv extends Logging {
           } else {
             None
           }, blockManagerInfo,
-          mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
-          isDriver)),
+          mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], isDriver)),
       registerOrLookupEndpoint(
         BlockManagerMaster.DRIVER_HEARTBEAT_ENDPOINT_NAME,
         new BlockManagerMasterHeartbeatEndpoint(rpcEnv, isLocal, blockManagerInfo)),

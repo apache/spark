@@ -562,7 +562,7 @@ private[spark] class BlockManager(
   private def registerWithExternalShuffleServer(): Unit = {
     logInfo("Registering executor with local external shuffle service.")
     val shuffleManagerMeta =
-      if (Utils.isPushBasedShuffleEnabled(conf, isDriver, false)) {
+      if (Utils.isPushBasedShuffleEnabled(conf, isDriver = isDriver, checkSerializer = false)) {
         s"${shuffleManager.getClass.getName}:" +
           s"${diskBlockManager.getMergeDirectoryAndAttemptIDJsonString()}}}"
       } else {
