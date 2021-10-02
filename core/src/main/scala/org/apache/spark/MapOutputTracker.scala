@@ -511,15 +511,39 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   // For testing
   def getMapSizesByExecutorId(shuffleId: Int, reduceId: Int)
       : Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
-    getMapSizesByExecutorId(shuffleId, 0, Int.MaxValue, reduceId, reduceId + 1).iter
+    getMapSizesByExecutorId(shuffleId, 0, Int.MaxValue, reduceId, reduceId + 1)
   }
 
   /**
    * Called from executors to get the server URIs and output sizes for each shuffle block that
    * needs to be read from a given range of map output partitions (startPartition is included but
    * endPartition is excluded from the range) within a range of mappers (startMapIndex is included
-   * but endMapIndex is excluded). If endMapIndex=Int.MaxValue, the actual endMapIndex will be
-   * changed to the length of total map outputs.
+   * but endMapIndex is excluded) when push based shuffle is not enabled for the specific shuffle
+   * dependency. If endMapIndex=Int.MaxValue, the actual endMapIndex will be changed to the length
+   * of total map outputs.
+   *
+   * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
+   *         and the second item is a sequence of (shuffle block id, shuffle block size, map index)
+   *         tuples describing the shuffle blocks that are stored at that block manager.
+   *         Note that zero-sized blocks are excluded in the result.
+   */
+  def getMapSizesByExecutorId(
+      shuffleId: Int,
+      startMapIndex: Int,
+      endMapIndex: Int,
+      startPartition: Int,
+      endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+    getPushBasedShuffleMapSizesByExecutorId(
+      shuffleId, startMapIndex, endMapIndex, startPartition, endPartition).iter
+  }
+
+  /**
+   * Called from executors to get the server URIs and output sizes for each shuffle block that
+   * needs to be read from a given range of map output partitions (startPartition is included but
+   * endPartition is excluded from the range) within a range of mappers (startMapIndex is included
+   * but endMapIndex is excluded) when push based shuffle is enabled for the specific shuffle
+   * dependency. If endMapIndex=Int.MaxValue, the actual endMapIndex will be changed to the length
+   * of total map outputs.
    *
    * @return A case class object which includes two attributes. The first attribute is a sequence
    *         of 2-item tuples, where the first item in the tuple is a BlockManagerId, and the
@@ -528,7 +552,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    *         zero-sized blocks are excluded in the result. The second attribute is a boolean flag,
    *         indicating whether batch fetch can be enabled.
    */
-  def getMapSizesByExecutorId(
+  def getPushBasedShuffleMapSizesByExecutorId(
       shuffleId: Int,
       startMapIndex: Int,
       endMapIndex: Int,
@@ -1064,7 +1088,7 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   // This method is only called in local-mode.
-  def getMapSizesByExecutorId(
+  def getPushBasedShuffleMapSizesByExecutorId(
       shuffleId: Int,
       startMapIndex: Int,
       endMapIndex: Int,
@@ -1142,7 +1166,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
    */
   private val fetchingLock = new KeyLock[Int]
 
-  override def getMapSizesByExecutorId(
+  override def getPushBasedShuffleMapSizesByExecutorId(
       shuffleId: Int,
       startMapIndex: Int,
       endMapIndex: Int,

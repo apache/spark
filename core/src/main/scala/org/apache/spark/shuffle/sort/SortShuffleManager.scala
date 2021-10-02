@@ -129,13 +129,20 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       endPartition: Int,
       context: TaskContext,
       metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
-    val blocksByAddress = SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(
-      handle.shuffleId, startMapIndex, endMapIndex, startPartition, endPartition)
+    val baseShuffleHandle = handle.asInstanceOf[BaseShuffleHandle[K, _, C]]
+    val (blocksByAddress, enableBatchFetch) =
+      if (baseShuffleHandle.dependency.shuffleMergeEnabled) {
+        val res = SparkEnv.get.mapOutputTracker.getPushBasedShuffleMapSizesByExecutorId(
+          handle.shuffleId, startMapIndex, endMapIndex, startPartition, endPartition)
+        (res.iter, res.enableBatchFetch)
+      } else {
+        val address = SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(
+          handle.shuffleId, startMapIndex, endMapIndex, startPartition, endPartition)
+        (address, canUseBatchFetch(startPartition, endPartition, context))
+      }
     new BlockStoreShuffleReader(
-      handle.asInstanceOf[BaseShuffleHandle[K, _, C]], blocksByAddress.iter, context, metrics,
-      shouldBatchFetch =
-        blocksByAddress.enableBatchFetch &&
-          canUseBatchFetch(startPartition, endPartition, context))
+      handle.asInstanceOf[BaseShuffleHandle[K, _, C]], blocksByAddress, context, metrics,
+      shouldBatchFetch = enableBatchFetch)
   }
 
   /** Get a writer for a given partition. Called on executors by map tasks. */
