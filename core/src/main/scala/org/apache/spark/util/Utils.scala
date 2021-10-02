@@ -2612,11 +2612,9 @@ private[spark] object Utils extends Logging {
         val isTesting = conf.get(IS_TESTING).getOrElse(false)
         val isShuffleServiceAndYarn = conf.get(SHUFFLE_SERVICE_ENABLED) &&
             conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn"
-        val serializerIsSupported = {
+        lazy val serializerIsSupported = {
           if (checkSerializer) {
-            Option(SparkEnv.get)
-              .map(_.serializer)
-              .getOrElse(instantiateSerializerFromConf[Serializer](SERIALIZER, conf, isDriver))
+            instantiateSerializerFromConf[Serializer](SERIALIZER, conf, isDriver)
               .supportsRelocationOfSerializedObjects
           } else {
             // if no need to check Serializer, always set serializerIsSupported as true
