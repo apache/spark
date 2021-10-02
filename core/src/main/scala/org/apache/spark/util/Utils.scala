@@ -2614,7 +2614,9 @@ private[spark] object Utils extends Logging {
             conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn"
         lazy val serializerIsSupported = {
           if (checkSerializer) {
-            instantiateSerializerFromConf[Serializer](SERIALIZER, conf, isDriver)
+            Option(SparkEnv.get)
+              .map(_.serializer)
+              .getOrElse(instantiateSerializerFromConf[Serializer](SERIALIZER, conf, isDriver))
               .supportsRelocationOfSerializedObjects
           } else {
             // if no need to check Serializer, always set serializerIsSupported as true
