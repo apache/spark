@@ -533,8 +533,10 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       endMapIndex: Int,
       startPartition: Int,
       endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
-    getPushBasedShuffleMapSizesByExecutorId(
-      shuffleId, startMapIndex, endMapIndex, startPartition, endPartition).iter
+    val mapSizesByExecutorId = getPushBasedShuffleMapSizesByExecutorId(
+      shuffleId, startMapIndex, endMapIndex, startPartition, endPartition)
+    assert(mapSizesByExecutorId.enableBatchFetch == true)
+    mapSizesByExecutorId.iter
   }
 
   /**
@@ -1105,7 +1107,7 @@ private[spark] class MapOutputTrackerMaster(
             shuffleId, startPartition, endPartition, statuses, startMapIndex, actualEndMapIndex)
         }
       case None =>
-        MapSizesByExecutorId(Iterator.empty, false)
+        MapSizesByExecutorId(Iterator.empty, true)
     }
   }
 
@@ -1479,9 +1481,10 @@ private[spark] object MapOutputTracker extends Logging {
     // TODO: SPARK-35036: Instead of reading map blocks in case of AQE with Push based shuffle,
     // TODO: improve push based shuffle to read partial merged blocks satisfying the start/end
     // TODO: map indexes
-    if (mergeStatuses.exists(_.nonEmpty) && mergeStatuses.exists(_.exists(_ != null))
-      && startMapIndex == 0 && endMapIndex == mapStatuses.length) {
+    if (mergeStatuses.exists(_.exists(_ != null)) && startMapIndex == 0
+      && endMapIndex == mapStatuses.length) {
       enableBatchFetch = false
+      logDebug(s"Disable shuffle batch fetch as Push based shuffle is enabled for $shuffleId.")
       // We have MergeStatus and full range of mapIds are requested so return a merged block.
       val numMaps = mapStatuses.length
       mergeStatuses.get.zipWithIndex.slice(startPartition, endPartition).foreach {
