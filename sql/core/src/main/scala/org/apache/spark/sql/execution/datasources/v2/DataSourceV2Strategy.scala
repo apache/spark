@@ -429,10 +429,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val table = a.table.asInstanceOf[ResolvedTable]
       AlterTableExec(table.catalog, table.identifier, a.changes) :: Nil
 
-    case CreateIndex(ResolvedDBObjectName(catalog, table),
+    case CreateIndex(ResolvedTable(catalog, identifier, _, _),
         indexName, indexType, ifNotExists, columns, columnProperties, properties) =>
-      CreateIndexExec(catalog.asTableCatalog, table.asIdentifier, indexName, indexType,
-        ifNotExists, columns, columnProperties, properties):: Nil
+      CreateIndexExec(catalog, identifier, indexName, indexType, ifNotExists, columns,
+        columnProperties, properties):: Nil
 
     case _ => Nil
   }

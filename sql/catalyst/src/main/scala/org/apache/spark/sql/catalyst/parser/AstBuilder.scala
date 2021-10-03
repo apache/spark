@@ -2780,7 +2780,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Convert a table property list into a key-value map.
+   * Convert a property list into a key-value map.
    * This should be called through [[visitPropertyKeyValues]] or [[visitPropertyKeys]].
    */
   override def visitPropertyList(
@@ -2822,8 +2822,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * A table property key can either be String or a collection of dot separated elements. This
-   * function extracts the property key based on whether its a string literal or a table property
+   * A property key can either be String or a collection of dot separated elements. This
+   * function extracts the property key based on whether its a string literal or a property
    * identifier.
    */
   override def visitPropertyKey(key: PropertyKeyContext): String = {
@@ -2835,7 +2835,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * A table property value can be String, Integer, Boolean or Decimal. This function extracts
+   * A property value can be String, Integer, Boolean or Decimal. This function extracts
    * the property value based on whether its a string, integer, boolean or decimal literal.
    */
   override def visitPropertyValue(value: PropertyValueContext): String = {
@@ -4467,7 +4467,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * CREATE [index_type] INDEX [index_name] ON [TABLE] table_name (column_index_property_list)
    *   [OPTIONS indexPropertyList]
    *   column_index_property_list: column_name [OPTIONS(indexPropertyList)]  [ ,  . . . ]
-   *   indexPropertyList: index_property_name = index_property_value [ ,  . . . ]
+   *   indexPropertyList: index_property_name [= index_property_value] [ ,  . . . ]
    * }}}
    */
   override def visitCreateIndex(ctx: CreateIndexContext): LogicalPlan = withOrigin(ctx) {
@@ -4480,9 +4480,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
 
     CreateIndex(
-      UnresolvedDBObjectName(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
-        isNamespace = true),
+      createUnresolvedTable(ctx.multipartIdentifier(), "CREATE INDEX"),
       indexName,
       indexType,
       ctx.EXISTS != null,
