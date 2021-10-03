@@ -33,7 +33,7 @@ case class CreateIndexExec(
     ident: Identifier,
     indexName: String,
     indexType: String,
-    ifNotExists: Boolean,
+    ignoreIfExists: Boolean,
     columns: Seq[FieldReference],
     columnProperties: Seq[Map[String, String]],
     private var properties: Map[String, String])
@@ -46,7 +46,7 @@ case class CreateIndexExec(
         s" IndexName $indexName indexType $indexType columns $columns" +
         s" columnProperties $columnProperties properties $properties")
     } catch {
-      case _: IndexAlreadyExistsException if ifNotExists =>
+      case _: IndexAlreadyExistsException if ignoreIfExists =>
         logWarning(s"Index ${indexName} already exists. Ignoring.")
     }
     Seq.empty

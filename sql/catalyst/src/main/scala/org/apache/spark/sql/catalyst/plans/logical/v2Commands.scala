@@ -1064,7 +1064,10 @@ case class CreateIndex(
     child: LogicalPlan,
     indexName: String,
     indexType: String,
-    ifNotExists: Boolean,
+    ignoreIfExists: Boolean,
     columns: Seq[FieldReference],
     columnsProperties: Seq[Map[String, String]],
-    properties: Map[String, String]) extends LeafCommand
+    properties: Map[String, String]) extends UnaryCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): CreateIndex =
+    copy(child = newChild)
+}

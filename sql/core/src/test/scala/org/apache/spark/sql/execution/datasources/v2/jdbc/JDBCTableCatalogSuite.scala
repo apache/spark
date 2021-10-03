@@ -439,13 +439,31 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val e2 = intercept[SQLFeatureNotSupportedException] {
         sql("CREATE index i1 ON h2.test.new_table" +
           " (col1 OPTIONS (fpp=0.1, numItems=10000000)," +
-          " col2 OPTIONS (fpp=0.2, numItems=20000000)) OPTIONS (fpp=0.3, numItems=30000000) ")
+          " col2 OPTIONS (fpp=0.2, numItems=20000000))")
       }.getMessage
       assert(e2.contains("IndexName i1"))
       assert(e2.contains("columns ArrayBuffer(col1, col2)"))
       assert(e2.contains("columnProperties ArrayBuffer(" +
         "Map(fpp -> 0.1, numItems -> 10000000), Map(fpp -> 0.2, numItems -> 20000000))"))
-      assert(e2.contains("properties Map(fpp -> 0.3, numItems -> 30000000)"))
+
+      val e3 = intercept[SQLFeatureNotSupportedException] {
+        sql("CREATE index i1 ON h2.test.new_table" +
+          " (col1, col2) OPTIONS (fpp=0.3, numItems=30000000) ")
+      }.getMessage
+      assert(e3.contains("IndexName i1"))
+      assert(e3.contains("columns ArrayBuffer(col1, col2)"))
+      assert(e3.contains("properties Map(fpp -> 0.3, numItems -> 30000000)"))
+
+      val e4 = intercept[SQLFeatureNotSupportedException] {
+        sql("CREATE index i1 ON h2.test.new_table" +
+          " (col1 OPTIONS (fpp=0.1, numItems=10000000)," +
+          " col2 OPTIONS (fpp=0.2, numItems=20000000)) OPTIONS (fpp=0.3, numItems=30000000)")
+      }.getMessage
+      assert(e4.contains("IndexName i1"))
+      assert(e4.contains("columns ArrayBuffer(col1, col2)"))
+      assert(e4.contains("columnProperties ArrayBuffer(" +
+        "Map(fpp -> 0.1, numItems -> 10000000), Map(fpp -> 0.2, numItems -> 20000000))"))
+      assert(e4.contains("properties Map(fpp -> 0.3, numItems -> 30000000)"))
     }
   }
 }
