@@ -42,6 +42,7 @@ from typing import (
     cast,
     TYPE_CHECKING,
 )
+import warnings
 
 import pandas as pd
 from pandas.api.types import is_hashable, is_list_like
@@ -1207,16 +1208,25 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 pdf[groupkey_name].rename(psser.name)
                 for groupkey_name, psser in zip(groupkey_names, self._groupkeys)
             ]
+            grouped = pdf.groupby(groupkeys)
             if is_series_groupby:
-                pser_or_pdf = pdf.groupby(groupkeys)[name].apply(pandas_apply, *args, **kwargs)
+                pser_or_pdf = grouped[name].apply(pandas_apply, *args, **kwargs)
             else:
-                pser_or_pdf = pdf.groupby(groupkeys).apply(pandas_apply, *args, **kwargs)
+                pser_or_pdf = grouped.apply(pandas_apply, *args, **kwargs)
             psser_or_psdf = ps.from_pandas(pser_or_pdf)
 
             if len(pdf) <= limit:
                 if isinstance(psser_or_psdf, ps.Series) and is_series_groupby:
                     psser_or_psdf = psser_or_psdf.rename(cast(SeriesGroupBy, self)._psser.name)
                 return cast(Union[Series, DataFrame], psser_or_psdf)
+
+            if len(grouped) <= 1:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("always")
+                    warnings.warn(
+                        "The amount of data for return type inference might not be large enough. "
+                        "Consider increasing an option `compute.shortcut_limit`."
+                    )
 
             if isinstance(psser_or_psdf, Series):
                 should_return_series = True
@@ -1295,6 +1305,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 pdf_or_ser = pdf.groupby(groupkey_names)[name].apply(wrapped_func, *args, **kwargs)
             else:
                 pdf_or_ser = pdf.groupby(groupkey_names).apply(wrapped_func, *args, **kwargs)
+                if should_return_series and isinstance(pdf_or_ser, pd.DataFrame):
+                    pdf_or_ser = pdf_or_ser.stack()
 
             if not isinstance(pdf_or_ser, pd.DataFrame):
                 return pd.DataFrame(pdf_or_ser)
