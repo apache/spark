@@ -28,6 +28,7 @@ import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
+import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -59,8 +60,10 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
       columnsProperties: Array[util.Map[NamedReference, util.Properties]],
       properties: util.Properties): Unit = {
     withConnection { conn =>
-      JdbcUtils.createIndex(
-        conn, indexName, indexType, name, columns, columnsProperties, properties, jdbcOptions)
+      classifyException(s"Failed to create index: $indexName in $name") {
+        JdbcUtils.createIndex(
+          conn, indexName, indexType, name, columns, columnsProperties, properties, jdbcOptions)
+      }
     }
   }
 
@@ -84,6 +87,15 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
       f(conn)
     } finally {
       conn.close()
+    }
+  }
+
+  private def classifyException[T](message: String)(f: => T): T = {
+    try {
+      f
+    } catch {
+      case e: Throwable =>
+        throw JdbcDialects.get(jdbcOptions.url).classifyException(message, e)
     }
   }
 }

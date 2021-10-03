@@ -17,19 +17,21 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Types}
+import java.sql.{Connection, SQLException, Types}
 import java.util
 import java.util.Locale
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, FloatType, LongType, MetadataBuilder}
 
-private case object MySQLDialect extends JdbcDialect {
+private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
   override def canHandle(url : String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:mysql")
@@ -138,20 +140,28 @@ private case object MySQLDialect extends JdbcDialect {
       indexName: String,
       tableName: String,
       options: JDBCOptions): Boolean = {
-    val caseSensitive = SQLConf.get.caseSensitiveAnalysis
-    val nameEquality = if (caseSensitive) {
-      org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
-    } else {
-      org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
-    }
     val sql = s"SHOW INDEXES FROM $tableName"
     val rs = JdbcUtils.executeQuery(conn, options, sql)
     while(rs.next()) {
       val retrievedIndexName = rs.getString("key_name")
-      if (nameEquality(retrievedIndexName, indexName)) {
+      if (conf.resolver(retrievedIndexName, indexName)) {
         return true
       }
     }
     false
+  }
+
+  override def classifyException(message: String, e: Throwable): AnalysisException = {
+    if (e.isInstanceOf[SQLException]) {
+      // Error codes are from
+      // https://mariadb.com/kb/en/mariadb-error-codes/#shared-mariadbmysql-error-codes
+      e.asInstanceOf[SQLException].getErrorCode match {
+        // ER_DUP_KEYNAME
+        case 1061 =>
+          throw new IndexAlreadyExistsException(message, cause = Some(e))
+        case _ =>
+      }
+    }
+    super.classifyException(message, e)
   }
 }

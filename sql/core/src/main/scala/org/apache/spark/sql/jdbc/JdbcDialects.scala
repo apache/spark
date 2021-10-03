@@ -289,6 +289,16 @@ abstract class JdbcDialect extends Serializable with Logging{
     s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS NULL"
   }
 
+  /**
+   * Creates an index.
+   *
+   * @param indexName        the name of the index to be created
+   * @param indexType        the IndexType of the index to be created
+   * @param tableName        the table on which index to be created
+   * @param columns          the columns on which index to be created
+   * @param columnProperties the properties of the columns on which index to be created
+   * @param properties       the properties of the index to be created
+   */
   def createIndex(
       indexName: String,
       indexType: String,
@@ -299,6 +309,14 @@ abstract class JdbcDialect extends Serializable with Logging{
     throw new UnsupportedOperationException("Create index is not supported")
   }
 
+  /**
+   * Checks whether an index exists
+   *
+   * @param indexName the name of the index
+   * @param tableName the table on which index to be checked
+   * @param options JDBCOptions of the table
+   * @return true if the index exists, false otherwise
+   */
   def indexExists(
       conn: Connection,
       indexName: String,

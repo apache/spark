@@ -24,6 +24,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
@@ -124,20 +125,27 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     val loaded = Catalogs.load("mysql", conf)
     val jdbcTable = loaded.asInstanceOf[TableCatalog]
       .loadTable(Identifier.of(Array.empty[String], "new_table"))
-    assert(jdbcTable.asInstanceOf[SupportsIndex].indexExists("i1") == false)
-    assert(jdbcTable.asInstanceOf[SupportsIndex].indexExists("i2") == false)
+      .asInstanceOf[SupportsIndex]
+    assert(jdbcTable.indexExists("i1") == false)
+    assert(jdbcTable.indexExists("i2") == false)
 
     val properties = new util.Properties();
     properties.put("KEY_BLOCK_SIZE", "10")
     properties.put("COMMENT", "'this is a comment'")
-    jdbcTable.asInstanceOf[SupportsIndex].createIndex("i1", "", Array(FieldReference("col1")),
+    jdbcTable.createIndex("i1", "", Array(FieldReference("col1")),
       Array.empty[util.Map[NamedReference, util.Properties]], properties)
 
-    jdbcTable.asInstanceOf[SupportsIndex].createIndex("i2", "",
+    jdbcTable.createIndex("i2", "",
       Array(FieldReference("col2"), FieldReference("col3"), FieldReference("col5")),
       Array.empty[util.Map[NamedReference, util.Properties]], new util.Properties)
 
-    assert(jdbcTable.asInstanceOf[SupportsIndex].indexExists("i1") == true)
-    assert(jdbcTable.asInstanceOf[SupportsIndex].indexExists("i2") == true)
+    assert(jdbcTable.indexExists("i1") == true)
+    assert(jdbcTable.indexExists("i2") == true)
+
+    val m = intercept[IndexAlreadyExistsException] {
+      jdbcTable.createIndex("i1", "", Array(FieldReference("col1")),
+        Array.empty[util.Map[NamedReference, util.Properties]], properties)
+    }.getMessage
+    assert(m.contains("Failed to create index: i1 in new_table"))
   }
 }
