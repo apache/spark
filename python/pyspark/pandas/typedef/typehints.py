@@ -158,9 +158,9 @@ def as_spark_type(
     if sys.version_info >= (3, 8) and LooseVersion(np.__version__) >= LooseVersion("1.21"):
         if (
             hasattr(tpe, "__origin__")
-            and tpe.__origin__ is np.ndarray # type: ignore[union-attr]
+            and tpe.__origin__ is np.ndarray  # type: ignore[union-attr]
             and hasattr(tpe, "__args__")
-            and len(tpe.__args__) > 1 # type: ignore[union-attr]
+            and len(tpe.__args__) > 1  # type: ignore[union-attr]
         ):
             # numpy.typing.NDArray
             return types.ArrayType(
@@ -175,7 +175,7 @@ def as_spark_type(
     elif tpe in (np.ndarray,):
         return types.ArrayType(types.StringType())
     elif hasattr(tpe, "__origin__") and issubclass(
-            tpe.__origin__, list  # type: ignore[union-attr]
+        tpe.__origin__, list  # type: ignore[union-attr]
     ):
         element_type = as_spark_type(
             tpe.__args__[0], raise_error=raise_error  # type: ignore[union-attr]
