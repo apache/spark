@@ -25,15 +25,15 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.session import SparkSession
 from pyspark.sql.types import StructType
 
+if TYPE_CHECKING:
+    from pyspark.sql._typing import UserDefinedFunctionLike
+    from pyspark.sql.types import DataType
+
 
 Database = namedtuple("Database", "name description locationUri")
 Table = namedtuple("Table", "name database description tableType isTemporary")
 Column = namedtuple("Column", "name description dataType nullable isPartition isBucket")
 Function = namedtuple("Function", "name description className isTemporary")
-
-if TYPE_CHECKING:
-    from pyspark.sql._typing import UserDefinedFunctionLike
-    from pyspark.sql.types import DataType
 
 
 class Catalog(object):
