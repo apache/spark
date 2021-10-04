@@ -1556,7 +1556,7 @@ object QueryExecutionErrors {
 
   def timeZoneIdNotSpecifiedForTimestampTypeError(): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "TIME_ZONE_ID_NOT_SPECIFIED_FOR_TIMESTAMP_TYPE",
+      errorClass = "TIMESTAMP_TYPE_DOES_NOT_SPECIFY_TIME_ZONE_ID",
       messageParameters = Array(TimestampType.catalogString))
   }
 
@@ -1589,7 +1589,7 @@ object QueryExecutionErrors {
 
   def onlySupportDataSourcesProvidingFileFormatError(providingClass: String): Throwable = {
     new SparkException(
-      errorClass = "ONLY_SUPPORT_DATA_SOURCES_PROVIDING_FILE_FORMAT",
+      errorClass = "DATA_SOURCE_DOES_NOT_PROVIDE_FILE_FORMAT",
       messageParameters = Array(providingClass), null)
   }
 
@@ -1610,7 +1610,7 @@ object QueryExecutionErrors {
 
   def multiFailuresInStageMaterializationError(error: Throwable): Throwable = {
     new SparkException(
-      errorClass = "MULTI_FAILURES_IN_STAGE_MATERIALIZATION",
+      errorClass = "MULTIPLE_FAILURES_IN_STAGE_MATERIALIZATION",
       messageParameters = Array.empty, error)
   }
 
@@ -1623,7 +1623,7 @@ object QueryExecutionErrors {
 
   def getParentLoggerNotImplementedError(className: String): Throwable = {
     new SparkSQLFeatureNotSupportedException(
-      errorClass = "GET_PARENT_LOGGER_NOT_IMPLEMENTED",
+      errorClass = "GET_PARENT_LOGGER_UNSUPPORTED",
       messageParameters = Array(className)
     )
   }

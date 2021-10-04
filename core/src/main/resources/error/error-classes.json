@@ -137,7 +137,7 @@
     "message" : [ "Unknown static partition column: %s" ],
     "sqlState" : "42000"
   },
-  "MULTI_FAILURES_IN_STAGE_MATERIALIZATION" : {
+  "MULTIPLE_FAILURES_IN_STAGE_MATERIALIZATION" : {
     "message" : [ "Multiple failures in stage materialization." ]
   },
   "NON_LITERAL_PIVOT_VALUES" : {
