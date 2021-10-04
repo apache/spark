@@ -32,7 +32,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
-import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIllegalStateException, SparkIndexOutOfBoundsException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIllegalStateException, SparkIndexOutOfBoundsException, SparkIOException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -1297,53 +1297,65 @@ object QueryExecutionErrors {
   }
 
   def serDeInterfaceNotFoundError(e: NoClassDefFoundError): Throwable = {
-    new ClassNotFoundException("The SerDe interface removed since Hive 2.3(HIVE-15167)." +
-      " Please migrate your custom SerDes to Hive 2.3. See HIVE-15167 for more details.", e)
+    new SparkClassNotFoundException(
+      errorClass = "SERDE_INTERFACE_NOT_FOUND",
+      messageParameters = Array.empty, e)
   }
 
   def convertHiveTableToCatalogTableError(
       e: SparkException, dbName: String, tableName: String): Throwable = {
-    new SparkException(s"${e.getMessage}, db: $dbName, table: $tableName", e)
+    new SparkException(
+      errorClass = "CANNOT_CONVERT_HIVE_TABLE_TO_CATALOG_TABLE",
+      messageParameters = Array(e.getMessage, dbName, tableName), e)
   }
 
   def cannotRecognizeHiveTypeError(
       e: ParseException, fieldType: String, fieldName: String): Throwable = {
     new SparkException(
-      s"Cannot recognize hive type string: $fieldType, column: $fieldName", e)
+      errorClass = "CANNOT_RECOGNIZE_HIVE_TYPE",
+      messageParameters = Array(fieldType, fieldName), e)
   }
 
   def getTablesByTypeUnsupportedByHiveVersionError(): Throwable = {
-    new UnsupportedOperationException("Hive 2.2 and lower versions don't support " +
-      "getTablesByType. Please use Hive 2.3 or higher version.")
+    new SparkUnsupportedOperationException(
+      errorClass = "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION",
+      messageParameters = Array.empty
+    )
   }
 
   def dropTableWithPurgeUnsupportedError(): Throwable = {
-    new UnsupportedOperationException("DROP TABLE ... PURGE")
+    new SparkUnsupportedOperationException(
+      errorClass = "DROP_TABLE_WITH_PURGE_UNSUPPORTED",
+      messageParameters = Array.empty
+    )
   }
 
   def alterTableWithDropPartitionAndPurgeUnsupportedError(): Throwable = {
-    new UnsupportedOperationException("ALTER TABLE ... DROP PARTITION ... PURGE")
+    new SparkUnsupportedOperationException(
+      errorClass = "ALTER_TABLE_WITH_DROP_PARTITION_AND_PURGE_UNSUPPORTED",
+      messageParameters = Array.empty
+    )
   }
 
   def invalidPartitionFilterError(): Throwable = {
-    new UnsupportedOperationException(
-      """Partition filter cannot have both `"` and `'` characters""")
+    new SparkUnsupportedOperationException(
+      errorClass = "INVALID_PARTITION_FILTER",
+      messageParameters = Array.empty
+    )
   }
 
   def getPartitionMetadataByFilterError(e: InvocationTargetException): Throwable = {
-    new RuntimeException(
-      s"""
-         |Caught Hive MetaException attempting to get partition metadata by filter
-         |from Hive. You can set the Spark configuration setting
-         |${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION} to true to work around
-         |this problem, however this will result in degraded performance. Please
-         |report a bug: https://issues.apache.org/jira/browse/SPARK
-       """.stripMargin.replaceAll("\n", " "), e)
+    new SparkRuntimeException(
+      errorClass = "CANNOT_GET_PARTITION_METADATA_BY_FILTER",
+      messageParameters = Array(
+        SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.toString),
+      e)
   }
 
   def unsupportedHiveMetastoreVersionError(version: String, key: String): Throwable = {
-    new UnsupportedOperationException(s"Unsupported Hive Metastore version ($version). " +
-      s"Please set $key with a valid version.")
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_HIVE_METASTORE_VERSION",
+      messageParameters = Array(version, key))
   }
 
   def loadHiveClientCausesNoClassDefFoundError(
@@ -1351,20 +1363,21 @@ object QueryExecutionErrors {
       execJars: Seq[URL],
       key: String,
       e: InvocationTargetException): Throwable = {
-    new ClassNotFoundException(
-      s"""
-         |$cnf when creating Hive client using classpath: ${execJars.mkString(", ")}\n
-         |Please make sure that jars for your version of hive and hadoop are included in the
-         |paths passed to $key.
-       """.stripMargin.replaceAll("\n", " "), e)
+    new SparkClassNotFoundException(
+      errorClass = "LOAD_HIVE_CLIENT_CAUSES_NO_CLASS_DEFINITION_FOUND",
+      messageParameters = Array(cnf.toString, execJars.mkString(", "), key), e)
   }
 
   def cannotFetchTablesOfDatabaseError(dbName: String, e: Exception): Throwable = {
-    new SparkException(s"Unable to fetch tables of db $dbName", e)
+    new SparkException(
+      errorClass = "CANNOT_FETCH DATABASE_TABLES",
+      messageParameters = Array(dbName), e)
   }
 
   def illegalLocationClauseForViewPartitionError(): Throwable = {
-    new SparkException("LOCATION clause illegal for view partition")
+    new SparkException(
+      errorClass = "ILLEGAL_LOCATION_CLAUSE_FOR_VIEW_PARTITION",
+      messageParameters = Array.empty, null)
   }
 
   def renamePathAsExistsPathError(srcPath: Path, dstPath: Path): Throwable = {
@@ -1373,37 +1386,33 @@ object QueryExecutionErrors {
   }
 
   def renameAsExistsPathError(dstPath: Path): Throwable = {
-    new FileAlreadyExistsException(s"Failed to rename as $dstPath already exists")
+    new SparkFileAlreadyExistsException(
+      errorClass = "RENAME_OVERWRITES_EXISTING_PATH",
+      messageParameters = Array(dstPath.toString)
+    )
   }
 
   def renameSrcPathNotFoundError(srcPath: Path): Throwable = {
-    new SparkFileNotFoundException(errorClass = "RENAME_SRC_PATH_NOT_FOUND",
-      Array(srcPath.toString))
+    new SparkFileNotFoundException(
+      errorClass = "RENAME_SRC_PATH_NOT_FOUND",
+      messageParameters = Array(srcPath.toString)
+    )
   }
 
   def failedRenameTempFileError(srcPath: Path, dstPath: Path): Throwable = {
-    new IOException(s"Failed to rename temp file $srcPath to $dstPath as rename returned false")
+    new SparkIOException(
+      errorClass = "FAILED_RENAME_TEMPORARY_FILE",
+      messageParameters = Array(srcPath.toString, dstPath.toString)
+    )
   }
 
   def legacyMetadataPathExistsError(metadataPath: Path, legacyMetadataPath: Path): Throwable = {
     new SparkException(
-      s"""
-         |Error: we detected a possible problem with the location of your "_spark_metadata"
-         |directory and you likely need to move it before restarting this query.
-         |
-         |Earlier version of Spark incorrectly escaped paths when writing out the
-         |"_spark_metadata" directory for structured streaming. While this was corrected in
-         |Spark 3.0, it appears that your query was started using an earlier version that
-         |incorrectly handled the "_spark_metadata" path.
-         |
-         |Correct "_spark_metadata" Directory: $metadataPath
-         |Incorrect "_spark_metadata" Directory: $legacyMetadataPath
-         |
-         |Please move the data from the incorrect directory to the correct one, delete the
-         |incorrect directory, and then restart this query. If you believe you are receiving
-         |this message in error, you can disable it with the SQL conf
-         |${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}.
-       """.stripMargin)
+      errorClass = "LEGACY_METADATA_PATH_EXISTS",
+      messageParameters = Array(
+        metadataPath.toString,
+        legacyMetadataPath.toString,
+        SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key), null)
   }
 
   def partitionColumnNotFoundInSchemaError(col: String, schema: StructType): Throwable = {

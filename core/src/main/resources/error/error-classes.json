@@ -1,4 +1,8 @@
 {
+  "ALTER_TABLE_WITH_DROP_PARTITION_AND_PURGE_UNSUPPORTED" : {
+    "message" : [ "ALTER TABLE ... DROP PARTITION ... PURGE" ],
+    "sqlState" : "0A000"
+  },
   "AMBIGUOUS_FIELD_NAME" : {
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
@@ -11,9 +15,26 @@
     "message" : [ "%s cannot be represented as Decimal(%s, %s)." ],
     "sqlState" : "22005"
   },
+  "CANNOT_CONVERT_HIVE_TABLE_TO_CATALOG_TABLE" : {
+    "message" : [ "%s, db: %s, table: %s" ]
+  },
+  "CANNOT_FETCH_DATABASE_TABLES" : {
+    "message" : [ "Unable to fetch tables of db %s" ]
+  },
+  "CANNOT_GET_PARTITION_METADATA_BY_FILTER" : {
+    "message" : [ "Caught Hive MetaException attempting to get partition metadata by filter from Hive.", "You can set the Spark configuration setting %s to true to work around this problem, however this will result in degraded performance.", "Please report a bug: https://issues.apache.org/jira/browse/SPARK" ]
+  },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"
+  },
+  "CANNOT_RECOGNIZE_HIVE_TYPE" : {
+    "message" : [ "Cannot recognize hive type string: %s, column: %s" ],
+    "sqlState" : "42000"
+  },
+  "CANNOT_SET_TIMEOUT_DURATION" : {
+    "message" : [ "Cannot set timeout duration without enabling processing time timeout in [map|flatMap]GroupsWithState" ],
+    "sqlState" : "0A000"
   },
   "CAST_CAUSES_OVERFLOW" : {
     "message" : [ "Casting %s to %s causes overflow" ],
@@ -26,6 +47,10 @@
     "message" : [ "divide by zero" ],
     "sqlState" : "22012"
   },
+  "DROP_TABLE_WITH_PURGE_UNSUPPORTED" : {
+    "message" : [ "DROP TABLE ... PURGE" ],
+    "sqlState" : "0A000"
+  },
   "DUPLICATE_KEY" : {
     "message" : [ "Found duplicate keys '%s'" ],
     "sqlState" : "23000"
@@ -37,8 +62,15 @@
     "message" : [ "Failed to rename %s to %s as destination already exists" ],
     "sqlState" : "22023"
   },
+  "FAILED_RENAME_TEMPORARY_FILE" : {
+    "message" : [ "Failed to rename temp file %s to %s as rename returned false" ]
+  },
   "FAILED_SET_ORIGINAL_PERMISSION_BACK" : {
     "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ]
+  },
+  "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION" : {
+    "message" : [ "Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version." ],
+    "sqlState" : "0A000"
   },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [ "Column of grouping (%s) can't be found in grouping columns %s" ],
@@ -53,6 +85,10 @@
   },
   "IF_PARTITION_NOT_EXISTS_UNSUPPORTED" : {
     "message" : [ "Cannot write, IF NOT EXISTS is not supported for table: %s" ]
+  },
+  "ILLEGAL_LOCATION_CLAUSE_FOR_VIEW_PARTITION" : {
+    "message" : [ "LOCATION clause illegal for view partition" ],
+    "sqlState" : "42000"
   },
   "INCOMPARABLE_PIVOT_COLUMN" : {
     "message" : [ "Invalid pivot column '%s'. Pivot columns must be comparable." ],
@@ -86,11 +122,25 @@
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
   },
+  "INVALID_PARTITION_FILTER" : {
+    "message" : [ "Partition filter cannot have both `\"` and `\\'` characters" ],
+    "sqlState" : "42000"
+  },
+  "LEGACY_METADATA_PATH_EXISTS" : {
+    "message" : [ "Error: we detected a possible problem with the location of your \"_spark_metadata\" directory and you likely need to move it before restarting this query.", "Earlier version of Spark incorrectly escaped paths when writing out the \"_spark_metadata\" directory for structured streaming.", "While this was corrected in Spark 3.0, it appears that your query was started using an earlier version that incorrectly handled the \"_spark_metadata\" path.", "Correct \"_spark_metadata\" Directory: %s. Incorrect \"_spark_metadata\" Directory: %s", "Please move the data from the incorrect directory to the correct one, delete the incorrect directory, and then restart this query.", "If you believe you are receiving this message in error, you can disable it with the SQL conf %s." ]
+  },
+  "LOAD_HIVE_CLIENT_CAUSES_NO_CLASS_DEFINITION_FOUND" : {
+    "message" : [ "%s when creating Hive client using classpath: %s", "Please make sure that jars for your version of hive and hadoop are included in the paths passed to %s." ]
+  },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist." ]
   },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
+    "sqlState" : "42000"
+  },
+  "MISSING_PARTITION_COLUMN" : {
+    "message" : [ "Partition column %s not found in schema %s" ],
     "sqlState" : "42000"
   },
   "MISSING_STATIC_PARTITION_COLUMN" : {
@@ -109,6 +159,10 @@
     "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
     "sqlState" : "42000"
   },
+  "RENAME_OVERWRITES_EXISTING_PATH" : {
+    "message" : [ "Failed to rename as %s already exists" ],
+    "sqlState" : "42000"
+  },
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [ "Failed to rename as %s was not found" ],
     "sqlState" : "22023"
@@ -120,6 +174,13 @@
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
     "sqlState" : "22023"
+  },
+  "SERDE_INTERFACE_NOT_FOUND" : {
+    "message" : [ "The SerDe interface removed since Hive 2.3(HIVE-15167). Please migrate your custom SerDes to Hive 2.3. See HIVE-15167 for more details." ],
+    "sqlState" : "0A000"
+  },
+  "STATE_NOT_DEFINED_OR_ALREADY_REMOVED" : {
+    "message" : [ "State is either not defined or has already been removed" ]
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
@@ -134,6 +195,10 @@
   },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [ "Unsupported data type %s" ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_HIVE_METASTORE_VERSION" : {
+    "message" : [ "Unsupported Hive Metastore version (%s). Please set %s with a valid version." ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_LITERAL_TYPE" : {
