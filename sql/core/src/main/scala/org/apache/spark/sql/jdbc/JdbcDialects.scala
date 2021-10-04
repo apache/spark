@@ -292,12 +292,12 @@ abstract class JdbcDialect extends Serializable with Logging{
   /**
    * Creates an index.
    *
-   * @param indexName        the name of the index to be created
-   * @param indexType        the IndexType of the index to be created
-   * @param tableName        the table on which index to be created
-   * @param columns          the columns on which index to be created
-   * @param columnProperties the properties of the columns on which index to be created
-   * @param properties       the properties of the index to be created
+   * @param indexName         the name of the index to be created
+   * @param indexType         the IndexType of the index to be created
+   * @param tableName         the table on which index to be created
+   * @param columns           the columns on which index to be created
+   * @param columnsProperties the properties of the columns on which index to be created
+   * @param properties        the properties of the index to be created
    */
   def createIndex(
       indexName: String,
