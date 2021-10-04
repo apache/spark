@@ -458,9 +458,7 @@ class SparkSession(SparkConversionMixin):
         return DataFrame(jdf, self._wrapped)
 
     def _inferSchemaFromList(
-        self,
-        data: Iterable[Union["DateTimeLiteral", "LiteralType", "DecimalLiteral", "RowLike"]],
-        names: Optional[List[str]] = None
+        self, data: Iterable[Any], names: Optional[List[str]] = None
     ) -> StructType:
         """
         Infer schema from list of Row, dict, or tuple.
@@ -489,7 +487,7 @@ class SparkSession(SparkConversionMixin):
 
     def _inferSchema(
         self,
-        rdd: "RDD[Union[DateTimeLiteral, LiteralType, DecimalLiteral, RowLike]]",
+        rdd: "RDD[Any]",
         samplingRatio: Optional[float] = None,
         names: Optional[List[str]] = None
     ) -> StructType:
@@ -541,9 +539,9 @@ class SparkSession(SparkConversionMixin):
 
     def _createFromRDD(
         self,
-        rdd: "RDD[Union[DateTimeLiteral, LiteralType, DecimalLiteral, RowLike]]",
+        rdd: "RDD[Any]",
         schema: Optional[Union[DataType, List[str]]],
-        samplingRatio: Optional[float],
+        samplingRatio: Optional[float]
     ) -> Tuple["RDD[Tuple]", StructType]:
         """
         Create an RDD for DataFrame from an existing RDD, returns the RDD and schema.
@@ -569,9 +567,7 @@ class SparkSession(SparkConversionMixin):
         return internal_rdd, struct
 
     def _createFromLocal(
-        self,
-        data: Iterable[Union["DateTimeLiteral", "LiteralType", "DecimalLiteral", "RowLike"]],
-        schema: Optional[Union[DataType, List[str]]]
+        self, data: Iterable[Any], schema: Optional[Union[DataType, List[str]]]
     ) -> Tuple["RDD[Tuple]", StructType]:
         """
         Create an RDD for DataFrame from a list or pandas.DataFrame, returns
@@ -684,11 +680,7 @@ class SparkSession(SparkConversionMixin):
 
     def createDataFrame(  # type: ignore[misc]
         self,
-        data: Union[
-            "RDD[Union[DateTimeLiteral, LiteralType, DecimalLiteral, RowLike]]",
-            Iterable[Union["DateTimeLiteral", "LiteralType", "DecimalLiteral", "RowLike"]],
-            "PandasDataFrameLike",
-        ],
+        data: Union["RDD[Any]", Iterable[Any], "PandasDataFrameLike"],
         schema: Optional[Union[AtomicType, StructType, str]] = None,
         samplingRatio: Optional[float] = None,
         verifySchema: bool = True
@@ -818,10 +810,7 @@ class SparkSession(SparkConversionMixin):
 
     def _create_dataframe(
         self,
-        data: Union[
-            "RDD[Union[DateTimeLiteral, LiteralType, DecimalLiteral, RowLike]]",
-            Iterable[Union["DateTimeLiteral", "LiteralType", "DecimalLiteral", "RowLike"]],
-        ],
+        data: Union["RDD[Any]", Iterable[Any]],
         schema: Optional[Union[DataType, List[str]]],
         samplingRatio: Optional[float],
         verifySchema: bool,
