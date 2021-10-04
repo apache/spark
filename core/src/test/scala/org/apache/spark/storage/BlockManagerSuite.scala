@@ -205,7 +205,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       rpcEnv = null
       master = null
       liveListenerBus = null
-      SparkEnv.set(null)
     } finally {
       super.afterEach()
     }

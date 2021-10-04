@@ -2616,6 +2616,7 @@ private[spark] object Utils extends Logging {
           if (checkSerializer) {
             Option(SparkEnv.get)
               .map(_.serializer)
+              .filter(_ != null)
               .getOrElse(instantiateSerializerFromConf[Serializer](SERIALIZER, conf, isDriver))
               .supportsRelocationOfSerializedObjects
           } else {
