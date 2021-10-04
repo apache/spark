@@ -3,13 +3,37 @@
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
   },
+  "CANNOT_ADD_MULTI_PARTITIONS_ON_NONATOMIC_PARTITION_TABLE" : {
+    "message" : [ "Nonatomic partition table %s can not add multiple partitions." ],
+    "sqlState" : "0A000"
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [ "Cannot cast %s to %s." ],
     "sqlState" : "22005"
   },
+  "CANNOT_CAST_NULL_LITERALS" : {
+    "message" : [ "null literals can't be casted to %s" ],
+    "sqlState" : "22018"
+  },
   "CANNOT_CHANGE_DECIMAL_PRECISION" : {
     "message" : [ "%s cannot be represented as Decimal(%s, %s)." ],
     "sqlState" : "22005"
+  },
+  "CANNOT_CREATE_PARQUET_CONVERTER_FOR_DATATYPE" : {
+    "message" : [ "Unable to create Parquet converter for data type %s whose Parquet type is %s" ],
+    "sqlState" : "0A000"
+  },
+  "CANNOT_CREATE_PARQUET_CONVERTER_FOR_DECIMAL_TYPE" : {
+    "message" : [ "Unable to create Parquet converter for decimal type %s whose Parquet type is %s. Parquet DECIMAL type can only be backed by INT32, INT64,FIXED_LEN_BYTE_ARRAY, or BINARY." ],
+    "sqlState" : "0A000"
+  },
+  "CANNOT_CREATE_PARQUET_CONVERTER_FOR_TYPE" : {
+    "message" : [ "Unable to create Parquet converter for %s whose Parquet type is %s without decimal metadata. Please read this column/field as Spark BINARY type." ],
+    "sqlState" : "0A000"
+  },
+  "CANNOT_LOAD_USER_DEFINED_TYPE" : {
+    "message" : [ "Can not load in UserDefinedType %s for user class %s." ],
+    "sqlState" : "0A000"
   },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [ "Cannot parse decimal" ],
@@ -21,6 +45,10 @@
   },
   "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
+  },
+  "DATA_SOURCE_DOES_NOT_PROVIDE_FILE_FORMAT" : {
+    "message" : [ "Only Data Sources providing FileFormat are supported: %s" ],
+    "sqlState" : "0A000"
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero" ],
@@ -37,8 +65,20 @@
     "message" : [ "Failed to rename %s to %s as destination already exists" ],
     "sqlState" : "22023"
   },
+  "FAILED_SET_ORIGINAL_ACL_BACK" : {
+    "message" : [ "Failed to set original ACL %s back to the created path: %s. Exception: %s" ],
+    "sqlState" : "42000"
+  },
   "FAILED_SET_ORIGINAL_PERMISSION_BACK" : {
     "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ]
+  },
+  "FIELD_INDEX_ON_ROW_WITHOUT_SCHEMA" : {
+    "message" : [ "fieldIndex on a Row without schema is undefined." ],
+    "sqlState" : "07009"
+  },
+  "GET_PARENT_LOGGER_UNSUPPORTED" : {
+    "message" : [ "%s.getParentLogger is not yet implemented." ],
+    "sqlState" : "0A000"
   },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [ "Column of grouping (%s) can't be found in grouping columns %s" ],
@@ -97,12 +137,23 @@
     "message" : [ "Unknown static partition column: %s" ],
     "sqlState" : "42000"
   },
+  "MULTI_FAILURES_IN_STAGE_MATERIALIZATION" : {
+    "message" : [ "Multiple failures in stage materialization." ]
+  },
   "NON_LITERAL_PIVOT_VALUES" : {
     "message" : [ "Literal expressions required for pivot values, found '%s'" ],
     "sqlState" : "42000"
   },
   "NON_PARTITION_COLUMN" : {
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
+    "sqlState" : "42000"
+  },
+  "NOT_PUBLIC_CLASS" : {
+    "message" : [ "%s is not a public class. Only public classes are supported." ],
+    "sqlState" : "0A000"
+  },
+  "NOT_USER_DEFINED_TYPE" : {
+    "message" : [ "%s is not an UserDefinedType. Please make sure registering an UserDefinedType for %s" ],
     "sqlState" : "42000"
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
@@ -121,8 +172,16 @@
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
     "sqlState" : "22023"
   },
+  "TIMESTAMP_TYPE_DOES_NOT_SPECIFY_TIME_ZONE_ID" : {
+    "message" : [ "%s must supply timeZoneId parameter" ],
+    "sqlState" : "23000"
+  },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
+  },
+  "UNRECOGNIZED_COMPRESSION_SCHEMA_TYPE_ID" : {
+    "message" : [ "Unrecognized compression scheme type ID: %s" ],
+    "sqlState" : "42000"
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [ "Unrecognized SQL type %s" ],
@@ -140,12 +199,24 @@
     "message" : [ "Unsupported literal type %s %s" ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_PRIMITIVE_TYPES" : {
+    "message" : [ "Primitive types are not supported." ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID" : {
     "message" : [ "%s does not implement simpleStringWithNodeId" ]
   },
   "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER" : {
     "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_USER_SPECIFIED_SCHEMA" : {
+    "message" : [ "%s source does not support user-specified schema." ],
+    "sqlState" : "0A000"
+  },
+  "VALUE_IS_NULL" : {
+    "message" : [ "Value at index %s is null" ],
+    "sqlState" : "22023"
   },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],

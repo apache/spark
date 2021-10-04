@@ -21,7 +21,7 @@ import java.time.ZoneId
 
 import org.apache.arrow.vector.types.pojo.ArrowType
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.LA
 import org.apache.spark.sql.types._
 
@@ -50,7 +50,7 @@ class ArrowUtilsSuite extends SparkFunSuite {
     roundtrip(DateType)
     roundtrip(YearMonthIntervalType())
     roundtrip(DayTimeIntervalType())
-    val tsExMsg = intercept[UnsupportedOperationException] {
+    val tsExMsg = intercept[SparkUnsupportedOperationException] {
       roundtrip(TimestampType)
     }
     assert(tsExMsg.getMessage.contains("timeZoneId"))

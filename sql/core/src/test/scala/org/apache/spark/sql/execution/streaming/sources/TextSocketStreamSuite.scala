@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit._
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
@@ -193,7 +194,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
       StructField("name", StringType) ::
       StructField("area", StringType) :: Nil)
     val params = Map("host" -> "localhost", "port" -> "1234")
-    val exception = intercept[UnsupportedOperationException] {
+    val exception = intercept[SparkUnsupportedOperationException] {
       spark.readStream.schema(userSpecifiedSchema).format("socket").options(params).load()
     }
     assert(exception.getMessage.contains(

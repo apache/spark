@@ -32,7 +32,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
-import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIllegalStateException, SparkIndexOutOfBoundsException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIllegalStateException, SparkIndexOutOfBoundsException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNullPointerException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -1529,106 +1529,136 @@ object QueryExecutionErrors {
   }
 
   def unsupportedOperationExceptionError(): Throwable = {
-    new UnsupportedOperationException
+    new SparkUnsupportedOperationException(
+      errorClass = "INTERNAL_ERROR",
+      messageParameters = Array.empty
+    )
   }
 
   def nullLiteralsCannotBeCastedError(name: String): Throwable = {
-    new UnsupportedOperationException(s"null literals can't be casted to $name")
+    new SparkUnsupportedOperationException(
+      errorClass = "CANNOT_CAST_NULL_LITERALS",
+      messageParameters = Array(name)
+    )
   }
 
   def notUserDefinedTypeError(name: String, userClass: String): Throwable = {
-    new SparkException(s"$name is not an UserDefinedType. Please make sure registering " +
-        s"an UserDefinedType for ${userClass}")
+    new SparkException(
+      errorClass = "NOT_USER_DEFINED_TYPE",
+      messageParameters = Array(name, userClass), null)
   }
 
   def cannotLoadUserDefinedTypeError(name: String, userClass: String): Throwable = {
-    new SparkException(s"Can not load in UserDefinedType ${name} for user class ${userClass}.")
+    new SparkException(
+      errorClass = "CANNOT_LOAD_USER_DEFINED_TYPE",
+      messageParameters = Array(name, userClass), null)
   }
 
   def timeZoneIdNotSpecifiedForTimestampTypeError(): Throwable = {
-    new UnsupportedOperationException(
-      s"${TimestampType.catalogString} must supply timeZoneId parameter")
+    new SparkUnsupportedOperationException(
+      errorClass = "TIME_ZONE_ID_NOT_SPECIFIED_FOR_TIMESTAMP_TYPE",
+      messageParameters = Array(TimestampType.catalogString))
   }
 
   def notPublicClassError(name: String): Throwable = {
-    new UnsupportedOperationException(
-      s"$name is not a public class. Only public classes are supported.")
+    new SparkUnsupportedOperationException(
+      errorClass = "NOT_PUBLIC_CLASS",
+      messageParameters = Array(name))
   }
 
   def primitiveTypesNotSupportedError(): Throwable = {
-    new UnsupportedOperationException("Primitive types are not supported.")
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_PRIMITIVE_TYPES",
+      messageParameters = Array.empty
+    )
   }
 
   def fieldIndexOnRowWithoutSchemaError(): Throwable = {
-    new UnsupportedOperationException("fieldIndex on a Row without schema is undefined.")
+    new SparkUnsupportedOperationException(
+      errorClass = "FIELD_INDEX_ON_ROW_WITHOUT_SCHEMA",
+      messageParameters = Array.empty
+    )
   }
 
   def valueIsNullError(index: Int): Throwable = {
-    new NullPointerException(s"Value at index $index is null")
+    new SparkNullPointerException(
+      errorClass = "VALUE_IS_NULL",
+      messageParameters = Array(index.toString)
+    )
   }
 
   def onlySupportDataSourcesProvidingFileFormatError(providingClass: String): Throwable = {
-    new SparkException(s"Only Data Sources providing FileFormat are supported: $providingClass")
+    new SparkException(
+      errorClass = "ONLY_SUPPORT_DATA_SOURCES_PROVIDING_FILE_FORMAT",
+      messageParameters = Array(providingClass), null)
   }
 
   def failToSetOriginalPermissionBackError(
       permission: FsPermission,
       path: Path,
       e: Throwable): Throwable = {
-    new SparkSecurityException(errorClass = "FAILED_SET_ORIGINAL_PERMISSION_BACK",
-      Array(permission.toString, path.toString, e.getMessage))
+    new SparkSecurityException(
+      errorClass = "FAILED_SET_ORIGINAL_PERMISSION_BACK",
+      messageParameters = Array(permission.toString, path.toString, e.getMessage))
   }
 
   def failToSetOriginalACLBackError(aclEntries: String, path: Path, e: Throwable): Throwable = {
-    new SecurityException(s"Failed to set original ACL $aclEntries back to " +
-      s"the created path: $path. Exception: ${e.getMessage}")
+    new SparkSecurityException(
+      errorClass = "FAILED_SET_ORIGINAL_ACL_BACK",
+      messageParameters = Array(aclEntries, path.toString, e.getMessage))
   }
 
   def multiFailuresInStageMaterializationError(error: Throwable): Throwable = {
-    new SparkException("Multiple failures in stage materialization.", error)
+    new SparkException(
+      errorClass = "MULTI_FAILURES_IN_STAGE_MATERIALIZATION",
+      messageParameters = Array.empty, error)
   }
 
   def unrecognizedCompressionSchemaTypeIDError(typeId: Int): Throwable = {
-    new UnsupportedOperationException(s"Unrecognized compression scheme type ID: $typeId")
+    new SparkUnsupportedOperationException(
+      errorClass = "UNRECOGNIZED_COMPRESSION_SCHEMA_TYPE_ID",
+      messageParameters = Array(typeId.toString)
+    )
   }
 
   def getParentLoggerNotImplementedError(className: String): Throwable = {
-    new SQLFeatureNotSupportedException(s"$className.getParentLogger is not yet implemented.")
+    new SparkSQLFeatureNotSupportedException(
+      errorClass = "GET_PARENT_LOGGER_NOT_IMPLEMENTED",
+      messageParameters = Array(className)
+    )
   }
 
   def cannotCreateParquetConverterForTypeError(t: DecimalType, parquetType: String): Throwable = {
-    new RuntimeException(
-      s"""
-         |Unable to create Parquet converter for ${t.typeName}
-         |whose Parquet type is $parquetType without decimal metadata. Please read this
-         |column/field as Spark BINARY type.
-       """.stripMargin.replaceAll("\n", " "))
+    new SparkRuntimeException(
+      errorClass = "CANNOT_CREATE_PARQUET_CONVERTER_FOR_TYPE",
+      messageParameters = Array(t.typeName, parquetType))
   }
 
   def cannotCreateParquetConverterForDecimalTypeError(
       t: DecimalType, parquetType: String): Throwable = {
-    new RuntimeException(
-      s"""
-         |Unable to create Parquet converter for decimal type ${t.json} whose Parquet type is
-         |$parquetType.  Parquet DECIMAL type can only be backed by INT32, INT64,
-         |FIXED_LEN_BYTE_ARRAY, or BINARY.
-       """.stripMargin.replaceAll("\n", " "))
+    new SparkRuntimeException(
+      errorClass = "CANNOT_CREATE_PARQUET_CONVERTER_FOR_DECIMAL_TYPE",
+      messageParameters = Array(t.json, parquetType))
   }
 
   def cannotCreateParquetConverterForDataTypeError(
       t: DataType, parquetType: String): Throwable = {
-    new RuntimeException(s"Unable to create Parquet converter for data type ${t.json} " +
-      s"whose Parquet type is $parquetType")
+    new SparkRuntimeException(
+      errorClass = "CANNOT_CREATE_PARQUET_CONVERTER_FOR_DATATYPE",
+      messageParameters = Array(t.json, parquetType))
   }
 
   def cannotAddMultiPartitionsOnNonatomicPartitionTableError(tableName: String): Throwable = {
-    new UnsupportedOperationException(
-      s"Nonatomic partition table $tableName can not add multiple partitions.")
+    new SparkUnsupportedOperationException(
+      errorClass = "CANNOT_ADD_MULTI_PARTITIONS_ON_NONATOMIC_PARTITION_TABLE",
+      messageParameters = Array(tableName)
+    )
   }
 
   def userSpecifiedSchemaUnsupportedByDataSourceError(provider: TableProvider): Throwable = {
-    new UnsupportedOperationException(
-      s"${provider.getClass.getSimpleName} source does not support user-specified schema.")
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_USER_SPECIFIED_SCHEMA",
+      messageParameters = Array(provider.getClass.getSimpleName))
   }
 
   def cannotDropMultiPartitionsOnNonatomicPartitionTableError(tableName: String): Throwable = {

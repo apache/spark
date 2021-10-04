@@ -98,6 +98,16 @@ private[spark] class SparkUnsupportedOperationException(
 }
 
 /**
+ * Null Pointer exception thrown from Spark with an error class.
+ */
+private[spark] class SparkNullPointerException(errorClass: String, messageParameters: Array[String])
+  extends NullPointerException(SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+}
+
+/**
  * Class not found exception thrown from Spark with an error class.
  */
 private[spark] class SparkClassNotFoundException(
@@ -229,6 +239,9 @@ private[spark] class SparkIOException(
   override def getErrorClass: String = errorClass
 }
 
+/**
+ * Run time exception thrown from Spark with an error class.
+ */
 private[spark] class SparkRuntimeException(
     errorClass: String,
     messageParameters: Array[String],
