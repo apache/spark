@@ -835,7 +835,7 @@ _all_complex_types = dict((v.typeName(), v)  # type: ignore[attr-defined]
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
 
 
-def _parse_datatype_string(s: Union[str, List[str]]) -> DataType:
+def _parse_datatype_string(s: str) -> DataType:
     """
     Parses the given data type string to a :class:`DataType`. The data type string format equals
     :class:`DataType.simpleString`, except that the top level struct type can omit
@@ -879,11 +879,11 @@ def _parse_datatype_string(s: Union[str, List[str]]) -> DataType:
     """
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
 
-    def from_ddl_schema(type_str: Union[str, List[str]]) -> DataType:
+    def from_ddl_schema(type_str: str) -> DataType:
         return _parse_datatype_json_string(
             sc._jvm.org.apache.spark.sql.types.StructType.fromDDL(type_str).json())
 
-    def from_ddl_datatype(type_str: Union[str, List[str]]) -> DataType:
+    def from_ddl_datatype(type_str: str) -> DataType:
         return _parse_datatype_json_string(
             sc._jvm.org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str).json())
 
@@ -897,7 +897,7 @@ def _parse_datatype_string(s: Union[str, List[str]]) -> DataType:
         except:
             try:
                 # For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
-                return from_ddl_datatype("struct<%s>" % s.strip())  # type: ignore[union-attr]
+                return from_ddl_datatype("struct<%s>" % s.strip())
             except:
                 raise e
 

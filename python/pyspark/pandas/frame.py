@@ -6442,14 +6442,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         include_spark_type = []
         for inc in include_list:
             try:
-                include_spark_type.append(_parse_datatype_string(inc))
+                include_spark_type.append(_parse_datatype_string(cast(str, inc)))
             except:
                 pass
 
         exclude_spark_type = []
         for exc in exclude_list:
             try:
-                exclude_spark_type.append(_parse_datatype_string(exc))
+                exclude_spark_type.append(_parse_datatype_string(cast(str, exc)))
             except:
                 pass
 
