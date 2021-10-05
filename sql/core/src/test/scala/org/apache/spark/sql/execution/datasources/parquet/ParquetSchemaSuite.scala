@@ -24,7 +24,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
-import org.apache.parquet.schema.{MessageType, MessageTypeParser, PrimitiveType}
+import org.apache.parquet.schema._
 import org.apache.parquet.schema.Type._
 
 import org.apache.spark.SparkException
@@ -45,14 +45,16 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       messageType: String,
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
-      writeLegacyParquetFormat: Boolean): Unit = {
+      writeLegacyParquetFormat: Boolean,
+      expectedParquetType: Option[ParquetType] = None): Unit = {
     testSchema(
       testName,
       StructType.fromAttributes(ScalaReflection.attributesFor[T]),
       messageType,
       binaryAsString,
       int96AsTimestamp,
-      writeLegacyParquetFormat)
+      writeLegacyParquetFormat,
+      expectedParquetType = expectedParquetType)
   }
 
   protected def testParquetToCatalyst(
@@ -111,7 +113,8 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       int96AsTimestamp: Boolean,
       writeLegacyParquetFormat: Boolean,
       outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
-        SQLConf.ParquetOutputTimestampType.INT96): Unit = {
+        SQLConf.ParquetOutputTimestampType.INT96,
+      expectedParquetType: Option[ParquetType] = None): Unit = {
 
     testCatalystToParquet(
       testName,
@@ -125,7 +128,8 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       sqlSchema,
       parquetSchema,
       binaryAsString,
-      int96AsTimestamp)
+      int96AsTimestamp,
+      expectedParquetType = expectedParquetType)
   }
 
   protected def compareParquetType(actual: ParquetType, expected: ParquetType): Unit = {
@@ -133,6 +137,16 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
         s"actual = ${actual.sparkType}, expected = ${expected.sparkType}")
     assert(actual.descriptor === expected.descriptor, "column descriptor mismatch: " +
         s"actual = ${actual.descriptor}, expected = ${expected.descriptor})")
+    // Parquet ColumnDescriptor equals only compare path so we'll need to compare other fields
+    // explicitly here
+    if (actual.descriptor.isDefined && expected.descriptor.isDefined) {
+      val actualDesc = actual.descriptor.get
+      val expectedDesc = expected.descriptor.get
+      assert(actualDesc.getMaxRepetitionLevel == expectedDesc.getMaxRepetitionLevel)
+      assert(actualDesc.getMaxRepetitionLevel == expectedDesc.getMaxRepetitionLevel)
+      assert(actualDesc.getPrimitiveType === expectedDesc.getPrimitiveType)
+    }
+
     assert(actual.repetitionLevel == expected.repetitionLevel, "repetition level mismatch: " +
         s"actual = ${actual.repetitionLevel}, expected = ${expected.repetitionLevel}")
     assert(actual.definitionLevel == expected.definitionLevel, "definition level mismatch: " +
@@ -147,6 +161,33 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
     actual.children.zip(expected.children).foreach { case (actualChild, expectedChild) =>
       compareParquetType(actualChild, expectedChild)
     }
+  }
+
+  protected def primitiveParquetType(
+      sparkType: DataType,
+      parquetTypeName: PrimitiveTypeName,
+      repetition: Repetition,
+      repLevel: Int,
+      defLevel: Int,
+      path: Seq[String],
+      logicalTypeAnnotation: Option[LogicalTypeAnnotation] = None): ParquetType = {
+    var typeBuilder = repetition match {
+      case Repetition.REQUIRED => Types.required(parquetTypeName)
+      case Repetition.OPTIONAL => Types.optional(parquetTypeName)
+      case Repetition.REPEATED => Types.repeated(parquetTypeName)
+    }
+    if (logicalTypeAnnotation.isDefined) {
+      typeBuilder = typeBuilder.as(logicalTypeAnnotation.get)
+    }
+    ParquetType(
+      sparkType = sparkType,
+      descriptor = Some(new ColumnDescriptor(path.toArray,
+        typeBuilder.named(path.last), repLevel, defLevel)),
+      repetitionLevel = repLevel,
+      definitionLevel = defLevel,
+      required = repetition != Repetition.OPTIONAL,
+      path = path,
+      children = Seq.empty)
   }
 }
 
@@ -165,7 +206,31 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = false,
     int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    writeLegacyParquetFormat = true,
+    expectedParquetType = Some(
+      ParquetType(
+        sparkType = StructType.fromAttributes(
+          ScalaReflection.attributesFor[(Boolean, Int, Long, Float, Double, Array[Byte])]),
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 0,
+        required = false,
+        path = Seq(),
+        children = Seq(
+          primitiveParquetType(BooleanType, PrimitiveTypeName.BOOLEAN, Repetition.REQUIRED,
+            0, 0, Seq("_1")),
+          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            0, 0, Seq("_2")),
+          primitiveParquetType(LongType, PrimitiveTypeName.INT64, Repetition.REQUIRED,
+            0, 0, Seq("_3")),
+          primitiveParquetType(FloatType, PrimitiveTypeName.FLOAT, Repetition.REQUIRED,
+            0, 0, Seq("_4")),
+          primitiveParquetType(DoubleType, PrimitiveTypeName.DOUBLE, Repetition.REQUIRED,
+            0, 0, Seq("_5")),
+          primitiveParquetType(BinaryType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+            0, 1, Seq("_6")),
+        )))
+  )
 
   testSchemaInference[(Byte, Short, Int, Long, java.sql.Date)](
     "logical integral types",
@@ -180,7 +245,28 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    writeLegacyParquetFormat = true,
+    expectedParquetType = Some(
+      ParquetType(
+        sparkType = StructType.fromAttributes(
+          ScalaReflection.attributesFor[(Byte, Short, Int, Long, java.sql.Date)]),
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 0,
+        required = false,
+        path = Seq(),
+        children = Seq(
+          primitiveParquetType(ByteType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            0, 0, Seq("_1"), logicalTypeAnnotation = Some(LogicalTypeAnnotation.intType(8, true))),
+          primitiveParquetType(ShortType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            0, 0, Seq("_2"), logicalTypeAnnotation = Some(LogicalTypeAnnotation.intType(16, true))),
+          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            0, 0, Seq("_3"), logicalTypeAnnotation = Some(LogicalTypeAnnotation.intType(32, true))),
+          primitiveParquetType(LongType, PrimitiveTypeName.INT64, Repetition.REQUIRED,
+            0, 0, Seq("_4"), logicalTypeAnnotation = Some(LogicalTypeAnnotation.intType(64, true))),
+          primitiveParquetType(DateType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
+            0, 1, Seq("_5"), logicalTypeAnnotation = Some(LogicalTypeAnnotation.dateType()))
+        ))))
 
   testSchemaInference[Tuple1[String]](
     "string",
@@ -191,7 +277,20 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    writeLegacyParquetFormat = true,
+    expectedParquetType = Some(
+      ParquetType(
+        sparkType = StructType.fromAttributes(
+          ScalaReflection.attributesFor[Tuple1[String]]),
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 0,
+        required = false,
+        path = Seq(),
+        children = Seq(
+          primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+            0, 1, Seq("_1"), logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType()))
+        ))))
 
   testSchemaInference[Tuple1[String]](
     "binary enum as string",
@@ -202,7 +301,20 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    writeLegacyParquetFormat = true,
+    expectedParquetType = Some(
+      ParquetType(
+        sparkType = StructType.fromAttributes(
+          ScalaReflection.attributesFor[Tuple1[String]]),
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 0,
+        required = false,
+        path = Seq(),
+        children = Seq(
+          primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+            0, 1, Seq("_1"), logicalTypeAnnotation = Some(LogicalTypeAnnotation.enumType()))
+        ))))
 
   testSchemaInference[Tuple1[Seq[Int]]](
     "non-nullable array - non-standard",
@@ -215,7 +327,28 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    writeLegacyParquetFormat = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "_1",
+          ArrayType(IntegerType, containsNull = false)))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(ParquetType(
+        sparkType = ArrayType(IntegerType, containsNull = false),
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 1,
+        required = false,
+        path = Seq("_1"),
+        children = Seq(
+          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REPEATED,
+            1, 2, Seq("_1", "array")))
+      )))))
 
   testSchemaInference[Tuple1[Seq[Int]]](
     "non-nullable array - standard",
@@ -230,7 +363,28 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    writeLegacyParquetFormat = false)
+    writeLegacyParquetFormat = false,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "_1",
+          ArrayType(IntegerType, containsNull = false)))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(ParquetType(
+        sparkType = ArrayType(IntegerType, containsNull = false),
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 1,
+        required = false,
+        path = Seq("_1"),
+        children = Seq(
+          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            1, 2, Seq("_1", "list", "element"))
+        ))))))
 
   testSchemaInference[Tuple1[Seq[Integer]]](
     "nullable array - non-standard",
@@ -245,7 +399,28 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    writeLegacyParquetFormat = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "_1",
+          ArrayType(IntegerType, containsNull = true)))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(ParquetType(
+        sparkType = ArrayType(IntegerType, containsNull = true),
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 1,
+        required = false,
+        path = Seq("_1"),
+        children = Seq(
+          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
+            1, 3, Seq("_1", "bag", "array"))
+        ))))))
 
   testSchemaInference[Tuple1[Seq[Integer]]](
     "nullable array - standard",
@@ -260,7 +435,28 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    writeLegacyParquetFormat = false)
+    writeLegacyParquetFormat = false,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "_1",
+          ArrayType(IntegerType, containsNull = true)))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(ParquetType(
+        sparkType = ArrayType(IntegerType, containsNull = true),
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 1,
+        required = false,
+        path = Seq("_1"),
+        children = Seq(
+          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
+            1, 3, Seq("_1", "list", "element"))
+        ))))))
 
   testSchemaInference[Tuple1[Map[Int, String]]](
     "map - standard",
@@ -276,7 +472,33 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    writeLegacyParquetFormat = false)
+    writeLegacyParquetFormat = false,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "_1",
+          MapType(IntegerType, StringType, valueContainsNull = true),
+          nullable = true))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(
+        ParquetType(
+          sparkType = MapType(IntegerType, StringType, valueContainsNull = true),
+          descriptor = None,
+          repetitionLevel = 0,
+          definitionLevel = 1,
+          required = false,
+          path = Seq("_1"),
+          children = Seq(
+            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+              1, 2, Seq("_1", "key_value", "key")),
+            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+              1, 3, Seq("_1", "key_value", "value"),
+              logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
+        )))))
 
   testSchemaInference[Tuple1[Map[Int, String]]](
     "map - non-standard",
@@ -292,7 +514,33 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    writeLegacyParquetFormat = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "_1",
+          MapType(IntegerType, StringType, valueContainsNull = true),
+          nullable = true))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(
+        ParquetType(
+          sparkType = MapType(IntegerType, StringType, valueContainsNull = true),
+          descriptor = None,
+          repetitionLevel = 0,
+          definitionLevel = 1,
+          required = false,
+          path = Seq("_1"),
+          children = Seq(
+            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+              1, 2, Seq("_1", "key_value", "key")),
+            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+              1, 3, Seq("_1", "key_value", "value"),
+              logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
+          )))))
 
   testSchemaInference[Tuple1[Map[(String, String), String]]](
     "map - group type key",
@@ -311,7 +559,50 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    writeLegacyParquetFormat = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "_1",
+          MapType(StructType(Seq(StructField("_1", StringType), StructField("_2", StringType))),
+            StringType, valueContainsNull = true),
+          nullable = true))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(
+        ParquetType(
+          sparkType = MapType(
+            StructType(Seq(StructField("_1", StringType), StructField("_2", StringType))),
+            StringType, valueContainsNull = true),
+          descriptor = None,
+          repetitionLevel = 0,
+          definitionLevel = 1,
+          required = false,
+          path = Seq("_1"),
+          children = Seq(
+            ParquetType(
+              sparkType =
+                StructType(Seq(StructField("_1", StringType), StructField("_2", StringType))),
+              descriptor = None,
+              repetitionLevel = 1,
+              definitionLevel = 2,
+              required = true,
+              path = Seq("_1", "key_value", "key"),
+              children = Seq(
+                primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+                  1, 3, Seq("_1", "key_value", "key", "_1"),
+                  logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())),
+                primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+                  1, 3, Seq("_1", "key_value", "key", "_2"),
+                  logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
+              ),
+            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+              1, 3, Seq("_1", "key_value", "value"),
+              logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
+          )))))
 
   testSchemaInference[Tuple1[(Int, String)]](
     "struct",
@@ -325,7 +616,36 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    writeLegacyParquetFormat = false)
+    writeLegacyParquetFormat = false,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "_1",
+          StructType(Seq(
+            StructField("_1", IntegerType, nullable = false),
+            StructField("_2", StringType)))))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(
+        ParquetType(
+          sparkType = StructType(Seq(
+            StructField("_1", IntegerType, nullable = false),
+            StructField("_2", StringType))),
+          descriptor = None,
+          repetitionLevel = 0,
+          definitionLevel = 1,
+          required = false,
+          path = Seq("_1"),
+          children = Seq(
+            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+              0, 1, Seq("_1", "_1")),
+            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+              0, 2, Seq("_1", "_2"),
+              logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
+        )))))
 
   testSchemaInference[Tuple1[Map[Int, (String, Seq[(Int, Double)])]]](
     "deeply nested type - non-standard",
@@ -351,7 +671,90 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    writeLegacyParquetFormat = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "_1",
+          MapType(IntegerType,
+            StructType(Seq(
+              StructField("_1", StringType),
+              StructField("_2", ArrayType(
+                StructType(Seq(
+                  StructField("_1", IntegerType, nullable = false),
+                  StructField("_2", DoubleType, nullable = false))))))),
+            valueContainsNull = true)))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(
+        ParquetType(
+          sparkType =
+            MapType(IntegerType,
+              StructType(Seq(
+                StructField("_1", StringType),
+                StructField("_2", ArrayType(
+                  StructType(Seq(
+                    StructField("_1", IntegerType, nullable = false),
+                    StructField("_2", DoubleType, nullable = false))))))),
+              valueContainsNull = true),
+          descriptor = None,
+          repetitionLevel = 0,
+          definitionLevel = 1,
+          required = false,
+          path = Seq("_1"),
+          children = Seq(
+            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+              1, 2, Seq("_1", "key_value", "key")),
+            ParquetType(
+              sparkType =
+                StructType(Seq(
+                  StructField("_1", StringType),
+                  StructField("_2", ArrayType(
+                    StructType(Seq(
+                      StructField("_1", IntegerType, nullable = false),
+                      StructField("_2", DoubleType, nullable = false))))))),
+              descriptor = None,
+              repetitionLevel = 1,
+              definitionLevel = 3,
+              required = false,
+              path = Seq("_1", "key_value", "value"),
+              children = Seq(
+                primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+                  1, 4, Seq("_1", "key_value", "value", "_1"),
+                  logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())),
+                ParquetType(
+                  sparkType = ArrayType(
+                    StructType(Seq(
+                      StructField("_1", IntegerType, nullable = false),
+                      StructField("_2", DoubleType, nullable = false)))),
+                  descriptor = None,
+                  repetitionLevel = 1,
+                  definitionLevel = 4,
+                  required = false,
+                  path = Seq("_1", "key_value", "value", "_2"),
+                  children = Seq(
+                    ParquetType(
+                      sparkType = StructType(Seq(
+                        StructField("_1", IntegerType, nullable = false),
+                        StructField("_2", DoubleType, nullable = false))),
+                      descriptor = None,
+                      repetitionLevel = 2,
+                      definitionLevel = 6,
+                      required = false,
+                      path = Seq("_1", "key_value", "value", "_2", "bag", "array"),
+                      children = Seq(
+                        primitiveParquetType(IntegerType, PrimitiveTypeName.INT32,
+                          Repetition.REQUIRED, 2, 6,
+                          Seq("_1", "key_value", "value", "_2", "bag", "array", "_1")),
+                        primitiveParquetType(DoubleType, PrimitiveTypeName.DOUBLE,
+                          Repetition.REQUIRED, 2, 6,
+                          Seq("_1", "key_value", "value", "_2", "bag", "array", "_2")),
+                      ))),
+                ))),
+          ))))))
 
   testSchemaInference[Tuple1[Map[Int, (String, Seq[(Int, Double)])]]](
     "deeply nested type - standard",
@@ -377,7 +780,90 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    writeLegacyParquetFormat = false)
+    writeLegacyParquetFormat = false,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "_1",
+          MapType(IntegerType,
+            StructType(Seq(
+              StructField("_1", StringType),
+              StructField("_2", ArrayType(
+                StructType(Seq(
+                  StructField("_1", IntegerType, nullable = false),
+                  StructField("_2", DoubleType, nullable = false))))))),
+            valueContainsNull = true)))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(
+        ParquetType(
+          sparkType =
+            MapType(IntegerType,
+              StructType(Seq(
+                StructField("_1", StringType),
+                StructField("_2", ArrayType(
+                  StructType(Seq(
+                    StructField("_1", IntegerType, nullable = false),
+                    StructField("_2", DoubleType, nullable = false))))))),
+              valueContainsNull = true),
+          descriptor = None,
+          repetitionLevel = 0,
+          definitionLevel = 1,
+          required = false,
+          path = Seq("_1"),
+          children = Seq(
+            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+              1, 2, Seq("_1", "key_value", "key")),
+            ParquetType(
+              sparkType =
+                StructType(Seq(
+                  StructField("_1", StringType),
+                  StructField("_2", ArrayType(
+                    StructType(Seq(
+                      StructField("_1", IntegerType, nullable = false),
+                      StructField("_2", DoubleType, nullable = false))))))),
+              descriptor = None,
+              repetitionLevel = 1,
+              definitionLevel = 3,
+              required = false,
+              path = Seq("_1", "key_value", "value"),
+              children = Seq(
+                primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+                  1, 4, Seq("_1", "key_value", "value", "_1"),
+                  logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())),
+                ParquetType(
+                  sparkType = ArrayType(
+                    StructType(Seq(
+                      StructField("_1", IntegerType, nullable = false),
+                      StructField("_2", DoubleType, nullable = false)))),
+                  descriptor = None,
+                  repetitionLevel = 1,
+                  definitionLevel = 4,
+                  required = false,
+                  path = Seq("_1", "key_value", "value", "_2"),
+                  children = Seq(
+                    ParquetType(
+                      sparkType = StructType(Seq(
+                        StructField("_1", IntegerType, nullable = false),
+                        StructField("_2", DoubleType, nullable = false))),
+                      descriptor = None,
+                      repetitionLevel = 2,
+                      definitionLevel = 6,
+                      required = false,
+                      path = Seq("_1", "key_value", "value", "_2", "list", "element"),
+                      children = Seq(
+                        primitiveParquetType(IntegerType, PrimitiveTypeName.INT32,
+                          Repetition.REQUIRED, 2, 6,
+                          Seq("_1", "key_value", "value", "_2", "list", "element", "_1")),
+                        primitiveParquetType(DoubleType, PrimitiveTypeName.DOUBLE,
+                          Repetition.REQUIRED, 2, 6,
+                          Seq("_1", "key_value", "value", "_2", "list", "element", "_2")),
+                    ))),
+              ))),
+        ))))))
 
   testSchemaInference[(Option[Int], Map[Int, Option[Double]])](
     "optional types",
@@ -394,7 +880,40 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    writeLegacyParquetFormat = false)
+    writeLegacyParquetFormat = false,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField("_1", IntegerType),
+        StructField("_2", MapType(IntegerType, DoubleType, valueContainsNull = true)))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(
+        ParquetType(
+          sparkType = IntegerType,
+          descriptor = Some(new ColumnDescriptor(Array("_1"),
+            Types.optional(PrimitiveTypeName.INT32).named("_1"), 0, 1)),
+          repetitionLevel = 0,
+          definitionLevel = 1,
+          required = false,
+          path = Seq("_1"),
+          children = Seq()),
+        ParquetType(
+          sparkType = MapType(IntegerType, DoubleType, valueContainsNull = true),
+          descriptor = None,
+          repetitionLevel = 0,
+          definitionLevel = 1,
+          required = false,
+          path = Seq("_2"),
+          children = Seq(
+            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+              1, 2, Seq("_2", "key_value", "key")),
+            primitiveParquetType(DoubleType, PrimitiveTypeName.DOUBLE, Repetition.OPTIONAL,
+              1, 3, Seq("_2", "key_value", "value")),
+          )))
+    )))
 }
 
 class ParquetSchemaSuite extends ParquetSchemaTest {
@@ -526,19 +1045,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         definitionLevel = 1,
         required = false,
         path = Seq("f1"),
-        children = Seq(ParquetType(
-          sparkType = IntegerType,
-          descriptor = {
-            Some(new ColumnDescriptor(Array("f1", "list", "element"),
-              new PrimitiveType(Repetition.OPTIONAL, PrimitiveTypeName.INT32, "element"),
-              1, 3))
-          },
-          repetitionLevel = 1,
-          definitionLevel = 3,
-          required = false,
-          path = Seq("f1", "list", "element"),
-          children = Seq()
-        )))
+        children = Seq(
+          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
+            1, 3, Seq("f1", "list", "element"))))
       ))))
 
   testParquetToCatalyst(
@@ -575,21 +1084,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           definitionLevel = 1,
           required = false,
           path = Seq("f1"),
-          children = Seq(ParquetType(
-            sparkType = IntegerType,
-            descriptor = {
-              Some(new ColumnDescriptor(Array("f1", "element", "num"),
-                new PrimitiveType(Repetition.OPTIONAL, PrimitiveTypeName.INT32, "num"),
-                1, 3))
-            },
-            repetitionLevel = 1,
-            definitionLevel = 3,
-            required = false,
-            path = Seq("f1", "element", "num"),
-            children = Seq()
-          )))
+          children = Seq(
+            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
+              1, 3, Seq("f1", "element", "num"))))
         ))))
-
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 1 - standard",
@@ -622,18 +1120,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         definitionLevel = 1,
         required = false,
         path = Seq("f1"),
-        children = Seq(ParquetType(
-          sparkType = IntegerType,
-          descriptor =
-            Some(new ColumnDescriptor(Array("f1", "list", "element"),
-              new PrimitiveType(Repetition.OPTIONAL, PrimitiveTypeName.INT32, "element"),
-              1, 3)),
-          repetitionLevel = 1,
-          definitionLevel = 2,
-          required = true,
-          path = Seq("f1", "list", "element"),
-          children = Seq()
-        )))
+        children = Seq(
+          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            1, 2, Seq("f1", "list", "element"))))
       ))))
 
   testParquetToCatalyst(
@@ -667,20 +1156,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         definitionLevel = 1,
         required = false,
         path = Seq("f1"),
-        children = Seq(ParquetType(
-          sparkType = IntegerType,
-          descriptor =
-            Some(new ColumnDescriptor(Array("f1", "element", "num"),
-              new PrimitiveType(Repetition.OPTIONAL, PrimitiveTypeName.INT32, "num"),
-              1, 3)),
-          repetitionLevel = 1,
-          definitionLevel = 2,
-          required = true,
-          path = Seq("f1", "element", "num"),
-          children = Seq()
-        )))
+        children = Seq(
+          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            1, 2, Seq("f1", "element", "num"))))
       ))))
-
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 3",
@@ -693,7 +1172,28 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true)
+    int96AsTimestamp = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "f1",
+          ArrayType(IntegerType, containsNull = false)))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(ParquetType(
+        sparkType = ArrayType(IntegerType, containsNull = false),
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 1,
+        required = false,
+        path = Seq("f1"),
+        children = Seq(
+          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REPEATED,
+            1, 2, Seq("f1", "element"))))
+      ))))
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 4",
@@ -716,7 +1216,48 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true)
+    int96AsTimestamp = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "f1",
+          ArrayType(
+            StructType(Seq(
+              StructField("str", StringType, nullable = false),
+              StructField("num", IntegerType, nullable = false))),
+            containsNull = false)))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(ParquetType(
+        ArrayType(
+          StructType(Seq(
+            StructField("str", StringType, nullable = false),
+            StructField("num", IntegerType, nullable = false))),
+          containsNull = false),
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 1,
+        required = false,
+        path = Seq("f1"),
+        children = Seq(ParquetType(
+          sparkType = StructType(Seq(
+            StructField("str", StringType, nullable = false),
+            StructField("num", IntegerType, nullable = false))),
+          descriptor = None,
+          repetitionLevel = 1,
+          definitionLevel = 2,
+          required = false,
+          path = Seq("f1", "element"),
+          children = Seq(
+            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
+              1, 2, Seq("f1", "element", "str"),
+              logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())),
+            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+              1, 2, Seq("f1", "element", "num")))))
+      )))))
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 5 - parquet-avro style",
@@ -737,7 +1278,44 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true)
+    int96AsTimestamp = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "f1",
+          ArrayType(
+            StructType(Seq(
+              StructField("str", StringType, nullable = false))),
+            containsNull = false),
+          nullable = true))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(ParquetType(
+        sparkType = ArrayType(
+          StructType(Seq(
+            StructField("str", StringType, nullable = false))),
+          containsNull = false),
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 1,
+        required = false,
+        path = Seq("f1"),
+        children = Seq(ParquetType(
+          sparkType = StructType(Seq(
+              StructField("str", StringType, nullable = false))),
+          descriptor = None,
+          repetitionLevel = 1,
+          definitionLevel = 2,
+          required = false,
+          path = Seq("f1", "array"),
+          children = Seq(
+            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
+              1, 2, Seq("f1", "array", "str"),
+              logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType()))))))
+      ))))
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 6 - parquet-thrift style",
@@ -758,7 +1336,44 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true)
+    int96AsTimestamp = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "f1",
+          ArrayType(
+            StructType(Seq(
+              StructField("str", StringType, nullable = false))),
+            containsNull = false),
+          nullable = true))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(ParquetType(
+        sparkType = ArrayType(
+          StructType(Seq(
+            StructField("str", StringType, nullable = false))),
+          containsNull = false),
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 1,
+        required = false,
+        path = Seq("f1"),
+        children = Seq(ParquetType(
+          sparkType = StructType(Seq(
+            StructField("str", StringType, nullable = false))),
+          descriptor = None,
+          repetitionLevel = 1,
+          definitionLevel = 2,
+          required = false,
+          path = Seq("f1", "f1_tuple"),
+          children = Seq(
+            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
+              1, 2, Seq("f1", "f1_tuple", "str"),
+              logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType()))))))
+      ))))
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type 7 - " +
@@ -770,7 +1385,28 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true)
+    int96AsTimestamp = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "f1",
+          ArrayType(IntegerType, containsNull = false), nullable = false))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(ParquetType(
+        sparkType = ArrayType(IntegerType, containsNull = false),
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 0,
+        required = true,
+        path = Seq("f1"),
+        children = Seq(
+          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REPEATED,
+            1, 1, Seq("f1")))))
+      )))
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type 8 - " +
@@ -792,7 +1428,49 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true)
+    int96AsTimestamp = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "f1",
+          ArrayType(
+            new StructType()
+                .add("c1", StringType, nullable = true)
+                .add("c2", IntegerType, nullable = false),
+            containsNull = false), nullable = false))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(ParquetType(
+        sparkType = ArrayType(
+          new StructType()
+              .add("c1", StringType, nullable = true)
+              .add("c2", IntegerType, nullable = false),
+          containsNull = false),
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 0,
+        required = true,
+        path = Seq("f1"),
+        children = Seq(
+          ParquetType(
+            sparkType = new StructType()
+                .add("c1", StringType, nullable = true)
+                .add("c2", IntegerType, nullable = false),
+            descriptor = None,
+            repetitionLevel = 1,
+            definitionLevel = 1,
+            required = true,
+            path = Seq("f1"),
+            children = Seq(
+              primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+                1, 2, Seq("f1", "c1"),
+                logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())),
+              primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+                1, 1, Seq("f1", "c2")))))
+        )))))
 
   // =======================================================
   // Tests for converting Catalyst ArrayType to Parquet LIST
@@ -885,7 +1563,33 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true)
+    int96AsTimestamp = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "f1",
+          MapType(IntegerType, StringType, valueContainsNull = false),
+          nullable = true))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(
+        ParquetType(
+          sparkType = MapType(IntegerType, StringType, valueContainsNull = false),
+          descriptor = None,
+          repetitionLevel = 0,
+          definitionLevel = 1,
+          required = false,
+          path = Seq("f1"),
+          children = Seq(
+            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+              1, 2, Seq("f1", "key_value", "key")),
+            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
+              1, 2, Seq("f1", "key_value", "value"),
+              logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())),
+          ))))))
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with non-nullable value type - 2",
@@ -904,7 +1608,33 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true)
+    int96AsTimestamp = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "f1",
+          MapType(IntegerType, StringType, valueContainsNull = false),
+          nullable = true))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(
+        ParquetType(
+          sparkType = MapType(IntegerType, StringType, valueContainsNull = false),
+          descriptor = None,
+          repetitionLevel = 0,
+          definitionLevel = 1,
+          required = false,
+          path = Seq("f1"),
+          children = Seq(
+            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+              1, 2, Seq("f1", "key_value", "num")),
+            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
+              1, 2, Seq("f1", "key_value", "str"),
+              logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())),
+          ))))))
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with non-nullable value type - 3 - prior to 1.4.x",
@@ -923,7 +1653,33 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true)
+    int96AsTimestamp = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "f1",
+          MapType(IntegerType, StringType, valueContainsNull = false),
+          nullable = true))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(
+        ParquetType(
+          sparkType = MapType(IntegerType, StringType, valueContainsNull = false),
+          descriptor = None,
+          repetitionLevel = 0,
+          definitionLevel = 1,
+          required = false,
+          path = Seq("f1"),
+          children = Seq(
+            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+              1, 2, Seq("f1", "key_value", "key")),
+            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
+              1, 2, Seq("f1", "key_value", "value"),
+              logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
+        )))))
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with nullable value type - 1 - standard",
@@ -942,7 +1698,33 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true)
+    int96AsTimestamp = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "f1",
+          MapType(IntegerType, StringType, valueContainsNull = true),
+          nullable = true))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(
+        ParquetType(
+          sparkType = MapType(IntegerType, StringType, valueContainsNull = true),
+          descriptor = None,
+          repetitionLevel = 0,
+          definitionLevel = 1,
+          required = false,
+          path = Seq("f1"),
+          children = Seq(
+            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+              1, 2, Seq("f1", "key_value", "key")),
+            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+              1, 3, Seq("f1", "key_value", "value"),
+              logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
+        )))))
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with nullable value type - 2",
@@ -961,7 +1743,33 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true)
+    int96AsTimestamp = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "f1",
+          MapType(IntegerType, StringType, valueContainsNull = true),
+          nullable = true))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(
+        ParquetType(
+          sparkType = MapType(IntegerType, StringType, valueContainsNull = true),
+          descriptor = None,
+          repetitionLevel = 0,
+          definitionLevel = 1,
+          required = false,
+          path = Seq("f1"),
+          children = Seq(
+            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+              1, 2, Seq("f1", "key_value", "num")),
+            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+              1, 3, Seq("f1", "key_value", "str"),
+              logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
+        )))))
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with nullable value type - 3 - parquet-avro style",
@@ -980,7 +1788,33 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true)
+    int96AsTimestamp = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "f1",
+          MapType(IntegerType, StringType, valueContainsNull = true),
+          nullable = true))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(
+        ParquetType(
+          sparkType = MapType(IntegerType, StringType, valueContainsNull = true),
+          descriptor = None,
+          repetitionLevel = 0,
+          definitionLevel = 1,
+          required = false,
+          path = Seq("f1"),
+          children = Seq(
+            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+              1, 2, Seq("f1", "key_value", "key")),
+            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+              1, 3, Seq("f1", "key_value", "value"),
+              logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
+        )))))
 
   // ====================================================
   // Tests for converting Catalyst MapType to Parquet Map

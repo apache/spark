@@ -115,7 +115,7 @@ class ParquetToSparkSchemaConverter(
         }
       }
 
-      var convertedField = convertField(field, fieldReadType)
+      val convertedField = convertField(field, fieldReadType)
 
       field.getType.getRepetition match {
         case OPTIONAL | REQUIRED =>
