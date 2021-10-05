@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
-import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.connector.expressions.NamedReference
 
 /**
  * Physical plan node for creating an index.
@@ -34,7 +34,7 @@ case class CreateIndexExec(
     indexName: String,
     indexType: String,
     ignoreIfExists: Boolean,
-    columns: Seq[FieldReference],
+    columns: Seq[NamedReference],
     columnProperties: Seq[Map[String, String]],
     private var properties: Map[String, String])
   extends LeafV2CommandExec {

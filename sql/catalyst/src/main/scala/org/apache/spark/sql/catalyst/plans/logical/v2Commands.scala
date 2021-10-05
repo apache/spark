@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.{FieldReference, Transform}
+import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.connector.write.Write
 import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
 
@@ -1065,7 +1065,7 @@ case class CreateIndex(
     indexName: String,
     indexType: String,
     ignoreIfExists: Boolean,
-    columns: Seq[FieldReference],
+    columns: Seq[NamedReference],
     columnsProperties: Seq[Map[String, String]],
     properties: Map[String, String]) extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): CreateIndex =
