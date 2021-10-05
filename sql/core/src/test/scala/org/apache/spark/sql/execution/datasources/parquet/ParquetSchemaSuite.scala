@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import org.apache.parquet.column.ColumnDescriptor
+
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.parquet.io.ParquetDecodingException
-import org.apache.parquet.schema.{MessageType, MessageTypeParser}
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
+import org.apache.parquet.schema.{MessageType, MessageTypeParser, PrimitiveType}
+import org.apache.parquet.schema.Type._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScalaReflection
@@ -56,13 +60,16 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       sqlSchema: StructType,
       parquetSchema: String,
       binaryAsString: Boolean,
-      int96AsTimestamp: Boolean): Unit = {
+      int96AsTimestamp: Boolean,
+      expectedParquetType: Option[ParquetType] = None): Unit = {
     val converter = new ParquetToSparkSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp)
 
     test(s"sql <= parquet: $testName") {
-      val actual = converter.convert(MessageTypeParser.parseMessageType(parquetSchema))
+      val actualParquetType = converter.convertTypeInfo(
+          MessageTypeParser.parseMessageType(parquetSchema))
+      val actual = actualParquetType.sparkType
       val expected = sqlSchema
       assert(
         actual === expected,
@@ -70,6 +77,10 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
            |Expected schema: ${expected.json}
            |Actual schema:   ${actual.json}
          """.stripMargin)
+
+      if (expectedParquetType.isDefined) {
+        compareParquetType(actualParquetType, expectedParquetType.get)
+      }
     }
   }
 
@@ -115,6 +126,27 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       parquetSchema,
       binaryAsString,
       int96AsTimestamp)
+  }
+
+  protected def compareParquetType(actual: ParquetType, expected: ParquetType): Unit = {
+    assert(actual.sparkType == expected.sparkType, "sparkType mismatch: " +
+        s"actual = ${actual.sparkType}, expected = ${expected.sparkType}")
+    assert(actual.descriptor === expected.descriptor, "column descriptor mismatch: " +
+        s"actual = ${actual.descriptor}, expected = ${expected.descriptor})")
+    assert(actual.repetitionLevel == expected.repetitionLevel, "repetition level mismatch: " +
+        s"actual = ${actual.repetitionLevel}, expected = ${expected.repetitionLevel}")
+    assert(actual.definitionLevel == expected.definitionLevel, "definition level mismatch: " +
+        s"actual = ${actual.definitionLevel}, expected = ${expected.definitionLevel}")
+    assert(actual.required == expected.required, "required mismatch: " +
+        s"actual = ${actual.required}, expected = ${expected.required}")
+    assert(actual.path == expected.path, "path mismatch: " +
+        s"actual = $actual.path, expected = ${expected.path}")
+
+    assert(actual.children.size == expected.children.size, "number of children mismatch: " +
+        s"actual = ${actual.children.size}, expected = ${expected.children.size}")
+    actual.children.zip(expected.children).foreach { case (actualChild, expectedChild) =>
+      compareParquetType(actualChild, expectedChild)
+    }
   }
 }
 
@@ -476,7 +508,38 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true)
+    int96AsTimestamp = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "f1",
+          ArrayType(IntegerType, containsNull = true)))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(ParquetType(
+        sparkType = ArrayType(IntegerType, containsNull = true),
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 1,
+        required = false,
+        path = Seq("f1"),
+        children = Seq(ParquetType(
+          sparkType = IntegerType,
+          descriptor = {
+            Some(new ColumnDescriptor(Array("f1", "list", "element"),
+              new PrimitiveType(Repetition.OPTIONAL, PrimitiveTypeName.INT32, "element"),
+              1, 3))
+          },
+          repetitionLevel = 1,
+          definitionLevel = 3,
+          required = false,
+          path = Seq("f1", "list", "element"),
+          children = Seq()
+        )))
+      ))))
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with nullable element type - 2",
@@ -494,7 +557,39 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true)
+    int96AsTimestamp = true,
+    expectedParquetType = Some(ParquetType(
+        sparkType = StructType(Seq(
+          StructField(
+            "f1",
+            ArrayType(IntegerType, containsNull = true)))),
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 0,
+        required = false,
+        path = Seq(),
+        children = Seq(ParquetType(
+          sparkType = ArrayType(IntegerType, containsNull = true),
+          descriptor = None,
+          repetitionLevel = 0,
+          definitionLevel = 1,
+          required = false,
+          path = Seq("f1"),
+          children = Seq(ParquetType(
+            sparkType = IntegerType,
+            descriptor = {
+              Some(new ColumnDescriptor(Array("f1", "element", "num"),
+                new PrimitiveType(Repetition.OPTIONAL, PrimitiveTypeName.INT32, "num"),
+                1, 3))
+            },
+            repetitionLevel = 1,
+            definitionLevel = 3,
+            required = false,
+            path = Seq("f1", "element", "num"),
+            children = Seq()
+          )))
+        ))))
+
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 1 - standard",
@@ -509,7 +604,37 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true)
+    int96AsTimestamp = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "f1",
+          ArrayType(IntegerType, containsNull = false)))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(ParquetType(
+        sparkType = ArrayType(IntegerType, containsNull = false),
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 1,
+        required = false,
+        path = Seq("f1"),
+        children = Seq(ParquetType(
+          sparkType = IntegerType,
+          descriptor =
+            Some(new ColumnDescriptor(Array("f1", "list", "element"),
+              new PrimitiveType(Repetition.OPTIONAL, PrimitiveTypeName.INT32, "element"),
+              1, 3)),
+          repetitionLevel = 1,
+          definitionLevel = 2,
+          required = true,
+          path = Seq("f1", "list", "element"),
+          children = Seq()
+        )))
+      ))))
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 2",
@@ -524,7 +649,38 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true)
+    int96AsTimestamp = true,
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "f1",
+          ArrayType(IntegerType, containsNull = false)))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(ParquetType(
+        sparkType = ArrayType(IntegerType, containsNull = false),
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 1,
+        required = false,
+        path = Seq("f1"),
+        children = Seq(ParquetType(
+          sparkType = IntegerType,
+          descriptor =
+            Some(new ColumnDescriptor(Array("f1", "element", "num"),
+              new PrimitiveType(Repetition.OPTIONAL, PrimitiveTypeName.INT32, "num"),
+              1, 3)),
+          repetitionLevel = 1,
+          definitionLevel = 2,
+          required = true,
+          path = Seq("f1", "element", "num"),
+          children = Seq()
+        )))
+      ))))
+
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 3",
