@@ -115,8 +115,8 @@ class SQLContext(object):
             )
 
         self._sc = sparkContext
-        self._jsc = self._sc._jsc
-        self._jvm = self._sc._jvm
+        self._jsc = self._sc._jsc  # type: ignore[attr-defined]
+        self._jvm = self._sc._jvm  # type: ignore[attr-defined]
         if sparkSession is None:
             sparkSession = SparkSession.builder.getOrCreate()
         if jsqlContext is None:
@@ -130,7 +130,7 @@ class SQLContext(object):
             SQLContext._instantiatedContext = self
 
     @property
-    def _ssql_ctx(self):
+    def _ssql_ctx(self):  # type: ignore[no-untyped-def]
         """Accessor for the JVM Spark SQL context.
 
         Subclasses can override this property to provide their own
