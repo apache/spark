@@ -377,11 +377,9 @@ class MultiIndex(Index):
 
     @property
     def dtypes(self) -> Series:
-        return pd.Series(
-            [field.dtype for field in self._internal.index_fields],
-            index=pd.Index(
-                [name if len(name) > 1 else name[0] for name in self._internal.index_names]
-            ),
+        return ps.Series(
+            [field.dtype.name for field in self._internal.index_fields],
+            index=[name if len(name) > 1 else name[0] for name in self._internal.index_names],
         )
 
     def _verify_for_rename(self, name: List[Name]) -> List[Label]:  # type: ignore[override]

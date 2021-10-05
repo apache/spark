@@ -6002,11 +6002,10 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
     def test_multi_index_dtypes(self):
         arrays = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
-        idx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
-        pdf = pd.DataFrame(np.random.randn(4, 5), idx)
-        psdf = ps.from_pandas(pdf)
+        pmidx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
+        psmidx = ps.from_pandas(pmidx)
 
-        self.assert_eq(psdf.index.dtypes, pdf.index.dtypes)
+        self.assert_eq(psmidx.dtypes, pmidx.dtypes)
 
 
 if __name__ == "__main__":
