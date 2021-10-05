@@ -86,10 +86,10 @@ class OrcDeserializer(
       case ShortType => (ordinal, value) =>
         updater.setShort(ordinal, value.asInstanceOf[ShortWritable].get)
 
-      case IntegerType => (ordinal, value) =>
+      case IntegerType | _: YearMonthIntervalType => (ordinal, value) =>
         updater.setInt(ordinal, value.asInstanceOf[IntWritable].get)
 
-      case LongType => (ordinal, value) =>
+      case LongType | _: DayTimeIntervalType => (ordinal, value) =>
         updater.setLong(ordinal, value.asInstanceOf[LongWritable].get)
 
       case FloatType => (ordinal, value) =>

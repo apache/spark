@@ -50,6 +50,8 @@ object OrcUtils extends Logging {
     "LZ4" -> ".lz4",
     "LZO" -> ".lzo")
 
+  val CATALYST_TYPE_ATTRIBUTE_NAME = "spark.sql.catalyst.type"
+
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)
@@ -95,11 +97,9 @@ object OrcUtils extends Logging {
         case Category.MAP => toMapType(orcType)
         case _ =>
           val parsedType = CatalystSqlParser.parseDataType(orcType.toString)
-          val catalystTypeMetadata = orcType.getAttributeValue("catalyst.type")
-          if (catalystTypeMetadata == "day-time-interval") {
-            DayTimeIntervalType()
-          } else if (catalystTypeMetadata == "year-month-interval") {
-            YearMonthIntervalType()
+          val catalystTypeMetadata = orcType.getAttributeValue(CATALYST_TYPE_ATTRIBUTE_NAME)
+          if (catalystTypeMetadata != null) {
+            CatalystSqlParser.parseDataType(catalystTypeMetadata)
           } else {
             parsedType
           }
@@ -279,40 +279,54 @@ object OrcUtils extends Logging {
     case _ => dt.catalogString
   }
 
-  def orcTypeDescription(dt: DataType): TypeDescription = dt match {
-    case s: StructType =>
-      val result = new TypeDescription(TypeDescription.Category.STRUCT)
-      s.fields.foreach { f =>
-        f.dataType match {
-          case _: DayTimeIntervalType =>
-            val fieldTypeDescription = orcTypeDescription(LongType)
-            fieldTypeDescription.setAttribute("catalyst.type", "day-time-interval")
-            result.addField(f.name, fieldTypeDescription)
-          case _: YearMonthIntervalType =>
-            val fieldTypeDescripton = orcTypeDescription(IntegerType)
-            fieldTypeDescripton.setAttribute("catalyst.type", "year-month-interval")
-            result.addField(f.name, fieldTypeDescripton)
-          case _ =>
-            result.addField(f.name, orcTypeDescription(f.dataType))
-        }
+  def orcTypeDescription(dt: DataType): TypeDescription = {
+    def getInnerTypeDecription(dt: DataType): Option[TypeDescription] = {
+      dt match {
+        case y: YearMonthIntervalType =>
+          val typeDesc = orcTypeDescription(IntegerType)
+          typeDesc.setAttribute(
+            CATALYST_TYPE_ATTRIBUTE_NAME, y.typeName)
+          Some(typeDesc)
+        case d: DayTimeIntervalType =>
+          val typeDesc = orcTypeDescription(LongType)
+          typeDesc.setAttribute(
+            CATALYST_TYPE_ATTRIBUTE_NAME, d.typeName)
+          Some(typeDesc)
+        case _ => None
       }
-      result
-    case a: ArrayType =>
-      val result = new TypeDescription(TypeDescription.Category.LIST)
-      result.addChild(orcTypeDescription(a.elementType))
-      result
-    case m: MapType =>
-      val result = new TypeDescription(TypeDescription.Category.MAP)
-      result.addChild(orcTypeDescription(m.keyType))
-      result.addChild(orcTypeDescription(m.valueType))
-      result
-    case d: DecimalType =>
-      val result = new TypeDescription(TypeDescription.Category.DECIMAL)
-      result.withScale(d.scale)
-      result.withPrecision(d.precision)
-      result
-    case other =>
-      TypeDescription.fromString(other.catalogString)
+    }
+
+    dt match {
+      case s: StructType =>
+        val result = new TypeDescription(TypeDescription.Category.STRUCT)
+        s.fields.foreach { f =>
+          getInnerTypeDecription(f.dataType) match {
+            case Some(t) => result.addField(f.name, t)
+            case None => result.addField(f.name, orcTypeDescription(f.dataType))
+          }
+        }
+        result
+      case a: ArrayType =>
+        val result = new TypeDescription(TypeDescription.Category.LIST)
+        getInnerTypeDecription(a.elementType) match {
+          case Some(t) => result.addChild(t)
+          case None => result.addChild(orcTypeDescription(a.elementType))
+        }
+        result
+      case m: MapType =>
+        val result = new TypeDescription(TypeDescription.Category.MAP)
+        getInnerTypeDecription(m.keyType) match {
+          case Some(t) => result.addChild(t)
+          case None => result.addChild(orcTypeDescription(m.keyType))
+        }
+        getInnerTypeDecription(m.valueType) match {
+          case Some(t) => result.addChild(t)
+          case None => result.addChild(orcTypeDescription(m.valueType))
+        }
+        result
+      case other =>
+        TypeDescription.fromString(other.catalogString)
+    }
   }
 
   /**
