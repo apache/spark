@@ -96,12 +96,11 @@ object OrcUtils extends Logging {
         case Category.LIST => toArrayType(orcType)
         case Category.MAP => toMapType(orcType)
         case _ =>
-          val parsedType = CatalystSqlParser.parseDataType(orcType.toString)
-          val catalystTypeMetadata = orcType.getAttributeValue(CATALYST_TYPE_ATTRIBUTE_NAME)
-          if (catalystTypeMetadata != null) {
-            CatalystSqlParser.parseDataType(catalystTypeMetadata)
+          val catalystTypeAttrValue = orcType.getAttributeValue(CATALYST_TYPE_ATTRIBUTE_NAME)
+          if (catalystTypeAttrValue != null) {
+            CatalystSqlParser.parseDataType(catalystTypeAttrValue)
           } else {
-            parsedType
+            CatalystSqlParser.parseDataType(orcType.toString)
           }
       }
     }
