@@ -1022,43 +1022,6 @@ object JdbcUtils extends Logging {
     executeStatement(conn, options, s"DROP SCHEMA ${dialect.quoteIdentifier(namespace)}")
   }
 
-  private def executeStatement(conn: Connection, options: JDBCOptions, sql: String): Unit = {
-    val statement = conn.createStatement
-    try {
-      statement.setQueryTimeout(options.queryTimeout)
-      statement.executeUpdate(sql)
-    } finally {
-      statement.close()
-    }
-  }
-
-  def classifyException[T](message: String, dialect: JdbcDialect)(f: => T): T = {
-    try {
-      f
-    } catch {
-      case e: Throwable => throw dialect.classifyException(message, e)
-    }
-  }
-
-  def withConnection[T](options: JDBCOptions)(f: Connection => T): T = {
-    val conn = createConnectionFactory(options)()
-    try {
-      f(conn)
-    } finally {
-      conn.close()
-    }
-  }
-
-  def executeQuery(conn: Connection, options: JDBCOptions, sql: String): ResultSet = {
-    val statement = conn.createStatement
-    try {
-      statement.setQueryTimeout(options.queryTimeout)
-      statement.executeQuery(sql)
-    } finally {
-      statement.close()
-    }
-  }
-
   /**
    * Create an index.
    */
@@ -1086,5 +1049,42 @@ object JdbcUtils extends Logging {
       options: JDBCOptions): Boolean = {
     val dialect = JdbcDialects.get(options.url)
     dialect.indexExists(conn, indexName, tableName, options)
+  }
+
+  private def executeStatement(conn: Connection, options: JDBCOptions, sql: String): Unit = {
+    val statement = conn.createStatement
+    try {
+      statement.setQueryTimeout(options.queryTimeout)
+      statement.executeUpdate(sql)
+    } finally {
+      statement.close()
+    }
+  }
+
+  def executeQuery(conn: Connection, options: JDBCOptions, sql: String): ResultSet = {
+    val statement = conn.createStatement
+    try {
+      statement.setQueryTimeout(options.queryTimeout)
+      statement.executeQuery(sql)
+    } finally {
+      statement.close()
+    }
+  }
+
+  def classifyException[T](message: String, dialect: JdbcDialect)(f: => T): T = {
+    try {
+      f
+    } catch {
+      case e: Throwable => throw dialect.classifyException(message, e)
+    }
+  }
+
+  def withConnection[T](options: JDBCOptions)(f: Connection => T): T = {
+    val conn = createConnectionFactory(options)()
+    try {
+      f(conn)
+    } finally {
+      conn.close()
+    }
   }
 }
