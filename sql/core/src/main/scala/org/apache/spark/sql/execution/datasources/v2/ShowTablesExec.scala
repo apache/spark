@@ -41,14 +41,17 @@ case class ShowTablesExec(
     val tables = catalog.listTables(namespace.toArray)
     tables.map { table =>
       if (pattern.map(StringUtils.filterPattern(Seq(table.name()), _).nonEmpty).getOrElse(true)) {
-        rows += toCatalystRow(table.namespace().quoted, table.name(), false)
+        rows += toCatalystRow(table.namespace().quoted, table.name(), isTempView(table))
       }
     }
 
-    listTempViews(pattern).map { tempView =>
-      rows += toCatalystRow(tempView.namespace().quoted, tempView.name(), true)
-    }
-
     rows.toSeq
+  }
+
+  private def isTempView(ident: Identifier): Boolean = {
+    catalog match {
+      case s: V2SessionCatalog => s.isTempView(ident)
+      case _ => false
+    }
   }
 }

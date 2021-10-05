@@ -42,14 +42,16 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
   // to test both V1 and V2 commands.
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
     (implicit pos: Position): Unit = {
-    Seq("true", "false").foreach { useV1Command =>
-      withSQLConf(SQLConf.LEGACY_USE_V1_COMMAND.key -> useV1Command) {
-        _version = if (SQLConf.get.useV1Command) {
-          "using V1 catalog with V1 command"
-        } else {
-          "using V1 catalog with V2 command"
+    Seq(true, false).foreach { useV1Command =>
+      _version = if (useV1Command) {
+        "using V1 catalog with V1 command"
+      } else {
+        "using V1 catalog with V2 command"
+      }
+      super.test(testName, testTags: _*) {
+        withSQLConf(SQLConf.LEGACY_USE_V1_COMMAND.key -> useV1Command.toString) {
+          testFun
         }
-        super.test(testName, testTags: _*)(testFun)
       }
     }
   }
