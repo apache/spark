@@ -213,7 +213,7 @@
     "message" : [ "Unsupported natural join type %s" ],
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_ROUNDING_MODE" : {
+  "ROW_FROM_CSV_PARSER_NOT_EXPECTED" : {
     "message" : [ "Not supported rounding mode: %s" ],
     "sqlState" : "0A000"
   },
