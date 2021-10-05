@@ -14,10 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-ARG java_image_tag=11-jre-slim
 
-FROM openjdk:${java_image_tag}
+ARG BASE_IMG=openjdk:11-jre-slim
 
+FROM ${BASE_IMG}
+
+ARG JAR_FILE=./target/remote-shuffle-service-server.jar
 ARG spark_uid=185
 
 # Before building this docker image, first build this POM project to get the jar file
@@ -28,7 +30,7 @@ RUN set -ex && \
 
 WORKDIR /opt/spark/
 
-COPY ./target/remote-shuffle-service-server.jar ./
+COPY ${JAR_FILE} ./
 
 EXPOSE 9338 9338
 EXPOSE 8080 8080

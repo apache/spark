@@ -1,11 +1,13 @@
 /*
- * This file is copied from Uber Remote Shuffle Service
-(https://github.com/uber/RemoteShuffleService) and modified.
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,6 +21,7 @@ import java.util
 import java.util.Random
 
 import org.apache.commons.lang3.exception.ExceptionUtils
+
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.remoteshuffle.clients.{MultiServerHeartbeatClient, NotifyClient}
@@ -88,9 +91,8 @@ class RssSparkListener(val user: String, val appId: String, val attemptId: Strin
     try {
       numInAppJobs.inc(1)
     } catch {
-      case e: Throwable => {
+      case e: Throwable =>
         logWarning("Failed to run onJobStart", e)
-      }
     }
   }
 
@@ -101,9 +103,8 @@ class RssSparkListener(val user: String, val appId: String, val attemptId: Strin
         numFailedInAppJobs.inc(1)
       }
     } catch {
-      case e: Throwable => {
+      case e: Throwable =>
         logWarning("Failed to run onJobEnd", e)
-      }
     }
 
     if (notifyServers == null || notifyServers.length == 0) {
