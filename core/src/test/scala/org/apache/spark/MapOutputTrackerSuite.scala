@@ -337,6 +337,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   test("SPARK-32921: master register and unregister merge result") {
     conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
     conf.set(IS_TESTING, true)
+    conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
     val rpcEnv = createRpcEnv("test")
     val tracker = newTrackerMaster()
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
@@ -596,6 +597,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     newConf.set(SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST, 10240L) // 10 KiB << 1MiB framesize
     newConf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
     newConf.set(IS_TESTING, true)
+    newConf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
 
     // needs TorrentBroadcast so need a SparkContext
     withSpark(new SparkContext("local", "MapOutputTrackerSuite", newConf)) { sc =>
