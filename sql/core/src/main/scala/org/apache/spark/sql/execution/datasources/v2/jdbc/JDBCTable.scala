@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-import java.sql.Connection
 import java.util
 
 import scala.collection.JavaConverters._
@@ -59,8 +58,9 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
       columns: Array[NamedReference],
       columnsProperties: Array[util.Map[NamedReference, util.Properties]],
       properties: util.Properties): Unit = {
-    withConnection { conn =>
-      classifyException(s"Failed to create index: $indexName in $name") {
+    JdbcUtils.withConnection(jdbcOptions) { conn =>
+      JdbcUtils.classifyException(s"Failed to create index: $indexName in $name",
+        JdbcDialects.get(jdbcOptions.url)) {
         JdbcUtils.createIndex(
           conn, indexName, indexType, name, columns, columnsProperties, properties, jdbcOptions)
       }
@@ -68,7 +68,7 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
   }
 
   override def indexExists(indexName: String): Boolean = {
-    withConnection { conn =>
+    JdbcUtils.withConnection(jdbcOptions) { conn =>
       JdbcUtils.indexExists(conn, indexName, name, jdbcOptions)
     }
   }
@@ -79,23 +79,5 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
 
   override def listIndexes(): Array[TableIndex] = {
     throw new UnsupportedOperationException("listIndexes is not supported yet")
-  }
-
-  private def withConnection[T](f: Connection => T): T = {
-    val conn = JdbcUtils.createConnectionFactory(jdbcOptions)()
-    try {
-      f(conn)
-    } finally {
-      conn.close()
-    }
-  }
-
-  private def classifyException[T](message: String)(f: => T): T = {
-    try {
-      f
-    } catch {
-      case e: Throwable =>
-        throw JdbcDialects.get(jdbcOptions.url).classifyException(message, e)
-    }
   }
 }

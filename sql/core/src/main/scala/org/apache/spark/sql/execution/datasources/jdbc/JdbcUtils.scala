@@ -1032,6 +1032,23 @@ object JdbcUtils extends Logging {
     }
   }
 
+  def classifyException[T](message: String, dialect: JdbcDialect)(f: => T): T = {
+    try {
+      f
+    } catch {
+      case e: Throwable => throw dialect.classifyException(message, e)
+    }
+  }
+
+  def withConnection[T](options: JDBCOptions)(f: Connection => T): T = {
+    val conn = createConnectionFactory(options)()
+    try {
+      f(conn)
+    } finally {
+      conn.close()
+    }
+  }
+
   def executeQuery(conn: Connection, options: JDBCOptions, sql: String): ResultSet = {
     val statement = conn.createStatement
     try {

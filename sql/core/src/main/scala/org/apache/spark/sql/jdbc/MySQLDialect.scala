@@ -140,7 +140,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       indexName: String,
       tableName: String,
       options: JDBCOptions): Boolean = {
-    val sql = s"SHOW INDEXES FROM $tableName"
+    val sql = s"SHOW INDEXES FROM ${quoteIdentifier(tableName)}"
     val rs = JdbcUtils.executeQuery(conn, options, sql)
     while(rs.next()) {
       val retrievedIndexName = rs.getString("key_name")

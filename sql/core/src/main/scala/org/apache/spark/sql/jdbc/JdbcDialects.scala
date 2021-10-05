@@ -293,7 +293,7 @@ abstract class JdbcDialect extends Serializable with Logging{
    * Creates an index.
    *
    * @param indexName         the name of the index to be created
-   * @param indexType         the IndexType of the index to be created
+   * @param indexType         the type of the index to be created
    * @param tableName         the table on which index to be created
    * @param columns           the columns on which index to be created
    * @param columnsProperties the properties of the columns on which index to be created
@@ -306,16 +306,17 @@ abstract class JdbcDialect extends Serializable with Logging{
       columns: Array[NamedReference],
       columnsProperties: Array[util.Map[NamedReference, util.Properties]],
       properties: util.Properties): String = {
-    throw new UnsupportedOperationException("Create index is not supported")
+    throw new UnsupportedOperationException("createIndex is not supported")
   }
 
   /**
    * Checks whether an index exists
    *
    * @param indexName the name of the index
-   * @param tableName the table on which index to be checked
+   * @param tableName the table name on which index to be checked
    * @param options JDBCOptions of the table
-   * @return true if the index exists, false otherwise
+   * @return true if the index with `indexName` exists in the table with `tableName`,
+   *         false otherwise
    */
   def indexExists(
       conn: Connection,
