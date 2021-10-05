@@ -11,16 +11,48 @@
     "message" : [ "%s cannot be represented as Decimal(%s, %s)." ],
     "sqlState" : "22005"
   },
+  "CANNOT_EVALUATE_EXPRESSION" : {
+    "message" : [ "Cannot evaluate expression: %s" ]
+  },
+  "CANNOT_GENERATE_CODE_FOR_EXPRESSION" : {
+    "message" : [ "Cannot generate code for expression: %s" ]
+  },
+  "CANNOT_GENERATE_CODE_FOR_UNSUPPORTED_TYPE" : {
+    "message" : [ "Cannot generate code for unsupported type: %s" ],
+    "sqlState" : "0A000"
+  },
+  "CANNOT_INTERPOLATE_CLASS_INTO_CODE_BLOCK" : {
+    "message" : [ "Can not interpolate %s into code block." ],
+    "sqlState" : "42000"
+  },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"
+  },
+  "CANNOT_RESOLVE_NESTED_SCHEMA" : {
+    "message" : [ "Can not handle nested schema...  plan %s" ]
+  },
+  "CANNOT_TERMINATE_GENERATOR" : {
+    "message" : [ "Cannot terminate expression: %s" ]
   },
   "CAST_CAUSES_OVERFLOW" : {
     "message" : [ "Casting %s to %s causes overflow" ],
     "sqlState" : "22005"
   },
+  "CLASS_UNSUPPORTED_BY_MAP_OBJECTS" : {
+    "message" : [ "Class `%s` is not supported by `MapObjects` as resulting collection." ],
+    "sqlState" : "0A000"
+  },
   "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
+  },
+  "CONSTRUCTOR_NOT_FOUND" : {
+    "message" : [ "Couldn't find a valid constructor on %s" ],
+    "sqlState" : "42000"
+  },
+  "CUSTOM_COLLECTION_CLASS_NOT_RESOLVED" : {
+    "message" : [ "Not resolved" ],
+    "sqlState" : "0A000"
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero" ],
@@ -29,6 +61,12 @@
   "DUPLICATE_KEY" : {
     "message" : [ "Found duplicate keys '%s'" ],
     "sqlState" : "23000"
+  },
+  "EXPECTED_METHODS_NOT_OVERRIDDEN" : {
+    "message" : [ "%s must override either %s or %s" ]
+  },
+  "EXPECTED_UNRESOLVED_ENCODER" : {
+    "message" : [ "Unresolved encoder expected, but %s was found." ]
   },
   "FAILED_EXECUTE_UDF" : {
     "message" : [ "Failed to execute user defined function (%s: (%s) => %s)" ]
@@ -39,6 +77,10 @@
   },
   "FAILED_SET_ORIGINAL_PERMISSION_BACK" : {
     "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ]
+  },
+  "FAILED_TO_CONVERT_VALUE_TO_JSON" : {
+    "message" : [ "Failed to convert value %s (class of %s) with the type of %s to JSON." ],
+    "sqlState" : "22005"
   },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [ "Column of grouping (%s) can't be found in grouping columns %s" ],
@@ -65,6 +107,10 @@
     "message" : [ "Index %s must be between 0 and the length of the ArrayData." ],
     "sqlState" : "22023"
   },
+  "INPUT_EXTERNAL_ROW_CANNOT_BE_NULL" : {
+    "message" : [ "The input external row cannot be null." ],
+    "sqlState" : "42000"
+  },
   "INTERNAL_ERROR" : {
     "message" : [ "%s" ]
   },
@@ -83,8 +129,9 @@
     "message" : [ "invalid input syntax for type numeric: %s" ],
     "sqlState" : "42000"
   },
-  "INVALID_JSON_SCHEMA_MAPTYPE" : {
-    "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
+  "INVALID_JSON_MAP_KEY_TYPE" : {
+    "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ],
+    "sqlState" : "42000"
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist." ]
@@ -105,17 +152,31 @@
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
     "sqlState" : "42000"
   },
+  "NULL_AS_MAP_KEY_NOT_ALLOWED" : {
+    "message" : [ "Cannot use null as map key!" ],
+    "sqlState" : "42000"
+  },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
+    "sqlState" : "42000"
+  },
+  "PRIMARY_CONSTRUCTOR_NOT_FOUND" : {
+    "message" : [ "Couldn't find a primary constructor on %s" ]
+  },
+  "REACHED_UNREACHABLE_LINE" : {
+    "message" : [ "This line should be unreachable %s" ],
     "sqlState" : "42000"
   },
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [ "Failed to rename as %s was not found" ],
     "sqlState" : "22023"
   },
-  "ROW_FROM_CSV_PARSER_NOT_EXPECTED" : {
-    "message" : [ "Expected one row from CSV parser." ],
+  "ROW_FIELD_CANNOT_BE_NULL" : {
+    "message" : [ "The %sth field '%s' of input row cannot be null." ],
     "sqlState" : "42000"
+  },
+  "ROW_FROM_CSV_PARSER_NOT_EXPECTED" : {
+    "message" : [ "Expected one row from CSV parser." ]
   },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
@@ -123,6 +184,10 @@
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
+  },
+  "UNEXPECTED_OPERATOR_IN_CORRELATED_SUBQUERY" : {
+    "message" : [ "Unexpected operator %s in correlated subquery %s" ],
+    "sqlState" : "42000"
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [ "Unrecognized SQL type %s" ],
@@ -136,8 +201,20 @@
     "message" : [ "Unsupported data type %s" ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_ENCODER" : {
+    "message" : [ "Only expression encoders are supported." ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_LITERAL_TYPE" : {
     "message" : [ "Unsupported literal type %s %s" ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_NATURAL_JOIN_TYPE" : {
+    "message" : [ "Unsupported natural join type %s" ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_ROUNDING_MODE" : {
+    "message" : [ "Not supported rounding mode: %s" ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID" : {
