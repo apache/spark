@@ -1010,10 +1010,10 @@ object SQLConf {
 
   val HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK =
     buildConf("spark.sql.hive.metastorePartitionPruningFastFallback")
-      .doc(s"When true and " +
-        s"we cannot do filtering on the server(${HIVE_METASTORE_PARTITION_PRUNING.key})," +
-        "pruning partition by getting the partition names first " +
-        "and pruning using expression evaluator on client.")
+      .doc("When true and " +
+        s"we cannot do filtering on the server(${HIVE_METASTORE_PARTITION_PRUNING.key}), " +
+        "Spark will instead prune partitions by getting the partition names first " +
+        "and then evaluate the filter expressions on the client side.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(false)

@@ -180,13 +180,11 @@ object ExternalCatalogUtils {
         nonPartitionPruningPredicates)
     }
 
-    val boundPredicate =
-      Predicate.createInterpreted(predicates.reduce(And).transform {
-        case att: AttributeReference =>
-          val index = partitionSchema.indexWhere(_.name == att.name)
-          BoundReference(index, partitionSchema(index).dataType, nullable = true)
-      })
-    boundPredicate
+    Predicate.createInterpreted(predicates.reduce(And).transform {
+      case att: AttributeReference =>
+        val index = partitionSchema.indexWhere(_.name == att.name)
+        BoundReference(index, partitionSchema(index).dataType, nullable = true)
+    })
   }
 
   private def isNullPartitionValue(value: String): Boolean = {
