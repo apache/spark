@@ -20,7 +20,7 @@ package org.apache.spark.sql.errors
 import java.io.{FileNotFoundException, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{URISyntaxException, URL}
-import java.sql.{SQLException, SQLFeatureNotSupportedException}
+import java.sql.SQLFeatureNotSupportedException
 import java.time.{DateTimeException, LocalDate}
 import java.time.temporal.ChronoField
 import java.util.ConcurrentModificationException
@@ -32,7 +32,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
-import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIllegalStateException, SparkIndexOutOfBoundsException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIllegalStateException, SparkIndexOutOfBoundsException, SparkIOException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -671,23 +671,23 @@ object QueryExecutionErrors {
 
   def missingJdbcTableNameAndQueryError(
       jdbcTableName: String, jdbcQueryString: String): Throwable = {
-    new IllegalArgumentException(
-      s"Option '$jdbcTableName' or '$jdbcQueryString' is required."
-    )
+    new SparkIllegalArgumentException(errorClass = "MISSING_JDBC_TABLE_NAME_AND_QUERY",
+      messageParameters = Array(jdbcTableName, jdbcQueryString))
   }
 
   def emptyOptionError(optionName: String): Throwable = {
-    new IllegalArgumentException(s"Option `$optionName` can not be empty.")
+    new SparkIllegalArgumentException(errorClass = "EMPTY_OPTION",
+      messageParameters = Array(optionName))
   }
 
   def invalidJdbcTxnIsolationLevelError(jdbcTxnIsolationLevel: String, value: String): Throwable = {
-    new IllegalArgumentException(
-      s"Invalid value `$value` for parameter `$jdbcTxnIsolationLevel`. This can be " +
-        "`NONE`, `READ_UNCOMMITTED`, `READ_COMMITTED`, `REPEATABLE_READ` or `SERIALIZABLE`.")
+    new SparkIllegalArgumentException(errorClass = "INVALID_JDBC_TRANSACTION_ISOLATION_LEVEL",
+      messageParameters = Array(value, jdbcTxnIsolationLevel))
   }
 
   def cannotGetJdbcTypeError(dt: DataType): Throwable = {
-    new IllegalArgumentException(s"Can't get JDBC type for ${dt.catalogString}")
+    new SparkIllegalArgumentException(errorClass = "CANNOT_GET_JDBC_TYPE",
+      messageParameters = Array(dt.catalogString))
   }
 
   def unrecognizedSqlTypeError(sqlType: Int): Throwable = {
@@ -695,26 +695,28 @@ object QueryExecutionErrors {
   }
 
   def unsupportedJdbcTypeError(content: String): Throwable = {
-    new SQLException(s"Unsupported type $content")
+    new SparkSQLException(errorClass = "UNSUPPORTED_JDBC_TYPE",
+      messageParameters = Array(content))
   }
 
   def unsupportedArrayElementTypeBasedOnBinaryError(dt: DataType): Throwable = {
-    new IllegalArgumentException(s"Unsupported array element " +
-      s"type ${dt.catalogString} based on binary")
+    new SparkIllegalArgumentException(errorClass = "UNSUPPORTED_ARRAY_ELEMENT_TYPE_BASED_ON_BINARY",
+      messageParameters = Array(dt.catalogString))
   }
 
   def nestedArraysUnsupportedError(): Throwable = {
-    new IllegalArgumentException("Nested arrays unsupported")
+    new SparkIllegalArgumentException(errorClass = "UNSUPPORTED_NESTED_ARRAYS",
+      messageParameters = Array.empty)
   }
 
   def cannotTranslateNonNullValueForFieldError(pos: Int): Throwable = {
-    new IllegalArgumentException(s"Can't translate non-null value for field $pos")
+    new SparkIllegalArgumentException(errorClass = "CANNOT_TRANSLATE_NON_NULL_VALUE_FOR_FIELD",
+      messageParameters = Array(pos.toString))
   }
 
   def invalidJdbcNumPartitionsError(n: Int, jdbcNumPartitions: String): Throwable = {
-    new IllegalArgumentException(
-      s"Invalid value `$n` for parameter `$jdbcNumPartitions` in table writing " +
-        "via JDBC. The minimum value is 1.")
+    new SparkIllegalArgumentException(errorClass = "INVALID_JDBC_NUM_PARTITIONS",
+      messageParameters = Array(n.toString, jdbcNumPartitions))
   }
 
   def transactionUnsupportedByJdbcServerError(): Throwable = {
@@ -723,45 +725,50 @@ object QueryExecutionErrors {
   }
 
   def dataTypeUnsupportedYetError(dataType: DataType): Throwable = {
-    new UnsupportedOperationException(s"$dataType is not supported yet.")
+    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_DATATYPE",
+      messageParameters = Array(dataType.toString))
   }
 
   def unsupportedOperationForDataTypeError(dataType: DataType): Throwable = {
-    new UnsupportedOperationException(s"DataType: ${dataType.catalogString}")
+    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_OPERATION_FOR_DATA_TYPE",
+      messageParameters = Array(dataType.catalogString))
   }
 
   def inputFilterNotFullyConvertibleError(owner: String): Throwable = {
-    new SparkException(s"The input filter of $owner should be fully convertible.")
+    new SparkException(errorClass = "INPUT_FILTER_NOT_FULLY_CONVERTIBLE",
+      messageParameters = Array(owner), null)
   }
 
   def cannotReadFooterForFileError(file: Path, e: IOException): Throwable = {
-    new SparkException(s"Could not read footer for file: $file", e)
+    new SparkException(errorClass = "CANNOT_READ_FOOTER_FOR_FILE",
+      messageParameters = Array(file.toString), e)
   }
 
   def cannotReadFooterForFileError(file: FileStatus, e: RuntimeException): Throwable = {
-    new IOException(s"Could not read footer for file: $file", e)
+    new SparkIOException(errorClass = "CANNOT_READ_FOOTER_FOR_FILE",
+      messageParameters = Array(file.toString), e)
   }
 
   def foundDuplicateFieldInCaseInsensitiveModeError(
       requiredFieldName: String, matchedOrcFields: String): Throwable = {
-    new RuntimeException(
-      s"""
-         |Found duplicate field(s) "$requiredFieldName": $matchedOrcFields
-         |in case-insensitive mode
-       """.stripMargin.replaceAll("\n", " "))
+    new SparkRuntimeException(errorClass = "FOUND_DUPLICATE_FIELD_IN_CASE_INSENSITIVE_MODE",
+      messageParameters = Array(requiredFieldName, matchedOrcFields))
   }
 
   def failedToMergeIncompatibleSchemasError(
       left: StructType, right: StructType, e: Throwable): Throwable = {
-    new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
+    new SparkException(errorClass = "FAILED_TO_MERGE_INCOMPATIBLE_SCHEMAS",
+      messageParameters = Array(left.toString, right.toString), e)
   }
 
   def ddlUnsupportedTemporarilyError(ddl: String): Throwable = {
-    new UnsupportedOperationException(s"$ddl is not supported temporarily.")
+    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_DDL",
+      messageParameters = Array(ddl))
   }
 
   def operatingOnCanonicalizationPlanError(): Throwable = {
-    new IllegalStateException("operating on canonicalization plan")
+    new SparkIllegalStateException(errorClass = "CANNOT_OPERATE_ON_CANONICALIZATION_PLAN",
+      messageParameters = Array.empty)
   }
 
   def executeBroadcastTimeoutError(timeout: Long, ex: Option[TimeoutException]): Throwable = {

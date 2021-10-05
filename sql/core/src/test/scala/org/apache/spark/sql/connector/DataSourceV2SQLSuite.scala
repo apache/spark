@@ -1816,7 +1816,7 @@ class DataSourceV2SQLSuite
       val e = intercept[UnsupportedOperationException] {
         sql(s"UPDATE $t SET name='Robert', age=32 WHERE p=1")
       }
-      assert(e.getMessage.contains("UPDATE TABLE is not supported temporarily"))
+      assert(e.getMessage.contains("DDL 'UPDATE TABLE' is not supported."))
     }
   }
 
@@ -1901,7 +1901,7 @@ class DataSourceV2SQLSuite
              |WHEN NOT MATCHED THEN INSERT *
            """.stripMargin)
       }
-      assert(e.getMessage.contains("MERGE INTO TABLE is not supported temporarily"))
+      assert(e.getMessage.contains("DDL 'MERGE INTO TABLE' is not supported."))
     }
   }
 

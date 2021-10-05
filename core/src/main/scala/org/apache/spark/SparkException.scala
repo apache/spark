@@ -221,12 +221,26 @@ private[spark] class SparkIndexOutOfBoundsException(
  * IO exception thrown from Spark with an error class.
  */
 private[spark] class SparkIOException(
-    errorClass: String,
+    message: String,
+    cause: Throwable,
+    errorClass: Option[String],
     messageParameters: Array[String])
-  extends IOException(
-    SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
+  extends IOException(message, cause) with SparkThrowable {
 
-  override def getErrorClass: String = errorClass
+  def this(message: String, cause: Throwable) =
+    this(message = message, cause = cause, errorClass = None, messageParameters = Array.empty)
+
+  def this(message: String) =
+    this(message = message, cause = null)
+
+  def this(errorClass: String, messageParameters: Array[String], cause: Throwable) =
+    this(
+      message = SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      cause = cause,
+      errorClass = Some(errorClass),
+      messageParameters = messageParameters)
+
+  override def getErrorClass: String = errorClass.orNull
 }
 
 private[spark] class SparkRuntimeException(
