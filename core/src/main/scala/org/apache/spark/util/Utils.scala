@@ -2626,7 +2626,7 @@ private[spark] object Utils extends Logging {
         }
         // TODO: [SPARK-36744] needs to support IO encryption for push-based shuffle
         val ioEncryptionDisabled = !conf.get(IO_ENCRYPTION_ENABLED)
-        isTesting || (isShuffleServiceAndYarn && ioEncryptionDisabled && serializerIsSupported)
+        (isShuffleServiceAndYarn || isTesting) && ioEncryptionDisabled && serializerIsSupported
       }
       if (!canDoPushBasedShuffle) {
         logWarning("Push-based shuffle can only be enabled when the application is submitted " +
