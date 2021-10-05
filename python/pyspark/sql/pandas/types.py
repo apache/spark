@@ -178,8 +178,9 @@ def _get_local_timezone() -> str:
     return os.environ.get('TZ', 'dateutil/:')
 
 
-def _check_series_localize_timestamps(s: "PandasSeriesLike", timezone: str, datatype=None
-                                      ) -> "PandasSeriesLike":
+def _check_series_localize_timestamps(
+    s: "PandasSeriesLike", timezone: str, datatype: Optional[str] = None
+) -> "PandasSeriesLike":
     """
     Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone.
 
@@ -199,6 +200,7 @@ def _check_series_localize_timestamps(s: "PandasSeriesLike", timezone: str, data
     """
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
     require_minimum_pandas_version()
+
     from pandas.api.types import is_datetime64tz_dtype
     tz = timezone or _get_local_timezone()
     # Check if its ArrayType<TimeStamp>
@@ -210,8 +212,9 @@ def _check_series_localize_timestamps(s: "PandasSeriesLike", timezone: str, data
         return s
 
 
-def _check_series_convert_timestamps_internal(s: "PandasSeriesLike", timezone: str,
-                                              datatype: Optional[str] = None) -> "PandasSeriesLike":
+def _check_series_convert_timestamps_internal(
+    s: "PandasSeriesLike", timezone: str, datatype: Optional[str] = None
+) -> "PandasSeriesLike":
     """
     Convert a tz-naive timestamp in the specified timezone or local timezone to UTC normalized for
     Spark internal storage
@@ -274,8 +277,9 @@ def _check_series_convert_timestamps_internal(s: "PandasSeriesLike", timezone: s
 
 
 def _check_series_convert_timestamps_localize(
-        s: "PandasSeriesLike", from_timezone: Optional[str], to_timezone: Optional[str],
-        datatype: Optional[str] = None) -> "PandasSeriesLike":
+    s: "PandasSeriesLike", from_timezone: Optional[str], to_timezone: Optional[str],
+    datatype: Optional[str] = None
+) -> "PandasSeriesLike":
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone
 
@@ -333,8 +337,9 @@ def modify_timestamp_array(data, to_tz: Optional[str], from_tz: Optional[str] = 
         return list(iterator)
 
 
-def _check_series_convert_timestamps_local_tz(s: "PandasSeriesLike", timezone: str, datatype=None
-                                              ) -> "PandasSeriesLike":
+def _check_series_convert_timestamps_local_tz(
+    s: "PandasSeriesLike", timezone: str, datatype: Optional[str] = None
+) -> "PandasSeriesLike":
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone
 
@@ -354,7 +359,7 @@ def _check_series_convert_timestamps_local_tz(s: "PandasSeriesLike", timezone: s
 
 
 def _check_series_convert_timestamps_tz_local(
-    s: "PandasSeriesLike", timezone: str, datatype=None
+    s: "PandasSeriesLike", timezone: str, datatype: Optional[str] = None
 ) -> "PandasSeriesLike":
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone

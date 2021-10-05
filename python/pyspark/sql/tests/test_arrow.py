@@ -28,7 +28,7 @@ from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import rand, udf
 from pyspark.sql.types import StructType, StringType, IntegerType, LongType, \
     FloatType, DoubleType, DecimalType, DateType, TimestampType, TimestampNTZType, \
-    BinaryType, StructField, ArrayType, NullType, MapType
+    BinaryType, StructField, ArrayType, NullType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
@@ -138,8 +138,8 @@ class ArrowTests(ReusedSQLTestCase):
 
     def test_toPandas_fallback_disabled(self):
         ts = datetime.datetime(2015, 11, 1, 0, 30)
-        schema = StructType([StructField("a", MapType(TimestampType(), TimestampType()), True)])
-        df = self.spark.createDataFrame([({ts: ts},)], schema=schema)
+        schema = StructType([StructField("a", ArrayType(ArrayType(TimestampType())), True)])
+        df = self.spark.createDataFrame([([[ts]],)], schema=schema)
         with QuietTest(self.sc):
             with self.warnings_lock:
                 with self.assertRaisesRegex(Exception, 'Unsupported type'):

@@ -191,8 +191,8 @@ class PandasConversionMixin(object):
             # to integer type e.g., np.int16, we will hit exception. So we use the inferred
             # float type, not the corrected type from the schema in this case.
             if pandas_type is not None and \
-                    not (isinstance(field.dataType, IntegralType) and field.nullable and
-                         pandas_col.isnull().any()):
+                not (isinstance(field.dataType, IntegralType) and field.nullable and
+                     pandas_col.isnull().any()):
                 dtype[fieldIdx] = pandas_type
             # Ensure we fall back to nullable numpy types, even when whole column is null:
             if isinstance(field.dataType, IntegralType) and pandas_col.isnull().any():
@@ -412,13 +412,12 @@ class SparkConversionMixin(object):
         assert isinstance(self, SparkSession)
 
         if timezone is not None:
-            from pyspark.sql.pandas.types import _check_series_convert_timestamps_tz_local
+            from pyspark.sql.pandas.types import _check_series_convert_timestamps_tz_local\
+                , _is_series_contain_timestamp
             from pandas.core.dtypes.common import is_datetime64tz_dtype
-            from pyspark.sql.pandas.types import _is_series_contain_timestamp
             copied = False
             if isinstance(schema, StructType):
                 for field in schema:
-                    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
                     if isinstance(field.dataType, TimestampType):
                         s = _check_series_convert_timestamps_tz_local(pdf[field.name], timezone)
                         if s is not pdf[field.name]:
