@@ -16,19 +16,21 @@
 #
 
 import sys
-from typing import List, Tuple, Union
+from typing import List, Tuple, TYPE_CHECKING, Union
 
 from pyspark import since, SparkContext
-from pyspark.sql._typing import ColumnOrName
 from pyspark.sql.column import _to_seq, _to_java_column  # type: ignore[attr-defined]
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]
+
+if TYPE_CHECKING:
+    from pyspark.sql._typing import ColumnOrName
 
 __all__ = ["Window", "WindowSpec"]
 
 
 def _to_java_cols(
-    cols: Tuple[Union[ColumnOrName, List[ColumnOrName]], ...]
+    cols: Tuple[Union["ColumnOrName", List["ColumnOrName"]], ...]
 ) -> int:
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if len(cols) == 1 and isinstance(cols[0], list):
@@ -70,7 +72,7 @@ class Window(object):
 
     @staticmethod
     @since(1.4)
-    def partitionBy(*cols: Union[ColumnOrName, List[ColumnOrName]]) -> WindowSpec:
+    def partitionBy(*cols: Union["ColumnOrName", List["ColumnOrName"]]) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the partitioning defined.
         """
@@ -80,7 +82,7 @@ class Window(object):
 
     @staticmethod
     @since(1.4)
-    def orderBy(*cols: Union[ColumnOrName, List[ColumnOrName]]) -> WindowSpec:
+    def orderBy(*cols: Union["ColumnOrName", List["ColumnOrName"]]) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the ordering defined.
         """
@@ -89,7 +91,7 @@ class Window(object):
         return WindowSpec(jspec)
 
     @staticmethod
-    def rowsBetween(start: int, end: int) -> WindowSpec:
+    def rowsBetween(start: int, end: int) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the frame boundaries defined,
         from `start` (inclusive) to `end` (inclusive).
@@ -153,7 +155,7 @@ class Window(object):
         return WindowSpec(jspec)
 
     @staticmethod
-    def rangeBetween(start: int, end: int) -> WindowSpec:
+    def rangeBetween(start: int, end: int) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the frame boundaries defined,
         from `start` (inclusive) to `end` (inclusive).
@@ -233,7 +235,7 @@ class WindowSpec(object):
     def __init__(self, jspec: JavaObject) -> None:
         self._jspec = jspec
 
-    def partitionBy(self, *cols: Union[ColumnOrName, List[ColumnOrName]]) -> WindowSpec:
+    def partitionBy(self, *cols: Union["ColumnOrName", List["ColumnOrName"]]) -> "WindowSpec":
         """
         Defines the partitioning columns in a :class:`WindowSpec`.
 
@@ -246,7 +248,7 @@ class WindowSpec(object):
         """
         return WindowSpec(self._jspec.partitionBy(_to_java_cols(cols)))
 
-    def orderBy(self, *cols: Union[ColumnOrName, List[ColumnOrName]]) -> WindowSpec:
+    def orderBy(self, *cols: Union["ColumnOrName", List["ColumnOrName"]]) -> "WindowSpec":
         """
         Defines the ordering columns in a :class:`WindowSpec`.
 
@@ -259,7 +261,7 @@ class WindowSpec(object):
         """
         return WindowSpec(self._jspec.orderBy(_to_java_cols(cols)))
 
-    def rowsBetween(self, start: int, end: int) -> WindowSpec:
+    def rowsBetween(self, start: int, end: int) -> "WindowSpec":
         """
         Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
 
@@ -290,7 +292,7 @@ class WindowSpec(object):
             end = Window.unboundedFollowing
         return WindowSpec(self._jspec.rowsBetween(start, end))
 
-    def rangeBetween(self, start: int, end: int) -> WindowSpec:
+    def rangeBetween(self, start: int, end: int) -> "WindowSpec":
         """
         Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
 
