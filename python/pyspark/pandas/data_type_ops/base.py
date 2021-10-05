@@ -39,6 +39,7 @@ from pyspark.sql.types import (
     NumericType,
     StringType,
     StructType,
+    StructField,
     TimestampType,
     TimestampNTZType,
     UserDefinedType,
@@ -354,6 +355,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
             from pyspark.pandas.frame import DataFrame
             from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, InternalField
 
+            len_right = len(right)
             if len(left) != len(right):
                 raise ValueError("Lengths must be equal")
 
@@ -421,7 +423,15 @@ class DataTypeOps(object, metaclass=ABCMeta):
                     scol_for(sdf_new, index_scol_name) for index_scol_name in index_scol_names
                 ],
                 data_spark_columns=[scol_for(sdf_new, scol_name)],
-                data_fields=[InternalField.from_struct_field(sdf_new.select(scol_name).schema[0])],
+                data_fields=[
+                    InternalField.from_struct_field(
+                        StructField(
+                            scol_name,
+                            BooleanType(),
+                            nullable=left._internal.data_fields[0].nullable,
+                        )
+                    )
+                ],
             )
             return first_series(DataFrame(internal))
         else:
