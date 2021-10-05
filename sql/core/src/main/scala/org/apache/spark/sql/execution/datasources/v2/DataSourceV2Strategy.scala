@@ -91,12 +91,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
   }
 
-  private def listTempViews(pattern: Option[String]): Seq[Identifier] = {
-    session.sessionState.catalog.listLocalTempViews(pattern.getOrElse("*")).map { tempView =>
-      Identifier.of(Array.empty, tempView.table)
-    }
-  }
-
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters,
         DataSourceV2ScanRelation(_, V1ScanWrapper(scan, pushed, aggregate), output)) =>
@@ -336,7 +330,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       ShowNamespacesExec(output, catalog.asNamespaceCatalog, ns, pattern) :: Nil
 
     case ShowTables(ResolvedNamespace(catalog, ns), pattern, output) =>
-      ShowTablesExec(output, catalog.asTableCatalog, ns, pattern, listTempViews) :: Nil
+      ShowTablesExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
 
     case SetCatalogAndNamespace(catalogManager, catalogName, ns) =>
       SetCatalogAndNamespaceExec(catalogManager, catalogName, ns) :: Nil

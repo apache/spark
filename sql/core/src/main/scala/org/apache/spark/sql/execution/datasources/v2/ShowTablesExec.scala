@@ -33,8 +33,7 @@ case class ShowTablesExec(
     output: Seq[Attribute],
     catalog: TableCatalog,
     namespace: Seq[String],
-    pattern: Option[String],
-    listTempViews: Option[String] => Seq[Identifier]) extends V2CommandExec with LeafExecNode {
+    pattern: Option[String]) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
 
