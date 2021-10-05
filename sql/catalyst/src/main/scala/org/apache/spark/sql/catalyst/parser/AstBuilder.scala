@@ -3569,9 +3569,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitUse(ctx: UseContext): LogicalPlan = withOrigin(ctx) {
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
-    Use(UnresolvedDBObjectName(
-      nameParts,
-      ctx.NAMESPACE != null))
+    Use(UnresolvedDBObjectName(nameParts, ctx.NAMESPACE != null))
   }
 
   /**
