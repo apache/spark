@@ -2287,9 +2287,9 @@ class DDLParserSuite extends AnalysisTest {
       CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", "BTREE", false,
         Array(FieldReference("col1")).toSeq, Seq(Map.empty[String, String]), Map.empty))
 
-    parseCompare("CREATE BTREE index i1 ON a.b.c" +
+    parseCompare("CREATE BTREE index IF NOT EXISTS i1 ON TABLE a.b.c" +
       " (col1 OPTIONS ('k1'='v1'), col2 OPTIONS ('k2'='v2')) ",
-      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", "BTREE", false,
+      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", "BTREE", true,
         Array(FieldReference("col1"), FieldReference("col2")).toSeq,
         Seq(Map("k1" -> "v1"), Map("k2" -> "v2")), Map.empty))
 
