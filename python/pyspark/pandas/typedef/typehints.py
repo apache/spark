@@ -753,7 +753,9 @@ def _to_type_holders(params: Any) -> Tuple:
         #   DataFrame[zip(index_names, index_types), zip(names, types)]
         def is_list_of_pairs(p: Any) -> bool:
             return (
-                isinstance(p, list) and len(p) >= 1 and isinstance(p[0], tuple) and len(p[0]) == 2
+                isinstance(p, list)
+                and len(p) >= 1
+                and all(isinstance(param, tuple) and (len(param) == 2) for param in p)
             )
 
         index_params = params[0]
