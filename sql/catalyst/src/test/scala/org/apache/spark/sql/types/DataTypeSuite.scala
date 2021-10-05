@@ -590,7 +590,7 @@ class DataTypeSuite extends SparkFunSuite {
       to: DataType,
       expected: Boolean,
       caseSensitive: Boolean = false): Unit = {
-    val testName = s"equalsStructurallyByName: (from: $from, to: $to, " +
+    val testName = s"SPARK-36918: equalsStructurallyByName: (from: $from, to: $to, " +
         s"caseSensitive: $caseSensitive)"
 
     val resolver = if (caseSensitive) {
