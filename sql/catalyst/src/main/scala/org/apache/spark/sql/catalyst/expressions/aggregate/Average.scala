@@ -97,7 +97,7 @@ case class Average(
     case d: DecimalType =>
       DecimalPrecision.decimalAndDecimal()(
         Divide(
-          CheckOverflowInSum(sum, d, !failOnError),
+          CheckOverflowInSum(sum, sumDataType.asInstanceOf[DecimalType], !failOnError),
           count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
     case _: YearMonthIntervalType =>
       If(EqualTo(count, Literal(0L)),
