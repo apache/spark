@@ -213,10 +213,6 @@
     "message" : [ "Unsupported natural join type %s" ],
     "sqlState" : "0A000"
   },
-  "ROW_FROM_CSV_PARSER_NOT_EXPECTED" : {
-    "message" : [ "Not supported rounding mode: %s" ],
-    "sqlState" : "0A000"
-  },
   "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID" : {
     "message" : [ "%s does not implement simpleStringWithNodeId" ]
   },
