@@ -354,6 +354,9 @@ class DataTypeOps(object, metaclass=ABCMeta):
             from pyspark.pandas.frame import DataFrame
             from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, InternalField
 
+            if len(left) != len(right):
+                raise ValueError("Lengths must be equal")
+
             sdf = left._internal.spark_frame
             structed_scol = F.struct(
                 sdf[NATURAL_ORDER_COLUMN_NAME],
@@ -378,15 +381,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
                     ],
                     F.when(x[scol_name].isNull() | y.isNull(), False)
                     .otherwise(
-                        F.when(
-                            F.assert_true(
-                                # If the comparing result is null,
-                                # that means the length of `left` and `right` is not the same.
-                                (x[scol_name] == y).isNotNull(),
-                                "Lengths must be equal",
-                            ).isNull(),
-                            x[scol_name] == y,
-                        )
+                        x[scol_name] == y,
                     )
                     .alias(scol_name)
                 ),
