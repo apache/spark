@@ -93,7 +93,16 @@ object OrcUtils extends Logging {
         case Category.STRUCT => toStructType(orcType)
         case Category.LIST => toArrayType(orcType)
         case Category.MAP => toMapType(orcType)
-        case _ => CatalystSqlParser.parseDataType(orcType.toString)
+        case _ =>
+          val parsedType = CatalystSqlParser.parseDataType(orcType.toString)
+          val catalystTypeMetadata = orcType.getAttributeValue("catalyst.type")
+          if (catalystTypeMetadata == "day-time-interval") {
+            DayTimeIntervalType()
+          } else if (catalystTypeMetadata == "year-month-interval") {
+            YearMonthIntervalType()
+          } else {
+            parsedType
+          }
       }
     }
 
@@ -265,7 +274,45 @@ object OrcUtils extends Logging {
       s"array<${orcTypeDescriptionString(a.elementType)}>"
     case m: MapType =>
       s"map<${orcTypeDescriptionString(m.keyType)},${orcTypeDescriptionString(m.valueType)}>"
+    case _: DayTimeIntervalType => LongType.catalogString
+    case _: YearMonthIntervalType => IntegerType.catalogString
     case _ => dt.catalogString
+  }
+
+  def orcTypeDescription(dt: DataType): TypeDescription = dt match {
+    case s: StructType =>
+      val result = new TypeDescription(TypeDescription.Category.STRUCT)
+      s.fields.foreach { f =>
+        f.dataType match {
+          case _: DayTimeIntervalType =>
+            val fieldTypeDescription = orcTypeDescription(LongType)
+            fieldTypeDescription.setAttribute("catalyst.type", "day-time-interval")
+            result.addField(f.name, fieldTypeDescription)
+          case _: YearMonthIntervalType =>
+            val fieldTypeDescripton = orcTypeDescription(IntegerType)
+            fieldTypeDescripton.setAttribute("catalyst.type", "year-month-interval")
+            result.addField(f.name, fieldTypeDescripton)
+          case _ =>
+            result.addField(f.name, orcTypeDescription(f.dataType))
+        }
+      }
+      result
+    case a: ArrayType =>
+      val result = new TypeDescription(TypeDescription.Category.LIST)
+      result.addChild(orcTypeDescription(a.elementType))
+      result
+    case m: MapType =>
+      val result = new TypeDescription(TypeDescription.Category.MAP)
+      result.addChild(orcTypeDescription(m.keyType))
+      result.addChild(orcTypeDescription(m.valueType))
+      result
+    case d: DecimalType =>
+      val result = new TypeDescription(TypeDescription.Category.DECIMAL)
+      result.withScale(d.scale)
+      result.withPrecision(d.precision)
+      result
+    case other =>
+      TypeDescription.fromString(other.catalogString)
   }
 
   /**
