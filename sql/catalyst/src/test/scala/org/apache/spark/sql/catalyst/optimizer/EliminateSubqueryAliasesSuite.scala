@@ -34,12 +34,6 @@ class EliminateSubqueryAliasesSuite extends PlanTest with PredicateHelper {
     val batches = Batch("EliminateSubqueryAliases", Once, EliminateSubqueryAliases) :: Nil
   }
 
-  private def assertEquivalent(e1: Expression, e2: Expression): Unit = {
-    val correctAnswer = Project(Alias(e2, "out")() :: Nil, OneRowRelation()).analyze
-    val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, OneRowRelation()).analyze)
-    comparePlans(actual, correctAnswer)
-  }
-
   private def afterOptimization(plan: LogicalPlan): LogicalPlan = {
     Optimize.execute(analysis.SimpleAnalyzer.execute(plan))
   }
