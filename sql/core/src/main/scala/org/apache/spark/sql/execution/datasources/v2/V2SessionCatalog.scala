@@ -186,8 +186,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
   implicit class TableIdentifierHelper(ident: Identifier) {
     def asTableIdentifier: TableIdentifier = {
       ident.namespace match {
-        case Array() =>
-          TableIdentifier(ident.name)
         case Array(db) =>
           TableIdentifier(ident.name, Some(db))
         case _ =>
@@ -280,7 +278,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   def isTempView(ident: Identifier): Boolean = {
-    catalog.isTempView(ident.asTableIdentifier)
+    catalog.isTempView(ident.namespace() :+ ident.name())
   }
 
   override def toString: String = s"V2SessionCatalog($name)"
