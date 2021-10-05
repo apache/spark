@@ -1629,6 +1629,8 @@ def to_datetime(
     DatetimeIndex(['1960-01-02', '1960-01-03', '1960-01-04'], dtype='datetime64[ns]', freq=None)
     """
 
+    # mappings for assembling units
+    # From pandas: pandas.core.tools.datetimes
     _unit_map = {
         "year": "year",
         "years": "year",
