@@ -15,23 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.test
+package org.apache.spark.sql.execution.command
 
-import java.io.{InputStream, IOException}
+import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 
-import scala.sys.process.BasicIO
+/**
+ * The command for `SET CATALOG XXX`
+ */
+case class SetCatalogCommand(catalogName: String) extends LeafRunnableCommand {
+  override def output: Seq[Attribute] = Seq.empty
 
-object ProcessTestUtils {
-  class ProcessOutputCapturer(stream: InputStream, capture: String => Unit) extends Thread {
-    this.setDaemon(true)
-
-    override def run(): Unit = {
-      try {
-        BasicIO.processFully(capture)(stream)
-      } catch { case _: IOException =>
-        // Ignores the IOException thrown when the process termination, which closes the input
-        // stream abruptly.
-      }
-    }
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sessionState.catalogManager.setCurrentCatalog(catalogName)
+    Seq.empty
   }
 }

@@ -782,7 +782,7 @@ class Frame(object, metaclass=ABCMeta):
         ...    ...    2012-03-31 12:00:00
         """
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-            options = options.get("options")  # type: ignore
+            options = options.get("options")
 
         if path is None:
             # If path is none, just collect and use pandas's to_csv.
@@ -791,7 +791,7 @@ class Frame(object, metaclass=ABCMeta):
                 self, ps.Series
             ):
                 # 0.23 seems not having 'columns' parameter in Series' to_csv.
-                return psdf_or_ser.to_pandas().to_csv(  # type: ignore
+                return psdf_or_ser.to_pandas().to_csv(
                     None,
                     sep=sep,
                     na_rep=na_rep,
@@ -800,7 +800,7 @@ class Frame(object, metaclass=ABCMeta):
                     index=False,
                 )
             else:
-                return psdf_or_ser.to_pandas().to_csv(  # type: ignore
+                return psdf_or_ser.to_pandas().to_csv(
                     None,
                     sep=sep,
                     na_rep=na_rep,
@@ -812,8 +812,10 @@ class Frame(object, metaclass=ABCMeta):
                     index=False,
                 )
 
-        psdf = self
-        if isinstance(self, ps.Series):
+        if isinstance(self, ps.DataFrame):
+            psdf = self
+        else:
+            assert isinstance(self, ps.Series)
             psdf = self.to_frame()
 
         if columns is None:
@@ -839,7 +841,7 @@ class Frame(object, metaclass=ABCMeta):
         if header is True and psdf._internal.column_labels_level > 1:
             raise ValueError("to_csv only support one-level index column now")
         elif isinstance(header, list):
-            sdf = psdf.to_spark(index_col)  # type: ignore
+            sdf = psdf.to_spark(index_col)
             sdf = sdf.select(
                 [scol_for(sdf, name_like_string(label)) for label in index_cols]
                 + [
@@ -851,7 +853,7 @@ class Frame(object, metaclass=ABCMeta):
             )
             header = True
         else:
-            sdf = psdf.to_spark(index_col)  # type: ignore
+            sdf = psdf.to_spark(index_col)
             sdf = sdf.select(
                 [scol_for(sdf, name_like_string(label)) for label in index_cols]
                 + [
@@ -872,7 +874,7 @@ class Frame(object, metaclass=ABCMeta):
         builder = sdf.write.mode(mode)
         if partition_cols is not None:
             builder.partitionBy(partition_cols)
-        builder._set_opts(
+        builder._set_opts(  # type: ignore[attr-defined]
             sep=sep,
             nullValue=na_rep,
             header=header,
@@ -983,7 +985,7 @@ class Frame(object, metaclass=ABCMeta):
         1         c
         """
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-            options = options.get("options")  # type: ignore
+            options = options.get("options")
 
         if not lines:
             raise NotImplementedError("lines=False is not implemented yet.")
@@ -994,17 +996,19 @@ class Frame(object, metaclass=ABCMeta):
         if path is None:
             # If path is none, just collect and use pandas's to_json.
             psdf_or_ser = self
-            pdf = psdf_or_ser.to_pandas()  # type: ignore
+            pdf = psdf_or_ser.to_pandas()
             if isinstance(self, ps.Series):
                 pdf = pdf.to_frame()
             # To make the format consistent and readable by `read_json`, convert it to pandas' and
             # use 'records' orient for now.
             return pdf.to_json(orient="records")
 
-        psdf = self
-        if isinstance(self, ps.Series):
+        if isinstance(self, ps.DataFrame):
+            psdf = self
+        else:
+            assert isinstance(self, ps.Series)
             psdf = self.to_frame()
-        sdf = psdf.to_spark(index_col=index_col)  # type: ignore
+        sdf = psdf.to_spark(index_col=index_col)
 
         if num_files is not None:
             warnings.warn(
@@ -1018,7 +1022,7 @@ class Frame(object, metaclass=ABCMeta):
         builder = sdf.write.mode(mode)
         if partition_cols is not None:
             builder.partitionBy(partition_cols)
-        builder._set_opts(compression=compression)
+        builder._set_opts(compression=compression)  # type: ignore[attr-defined]
         builder.options(**options).format("json").save(path)
         return None
 
@@ -2106,7 +2110,7 @@ class Frame(object, metaclass=ABCMeta):
         if num_columns == 0:
             return 0
         else:
-            return len(self) * num_columns  # type: ignore
+            return len(self) * num_columns  # type: ignore[arg-type]
 
     def abs(self: FrameLike) -> FrameLike:
         """
@@ -3171,25 +3175,25 @@ class Frame(object, metaclass=ABCMeta):
 
     @property
     def at(self) -> AtIndexer:
-        return AtIndexer(self)  # type: ignore
+        return AtIndexer(self)
 
     at.__doc__ = AtIndexer.__doc__
 
     @property
     def iat(self) -> iAtIndexer:
-        return iAtIndexer(self)  # type: ignore
+        return iAtIndexer(self)
 
     iat.__doc__ = iAtIndexer.__doc__
 
     @property
     def iloc(self) -> iLocIndexer:
-        return iLocIndexer(self)  # type: ignore
+        return iLocIndexer(self)
 
     iloc.__doc__ = iLocIndexer.__doc__
 
     @property
     def loc(self) -> LocIndexer:
-        return LocIndexer(self)  # type: ignore
+        return LocIndexer(self)
 
     loc.__doc__ = LocIndexer.__doc__
 

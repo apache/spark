@@ -168,6 +168,6 @@ Input [2]: [d_date_sk#5, d_month_seq#26]
 
 (30) BroadcastExchange
 Input [1]: [d_date_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#27]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#27]
 
 

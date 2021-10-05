@@ -90,7 +90,7 @@ Input [2]: [ca_address_sk#15, ca_state#16]
 
 (8) BroadcastExchange
 Input [1]: [ca_address_sk#15]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#17]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#17]
 
 (9) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [c_current_addr_sk#3]
@@ -103,7 +103,7 @@ Input [15]: [c_customer_sk#1, c_customer_id#2, c_current_addr_sk#3, c_salutation
 
 (11) BroadcastExchange
 Input [13]: [c_customer_sk#1, c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, c_preferred_cust_flag#7, c_birth_day#8, c_birth_month#9, c_birth_year#10, c_birth_country#11, c_login#12, c_email_address#13, c_last_review_date#14]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#18]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#18]
 
 (12) Scan parquet default.web_returns
 Output [4]: [wr_returning_customer_sk#19, wr_returning_addr_sk#20, wr_return_amt#21, wr_returned_date_sk#22]
@@ -295,7 +295,7 @@ Condition : isnotnull((avg(ctr_total_return) * 1.2)#46)
 
 (52) BroadcastExchange
 Input [2]: [(avg(ctr_total_return) * 1.2)#46, ctr_state#34#47]
-Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [id=#48]
+Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false,false), [id=#48]
 
 (53) BroadcastHashJoin [codegen id : 17]
 Left keys [1]: [ctr_state#34]
@@ -340,7 +340,7 @@ Input [2]: [d_date_sk#24, d_year#49]
 
 (60) BroadcastExchange
 Input [1]: [d_date_sk#24]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#50]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#50]
 
 Subquery:2 Hosting operator id = 33 Hosting Expression = wr_returned_date_sk#22 IN dynamicpruning#23
 

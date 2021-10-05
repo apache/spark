@@ -1990,7 +1990,7 @@ class Index(IndexOpsMixin):
         if isinstance(self, MultiIndex):
             if level is not None:
                 self_names = self.names
-                self_names[level] = names  # type: ignore
+                self_names[level] = names  # type: ignore[index]
                 names = self_names
         return self.rename(name=names, inplace=inplace)
 
@@ -2060,9 +2060,7 @@ class Index(IndexOpsMixin):
                 [isinstance(item, tuple) for item in other]
             )
             if is_other_list_of_tuples:
-                other = MultiIndex.from_tuples(other)  # type: ignore
-            elif isinstance(other, Series):
-                other = Index(other)
+                other = MultiIndex.from_tuples(other)  # type: ignore[arg-type]
             else:
                 raise TypeError("other must be a MultiIndex or a list of tuples")
 
@@ -2578,7 +2576,7 @@ class Index(IndexOpsMixin):
         if hasattr(MissingPandasLikeIndex, item):
             property_or_func = getattr(MissingPandasLikeIndex, item)
             if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
+                return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
         raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, item))
@@ -2601,7 +2599,31 @@ class Index(IndexOpsMixin):
     def __iter__(self) -> Iterator:
         return MissingPandasLikeIndex.__iter__(self)
 
+    def __and__(self, other: "Index") -> "Index":
+        warnings.warn(
+            "Index.__and__ operating as a set operation is deprecated, "
+            "in the future this will be a logical operation matching Series.__and__.  "
+            "Use index.intersection(other) instead",
+            FutureWarning,
+        )
+        return self.intersection(other)
+
+    def __or__(self, other: "Index") -> "Index":
+        warnings.warn(
+            "Index.__or__ operating as a set operation is deprecated, "
+            "in the future this will be a logical operation matching Series.__or__.  "
+            "Use index.union(other) instead",
+            FutureWarning,
+        )
+        return self.union(other)
+
     def __xor__(self, other: "Index") -> "Index":
+        warnings.warn(
+            "Index.__xor__ operating as a set operation is deprecated, "
+            "in the future this will be a logical operation matching Series.__xor__.  "
+            "Use index.symmetric_difference(other) instead",
+            FutureWarning,
+        )
         return self.symmetric_difference(other)
 
     def __rxor__(self, other: Any) -> "Index":

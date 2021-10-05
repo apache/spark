@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PushableColumnWithoutNestedColumn}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
@@ -38,7 +39,7 @@ object PushDownUtils extends PredicateHelper {
    */
   def pushFilters(
       scanBuilder: ScanBuilder,
-      filters: Seq[Expression]): (Seq[sources.Filter], Seq[Expression]) = {
+      filters: Seq[Expression]): (Either[Seq[sources.Filter], Seq[V2Filter]], Seq[Expression]) = {
     scanBuilder match {
       case r: SupportsPushDownFilters =>
         // A map from translated data source leaf node filters to original catalyst filter
@@ -67,12 +68,41 @@ object PushDownUtils extends PredicateHelper {
         val postScanFilters = r.pushFilters(translatedFilters.toArray).map { filter =>
           DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
         }
-        (r.pushedFilters(), (untranslatableExprs ++ postScanFilters).toSeq)
+        (Left(r.pushedFilters()), (untranslatableExprs ++ postScanFilters).toSeq)
+
+      case r: SupportsPushDownV2Filters =>
+        // A map from translated data source leaf node filters to original catalyst filter
+        // expressions. For a `And`/`Or` predicate, it is possible that the predicate is partially
+        // pushed down. This map can be used to construct a catalyst filter expression from the
+        // input filter, or a superset(partial push down filter) of the input filter.
+        val translatedFilterToExpr = mutable.HashMap.empty[V2Filter, Expression]
+        val translatedFilters = mutable.ArrayBuffer.empty[V2Filter]
+        // Catalyst filter expression that can't be translated to data source filters.
+        val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
+
+        for (filterExpr <- filters) {
+          val translated =
+            DataSourceV2Strategy.translateFilterV2WithMapping(
+              filterExpr, Some(translatedFilterToExpr), nestedPredicatePushdownEnabled = true)
+          if (translated.isEmpty) {
+            untranslatableExprs += filterExpr
+          } else {
+            translatedFilters += translated.get
+          }
+        }
+
+        // Data source filters that need to be evaluated again after scanning. which means
+        // the data source cannot guarantee the rows returned can pass these filters.
+        // As a result we must return it so Spark can plan an extra filter operator.
+        val postScanFilters = r.pushFilters(translatedFilters.toArray).map { filter =>
+          DataSourceV2Strategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
+        }
+        (Right(r.pushedFilters), (untranslatableExprs ++ postScanFilters).toSeq)
 
       case f: FileScanBuilder =>
         val postScanFilters = f.pushFilters(filters)
-        (f.pushedFilters, postScanFilters)
-      case _ => (Nil, filters)
+        (Left(f.pushedFilters), postScanFilters)
+      case _ => (Left(Nil), filters)
     }
   }
 

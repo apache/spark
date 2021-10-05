@@ -104,7 +104,7 @@ Condition : isnotnull(ss_customer_sk#9)
 
 (7) BroadcastExchange
 Input [4]: [ss_customer_sk#9, ss_ext_discount_amt#10, ss_ext_list_price#11, ss_sold_date_sk#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#14]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#14]
 
 (8) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [c_customer_sk#1]
@@ -180,7 +180,7 @@ Condition : isnotnull(ss_customer_sk#31)
 
 (23) BroadcastExchange
 Input [4]: [ss_customer_sk#31, ss_ext_discount_amt#32, ss_ext_list_price#33, ss_sold_date_sk#34]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#36]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#36]
 
 (24) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [c_customer_sk#23]
@@ -223,7 +223,7 @@ Results [3]: [c_customer_id#24 AS customer_id#42, c_preferred_cust_flag#27 AS cu
 
 (32) BroadcastExchange
 Input [3]: [customer_id#42, customer_preferred_cust_flag#43, year_total#44]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#45]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false,false), [id=#45]
 
 (33) BroadcastHashJoin [codegen id : 16]
 Left keys [1]: [customer_id#21]
@@ -265,7 +265,7 @@ Condition : isnotnull(ws_bill_customer_sk#54)
 
 (41) BroadcastExchange
 Input [4]: [ws_bill_customer_sk#54, ws_ext_discount_amt#55, ws_ext_list_price#56, ws_sold_date_sk#57]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#58]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#58]
 
 (42) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [c_customer_sk#46]
@@ -312,7 +312,7 @@ Condition : (isnotnull(year_total#66) AND (year_total#66 > 0.00))
 
 (51) BroadcastExchange
 Input [2]: [customer_id#65, year_total#66]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#67]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false,false), [id=#67]
 
 (52) BroadcastHashJoin [codegen id : 16]
 Left keys [1]: [customer_id#21]
@@ -354,7 +354,7 @@ Condition : isnotnull(ws_bill_customer_sk#76)
 
 (60) BroadcastExchange
 Input [4]: [ws_bill_customer_sk#76, ws_ext_discount_amt#77, ws_ext_list_price#78, ws_sold_date_sk#79]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#80]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#80]
 
 (61) BroadcastHashJoin [codegen id : 14]
 Left keys [1]: [c_customer_sk#68]
@@ -397,7 +397,7 @@ Results [2]: [c_customer_id#69 AS customer_id#86, MakeDecimal(sum(UnscaledValue(
 
 (69) BroadcastExchange
 Input [2]: [customer_id#86, year_total#87]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#88]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false,false), [id=#88]
 
 (70) BroadcastHashJoin [codegen id : 16]
 Left keys [1]: [customer_id#21]
@@ -437,7 +437,7 @@ Condition : ((isnotnull(d_year#16) AND (d_year#16 = 2001)) AND isnotnull(d_date_
 
 (76) BroadcastExchange
 Input [2]: [d_date_sk#15, d_year#16]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#89]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#89]
 
 Subquery:2 Hosting operator id = 20 Hosting Expression = ss_sold_date_sk#34 IN dynamicpruning#35
 BroadcastExchange (80)
@@ -462,7 +462,7 @@ Condition : ((isnotnull(d_year#38) AND (d_year#38 = 2002)) AND isnotnull(d_date_
 
 (80) BroadcastExchange
 Input [2]: [d_date_sk#37, d_year#38]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#90]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#90]
 
 Subquery:3 Hosting operator id = 38 Hosting Expression = ws_sold_date_sk#57 IN dynamicpruning#13
 

@@ -55,7 +55,7 @@ Input [3]: [l_orderkey#4, l_commitdate#5, l_receiptdate#6]
 
 (9) BroadcastExchange
 Input [1]: [l_orderkey#4]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#7]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false,true), [id=#7]
 
 (10) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [o_orderkey#1]

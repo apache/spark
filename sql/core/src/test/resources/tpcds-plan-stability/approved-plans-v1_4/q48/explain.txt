@@ -60,7 +60,7 @@ Condition : isnotnull(s_store_sk#9)
 
 (7) BroadcastExchange
 Input [1]: [s_store_sk#9]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#10]
 
 (8) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_store_sk#3]
@@ -87,7 +87,7 @@ Condition : (isnotnull(cd_demo_sk#11) AND ((((cd_marital_status#12 = M) AND (cd_
 
 (13) BroadcastExchange
 Input [3]: [cd_demo_sk#11, cd_marital_status#12, cd_education_status#13]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#14]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#14]
 
 (14) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_cdemo_sk#1]
@@ -118,7 +118,7 @@ Input [3]: [ca_address_sk#15, ca_state#16, ca_country#17]
 
 (20) BroadcastExchange
 Input [2]: [ca_address_sk#15, ca_state#16]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#18]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#18]
 
 (21) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_addr_sk#2]
@@ -189,6 +189,6 @@ Input [2]: [d_date_sk#19, d_year#25]
 
 (33) BroadcastExchange
 Input [1]: [d_date_sk#19]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#26]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#26]
 
 

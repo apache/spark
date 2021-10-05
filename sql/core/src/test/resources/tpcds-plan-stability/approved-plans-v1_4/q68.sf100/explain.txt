@@ -156,7 +156,7 @@ Input [2]: [s_store_sk#21, s_city#22]
 
 (25) BroadcastExchange
 Input [1]: [s_store_sk#21]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#23]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#23]
 
 (26) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [ss_store_sk#13]
@@ -187,7 +187,7 @@ Input [3]: [hd_demo_sk#24, hd_dep_count#25, hd_vehicle_count#26]
 
 (32) BroadcastExchange
 Input [1]: [hd_demo_sk#24]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#27]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#27]
 
 (33) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [ss_hdemo_sk#11]
@@ -287,6 +287,6 @@ Input [3]: [d_date_sk#20, d_year#45, d_dom#46]
 
 (52) BroadcastExchange
 Input [1]: [d_date_sk#20]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#47]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#47]
 
 

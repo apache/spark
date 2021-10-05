@@ -1047,6 +1047,47 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * find the trivially true predicates and automatically resolves them to both sides.
+   */
+  private def resolveSelfJoinCondition(
+      right: Dataset[_],
+      joinExprs: Option[Column],
+      joinType: String): Join = {
+    // Note that in this function, we introduce a hack in the case of self-join to automatically
+    // resolve ambiguous join conditions into ones that might make sense [SPARK-6231].
+    // Consider this case: df.join(df, df("key") === df("key"))
+    // Since df("key") === df("key") is a trivially true condition, this actually becomes a
+    // cartesian join. However, most likely users expect to perform a self join using "key".
+    // With that assumption, this hack turns the trivially true condition into equality on join
+    // keys that are resolved to both sides.
+
+    // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
+    // After the cloning, left and right side will have distinct expression ids.
+    val plan = withPlan(
+      Join(logicalPlan, right.logicalPlan,
+        JoinType(joinType), joinExprs.map(_.expr), JoinHint.NONE))
+      .queryExecution.analyzed.asInstanceOf[Join]
+
+    // If auto self join alias is disabled, return the plan.
+    if (!sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
+      return plan
+    }
+
+    // If left/right have no output set intersection, return the plan.
+    val lanalyzed = this.queryExecution.analyzed
+    val ranalyzed = right.queryExecution.analyzed
+    if (lanalyzed.outputSet.intersect(ranalyzed.outputSet).isEmpty) {
+      return plan
+    }
+
+    // Otherwise, find the trivially true predicates and automatically resolves them to both sides.
+    // By the time we get here, since we have already run analysis, all attributes should've been
+    // resolved and become AttributeReference.
+
+    resolveSelfJoinCondition(plan)
+  }
+
+  /**
    * Join with another `DataFrame`, using the given join expression. The following performs
    * a full outer join between `df1` and `df2`.
    *
@@ -1071,38 +1112,8 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def join(right: Dataset[_], joinExprs: Column, joinType: String): DataFrame = {
-    // Note that in this function, we introduce a hack in the case of self-join to automatically
-    // resolve ambiguous join conditions into ones that might make sense [SPARK-6231].
-    // Consider this case: df.join(df, df("key") === df("key"))
-    // Since df("key") === df("key") is a trivially true condition, this actually becomes a
-    // cartesian join. However, most likely users expect to perform a self join using "key".
-    // With that assumption, this hack turns the trivially true condition into equality on join
-    // keys that are resolved to both sides.
-
-    // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
-    // After the cloning, left and right side will have distinct expression ids.
-    val plan = withPlan(
-      Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr), JoinHint.NONE))
-      .queryExecution.analyzed.asInstanceOf[Join]
-
-    // If auto self join alias is disabled, return the plan.
-    if (!sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
-      return withPlan(plan)
-    }
-
-    // If left/right have no output set intersection, return the plan.
-    val lanalyzed = this.queryExecution.analyzed
-    val ranalyzed = right.queryExecution.analyzed
-    if (lanalyzed.outputSet.intersect(ranalyzed.outputSet).isEmpty) {
-      return withPlan(plan)
-    }
-
-    // Otherwise, find the trivially true predicates and automatically resolves them to both sides.
-    // By the time we get here, since we have already run analysis, all attributes should've been
-    // resolved and become AttributeReference.
-
     withPlan {
-      resolveSelfJoinCondition(plan)
+      resolveSelfJoinCondition(right, Some(joinExprs), joinType)
     }
   }
 
@@ -1230,6 +1241,58 @@ class Dataset[T] private[sql](
    */
   def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
     joinWith(other, condition, "inner")
+  }
+
+  // TODO(SPARK-22947): Fix the DataFrame API.
+  private[sql] def joinAsOf(
+      other: Dataset[_],
+      leftAsOf: Column,
+      rightAsOf: Column,
+      usingColumns: Seq[String],
+      joinType: String,
+      tolerance: Column,
+      allowExactMatches: Boolean,
+      direction: String): DataFrame = {
+    val joinExprs = usingColumns.map { column =>
+      EqualTo(resolve(column), other.resolve(column))
+    }.reduceOption(And).map(Column.apply).orNull
+
+    joinAsOf(other, leftAsOf, rightAsOf, joinExprs, joinType,
+      tolerance, allowExactMatches, direction)
+  }
+
+  // TODO(SPARK-22947): Fix the DataFrame API.
+  private[sql] def joinAsOf(
+      other: Dataset[_],
+      leftAsOf: Column,
+      rightAsOf: Column,
+      joinExprs: Column,
+      joinType: String,
+      tolerance: Column,
+      allowExactMatches: Boolean,
+      direction: String): DataFrame = {
+    val joined = resolveSelfJoinCondition(other, Option(joinExprs), joinType)
+    val leftAsOfExpr = leftAsOf.expr.transformUp {
+      case a: AttributeReference if logicalPlan.outputSet.contains(a) =>
+        val index = logicalPlan.output.indexWhere(_.exprId == a.exprId)
+        joined.left.output(index)
+    }
+    val rightAsOfExpr = rightAsOf.expr.transformUp {
+      case a: AttributeReference if other.logicalPlan.outputSet.contains(a) =>
+        val index = other.logicalPlan.output.indexWhere(_.exprId == a.exprId)
+        joined.right.output(index)
+    }
+    withPlan {
+      AsOfJoin(
+        joined.left, joined.right,
+        leftAsOfExpr, rightAsOfExpr,
+        joined.condition,
+        joined.joinType,
+        Option(tolerance).map(_.expr),
+        allowExactMatches,
+        AsOfJoinDirection(direction)
+      )
+    }
   }
 
   /**

@@ -53,7 +53,7 @@ Condition : (isnotnull(s_suppkey#5) AND isnotnull(s_nationkey#6))
 
 (7) BroadcastExchange
 Input [2]: [s_suppkey#5, s_nationkey#6]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#7]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false,false), [id=#7]
 
 (8) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ps_suppkey#2]
@@ -84,7 +84,7 @@ Input [2]: [n_nationkey#8, n_name#9]
 
 (14) BroadcastExchange
 Input [1]: [n_nationkey#8]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#10]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false,false), [id=#10]
 
 (15) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [s_nationkey#6]
