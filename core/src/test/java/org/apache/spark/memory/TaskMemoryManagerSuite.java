@@ -17,7 +17,6 @@
 
 package org.apache.spark.memory;
 
-import org.apache.spark.tags.ChromeUITest;
 import org.junit.Assert;
 import org.junit.Test;
 

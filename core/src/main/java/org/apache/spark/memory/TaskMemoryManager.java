@@ -149,18 +149,22 @@ public class TaskMemoryManager {
       // Try to release memory from other consumers first, then we can reduce the frequency of
       // spilling, avoid to have too many spilled files.
       if (got < required) {
-        logger.debug("Task {} need to spill {} for {}", taskAttemptId, Utils.bytesToString(required - got), requestingConsumer);
-        // We need to call spill() on consumers to free up more memory. We want to optimize for two things:
-        // * Minimize the number of spill calls, to reduce the number of spill files and avoid small spill files.
-        // * Avoid spilling more data than necessary - if we only need a little more memory, we may not want to
-        //   spill as much data as possible. Many consumers spill more than the requested amount, so we can take
-        //   that into account in our decisions.
-        // We use a heuristic that selects the smallest memory consumer with at least `required` bytes of memory
-        // in an attempt to balance these factors. It may work well if there are fewer larger requests, but
-        // can result in many small spills if there are many smaller requests.
+        logger.debug("Task {} need to spill {} for {}", taskAttemptId,
+                Utils.bytesToString(required - got), requestingConsumer);
+        // We need to call spill() on consumers to free up more memory. We want to optimize for two
+        // things:
+        // * Minimize the number of spill calls, to reduce the number of spill files and avoid small
+        //  spill files.
+        // * Avoid spilling more data than necessary - if we only need a little more memory, we may
+        //   not want to spill as much data as possible. Many consumers spill more than the
+        //   requested amount, so we can take that into account in our decisions.
+        // We use a heuristic that selects the smallest memory consumer with at least `required`
+        // bytes of memory in an attempt to balance these factors. It may work well if there are
+        // fewer larger requests, but can result in many small spills if there are many smaller
+        // requests.
 
-        // Build a map of consumer in order of memory usage to prioritize spilling. Assign current consumer a
-        // nominal memory usage of 0 so that it is always last in priority order.
+        // Build a map of consumer in order of memory usage to prioritize spilling. Assign current
+        // consumer a nominal memory usage of 0 so that it is always last in priority order.
         TreeMap<Long, List<MemoryConsumer>> sortedConsumers = new TreeMap<>();
         for (MemoryConsumer c: consumers) {
           if (c.getUsed() > 0 && c.getMode() == mode) {
@@ -175,7 +179,7 @@ public class TaskMemoryManager {
           // Get the consumer using the least memory more than the remaining required memory.
           Map.Entry<Long, List<MemoryConsumer>> currentEntry =
             sortedConsumers.ceilingEntry(required - got);
-          // No consumer has used memory more than the remaining required memory, get the next biggest consumer.
+          // No consumer has enough memory on its own, start with spilling the biggest consumer.
           if (currentEntry == null) {
             currentEntry = sortedConsumers.lastEntry();
           }
@@ -188,15 +192,16 @@ public class TaskMemoryManager {
       }
 
       consumers.add(requestingConsumer);
-      logger.debug("Task {} acquired {} for {}", taskAttemptId, Utils.bytesToString(got), requestingConsumer);
+      logger.debug("Task {} acquired {} for {}", taskAttemptId, Utils.bytesToString(got),
+              requestingConsumer);
       return got;
     }
   }
 
   /**
-   * Try to acquire as much memory as possible from `cList[idx]`, up to `requested` bytes by spilling and
-   * then acquiring the freed memory. If no more memory can be spilled from `cList[idx]`, remove it from
-   * the list.
+   * Try to acquire as much memory as possible from `cList[idx]`, up to `requested` bytes by
+   * spilling and then acquiring the freed memory. If no more memory can be spilled from
+   * `cList[idx]`, remove it from the list.
    *
    * @return number of bytes acquired (<= requested)
    * @throws RuntimeException if task is interrupted
@@ -206,12 +211,14 @@ public class TaskMemoryManager {
                                   long requested, List<MemoryConsumer> cList, int idx) {
     MemoryMode mode = requestingConsumer.getMode();
     MemoryConsumer consumerToSpill = cList.get(idx);
-    logger.debug("Task {} try to spill {} from {} for {}", taskAttemptId, Utils.bytesToString(requested), consumerToSpill, requestingConsumer);
+    logger.debug("Task {} try to spill {} from {} for {}", taskAttemptId,
+            Utils.bytesToString(requested), consumerToSpill, requestingConsumer);
     try {
       long released = consumerToSpill.spill(requested, requestingConsumer);
       if (released > 0) {
         logger.debug("Task {} released {} of requested {} from {} for {}", taskAttemptId,
-          Utils.bytesToString(released), Utils.bytesToString(requested), consumerToSpill, requestingConsumer);
+                Utils.bytesToString(released), Utils.bytesToString(requested), consumerToSpill,
+                requestingConsumer);
 
         // When our spill handler releases memory, `ExecutionMemoryPool#releaseMemory()` will
         // immediately notify other tasks that memory has been freed, and they may acquire the
