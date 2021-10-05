@@ -92,6 +92,31 @@ private[sql] trait LookupCatalog extends Logging {
     }
   }
 
+  object CatalogAndNamespaceForIdentifier {
+    private val globalTempDB = SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    def unapply(nameParts: Seq[String]): Some[(CatalogPlugin, Seq[String])] = {
+      assert(nameParts.nonEmpty)
+      if (nameParts.length == 1) {
+        Some(currentCatalog, (catalogManager.currentNamespace :+ nameParts.head).toSeq)
+      } else if (nameParts.head.equalsIgnoreCase(globalTempDB)) {
+        // Conceptually global temp views are in a special reserved catalog. However, the v2 catalog
+        // API does not support view yet, and we have to use v1 commands to deal with global temp
+        // views. To simplify the implementation, we put global temp views in a special namespace
+        // in the session catalog. The special namespace has higher priority during name resolution.
+        // For example, if the name of a custom catalog is the same with `GLOBAL_TEMP_DATABASE`,
+        // this custom catalog can't be accessed.
+        Some((catalogManager.v2SessionCatalog, nameParts))
+      } else {
+        try {
+          Some((catalogManager.catalog(nameParts.head), nameParts.tail))
+        } catch {
+          case _: CatalogNotFoundException =>
+            Some((currentCatalog, nameParts))
+        }
+      }
+    }
+  }
+
   /**
    * Extract catalog and identifier from a multi-part name with the current catalog if needed.
    * Catalog name takes precedence over identifier, but for a single-part name, identifier takes

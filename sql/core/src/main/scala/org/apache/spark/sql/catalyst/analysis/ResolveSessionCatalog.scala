@@ -453,12 +453,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case CreateTempFunction(nameParts, className, resources, ignoreIfExists, replace) =>
       // temp func doesn't belong to any catalog and we shouldn't resolve catalog in the name.
-      callCreateFunctionCommand(nameParts, className, resources, true, ignoreIfExists, replace)
+      convertToV1CreateFunction(nameParts, className, resources, true, ignoreIfExists, replace)
 
     case CreateFunction(ResolvedDBObjectName(catalog, nameParts),
         className, resources, ignoreIfExists, replace) =>
       if (isSessionCatalog(catalog)) {
-        callCreateFunctionCommand(nameParts, className, resources, false, ignoreIfExists, replace)
+        convertToV1CreateFunction(nameParts, className, resources, false, ignoreIfExists, replace)
       } else {
         throw QueryCompilationErrors.functionUnsupportedInV2CatalogError()
       }
@@ -469,7 +469,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       RefreshFunctionCommand(funcIdentifier.database, funcIdentifier.funcName)
   }
 
-  private def callCreateFunctionCommand(
+  private def convertToV1CreateFunction(
       nameParts: Seq[String],
       className: String,
       resources: Seq[FunctionResource],
