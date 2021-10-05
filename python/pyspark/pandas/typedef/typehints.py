@@ -94,12 +94,12 @@ class SeriesType(Generic[T]):
 class DataFrameType(object):
     def __init__(
         self,
-        index_fields: Optional[List["InternalField"]],
+        index_fields: List["InternalField"],
         data_fields: List["InternalField"],
     ):
         self.index_fields = index_fields
         self.data_fields = data_fields
-        self.fields = index_fields + data_fields if isinstance(index_fields, List) else data_fields
+        self.fields = index_fields + data_fields
 
     @property
     def dtypes(self) -> List[Dtype]:
@@ -135,11 +135,13 @@ class UnknownType(object):
 class IndexNameTypeHolder(object):
     name = None
     tpe = None
+    short_name = "IndexNameType"
 
 
 class NameTypeHolder(object):
     name = None
     tpe = None
+    short_name = "NameType"
 
 
 def as_spark_type(
@@ -612,9 +614,8 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
                     )
                 )
         else:
-            assert len(index_parameters) == 0
             # No type hint for index.
-            index_fields = None
+            assert len(index_parameters) == 0
 
         data_dtypes, data_spark_types = zip(
             *(
@@ -665,7 +666,9 @@ def create_type_for_series_type(param: Any) -> Type[SeriesType]:
     from pyspark.pandas.typedef import NameTypeHolder
 
     if isinstance(param, ExtensionDtype):
-        new_class = type("NameType", (NameTypeHolder,), {})  # type: Type[NameTypeHolder]
+        new_class = type(
+            NameTypeHolder.short_name, (NameTypeHolder,), {}
+        )  # type: Type[NameTypeHolder]
         new_class.tpe = param
     else:
         new_class = param.type if isinstance(param, np.dtype) else param
@@ -726,131 +729,110 @@ def create_tuple_for_frame_type(params: Any) -> object:
         ... # doctest: +ELLIPSIS
         typing.Tuple[...IndexNameType, ...NameType]
     """
-    return Tuple[_extract_types(params)]
+    return Tuple[_to_type_holders(params)]
 
 
-def _extract_types(params: Any) -> Tuple:
-    origin = params
+def _to_type_holders(params: Any) -> Tuple:
+    from pyspark.pandas.typedef import NameTypeHolder, IndexNameTypeHolder
 
-    params = _to_tuple_of_params(params)
-
-    if _is_named_params(params):
-        # Example:
-        #   DataFrame["id": int, "A": int]
-        new_params = _address_named_type_hoders(params, is_index=False)
-        return tuple(new_params)
-    elif len(params) == 2 and isinstance(params[1], (zip, list, pd.Series)):
-        # Example:
-        #   DataFrame[int, [int, int]]
-        #   DataFrame[pdf.index.dtype, pdf.dtypes]
-        #   DataFrame[("index", int), [("id", int), ("A", int)]]
-        #   DataFrame[(pdf.index.name, pdf.index.dtype), zip(pdf.columns, pdf.dtypes)]
-        #
-        #   DataFrame[[int, int], [int, int]]
-        #   DataFrame[pdf.index.dtypes, pdf.dtypes]
-        #   DataFrame[[("index", int), ("index-2", int)], [("id", int), ("A", int)]]
-        #   DataFrame[zip(pdf.index.names, pdf.index.dtypes), zip(pdf.columns, pdf.dtypes)]
-
-        index_params = params[0]
-
-        if isinstance(index_params, tuple) and len(index_params) == 2:
-            index_params = tuple([slice(*index_params)])
-
-        index_params = _convert_tuples_to_zip(index_params)
-        index_params = _to_tuple_of_params(index_params)
-
-        if _is_named_params(index_params):
-            # Example:
-            #   DataFrame[[("id", int), ("A", int)], [int, int]]
-            new_index_params = _address_named_type_hoders(index_params, is_index=True)
-            index_types = tuple(new_index_params)
-        else:
-            # Exaxmples:
-            #   DataFrame[[float, float], [int, int]]
-            #   DataFrame[pdf.dtypes, [int, int]]
-            index_types = _address_unnamed_type_holders(index_params, origin, is_index=True)
-
-        data_types = params[1]
-        data_types = _convert_tuples_to_zip(data_types)
-
-        return index_types + _extract_types(data_types)
-
-    else:
-        # Exaxmples:
-        #   DataFrame[float, float]
-        #   DataFrame[pdf.dtypes]
-        return _address_unnamed_type_holders(params, origin, is_index=False)
-
-
-def _is_named_params(params: Any) -> Any:
-    return all(
-        isinstance(param, slice) and param.step is None and param.stop is not None
-        for param in params
+    is_with_index = (
+        isinstance(params, tuple)
+        and len(params) == 2
+        and isinstance(params[1], (zip, list, pd.Series))
     )
 
+    if is_with_index:
+        # With index
+        #   DataFrame[index_type, [type, ...]]
+        #   DataFrame[dtype instance, dtypes instance]
+        #   DataFrame[[index_type, ...], [type, ...]]
+        #   DataFrame[dtypes instance, dtypes instance]
+        #   DataFrame[(index_name, index_type), [(name, type), ...]]
+        #   DataFrame[(index_name, index_type), zip(names, types)]
+        #   DataFrame[[(index_name, index_type), ...], [(name, type), ...]]
+        #   DataFrame[zip(index_names, index_types), zip(names, types)]
+        def is_list_of_pairs(p: Any) -> bool:
+            return (
+                isinstance(p, list)
+                and len(p) >= 1
+                and all(isinstance(param, tuple) and (len(param) == 2) for param in p)
+            )
 
-def _address_named_type_hoders(params: Any, is_index: bool) -> Any:
-    # Example:
-    #   params = (slice("id", int, None), slice("A", int, None))
-    new_params = []
-    for param in params:
-        new_param = (
-            type("IndexNameType", (IndexNameTypeHolder,), {})
-            if is_index
-            else type("NameType", (NameTypeHolder,), {})
-        )  # type: Union[Type[IndexNameTypeHolder], Type[NameTypeHolder]]
-        new_param.name = param.start
-        if isinstance(param.stop, ExtensionDtype):
-            new_param.tpe = param.stop
-        else:
-            # When the given argument is a numpy's dtype instance.
-            new_param.tpe = param.stop.type if isinstance(param.stop, np.dtype) else param.stop
-        new_params.append(new_param)
-    return new_params
+        index_params = params[0]
+        if isinstance(index_params, tuple) and len(index_params) == 2:
+            # DataFrame[("index", int), ...]
+            index_params = [index_params]
+
+        if is_list_of_pairs(index_params):
+            # DataFrame[[("index", int), ("index-2", int)], ...]
+            index_params = tuple(slice(name, tpe) for name, tpe in index_params)
+
+        index_types = _new_type_holders(index_params, IndexNameTypeHolder)
+
+        data_types = params[1]
+        if is_list_of_pairs(data_types):
+            # DataFrame[..., [("id", int), ("A", int)]]
+            data_types = tuple(slice(*data_type) for data_type in data_types)
+
+        data_types = _new_type_holders(data_types, NameTypeHolder)
+
+        return index_types + data_types
+    else:
+        # Without index
+        #   DataFrame[type, type, ...]
+        #   DataFrame[name: type, name: type, ...]
+        #   DataFrame[dtypes instance]
+        #   DataFrame[zip(names, types)]
+        return _new_type_holders(params, NameTypeHolder)
 
 
-def _to_tuple_of_params(params: Any) -> Any:
-    """
-    >>> _to_tuple_of_params(int)
-    (<class 'int'>,)
-
-    >>> _to_tuple_of_params([int, int, int])
-    (<class 'int'>, <class 'int'>, <class 'int'>)
-
-    >>> arrays = [[1, 1, 2], ['red', 'blue', 'red']]
-    >>> idx = pd.MultiIndex.from_arrays(arrays, names=('number', 'color'))
-    >>> pdf = pd.DataFrame([[1, 2], [2, 3], [4, 5]], index=idx, columns=["a", "b"])
-
-    >>> _to_tuple_of_params(zip(pdf.columns, pdf.dtypes))
-    (slice('a', dtype('int64'), None), slice('b', dtype('int64'), None))
-    >>> _to_tuple_of_params(zip(pdf.index.names, pdf.index.dtypes))
-    (slice('number', dtype('int64'), None), slice('color', dtype('O'), None))
-    """
+def _new_type_holders(
+    params: Any, holder_clazz: Type[Union[NameTypeHolder, IndexNameTypeHolder]]
+) -> Tuple:
     if isinstance(params, zip):
+        #   DataFrame[zip(names, types)]
         params = tuple(slice(name, tpe) for name, tpe in params)  # type: ignore[misc, has-type]
 
     if isinstance(params, Iterable):
+        #   DataFrame[type, type, ...]
+        #   DataFrame[name: type, name: type, ...]
+        #   DataFrame[dtypes instance]
         params = tuple(params)
     else:
+        #   DataFrame[type, type]
+        #   DataFrame[name: type]
         params = (params,)
-    return params
 
+    is_named_params = all(
+        isinstance(param, slice) and param.step is None and param.stop is not None
+        for param in params
+    )
+    is_unnamed_params = all(
+        not isinstance(param, slice) and not isinstance(param, Iterable) for param in params
+    )
 
-def _convert_tuples_to_zip(params: Any) -> Any:
-    if isinstance(params, list) and len(params) >= 1 and isinstance(params[0], tuple):
-        return zip((name for name, _ in params), (tpe for _, tpe in params))
-    return params
-
-
-def _address_unnamed_type_holders(params: Any, origin: Any, is_index: bool) -> Any:
-    if all(not isinstance(param, slice) and not isinstance(param, Iterable) for param in params):
+    if is_named_params:
+        # DataFrame["id": int, "A": int]
+        new_params = []
+        for param in params:
+            new_param = type(
+                holder_clazz.short_name, (holder_clazz,), {}
+            )  # type: Type[Union[NameTypeHolder, IndexNameTypeHolder]]
+            new_param.name = param.start
+            if isinstance(param.stop, ExtensionDtype):
+                new_param.tpe = param.stop
+            else:
+                # When the given argument is a numpy's dtype instance.
+                new_param.tpe = param.stop.type if isinstance(param.stop, np.dtype) else param.stop
+            new_params.append(new_param)
+        return tuple(new_params)
+    elif is_unnamed_params:
+        # DataFrame[float, float]
         new_types = []
         for param in params:
-            new_type = (
-                type("IndexNameType", (IndexNameTypeHolder,), {})
-                if is_index
-                else type("NameType", (NameTypeHolder,), {})
-            )  # type: Union[Type[IndexNameTypeHolder], Type[NameTypeHolder]]
+            new_type = type(
+                holder_clazz.short_name, (holder_clazz,), {}
+            )  # type: Type[Union[NameTypeHolder, IndexNameTypeHolder]]
             if isinstance(param, ExtensionDtype):
                 new_type.tpe = param
             else:
@@ -872,7 +854,7 @@ def _address_unnamed_type_holders(params: Any, origin: Any, is_index: bool) -> A
   - DataFrame[[(index_name, index_type), ...], [(name, type), ...]]
   - DataFrame[dtypes instance, dtypes instance]
   - DataFrame[zip(index_names, index_types), zip(names, types)]\n"""
-            + "However, got %s." % str(origin)
+            + "However, got %s." % str(params)
         )
 
 

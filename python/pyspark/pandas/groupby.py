@@ -1253,7 +1253,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 data_fields = cast(DataFrameType, return_type).data_fields
                 return_schema = cast(DataFrameType, return_type).spark_type
                 index_fields = cast(DataFrameType, return_type).index_fields
-                should_retain_index = index_fields is not None
+                should_retain_index = len(index_fields) > 0
                 psdf_from_pandas = None
             else:
                 should_return_series = True
