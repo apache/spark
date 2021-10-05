@@ -45,8 +45,11 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
  *
  * ShuffleDataIO also can change the behavior of deleteFilesOnStop.
  */
-private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Boolean,
-    isDriver: Boolean) extends Logging {
+private[spark] class DiskBlockManager(
+    conf: SparkConf,
+    var deleteFilesOnStop: Boolean,
+    isDriver: Boolean)
+  extends Logging {
 
   private[spark] val subDirsPerLocalDir = conf.get(config.DISKSTORE_SUB_DIRECTORIES)
 
