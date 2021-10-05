@@ -376,9 +376,9 @@ class MultiIndex(Index):
         raise PandasNotImplementedError(class_name="pd.MultiIndex", property_name="name")
 
     @property
-    def dtypes(self) -> Series:
-        return ps.Series(
-            [field.dtype.name for field in self._internal.index_fields],
+    def dtypes(self) -> pd.Series:
+        return pd.Series(
+            [field.dtype for field in self._internal.index_fields],
             index=[name if len(name) > 1 else name[0] for name in self._internal.index_names],
         )
 
