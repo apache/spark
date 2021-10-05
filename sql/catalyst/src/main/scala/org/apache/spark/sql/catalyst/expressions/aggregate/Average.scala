@@ -94,7 +94,7 @@ case class Average(
   // If all input are nulls, count will be 0 and we will get null after the division.
   // We can't directly use `/` as it throws an exception under ansi mode.
   override lazy val evaluateExpression = child.dataType match {
-    case d: DecimalType =>
+    case _: DecimalType =>
       DecimalPrecision.decimalAndDecimal()(
         Divide(
           CheckOverflowInSum(sum, sumDataType.asInstanceOf[DecimalType], !failOnError),
