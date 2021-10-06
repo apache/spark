@@ -19,6 +19,7 @@ package org.apache.spark.deploy.rest
 
 import scala.util.Try
 
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.config
 import org.apache.spark.util.Utils
 
@@ -73,8 +74,7 @@ private[rest] class CreateSubmissionRequest extends SubmitRestProtocolRequest {
   private def assertProperty[T](key: String, valueType: String, convert: (String => T)): Unit = {
     sparkProperties.get(key).foreach { value =>
       Try(convert(value)).getOrElse {
-        throw new SubmitRestProtocolException(
-          s"Property '$key' expected $valueType value: actual was '$value'.")
+        throw SparkCoreErrors.unexpectedValueForPropertyError(key, valueType, value)
       }
     }
   }

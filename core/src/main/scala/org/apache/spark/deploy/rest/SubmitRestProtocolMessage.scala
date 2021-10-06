@@ -25,6 +25,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.util.Utils
 
 /**
@@ -66,22 +67,21 @@ private[rest] abstract class SubmitRestProtocolMessage {
     try {
       doValidate()
     } catch {
-      case e: Exception =>
-        throw new SubmitRestProtocolException(s"Validation of message $messageType failed!", e)
+      case e: Exception => throw SparkCoreErrors.failToValidateMessageError(messageType, e)
     }
   }
 
   /** Assert the validity of the message */
   protected def doValidate(): Unit = {
     if (action == null) {
-      throw new SubmitRestMissingFieldException(s"The action field is missing in $messageType")
+      throw SparkCoreErrors.missingActionFieldError(messageType)
     }
   }
 
   /** Assert that the specified field is set in this message. */
   protected def assertFieldIsSet[T](value: T, name: String): Unit = {
     if (value == null) {
-      throw new SubmitRestMissingFieldException(s"'$name' is missing in message $messageType.")
+      throw SparkCoreErrors.missingFieldInMessageError(messageType, name)
     }
   }
 
@@ -115,7 +115,7 @@ private[spark] object SubmitRestProtocolMessage {
       case _ => None
     }
     value.getOrElse {
-      throw new SubmitRestMissingFieldException(s"Action field not found in JSON:\n$json")
+      throw SparkCoreErrors.actionFieldNotFoundInJsonError(json)
     }
   }
 

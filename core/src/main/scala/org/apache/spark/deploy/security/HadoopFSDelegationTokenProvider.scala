@@ -27,7 +27,8 @@ import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkConf
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.security.HadoopDelegationTokenProvider
@@ -93,9 +94,7 @@ private[deploy] class HadoopFSDelegationTokenProvider
     logDebug("Delegation token renewer is: " + tokenRenewer)
 
     if (tokenRenewer == null || tokenRenewer.length() == 0) {
-      val errorMessage = "Can't get Master Kerberos principal for use as renewer."
-      logError(errorMessage)
-      throw new SparkException(errorMessage)
+      throw SparkCoreErrors.cannotGetMasterKerberosPrincipalRenewerError()
     }
 
     tokenRenewer

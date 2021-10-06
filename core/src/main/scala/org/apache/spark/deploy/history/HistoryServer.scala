@@ -28,6 +28,7 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History
@@ -346,9 +347,9 @@ object HistoryServer extends Logging {
     if (conf.get(History.KERBEROS_ENABLED)) {
       // if you have enabled kerberos the following 2 params must be set
       val principalName = conf.get(History.KERBEROS_PRINCIPAL)
-        .getOrElse(throw new NoSuchElementException(History.KERBEROS_PRINCIPAL.key))
+        .getOrElse(throw SparkCoreErrors.noSuchElementError(History.KERBEROS_PRINCIPAL.key))
       val keytabFilename = conf.get(History.KERBEROS_KEYTAB)
-        .getOrElse(throw new NoSuchElementException(History.KERBEROS_KEYTAB.key))
+        .getOrElse(throw SparkCoreErrors.noSuchElementError(History.KERBEROS_KEYTAB.key))
       SparkHadoopUtil.get.loginUserFromKeytab(principalName, keytabFilename)
     }
   }

@@ -24,8 +24,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkException, SparkUserAppException}
 import org.apache.spark.api.r.{RBackend, RUtils}
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.config.R._
 import org.apache.spark.internal.config.SUBMIT_DEPLOY_MODE
 import org.apache.spark.util.RedirectThread
@@ -107,14 +107,14 @@ object RRunner {
         sparkRBackend.close()
       }
       if (returnCode != 0) {
-        throw new SparkUserAppException(returnCode)
+        throw SparkCoreErrors.sparkUserAppError(returnCode)
       }
     } else {
       val errorMessage = s"SparkR backend did not initialize in $backendTimeout seconds"
       // scalastyle:off println
       System.err.println(errorMessage)
       // scalastyle:on println
-      throw new SparkException(errorMessage)
+      throw SparkCoreErrors.sparkRBackendInitializationError(backendTimeout)
     }
   }
 }

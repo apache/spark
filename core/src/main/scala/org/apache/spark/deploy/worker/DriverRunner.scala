@@ -31,6 +31,7 @@ import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.StandaloneResourceUtils.prepareResourcesFile
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{DRIVER_RESOURCES_FILE, SPARK_DRIVER_PREFIX}
 import org.apache.spark.internal.config.UI.UI_REVERSE_PROXY
@@ -145,7 +146,7 @@ private[deploy] class DriverRunner(
   private def createWorkingDirectory(): File = {
     val driverDir = new File(workDir, driverId)
     if (!driverDir.exists() && !driverDir.mkdirs()) {
-      throw new IOException("Failed to create directory " + driverDir)
+      throw SparkCoreErrors.failToCreateDirectoryError(driverDir)
     }
     driverDir
   }
@@ -167,8 +168,7 @@ private[deploy] class DriverRunner(
         System.currentTimeMillis(),
         useCache = false)
       if (!localJarFile.exists()) { // Verify copy succeeded
-        throw new IOException(
-          s"Can not find expected jar $jarFileName which should have been loaded in $driverDir")
+        throw SparkCoreErrors.cannotFindJarInDriverDirectoryError(jarFileName, driverDir)
       }
     }
     localJarFile.getAbsolutePath

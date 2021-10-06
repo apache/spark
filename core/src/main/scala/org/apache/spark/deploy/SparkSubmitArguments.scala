@@ -27,8 +27,9 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.io.Source
 import scala.util.Try
 
-import org.apache.spark.{SparkConf, SparkException, SparkUserAppException}
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkSubmitAction._
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.DYN_ALLOCATION_ENABLED
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
@@ -576,7 +577,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       logInfo(getSqlShellOptions())
     }
 
-    throw new SparkUserAppException(exitCode)
+    throw SparkCoreErrors.sparkUserAppError(exitCode)
   }
 
   /**
@@ -598,7 +599,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
       val sm = new SecurityManager() {
         override def checkExit(status: Int): Unit = {
-          throw new SecurityException()
+          throw SparkCoreErrors.securityError()
         }
 
         override def checkPermission(perm: java.security.Permission): Unit = {}

@@ -36,6 +36,7 @@ import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
@@ -514,7 +515,7 @@ private[deploy] class Worker(
         val cleanupFuture: concurrent.Future[Unit] = concurrent.Future {
           val appDirs = workDir.listFiles()
           if (appDirs == null) {
-            throw new IOException("ERROR: Failed to list files in " + appDirs)
+            throw SparkCoreErrors.failToListFilesInAppDirsError(appDirs)
           }
           appDirs.filter { dir =>
             // the directory is used by an application - check that the application is not running
@@ -575,7 +576,7 @@ private[deploy] class Worker(
           // Create the executor's working directory
           val executorDir = new File(workDir, appId + "/" + execId)
           if (!executorDir.mkdirs()) {
-            throw new IOException("Failed to create directory " + executorDir)
+            throw SparkCoreErrors.failToCreateDirectoryError(executorDir)
           }
 
           // Create local dirs for the executor. These are passed to the executor via the
@@ -595,8 +596,8 @@ private[deploy] class Worker(
               }
             }.toSeq
             if (dirs.isEmpty) {
-              throw new IOException("No subfolder can be created in " +
-                s"${localRootDirs.mkString(",")}.")
+              throw SparkCoreErrors.cannotCreateSubfolderInLocalRootDirsError(
+                localRootDirs.mkString(","))
             }
             dirs
           })

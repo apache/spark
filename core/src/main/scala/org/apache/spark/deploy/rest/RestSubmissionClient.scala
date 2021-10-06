@@ -31,8 +31,9 @@ import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonProcessingException
 
-import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf, SparkException}
+import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 import org.apache.spark.deploy.SparkApplication
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -99,7 +100,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
       } catch {
         case e: SubmitRestConnectionException =>
           if (handleConnectionException(m)) {
-            throw new SubmitRestConnectionException("Unable to connect to server", e)
+            throw SparkCoreErrors.unableToConnectToServerError(e)
           }
       }
     }
@@ -128,7 +129,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
       } catch {
         case e: SubmitRestConnectionException =>
           if (handleConnectionException(m)) {
-            throw new SubmitRestConnectionException("Unable to connect to server", e)
+            throw SparkCoreErrors.unableToConnectToServerError(e)
           }
       }
     }
@@ -160,7 +161,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
       } catch {
         case e: SubmitRestConnectionException =>
           if (handleConnectionException(m)) {
-            throw new SubmitRestConnectionException("Unable to connect to server", e)
+            throw SparkCoreErrors.unableToConnectToServerError(e)
           }
       }
     }
@@ -218,7 +219,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
       }
     } catch {
       case e: ConnectException =>
-        throw new SubmitRestConnectionException("Connect Exception when connect to server", e)
+        throw SparkCoreErrors.connectServerError(e)
     }
     readResponse(conn)
   }
@@ -238,7 +239,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
           .getLines().mkString("\n"))
         if (responseCode == HttpServletResponse.SC_INTERNAL_SERVER_ERROR &&
           !connection.getContentType().contains("application/json")) {
-          throw new SubmitRestProtocolException(s"Server responded with exception:\n${errString}")
+          throw SparkCoreErrors.serverRespondedWithExceptionError(errString)
         }
         logError(s"Server responded with error:\n${errString}")
         val error = new ErrorResponse
@@ -252,7 +253,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
 
         // If the server threw an exception while writing a response, it will not have a body
         if (dataStream == null) {
-          throw new SubmitRestProtocolException("Server returned empty body")
+          throw SparkCoreErrors.serverReturnedEmptyBodyError()
         }
         val responseJson = Source.fromInputStream(dataStream).mkString
         logDebug(s"Response from the server:\n$responseJson")
@@ -266,8 +267,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
           // Otherwise, simply return the response
           case response: SubmitRestProtocolResponse => response
           case unexpected =>
-            throw new SubmitRestProtocolException(
-              s"Message received from server was not a response:\n${unexpected.toJson}")
+            throw SparkCoreErrors.messageReceivedFromServerWasNotAResponseError(unexpected.toJson)
         }
       }
     }
@@ -276,13 +276,12 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
     try { Await.result(responseFuture, 10.seconds) } catch {
       // scalastyle:on awaitresult
       case unreachable @ (_: FileNotFoundException | _: SocketException) =>
-        throw new SubmitRestConnectionException("Unable to connect to server", unreachable)
+        throw SparkCoreErrors.unableToConnectToServerError(unreachable)
       case malformed @ (_: JsonProcessingException | _: SubmitRestProtocolException) =>
-        throw new SubmitRestProtocolException("Malformed response received from server", malformed)
-      case timeout: TimeoutException =>
-        throw new SubmitRestConnectionException("No response from server", timeout)
+        throw SparkCoreErrors.malformedResponseReceivedFromServerError(malformed)
+      case timeout: TimeoutException => throw SparkCoreErrors.noResponseFromServerError(timeout)
       case NonFatal(t) =>
-        throw new SparkException("Exception while waiting for response", t)
+        throw SparkCoreErrors.waitingForResponseError(t)
     }
   }
 

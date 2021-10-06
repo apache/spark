@@ -19,7 +19,7 @@ package org.apache.spark.deploy.history
 
 import java.util.NoSuchElementException
 import java.util.concurrent.ExecutionException
-import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
+import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletRequest, ServletResponse}
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.JavaConverters._
@@ -29,6 +29,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, Removal
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.eclipse.jetty.servlet.FilterHolder
 
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.ui.SparkUI
@@ -169,8 +170,7 @@ private[history] class ApplicationCache(
           metrics.lookupFailureCount.inc()
           // guava's cache logs via java.util log, so is of limited use. Hence: our own message
           logInfo(s"Failed to load application attempt $application")
-          throw new NoSuchElementException(s"no application with application Id '$appId'" +
-              attemptId.map { id => s" attemptId '$id'" }.getOrElse(" and no attempt Id"))
+          throw SparkCoreErrors.noApplicationWithApplicationIdError(appId, attemptId)
       }
     }
     try {
@@ -390,7 +390,7 @@ private[history] class ApplicationCacheCheckFilter(
     // this check is universal, just in case someone does exactly
     // that on your classpath
     if (!(request.isInstanceOf[HttpServletRequest])) {
-      throw new ServletException("This filter only works for HTTP/HTTPS")
+      throw SparkCoreErrors.filterOnlyWorksForHTTPError()
     }
     val httpRequest = request.asInstanceOf[HttpServletRequest]
     val httpResponse = response.asInstanceOf[HttpServletResponse]

@@ -32,6 +32,7 @@ import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.master.RecoveryState
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -321,7 +322,7 @@ private object FaultToleranceTest extends App with Logging {
         logError("Master states: " + masters.map(_.state))
         logError("Num apps: " + numLiveApps)
         logError("IPs expected: " + workers.map(_.ip) + " / found: " + liveWorkerIPs)
-        throw new RuntimeException("Failed to get into acceptable cluster state after 2 min.", e)
+        throw SparkCoreErrors.failToGetIntoAcceptableClusterStateError(e)
     }
   }
 

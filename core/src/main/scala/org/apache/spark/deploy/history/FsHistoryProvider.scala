@@ -38,8 +38,9 @@ import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
 import org.fusesource.leveldbjni.internal.NativeDB
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
@@ -283,12 +284,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           "Logging directory specified is not a directory: %s".format(logDir))
       }
     } catch {
-      case f: FileNotFoundException =>
-        var msg = s"Log directory specified does not exist: $logDir"
-        if (logDir == DEFAULT_LOG_DIR) {
-          msg += " Did you configure the correct one through spark.history.fs.logDirectory?"
-        }
-        throw new FileNotFoundException(msg).initCause(f)
+      case f: FileNotFoundException => throw SparkCoreErrors.logDirNotExistError(logDir, f)
     }
 
     // Disable the background thread during tests.
@@ -458,7 +454,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val app = load(appId)
     val attempt = app.attempts.find(_.info.attemptId == attemptId).orNull
     if (attempt == null) {
-      throw new NoSuchElementException()
+      throw SparkCoreErrors.noSuchElementError()
     }
     val secManager = createSecurityManager(this.conf.clone(), attempt)
     secManager.checkUIViewPermissions(user)
@@ -673,7 +669,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       load(appId)
     } catch {
       case _: NoSuchElementException =>
-        throw new SparkException(s"Logs for $appId not found.")
+        throw SparkCoreErrors.logsNotFoundForAppError(appId)
     }
 
     try {
@@ -1359,7 +1355,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   /** For testing. Returns internal data about a single attempt. */
   private[history] def getAttempt(appId: String, attemptId: Option[String]): AttemptInfoWrapper = {
     load(appId).attempts.find(_.info.attemptId == attemptId).getOrElse(
-      throw new NoSuchElementException(s"Cannot find attempt $attemptId of $appId."))
+      throw SparkCoreErrors.cannotFindAttemptOfAppIdError(attemptId, appId))
   }
 
   private def deleteLog(fs: FileSystem, log: Path): Boolean = {
@@ -1553,7 +1549,7 @@ private[history] class AppListingListener(
   private def checkProgress(): Unit = {
     if (haltEnabled && !halted && app.id != null && gotEnvUpdate) {
       halted = true
-      throw new HaltReplayException()
+      throw SparkCoreErrors.haltReplayError()
     }
   }
 

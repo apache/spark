@@ -36,7 +36,8 @@ import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkConf
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.util.Utils
@@ -139,7 +140,7 @@ private[spark] class SparkHadoopUtil extends Logging {
 
   def loginUserFromKeytab(principalName: String, keytabFilename: String): Unit = {
     if (!new File(keytabFilename).exists()) {
-      throw new SparkException(s"Keytab file: ${keytabFilename} does not exist")
+      throw SparkCoreErrors.keytabFileNotExistError(keytabFilename)
     } else {
       logInfo("Attempting to login to Kerberos " +
         s"using principal: ${principalName} and keytab: ${keytabFilename}")
@@ -529,7 +530,7 @@ private[spark] object SparkHadoopUtil extends Logging {
         // the builder api does not resolve relative paths, nor does it create parent dirs, while
         // the old api does.
         if (!fs.mkdirs(path.getParent())) {
-          throw new IOException(s"Failed to create parents of $path")
+          throw SparkCoreErrors.failToCreateParentsError(path)
         }
         val qualifiedPath = fs.makeQualified(path)
         val builder = builderMethod.invoke(fs, qualifiedPath)

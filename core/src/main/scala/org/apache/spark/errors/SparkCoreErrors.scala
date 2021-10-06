@@ -17,13 +17,19 @@
 
 package org.apache.spark.errors
 
-import java.io.IOException
+import java.io.{EOFException, File, FileNotFoundException, IOException}
+import java.net.ConnectException
+import java.util.NoSuchElementException
 import java.util.concurrent.TimeoutException
+import javax.servlet.ServletException
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkException, TaskNotSerializableException}
+import org.apache.spark.{SparkException, SparkUserAppException, TaskContext, TaskKilledException, TaskNotSerializableException}
+import org.apache.spark.deploy.rest.{SubmitRestConnectionException, SubmitRestMissingFieldException, SubmitRestProtocolException}
+import org.apache.spark.internal.config.History
 import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException}
+import org.apache.spark.scheduler.HaltReplayException
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleManager}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, BlockSavedOnDecommissionedBlockManagerException, RDDBlockId, UnrecognizedBlockId}
 
@@ -45,6 +51,200 @@ object SparkCoreErrors {
 
   def unsupportedDataTypeError(other: Any): Throwable = {
     new SparkException(s"Data of type $other is not supported")
+  }
+
+  def failToGetIntoAcceptableClusterStateError(e: TimeoutException): Throwable = {
+    new RuntimeException("Failed to get into acceptable cluster state after 2 min.", e)
+  }
+
+  def serverSocketFailedToBindJavaSideError(): Throwable = {
+    new SparkException("ServerSocket failed to bind to Java side.")
+  }
+
+  def taskKilledError(context: TaskContext): Throwable = {
+    new TaskKilledException(context.getKillReason().getOrElse("unknown reason"))
+  }
+
+  def pythonWorkerExitedError(eof: EOFException, error: String = null): Throwable = {
+    val msg = "Python worker exited unexpectedly (crashed)"
+    if(error == null) {
+      new SparkException(msg, eof)
+    } else {
+      new SparkException(msg + s": $error", eof)
+    }
+  }
+
+  def sparkRBackendInitializationError(backendTimeout: Int): Throwable = {
+    new SparkException(s"SparkR backend did not initialize in $backendTimeout seconds")
+  }
+
+  def sparkUserAppError(returnCode: Int): Throwable = {
+    SparkUserAppException(returnCode)
+  }
+
+  def keytabFileNotExistError(keytabFilename: String): Throwable = {
+    new SparkException(s"Keytab file: ${keytabFilename} does not exist")
+  }
+
+  def failToCreateParentsError(path: Path): Throwable = {
+    new IOException(s"Failed to create parents of $path")
+  }
+
+  def failToLoadIvySettingError(settingsFile: String, e: Throwable): Throwable = {
+    new SparkException(s"Failed when loading Ivy settings from $settingsFile", e)
+  }
+
+  def invalidSparkConfigPairError(pair: String): Throwable = {
+    new SparkException(s"Spark config without '=': $pair")
+  }
+
+  def multipleExternalSparkSubmitOperationsRegisteredError(x: Int, master: String): Throwable = {
+    new SparkException(s"Multiple($x) external SparkSubmitOperations " +
+      s"clients registered for master url ${master}.")
+  }
+
+  def securityError(): Throwable = {
+    new SecurityException()
+  }
+
+  def failToPrepareResourceFileError(compShortName: String, e: Throwable): Throwable = {
+    new SparkException(s"Exception threw while preparing resource file for $compShortName", e)
+  }
+
+  def noApplicationWithApplicationIdError(appId: String, attemptId: Option[String]): Throwable = {
+    new NoSuchElementException(s"no application with application Id '$appId'" +
+      attemptId.map { id => s" attemptId '$id'" }.getOrElse(" and no attempt Id"))
+  }
+
+  def filterOnlyWorksForHTTPError(): Throwable = {
+    new ServletException("This filter only works for HTTP/HTTPS")
+  }
+
+  def logFileAlreadyExistsError(dest: Path): Throwable = {
+    new IOException(s"Target log file already exists ($dest)")
+  }
+
+  def logDirectoryAlreadyExistsError(logDirForAppPath: Path): Throwable = {
+    new IOException(s"Target log directory already exists ($logDirForAppPath)")
+  }
+
+  def logDirNotExistError(logDir: String, f: FileNotFoundException): Throwable = {
+    var msg = s"Log directory specified does not exist: $logDir"
+    if (logDir == History.DEFAULT_LOG_DIR) {
+      msg += " Did you configure the correct one through spark.history.fs.logDirectory?"
+    }
+    new FileNotFoundException(msg).initCause(f)
+  }
+
+  def noSuchElementError(s: String): Throwable = {
+    new NoSuchElementException(s)
+  }
+
+  def logsNotFoundForAppError(appId: String): Throwable = {
+    new SparkException(s"Logs for $appId not found.")
+  }
+
+  def cannotFindAttemptOfAppIdError(attemptId: Option[String], appId: String): Throwable = {
+    new NoSuchElementException(s"Cannot find attempt $attemptId of $appId.")
+  }
+
+  def haltReplayError(): Throwable = {
+    new HaltReplayException()
+  }
+
+  def keyMustBePositiveError(s: String): Throwable = {
+    new SparkException(s"${s} must be positive")
+  }
+
+  def unexpectedStateUpdateForDriverError(driverId: String, state: String): Throwable = {
+    new Exception(s"Received unexpected state update for driver $driverId: $state")
+  }
+
+  def unableToConnectToServerError(e: Throwable): Throwable = {
+    new SubmitRestConnectionException("Unable to connect to server", e)
+  }
+
+  def connectServerError(e: ConnectException): Throwable = {
+    new SubmitRestConnectionException("Connect Exception when connect to server", e)
+  }
+
+  def serverRespondedWithExceptionError(s: Option[String]): Throwable = {
+    new SubmitRestProtocolException(s"Server responded with exception:\n${s}")
+  }
+
+  def serverReturnedEmptyBodyError(): Throwable = {
+    new SubmitRestProtocolException("Server returned empty body")
+  }
+
+  def messageReceivedFromServerWasNotAResponseError(response: String): Throwable = {
+    new SubmitRestProtocolException(
+      s"Message received from server was not a response:\n$response")
+  }
+
+  def malformedResponseReceivedFromServerError(malformed: Throwable): Throwable = {
+    new SubmitRestProtocolException("Malformed response received from server", malformed)
+  }
+
+  def noResponseFromServerError(timeout: Throwable): Throwable = {
+    new SubmitRestConnectionException("No response from server", timeout)
+  }
+
+  def waitingForResponseError(t: Throwable): Throwable = {
+    new SparkException("Exception while waiting for response", t)
+  }
+
+  def applicationJarMissingError(): Throwable = {
+    new SubmitRestMissingFieldException("Application jar is missing.")
+  }
+
+  def mainClassMissingError(): Throwable = {
+    new SubmitRestMissingFieldException("Main class is missing.")
+  }
+
+  def failToValidateMessageError(messageType: String, e: Exception): Throwable = {
+    new SubmitRestProtocolException(s"Validation of message $messageType failed!", e)
+  }
+
+  def missingActionFieldError(messageType: String): Throwable = {
+    new SubmitRestMissingFieldException(s"The action field is missing in $messageType")
+  }
+
+  def missingFieldInMessageError(messageType: String, name: String): Throwable = {
+    new SubmitRestMissingFieldException(s"'$name' is missing in message $messageType.")
+  }
+
+  def actionFieldNotFoundInJsonError(json: String): Throwable = {
+    new SubmitRestMissingFieldException(s"Action field not found in JSON:\n$json")
+  }
+
+  def unexpectedValueForPropertyError(key: String, valueType: String, value: String): Throwable = {
+    new SubmitRestProtocolException(
+      s"Property '$key' expected $valueType value: actual was '$value'.")
+  }
+
+  def cannotGetMasterKerberosPrincipalRenewerError(): Throwable = {
+    new SparkException("Can't get Master Kerberos principal for use as renewer.")
+  }
+
+  def failToCreateDirectoryError(driverDir: File): Throwable = {
+    new IOException(s"Failed to create directory $driverDir")
+  }
+
+  def cannotFindJarInDriverDirectoryError(jarFileName: String, driverDir: File): Throwable = {
+    new IOException(
+      s"Can not find expected jar $jarFileName which should have been loaded in $driverDir")
+  }
+
+  def failToListFilesInAppDirsError(appDirs: Array[File]): Throwable = {
+    new IOException(s"ERROR: Failed to list files in $appDirs")
+  }
+
+  def cannotCreateSubfolderInLocalRootDirsError(localRootDirs: String): Throwable = {
+    new IOException(s"No subfolder can be created in ${localRootDirs}.")
+  }
+
+  def requestMustSpecifyApplicationOrDriverError(): Throwable = {
+    new Exception("Request must specify either application or driver identifiers")
   }
 
   def rddBlockNotFoundError(blockId: BlockId, id: Int): Throwable = {
