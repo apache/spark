@@ -68,7 +68,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       assumeInt96IsTimestamp = int96AsTimestamp)
 
     test(s"sql <= parquet: $testName") {
-      val actualParquetType = converter.convertTypeInfo(
+      val actualParquetType = converter.convertParquetType(
           MessageTypeParser.parseMessageType(parquetSchema))
       val actual = actualParquetType.sparkType
       val expected = sqlSchema

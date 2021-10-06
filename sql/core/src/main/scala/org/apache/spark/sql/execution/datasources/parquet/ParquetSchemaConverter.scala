@@ -74,7 +74,7 @@ class ParquetToSparkSchemaConverter(
    * This is necessary since conversion from Parquet to Spark could cause precision loss. For
    * instance, Spark read schema is smallint/tinyint but Parquet only support int.
    */
-  def convertTypeInfo(
+  def convertParquetType(
       parquetSchema: MessageType,
       sparkReadSchema: Option[StructType] = None,
       caseSensitive: Boolean = true): ParquetType = {
