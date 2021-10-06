@@ -28,6 +28,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{EXECUTOR_CORES, RESOURCES_DISCOVERY_PLUGIN, SPARK_TASK_PREFIX}
 import org.apache.spark.internal.config.Tests.{RESOURCES_WARNING_TESTING}
@@ -140,7 +141,7 @@ private[spark] object ResourceUtils extends Logging {
   def parseResourceRequest(sparkConf: SparkConf, resourceId: ResourceID): ResourceRequest = {
     val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
     val amount = settings.getOrElse(AMOUNT,
-      throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
+      throw SparkCoreErrors.noAmountSpecifiedForResourceError(resourceId.resourceName)
     ).toInt
     val discoveryScript = Optional.ofNullable(settings.get(DISCOVERY_SCRIPT).orNull)
     val vendor = Optional.ofNullable(settings.get(VENDOR).orNull)
@@ -193,7 +194,7 @@ private[spark] object ResourceUtils extends Logging {
     listResourceIds(sparkConf, SPARK_TASK_PREFIX).map { resourceId =>
       val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
       val amountDouble = settings.getOrElse(AMOUNT,
-        throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
+        throw SparkCoreErrors.noAmountSpecifiedForResourceError(resourceId.resourceName)
       ).toDouble
       treqs.resource(resourceId.resourceName, amountDouble)
     }
@@ -205,7 +206,7 @@ private[spark] object ResourceUtils extends Logging {
     val rnamesAndAmounts = resourceIds.map { resourceId =>
       val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
       val amountDouble = settings.getOrElse(AMOUNT,
-        throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
+        throw SparkCoreErrors.noAmountSpecifiedForResourceError(resourceId.resourceName)
       ).toDouble
       (resourceId.resourceName, amountDouble)
     }

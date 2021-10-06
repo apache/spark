@@ -157,6 +157,14 @@ object SparkCoreErrors {
     new SparkException("Checkpoint dir must be specified.")
   }
 
+  def resourceNotExistInProfileIdError(resource: String, id: Int): Throwable = {
+    new SparkException(s"Resource $resource doesn't exist in profile id: $id")
+  }
+
+  def noAmountSpecifiedForResourceError(str: String): Throwable = {
+    new SparkException(s"You must specify an amount for ${str}")
+  }
+
   def askStandaloneSchedulerToShutDownExecutorsError(e: Exception): Throwable = {
     new SparkException("Error asking standalone scheduler to shut down executors", e)
   }
