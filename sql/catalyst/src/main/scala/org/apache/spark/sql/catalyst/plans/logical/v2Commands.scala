@@ -218,7 +218,10 @@ case class CreateV2Table(
     comment: Option[String],
     provider: Option[String],
     external: Boolean,
-    ignoreIfExists: Boolean) extends LeafCommand with V2CreateTablePlanX {
+    ignoreIfExists: Boolean) extends UnaryCommand with V2CreateTablePlanX {
+  override def child: LogicalPlan = name
+  override protected def withNewChildInternal(newChild: LogicalPlan): V2CreateTablePlanX =
+    copy(name = newChild)
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlanX = {
     this.copy(partitioning = rewritten)
   }
