@@ -514,6 +514,12 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     getMapSizesByExecutorId(shuffleId, 0, Int.MaxValue, reduceId, reduceId + 1)
   }
 
+  // For testing
+  def getPushBasedShuffleMapSizesByExecutorId(shuffleId: Int, reduceId: Int)
+      : MapSizesByExecutorId = {
+    getPushBasedShuffleMapSizesByExecutorId(shuffleId, 0, Int.MaxValue, reduceId, reduceId + 1)
+  }
+
   /**
    * Called from executors to get the server URIs and output sizes for each shuffle block that
    * needs to be read from a given range of map output partitions (startPartition is included but
