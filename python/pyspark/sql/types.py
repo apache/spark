@@ -711,7 +711,7 @@ class StructType(DataType):
             else:
                 raise ValueError("Unexpected tuple %r with StructType" % obj)
 
-    def fromInternal(self, obj: Tuple) -> Row:
+    def fromInternal(self, obj: Tuple) -> "Row":
         if obj is None:
             return
         if isinstance(obj, Row):
@@ -1597,14 +1597,14 @@ class Row(tuple):
     """
 
     @overload
-    def __new__(cls, *args: str) -> Row:
+    def __new__(cls, *args: str) -> "Row":
         ...
 
     @overload
-    def __new__(cls, **kwargs: Any) -> Row:
+    def __new__(cls, **kwargs: Any) -> "Row":
         ...
 
-    def __new__(cls, *args: Optional[str], **kwargs: Optional[Any]) -> Row:
+    def __new__(cls, *args: Optional[str], **kwargs: Optional[Any]) -> "Row":
         if args and kwargs:
             raise ValueError("Can not use both args "
                              "and kwargs to create Row")
@@ -1668,7 +1668,7 @@ class Row(tuple):
             return super(Row, self).__contains__(item)
 
     # let object acts like class
-    def __call__(self, *args: Any) -> Row:
+    def __call__(self, *args: Any) -> "Row":
         """create new Row object"""
         if len(args) > len(self):
             raise ValueError("Can not create Row with fields %s, expected %d values "
