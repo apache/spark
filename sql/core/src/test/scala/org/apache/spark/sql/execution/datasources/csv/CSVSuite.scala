@@ -29,6 +29,7 @@ import scala.collection.JavaConverters._
 import scala.util.Properties
 
 import com.univocity.parsers.common.TextParsingException
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
@@ -357,6 +358,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
       }
 
       assert(exception.getMessage.contains("Malformed CSV record"))
+      assert(ExceptionUtils.getRootCause(exception).isInstanceOf[RuntimeException])
     }
   }
 
