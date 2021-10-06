@@ -136,6 +136,9 @@ object ImageSchema {
       // Catch runtime exception because `ImageIO` may throw unexpected `RuntimeException`.
       // But do not catch the declared `IOException` (regarded as FileSystem failure)
       case _: RuntimeException => null
+      // However, we catch `IIOException` as this exception is used for signaling run-time
+      // failure of reading.
+      case _: javax.imageio.IIOException => null
     }
 
     if (img == null) {
