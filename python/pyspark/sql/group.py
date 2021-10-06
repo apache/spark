@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from __future__ import annotations
 
 import sys
 
@@ -33,7 +34,7 @@ __all__ = ["GroupedData"]
 
 
 def dfapi(f: Callable) -> Callable:
-    def _api(self: Type["GroupedData"]) -> DataFrame:
+    def _api(self: Type[GroupedData]) -> DataFrame:
         name = f.__name__
         jdf = getattr(self._jgd, name)()
         return DataFrame(jdf, self.sql_ctx)
@@ -43,7 +44,7 @@ def dfapi(f: Callable) -> Callable:
 
 
 def df_varargs_api(f: Callable) -> Callable:
-    def _api(self: Type["GroupedData"], *cols: Column) -> DataFrame:
+    def _api(self: Type[GroupedData], *cols: Column) -> DataFrame:
         name = f.__name__
         # TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
         jdf = getattr(self._jgd, name)(
@@ -238,7 +239,7 @@ class GroupedData(PandasGroupedOpsMixin):
         [Row(sum(age)=7, sum(height)=165)]
         """
 
-    def pivot(self, pivot_col: str, values: Optional[List["LiteralType"]] = None) -> "GroupedData":
+    def pivot(self, pivot_col: str, values: Optional[List[LiteralType]] = None) -> GroupedData:
         """
         Pivots a column of the current :class:`DataFrame` and perform the specified aggregation.
         There are two versions of pivot function: one that requires the caller to specify the list
