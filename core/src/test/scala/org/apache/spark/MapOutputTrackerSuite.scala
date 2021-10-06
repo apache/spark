@@ -406,6 +406,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   test("SPARK-32921: get map statuses from merged shuffle") {
     conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
     conf.set(IS_TESTING, true)
+    conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
     val hostname = "localhost"
     val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))
 
@@ -440,7 +441,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     val mapSizesByExecutorId = slaveTracker.getPushBasedShuffleMapSizesByExecutorId(10, 0)
     assert(mapSizesByExecutorId.enableBatchFetch === false)
-    assert(mapSizesByExecutorId.iter.toSeq ===
+    assert(slaveTracker.getMapSizesForMergeResult(10, 0).toSeq ===
       Seq((blockMgrId, ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000, 0),
         (ShuffleBlockId(10, 1, 0), size1000, 1), (ShuffleBlockId(10, 2, 0), size1000, 2),
         (ShuffleBlockId(10, 3, 0), size1000, 3)))))
