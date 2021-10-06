@@ -104,8 +104,8 @@ object QueryExecutionErrors {
   }
 
   def invalidInputSyntaxForNumericError(s: UTF8String): NumberFormatException = {
-    new SparkNumberFormatException(errorClass = "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE",
-      messageParameters = Array(s.toString))
+    new SparkNumberFormatException(errorClass = "INVALID_INPUT_SYNTAX_FOR_TYPE",
+      messageParameters = Array("numeric", s.toString))
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
@@ -1088,7 +1088,8 @@ object QueryExecutionErrors {
   }
 
   def invalidInputSyntaxForBooleanError(s: UTF8String): UnsupportedOperationException = {
-    new SparkUnsupportedOperationException("INVALID_INPUT_SYNTAX", Array("boolean", s.toString))
+    new SparkUnsupportedOperationException("INVALID_INPUT_SYNTAX_FOR_TYPE",
+      Array("boolean", s.toString))
   }
 
   def unsupportedOperandTypeForSizeFunctionError(dataType: DataType): Throwable = {
