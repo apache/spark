@@ -42,7 +42,6 @@ from typing import (
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import JavaClass, JavaGateway, JavaObject
 
-from pyspark import SparkContext
 from pyspark.serializers import CloudPickleSerializer
 
 T = TypeVar("T")
@@ -888,6 +887,8 @@ def _parse_datatype_string(s: str) -> DataType:
         ...
     ParseException:...
     """
+    from pyspark import SparkContext
+
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
 
     def from_ddl_schema(type_str: str) -> DataType:
