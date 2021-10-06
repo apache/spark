@@ -3329,7 +3329,7 @@ def octet_length(col: "ColumnOrName") -> Column:
         Byte length of the col
 
     Examples
-    -------
+    --------
     >>> from pyspark.sql.functions import octet_length
     >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']) \
             .select(octet_length('cat')).collect()
@@ -3355,7 +3355,7 @@ def bit_length(col: "ColumnOrName") -> Column:
         Bit length of the col
 
     Examples
-    -------
+    --------
     >>> from pyspark.sql.functions import bit_length
     >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']) \
             .select(bit_length('cat')).collect()
