@@ -240,6 +240,7 @@ MultiIndex Properties
    MultiIndex.nlevels
    MultiIndex.levshape
    MultiIndex.values
+   MultiIndex.dtypes
 
 MultiIndex components
 ~~~~~~~~~~~~~~~~~~~~~

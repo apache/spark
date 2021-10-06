@@ -6001,8 +6001,15 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assert_eq(expected_pdf, psdf1.combine_first(psdf2))
 
     def test_multi_index_dtypes(self):
+        # SPARK-36930: Support ps.MultiIndex.dtypes
         arrays = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
         pmidx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
+        psmidx = ps.from_pandas(pmidx)
+
+        self.assert_eq(psmidx.dtypes, pmidx.dtypes)
+
+        # multiple labels
+        pmidx = pd.MultiIndex.from_arrays(arrays, names=[("zero", "first"), ("one", "second")])
         psmidx = ps.from_pandas(pmidx)
 
         self.assert_eq(psmidx.dtypes, pmidx.dtypes)
