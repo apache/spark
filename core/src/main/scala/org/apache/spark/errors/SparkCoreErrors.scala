@@ -19,12 +19,17 @@ package org.apache.spark.errors
 
 import java.io.IOException
 import java.util.concurrent.TimeoutException
+import javax.ws.rs.WebApplicationException
+import javax.ws.rs.core.Response
+import javax.ws.rs.core.Response.Status
 
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkException, TaskNotSerializableException}
 import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleManager}
+import org.apache.spark.status.KVUtils.MetadataMismatchException
+import org.apache.spark.status.api.v1.{BadParameterException, ForbiddenException, NotFoundException, ServiceUnavailable}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, BlockSavedOnDecommissionedBlockManagerException, RDDBlockId, UnrecognizedBlockId}
 
 /**
@@ -155,6 +160,104 @@ object SparkCoreErrors {
 
   def mustSpecifyCheckpointDirError(): Throwable = {
     new SparkException("Checkpoint dir must be specified.")
+  }
+
+  def failToGetApplicationInfoError(): Throwable = {
+    new NoSuchElementException("Failed to get the application information. " +
+      "If you are starting up Spark, please wait a while until it's ready.")
+  }
+
+  def noStageWithIdError(stageId: Int): Throwable = {
+    new NoSuchElementException(s"No stage with id $stageId")
+  }
+
+  def failToGetApplicationSummaryError(): Throwable = {
+    new NoSuchElementException("Failed to get the application summary. " +
+      "If you are starting up Spark, please wait a while until it's ready.")
+  }
+
+  def metadataMismatchError(): Throwable = {
+    new MetadataMismatchException()
+  }
+
+  def indexOutOfBoundError(idx: Int): Throwable = {
+    new IndexOutOfBoundsException(idx.toString)
+  }
+
+  def notAuthorizedUserError(user: String): Throwable = {
+    new ForbiddenException(s"""user "$user" is not authorized""")
+  }
+
+  def appNotFoundError(appKey: String): Throwable = {
+    new NotFoundException(s"no such app: $appKey")
+  }
+
+  def unknownJobError(jobId: Int): Throwable = {
+    new NotFoundException(s"unknown job: $jobId")
+  }
+
+  def invalidExecutorIdError(url: String): Throwable = {
+    new BadParameterException(s"Invalid executorId: neither '$url' nor number.")
+  }
+
+  def threadDumpsNotAvailableError(): Throwable = {
+    new ServiceUnavailable("Thread dumps not available through the history server.")
+  }
+
+  def noThreadDumpAvailableError(): Throwable = {
+    new NotFoundException("No thread dump is available.")
+  }
+
+  def uriNotFoundError(uri: String): Throwable = {
+    new NotFoundException(uri)
+  }
+
+  def executorNotExistError(): Throwable = {
+    new NotFoundException("Executor does not exist.")
+  }
+
+  def executorIsNotActiveError(): Throwable = {
+    new BadParameterException("Executor is not active.")
+  }
+
+  def noRddFoundError(rddId: Int): Throwable = {
+    new NotFoundException(s"no rdd found w/ id $rddId")
+  }
+
+  def eventLogsNotAvailableError(appId: String): Throwable = {
+    new ServiceUnavailable(s"Event logs are not available for app: $appId.")
+  }
+
+  def unknownAppError(appId: String): Throwable = {
+    new NotFoundException(s"unknown app: $appId")
+  }
+
+  def unknownAppWithAttemptError(appId: String, attemptId: String): Throwable = {
+    new NotFoundException(s"unknown app $appId, attempt $attemptId")
+  }
+
+  def unknownStageError(stageId: Int): Throwable = {
+    new NotFoundException(s"unknown stage: $stageId")
+  }
+
+  def unknownAttemptForStageError(stageId: Int, msg: String): Throwable = {
+    new NotFoundException(s"unknown attempt for stage $stageId.  Found attempts: [$msg]")
+  }
+
+  def noTaskReportedMetricsError(stageId: Int, stageAttemptId: Int): Throwable = {
+    new NotFoundException(s"No tasks reported metrics for $stageId / $stageAttemptId yet.")
+  }
+
+  def badParameterError(param: String, exp: String, actual: String): Throwable = {
+    new BadParameterException(param, exp, actual)
+  }
+
+  def webApplicationError(originalValue: String): Throwable = {
+    new WebApplicationException(
+      Response.status(Status.BAD_REQUEST)
+        .entity("Couldn't parse date: " + originalValue)
+        .build()
+    )
   }
 
   def askStandaloneSchedulerToShutDownExecutorsError(e: Exception): Throwable = {

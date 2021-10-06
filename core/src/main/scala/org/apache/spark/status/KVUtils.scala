@@ -26,6 +26,7 @@ import scala.reflect.{classTag, ClassTag}
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.kvstore._
 
@@ -62,7 +63,7 @@ private[spark] object KVUtils extends Logging {
       db.setMetadata(metadata)
     } else if (dbMeta != metadata) {
       db.close()
-      throw new MetadataMismatchException()
+      throw SparkCoreErrors.metadataMismatchError()
     }
 
     db

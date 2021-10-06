@@ -28,6 +28,7 @@ import org.glassfish.jersey.server.ServerProperties
 import org.glassfish.jersey.servlet.ServletContainer
 
 import org.apache.spark.SecurityManager
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.ui.{SparkUI, UIUtils}
 
 /**
@@ -137,14 +138,14 @@ private[v1] trait BaseAppResource extends ApiRequestContext {
       uiRoot.withSparkUI(appId, Option(attemptId)) { ui =>
         val user = httpRequest.getRemoteUser()
         if (!ui.securityManager.checkUIViewPermissions(user)) {
-          throw new ForbiddenException(raw"""user "$user" is not authorized""")
+          throw SparkCoreErrors.notAuthorizedUserError(user)
         }
         fn(ui)
       }
     } catch {
       case _: NoSuchElementException =>
         val appKey = Option(attemptId).map(appId + "/" + _).getOrElse(appId)
-        throw new NotFoundException(s"no such app: $appKey")
+        throw SparkCoreErrors.appNotFoundError(appKey)
     }
   }
 
@@ -152,26 +153,26 @@ private[v1] trait BaseAppResource extends ApiRequestContext {
     try {
       val user = httpRequest.getRemoteUser()
       if (!uiRoot.checkUIViewPermissions(appId, Option(attemptId), user)) {
-        throw new ForbiddenException(raw"""user "$user" is not authorized""")
+        throw SparkCoreErrors.notAuthorizedUserError(user)
       }
     } catch {
       case _: NoSuchElementException =>
         val appKey = Option(attemptId).map(appId + "/" + _).getOrElse(appId)
-        throw new NotFoundException(s"no such app: $appKey")
+        throw SparkCoreErrors.appNotFoundError(appKey)
     }
   }
 }
 
-private[v1] class ForbiddenException(msg: String) extends WebApplicationException(
+private[spark] class ForbiddenException(msg: String) extends WebApplicationException(
     UIUtils.buildErrorResponse(Response.Status.FORBIDDEN, msg))
 
-private[v1] class NotFoundException(msg: String) extends WebApplicationException(
+private[spark] class NotFoundException(msg: String) extends WebApplicationException(
     UIUtils.buildErrorResponse(Response.Status.NOT_FOUND, msg))
 
-private[v1] class ServiceUnavailable(msg: String) extends WebApplicationException(
+private[spark] class ServiceUnavailable(msg: String) extends WebApplicationException(
     UIUtils.buildErrorResponse(Response.Status.SERVICE_UNAVAILABLE, msg))
 
-private[v1] class BadParameterException(msg: String) extends WebApplicationException(
+private[spark] class BadParameterException(msg: String) extends WebApplicationException(
     UIUtils.buildErrorResponse(Response.Status.BAD_REQUEST, msg)) {
   def this(param: String, exp: String, actual: String) = {
     this(raw"""Bad value for parameter "$param".  Expected a $exp, got "$actual"""")

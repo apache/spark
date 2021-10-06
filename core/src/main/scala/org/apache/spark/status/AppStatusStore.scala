@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.FallbackStorage.FALLBACK_BLOCK_MANAGER_ID
 import org.apache.spark.ui.scope._
@@ -48,8 +49,7 @@ private[spark] class AppStatusStore(
       }
     } catch {
       case _: NoSuchElementException =>
-        throw new NoSuchElementException("Failed to get the application information. " +
-          "If you are starting up Spark, please wait a while until it's ready.")
+        throw SparkCoreErrors.failToGetApplicationInfoError()
     }
   }
 
@@ -157,7 +157,7 @@ private[spark] class AppStatusStore(
       if (it.hasNext()) {
         it.next().info
       } else {
-        throw new NoSuchElementException(s"No stage with id $stageId")
+        throw SparkCoreErrors.noStageWithIdError(stageId)
       }
     } finally {
       it.close()
@@ -670,8 +670,7 @@ private[spark] class AppStatusStore(
       store.read(classOf[AppSummary], classOf[AppSummary].getName())
     } catch {
       case _: NoSuchElementException =>
-        throw new NoSuchElementException("Failed to get the application summary. " +
-          "If you are starting up Spark, please wait a while until it's ready.")
+        throw SparkCoreErrors.failToGetApplicationSummaryError()
     }
   }
 
