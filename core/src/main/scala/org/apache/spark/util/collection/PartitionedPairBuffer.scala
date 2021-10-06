@@ -19,6 +19,7 @@ package org.apache.spark.util.collection
 
 import java.util.Comparator
 
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.collection.WritablePartitionedPairCollection._
 
@@ -87,7 +88,7 @@ private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
 
     override def next(): ((Int, K), V) = {
       if (!hasNext) {
-        throw new NoSuchElementException
+        throw SparkCoreErrors.noSuchElementError()
       }
       val pair = (data(2 * pos).asInstanceOf[(Int, K)], data(2 * pos + 1).asInstanceOf[V])
       pos += 1

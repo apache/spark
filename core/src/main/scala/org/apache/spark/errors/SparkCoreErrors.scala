@@ -17,7 +17,8 @@
 
 package org.apache.spark.errors
 
-import java.io.IOException
+import java.io.{EOFException, File, IOException}
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeoutException
 
 import org.apache.hadoop.fs.Path
@@ -26,6 +27,7 @@ import org.apache.spark.{SparkException, TaskNotSerializableException}
 import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleManager}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, BlockSavedOnDecommissionedBlockManagerException, RDDBlockId, UnrecognizedBlockId}
+import org.apache.spark.util.ReturnStatementInClosureException
 
 /**
  * Object for grouping error messages from (most) exceptions thrown during query execution.
@@ -77,10 +79,6 @@ object SparkCoreErrors {
          |unpersisted. If this problem persists, you may consider using `rdd.checkpoint()`
          |instead, which is slower than local checkpointing but more fault-tolerant.
        """.stripMargin.replaceAll("\n", " "))
-  }
-
-  def endOfStreamError(): Throwable = {
-    new java.util.NoSuchElementException("End of stream")
   }
 
   def cannotUseMapSideCombiningWithArrayKeyError(): Throwable = {
@@ -155,6 +153,155 @@ object SparkCoreErrors {
 
   def mustSpecifyCheckpointDirError(): Throwable = {
     new SparkException("Checkpoint dir must be specified.")
+  }
+
+  def endOfIteratorError(): Throwable = {
+    new NoSuchElementException("End of iterator")
+  }
+
+  def medianHeapIsEmptyError(): Throwable = {
+    new NoSuchElementException("MedianHeap is empty.")
+  }
+
+  def indexOutOfBoundsError(): Throwable = {
+    new IndexOutOfBoundsException
+  }
+
+  def unsupportedOperationError(message: String): Throwable = {
+    new UnsupportedOperationException(message)
+  }
+
+  def bufferMoreThanArrayMaxElementsError(arrayMax: Int): Throwable = {
+    new UnsupportedOperationException(s"Can't grow buffer past $arrayMax elements")
+  }
+
+  def shouldNotReachHereError(): Throwable = {
+    new RuntimeException("Should never reach here.")
+  }
+
+  def bufferSizeExceedsMaximumArraySizeError(size: Long): Throwable = {
+    new UnsupportedOperationException(
+      s"cannot call toArray because buffer size ($size bytes) exceeds maximum array size")
+  }
+
+  def rootDirDoesNotExistError(rootDir: String): Throwable = {
+    new RuntimeException(s"${rootDir} does not exist." +
+      s" Please create this dir in order to persist driver logs")
+  }
+
+  def cloneFunctionIsNotImplementedError(): Throwable = {
+    new UnsupportedOperationException("clone() is not implemented.")
+  }
+
+  def accumulatorNotRegisteredError(): Throwable = {
+    new UnsupportedOperationException("Accumulator must be registered before send to executor")
+  }
+
+  def cannotMergeError(left: String, right: String): Throwable = {
+    new UnsupportedOperationException(s"Cannot merge $left with $right")
+  }
+
+  def taskNotSerializableError(ex: Exception): Throwable = {
+    new SparkException("Task not serializable", ex)
+  }
+
+  def returnStatementInClosureError(): Throwable = {
+    new ReturnStatementInClosureException
+  }
+
+  def cannotResolveToMultipleFilesError(base: String, resolved: String): Throwable = {
+    new SparkException(s"$base resolves ambiguously to multiple files: $resolved")
+  }
+
+  def keyIsNullError(): Throwable = {
+    new NullPointerException("key must not be null")
+  }
+
+  def endOfStreamError(): Throwable = {
+    new NoSuchElementException("End of stream")
+  }
+
+  def endOfFileError(): Throwable = {
+    new EOFException("End of file before fully reading buffer")
+  }
+
+  def cannotWriteBufferToOutputSteamError(): Throwable = {
+    new IOException("Could not fully write buffer to output stream")
+  }
+
+  def executorAlreadyShutdownError(): Throwable = {
+    new RejectedExecutionException("Executor already shutdown")
+  }
+
+  def exceptionThrownInAwaitResultError(t: Throwable): Throwable = {
+    new SparkException("Exception thrown in awaitResult: ", t)
+  }
+
+  def failToCreateTempDirectoryError(root: String, maxAttempts: Int): Throwable = {
+    new IOException("Failed to create a temp directory (under " + root + ") after " +
+      maxAttempts + " attempts!")
+  }
+
+  def failToDeleteFileError(
+      destFilePath: String,
+      sourceFilePath: String): Throwable = {
+    new SparkException(s"Failed to delete $destFilePath while attempting to " +
+      s"overwrite it with $sourceFilePath")
+  }
+
+  def fileExistAndNotMatchContentsError(destFile: File, url: String): Throwable = {
+    new SparkException(s"File $destFile exists and does not match contents of $url")
+  }
+
+  def failToCreateDirectoryError(dest: String): Throwable = {
+    new IOException(s"Failed to create directory $dest")
+  }
+
+  def failToGetTempDirectoryError(dir: String): Throwable = {
+    new IOException(s"Failed to get a temp directory under [$dir].")
+  }
+
+  def yarnLocalDirsCannotBeEmptyError(): Throwable = {
+    new Exception("Yarn Local dirs can't be empty")
+  }
+
+  def processExitedError(command: Seq[String], exitCode: Int): Throwable = {
+    new SparkException(s"Process $command exited with code $exitCode")
+  }
+
+  def ioError(e: Throwable): Throwable = {
+    new IOException(e)
+  }
+
+  def sourceMustBeAbsoluteError(): Throwable = {
+    new IOException("Source must be absolute")
+  }
+
+  def destinationMustBeRelativeError(): Throwable = {
+    new IOException("Destination must be relative")
+  }
+
+  def failToLoadSparkPropertiesError(filename: String, e: Throwable): Throwable = {
+    new SparkException(s"Failed when loading Spark properties from $filename", e)
+  }
+
+  def failToStartServiceOnPortError(serviceString: String, startPort: Int): Throwable = {
+    new SparkException(s"Failed to start service$serviceString on port $startPort")
+  }
+
+  def invalidMasterURLError(sparkUrl: String, e: Throwable = null): Throwable = {
+    new SparkException(s"Invalid master URL: $sparkUrl", e)
+  }
+
+  def missingZeroArgumentConstructorOrSingleArgumentConstructorError(name: String): Throwable = {
+    new SparkException(
+      s"""$name did not have a zero-argument constructor or a
+         |single-argument constructor that accepts SparkConf. Note: if the class is
+         |defined inside of another Scala class, then its constructors may accept an
+         |implicit parameter that references the enclosing class; in this case, you must
+         |define the class as a top-level class in order to prevent this extra
+         |parameter from breaking Spark's ability to find a valid constructor.
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   def askStandaloneSchedulerToShutDownExecutorsError(e: Exception): Throwable = {

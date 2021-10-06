@@ -30,6 +30,7 @@ import org.apache.log4j.{FileAppender => Log4jFileAppender, _}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
@@ -107,8 +108,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       val rootDir = conf.get(DRIVER_LOG_DFS_DIR).get
       val fileSystem: FileSystem = new Path(rootDir).getFileSystem(hadoopConf)
       if (!fileSystem.exists(new Path(rootDir))) {
-        throw new RuntimeException(s"${rootDir} does not exist." +
-          s" Please create this dir in order to persist driver logs")
+        throw SparkCoreErrors.rootDirDoesNotExistError(rootDir)
       }
       val dfsLogFile: String = FileUtils.getFile(rootDir, appId
         + DriverLogger.DRIVER_LOG_FILE_SUFFIX).getAbsolutePath()

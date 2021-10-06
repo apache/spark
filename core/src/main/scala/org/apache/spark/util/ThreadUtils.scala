@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 import org.apache.spark.SparkException
+import org.apache.spark.errors.SparkCoreErrors
 
 private[spark] object ThreadUtils {
 
@@ -90,7 +91,7 @@ private[spark] object ThreadUtils {
     override def execute(command: Runnable): Unit = {
       lock.lock()
       try {
-        if (isShutdown()) throw new RejectedExecutionException("Executor already shutdown")
+        if (isShutdown()) throw SparkCoreErrors.executorAlreadyShutdownError()
         runningTasks += 1
       } finally {
         lock.unlock()
@@ -298,7 +299,7 @@ private[spark] object ThreadUtils {
       // the exception.
       case NonFatal(t)
           if !t.isInstanceOf[TimeoutException] =>
-        throw new SparkException("Exception thrown in awaitResult: ", t)
+        throw SparkCoreErrors.exceptionThrownInAwaitResultError(t)
     }
   }
   // scalastyle:on awaitresult
@@ -315,7 +316,7 @@ private[spark] object ThreadUtils {
         throw e.throwable
       case NonFatal(t)
         if !t.isInstanceOf[TimeoutException] =>
-        throw new SparkException("Exception thrown in awaitResult: ", t)
+        throw SparkCoreErrors.exceptionThrownInAwaitResultError(t)
     }
   }
 
@@ -335,7 +336,7 @@ private[spark] object ThreadUtils {
     } catch {
       // TimeoutException is thrown in the current thread, so not need to warp the exception.
       case NonFatal(t) if !t.isInstanceOf[TimeoutException] =>
-        throw new SparkException("Exception thrown in awaitResult: ", t)
+        throw SparkCoreErrors.exceptionThrownInAwaitResultError(t)
     }
   }
   // scalastyle:on awaitready

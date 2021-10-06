@@ -19,6 +19,8 @@ package org.apache.spark.util
 
 import java.util.concurrent.ConcurrentHashMap
 
+import org.apache.spark.errors.SparkCoreErrors
+
 /**
  * A special locking mechanism to provide locking with a given key. By providing the same key
  * (identity is tested using the `equals` method), we ensure there is only one `func` running at
@@ -57,7 +59,7 @@ private[spark] class KeyLock[K] {
    */
   def withLock[T](key: K)(func: => T): T = {
     if (key == null) {
-      throw new NullPointerException("key must not be null")
+      throw SparkCoreErrors.keyIsNullError()
     }
     acquireLock(key)
     try {

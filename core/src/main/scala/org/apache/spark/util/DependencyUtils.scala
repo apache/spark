@@ -24,8 +24,9 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkSubmitUtils
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
@@ -271,8 +272,8 @@ private[spark] object DependencyUtils extends Logging {
     Utils.stringToSeq(paths).flatMap { path =>
       val (base, fragment) = splitOnFragment(path)
       (resolveGlobPath(base, hadoopConf), fragment) match {
-        case (resolved, Some(_)) if resolved.length > 1 => throw new SparkException(
-            s"${base.toString} resolves ambiguously to multiple files: ${resolved.mkString(",")}")
+        case (resolved, Some(_)) if resolved.length > 1 => throw SparkCoreErrors
+          .cannotResolveToMultipleFilesError(base.toString, resolved.mkString(","))
         case (resolved, Some(namedAs)) => resolved.map(_ + "#" + namedAs)
         case (resolved, _) => resolved
       }

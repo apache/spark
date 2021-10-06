@@ -19,6 +19,7 @@ package org.apache.spark.util.collection
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.unsafe.array.ByteArrayMethods
 
 /**
@@ -42,7 +43,7 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
 
   def apply(position: Int): T = {
     if (position < 0 || position >= curSize) {
-      throw new IndexOutOfBoundsException
+      throw SparkCoreErrors.indexOutOfBoundsError()
     }
     if (position == 0) {
       element0
@@ -55,7 +56,7 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
 
   private def update(position: Int, value: T): Unit = {
     if (position < 0 || position >= curSize) {
-      throw new IndexOutOfBoundsException
+      throw SparkCoreErrors.indexOutOfBoundsError()
     }
     if (position == 0) {
       element0 = value
@@ -117,7 +118,7 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
     override def hasNext: Boolean = pos < curSize
     override def next(): T = {
       if (!hasNext) {
-        throw new NoSuchElementException
+        throw SparkCoreErrors.noSuchElementError()
       }
       pos += 1
       apply(pos - 1)
@@ -130,7 +131,7 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
     val newArraySize = newSize - 2
     val arrayMax = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
     if (newSize < 0 || newArraySize > arrayMax) {
-      throw new UnsupportedOperationException(s"Can't grow buffer past $arrayMax elements")
+      throw SparkCoreErrors.bufferMoreThanArrayMaxElementsError(arrayMax)
     }
     val capacity = if (otherElements != null) otherElements.length else 0
     if (newArraySize > capacity) {

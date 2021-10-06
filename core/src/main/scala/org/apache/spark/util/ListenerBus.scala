@@ -26,6 +26,7 @@ import scala.util.control.NonFatal
 import com.codahale.metrics.Timer
 
 import org.apache.spark.SparkEnv
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.scheduler.EventLoggingListener
 import org.apache.spark.scheduler.SparkListenerEnvironmentUpdate
@@ -118,7 +119,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
         if (Thread.interrupted()) {
           // We want to throw the InterruptedException right away so we can associate the interrupt
           // with this listener, as opposed to waiting for a queue.take() etc. to detect it.
-          throw new InterruptedException()
+          throw SparkCoreErrors.interruptedError()
         }
       } catch {
         case ie: InterruptedException =>

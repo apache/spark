@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import org.apache.spark.errors.SparkCoreErrors
+
 /** Provides a basic/boilerplate Iterator implementation. */
 private[spark] abstract class NextIterator[U] extends Iterator[U] {
 
@@ -82,7 +84,7 @@ private[spark] abstract class NextIterator[U] extends Iterator[U] {
 
   override def next(): U = {
     if (!hasNext) {
-      throw new NoSuchElementException("End of stream")
+      throw SparkCoreErrors.endOfStreamError()
     }
     gotNext = false
     nextValue

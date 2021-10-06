@@ -22,6 +22,7 @@ import scala.reflect._
 import com.google.common.hash.Hashing
 
 import org.apache.spark.annotation.Private
+import org.apache.spark.errors.SparkCoreErrors
 
 /**
  * A simple, fast hash set optimized for non-null insertion-only use case, where keys are never
@@ -155,7 +156,7 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
         delta += 1
       }
     }
-    throw new RuntimeException("Should never reach here.")
+    throw SparkCoreErrors.shouldNotReachHereError()
   }
 
   /**
@@ -189,7 +190,7 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
         delta += 1
       }
     }
-    throw new RuntimeException("Should never reach here.")
+    throw SparkCoreErrors.shouldNotReachHereError()
   }
 
   /** Return the value at the specified position. */

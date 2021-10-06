@@ -28,6 +28,7 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer.{DeserializationStream, Serializer, SerializerManager}
@@ -382,7 +383,7 @@ class ExternalAppendOnlyMap[K, V, C](
      */
     override def next(): (K, C) = {
       if (mergeHeap.isEmpty) {
-        throw new NoSuchElementException
+        throw SparkCoreErrors.noSuchElementError()
       }
       // Select a key from the StreamBuffer that holds the lowest key hash
       val minBuffer = mergeHeap.dequeue()

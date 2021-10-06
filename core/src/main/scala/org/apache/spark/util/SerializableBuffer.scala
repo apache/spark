@@ -17,9 +17,11 @@
 
 package org.apache.spark.util
 
-import java.io.{EOFException, IOException, ObjectInputStream, ObjectOutputStream}
+import java.io.{ObjectInputStream, ObjectOutputStream}
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
+
+import org.apache.spark.errors.SparkCoreErrors
 
 /**
  * A wrapper around a java.nio.ByteBuffer that is serializable through Java serialization, to make
@@ -37,7 +39,7 @@ class SerializableBuffer(@transient var buffer: ByteBuffer) extends Serializable
     while (amountRead < length) {
       val ret = channel.read(buffer)
       if (ret == -1) {
-        throw new EOFException("End of file before fully reading buffer")
+        throw SparkCoreErrors.endOfFileError()
       }
       amountRead += ret
     }
@@ -47,7 +49,7 @@ class SerializableBuffer(@transient var buffer: ByteBuffer) extends Serializable
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     out.writeInt(buffer.limit())
     if (Channels.newChannel(out).write(buffer) != buffer.limit()) {
-      throw new IOException("Could not fully write buffer to output stream")
+      throw SparkCoreErrors.cannotWriteBufferToOutputSteamError()
     }
     buffer.rewind() // Allow us to write it again later
   }

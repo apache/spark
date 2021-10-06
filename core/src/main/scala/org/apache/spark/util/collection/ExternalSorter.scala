@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import com.google.common.io.ByteStreams
 
 import org.apache.spark._
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer._
@@ -380,7 +381,7 @@ private[spark] class ExternalSorter[K, V, C](
 
       override def next(): Product2[K, C] = {
         if (!hasNext) {
-          throw new NoSuchElementException
+          throw SparkCoreErrors.noSuchElementError()
         }
         val firstBuf = heap.dequeue()
         val firstPair = firstBuf.next()
@@ -419,7 +420,7 @@ private[spark] class ExternalSorter[K, V, C](
 
         override def next(): Iterator[Product2[K, C]] = {
           if (!hasNext) {
-            throw new NoSuchElementException
+            throw SparkCoreErrors.noSuchElementError()
           }
           keys.clear()
           combiners.clear()
@@ -459,7 +460,7 @@ private[spark] class ExternalSorter[K, V, C](
 
         override def next(): Product2[K, C] = {
           if (!hasNext) {
-            throw new NoSuchElementException
+            throw SparkCoreErrors.noSuchElementError()
           }
           val elem = sorted.next()
           val k = elem._1
@@ -600,7 +601,7 @@ private[spark] class ExternalSorter[K, V, C](
 
       override def next(): Product2[K, C] = {
         if (!hasNext) {
-          throw new NoSuchElementException
+          throw SparkCoreErrors.noSuchElementError()
         }
         val item = nextItem
         nextItem = null
@@ -850,7 +851,7 @@ private[spark] class ExternalSorter[K, V, C](
 
     override def next(): Product2[K, C] = {
       if (!hasNext) {
-        throw new NoSuchElementException
+        throw SparkCoreErrors.noSuchElementError()
       }
       val elem = data.next()
       (elem._1._2, elem._2)

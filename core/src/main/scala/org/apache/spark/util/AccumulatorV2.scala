@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.util.AccumulatorContext.internOption
@@ -161,8 +162,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   final protected def writeReplace(): Any = {
     if (atDriverSide) {
       if (!isRegistered) {
-        throw new UnsupportedOperationException(
-          "Accumulator must be registered before send to executor")
+        throw SparkCoreErrors.accumulatorNotRegisteredError()
       }
       val copyAcc = copyAndReset()
       assert(copyAcc.isZero, "copyAndReset must return a zero value copy")
@@ -372,8 +372,7 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
       _sum += o.sum
       _count += o.count
     case _ =>
-      throw new UnsupportedOperationException(
-        s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+      throw SparkCoreErrors.cannotMergeError(this.getClass.getName, other.getClass.getName)
   }
 
   private[spark] def setValue(newValue: Long): Unit = _sum = newValue
@@ -450,8 +449,7 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
       _sum += o.sum
       _count += o.count
     case _ =>
-      throw new UnsupportedOperationException(
-        s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+      throw SparkCoreErrors.cannotMergeError(this.getClass.getName, other.getClass.getName)
   }
 
   private[spark] def setValue(newValue: Double): Unit = _sum = newValue
@@ -496,8 +494,7 @@ class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
 
   override def merge(other: AccumulatorV2[T, java.util.List[T]]): Unit = other match {
     case o: CollectionAccumulator[T] => this.synchronized(getOrCreate.addAll(o.value))
-    case _ => throw new UnsupportedOperationException(
-      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+    case _ => throw SparkCoreErrors.cannotMergeError(this.getClass.getName, other.getClass.getName)
   }
 
   override def value: java.util.List[T] = this.synchronized {

@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 import org.apache.commons.math3.distribution.PoissonDistribution
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.errors.SparkCoreErrors
 
 /**
  * :: DeveloperApi ::
@@ -49,7 +50,7 @@ trait RandomSampler[T, U] extends Pseudorandom with Cloneable with Serializable 
 
   /** return a copy of the RandomSampler object */
   override def clone: RandomSampler[T, U] =
-    throw new UnsupportedOperationException("clone() is not implemented.")
+    throw SparkCoreErrors.cloneFunctionIsNotImplementedError()
 }
 
 private[spark]

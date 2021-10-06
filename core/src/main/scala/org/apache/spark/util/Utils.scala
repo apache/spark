@@ -62,6 +62,7 @@ import org.slf4j.Logger
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Streaming._
@@ -312,8 +313,7 @@ private[spark] object Utils extends Logging {
     while (dir == null) {
       attempts += 1
       if (attempts > maxAttempts) {
-        throw new IOException("Failed to create a temp directory (under " + root + ") after " +
-          maxAttempts + " attempts!")
+        throw SparkCoreErrors.failToCreateTempDirectoryError(root, maxAttempts)
       }
       try {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID.toString)
@@ -679,16 +679,11 @@ private[spark] object Utils extends Logging {
             s"File $destFile exists and does not match contents of $url, replacing it with $url"
           )
           if (!destFile.delete()) {
-            throw new SparkException(
-              "Failed to delete %s while attempting to overwrite it with %s".format(
-                destFile.getAbsolutePath,
-                sourceFile.getAbsolutePath
-              )
-            )
+            throw SparkCoreErrors.failToDeleteFileError(destFile.getAbsolutePath,
+              sourceFile.getAbsolutePath)
           }
         } else {
-          throw new SparkException(
-            s"File $destFile exists and does not match contents of $url")
+          throw SparkCoreErrors.fileExistAndNotMatchContentsError(destFile, url)
         }
       } else {
         // Do nothing if the file contents are the same, i.e. this file has been copied
@@ -732,7 +727,7 @@ private[spark] object Utils extends Logging {
   private def copyRecursive(source: File, dest: File): Unit = {
     if (source.isDirectory) {
       if (!dest.mkdir()) {
-        throw new IOException(s"Failed to create directory ${dest.getPath}")
+        throw SparkCoreErrors.failToCreateDirectoryError(dest.getPath)
       }
       val subfiles = source.listFiles()
       subfiles.foreach(f => copyRecursive(f, new File(dest, f.getName)))
@@ -806,7 +801,7 @@ private[spark] object Utils extends Logging {
       fileOverwrite: Boolean,
       filename: Option[String] = None): Unit = {
     if (!targetDir.exists() && !targetDir.mkdir()) {
-      throw new IOException(s"Failed to create directory ${targetDir.getPath}")
+      throw SparkCoreErrors.failToCreateDirectoryError(targetDir.getPath)
     }
     val dest = new File(targetDir, filename.getOrElse(path.getName))
     if (fs.isFile(path)) {
@@ -860,8 +855,7 @@ private[spark] object Utils extends Logging {
     val localRootDirs = getOrCreateLocalRootDirs(conf)
     if (localRootDirs.isEmpty) {
       val configuredLocalDirs = getConfiguredLocalDirs(conf)
-      throw new IOException(
-        s"Failed to get a temp directory under [${configuredLocalDirs.mkString(",")}].")
+      throw SparkCoreErrors.failToGetTempDirectoryError(configuredLocalDirs.mkString(","))
     } else {
       localRootDirs(scala.util.Random.nextInt(localRootDirs.length))
     }
@@ -964,7 +958,7 @@ private[spark] object Utils extends Logging {
     val localDirs = Option(conf.getenv("LOCAL_DIRS")).getOrElse("")
 
     if (localDirs.isEmpty) {
-      throw new Exception("Yarn Local dirs can't be empty")
+      throw SparkCoreErrors.yarnLocalDirsCannotBeEmptyError()
     }
     localDirs
   }
@@ -1358,7 +1352,7 @@ private[spark] object Utils extends Logging {
     stdoutThread.join()   // Wait for it to finish reading output
     if (exitCode != 0) {
       logError(s"Process $command exited with code $exitCode: $output")
-      throw new SparkException(s"Process $command exited with code $exitCode")
+      throw SparkCoreErrors.processExitedError(command, exitCode)
     }
     output.toString
   }
@@ -1438,7 +1432,7 @@ private[spark] object Utils extends Logging {
         throw e
       case NonFatal(e) =>
         logError("Exception encountered", e)
-        throw new IOException(e)
+        throw SparkCoreErrors.ioError(e)
     }
   }
 
@@ -1923,10 +1917,10 @@ private[spark] object Utils extends Logging {
    */
   def symlink(src: File, dst: File): Unit = {
     if (!src.isAbsolute()) {
-      throw new IOException("Source must be absolute")
+      throw SparkCoreErrors.sourceMustBeAbsoluteError()
     }
     if (dst.isAbsolute()) {
-      throw new IOException("Destination must be relative")
+      throw SparkCoreErrors.destinationMustBeRelativeError()
     }
     Files.createSymbolicLink(dst.toPath, src.toPath)
   }
@@ -2195,7 +2189,7 @@ private[spark] object Utils extends Logging {
 
     } catch {
       case e: IOException =>
-        throw new SparkException(s"Failed when loading Spark properties from $filename", e)
+        throw SparkCoreErrors.failToLoadSparkPropertiesError(filename, e)
     } finally {
       inReader.close()
     }
@@ -2392,7 +2386,7 @@ private[spark] object Utils extends Logging {
       }
     }
     // Should never happen
-    throw new SparkException(s"Failed to start service$serviceString on port $startPort")
+    throw SparkCoreErrors.failToStartServiceOnPortError(serviceString, startPort)
   }
 
   /**
@@ -2498,12 +2492,12 @@ private[spark] object Utils extends Logging {
         uri.getFragment != null ||
         uri.getQuery != null ||
         uri.getUserInfo != null) {
-        throw new SparkException("Invalid master URL: " + sparkUrl)
+        throw SparkCoreErrors.invalidMasterURLError(sparkUrl)
       }
       (host, port)
     } catch {
       case e: java.net.URISyntaxException =>
-        throw new SparkException("Invalid master URL: " + sparkUrl, e)
+        throw SparkCoreErrors.invalidMasterURLError(sparkUrl, e)
     }
   }
 
@@ -2888,13 +2882,7 @@ private[spark] object Utils extends Logging {
         Some(ext)
       } catch {
         case _: NoSuchMethodException =>
-          throw new SparkException(
-            s"$name did not have a zero-argument constructor or a" +
-              " single-argument constructor that accepts SparkConf. Note: if the class is" +
-              " defined inside of another Scala class, then its constructors may accept an" +
-              " implicit parameter that references the enclosing class; in this case, you must" +
-              " define the class as a top-level class in order to prevent this extra" +
-              " parameter from breaking Spark's ability to find a valid constructor.")
+          throw SparkCoreErrors.missingZeroArgumentConstructorOrSingleArgumentConstructorError(name)
 
         case e: InvocationTargetException =>
           e.getCause() match {
