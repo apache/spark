@@ -39,7 +39,6 @@ from pyspark.sql.types import (
     NumericType,
     StringType,
     StructType,
-    StructField,
     TimestampType,
     TimestampNTZType,
     UserDefinedType,
@@ -417,19 +416,23 @@ class DataTypeOps(object, metaclass=ABCMeta):
             # |                4|false|
             # +-----------------+-----+
             sdf_new = sdf_new.select("col.*")
+
+            index_spark_columns = [
+                scol_for(sdf_new, index_scol_name) for index_scol_name in index_scol_names
+            ]
+            data_spark_columns = [scol_for(sdf_new, scol_name)]
+
             internal = left._internal.copy(
                 spark_frame=sdf_new,
-                index_spark_columns=[
-                    scol_for(sdf_new, index_scol_name) for index_scol_name in index_scol_names
+                index_spark_columns=index_spark_columns,
+                data_spark_columns=data_spark_columns,
+                index_fields=[
+                    InternalField.from_struct_field(index_field)
+                    for index_field in sdf_new.select(index_spark_columns).schema.fields
                 ],
-                data_spark_columns=[scol_for(sdf_new, scol_name)],
                 data_fields=[
                     InternalField.from_struct_field(
-                        StructField(
-                            scol_name,
-                            BooleanType(),
-                            nullable=left._internal.data_fields[0].nullable,
-                        )
+                        sdf_new.select(data_spark_columns).schema.fields[0]
                     )
                 ],
             )
