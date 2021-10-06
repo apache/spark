@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.parquet.column.ColumnDescriptor
-
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.parquet.column.ColumnDescriptor
 import org.apache.parquet.io.ParquetDecodingException
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema._
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type._
 
 import org.apache.spark.SparkException
@@ -228,7 +227,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
           primitiveParquetType(DoubleType, PrimitiveTypeName.DOUBLE, Repetition.REQUIRED,
             0, 0, Seq("_5")),
           primitiveParquetType(BinaryType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
-            0, 1, Seq("_6")),
+            0, 1, Seq("_6"))
         )))
   )
 
@@ -598,11 +597,11 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
                 primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
                   1, 3, Seq("_1", "key_value", "key", "_2"),
                   logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
-              ),
+            ),
             primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
               1, 3, Seq("_1", "key_value", "value"),
               logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
-          )))))
+        )))))
 
   testSchemaInference[Tuple1[(Int, String)]](
     "struct",
@@ -751,9 +750,8 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
                           Seq("_1", "key_value", "value", "_2", "bag", "array", "_1")),
                         primitiveParquetType(DoubleType, PrimitiveTypeName.DOUBLE,
                           Repetition.REQUIRED, 2, 6,
-                          Seq("_1", "key_value", "value", "_2", "bag", "array", "_2")),
-                      ))),
-                ))),
+                          Seq("_1", "key_value", "value", "_2", "bag", "array", "_2"))
+                      ))))))
           ))))))
 
   testSchemaInference[Tuple1[Map[Int, (String, Seq[(Int, Double)])]]](
@@ -860,9 +858,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
                           Seq("_1", "key_value", "value", "_2", "list", "element", "_1")),
                         primitiveParquetType(DoubleType, PrimitiveTypeName.DOUBLE,
                           Repetition.REQUIRED, 2, 6,
-                          Seq("_1", "key_value", "value", "_2", "list", "element", "_2")),
-                    ))),
-              ))),
+                          Seq("_1", "key_value", "value", "_2", "list", "element", "_2"))))))))
         ))))))
 
   testSchemaInference[(Option[Int], Map[Int, Option[Double]])](
@@ -911,8 +907,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
             primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
               1, 2, Seq("_2", "key_value", "key")),
             primitiveParquetType(DoubleType, PrimitiveTypeName.DOUBLE, Repetition.OPTIONAL,
-              1, 3, Seq("_2", "key_value", "value")),
-          )))
+              1, 3, Seq("_2", "key_value", "value")))))
     )))
 }
 
@@ -1588,7 +1583,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
               1, 2, Seq("f1", "key_value", "key")),
             primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
               1, 2, Seq("f1", "key_value", "value"),
-              logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())),
+              logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType()))
           ))))))
 
   testParquetToCatalyst(
@@ -1633,7 +1628,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
               1, 2, Seq("f1", "key_value", "num")),
             primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
               1, 2, Seq("f1", "key_value", "str"),
-              logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())),
+              logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType()))
           ))))))
 
   testParquetToCatalyst(
