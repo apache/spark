@@ -38,6 +38,6 @@ case class PartialResultException(
  * @param cause the actual exception about why the record is bad and can't be parsed.
  */
 case class BadRecordException(
-    record: () => UTF8String,
-    partialResult: () => Option[InternalRow],
+    @transient record: () => UTF8String,
+    @transient partialResult: () => Option[InternalRow],
     cause: Throwable) extends Exception(cause)
