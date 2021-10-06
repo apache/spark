@@ -429,8 +429,7 @@ object DataType {
   }
 
   /**
-   * Returns true if the two data types share the same shape by name, i.e. the names
-   * are the same, but the types don't need to be the same.
+   * Returns true if the two data types have the same field names in order recursively.
    */
   def equalsStructurallyByName(
       from: DataType,
