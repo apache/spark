@@ -18,9 +18,6 @@ package org.apache.spark.status.api.v1
 
 import java.text.{ParseException, SimpleDateFormat}
 import java.util.{Locale, TimeZone}
-import javax.ws.rs.WebApplicationException
-import javax.ws.rs.core.Response
-import javax.ws.rs.core.Response.Status
 
 import org.apache.spark.errors.SparkCoreErrors
 
