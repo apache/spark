@@ -382,4 +382,16 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
       }
     }
   }
+
+  test("SPARK-36941: Save/load ANSI intervals to Hive Parquet table") {
+    val tableName = "tbl_ansi_intervals"
+    withTable(tableName) {
+      val (ym, dt) = (java.time.Period.ofMonths(10), java.time.Duration.ofDays(1))
+      val df = Seq((ym, dt)).toDF("ym", "dt")
+      df.write.mode(SaveMode.Overwrite).format("parquet").saveAsTable(tableName)
+      checkAnswer(
+        sql(s"select * from $tableName"),
+        Row(ym, dt))
+    }
+  }
 }
