@@ -14,21 +14,12 @@
   "CANNOT_CONVERT_COLUMN_TO_JSON" : {
     "message" : [ "Unable to convert column %s of type %s to JSON." ]
   },
-  "CANNOT_EVALUATE_EXPRESSION" : {
-    "message" : [ "Cannot evaluate expression: %s" ]
-  },
-  "CANNOT_GENERATE_CODE_FOR_EXPRESSION" : {
-    "message" : [ "Cannot generate code for expression: %s" ]
-  },
   "CANNOT_GET_OUTER_POINTER_FOR_INNERCLASS" : {
     "message" : [ "Failed to get outer pointer for %s" ]
   },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"
-  },
-  "CANNOT_TERMINATE_GENERATOR" : {
-    "message" : [ "Cannot terminate expression: %s" ]
   },
   "CAST_CAUSES_OVERFLOW" : {
     "message" : [ "Casting %s to %s causes overflow" ],
@@ -94,6 +85,9 @@
     "message" : [ "Initial type %s must be %s" ],
     "sqlState" : "42000"
   },
+  "INTERNAL_ERROR" : {
+    "message" : [ "%s" ]
+  },
   "INVALID_ARRAY_INDEX" : {
     "message" : [ "Invalid index: %s, numElements: %s" ]
   },
@@ -112,8 +106,8 @@
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
   },
-  "LOGICAL_HINT_OPERATOR_NOT_REMOVED_DURING_ANALYSIS" : {
-    "message" : [ "Internal error: logical hint operator should have been removed during analysis" ]
+  "MAP_KEY_DOES_NOT_EXIST" : {
+    "message" : [ "Key %s does not exist." ]
   },
   "MALFORMED_JSON" : {
     "message" : [ "Malformed JSON" ]
@@ -121,15 +115,8 @@
   "MALFORMED_JSON_RECORDS_IN_SCHEMA_INFERENCE" : {
     "message" : [ "Malformed records are detected in schema inference. Parse Mode: %s. Reasons: %s" ]
   },
-  "MAP_KEY_DOES_NOT_EXIST" : {
-    "message" : [ "Key %s does not exist." ]
-  },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
-    "sqlState" : "42000"
-  },
-  "MISSING_METHOD" : {
-    "message" : [ "A method named \"%s\" is not declared in any enclosing class nor any supertype" ],
     "sqlState" : "42000"
   },
   "MISSING_STATIC_PARTITION_COLUMN" : {

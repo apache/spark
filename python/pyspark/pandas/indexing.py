@@ -54,11 +54,12 @@ from pyspark.pandas.utils import (
 
 if TYPE_CHECKING:
     from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.generic import Frame  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
 class IndexerLike(object):
-    def __init__(self, psdf_or_psser: Union["Series", "DataFrame"]):
+    def __init__(self, psdf_or_psser: "Frame"):
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.series import Series
 
@@ -534,7 +535,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         except AnalysisException:
             raise KeyError(
                 "[{}] don't exist in columns".format(
-                    [col._jc.toString() for col in data_spark_columns]  # type: ignore
+                    [col._jc.toString() for col in data_spark_columns]  # type: ignore[operator]
                 )
             )
 

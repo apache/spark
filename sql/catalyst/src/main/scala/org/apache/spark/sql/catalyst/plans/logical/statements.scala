@@ -279,11 +279,6 @@ case class InsertIntoStatement(
 case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends LeafParsedStatement
 
 /**
- * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
- */
-case class ShowCurrentNamespaceStatement() extends LeafParsedStatement
-
-/**
  *  CREATE FUNCTION statement, as parsed from SQL
  */
 case class CreateFunctionStatement(

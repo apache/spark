@@ -79,7 +79,7 @@ Input [3]: [ss_customer_sk#4, ss_sold_date_sk#5, d_date_sk#7]
 
 (9) BroadcastExchange
 Input [1]: [ss_customer_sk#4]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,true), [id=#8]
 
 (10) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [c_customer_sk#1]
@@ -134,7 +134,7 @@ Input [3]: [cs_ship_customer_sk#13, cs_sold_date_sk#14, d_date_sk#15]
 
 (22) BroadcastExchange
 Input [1]: [customsk#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#17]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,true), [id=#17]
 
 (23) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [c_customer_sk#1]
@@ -161,7 +161,7 @@ Condition : isnotnull(ca_address_sk#18)
 
 (28) BroadcastExchange
 Input [2]: [ca_address_sk#18, ca_state#19]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#20]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#20]
 
 (29) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [c_current_addr_sk#3]
@@ -188,7 +188,7 @@ Condition : isnotnull(cd_demo_sk#21)
 
 (34) BroadcastExchange
 Input [6]: [cd_demo_sk#21, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#27]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#27]
 
 (35) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [c_current_cdemo_sk#2]
@@ -251,7 +251,7 @@ Input [3]: [d_date_sk#7, d_year#77, d_qoy#78]
 
 (45) BroadcastExchange
 Input [1]: [d_date_sk#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#79]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#79]
 
 Subquery:2 Hosting operator id = 11 Hosting Expression = ws_sold_date_sk#10 IN dynamicpruning#6
 

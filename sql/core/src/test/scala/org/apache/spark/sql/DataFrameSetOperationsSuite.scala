@@ -999,8 +999,9 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     }.getMessage
     assert(errMsg.contains("Union can only be performed on tables with" +
       " the compatible column types." +
-      " struct<c1:int,c2:int,c3:struct<c3:int,c5:int>> <> struct<c1:int,c2:int,c3:struct<c3:int>>" +
-      " at the third column of the second table"))
+      " The third column of the second table is struct<c1:int,c2:int,c3:struct<c3:int,c5:int>>" +
+      " type which is not compatible with struct<c1:int,c2:int,c3:struct<c3:int>> at same" +
+      " column of first table"))
 
     // diff Case sensitive attributes names and diff sequence scenario for unionByName
     df1 = Seq((1, 2, UnionClass1d(1, 2, Struct3(1)))).toDF("a", "b", "c")
@@ -1039,24 +1040,47 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-36673: Union of structs with different orders") {
+  test("SPARK-36797: Union should resolve nested columns as top-level columns") {
+    // Different nested field names, but same nested field types. Union resolves column by position.
     val df1 = spark.range(2).withColumn("nested",
       struct(expr("id * 5 AS inner1"), struct(expr("id * 10 AS inner2"))))
     val df2 = spark.range(2).withColumn("nested",
       struct(expr("id * 5 AS inner2"), struct(expr("id * 10 AS inner1"))))
 
-    val err1 = intercept[AnalysisException](df1.union(df2).collect())
+    checkAnswer(df1.union(df2),
+      Row(0, Row(0, Row(0))) :: Row(0, Row(0, Row(0))) :: Row(1, Row(5, Row(10))) ::
+        Row(1, Row(5, Row(10))) :: Nil)
 
-    assert(err1.message
-      .contains("Union can only be performed on tables with the compatible column types"))
-
-    val df3 = spark.range(2).withColumn("nested",
-      struct(expr("id * 5 AS inner1"), struct(expr("id * 10 AS inner2").cast("string"))))
+    val df3 = spark.range(2).withColumn("nested array",
+      array(struct(expr("id * 5 AS inner1"), struct(expr("id * 10 AS inner2")))))
     val df4 = spark.range(2).withColumn("nested",
+      array(struct(expr("id * 5 AS inner2"), struct(expr("id * 10 AS inner1")))))
+
+    checkAnswer(df3.union(df4),
+      Row(0, Seq(Row(0, Row(0)))) :: Row(0, Seq(Row(0, Row(0)))) :: Row(1, Seq(Row(5, Row(10)))) ::
+        Row(1, Seq(Row(5, Row(10)))) :: Nil)
+
+    val df5 = spark.range(2).withColumn("nested array",
+      map(struct(expr("id * 5 AS key1")),
+        struct(expr("id * 5 AS inner1"), struct(expr("id * 10 AS inner2")))))
+    val df6 = spark.range(2).withColumn("nested",
+      map(struct(expr("id * 5 AS key2")),
+        struct(expr("id * 5 AS inner2"), struct(expr("id * 10 AS inner1")))))
+
+    checkAnswer(df5.union(df6),
+      Row(0, Map(Row(0) -> Row(0, Row(0)))) ::
+        Row(0, Map(Row(0) -> Row(0, Row(0)))) ::
+        Row(1, Map(Row(5) ->Row(5, Row(10)))) ::
+        Row(1, Map(Row(5) ->Row(5, Row(10)))) :: Nil)
+
+    // Different nested field names, and different nested field types.
+    val df7 = spark.range(2).withColumn("nested",
+      struct(expr("id * 5 AS inner1"), struct(expr("id * 10 AS inner2").cast("string"))))
+    val df8 = spark.range(2).withColumn("nested",
       struct(expr("id * 5 AS inner2").cast("string"), struct(expr("id * 10 AS inner1"))))
 
-    val err2 = intercept[AnalysisException](df3.union(df4).collect())
-    assert(err2.message
+    val err = intercept[AnalysisException](df7.union(df8).collect())
+    assert(err.message
       .contains("Union can only be performed on tables with the compatible column types"))
   }
 }

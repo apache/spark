@@ -72,7 +72,7 @@ column_functions1 <- c(
   "desc", "desc_nulls_first", "desc_nulls_last",
   "isNaN", "isNull", "isNotNull"
 )
-column_functions2 <- c("like", "rlike", "getField", "getItem", "contains")
+column_functions2 <- c("like", "rlike", "ilike", "getField", "getItem", "contains")
 
 createOperator <- function(op) {
   setMethod(op,

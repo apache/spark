@@ -109,7 +109,7 @@ Results [2]: [cast((avg(UnscaledValue(i_current_price#8))#15 / 100.0) as decimal
 
 (13) BroadcastExchange
 Input [2]: [avg(i_current_price)#16, i_category#9]
-Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [id=#17]
+Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false,false), [id=#17]
 
 (14) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [i_category#7]
@@ -126,7 +126,7 @@ Input [5]: [i_item_sk#5, i_current_price#6, i_category#7, avg(i_current_price)#1
 
 (17) BroadcastExchange
 Input [1]: [i_item_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#18]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#18]
 
 (18) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_item_sk#1]
@@ -283,7 +283,7 @@ Input [2]: [d_date_sk#19, d_month_seq#34]
 
 (50) BroadcastExchange
 Input [1]: [d_date_sk#19]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#37]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#37]
 
 Subquery:2 Hosting operator id = 48 Hosting Expression = Subquery scalar-subquery#35, [id=#36]
 * HashAggregate (57)
