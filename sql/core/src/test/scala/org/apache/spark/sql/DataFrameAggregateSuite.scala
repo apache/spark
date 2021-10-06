@@ -1416,6 +1416,12 @@ class DataFrameAggregateSuite extends QueryTest
     val df2 = Seq(Period.ofYears(1)).toDF("a").groupBy("a").count()
     checkAnswer(df2, Row(Period.ofYears(1), 1))
   }
+
+  test("SPARK-36926: decimal average mistakenly overflow") {
+    val df = (1 to 10).map(_ => "9999999999.99").toDF("d")
+    val res = df.select($"d".cast("decimal(12, 2)").as("d")).agg(avg($"d").cast("string"))
+    checkAnswer(res, Row("9999999999.990000"))
+  }
 }
 
 case class B(c: Option[Double])
