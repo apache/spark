@@ -341,6 +341,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         dataOut.writeInt(context.partitionId())
         dataOut.writeInt(context.attemptNumber())
         dataOut.writeLong(context.taskAttemptId())
+        dataOut.writeInt(context.cpus())
         val resources = context.resources()
         dataOut.writeInt(resources.size)
         resources.foreach { case (k, v) =>

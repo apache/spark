@@ -126,7 +126,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         # datetime64[ns] type handling.
         s = arrow_column.to_pandas(date_as_object=True)
 
-        if pyarrow.types.is_timestamp(arrow_column.type):
+        if pyarrow.types.is_timestamp(arrow_column.type) and arrow_column.type.tz is not None:
             return _check_series_localize_timestamps(s, self._timezone)
         elif pyarrow.types.is_map(arrow_column.type):
             return _convert_map_items_to_dict(s)
@@ -162,7 +162,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         def create_array(s, t):
             mask = s.isnull()
             # Ensure timestamp series are in expected form for Spark internal representation
-            if t is not None and pa.types.is_timestamp(t):
+            if t is not None and pa.types.is_timestamp(t) and t.tz is not None:
                 s = _check_series_convert_timestamps_internal(s, self._timezone)
             elif t is not None and pa.types.is_map(t):
                 s = _convert_dict_to_map_items(s)

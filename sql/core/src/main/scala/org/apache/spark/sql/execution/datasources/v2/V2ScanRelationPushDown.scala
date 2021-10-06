@@ -25,11 +25,12 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.expressions.Aggregation
+import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.SchemaUtils._
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
@@ -57,12 +58,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
       val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
         sHolder.builder, normalizedFiltersWithoutSubquery)
+      val pushedFiltersStr = if (pushedFilters.isLeft) {
+        pushedFilters.left.get.mkString(", ")
+      } else {
+        pushedFilters.right.get.mkString(", ")
+      }
+
       val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
 
       logInfo(
         s"""
            |Pushing operators to ${sHolder.relation.name}
-           |Pushed Filters: ${pushedFilters.mkString(", ")}
+           |Pushed Filters: $pushedFiltersStr
            |Post-Scan Filters: ${postScanFilters.mkString(",")}
          """.stripMargin)
 
@@ -92,8 +99,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                     agg
                 }
               }
-              val pushedAggregates = PushDownUtils
-                .pushAggregates(sHolder.builder, aggregates, groupingExpressions)
+              val normalizedAggregates = DataSourceStrategy.normalizeExprs(
+                aggregates, sHolder.relation.output).asInstanceOf[Seq[AggregateExpression]]
+              val normalizedGroupingExpressions = DataSourceStrategy.normalizeExprs(
+                groupingExpressions, sHolder.relation.output)
+              val pushedAggregates = PushDownUtils.pushAggregates(
+                sHolder.builder, normalizedAggregates, normalizedGroupingExpressions)
               if (pushedAggregates.isEmpty) {
                 aggNode // return original plan node
               } else {
@@ -114,7 +125,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 // scalastyle:on
                 val newOutput = scan.readSchema().toAttributes
                 assert(newOutput.length == groupingExpressions.length + aggregates.length)
-                val groupAttrs = groupingExpressions.zip(newOutput).map {
+                val groupAttrs = normalizedGroupingExpressions.zip(newOutput).map {
                   case (a: Attribute, b: Attribute) => b.withExprId(a.exprId)
                   case (_, b) => b
                 }
@@ -207,7 +218,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         val newProjects = normalizedProjects
           .map(projectionFunc)
           .asInstanceOf[Seq[NamedExpression]]
-        Project(newProjects, withFilter)
+        Project(restoreOriginalOutputNames(newProjects, project.map(_.name)), withFilter)
       } else {
         withFilter
       }

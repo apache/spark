@@ -33,6 +33,7 @@ class TaskContext(object):
     _stageId = None
     _taskAttemptId = None
     _localProperties = None
+    _cpus = None
     _resources = None
 
     def __new__(cls):
@@ -96,6 +97,12 @@ class TaskContext(object):
         Get a local property set upstream in the driver, or None if it is missing.
         """
         return self._localProperties.get(key, None)
+
+    def cpus(self):
+        """
+        CPUs allocated to the task.
+        """
+        return self._cpus
 
     def resources(self):
         """

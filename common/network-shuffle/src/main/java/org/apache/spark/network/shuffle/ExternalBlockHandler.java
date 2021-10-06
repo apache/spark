@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.shuffle;
 
-import com.google.common.base.Preconditions;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -35,8 +34,9 @@ import com.codahale.metrics.MetricSet;
 import com.codahale.metrics.RatioGauge;
 import com.codahale.metrics.Timer;
 import com.codahale.metrics.Counter;
-import com.google.common.collect.Sets;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Sets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,6 +49,7 @@ import org.apache.spark.network.protocol.MergedBlockMetaRequest;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
+import org.apache.spark.network.shuffle.checksum.Cause;
 import org.apache.spark.network.shuffle.protocol.*;
 import org.apache.spark.network.util.TimerWithCustomTimeUnit;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
@@ -223,6 +224,14 @@ public class ExternalBlockHandler extends RpcHandler
       } finally {
         responseDelayContext.stop();
       }
+    } else if (msgObj instanceof DiagnoseCorruption) {
+      DiagnoseCorruption msg = (DiagnoseCorruption) msgObj;
+      checkAuth(client, msg.appId);
+      Cause cause = blockManager.diagnoseShuffleBlockCorruption(
+        msg.appId, msg.execId, msg.shuffleId, msg.mapId, msg.reduceId, msg.checksum, msg.algorithm);
+      // In any cases of the error, diagnoseShuffleBlockCorruption should return UNKNOWN_ISSUE,
+      // so it should always reply as success.
+      callback.onSuccess(new CorruptionCause(cause).toByteBuffer());
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
     }
@@ -582,64 +591,6 @@ public class ExternalBlockHandler extends RpcHandler
       }
       metrics.blockTransferRateBytes.mark(block.size());
       return block;
-    }
-  }
-
-  /**
-   * Dummy implementation of merged shuffle file manager. Suitable for when push-based shuffle
-   * is not enabled.
-   *
-   * @since 3.1.0
-   */
-  public static class NoOpMergedShuffleFileManager implements MergedShuffleFileManager {
-
-    // This constructor is needed because we use this constructor to instantiate an implementation
-    // of MergedShuffleFileManager using reflection.
-    // See YarnShuffleService#newMergedShuffleFileManagerInstance.
-    public NoOpMergedShuffleFileManager(TransportConf transportConf) {}
-
-    @Override
-    public StreamCallbackWithID receiveBlockDataAsStream(PushBlockStream msg) {
-      throw new UnsupportedOperationException("Cannot handle shuffle block merge");
-    }
-
-    @Override
-    public MergeStatuses finalizeShuffleMerge(FinalizeShuffleMerge msg) throws IOException {
-      throw new UnsupportedOperationException("Cannot handle shuffle block merge");
-    }
-
-    @Override
-    public void registerExecutor(String appId, ExecutorShuffleInfo executorInfo) {
-      // No-Op. Do nothing.
-    }
-
-    @Override
-    public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
-      // No-Op. Do nothing.
-    }
-
-    @Override
-    public ManagedBuffer getMergedBlockData(
-        String appId,
-        int shuffleId,
-        int shuffleMergeId,
-        int reduceId,
-        int chunkId) {
-      throw new UnsupportedOperationException("Cannot handle shuffle block merge");
-    }
-
-    @Override
-    public MergedBlockMeta getMergedBlockMeta(
-        String appId,
-        int shuffleId,
-        int shuffleMergeId,
-        int reduceId) {
-      throw new UnsupportedOperationException("Cannot handle shuffle block merge");
-    }
-
-    @Override
-    public String[] getMergedBlockDirs(String appId) {
-      throw new UnsupportedOperationException("Cannot handle shuffle block merge");
     }
   }
 

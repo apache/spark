@@ -32,6 +32,9 @@ from pyspark.pandas.data_type_ops.base import (
     _as_categorical_type,
     _as_other_type,
     _as_string_type,
+    _sanitize_list_like,
+    _is_valid_for_logical_operator,
+    _is_boolean_type,
 )
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef.typehints import extension_dtypes, pandas_on_spark_type
@@ -65,6 +68,7 @@ class NumericOps(DataTypeOps):
         return "numerics"
 
     def add(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Addition can not be applied to given types.")
 
@@ -72,6 +76,7 @@ class NumericOps(DataTypeOps):
         return column_op(Column.__add__)(left, right)
 
     def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Subtraction can not be applied to given types.")
 
@@ -79,6 +84,7 @@ class NumericOps(DataTypeOps):
         return column_op(Column.__sub__)(left, right)
 
     def mod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Modulo can not be applied to given types.")
 
@@ -89,6 +95,7 @@ class NumericOps(DataTypeOps):
         return column_op(mod)(left, right)
 
     def pow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Exponentiation can not be applied to given types.")
 
@@ -103,24 +110,28 @@ class NumericOps(DataTypeOps):
         return column_op(pow_func)(left, right)
 
     def radd(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("Addition can not be applied to given types.")
         right = transform_boolean_operand_to_numeric(right)
         return column_op(Column.__radd__)(left, right)
 
     def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("Subtraction can not be applied to given types.")
         right = transform_boolean_operand_to_numeric(right)
         return column_op(Column.__rsub__)(left, right)
 
     def rmul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("Multiplication can not be applied to given types.")
         right = transform_boolean_operand_to_numeric(right)
         return column_op(Column.__rmul__)(left, right)
 
     def rpow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("Exponentiation can not be applied to given types.")
 
@@ -131,6 +142,7 @@ class NumericOps(DataTypeOps):
         return column_op(rpow_func)(left, right)
 
     def rmod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("Modulo can not be applied to given types.")
 
@@ -149,15 +161,19 @@ class NumericOps(DataTypeOps):
         )
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         return column_op(Column.__lt__)(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         return column_op(Column.__le__)(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         return column_op(Column.__ge__)(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         return column_op(Column.__gt__)(left, right)
 
 
@@ -167,11 +183,36 @@ class IntegralOps(NumericOps):
     LongType, IntegerType, ByteType and ShortType.
     """
 
+    def xor(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+
+        if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
+            return right ^ left
+        elif _is_valid_for_logical_operator(right):
+            right_is_boolean = _is_boolean_type(right)
+
+            def xor_func(left: Column, right: Any) -> Column:
+                if not isinstance(right, Column):
+                    if pd.isna(right):
+                        right = SF.lit(None)
+                    else:
+                        right = SF.lit(right)
+                return (
+                    left.bitwiseXOR(right.cast("integer")).cast("boolean")
+                    if right_is_boolean
+                    else left.bitwiseXOR(right)
+                )
+
+            return column_op(xor_func)(left, right)
+        else:
+            raise TypeError("XOR can not be applied to given types.")
+
     @property
     def pretty_name(self) -> str:
         return "integrals"
 
     def mul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType):
             return column_op(SF.repeat)(right, left)
 
@@ -182,6 +223,7 @@ class IntegralOps(NumericOps):
         return column_op(Column.__mul__)(left, right)
 
     def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("True division can not be applied to given types.")
 
@@ -194,6 +236,7 @@ class IntegralOps(NumericOps):
         return numpy_column_op(truediv)(left, right)
 
     def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Floor division can not be applied to given types.")
 
@@ -208,6 +251,7 @@ class IntegralOps(NumericOps):
         return numpy_column_op(floordiv)(left, right)
 
     def rtruediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("True division can not be applied to given types.")
 
@@ -220,6 +264,7 @@ class IntegralOps(NumericOps):
         return numpy_column_op(rtruediv)(left, right)
 
     def rfloordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("Floor division can not be applied to given types.")
 
@@ -252,6 +297,7 @@ class FractionalOps(NumericOps):
         return "fractions"
 
     def mul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Multiplication can not be applied to given types.")
 
@@ -259,6 +305,7 @@ class FractionalOps(NumericOps):
         return column_op(Column.__mul__)(left, right)
 
     def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("True division can not be applied to given types.")
 
@@ -275,6 +322,7 @@ class FractionalOps(NumericOps):
         return numpy_column_op(truediv)(left, right)
 
     def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Floor division can not be applied to given types.")
 
@@ -293,6 +341,7 @@ class FractionalOps(NumericOps):
         return numpy_column_op(floordiv)(left, right)
 
     def rtruediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("True division can not be applied to given types.")
 
@@ -305,6 +354,7 @@ class FractionalOps(NumericOps):
         return numpy_column_op(rtruediv)(left, right)
 
     def rfloordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("Floor division can not be applied to given types.")
 
@@ -410,6 +460,10 @@ class IntegralExtensionOps(IntegralOps):
     - dtypes:
         Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
     """
+
+    def xor(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+        raise TypeError("XOR can not be applied to given types.")
 
     def restore(self, col: pd.Series) -> pd.Series:
         """Restore column when to_pandas."""

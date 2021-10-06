@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit._
 
-import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -586,7 +585,12 @@ case class SessionWindowStateStoreRestoreExec(
 }
 
 /**
- * For each input tuple, the key is calculated and the tuple is `put` into the [[StateStore]].
+ * This class replaces existing sessions for the grouping key with new sessions in state store.
+ * All inputs are valid on storing into state store; don't filter out via watermark while storing.
+ * Refer the method doc of [[StreamingSessionWindowStateManager.updateSessions]] for more details.
+ *
+ * This class will provide the output according to the output mode.
+ * Update mode is not supported as the semantic is not feasible for session window.
  */
 case class SessionWindowStateStoreSaveExec(
     keyWithoutSessionExpressions: Seq[Attribute],
@@ -643,9 +647,7 @@ case class SessionWindowStateStoreSaveExec(
         // Assumption: watermark predicates must be non-empty if append mode is allowed
         case Some(Append) =>
           allUpdatesTimeMs += timeTakenMs {
-            val filteredIter = applyRemovingRowsOlderThanWatermark(iter,
-              watermarkPredicateForData.get)
-            putToStore(filteredIter, store)
+            putToStore(iter, store)
           }
 
           val removalStartTimeNs = System.nanoTime
@@ -672,46 +674,6 @@ case class SessionWindowStateStoreSaveExec(
             }
           }
 
-        case Some(Update) =>
-          val baseIterator = watermarkPredicateForData match {
-            case Some(predicate) => applyRemovingRowsOlderThanWatermark(iter, predicate)
-            case None => iter
-          }
-          val iterPutToStore = iteratorPutToStore(baseIterator, store,
-            returnOnlyUpdatedRows = true)
-          new NextIterator[InternalRow] {
-            private val updatesStartTimeNs = System.nanoTime
-
-            override protected def getNext(): InternalRow = {
-              if (iterPutToStore.hasNext) {
-                val row = iterPutToStore.next()
-                numOutputRows += 1
-                row
-              } else {
-                finished = true
-                null
-              }
-            }
-
-            override protected def close(): Unit = {
-              allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
-
-              allRemovalsTimeMs += timeTakenMs {
-                if (watermarkPredicateForData.nonEmpty) {
-                  val removedIter = stateManager.removeByValueCondition(
-                    store, watermarkPredicateForData.get.eval)
-                  while (removedIter.hasNext) {
-                    numRemovedStateRows += 1
-                    removedIter.next()
-                  }
-                }
-              }
-              commitTimeMs += timeTakenMs { store.commit() }
-              setStoreMetrics(store)
-              setOperatorMetrics()
-            }
-          }
-
         case _ => throw QueryExecutionErrors.invalidStreamingOutputModeError(outputMode)
       }
     }
@@ -731,68 +693,38 @@ case class SessionWindowStateStoreSaveExec(
       newMetadata.batchWatermarkMs > eventTimeWatermark.get
   }
 
-  private def iteratorPutToStore(
-      iter: Iterator[InternalRow],
-      store: StateStore,
-      returnOnlyUpdatedRows: Boolean): Iterator[InternalRow] = {
+  private def putToStore(iter: Iterator[InternalRow], store: StateStore): Unit = {
     val numUpdatedStateRows = longMetric("numUpdatedStateRows")
     val numRemovedStateRows = longMetric("numRemovedStateRows")
 
-    new NextIterator[InternalRow] {
-      var curKey: UnsafeRow = null
-      val curValuesOnKey = new mutable.ArrayBuffer[UnsafeRow]()
+    var curKey: UnsafeRow = null
+    val curValuesOnKey = new mutable.ArrayBuffer[UnsafeRow]()
 
-      private def applyChangesOnKey(): Unit = {
-        if (curValuesOnKey.nonEmpty) {
-          val (upserted, deleted) = stateManager.updateSessions(store, curKey, curValuesOnKey.toSeq)
-          numUpdatedStateRows += upserted
-          numRemovedStateRows += deleted
-          curValuesOnKey.clear
-        }
+    def applyChangesOnKey(): Unit = {
+      if (curValuesOnKey.nonEmpty) {
+        val (upserted, deleted) = stateManager.updateSessions(store, curKey, curValuesOnKey.toSeq)
+        numUpdatedStateRows += upserted
+        numRemovedStateRows += deleted
+        curValuesOnKey.clear
+      }
+    }
+
+    while (iter.hasNext) {
+      val row = iter.next().asInstanceOf[UnsafeRow]
+      val key = stateManager.extractKeyWithoutSession(row)
+
+      if (curKey == null || curKey != key) {
+        // new group appears
+        applyChangesOnKey()
+        curKey = key.copy()
       }
 
-      @tailrec
-      override protected def getNext(): InternalRow = {
-        if (!iter.hasNext) {
-          applyChangesOnKey()
-          finished = true
-          return null
-        }
-
-        val row = iter.next().asInstanceOf[UnsafeRow]
-        val key = stateManager.extractKeyWithoutSession(row)
-
-        if (curKey == null || curKey != key) {
-          // new group appears
-          applyChangesOnKey()
-          curKey = key.copy()
-        }
-
-        // must copy the row, for this row is a reference in iterator and
-        // will change when iter.next
-        curValuesOnKey += row.copy
-
-        if (!returnOnlyUpdatedRows) {
-          row
-        } else {
-          if (stateManager.newOrModified(store, row)) {
-            row
-          } else {
-            // current row isn't the "updated" row, continue to the next row
-            getNext()
-          }
-        }
-      }
-
-      override protected def close(): Unit = {}
+      // must copy the row, for this row is a reference in iterator and
+      // will change when iter.next
+      curValuesOnKey += row.copy
     }
-  }
 
-  private def putToStore(baseIter: Iterator[InternalRow], store: StateStore): Unit = {
-    val iterPutToStore = iteratorPutToStore(baseIter, store, returnOnlyUpdatedRows = false)
-    while (iterPutToStore.hasNext) {
-      iterPutToStore.next()
-    }
+    applyChangesOnKey()
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =

@@ -36,6 +36,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -115,27 +116,12 @@ class OrcFileFormat
     }
   }
 
-  private def supportBatchForNestedColumn(
-      sparkSession: SparkSession,
-      schema: StructType): Boolean = {
-    val hasNestedColumn = schema.map(_.dataType).exists {
-      case _: ArrayType | _: MapType | _: StructType => true
-      case _ => false
-    }
-    if (hasNestedColumn) {
-      sparkSession.sessionState.conf.orcVectorizedReaderNestedColumnEnabled
-    } else {
-      true
-    }
-  }
-
   override def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
     val conf = sparkSession.sessionState.conf
     conf.orcVectorizedReaderEnabled && conf.wholeStageEnabled &&
-      schema.length <= conf.wholeStageMaxNumFields &&
-      schema.forall(s => supportDataType(s.dataType) &&
-        !s.dataType.isInstanceOf[UserDefinedType[_]]) &&
-      supportBatchForNestedColumn(sparkSession, schema)
+      !WholeStageCodegenExec.isTooManyFields(conf, schema) &&
+      schema.forall(s => OrcUtils.supportColumnarReads(
+        s.dataType, sparkSession.sessionState.conf.orcVectorizedReaderNestedColumnEnabled))
   }
 
   override def isSplitable(
@@ -247,6 +233,8 @@ class OrcFileFormat
   }
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
+    case _: AnsiIntervalType => false
+
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }

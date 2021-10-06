@@ -884,6 +884,10 @@ setGeneric("base64", function(x) { standardGeneric("base64") })
 #' @name NULL
 setGeneric("bin", function(x) { standardGeneric("bin") })
 
+#' @rdname column_string_functions
+#' @name NULL
+setGeneric("bit_length", function(x, ...) { standardGeneric("bit_length") })
+
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("bitwise_not", function(x) { standardGeneric("bitwise_not") })
@@ -927,6 +931,10 @@ setGeneric("concat_ws", function(sep, x, ...) { standardGeneric("concat_ws") })
 #' @name NULL
 setGeneric("conv", function(x, fromBase, toBase) { standardGeneric("conv") })
 
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("cot", function(x) { standardGeneric("cot") })
+
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("count_distinct", function(x, ...) { standardGeneric("count_distinct") })
@@ -946,6 +954,10 @@ setGeneric("create_array", function(x, ...) { standardGeneric("create_array") })
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("create_map", function(x, ...) { standardGeneric("create_map") })
+
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("csc", function(x) { standardGeneric("csc") })
 
 #' @rdname column_misc_functions
 #' @name NULL
@@ -1228,6 +1240,10 @@ setGeneric("n_distinct", function(x, ...) { standardGeneric("n_distinct") })
 
 #' @rdname column_string_functions
 #' @name NULL
+setGeneric("octet_length", function(x, ...) { standardGeneric("octet_length") })
+
+#' @rdname column_string_functions
+#' @name NULL
 setGeneric("overlay", function(x, replace, pos, ...) { standardGeneric("overlay") })
 
 #' @rdname column_window_functions
@@ -1319,6 +1335,10 @@ setGeneric("schema_of_json", function(x, ...) { standardGeneric("schema_of_json"
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("sd", function(x, na.rm = FALSE) { standardGeneric("sd") })
+
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("sec", function(x) { standardGeneric("sec") })
 
 #' @rdname column_datetime_functions
 #' @name NULL

@@ -24,6 +24,7 @@ import org.scalatest.PrivateMethodTester
 import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.{Aggregator, DebugFilesystem, Partitioner, SharedSparkContext, ShuffleDependency, SparkContext, SparkFunSuite}
+import org.apache.spark.internal.config
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleChecksumTestHelper}
@@ -165,12 +166,13 @@ class SortShuffleWriterSuite
       val expectSpillSize = if (doSpill) records.size else 0
       assert(sorter.numSpills === expectSpillSize)
       writer.stop(success = true)
-      val checksumFile = shuffleBlockResolver.getChecksumFile(shuffleId, 0)
+      val checksumAlgorithm = conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
+      val checksumFile = shuffleBlockResolver.getChecksumFile(shuffleId, 0, checksumAlgorithm)
       assert(checksumFile.exists())
       assert(checksumFile.length() === 8 * numPartition)
       val dataFile = shuffleBlockResolver.getDataFile(shuffleId, 0)
       val indexFile = shuffleBlockResolver.getIndexFile(shuffleId, 0)
-      compareChecksums(numPartition, checksumFile, dataFile, indexFile)
+      compareChecksums(numPartition, checksumAlgorithm, checksumFile, dataFile, indexFile)
       localSC.stop()
     }
   }

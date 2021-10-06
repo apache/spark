@@ -70,7 +70,7 @@ import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
+import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer, SerializerInstance}
 import org.apache.spark.status.api.v1.{StackTrace, ThreadStackTrace}
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
@@ -2597,14 +2597,34 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Push based shuffle can only be enabled when the application is submitted
-   * to run in YARN mode, with external shuffle service enabled
+   * Push based shuffle can only be enabled when below conditions are met:
+   *   - the application is submitted to run in YARN mode
+   *   - external shuffle service enabled
+   *   - IO encryption disabled
+   *   - serializer(such as KryoSerializer) supports relocation of serialized objects
    */
   def isPushBasedShuffleEnabled(conf: SparkConf): Boolean = {
-    conf.get(PUSH_BASED_SHUFFLE_ENABLED) &&
-      (conf.get(IS_TESTING).getOrElse(false) ||
+    val pushBasedShuffleEnabled = conf.get(PUSH_BASED_SHUFFLE_ENABLED)
+    if (pushBasedShuffleEnabled) {
+      val serializer = Utils.classForName(conf.get(SERIALIZER)).getConstructor(classOf[SparkConf])
+        .newInstance(conf).asInstanceOf[Serializer]
+      val canDoPushBasedShuffle = conf.get(IS_TESTING).getOrElse(false) ||
         (conf.get(SHUFFLE_SERVICE_ENABLED) &&
-          conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn"))
+          conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn" &&
+          // TODO: [SPARK-36744] needs to support IO encryption for push-based shuffle
+          !conf.get(IO_ENCRYPTION_ENABLED) &&
+          serializer.supportsRelocationOfSerializedObjects)
+
+      if (!canDoPushBasedShuffle) {
+        logWarning("Push-based shuffle can only be enabled when the application is submitted " +
+          "to run in YARN mode, with external shuffle service enabled, IO encryption disabled, " +
+          "and relocation of serialized objects supported.")
+      }
+
+      canDoPushBasedShuffle
+    } else {
+      false
+    }
   }
 
   /**
@@ -2820,7 +2840,7 @@ private[spark] object Utils extends Logging {
             klass.getConstructor().newInstance()
         }
 
-        Some(ext.asInstanceOf[T])
+        Some(ext)
       } catch {
         case _: NoSuchMethodException =>
           throw new SparkException(
@@ -3094,13 +3114,6 @@ private[spark] object Utils extends Logging {
     } else {
       0
     }
-  }
-
-  def executorTimeoutMs(conf: SparkConf): Long = {
-    // "spark.network.timeout" uses "seconds", while `spark.storage.blockManagerSlaveTimeoutMs` uses
-    // "milliseconds"
-    conf.get(config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT)
-      .getOrElse(Utils.timeStringAsMs(s"${conf.get(Network.NETWORK_TIMEOUT)}s"))
   }
 
   /** Returns a string message about delegation token generation failure */

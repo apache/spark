@@ -30,7 +30,7 @@ from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.types import DataType, StructType, \
     _make_type_verifier, _infer_schema, _has_nulltype, _merge_type, _create_converter, \
     _parse_datatype_string
-from pyspark.sql.utils import install_exception_handler
+from pyspark.sql.utils import install_exception_handler, is_timestamp_ntz_preferred
 
 __all__ = ["SparkSession"]
 
@@ -437,7 +437,9 @@ class SparkSession(SparkConversionMixin):
         if not data:
             raise ValueError("can not infer schema from empty dataset")
         infer_dict_as_struct = self._wrapped._conf.inferDictAsStruct()
-        schema = reduce(_merge_type, (_infer_schema(row, names, infer_dict_as_struct)
+        prefer_timestamp_ntz = is_timestamp_ntz_preferred()
+        schema = reduce(_merge_type, (
+            _infer_schema(row, names, infer_dict_as_struct, prefer_timestamp_ntz)
                         for row in data))
         if _has_nulltype(schema):
             raise ValueError("Some of types cannot be determined after inferring")
@@ -465,12 +467,18 @@ class SparkSession(SparkConversionMixin):
                              "can not infer schema")
 
         infer_dict_as_struct = self._wrapped._conf.inferDictAsStruct()
+        prefer_timestamp_ntz = is_timestamp_ntz_preferred()
         if samplingRatio is None:
-            schema = _infer_schema(first, names=names, infer_dict_as_struct=infer_dict_as_struct)
+            schema = _infer_schema(
+                first,
+                names=names,
+                infer_dict_as_struct=infer_dict_as_struct,
+                prefer_timestamp_ntz=prefer_timestamp_ntz)
             if _has_nulltype(schema):
                 for row in rdd.take(100)[1:]:
                     schema = _merge_type(schema, _infer_schema(
-                        row, names=names, infer_dict_as_struct=infer_dict_as_struct))
+                        row, names=names, infer_dict_as_struct=infer_dict_as_struct,
+                        prefer_timestamp_ntz=prefer_timestamp_ntz))
                     if not _has_nulltype(schema):
                         break
                 else:
@@ -480,7 +488,8 @@ class SparkSession(SparkConversionMixin):
             if samplingRatio < 0.99:
                 rdd = rdd.sample(False, float(samplingRatio))
             schema = rdd.map(lambda row: _infer_schema(
-                row, names, infer_dict_as_struct=infer_dict_as_struct)).reduce(_merge_type)
+                row, names, infer_dict_as_struct=infer_dict_as_struct,
+                prefer_timestamp_ntz=prefer_timestamp_ntz)).reduce(_merge_type)
         return schema
 
     def _createFromRDD(self, rdd, schema, samplingRatio):

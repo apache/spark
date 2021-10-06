@@ -20,13 +20,14 @@ import pydoc
 import shutil
 import tempfile
 import unittest
+import datetime
 
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, Column, Row
 from pyspark.sql.functions import udf
 from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import StringType, IntegerType, BooleanType, DoubleType, LongType, \
-    ArrayType, StructType, StructField
+    ArrayType, StructType, StructField, TimestampNTZType
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_compiled_message
 from pyspark.testing.utils import QuietTest
@@ -551,6 +552,23 @@ class UDFTests(ReusedSQLTestCase):
         self.assertTrue(f.__doc__ in f_.__doc__)
         self.assertEqual(f, f_.func)
         self.assertEqual(return_type, f_.returnType)
+
+    def test_udf_timestamp_ntz(self):
+        # SPARK-36626: Test TimestampNTZ in Python UDF
+        @udf(TimestampNTZType())
+        def noop(x):
+            assert x == datetime.datetime(1970, 1, 1, 0, 0)
+            return x
+
+        with self.sql_conf({"spark.sql.session.timeZone": "Pacific/Honolulu"}):
+            df = (self.spark
+                  .createDataFrame(
+                      [(datetime.datetime(1970, 1, 1, 0, 0),)], schema="dt timestamp_ntz")
+                  .select(noop("dt").alias("dt")))
+
+            df.selectExpr("assert_true('1970-01-01 00:00:00' == CAST(dt AS STRING))").collect()
+            self.assertEqual(df.schema[0].dataType.typeName(), "timestamp_ntz")
+            self.assertEqual(df.first()[0], datetime.datetime(1970, 1, 1, 0, 0))
 
     def test_nonparam_udf_with_aggregate(self):
         import pyspark.sql.functions as f

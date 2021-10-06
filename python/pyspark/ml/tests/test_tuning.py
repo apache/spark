@@ -16,7 +16,6 @@
 #
 
 import tempfile
-import math
 import unittest
 
 import numpy as np
@@ -28,7 +27,7 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator, \
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.param import Param, Params
 from pyspark.ml.tuning import CrossValidator, CrossValidatorModel, ParamGridBuilder, \
-    TrainValidationSplit, TrainValidationSplitModel, ParamRandomBuilder
+    TrainValidationSplit, TrainValidationSplitModel
 from pyspark.sql.functions import rand
 from pyspark.testing.mlutils import DummyEvaluator, DummyLogisticRegression, \
     DummyLogisticRegressionModel, SparkSessionTestCase
@@ -67,108 +66,6 @@ class InducedErrorEstimator(Estimator, HasInducedError):
         return model
 
 
-class DummyParams(Params):
-
-    def __init__(self):
-        super(DummyParams, self).__init__()
-        self.test_param = Param(self, "test_param", "dummy parameter for testing")
-        self.another_test_param = Param(self, "another_test_param", "second parameter for testing")
-
-
-class ParamRandomBuilderTests(unittest.TestCase):
-
-    def __init__(self, methodName):
-        super(ParamRandomBuilderTests, self).__init__(methodName=methodName)
-        self.dummy_params = DummyParams()
-        self.to_test = ParamRandomBuilder()
-        self.n = 100
-
-    def check_ranges(self, params, lowest, highest, expected_type):
-        self.assertEqual(self.n, len(params))
-        for param in params:
-            for v in param.values():
-                self.assertGreaterEqual(v, lowest)
-                self.assertLessEqual(v, highest)
-                self.assertEqual(type(v), expected_type)
-
-    def check_addRandom_ranges(self, x, y, expected_type):
-        params = self.to_test.addRandom(self.dummy_params.test_param, x, y, self.n).build()
-        self.check_ranges(params, x, y, expected_type)
-
-    def check_addLog10Random_ranges(self, x, y, expected_type):
-        params = self.to_test.addLog10Random(self.dummy_params.test_param, x, y, self.n).build()
-        self.check_ranges(params, x, y, expected_type)
-
-    @staticmethod
-    def counts(xs):
-        key_to_count = {}
-        for v in xs:
-            k = int(v)
-            if key_to_count.get(k) is None:
-                key_to_count[k] = 1
-            else:
-                key_to_count[k] = key_to_count[k] + 1
-        return key_to_count
-
-    @staticmethod
-    def raw_values_of(params):
-        values = []
-        for param in params:
-            for v in param.values():
-                values.append(v)
-        return values
-
-    def check_even_distribution(self, vs, bin_function):
-        binned = map(lambda x: bin_function(x), vs)
-        histogram = self.counts(binned)
-        values = list(histogram.values())
-        sd = np.std(values)
-        mu = np.mean(values)
-        for k, v in histogram.items():
-            self.assertLess(abs(v - mu), 5 * sd, "{} values for bucket {} is unlikely "
-                                                 "when the mean is {} and standard deviation {}"
-                            .format(v, k, mu, sd))
-
-    def test_distribution(self):
-        params = self.to_test.addRandom(self.dummy_params.test_param, 0, 20000, 10000).build()
-        values = self.raw_values_of(params)
-        self.check_even_distribution(values, lambda x: x // 1000)
-
-    def test_logarithmic_distribution(self):
-        params = self.to_test.addLog10Random(self.dummy_params.test_param, 1, 1e10, 10000).build()
-        values = self.raw_values_of(params)
-        self.check_even_distribution(values, lambda x: math.log10(x))
-
-    def test_param_cardinality(self):
-        num_random_params = 7
-        values = [1, 2, 3]
-        self.to_test.addRandom(self.dummy_params.test_param, 1, 10, num_random_params)
-        self.to_test.addGrid(self.dummy_params.another_test_param, values)
-        self.assertEqual(len(self.to_test.build()), num_random_params * len(values))
-
-    def test_add_random_integer_logarithmic_range(self):
-        self.check_addLog10Random_ranges(100, 200, int)
-
-    def test_add_logarithmic_random_float_and_integer_yields_floats(self):
-        self.check_addLog10Random_ranges(100, 200., float)
-
-    def test_add_random_float_logarithmic_range(self):
-        self.check_addLog10Random_ranges(100., 200., float)
-
-    def test_add_random_integer_range(self):
-        self.check_addRandom_ranges(100, 200, int)
-
-    def test_add_random_float_and_integer_yields_floats(self):
-        self.check_addRandom_ranges(100, 200., float)
-
-    def test_add_random_float_range(self):
-        self.check_addRandom_ranges(100., 200., float)
-
-    def test_unexpected_type(self):
-        with self.assertRaises(TypeError):
-            self.to_test.addRandom(self.dummy_params.test_param, 1, "wrong type", 1).build()
-
-
 class ParamGridBuilderTests(SparkSessionTestCase):
 
     def test_addGrid(self):
@@ -193,6 +90,18 @@ class ValidatorTestUtilsMixin:
 
 
 class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
+
+    def test_gen_avg_and_std_metrics(self):
+        metrics_all = [
+            [1.0, 3.0, 2.0, 4.0],
+            [3.0, 2.0, 2.0, 4.0],
+            [3.0, 2.5, 2.1, 8.0],
+        ]
+        avg_metrics, std_metrics = CrossValidator._gen_avg_and_std_metrics(metrics_all)
+        assert np.allclose(avg_metrics, [2.33333333, 2.5, 2.03333333, 5.33333333])
+        assert np.allclose(std_metrics, [0.94280904, 0.40824829, 0.04714045, 1.88561808])
+        assert isinstance(avg_metrics, list)
+        assert isinstance(std_metrics, list)
 
     def test_copy(self):
         dataset = self.spark.createDataFrame([
@@ -232,6 +141,7 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         for index in range(len(cvModel.avgMetrics)):
             self.assertTrue(abs(cvModel.avgMetrics[index] - cvModelCopied.avgMetrics[index])
                             < 0.0001)
+        self.assertTrue(np.allclose(cvModel.stdMetrics, cvModelCopied.stdMetrics))
         # SPARK-32092: CrossValidatorModel.copy() needs to copy all existing params
         for param in [
             lambda x: x.getNumFolds(),
@@ -245,6 +155,12 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
             cvModelCopied.avgMetrics[0],
             'foo',
             "Changing the original avgMetrics should not affect the copied model"
+        )
+        cvModel.stdMetrics[0] = 'foo'
+        self.assertNotEqual(
+            cvModelCopied.stdMetrics[0],
+            'foo',
+            "Changing the original stdMetrics should not affect the copied model"
         )
         cvModel.subModels[0][0].getInducedError = lambda: 'foo'
         self.assertNotEqual(
@@ -353,6 +269,15 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
             loadedCvModel.isSet(param) for param in loadedCvModel.params
         ))
 
+        # mimic old version CrossValidatorModel (without stdMetrics attribute)
+        # test loading model backwards compatibility
+        cvModel2 = cvModel.copy()
+        cvModel2.stdMetrics = []
+        cvModelPath2 = temp_path + "/cvModel2"
+        cvModel2.save(cvModelPath2)
+        loadedCvModel2 = CrossValidatorModel.load(cvModelPath2)
+        assert loadedCvModel2.stdMetrics == []
+
     def test_save_load_trained_model(self):
         self._run_test_save_load_trained_model(LogisticRegression, LogisticRegressionModel)
         self._run_test_save_load_trained_model(DummyLogisticRegression,
@@ -414,6 +339,7 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         cv.setParallelism(2)
         cvParallelModel = cv.fit(dataset)
         self.assertEqual(cvSerialModel.avgMetrics, cvParallelModel.avgMetrics)
+        self.assertEqual(cvSerialModel.stdMetrics, cvParallelModel.stdMetrics)
 
     def test_expose_sub_models(self):
         temp_path = tempfile.mkdtemp()

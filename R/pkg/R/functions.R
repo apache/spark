@@ -647,6 +647,19 @@ setMethod("bin",
           })
 
 #' @details
+#' \code{bit_length}: Calculates the bit length for the specified string column.
+#'
+#' @rdname column_string_functions
+#' @aliases bit_length bit_length,Column-method
+#' @note length since 3.3.0
+setMethod("bit_length",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "bit_length", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{bitwise_not}: Computes bitwise NOT.
 #'
 #' @rdname column_nonaggregate_functions
@@ -870,6 +883,19 @@ setMethod("cosh",
             column(jc)
           })
 
+#' @details
+#' \code{cot}: Returns the cotangent of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases cot cot,Column-method
+#' @note cot since 3.3.0
+setMethod("cot",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "cot", x@jc)
+            column(jc)
+          })
+
 #' Returns the number of items in a group
 #'
 #' This can be used as a column aggregate function with \code{Column} as input,
@@ -899,6 +925,19 @@ setMethod("crc32",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "crc32", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{csc}: Returns the cosecant of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases csc csc,Column-method
+#' @note csc since 3.3.0
+setMethod("csc",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "csc", x@jc)
             column(jc)
           })
 
@@ -1553,6 +1592,19 @@ setMethod("negate",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "negate", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{octet_length}: Calculates the byte length for the specified string column.
+#'
+#' @rdname column_string_functions
+#' @aliases octet_length octet_length,Column-method
+#' @note length since 3.3.0
+setMethod("octet_length",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "octet_length", x@jc)
             column(jc)
           })
 
@@ -3348,6 +3400,19 @@ setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "rpad",
                               x@jc, as.integer(len), pad)
+            column(jc)
+          })
+
+#' @details
+#' \code{sec}: Returns the secant of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases sec sec,Column-method
+#' @note sec since 3.3.0
+setMethod("sec",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "sec", x@jc)
             column(jc)
           })
 

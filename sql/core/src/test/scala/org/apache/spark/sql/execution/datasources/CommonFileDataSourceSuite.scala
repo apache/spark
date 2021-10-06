@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.Locale
+
 import org.scalatest.funsuite.AnyFunSuite
 
-import org.apache.spark.sql.{Dataset, Encoders, FakeFileSystemRequiringDSOption, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Dataset, Encoders, FakeFileSystemRequiringDSOption, SparkSession}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 
 /**
@@ -32,6 +34,27 @@ trait CommonFileDataSourceSuite extends SQLHelper { self: AnyFunSuite =>
   protected def spark: SparkSession
   protected def dataSourceFormat: String
   protected def inputDataset: Dataset[_] = spark.createDataset(Seq("abc"))(Encoders.STRING)
+
+  test(s"SPARK-36349: disallow saving of ANSI intervals to $dataSourceFormat") {
+    Seq("INTERVAL '1' DAY", "INTERVAL '1' YEAR").foreach { i =>
+      withTempPath { dir =>
+        val errMsg = intercept[AnalysisException] {
+          spark.sql(s"SELECT $i").write.format(dataSourceFormat).save(dir.getAbsolutePath)
+        }.getMessage
+        assert(errMsg.contains("Cannot save interval data type into external storage"))
+      }
+    }
+
+    // Check all built-in file-based datasources except of libsvm which requires particular schema.
+    if (!Set("libsvm").contains(dataSourceFormat.toLowerCase(Locale.ROOT))) {
+      Seq("INTERVAL DAY TO SECOND", "INTERVAL YEAR TO MONTH").foreach { it =>
+        val errMsg = intercept[AnalysisException] {
+          spark.sql(s"CREATE TABLE t (i $it) USING $dataSourceFormat")
+        }.getMessage
+        assert(errMsg.contains("data source does not support"))
+      }
+    }
+  }
 
   test(s"Propagate Hadoop configs from $dataSourceFormat options to underlying file system") {
     withSQLConf(

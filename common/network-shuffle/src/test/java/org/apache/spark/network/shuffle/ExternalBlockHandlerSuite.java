@@ -17,14 +17,18 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.IOException;
+import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.zip.CheckedInputStream;
+import java.util.zip.Checksum;
 
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.Metric;
 import com.codahale.metrics.Timer;
+import com.google.common.io.ByteStreams;
+import com.google.common.io.Files;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -42,7 +46,11 @@ import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.protocol.MergedBlockMetaRequest;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
+import org.apache.spark.network.shuffle.checksum.Cause;
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
+import org.apache.spark.network.shuffle.protocol.CorruptionCause;
+import org.apache.spark.network.shuffle.protocol.DiagnoseCorruption;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FetchShuffleBlocks;
 import org.apache.spark.network.shuffle.protocol.FetchShuffleBlockChunks;
@@ -106,6 +114,111 @@ public class ExternalBlockHandlerSuite {
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 0);
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 1);
     verifyOpenBlockLatencyMetrics(2, 2);
+  }
+
+  private void checkDiagnosisResult(
+      String algorithm,
+      Cause expectedCaused) throws IOException {
+    String appId = "app0";
+    String execId = "execId";
+    int shuffleId = 0;
+    long mapId = 0;
+    int reduceId = 0;
+
+    // prepare the checksum file
+    File tmpDir = Files.createTempDir();
+    File checksumFile = new File(tmpDir,
+      "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".checksum." + algorithm);
+    DataOutputStream out = new DataOutputStream(new FileOutputStream(checksumFile));
+    long checksumByReader = 0L;
+    if (expectedCaused != Cause.UNSUPPORTED_CHECKSUM_ALGORITHM) {
+      Checksum checksum = ShuffleChecksumHelper.getChecksumByAlgorithm(algorithm);
+      CheckedInputStream checkedIn = new CheckedInputStream(
+        blockMarkers[0].createInputStream(), checksum);
+      byte[] buffer = new byte[10];
+      ByteStreams.readFully(checkedIn, buffer, 0, (int) blockMarkers[0].size());
+      long checksumByWriter = checkedIn.getChecksum().getValue();
+
+      switch (expectedCaused) {
+        // when checksumByWriter != checksumRecalculated
+        case DISK_ISSUE:
+          out.writeLong(checksumByWriter - 1);
+          checksumByReader = checksumByWriter;
+          break;
+
+        // when checksumByWriter == checksumRecalculated and checksumByReader != checksumByWriter
+        case NETWORK_ISSUE:
+          out.writeLong(checksumByWriter);
+          checksumByReader = checksumByWriter - 1;
+          break;
+
+        case UNKNOWN_ISSUE:
+          // write a int instead of a long to corrupt the checksum file
+          out.writeInt(0);
+          checksumByReader = checksumByWriter;
+          break;
+
+        default:
+          out.writeLong(checksumByWriter);
+          checksumByReader = checksumByWriter;
+      }
+    }
+    out.close();
+
+    when(blockResolver.getBlockData(appId, execId, shuffleId, mapId, reduceId))
+      .thenReturn(blockMarkers[0]);
+    Cause actualCause = ShuffleChecksumHelper.diagnoseCorruption(algorithm, checksumFile, reduceId,
+      blockResolver.getBlockData(appId, execId, shuffleId, mapId, reduceId), checksumByReader);
+    when(blockResolver
+      .diagnoseShuffleBlockCorruption(
+        appId, execId, shuffleId, mapId, reduceId, checksumByReader, algorithm))
+      .thenReturn(actualCause);
+
+    when(client.getClientId()).thenReturn(appId);
+    RpcResponseCallback callback = mock(RpcResponseCallback.class);
+
+    DiagnoseCorruption diagnoseMsg = new DiagnoseCorruption(
+      appId, execId, shuffleId, mapId, reduceId, checksumByReader, algorithm);
+    handler.receive(client, diagnoseMsg.toByteBuffer(), callback);
+
+    ArgumentCaptor<ByteBuffer> response = ArgumentCaptor.forClass(ByteBuffer.class);
+    verify(callback, times(1)).onSuccess(response.capture());
+    verify(callback, never()).onFailure(any());
+
+    CorruptionCause cause =
+      (CorruptionCause) BlockTransferMessage.Decoder.fromByteBuffer(response.getValue());
+    assertEquals(expectedCaused, cause.cause);
+    tmpDir.delete();
+  }
+
+  @Test
+  public void testShuffleCorruptionDiagnosisDiskIssue() throws IOException {
+    checkDiagnosisResult( "ADLER32", Cause.DISK_ISSUE);
+  }
+
+  @Test
+  public void testShuffleCorruptionDiagnosisNetworkIssue() throws IOException {
+    checkDiagnosisResult("ADLER32", Cause.NETWORK_ISSUE);
+  }
+
+  @Test
+  public void testShuffleCorruptionDiagnosisUnknownIssue() throws IOException {
+    checkDiagnosisResult("ADLER32", Cause.UNKNOWN_ISSUE);
+  }
+
+  @Test
+  public void testShuffleCorruptionDiagnosisChecksumVerifyPass() throws IOException {
+    checkDiagnosisResult("ADLER32", Cause.CHECKSUM_VERIFY_PASS);
+  }
+
+  @Test
+  public void testShuffleCorruptionDiagnosisUnSupportedAlgorithm() throws IOException {
+    checkDiagnosisResult("XXX", Cause.UNSUPPORTED_CHECKSUM_ALGORITHM);
+  }
+
+  @Test
+  public void testShuffleCorruptionDiagnosisCRC32() throws IOException {
+    checkDiagnosisResult("CRC32", Cause.CHECKSUM_VERIFY_PASS);
   }
 
   @Test

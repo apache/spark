@@ -78,7 +78,7 @@ The `CAST` clause of Spark ANSI mode follows the syntax rules of section 6.13 "c
 * MapType => String
 * StructType => String
 
- The valid combinations of target data type and source data type in a `CAST` expression are given by the following table.
+ The valid combinations of source and target data type in a `CAST` expression are given by the following table.
 “Y” indicates that the combination is syntactically valid without restriction and “N” indicates that the combination is not valid.
 
 | Source\Target | Numeric | String | Date | Timestamp | Interval | Boolean | Binary | Array | Map | Struct |
@@ -156,7 +156,32 @@ SELECT * FROM t;
 ```
 
 ### Store assignment
-As mentioned at the beginning, when `spark.sql.storeAssignmentPolicy` is set to `ANSI`(which is the default value), Spark SQL complies with the ANSI store assignment rules. During table insertion, Spark will throw exception on numeric value overflow or the source value can't be stored as the target type. 
+As mentioned at the beginning, when `spark.sql.storeAssignmentPolicy` is set to `ANSI`(which is the default value), Spark SQL complies with the ANSI store assignment rules on table insertions. The valid combinations of source and target data type in table insertions are given by the following table.
+
+| Source\Target | Numeric | String | Date | Timestamp | Interval | Boolean | Binary | Array | Map | Struct |
+|:-------------:|:-------:|:------:|:----:|:---------:|:--------:|:-------:|:------:|:-----:|:---:|:------:|
+| Numeric       | Y       | Y      | N    | N         | N        | N       | N      | N     | N   | N      |
+| String        | N       | Y      | N    | N         | N        | N       | N      | N     | N   | N      |
+| Date          | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Timestamp     | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Interval      | N       | Y      | N    | N         | N*        | N       | N      | N     | N   | N      |
+| Boolean       | N       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| Binary        | N       | Y      | N    | N         | N        | N       | Y      | N     | N   | N      |
+| Array         | N       | N      | N    | N         | N        | N       | N      | Y**     | N   | N      |
+| Map           | N       | N      | N    | N         | N        | N       | N      | N     | Y**   | N      |
+| Struct        | N       | N      | N    | N         | N        | N       | N      | N     | N   | Y**      |
+
+\* Spark doesn't support interval type table column.
+
+\*\* For Array/Map/Struct types, the data type check rule applies recursively to its component elements.
+
+During table insertion, Spark will throw exception on numeric value overflow.
+```sql
+CREATE TABLE test(i INT);
+
+INSERT INTO test VALUES (2147483648L);
+java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
+```
 
 ### Type coercion
 #### Type Promotion and Precedence
@@ -255,7 +280,13 @@ The behavior of some SQL functions can be different under ANSI mode (`spark.sql.
 The behavior of some SQL operators can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
   - `array_col[index]`: This operator throws `ArrayIndexOutOfBoundsException` if using invalid indices.
   - `map_col[key]`: This operator throws `NoSuchElementException` if key does not exist in map.
-  - `GROUP BY`: aliases in a select list can not be used in GROUP BY clauses. Each column referenced in a GROUP BY clause shall unambiguously reference a column of the table resulting from the FROM clause.
+
+### Useful Functions for ANSI Mode
+
+When ANSI mode is on, it throws exceptions for invalid operations. You can use the following SQL functions to suppress such exceptions.
+  - `try_cast`: identical to `CAST`, except that it returns `NULL` result instead of throwing an exception on runtime error.
+  - `try_add`: identical to the add operator `+`, except that it returns `NULL` result instead of throwing an exception on integral value overflow.
+  - `try_divide`: identical to the division operator `/`, except that it returns `NULL` result instead of throwing an exception on dividing 0.
 
 ### SQL Keywords
 
@@ -396,6 +427,7 @@ Below is a list of all the keywords in Spark SQL.
 |LEADING|reserved|non-reserved|reserved|
 |LEFT|reserved|strict-non-reserved|reserved|
 |LIKE|non-reserved|non-reserved|reserved|
+|ILIKE|non-reserved|non-reserved|non-reserved|
 |LIMIT|non-reserved|non-reserved|non-reserved|
 |LINES|non-reserved|non-reserved|non-reserved|
 |LIST|non-reserved|non-reserved|non-reserved|

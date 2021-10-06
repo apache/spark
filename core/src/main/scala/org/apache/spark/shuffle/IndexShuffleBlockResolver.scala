@@ -31,9 +31,9 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.client.StreamCallbackWithID
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.{ExecutorDiskUtils, MergedBlockMeta}
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
-import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
@@ -157,7 +157,7 @@ private[spark] class IndexShuffleBlockResolver(
       logWarning(s"Error deleting index ${file.getPath()}")
     }
 
-    file = getChecksumFile(shuffleId, mapId)
+    file = getChecksumFile(shuffleId, mapId, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
     if (file.exists() && !file.delete()) {
       logWarning(s"Error deleting checksum ${file.getPath()}")
     }
@@ -339,7 +339,8 @@ private[spark] class IndexShuffleBlockResolver(
     val (checksumFileOpt, checksumTmpOpt) = if (checksumEnabled) {
       assert(lengths.length == checksums.length,
         "The size of partition lengths and checksums should be equal")
-      val checksumFile = getChecksumFile(shuffleId, mapId)
+      val checksumFile =
+        getChecksumFile(shuffleId, mapId, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
       (Some(checksumFile), Some(Utils.tempFileWith(checksumFile)))
     } else {
       (None, None)
@@ -540,14 +541,13 @@ private[spark] class IndexShuffleBlockResolver(
   def getChecksumFile(
       shuffleId: Int,
       mapId: Long,
+      algorithm: String,
       dirs: Option[Array[String]] = None): File = {
     val blockId = ShuffleChecksumBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
-    val fileName = ShuffleChecksumHelper.getChecksumFileName(blockId, conf)
+    val fileName = ShuffleChecksumHelper.getChecksumFileName(blockId.name, algorithm)
     dirs
       .map(ExecutorDiskUtils.getFile(_, blockManager.subDirsPerLocalDir, fileName))
-      .getOrElse {
-        blockManager.diskBlockManager.getFile(fileName)
-      }
+      .getOrElse(blockManager.diskBlockManager.getFile(fileName))
   }
 
   override def getBlockData(

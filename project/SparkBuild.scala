@@ -208,7 +208,7 @@ object SparkBuild extends PomBuild {
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies ++= {
       if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = "1.7.5"
+        val silencerVersion = "1.7.6"
         Seq(
           "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
           compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),
@@ -967,6 +967,8 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalog/v2/utils")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org.apache.spark.errors")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org.apache.spark.sql.errors")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hive")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/v2/avro")))
       .map(_.filterNot(_.getCanonicalPath.contains("SSLOptions")))
@@ -1125,12 +1127,12 @@ object TestSettings {
     // SPARK-29282 This is for consistency between JDK8 and JDK11.
     (Test / javaOptions) ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
-      s"-Xmx3200m -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads -XX:ReservedCodeCacheSize=128m"
+      s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads -XX:ReservedCodeCacheSize=128m"
         .split(" ").toSeq
     },
     javaOptions ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
-      s"-Xmx3200m -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
+      s"-Xmx4g -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
     },
     (Test / javaOptions) ++= {
       val jdwpEnabled = sys.props.getOrElse("test.jdwp.enabled", "false").toBoolean

@@ -266,7 +266,7 @@ class ParquetToSparkSchemaConverter(
   // Here we implement Parquet LIST backwards-compatibility rules.
   // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules
   // scalastyle:on
-  private def isElementType(repeatedType: Type, parentName: String): Boolean = {
+  private[parquet] def isElementType(repeatedType: Type, parentName: String): Boolean = {
     {
       // For legacy 2-level list types with primitive element type, e.g.:
       //

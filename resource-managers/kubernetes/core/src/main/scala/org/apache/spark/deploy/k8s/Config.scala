@@ -323,6 +323,16 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_ALLOCATION_PODS_ALLOCATOR =
+    ConfigBuilder("spark.kubernetes.allocation.pods.allocator")
+      .doc("Allocator to use for pods. Possible values are direct (the default) and statefulset " +
+        ", or a full class name of a class implementing AbstractPodsAllocator. " +
+        "Future version may add Job or replicaset. This is a developer API and may change " +
+      "or be removed at anytime.")
+      .version("3.3.0")
+      .stringConf
+      .createWithDefault("direct")
+
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
       .doc("Number of pods to launch at once in each round of executor allocation.")
@@ -593,6 +603,18 @@ private[spark] object Config extends Logging {
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(delay => delay > 0, "delay must be a positive time value")
       .createWithDefaultString("30s")
+
+  val KUBERNETES_MAX_PENDING_PODS =
+    ConfigBuilder("spark.kubernetes.allocation.maxPendingPods")
+      .doc("Maximum number of pending PODs allowed during executor allocation for this " +
+        "application. Those newly requested executors which are unknown by Kubernetes yet are " +
+        "also counted into this limit as they will change into pending PODs by time. " +
+        "This limit is independent from the resource profiles as it limits the sum of all " +
+        "allocation for all the used resource profiles.")
+      .version("3.2.0")
+      .intConf
+      .checkValue(value => value > 0, "Maximum number of pending pods should be a positive integer")
+      .createWithDefault(Int.MaxValue)
 
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."

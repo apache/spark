@@ -22,7 +22,7 @@ import java.util.Objects
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 /**
  * The data type for User Defined Types (UDTs).
@@ -38,6 +38,7 @@ import org.apache.spark.annotation.DeveloperApi
  * The conversion via `deserialize` occurs when reading from a `DataFrame`.
  */
 @DeveloperApi
+@Since("3.2.0")
 abstract class UserDefinedType[UserType >: Null] extends DataType with Serializable {
 
   /** Underlying storage type for this UDT */

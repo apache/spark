@@ -40,10 +40,12 @@ import org.apache.spark.Partitioner;
 import org.apache.spark.ShuffleDependency;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkException;
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
 import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
+import org.apache.spark.shuffle.checksum.ShuffleChecksumSupport;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
@@ -51,7 +53,6 @@ import org.apache.spark.serializer.Serializer;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.shuffle.ShuffleWriter;
-import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.storage.*;
 import org.apache.spark.util.Utils;
 
@@ -76,7 +77,9 @@ import org.apache.spark.util.Utils;
  * <p>
  * There have been proposals to completely remove this code path; see SPARK-6026 for details.
  */
-final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
+final class BypassMergeSortShuffleWriter<K, V>
+  extends ShuffleWriter<K, V>
+  implements ShuffleChecksumSupport {
 
   private static final Logger logger = LoggerFactory.getLogger(BypassMergeSortShuffleWriter.class);
 
@@ -125,8 +128,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.writeMetrics = writeMetrics;
     this.serializer = dep.serializer();
     this.shuffleExecutorComponents = shuffleExecutorComponents;
-    this.partitionChecksums =
-      ShuffleChecksumHelper.createPartitionChecksumsIfEnabled(numPartitions, conf);
+    this.partitionChecksums = createPartitionChecksums(numPartitions, conf);
   }
 
   @Override
@@ -230,9 +232,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       partitionWriters = null;
     }
-    return mapOutputWriter.commitAllPartitions(
-      ShuffleChecksumHelper.getChecksumValues(partitionChecksums)
-    ).getPartitionLengths();
+    return mapOutputWriter.commitAllPartitions(getChecksumValues(partitionChecksums))
+      .getPartitionLengths();
   }
 
   private void writePartitionedDataWithChannel(
