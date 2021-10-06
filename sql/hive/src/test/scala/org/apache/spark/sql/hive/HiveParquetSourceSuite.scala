@@ -23,13 +23,14 @@ import java.io.IOException
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
  * A suite of tests for the Parquet support through the data sources API.
  */
-class HiveParquetSourceSuite extends ParquetPartitioningTest {
+class HiveParquetSourceSuite extends ParquetPartitioningTest with ParquetTest {
   import testImplicits._
   import spark._
 
@@ -389,9 +390,9 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
       val (ym, dt) = (java.time.Period.ofMonths(10), java.time.Duration.ofDays(1))
       val df = Seq((ym, dt)).toDF("ym", "dt")
       df.write.mode(SaveMode.Overwrite).format("parquet").saveAsTable(tableName)
-      checkAnswer(
-        sql(s"select * from $tableName"),
-        Row(ym, dt))
+      withAllParquetReaders {
+        checkAnswer(sql(s"select * from $tableName"), Row(ym, dt))
+      }
     }
   }
 }
