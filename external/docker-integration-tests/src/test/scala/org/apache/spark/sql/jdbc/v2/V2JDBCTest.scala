@@ -181,12 +181,16 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     }
   }
 
+  def supportsIndex: Boolean = false
   def testIndex(tbl: String): Unit = {}
 
   test("SPARK-36913: Test INDEX") {
-    withTable(s"$catalogName.new_table") {
-      sql(s"CREATE TABLE $catalogName.new_table(col1 INT, col2 INT, col3 INT, col4 INT, col5 INT)")
-      testIndex(s"$catalogName.new_table")
+    if (supportsIndex) {
+      withTable(s"$catalogName.new_table") {
+        sql(s"CREATE TABLE $catalogName.new_table(col1 INT, col2 INT, col3 INT," +
+          s" col4 INT, col5 INT)")
+        testIndex(s"$catalogName.new_table")
+      }
     }
   }
 }

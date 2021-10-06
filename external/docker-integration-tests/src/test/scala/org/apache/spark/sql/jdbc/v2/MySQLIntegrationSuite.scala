@@ -121,6 +121,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     assert(t.schema === expectedSchema)
   }
 
+  override def supportsIndex: Boolean = true
+
   override def testIndex(tbl: String): Unit = {
     val loaded = Catalogs.load("mysql", conf)
     val jdbcTable = loaded.asInstanceOf[TableCatalog]
