@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
 
 def from_avro(
-    data: ColumnOrName, jsonFormatSchema: str, options: Optional[Dict[str, str]] = None
+    data: "ColumnOrName", jsonFormatSchema: str, options: Optional[Dict[str, str]] = None
 ) -> Column:
     """
     Converts a binary column of Avro format into its corresponding catalyst value.
@@ -84,7 +84,7 @@ def from_avro(
     return Column(jc)
 
 
-def to_avro(data: ColumnOrName, jsonFormatSchema: str = "") -> Column:
+def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     """
     Converts a column into binary of avro format.
 
