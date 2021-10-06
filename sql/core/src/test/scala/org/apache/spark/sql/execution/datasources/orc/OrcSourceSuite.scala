@@ -31,7 +31,7 @@ import org.apache.orc.OrcProto.Stream.Kind
 import org.apache.orc.impl.RecordReaderImpl
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException}
 import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -551,7 +551,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll with CommonFileDa
   }
 }
 
-class OrcSourceSuite extends OrcSuite with SharedSparkSession {
+abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -806,4 +806,18 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
                 StructField("456", StringType) :: Nil))))))
     }
   }
+}
+
+class OrcSourceV1Suite extends OrcSourceSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
+}
+
+class OrcSourceV2Suite extends OrcSourceSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }
