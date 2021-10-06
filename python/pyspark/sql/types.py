@@ -554,11 +554,11 @@ class StructType(DataType):
         data_type: Union[str, DataType],
         nullable: bool = True,
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> StructType:
+    ) -> "StructType":
         ...
 
     @overload
-    def add(self, field: StructField) -> StructType:
+    def add(self, field: StructField) -> "StructType":
         ...
 
     def add(
@@ -567,7 +567,7 @@ class StructType(DataType):
         data_type: Optional[Union[str, DataType]] = None,
         nullable: Optional[bool] = True,
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> StructType:
+    ) -> "StructType":
         """
         Construct a :class:`StructType` by adding new elements to it, to define the schema.
         The method accepts either:
