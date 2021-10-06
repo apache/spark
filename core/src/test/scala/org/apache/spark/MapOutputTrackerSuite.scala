@@ -362,6 +362,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   test("SPARK-32921: get map sizes with merged shuffle") {
     conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
     conf.set(IS_TESTING, true)
+    conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
     val hostname = "localhost"
     val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))
 
@@ -391,7 +392,9 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       bitmap, 3000L))
     slaveTracker.updateEpoch(masterTracker.getEpoch)
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
-    assert(slaveTracker.getMapSizesByExecutorId(10, 0).toSeq ===
+    val mapSizesByExecutorId = slaveTracker.getPushBasedShuffleMapSizesByExecutorId(10, 0)
+    assert(mapSizesByExecutorId.enableBatchFetch === false)
+    assert(mapSizesByExecutorId.iter.toSeq ===
       Seq((blockMgrId, ArrayBuffer((ShuffleMergedBlockId(10, 0, 0), 3000, -1),
         (ShuffleBlockId(10, 2, 0), size1000, 2)))))
 
@@ -404,6 +407,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   test("SPARK-32921: get map statuses from merged shuffle") {
     conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
     conf.set(IS_TESTING, true)
+    conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
     val hostname = "localhost"
     val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))
 
@@ -436,6 +440,8 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       bitmap, 4000L))
     slaveTracker.updateEpoch(masterTracker.getEpoch)
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
+    val mapSizesByExecutorId = slaveTracker.getPushBasedShuffleMapSizesByExecutorId(10, 0)
+    assert(mapSizesByExecutorId.enableBatchFetch === false)
     assert(slaveTracker.getMapSizesForMergeResult(10, 0).toSeq ===
       Seq((blockMgrId, ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000, 0),
         (ShuffleBlockId(10, 1, 0), size1000, 1), (ShuffleBlockId(10, 2, 0), size1000, 2),
@@ -449,6 +455,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   test("SPARK-32921: get map statuses for merged shuffle block chunks") {
     conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
     conf.set(IS_TESTING, true)
+    conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
     val hostname = "localhost"
     val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))
 
@@ -735,5 +742,116 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       tracker.unregisterShuffle(shuffleId)
       tracker.stop()
     }
+  }
+
+  test("SPARK-36892: Batch fetch should be enabled in some scenarios with push based shuffle") {
+    conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
+    conf.set(IS_TESTING, true)
+    conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
+
+    val hostname = "localhost"
+    val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))
+
+    val masterTracker = newTrackerMaster()
+    masterTracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, conf))
+
+    val slaveRpcEnv = createRpcEnv("spark-slave", hostname, 0, new SecurityManager(conf))
+    val slaveTracker = new MapOutputTrackerWorker(conf)
+    slaveTracker.trackerEndpoint =
+      slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+
+    masterTracker.registerShuffle(10, 4, 1)
+    slaveTracker.updateEpoch(masterTracker.getEpoch)
+
+    val blockMgrId = BlockManagerId("a", "hostA", 1000)
+    masterTracker.registerMapOutput(10, 0, MapStatus(blockMgrId, Array(1000L), 0))
+    masterTracker.registerMapOutput(10, 1, MapStatus(blockMgrId, Array(1000L), 1))
+    masterTracker.registerMapOutput(10, 2, MapStatus(blockMgrId, Array(1000L), 2))
+    masterTracker.registerMapOutput(10, 3, MapStatus(blockMgrId, Array(1000L), 3))
+
+    slaveTracker.updateEpoch(masterTracker.getEpoch)
+    val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
+    val mapSizesByExecutorId = slaveTracker.getPushBasedShuffleMapSizesByExecutorId(10, 0)
+    // Batch fetch should be enabled when there are no merged shuffle files
+    assert(mapSizesByExecutorId.enableBatchFetch === true)
+    assert(mapSizesByExecutorId.iter.toSeq ===
+      Seq((blockMgrId, ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000, 0),
+        (ShuffleBlockId(10, 1, 0), size1000, 1), (ShuffleBlockId(10, 2, 0), size1000, 2),
+        (ShuffleBlockId(10, 3, 0), size1000, 3)))))
+
+    masterTracker.registerShuffle(11, 4, 1)
+    slaveTracker.updateEpoch(masterTracker.getEpoch)
+
+    val bitmap = new RoaringBitmap()
+    bitmap.add(0)
+    bitmap.add(1)
+    bitmap.add(3)
+
+    masterTracker.registerMergeResult(11, 0, MergeStatus(blockMgrId, 0,
+      bitmap, 3000L))
+    masterTracker.registerMapOutput(11, 0, MapStatus(blockMgrId, Array(1000L), 0))
+    masterTracker.registerMapOutput(11, 1, MapStatus(blockMgrId, Array(1000L), 1))
+    masterTracker.registerMapOutput(11, 2, MapStatus(blockMgrId, Array(1000L), 2))
+    masterTracker.registerMapOutput(11, 3, MapStatus(blockMgrId, Array(1000L), 3))
+
+    slaveTracker.updateEpoch(masterTracker.getEpoch)
+    val mapSizesByExecutorId2 = slaveTracker.getPushBasedShuffleMapSizesByExecutorId(11, 0, 2, 0, 1)
+    // Batch fetch should be enabled when it only fetches subsets of mapper outputs
+    assert(mapSizesByExecutorId2.enableBatchFetch === true)
+    assert(mapSizesByExecutorId2.iter.toSeq ===
+      Seq((blockMgrId, ArrayBuffer((ShuffleBlockId(11, 0, 0), size1000, 0),
+        (ShuffleBlockId(11, 1, 0), size1000, 1)))))
+
+    masterTracker.unregisterShuffle(10)
+    masterTracker.unregisterShuffle(11)
+    masterTracker.stop()
+    slaveTracker.stop()
+    rpcEnv.shutdown()
+    slaveRpcEnv.shutdown()
+  }
+
+  test("SPARK-36892: Batch fetch should be disabled in some scenarios with push based shuffle") {
+    conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
+    conf.set(IS_TESTING, true)
+    conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
+
+    val hostname = "localhost"
+    val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))
+
+    val masterTracker = newTrackerMaster()
+    masterTracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, conf))
+
+    val slaveRpcEnv = createRpcEnv("spark-slave", hostname, 0, new SecurityManager(conf))
+    val slaveTracker = new MapOutputTrackerWorker(conf)
+    slaveTracker.trackerEndpoint =
+      slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+    masterTracker.registerShuffle(10, 4, 2)
+    assert(masterTracker.containsShuffle(10))
+
+    val blockMgrId = BlockManagerId("a", "hostA", 1000)
+    masterTracker.registerMapOutput(10, 0, MapStatus(blockMgrId, Array(1000L, 1000L), 0))
+    masterTracker.registerMapOutput(10, 1, MapStatus(blockMgrId, Array(1000L, 1000L), 1))
+    masterTracker.registerMapOutput(10, 2, MapStatus(blockMgrId, Array(1000L, 1000L), 2))
+    masterTracker.registerMapOutput(10, 3, MapStatus(blockMgrId, Array(1000L, 1000L), 3))
+    slaveTracker.updateEpoch(masterTracker.getEpoch)
+
+    val bitmap = new RoaringBitmap()
+    bitmap.add(0)
+    bitmap.add(1)
+    masterTracker.registerMergeResult(10, 0, MergeStatus(blockMgrId, 0,
+      bitmap, 2000L))
+    masterTracker.registerMergeResult(10, 1, MergeStatus(blockMgrId, 0,
+      bitmap, 2000L))
+    slaveTracker.updateEpoch(masterTracker.getEpoch)
+    // Query for all mappers output for multiple reducers, since there are merged shuffles,
+    // batch fetch should be disabled.
+    val mapSizesByExecutorId =
+      slaveTracker.getPushBasedShuffleMapSizesByExecutorId(10, 0, Int.MaxValue, 0, 2)
+    assert(mapSizesByExecutorId.enableBatchFetch === false)
+    masterTracker.unregisterShuffle(10)
+    masterTracker.stop()
+    rpcEnv.shutdown()
   }
 }
