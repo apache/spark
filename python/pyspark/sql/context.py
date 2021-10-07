@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 import sys
 import warnings
 from typing import (
@@ -264,8 +263,8 @@ class SQLContext(object):
         self,
         name: str,
         f: Callable[..., Any],
-        returnType: Optional[DataType] = None
-    ) -> UserDefinedFunctionLike:
+        returnType: Optional["DataType"] = None
+    ) -> "UserDefinedFunctionLike":
         """An alias for :func:`spark.udf.register`.
         See :meth:`pyspark.sql.UDFRegistration.register`.
 
@@ -284,7 +283,7 @@ class SQLContext(object):
         self,
         name: str,
         javaClassName: str,
-        returnType: Optional[DataType] = None
+        returnType: Optional["DataType"] = None
     ) -> None:
         """An alias for :func:`spark.udf.registerJavaFunction`.
         See :meth:`pyspark.sql.UDFRegistration.registerJavaFunction`.
@@ -321,7 +320,7 @@ class SQLContext(object):
     @overload
     def createDataFrame(
         self,
-        data: Union[RDD[RowLike], Iterable[RowLike]],
+        data: Union["RDD[RowLike]", "Iterable[RowLike]"],
         samplingRatio: Optional[float] = ...,
     ) -> DataFrame:
         ...
@@ -329,7 +328,7 @@ class SQLContext(object):
     @overload
     def createDataFrame(
         self,
-        data: Union[RDD[RowLike], Iterable[RowLike]],
+        data: Union["RDD[RowLike]", "Iterable[RowLike]"],
         schema: Union[List[str], Tuple[str, ...]] = ...,
         verifySchema: bool = ...,
     ) -> DataFrame:
@@ -339,10 +338,10 @@ class SQLContext(object):
     def createDataFrame(
         self,
         data: Union[
-            RDD[Union[DateTimeLiteral, LiteralType, DecimalLiteral]],
-            Iterable[Union[DateTimeLiteral, LiteralType, DecimalLiteral]],
+            "RDD[Union[DateTimeLiteral, LiteralType, DecimalLiteral]]",
+            "Iterable[Union[DateTimeLiteral, LiteralType, DecimalLiteral]]",
         ],
-        schema: Union[AtomicType, str],
+        schema: Union["AtomicType", str],
         verifySchema: bool = ...,
     ) -> DataFrame:
         ...
@@ -350,30 +349,30 @@ class SQLContext(object):
     @overload
     def createDataFrame(
         self,
-        data: Union[RDD[RowLike], Iterable[RowLike]],
-        schema: Union[StructType, str],
+        data: Union["RDD[RowLike]", "Iterable[RowLike]"],
+        schema: Union["StructType", str],
         verifySchema: bool = ...,
     ) -> DataFrame:
         ...
 
     @overload
     def createDataFrame(
-        self, data: DataFrameLike, samplingRatio: Optional[float] = ...
+        self, data: "DataFrameLike", samplingRatio: Optional[float] = ...
     ) -> DataFrame:
         ...
 
     @overload
     def createDataFrame(
         self,
-        data: DataFrameLike,
-        schema: Union[StructType, str],
+        data: "DataFrameLike",
+        schema: Union["StructType", str],
         verifySchema: bool = ...,
     ) -> DataFrame:
         ...
 
     def createDataFrame(  # type: ignore[misc]
         self,
-        data: Union[RDD[RowLike], Iterable[RowLike]],
+        data: Union["RDD[RowLike]", "Iterable[RowLike]"],
         schema: Union[List[str], Tuple[str, ...]] = None,  # type: ignore[assignment]
         samplingRatio: Optional[float] = None,
         verifySchema: bool = True
@@ -512,7 +511,7 @@ class SQLContext(object):
         tableName: str,
         path: Optional[str] = None,
         source: Optional[str] = None,
-        schema: Optional[StructType] = None,
+        schema: Optional["StructType"] = None,
         **options: str
     ) -> DataFrame:
         """Creates an external table based on the dataset in a data source.
@@ -680,7 +679,7 @@ class SQLContext(object):
         return DataStreamReader(self)
 
     @property
-    def streams(self) -> StreamingQueryManager:
+    def streams(self) -> "StreamingQueryManager":
         """Returns a :class:`StreamingQueryManager` that allows managing all the
         :class:`StreamingQuery` StreamingQueries active on `this` context.
 
