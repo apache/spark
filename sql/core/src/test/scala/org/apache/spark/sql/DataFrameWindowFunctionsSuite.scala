@@ -400,7 +400,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     val e = intercept[AnalysisException](
       df.select($"key", count("invalid").over()))
     assert(e.getErrorClass == "MISSING_COLUMN")
-    assert(e.messageParameters.sameElements(Array("invalid", "key, value")))
+    assert(e.messageParameters.sameElements(Array("invalid", "value, key")))
   }
 
   test("numerical aggregate functions on string column") {
