@@ -34,6 +34,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case UnresolvedDBObjectName(CatalogAndNamespace(catalog, name), isNamespace) if isNamespace =>
       ResolvedDBObjectName(catalog, name)
 
+    case UnresolvedDBObjectName(CatalogAndIdentifier(catalog, identifier), _) =>
+      ResolvedDBObjectName(catalog, identifier.namespace :+ identifier.name())
+
     case c @ CreateTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
       CreateV2Table(
@@ -80,14 +83,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         writeOptions = c.writeOptions,
         orCreate = c.orCreate)
 
-    case Use(UnresolvedDBObjectName(nameParts, isNamespace)) =>
-      if (isNamespace) {
-        SetCatalogAndNamespace(catalogManager, None, Some(nameParts))
-      } else {
-        val CatalogAndNamespace(catalog, ns) = nameParts
-        val namespace = if (ns.nonEmpty) Some(ns) else None
-        SetCatalogAndNamespace(catalogManager, Some(catalog.name()), namespace)
-      }
+    case Use(ResolvedDBObjectName(catalog, ns)) =>
+      val namespace = if (ns.nonEmpty) Some(ns) else None
+      SetCatalogAndNamespace(catalogManager, Some(catalog.name()), namespace)
   }
 
   object NonSessionCatalogAndTable {
