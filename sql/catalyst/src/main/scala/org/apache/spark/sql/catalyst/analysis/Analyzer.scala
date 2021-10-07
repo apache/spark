@@ -1379,13 +1379,16 @@ class Analyzer(override val catalogManager: CatalogManager)
 
         case oldVersion: SerializeFromObject
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-          Seq((oldVersion, oldVersion.copy(
-            serializer = oldVersion.serializer.map(_.newInstance()))))
+          val newVersion = oldVersion.copy(serializer = oldVersion.serializer.map(_.newInstance()))
+          newVersion.copyTagsFrom(oldVersion)
+          Seq((oldVersion, newVersion))
 
         // Handle projects that create conflicting aliases.
         case oldVersion @ Project(projectList, _)
             if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
-          Seq((oldVersion, oldVersion.copy(projectList = newAliases(projectList))))
+          val newVersion = oldVersion.copy(projectList = newAliases(projectList))
+          newVersion.copyTagsFrom(oldVersion)
+          Seq((oldVersion, newVersion))
 
         // We don't need to search child plan recursively if the projectList of a Project
         // is only composed of Alias and doesn't contain any conflicting attributes.
@@ -1397,8 +1400,9 @@ class Analyzer(override val catalogManager: CatalogManager)
 
         case oldVersion @ Aggregate(_, aggregateExpressions, _)
             if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
-          Seq((oldVersion, oldVersion.copy(
-            aggregateExpressions = newAliases(aggregateExpressions))))
+          val newVersion = oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions))
+          newVersion.copyTagsFrom(oldVersion)
+          Seq((oldVersion, newVersion))
 
         // We don't search the child plan recursively for the same reason as the above Project.
         case _ @ Aggregate(_, aggregateExpressions, _)
@@ -1407,20 +1411,28 @@ class Analyzer(override val catalogManager: CatalogManager)
 
         case oldVersion @ FlatMapGroupsInPandas(_, _, output, _)
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-          Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
+          val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
+          newVersion.copyTagsFrom(oldVersion)
+          Seq((oldVersion, newVersion))
 
         case oldVersion @ FlatMapCoGroupsInPandas(_, _, _, output, _, _)
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-          Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
+          val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
+          newVersion.copyTagsFrom(oldVersion)
+          Seq((oldVersion, newVersion))
 
         case oldVersion @ MapInPandas(_, output, _)
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-          Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
+          val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
+          newVersion.copyTagsFrom(oldVersion)
+          Seq((oldVersion, newVersion))
 
         case oldVersion: Generate
             if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
           val newOutput = oldVersion.generatorOutput.map(_.newInstance())
-          Seq((oldVersion, oldVersion.copy(generatorOutput = newOutput)))
+          val newVersion = oldVersion.copy(generatorOutput = newOutput)
+          newVersion.copyTagsFrom(oldVersion)
+          Seq((oldVersion, newVersion))
 
         case oldVersion: Expand
             if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
@@ -1432,12 +1444,22 @@ class Analyzer(override val catalogManager: CatalogManager)
               attr
             }
           }
-          Seq((oldVersion, oldVersion.copy(output = newOutput)))
+          val newVersion = oldVersion.copy(output = newOutput)
+          newVersion.copyTagsFrom(oldVersion)
+          Seq((oldVersion, newVersion))
 
         case oldVersion @ Window(windowExpressions, _, _, child)
             if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
             .nonEmpty =>
-          Seq((oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions))))
+          val newVersion = oldVersion.copy(windowExpressions = newAliases(windowExpressions))
+          newVersion.copyTagsFrom(oldVersion)
+          Seq((oldVersion, newVersion))
+
+        case oldVersion @ ScriptTransformation(_, _, output, _, _)
+          if AttributeSet(output).intersect(conflictingAttributes).nonEmpty =>
+          val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
+          newVersion.copyTagsFrom(oldVersion)
+          Seq((oldVersion, newVersion))
 
         case _ => plan.children.flatMap(collectConflictPlans)
       }
