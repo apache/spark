@@ -1672,7 +1672,7 @@ def to_datetime(
 
     def pandas_to_datetime(pser_or_pdf: Union[pd.DataFrame, pd.Series]) -> Series[np.datetime64]:
         if isinstance(pser_or_pdf, pd.DataFrame):
-            pser_or_pdf = pser_or_pdf[[*list_cols]]
+            pser_or_pdf = pser_or_pdf[list_cols]
         return pd.to_datetime(
             pser_or_pdf,
             errors=errors,
@@ -1693,7 +1693,7 @@ def to_datetime(
             if value is not None and value in arg:
                 list_cols.append(value)
 
-        psdf = arg[[*list_cols]]
+        psdf = arg[list_cols]
         return psdf.pandas_on_spark.transform_batch(pandas_to_datetime)
     return pd.to_datetime(
         arg,
