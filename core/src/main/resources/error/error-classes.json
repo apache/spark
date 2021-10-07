@@ -21,9 +21,6 @@
   "CANNOT_FETCH_DATABASE_TABLES" : {
     "message" : [ "Unable to fetch tables of db %s" ]
   },
-  "CANNOT_GET_PARTITION_METADATA_BY_FILTER" : {
-    "message" : [ "Caught Hive MetaException attempting to get partition metadata by filter from Hive.", "You can set the Spark configuration setting %s to true to work around this problem, however this will result in degraded performance.", "Please report a bug: https://issues.apache.org/jira/browse/SPARK" ]
-  },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"

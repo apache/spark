@@ -1346,10 +1346,15 @@ object QueryExecutionErrors {
 
   def getPartitionMetadataByFilterError(e: InvocationTargetException): Throwable = {
     new SparkRuntimeException(
-      errorClass = "CANNOT_GET_PARTITION_METADATA_BY_FILTER",
+      errorClass = "INTERNAL_ERROR",
       messageParameters = Array(
-        SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.toString),
-      e)
+        s"""
+           |Caught Hive MetaException attempting to get partition metadata by filter
+           |from Hive. You can set the Spark configuration setting
+           |${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION} to true to work around
+           |this problem, however this will result in degraded performance. Please
+           |report a bug: https://issues.apache.org/jira/browse/SPARK
+       """.stripMargin.replaceAll("\n", " ")), e)
   }
 
   def unsupportedHiveMetastoreVersionError(version: String, key: String): Throwable = {
@@ -1370,7 +1375,7 @@ object QueryExecutionErrors {
 
   def cannotFetchTablesOfDatabaseError(dbName: String, e: Exception): Throwable = {
     new SparkException(
-      errorClass = "CANNOT_FETCH DATABASE_TABLES",
+      errorClass = "CANNOT_FETCH_DATABASE_TABLES",
       messageParameters = Array(dbName), e)
   }
 
