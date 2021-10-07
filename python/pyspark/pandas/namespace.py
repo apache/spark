@@ -1643,6 +1643,21 @@ def to_datetime(
         "months": "month",
         "day": "day",
         "days": "day",
+        "hour": "h",
+        "hours": "h",
+        "minute": "m",
+        "minutes": "m",
+        "second": "s",
+        "seconds": "s",
+        "ms": "ms",
+        "millisecond": "ms",
+        "milliseconds": "ms",
+        "us": "us",
+        "microsecond": "us",
+        "microseconds": "us",
+        "ns": "ns",
+        "nanosecond": "ns",
+        "nanoseconds": "ns",
     }
 
     # replace passed unit with _unit_map
@@ -1657,7 +1672,7 @@ def to_datetime(
 
     def pandas_to_datetime(pser_or_pdf: Union[pd.DataFrame, pd.Series]) -> Series[np.datetime64]:
         if isinstance(pser_or_pdf, pd.DataFrame):
-            pser_or_pdf = pser_or_pdf[[unit_rev["year"], unit_rev["month"], unit_rev["day"]]]
+            pser_or_pdf = pser_or_pdf[[*list_cols]]
         return pd.to_datetime(
             pser_or_pdf,
             errors=errors,
@@ -1672,7 +1687,13 @@ def to_datetime(
     if isinstance(arg, DataFrame):
         unit = {k: f(k) for k in arg.keys()}
         unit_rev = {v: k for k, v in unit.items()}
-        psdf = arg[[unit_rev["year"], unit_rev["month"], unit_rev["day"]]]
+        list_cols = [unit_rev["year"], unit_rev["month"], unit_rev["day"]]
+        for u in ["h", "m", "s", "ms", "us", "ns"]:
+            value = unit_rev.get(u)
+            if value is not None and value in arg:
+                list_cols.append(value)
+
+        psdf = arg[[*list_cols]]
         return psdf.pandas_on_spark.transform_batch(pandas_to_datetime)
     return pd.to_datetime(
         arg,
