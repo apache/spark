@@ -426,7 +426,8 @@ trait JoinSelectionHelper {
   }
 
   /**
-   * Returns true if the data size of plan a multiplied by SHUFFLE_HASH_JOIN_FACTOR is smaller than plan b.
+   * Returns true if the data size of plan a multiplied by SHUFFLE_HASH_JOIN_FACTOR
+   * is smaller than plan b.
    *
    * The cost to build hash map is higher than sorting, we should only build hash map on a table
    * that is much smaller than other one. Since we does not have the statistic for number of rows,
