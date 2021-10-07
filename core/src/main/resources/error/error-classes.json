@@ -26,8 +26,7 @@
     "sqlState" : "22005"
   },
   "CLASS_HAS_UNEXPECTED_SERIALIZER" : {
-    "message" : [ "Class %s has unexpected serializer: %s" ],
-    "sqlState" : "2200W"
+    "message" : [ "Class %s has unexpected serializer: %s" ]
   },
   "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
@@ -44,7 +43,7 @@
     "message" : [ "Error while decoding: %s" ]
   },
   "EXPRESSION_ENCODING" : {
-    "message" : [ "Error while encoding: %s" ]
+    "message" : [ "Error while encoding: %s\n%s" ]
   },
   "FAILED_EXECUTE_UDF" : {
     "message" : [ "Failed to execute user defined function (%s: (%s) => %s)" ]
@@ -106,14 +105,14 @@
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
   },
-  "MAP_KEY_DOES_NOT_EXIST" : {
-    "message" : [ "Key %s does not exist." ]
-  },
   "MALFORMED_JSON" : {
     "message" : [ "Malformed JSON" ]
   },
   "MALFORMED_JSON_RECORDS_IN_SCHEMA_INFERENCE" : {
     "message" : [ "Malformed records are detected in schema inference. Parse Mode: %s. Reasons: %s" ]
+  },
+  "MAP_KEY_DOES_NOT_EXIST" : {
+    "message" : [ "Key %s does not exist." ]
   },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],

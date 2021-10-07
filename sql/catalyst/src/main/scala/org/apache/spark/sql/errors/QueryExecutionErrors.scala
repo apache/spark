@@ -1066,13 +1066,15 @@ object QueryExecutionErrors {
 
   def expressionDecodingError(cause: Exception, expressions: Seq[Expression]): Throwable = {
     new SparkRuntimeException("EXPRESSION_DECODING",
-      Array(expressions.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")),
+      Array(cause.getMessage,
+        expressions.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")),
       cause)
   }
 
   def expressionEncodingError(cause: Exception, expressions: Seq[Expression]): Throwable = {
     new SparkRuntimeException(s"EXPRESSION_ENCODING",
-      Array(expressions.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")),
+      Array(cause.getMessage,
+        expressions.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")),
       cause)
   }
 
