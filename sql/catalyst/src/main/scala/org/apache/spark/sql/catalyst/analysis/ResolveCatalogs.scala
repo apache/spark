@@ -34,9 +34,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case UnresolvedDBObjectName(CatalogAndNamespace(catalog, name), isNamespace) if isNamespace =>
       ResolvedDBObjectName(catalog, name)
 
-    case UnresolvedDBObjectName(CatalogAndIdentifier(catalog, identifier), _) =>
-      ResolvedDBObjectName(catalog, identifier.namespace :+ identifier.name())
-
     case c @ CreateTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
       CreateV2Table(
