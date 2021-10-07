@@ -76,10 +76,6 @@
     "message" : [ "fieldIndex on a Row without schema is undefined." ],
     "sqlState" : "07009"
   },
-  "GET_PARENT_LOGGER_UNSUPPORTED" : {
-    "message" : [ "%s.getParentLogger is not yet implemented." ],
-    "sqlState" : "0A000"
-  },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [ "Column of grouping (%s) can't be found in grouping columns %s" ],
     "sqlState" : "42000"
@@ -193,6 +189,10 @@
   },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [ "Unsupported data type %s" ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_GET_PARENT_LOGGER" : {
+    "message" : [ "%s.getParentLogger is not yet implemented." ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_LITERAL_TYPE" : {

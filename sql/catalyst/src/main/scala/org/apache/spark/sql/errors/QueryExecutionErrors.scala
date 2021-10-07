@@ -1623,7 +1623,7 @@ object QueryExecutionErrors {
 
   def getParentLoggerNotImplementedError(className: String): Throwable = {
     new SparkSQLFeatureNotSupportedException(
-      errorClass = "GET_PARENT_LOGGER_UNSUPPORTED",
+      errorClass = "UNSUPPORTED_GET_PARENT_LOGGER",
       messageParameters = Array(className)
     )
   }
