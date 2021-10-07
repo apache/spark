@@ -71,6 +71,27 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
             ps.to_datetime([1, 2, 3], unit="D", origin=pd.Timestamp("1960-01-01")),
         )
 
+        pdf = pd.DataFrame({"years": [2015, 2016], "month": [2, 3], "day": [4, 5]})
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame({"years": [2015, 2016], "months": [2, 3], "day": [4, 5]})
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame({"years": [2015, 2016], "months": [2, 3], "days": [4, 5]})
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
     def test_date_range(self):
         self.assert_eq(
             ps.date_range(start="1/1/2018", end="1/08/2018"),
