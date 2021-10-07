@@ -68,7 +68,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     val bmm = new BlockManagerMaster(new NoopRpcEndpointRef(conf), null, conf, false)
 
     val bm = mock(classOf[BlockManager])
-    val dbm = new DiskBlockManager(conf, false)
+    val dbm = new DiskBlockManager(conf, deleteFilesOnStop = false, isDriver = false)
     when(bm.diskBlockManager).thenReturn(dbm)
     when(bm.master).thenReturn(bmm)
     val resolver = new IndexShuffleBlockResolver(conf, bm)
@@ -134,7 +134,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
 
     val ids = Set((1, 1L, 1))
     val bm = mock(classOf[BlockManager])
-    val dbm = new DiskBlockManager(conf, false)
+    val dbm = new DiskBlockManager(conf, deleteFilesOnStop = false, isDriver = false)
     when(bm.diskBlockManager).thenReturn(dbm)
     val indexShuffleBlockResolver = new IndexShuffleBlockResolver(conf, bm)
     val indexFile = indexShuffleBlockResolver.getIndexFile(1, 1L)

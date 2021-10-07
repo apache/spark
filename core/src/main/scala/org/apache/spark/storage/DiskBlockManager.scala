@@ -45,7 +45,10 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
  *
  * ShuffleDataIO also can change the behavior of deleteFilesOnStop.
  */
-private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Boolean)
+private[spark] class DiskBlockManager(
+    conf: SparkConf,
+    var deleteFilesOnStop: Boolean,
+    isDriver: Boolean)
   extends Logging {
 
   private[spark] val subDirsPerLocalDir = conf.get(config.DISKSTORE_SUB_DIRECTORIES)
@@ -208,7 +211,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
    * permission to create directories under application local directories.
    */
   private def createLocalDirsForMergedShuffleBlocks(): Unit = {
-    if (Utils.isPushBasedShuffleEnabled(conf)) {
+    if (Utils.isPushBasedShuffleEnabled(conf, isDriver = isDriver, checkSerializer = false)) {
       // Will create the merge_manager directory only if it doesn't exist under the local dir.
       Utils.getConfiguredLocalDirs(conf).foreach { rootDir =>
         try {

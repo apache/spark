@@ -51,7 +51,8 @@ class BlockManagerMasterEndpoint(
     listenerBus: LiveListenerBus,
     externalBlockStoreClient: Option[ExternalBlockStoreClient],
     blockManagerInfo: mutable.Map[BlockManagerId, BlockManagerInfo],
-    mapOutputTracker: MapOutputTrackerMaster)
+    mapOutputTracker: MapOutputTrackerMaster,
+    isDriver: Boolean)
   extends IsolatedRpcEndpoint with Logging {
 
   // Mapping from executor id to the block manager's local disk directories.
@@ -100,7 +101,7 @@ class BlockManagerMasterEndpoint(
 
   val defaultRpcTimeout = RpcUtils.askRpcTimeout(conf)
 
-  private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(conf)
+  private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(conf, isDriver)
 
   logInfo("BlockManagerMasterEndpoint up")
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)
