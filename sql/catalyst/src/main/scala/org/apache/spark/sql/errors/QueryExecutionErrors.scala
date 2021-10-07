@@ -345,94 +345,139 @@ object QueryExecutionErrors {
 
   def unableToCreateDatabaseAsFailedToCreateDirectoryError(
       dbDefinition: CatalogDatabase, e: IOException): Throwable = {
-    new SparkException("CANNOT_CREATE_OBJECT_DUE_TO_FAILED_DIRECTORY_CREATION",
-      Array("DATABASE", dbDefinition.name, dbDefinition.locationUri.toString), e)
+    new SparkException(
+      errorClass = "CANNOT_CREATE_OBJECT_DUE_TO_FAILED_DIRECTORY_CREATION",
+      messageParameters = Array("DATABASE", dbDefinition.name, dbDefinition.locationUri.toString),
+      cause = e)
   }
 
   def unableToDropDatabaseAsFailedToDeleteDirectoryError(
       dbDefinition: CatalogDatabase, e: IOException): Throwable = {
-    new SparkException("CANNOT_DROP_OBJECT_DUE_TO_FAILED_DIRECTORY_DELETION",
-      Array("DATABASE", dbDefinition.name, dbDefinition.locationUri.toString), e)
+    new SparkException(
+      errorClass = "CANNOT_DROP_OBJECT_DUE_TO_FAILED_DIRECTORY_DELETION",
+      messageParameters = Array("DATABASE", dbDefinition.name, dbDefinition.locationUri.toString),
+      cause = e)
   }
 
   def unableToCreateTableAsFailedToCreateDirectoryError(
       table: String, defaultTableLocation: Path, e: IOException): Throwable = {
-    new SparkException("CANNOT_CREATE_OBJECT_DUE_TO_FAILED_DIRECTORY_CREATION",
-      Array("TABLE", table, defaultTableLocation.toString), e)
+    new SparkException(
+      errorClass = "CANNOT_CREATE_OBJECT_DUE_TO_FAILED_DIRECTORY_CREATION",
+      messageParameters = Array("TABLE", table, defaultTableLocation.toString),
+      cause = e)
   }
 
   def unableToDeletePartitionPathError(partitionPath: Path, e: IOException): Throwable = {
-    new SparkException("CANNOT_DELETE_PARTITION_PATH", Array(partitionPath.toString), e)
+    new SparkException(
+      errorClass = "CANNOT_DELETE_PARTITION_PATH",
+      messageParameters = Array(partitionPath.toString),
+      cause = e)
   }
 
   def unableToDropTableAsFailedToDeleteDirectoryError(
       table: String, dir: Path, e: IOException): Throwable = {
-    new SparkException("CANNOT_DROP_OBJECT_DUE_TO_FAILED_DIRECTORY_DELETION",
-      Array("TABLE", table, dir.toString), e)
+    new SparkException(
+      errorClass = "CANNOT_DROP_OBJECT_DUE_TO_FAILED_DIRECTORY_DELETION",
+      messageParameters = Array("TABLE", table, dir.toString),
+      cause = e)
   }
 
   def unableToRenameTableAsFailedToRenameDirectoryError(
       oldName: String, newName: String, oldDir: Path, e: IOException): Throwable = {
-    new SparkException("CANNOT_RENAME_TABLE_DUE_TO_FAILED_DIRECTORY_RENAMING",
-      Array(oldName, newName, oldDir.toString), e)
+    new SparkException(
+      errorClass = "CANNOT_RENAME_TABLE_DUE_TO_FAILED_DIRECTORY_RENAMING",
+      messageParameters = Array(oldName, newName, oldDir.toString),
+      cause = e)
   }
 
   def unableToCreatePartitionPathError(partitionPath: Path, e: IOException): Throwable = {
-    new SparkException("CANNOT_CREATE_PARTITION_PATH", Array(partitionPath.toString), e)
+    new SparkException(
+      errorClass = "CANNOT_CREATE_PARTITION_PATH",
+      messageParameters = Array(partitionPath.toString),
+      cause = e)
   }
 
   def unableToRenamePartitionPathError(oldPartPath: Path, e: IOException): Throwable = {
-    new SparkException("CANNOT_RENAME_PARTITION_PATH", Array(oldPartPath.toString), e)
+    new SparkException(
+      errorClass = "CANNOT_RENAME_PARTITION_PATH",
+      messageParameters = Array(oldPartPath.toString),
+      cause = e)
   }
 
   def methodNotImplementedError(methodName: String): Throwable = {
-    new SparkUnsupportedOperationException("METHOD_NOT_IMPLEMENTED", Array(methodName))
+    new SparkUnsupportedOperationException(
+      errorClass = "METHOD_NOT_IMPLEMENTED",
+      messageParameters = Array(methodName))
   }
 
   def tableStatsNotSpecifiedError(): Throwable = {
-    new SparkIllegalStateException("TABLE_STATISTICS_NOT_SPECIFIED", Array.empty)
+    new SparkIllegalStateException(
+      errorClass = "TABLE_STATISTICS_NOT_SPECIFIED",
+      messageParameters = Array.empty)
   }
 
   def unaryMinusCauseOverflowError(originValue: AnyVal): ArithmeticException = {
-    new SparkArithmeticException("UNARY_MINUS_OVERFLOW", Array(originValue.toString))
+    new SparkArithmeticException(
+      errorClass = "UNARY_MINUS_OVERFLOW",
+      messageParameters = Array(originValue.toString))
   }
 
   def binaryArithmeticCauseOverflowError(
       eval1: Short, symbol: String, eval2: Short): ArithmeticException = {
-    new SparkArithmeticException("BINARY_ARITHMETIC_OVERFLOW",
-      Array(eval1.toString, symbol, eval2.toString))
+    new SparkArithmeticException(
+      errorClass = "BINARY_ARITHMETIC_OVERFLOW",
+      messageParameters = Array(eval1.toString, symbol, eval2.toString))
   }
 
   def failedSplitSubExpressionMsg(length: Int): String = {
-    SparkThrowableHelper.getMessage("FAILED_SPLIT_SUBEXPRESSION", Array(length.toString))
+    SparkThrowableHelper.getMessage(
+      errorClass = "FAILED_SPLIT_SUBEXPRESSION",
+      messageParameters = Array(length.toString))
   }
 
   def failedSplitSubExpressionError(length: Int): Throwable = {
-    new SparkIllegalStateException("FAILED_SPLIT_SUBEXPRESSION", Array(length.toString))
+    new SparkIllegalStateException(
+      errorClass = "FAILED_SPLIT_SUBEXPRESSION",
+      messageParameters = Array(length.toString))
   }
 
   def failedToCompileMsg(e: Exception): String = {
-    SparkThrowableHelper.getMessage("COMPILATION_FAILED", Array(e.toString))
+    SparkThrowableHelper.getMessage(
+      errorClass = "COMPILATION_FAILED",
+      messageParameters = Array(e.toString))
   }
 
   def internalCompilerError(e: InternalCompilerException): Throwable = {
-    new SparkInternalCompilerException("COMPILATION_FAILED", Array(e.toString))
+    new SparkInternalCompilerException(
+      errorClass = "COMPILATION_FAILED",
+      messageParameters = Array(e.toString))
   }
 
   def compilerError(e: CompileException): Throwable = {
-    new SparkCompileException("COMPILATION_FAILED", Array(e.toString), e.getLocation)
+    new SparkCompileException(
+      errorClass = "COMPILATION_FAILED",
+      messageParameters = Array(e.toString),
+      location = e.getLocation)
   }
 
   def unsupportedTableChangeError(e: IllegalArgumentException): Throwable = {
-    new SparkException("UNSUPPORTED_TABLE_CHANGE", Array(e.getMessage), e)
+    new SparkException(
+      errorClass = "UNSUPPORTED_TABLE_CHANGE",
+      messageParameters = Array(e.getMessage),
+      cause = e)
   }
 
   def notADatasourceRDDPartitionError(split: Partition): Throwable = {
-    new SparkException("NOT_A_DATA_SOURCE_RDD_PARTITION", Array(split.toString), null)
+    new SparkException(
+      errorClass = "NOT_A_DATA_SOURCE_RDD_PARTITION",
+      messageParameters = Array(split.toString),
+      cause = null)
   }
 
   def dataPathNotSpecifiedError(): Throwable = {
-    new SparkIllegalArgumentException("DATA_PATH_NOT_SPECIFIED", Array.empty)
+    new SparkIllegalArgumentException(
+      errorClass = "DATA_PATH_NOT_SPECIFIED",
+      messageParameters = Array.empty)
   }
 
   def createStreamingSourceNotSpecifySchemaError(): Throwable = {
