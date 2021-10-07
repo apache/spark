@@ -31,6 +31,15 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case Use(UnresolvedDBObjectName(nameParts, isNamespace)) =>
+      if (isNamespace) {
+        SetCatalogAndNamespace(catalogManager, None, Some(nameParts))
+      } else {
+        val CatalogAndNamespace(catalog, ns) = nameParts
+        val namespace = if (ns.nonEmpty) Some(ns) else None
+        SetCatalogAndNamespace(catalogManager, Some(catalog.name()), namespace)
+      }
+
     case UnresolvedDBObjectName(CatalogAndNamespace(catalog, name), isNamespace) if isNamespace =>
       ResolvedDBObjectName(catalog, name)
 
@@ -79,10 +88,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         convertTableProperties(c),
         writeOptions = c.writeOptions,
         orCreate = c.orCreate)
-
-    case Use(ResolvedDBObjectName(catalog, ns)) =>
-      val namespace = if (ns.nonEmpty) Some(ns) else None
-      SetCatalogAndNamespace(catalogManager, Some(catalog.name()), namespace)
   }
 
   object NonSessionCatalogAndTable {
