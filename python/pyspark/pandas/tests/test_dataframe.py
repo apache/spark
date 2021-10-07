@@ -6026,6 +6026,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assert_eq(psmidx.dtypes, expected)
 
     def test_cov(self):
+        # SPARK-36396: Implement DataFrame.cov
+
         # int
         pdf = pd.DataFrame([(1, 2), (0, 3), (2, 0), (1, 1)], columns=["a", "b"])
         psdf = ps.from_pandas(pdf)
