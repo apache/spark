@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from __future__ import annotations
-
 import sys
 import warnings
 from typing import (
@@ -145,7 +143,7 @@ class SQLContext(object):
         return self.sparkSession._jsparkSession.sessionState().conf()
 
     @classmethod
-    def getOrCreate(cls: Type[SQLContext], sc: SparkContext) -> SQLContext:
+    def getOrCreate(cls: Type["SQLContext"], sc: SparkContext) -> "SQLContext":
         """
         Get the existing SQLContext or create a new one with given SparkContext.
 
@@ -171,7 +169,7 @@ class SQLContext(object):
             cls(sc, sparkSession, jsqlContext)
         return cls._instantiatedContext  # type: ignore[return-value]
 
-    def newSession(self) -> SQLContext:
+    def newSession(self) -> "SQLContext":
         """
         Returns a new SQLContext as new session, that has separate SQLConf,
         registered temporary views and UDFs, but shared SparkContext and
