@@ -76,11 +76,8 @@ public class ParquetVectorUpdaterFactory {
       case INT32:
         if (sparkType == DataTypes.IntegerType || canReadAsIntDecimal(descriptor, sparkType)) {
           return new IntegerUpdater();
-        } else if (sparkType == DataTypes.LongType && isUnsignedIntTypeMatched(32)) {
-          // In `ParquetToSparkSchemaConverter`, we map parquet UINT32 to our LongType.
-          // For unsigned int32, it stores as plain signed int32 in Parquet when dictionary
-          // fallbacks. We read them as long values.
-          return new UnsignedIntegerUpdater();
+        } else if (sparkType == DataTypes.LongType) {
+          return new LongIntegerUpdater();
         } else if (sparkType == DataTypes.ByteType) {
           return new ByteUpdater();
         } else if (sparkType == DataTypes.ShortType) {
@@ -281,14 +278,14 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  private static class UnsignedIntegerUpdater implements ParquetVectorUpdater {
+  private static class LongIntegerUpdater implements ParquetVectorUpdater {
     @Override
     public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      valuesReader.readUnsignedIntegers(total, values, offset);
+      valuesReader.readIntegersAsLongs(total, values, offset);
     }
 
     @Override
@@ -301,7 +298,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      values.putLong(offset, Integer.toUnsignedLong(valuesReader.readInteger()));
+      values.putLong(offset, valuesReader.readInteger());
     }
 
     @Override

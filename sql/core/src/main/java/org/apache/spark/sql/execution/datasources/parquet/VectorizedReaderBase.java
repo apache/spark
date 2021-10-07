@@ -67,6 +67,11 @@ public class VectorizedReaderBase extends ValuesReader implements VectorizedValu
   }
 
   @Override
+  public void readIntegersAsLongs(int total, WritableColumnVector c, int rowId) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public void readIntegersWithRebase(int total, WritableColumnVector c, int rowId,
       boolean failIfRebase) {
     throw new UnsupportedOperationException();

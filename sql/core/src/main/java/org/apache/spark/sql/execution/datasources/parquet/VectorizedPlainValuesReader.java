@@ -131,6 +131,16 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   }
 
   @Override
+  public final void readIntegersAsLongs(int total, WritableColumnVector c, int rowId) {
+    int requiredBytes = total * 4;
+    ByteBuffer buffer = getBuffer(requiredBytes);
+    for (int i = 0; i < total; i += 1) {
+      c.putLong(rowId + i, buffer.getInt());
+    }
+  }
+
+
+  @Override
   public final void readUnsignedIntegers(int total, WritableColumnVector c, int rowId) {
     int requiredBytes = total * 4;
     ByteBuffer buffer = getBuffer(requiredBytes);
