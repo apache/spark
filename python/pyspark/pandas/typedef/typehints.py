@@ -720,13 +720,13 @@ def create_tuple_for_frame_type(params: Any) -> object:
         >>> pdf = pd.DataFrame({'a': range(3)}, index=idx)
         >>> ps.DataFrame[[int, int], [int, int]]  # doctest: +ELLIPSIS
         typing.Tuple[...IndexNameType, ...IndexNameType, ...NameType, ...NameType]
-        >>> ps.DataFrame[pdf.index.dtypes, pdf.dtypes]  # doctest: +ELLIPSIS
+        >>> ps.DataFrame[pdf.index.dtypes, pdf.dtypes]  # doctest: +ELLIPSIS, +SKIP
         typing.Tuple[...IndexNameType, ...NameType]
         >>> ps.DataFrame[[("index-1", int), ("index-2", int)], [("id", int), ("A", int)]]
         ... # doctest: +ELLIPSIS
         typing.Tuple[...IndexNameType, ...IndexNameType, ...NameType, ...NameType]
         >>> ps.DataFrame[zip(pdf.index.names, pdf.index.dtypes), zip(pdf.columns, pdf.dtypes)]
-        ... # doctest: +ELLIPSIS
+        ... # doctest: +ELLIPSIS, +SKIP
         typing.Tuple[...IndexNameType, ...NameType]
     """
     return Tuple[_to_type_holders(params)]
