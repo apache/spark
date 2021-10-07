@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive
 
+import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
@@ -137,8 +138,8 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
       checkAnswer(
         sql(s"SELECT * FROM $tbl"),
         Row(
-          java.time.Period.ofYears(1).plusMonths(1),
-          java.time.Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)
+          Period.ofYears(1).plusMonths(1),
+          Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)
             .plus(123456, ChronoUnit.MICROS)))
     }
   }
