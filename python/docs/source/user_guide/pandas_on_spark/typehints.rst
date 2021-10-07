@@ -61,7 +61,7 @@ it as a Spark schema. As an example, you can specify the return type hint as bel
     >>> df.groupby('A').apply(pandas_div)
 
 Notice that the function ``pandas_div`` actually takes and outputs a pandas DataFrame instead of
-pandas-on-Spark :class:`DataFrame`. So, technically the correct types should be pandas'.
+pandas-on-Spark :class:`DataFrame`. So, technically the correct types should be of pandas.
 
 With Python 3.7+, you can specify the type hints by using pandas instances as follows:
 
