@@ -92,6 +92,7 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
         self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
 
+        # SPARK-36946: Support time for ps.to_datetime
         pdf = pd.DataFrame(
             {
                 "year": [2015, 2016],
