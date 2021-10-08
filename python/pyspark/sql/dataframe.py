@@ -3054,9 +3054,9 @@ def _test():
         StructField("name", StringType(), False),
         StructField("time", LongType(), False)])
     globs['sdf'] = spark.readStream \
-      .schema(schema) \
-      .format('csv') \
-      .load('python/test_support/sql/with-time-column.csv')
+        .schema(schema) \
+        .format('csv') \
+        .load('python/test_support/sql/with-time-column.csv')
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.dataframe, globs=globs,
