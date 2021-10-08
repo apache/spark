@@ -1236,6 +1236,13 @@ class MultiIndex(Index):
     ) -> "Index":
         return MissingPandasLikeMultiIndex.map(self, mapper, na_action)
 
+    def putmask(
+        self,
+        mask: Union[Series, "Index", List, Tuple] = None,
+        value: Union[Series, "Index", List, Tuple] = None,
+    ) -> "Index":
+        return MissingPandasLikeMultiIndex.putmask(self, mask, value)
+
 
 def _test() -> None:
     import os

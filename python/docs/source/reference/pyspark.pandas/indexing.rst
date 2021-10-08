@@ -83,6 +83,7 @@ Modifying and computations
    Index.min
    Index.max
    Index.map
+   Index.putmask
    Index.rename
    Index.repeat
    Index.take

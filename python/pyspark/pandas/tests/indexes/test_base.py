@@ -2388,6 +2388,41 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             lambda: psidx.map({1: 1, 2: 2.0, 3: "three"}),
         )
 
+    def test_putmask(self):
+        pidx = pd.Index(["a", "b", "c", "d", "e"])
+        psidx = ps.from_pandas(pidx)
+
+        self.assert_eq(
+            psidx.putmask(psidx < "c", "k").sort_values(),
+            pidx.putmask(pidx < "c", "k").sort_values(),
+        )
+        self.assert_eq(
+            psidx.putmask(psidx < "c", ["g", "h", "i", "j", "k"]).sort_values(),
+            pidx.putmask(pidx < "c", ["g", "h", "i", "j", "k"]).sort_values(),
+        )
+        self.assert_eq(
+            psidx.putmask(psidx < "c", ("g", "h", "i", "j", "k")).sort_values(),
+            pidx.putmask(pidx < "c", ("g", "h", "i", "j", "k")).sort_values(),
+        )
+        self.assert_eq(
+            psidx.putmask(psidx < "c", ps.Index(["g", "h", "i", "j", "k"])).sort_values(),
+            pidx.putmask(pidx < "c", pd.Index(["g", "h", "i", "j", "k"])).sort_values(),
+        )
+        self.assert_eq(
+            psidx.putmask(psidx < "c", ps.Series(["g", "h", "i", "j", "k"])).sort_values(),
+            pidx.putmask(pidx < "c", pd.Series(["g", "h", "i", "j", "k"])).sort_values(),
+        )
+
+        self.assertRaises(
+            ValueError,
+            lambda: psidx.putmask(psidx < "c", ps.Series(["g", "h"])),
+        )
+
+        self.assertRaises(
+            ValueError,
+            lambda: psidx.putmask([True, False], ps.Series(["g", "h", "i", "j", "k"])),
+        )
+
     def test_multiindex_equal_levels(self):
         pmidx1 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
         pmidx2 = pd.MultiIndex.from_tuples([("b", "y"), ("a", "x"), ("c", "z")])

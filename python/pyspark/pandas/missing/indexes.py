@@ -53,7 +53,6 @@ class MissingPandasLikeIndex(object):
     groupby = _unsupported_function("groupby")
     is_ = _unsupported_function("is_")
     join = _unsupported_function("join")
-    putmask = _unsupported_function("putmask")
     ravel = _unsupported_function("ravel")
     reindex = _unsupported_function("reindex")
     searchsorted = _unsupported_function("searchsorted")

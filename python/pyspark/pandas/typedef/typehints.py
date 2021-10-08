@@ -356,7 +356,7 @@ def infer_pd_series_spark_type(
     if dtype == np.dtype("object"):
         if len(pser) == 0 or pser.isnull().all():
             return types.NullType()
-        elif hasattr(pser.iloc[0], "__UDT__"):
+        elif hasattr(pser, "iloc") and hasattr(pser.iloc[0], "__UDT__"):
             return pser.iloc[0].__UDT__
         else:
             return from_arrow_type(pa.Array.from_pandas(pser).type, prefer_timestamp_ntz)

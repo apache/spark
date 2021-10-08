@@ -36,8 +36,16 @@ from pandas.io.formats.printing import pprint_thing
 from pandas.api.types import CategoricalDtype, is_hashable
 from pandas._libs import lib
 
+from pyspark.sql.functions import pandas_udf
 from pyspark.sql import functions as F, Column
-from pyspark.sql.types import FractionalType, IntegralType, TimestampType, TimestampNTZType
+from pyspark.sql.types import (
+    FractionalType,
+    IntegralType,
+    TimestampType,
+    TimestampNTZType,
+    BooleanType,
+    StringType,
+)
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Dtype, Label, Name, Scalar
@@ -46,6 +54,7 @@ from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.missing.indexes import MissingPandasLikeIndex
 from pyspark.pandas.series import Series, first_series
+from pyspark.pandas.typedef import infer_pd_series_spark_type
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.accessors import SparkIndexMethods
 from pyspark.pandas.utils import (
@@ -1926,6 +1935,112 @@ class Index(IndexOpsMixin):
             .select(sequence_col)
             .first()[0]
         )
+
+    def putmask(
+        self, mask: Union[Series, "Index", List, Tuple], value: Union[Series, "Index", List, Tuple]
+    ) -> "Index":
+        """
+        Return a new Index of the values set with the mask.
+        .. note:: this API can be pretty expensive since it is based on
+             a global sequence internally.
+        Parameters
+        ----------
+        mask : array-like
+            Boolean mask array. It has to be the same shape as the index.
+        value : array-like
+            Value to put into the index where mask is True.
+        Returns
+        -------
+        Index
+        Examples
+        -------
+        >>> psidx = ps.Index([1, 2, 3, 4, 5])
+        >>> psidx
+        Int64Index([1, 2, 3, 4, 5], dtype='int64')
+        >>> psidx.putmask(psidx > 3, 100).sort_values()
+        Int64Index([1, 2, 3, 100, 100], dtype='int64')
+        >>> psidx.putmask(psidx > 3, ps.Index([100, 200, 300, 400, 500])).sort_values()
+        Int64Index([1, 2, 3, 400, 500], dtype='int64')
+        """
+        scol_name = self._internal.index_spark_column_names[0]
+        sdf = self._internal.spark_frame.select(self.spark.column)
+
+        dist_sequence_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
+        sdf = InternalFrame.attach_distributed_sequence_column(
+            sdf, column_name=dist_sequence_col_name
+        )
+
+        replace_col = verify_temp_column_name(sdf, "__replace_column__")
+        masking_col = verify_temp_column_name(sdf, "__masking_column__")
+
+        if isinstance(value, (list, tuple, Index, Series)):
+            if isinstance(value, (list, tuple)):
+                pd_value = pd.Series(value)
+            elif isinstance(value, (Series, Index)):
+                pd_value = value.to_pandas()
+
+            if self.size != pd_value.size:
+                # TODO: We can't support different size of value for now.
+                raise ValueError("value and data must be the same size")
+
+            replace_return_type = infer_pd_series_spark_type(pd_value, pd_value.dtype)
+
+            @pandas_udf(
+                returnType=replace_return_type if replace_return_type else StringType()
+            )  # type: ignore
+            def replace_pandas_udf(sequence: pd.Series) -> pd.Series:
+                return pd_value[sequence]
+
+            sdf = sdf.withColumn(replace_col, replace_pandas_udf(dist_sequence_col_name))
+        else:
+            sdf = sdf.withColumn(replace_col, F.lit(value))
+
+        if isinstance(mask, (list, tuple)):
+            pandas_mask = pd.Series(mask)
+        elif isinstance(mask, (Index, Series)):
+            pandas_mask = mask.to_pandas()
+        else:
+            raise TypeError("Mask data doesn't support type " "{0}".format(type(mask).__name__))
+
+        if self.size != pandas_mask.size:
+            raise ValueError("mask and data must be the same size")
+
+        @pandas_udf(returnType=BooleanType())  # type: ignore
+        def masking_pandas_udf(sequence: pd.Series) -> pd.Series:
+            return pandas_mask[sequence]
+
+        sdf = sdf.withColumn(masking_col, masking_pandas_udf(dist_sequence_col_name))
+
+        # spark_frame here looks like below
+        # +-------------------------------+-----------------+------------------+------------------+
+        # |__distributed_sequence_column__|__index_level_0__|__replace_column__|__masking_column__|
+        # +-------------------------------+-----------------+------------------+------------------+
+        # |                              0|                a|               100|              true|
+        # |                              3|                d|               400|             false|
+        # |                              1|                b|               200|              true|
+        # |                              2|                c|               300|             false|
+        # |                              4|                e|               500|             false|
+        # +-------------------------------+-----------------+------------------+------------------+
+
+        cond = F.when(scol_for(sdf, masking_col), scol_for(sdf, replace_col)).otherwise(
+            scol_for(sdf, scol_name)
+        )
+        sdf = sdf.select(cond.alias(scol_name))
+
+        if sdf.schema[scol_name].nullable != self._internal.index_fields[0].nullable:
+            sdf.schema[scol_name].nullable = self._internal.index_fields[0].nullable
+            sdf = sdf.sql_ctx.createDataFrame(sdf.rdd, sdf.schema)
+
+        internal = InternalFrame(
+            spark_frame=sdf,
+            index_spark_columns=[
+                scol_for(sdf, col) for col in self._internal.index_spark_column_names
+            ],
+            index_names=self._internal.index_names,
+            index_fields=self._internal.index_fields,
+        )
+
+        return DataFrame(internal).index
 
     def set_names(
         self,
