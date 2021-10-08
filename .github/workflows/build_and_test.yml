@@ -25,6 +25,8 @@ on:
     - '**'
     - '!branch-*.*'
   schedule:
+    # master, Hadoop 2
+    - cron: '0 1 * * *'
     # master
     - cron: '0 4 * * *'
     # branch-3.2
