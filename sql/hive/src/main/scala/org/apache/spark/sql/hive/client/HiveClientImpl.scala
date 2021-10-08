@@ -736,10 +736,11 @@ private[hive] class HiveClientImpl(
   override def getPartitions(
       db: String,
       table: String,
-      partialSpec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = withHiveState {
-    getPartitions(
-      getRawTableOption(db, table).getOrElse(throw new NoSuchTableException(db, table)),
-      partialSpec)
+      partialSpec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = {
+    val hiveTable = withHiveState {
+      getRawTableOption(db, table).getOrElse(throw new NoSuchTableException(db, table))
+    }
+    getPartitions(hiveTable, partialSpec)
   }
 
   /**
