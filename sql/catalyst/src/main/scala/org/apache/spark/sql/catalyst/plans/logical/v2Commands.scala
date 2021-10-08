@@ -622,12 +622,13 @@ object ShowViews {
 }
 
 /**
- * The logical plan of the USE/USE NAMESPACE command.
+ * The logical plan of the USE command.
  */
-case class SetCatalogAndNamespace(
-    catalogManager: CatalogManager,
-    catalogName: Option[String],
-    namespace: Option[Seq[String]]) extends LeafCommand
+case class SetCatalogAndNamespace(child: LogicalPlan) extends UnaryCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): SetCatalogAndNamespace = {
+    copy(child = newChild)
+  }
+}
 
 /**
  * The logical plan of the REFRESH TABLE command.
@@ -1046,14 +1047,4 @@ case class UncacheTable(
   override def childrenToAnalyze: Seq[LogicalPlan] = table :: Nil
 
   override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
-}
-
-/**
- * The logical plan of the USE command.
- */
-case class Use(name: LogicalPlan) extends UnaryCommand {
-  override def child: LogicalPlan = name
-  override protected def withNewChildInternal(newChild: LogicalPlan): Use = {
-    copy(name = newChild)
-  }
 }
