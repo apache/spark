@@ -3048,8 +3048,9 @@ def _test():
     globs['df5'] = sc.parallelize([Row(age=10, name='Alice', spy=False),
                                    Row(age=5, name='Bob', spy=None),
                                    Row(age=None, name='Mallory', spy=True)]).toDF()
-    globs['sdf'] = sc.parallelize([Row(name='Tom', time=1479441846),
-                                   Row(name='Bob', time=1479442946)]).toDF()
+
+    schema = StructType([StructField("name", StringType(), False), StructField("time", LongType(), False)])
+    globs['sdf'] = spark.readStream.format('csv').load('python/test_support/sql/with-time-column.csv')
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.dataframe, globs=globs,
