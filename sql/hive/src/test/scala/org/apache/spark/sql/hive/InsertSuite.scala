@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.util.Locale
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
@@ -852,6 +853,68 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
 
       assert(!e.contains("get partition: Value for key d is null or empty"))
       assert(e.contains("Partition spec is invalid"))
+    }
+  }
+
+  test("SPARK-35531: Insert data with different cases") {
+    withTable("TEST1") {
+      val createHive =
+        """
+          |CREATE TABLE TEST1(
+          |v1 BIGINT,
+          |s1 INT)
+          |PARTITIONED BY (pk BIGINT)
+          |CLUSTERED BY (v1)
+          |SORTED BY (s1)
+          |INTO 200 BUCKETS
+          |STORED AS PARQUET
+        """.stripMargin
+
+      val insertString =
+        """
+          |INSERT INTO test1
+          |SELECT * FROM VALUES(1,1,1)
+        """.stripMargin
+
+      val dropString = "DROP TABLE IF EXISTS test1"
+
+      spark.sql(dropString)
+      spark.sql(createHive.toLowerCase(Locale.ROOT))
+
+      spark.sql(insertString.toLowerCase(Locale.ROOT))
+      spark.sql(insertString.toUpperCase(Locale.ROOT))
+
+      spark.sql(dropString)
+      spark.sql(createHive.toUpperCase(Locale.ROOT))
+
+      spark.sql(insertString.toLowerCase(Locale.ROOT))
+      spark.sql(insertString.toUpperCase(Locale.ROOT))
+
+      val createSpark =
+        """
+          |create table TEST1(
+          |v1 BIGINT,
+          |s1 INT)
+          |using parquet
+          |partitioned by (pk BIGINT)
+          |clustered by (v1)
+          |sorted by (s1)
+          |into 200 buckets
+          |
+          |""".stripMargin
+
+      spark.sql(dropString)
+      spark.sql(createSpark.toLowerCase(Locale.ROOT))
+
+      spark.sql(insertString.toLowerCase(Locale.ROOT))
+      spark.sql(insertString.toUpperCase(Locale.ROOT))
+
+
+      spark.sql(dropString)
+      spark.sql(createSpark.toUpperCase(Locale.ROOT))
+
+      spark.sql(insertString.toLowerCase(Locale.ROOT))
+      spark.sql(insertString.toUpperCase(Locale.ROOT))
     }
   }
 }
