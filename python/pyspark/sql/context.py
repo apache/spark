@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-
 import sys
 import warnings
 from typing import (
