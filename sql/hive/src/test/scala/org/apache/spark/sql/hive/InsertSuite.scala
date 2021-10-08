@@ -857,62 +857,52 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
   }
 
   test("SPARK-35531: Insert data with different cases of bucket column") {
-    withTable("TEST1") {
-      val createHive =
-        """
-          |CREATE TABLE TEST1(
-          |v1 BIGINT,
-          |s1 INT)
-          |PARTITIONED BY (pk BIGINT)
-          |CLUSTERED BY (v1)
-          |SORTED BY (s1)
-          |INTO 200 BUCKETS
-          |STORED AS PARQUET
+    withTable("test1") {
+      Seq(true, false).foreach { isHiveTable =>
+        val createSpark = if (isHiveTable) {
+          """
+            |CREATE TABLE TEST1(
+            |v1 BIGINT,
+            |s1 INT)
+            |PARTITIONED BY (pk BIGINT)
+            |CLUSTERED BY (v1)
+            |SORTED BY (s1)
+            |INTO 200 BUCKETS
+            |STORED AS PARQUET
+          """.stripMargin
+        } else {
+          s"""
+             |CREATE TABLE test1(
+             |v1 BIGINT,
+             |s1 INT)
+             |USING PARQUET
+             |PARTITIONED BY (pk BIGINT)
+             |CLUSTERED BY (v1)
+             |SORTED BY (s1)
+             |INTO 200 BUCKETS
+        """.stripMargin
+        }
+
+        val insertString =
+          """
+            |INSERT INTO test1
+            |SELECT * FROM VALUES(1,1,1)
         """.stripMargin
 
-      val insertString =
-        """
-          |INSERT INTO test1
-          |SELECT * FROM VALUES(1,1,1)
-        """.stripMargin
+        val dropString = "DROP TABLE IF EXISTS test1"
 
-      val dropString = "DROP TABLE IF EXISTS test1"
+        sql(dropString)
+        sql(createSpark.toLowerCase(Locale.ROOT))
 
-      spark.sql(dropString)
-      spark.sql(createHive.toLowerCase(Locale.ROOT))
+        sql(insertString.toLowerCase(Locale.ROOT))
+        sql(insertString.toUpperCase(Locale.ROOT))
 
-      spark.sql(insertString.toLowerCase(Locale.ROOT))
-      spark.sql(insertString.toUpperCase(Locale.ROOT))
+        sql(dropString)
+        sql(createSpark.toUpperCase(Locale.ROOT))
 
-      spark.sql(dropString)
-      spark.sql(createHive.toUpperCase(Locale.ROOT))
-
-      spark.sql(insertString.toLowerCase(Locale.ROOT))
-      spark.sql(insertString.toUpperCase(Locale.ROOT))
-
-      val createSpark =
-        """
-          |CREATE TABLE TEST1(
-          |v1 BIGINT,
-          |s1 INT)
-          |USING PARQUET
-          |PARTITIONED BY (pk BIGINT)
-          |CLUSTERED BY (v1)
-          |SORTED BY (s1)
-          |INTO 200 BUCKETS
-        """.stripMargin
-
-      spark.sql(dropString)
-      spark.sql(createSpark.toLowerCase(Locale.ROOT))
-
-      spark.sql(insertString.toLowerCase(Locale.ROOT))
-      spark.sql(insertString.toUpperCase(Locale.ROOT))
-
-      spark.sql(dropString)
-      spark.sql(createSpark.toUpperCase(Locale.ROOT))
-
-      spark.sql(insertString.toLowerCase(Locale.ROOT))
-      spark.sql(insertString.toUpperCase(Locale.ROOT))
+        sql(insertString.toLowerCase(Locale.ROOT))
+        sql(insertString.toUpperCase(Locale.ROOT))
+      }
     }
   }
 }
