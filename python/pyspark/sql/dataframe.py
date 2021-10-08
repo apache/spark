@@ -3050,7 +3050,9 @@ def _test():
                                    Row(age=5, name='Bob', spy=None),
                                    Row(age=None, name='Mallory', spy=True)]).toDF()
 
-    schema = StructType([StructField("name", StringType(), False), StructField("time", LongType(), False)])
+    schema = StructType([
+        StructField("name", StringType(), False),
+        StructField("time", LongType(), False)])
     globs['sdf'] = spark.readStream \
       .schema(schema) \
       .format('csv') \
