@@ -395,7 +395,7 @@ abstract class AesBase(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, key) - Returns a encrypted value of `expr` using AES.
+    _FUNC_(expr, key) - Returns an encrypted value of `expr` using AES.
       Key lengths of 16, 24 and 32 bits are supported.
   """,
   examples = """
@@ -403,7 +403,7 @@ abstract class AesBase(left: Expression, right: Expression)
       > SELECT base64(_FUNC_('Spark', 'abcdefghijklmnop'));
        4Hv0UKCx6nfUeAoPZo1z+w==
   """,
-  since = "3.2.0",
+  since = "3.3.0",
   group = "misc_funcs")
 case class AesEncrypt(left: Expression, right: Expression) extends AesBase(left, right) {
   override protected val cipherMode: Int = Cipher.ENCRYPT_MODE
@@ -430,7 +430,7 @@ case class AesEncrypt(left: Expression, right: Expression) extends AesBase(left,
       > SELECT _FUNC_(unbase64('4Hv0UKCx6nfUeAoPZo1z+w=='), 'abcdefghijklmnop');
        Spark
   """,
-  since = "3.2.0",
+  since = "3.3.0",
   group = "misc_funcs")
 case class AesDecrypt(left: Expression, right: Expression) extends AesBase(left, right) {
   override protected val cipherMode: Int = Cipher.DECRYPT_MODE
