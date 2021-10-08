@@ -23,6 +23,7 @@ import java.util.concurrent.{CountDownLatch, ExecutorService, LinkedBlockingQueu
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.duration._
+import scala.language.reflectiveCalls
 
 import org.mockito.ArgumentMatchers.{any, anyInt, anyString, eq => meq}
 import org.mockito.Mockito.{atLeast, atMost, never, spy, times, verify, when}
@@ -36,8 +37,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
-import org.apache.spark.util.{Clock}
-import org.apache.spark.util.{ManualClock, ThreadUtils}
+import org.apache.spark.util.{Clock, ManualClock, ThreadUtils}
 
 class FakeSchedulerBackend extends SchedulerBackend {
   def start(): Unit = {}
@@ -2040,7 +2040,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val directResult = new DirectTaskResult[Int](ser.serialize(1), Seq(), Array.empty)
     val resultBytes = ser.serialize(directResult)
 
-    import scala.language.reflectiveCalls
     val busyTask = new Runnable {
       val lock : Object = new Object
       override def run(): Unit = {
@@ -2077,7 +2076,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val taskSetManager = taskScheduler.taskIdToTaskSetManager.get(taskDescriptions(1).taskId)
     assert(taskSetManager != null)
     assert(0 == taskSetManager.tasksSuccessful)
-    assert(false == taskSetManager.successful(taskDescriptions(0).index))
+    assert(!taskSetManager.successful(taskDescriptions(0).index))
   }
 
   /**
