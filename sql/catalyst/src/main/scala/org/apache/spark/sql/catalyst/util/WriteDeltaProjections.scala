@@ -15,14 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.write
+package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.catalyst.InternalRowProjection
 
-private[sql] case class LogicalWriteInfoImpl(
-    queryId: String,
-    schema: StructType,
-    options: CaseInsensitiveStringMap,
-    rowIdSchema: StructType = null,
-    metadataSchema: StructType = null) extends LogicalWriteInfo
+case class WriteDeltaProjections(
+    rowProjection: Option[InternalRowProjection],
+    rowIdProjection: InternalRowProjection,
+    metadataProjection: Option[InternalRowProjection])

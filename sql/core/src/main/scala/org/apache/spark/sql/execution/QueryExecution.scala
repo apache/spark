@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, CTERelationDef, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, CTERelationDef, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceData, ReplaceTableAsSelect, ReturnAnswer, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -104,6 +104,10 @@ class QueryExecution(
   }
 
   private def eagerlyExecuteCommands(p: LogicalPlan) = p transformDown {
+    // both ReplaceData and WriteDelta are nested within other plans after the analysis
+    // they will either be removed or made top-level commands in the optimizer
+    case rd: ReplaceData => rd
+    case wd: WriteDelta => wd
     case c: Command =>
       val qe = sparkSession.sessionState.executePlan(c, CommandExecutionMode.NON_ROOT)
       val result = SQLExecution.withNewExecutionId(qe, Some(commandExecutionName(c))) {

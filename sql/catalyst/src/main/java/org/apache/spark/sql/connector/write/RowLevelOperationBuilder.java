@@ -15,14 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.write
+package org.apache.spark.sql.connector.write;
 
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.annotation.Experimental;
 
-private[sql] case class LogicalWriteInfoImpl(
-    queryId: String,
-    schema: StructType,
-    options: CaseInsensitiveStringMap,
-    rowIdSchema: StructType = null,
-    metadataSchema: StructType = null) extends LogicalWriteInfo
+/**
+ * An interface for building a {@link RowLevelOperation}.
+ *
+ * @since 3.3.0
+ */
+@Experimental
+public interface RowLevelOperationBuilder {
+  /**
+   * Returns a {@link RowLevelOperation} that controls how Spark handles operations that require
+   * rewriting data such as DELETE, UPDATE, MERGE.
+   */
+  RowLevelOperation build();
+}

@@ -15,14 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.write
+package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RowLevelCommand}
+import org.apache.spark.sql.catalyst.rules.Rule
 
-private[sql] case class LogicalWriteInfoImpl(
-    queryId: String,
-    schema: StructType,
-    options: CaseInsensitiveStringMap,
-    rowIdSchema: StructType = null,
-    metadataSchema: StructType = null) extends LogicalWriteInfo
+/**
+ * Replaces operations such as DELETE and MERGE with the corresponding rewrite plans.
+ */
+object ReplaceRewrittenRowLevelCommands extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case c: RowLevelCommand => c.rewritePlan match {
+      case Some(rewritePlan) => rewritePlan
+      case _ => c
+    }
+  }
+}

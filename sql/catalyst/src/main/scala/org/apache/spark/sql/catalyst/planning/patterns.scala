@@ -18,12 +18,15 @@
 package org.apache.spark.sql.catalyst.planning
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.internal.SQLConf
 
 trait OperationHelper extends AliasHelper with PredicateHelper {
@@ -386,5 +389,97 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
         None
       }
     case _ => None
+  }
+}
+
+/**
+ * An extractor for operations such as DELETE and MERGE that require rewriting data.
+ *
+ * This class extracts the following entities:
+ *  - the row-level command (e.g. [[DeleteFromTable]], [[MergeIntoTable]]);
+ *  - the scan relation in the rewrite plan that can be either [[DataSourceV2Relation]] or
+ *  [[DataSourceV2ScanRelation]] depending on whether the planning has already happened;
+ *  - the current rewrite plan.
+ */
+object RewrittenRowLevelCommand {
+  type ReturnType = (RowLevelCommand, LogicalPlan, LogicalPlan)
+
+  def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
+    case c: RowLevelCommand if c.rewritePlan.nonEmpty =>
+      val rewritePlan = c.rewritePlan.get
+
+      // both ReplaceData and WriteDelta reference a write relation
+      // but we need to find the scan relation which should be at the bottom
+      // both the write and scan relations will share the same RowLevelOperationTable object
+      // that's why we are using the reference equality to find the needed scan relation
+
+      val allowScanDuplication = c match {
+        // group-based updates that rely on the union approach may have multiple identical scans
+        case _: UpdateTable if rewritePlan.isInstanceOf[ReplaceData] => true
+        case _ => false
+      }
+
+      rewritePlan match {
+        case replaceData: ReplaceData =>
+          replaceData.table match {
+            case DataSourceV2Relation(table, _, _, _, _) =>
+              val scanRelation = findScanRelation(table, replaceData.query, allowScanDuplication)
+              scanRelation.map((c, _, replaceData))
+            case _ =>
+              None
+          }
+
+        case writeDelta: WriteDelta =>
+          writeDelta.table match {
+            case DataSourceV2Relation(table, _, _, _, _) =>
+              val scanRelation = findScanRelation(table, writeDelta.query, allowScanDuplication)
+              scanRelation.map((c, _, writeDelta))
+            case _ =>
+              None
+          }
+      }
+
+    case _ =>
+      None
+  }
+
+  private def findScanRelation(
+      table: Table,
+      plan: LogicalPlan,
+      allowScanDuplication: Boolean): Option[LogicalPlan] = {
+
+    val scanRelations = plan.collect {
+      case r: DataSourceV2Relation if r.table eq table => r
+      case r: DataSourceV2ScanRelation if r.relation.table eq table => r
+    }
+
+    // in some cases, the optimizer replaces the v2 scan relation with a local relation
+    // for example, there is no reason to query the table if the condition is always false
+    // that's why it is valid not to find the corresponding v2 scan relation
+
+    scanRelations match {
+      case relations if relations.isEmpty =>
+        None
+
+      case Seq(relation) =>
+        Some(relation)
+
+      case Seq(relation1: DataSourceV2Relation, relation2: DataSourceV2Relation)
+          if allowScanDuplication && (relation1.table eq relation2.table) =>
+        Some(relation1)
+
+      case Seq(relation1: DataSourceV2ScanRelation, relation2: DataSourceV2ScanRelation)
+          if allowScanDuplication && (relation1.scan eq relation2.scan) =>
+        Some(relation1)
+
+      case Seq(relation1, relation2) if allowScanDuplication =>
+        throw new AnalysisException(s"Row-level scan relations don't match: $relation1, $relation2")
+
+      case relations if allowScanDuplication =>
+        throw new AnalysisException(s"Expected 2 row-level scan relations: $relations")
+
+      case relations =>
+        throw new AnalysisException(s"Expected only one row-level scan relation: $relations")
+    }
   }
 }

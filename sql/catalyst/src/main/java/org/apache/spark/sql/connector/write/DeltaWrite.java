@@ -15,14 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.write
+package org.apache.spark.sql.connector.write;
 
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.annotation.Experimental;
 
-private[sql] case class LogicalWriteInfoImpl(
-    queryId: String,
-    schema: StructType,
-    options: CaseInsensitiveStringMap,
-    rowIdSchema: StructType = null,
-    metadataSchema: StructType = null) extends LogicalWriteInfo
+/**
+ * A logical representation of a data source write that handles a delta of rows.
+ *
+ * @since 3.3.0
+ */
+@Experimental
+public interface DeltaWrite extends Write {
+  DeltaBatchWrite toBatch();
+}

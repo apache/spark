@@ -245,7 +245,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, _, Some(write)) =>
       OverwritePartitionsDynamicExec(planLater(query), refreshCache(r), write) :: Nil
 
-    case DeleteFromTable(relation, condition) =>
+    case DeleteFromTable(relation, condition, None) =>
       relation match {
         case DataSourceV2ScanRelation(r, _, output) =>
           val table = r.table
@@ -268,6 +268,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case _ =>
           throw QueryCompilationErrors.deleteOnlySupportedWithV2TablesError()
       }
+
+    case ReplaceData(_: DataSourceV2Relation, query, r: DataSourceV2Relation, Some(write)) =>
+      // make sure we use the original relation to refresh the cache
+      ReplaceDataExec(planLater(query), refreshCache(r), write) :: Nil
+
+    case WriteDelta(_: DataSourceV2Relation, query, r: DataSourceV2Relation, projs, Some(write)) =>
+      // make sure we use the original relation to refresh the cache
+      WriteDeltaExec(planLater(query), refreshCache(r), projs, write) :: Nil
 
     case WriteToContinuousDataSource(writer, query, customMetrics) =>
       WriteToContinuousDataSourceExec(writer, planLater(query), customMetrics) :: Nil

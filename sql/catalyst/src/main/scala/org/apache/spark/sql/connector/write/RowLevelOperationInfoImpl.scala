@@ -17,12 +17,9 @@
 
 package org.apache.spark.sql.connector.write
 
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-private[sql] case class LogicalWriteInfoImpl(
-    queryId: String,
-    schema: StructType,
-    options: CaseInsensitiveStringMap,
-    rowIdSchema: StructType = null,
-    metadataSchema: StructType = null) extends LogicalWriteInfo
+case class RowLevelOperationInfoImpl(
+    command: Command,
+    options: CaseInsensitiveStringMap) extends RowLevelOperationInfo

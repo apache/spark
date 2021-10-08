@@ -15,14 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.write
+package org.apache.spark.sql.connector.write;
 
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.annotation.Experimental;
 
-private[sql] case class LogicalWriteInfoImpl(
-    queryId: String,
-    schema: StructType,
-    options: CaseInsensitiveStringMap,
-    rowIdSchema: StructType = null,
-    metadataSchema: StructType = null) extends LogicalWriteInfo
+/**
+ * An interface for building a {@link DeltaWrite}.
+ *
+ * @since 3.3.0
+ */
+@Experimental
+public interface DeltaWriteBuilder extends WriteBuilder {
+
+  /**
+   * Returns a logical {@link DeltaWrite}.
+   */
+  @Override
+  default DeltaWrite build() {
+    throw new UnsupportedOperationException("Not implemented: build");
+  }
+}

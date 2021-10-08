@@ -15,14 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.write
+package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
-
-private[sql] case class LogicalWriteInfoImpl(
-    queryId: String,
-    schema: StructType,
-    options: CaseInsensitiveStringMap,
-    rowIdSchema: StructType = null,
-    metadataSchema: StructType = null) extends LogicalWriteInfo
+object RowDeltaUtils {
+  final val OPERATION_COLUMN: String = "__row_operation"
+  final val DELETE_OPERATION: Int = 1
+  final val UPDATE_OPERATION: Int = 2
+  final val INSERT_OPERATION: Int = 3
+}

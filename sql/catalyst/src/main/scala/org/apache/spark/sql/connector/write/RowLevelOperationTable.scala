@@ -17,12 +17,31 @@
 
 package org.apache.spark.sql.connector.write
 
+import java.util
+
+import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsRowLevelOperations, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-private[sql] case class LogicalWriteInfoImpl(
-    queryId: String,
-    schema: StructType,
-    options: CaseInsensitiveStringMap,
-    rowIdSchema: StructType = null,
-    metadataSchema: StructType = null) extends LogicalWriteInfo
+/**
+ * An internal v2 table implementation that wraps the original table during DELETE, UPDATE,
+ * MERGE operations.
+ */
+case class RowLevelOperationTable(
+    table: Table with SupportsRowLevelOperations,
+    operation: RowLevelOperation) extends Table with SupportsRead with SupportsWrite {
+
+  override def name: String = table.name
+  override def schema: StructType = table.schema
+  override def capabilities: util.Set[TableCapability] = table.capabilities
+  override def toString: String = table.toString
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    operation.newScanBuilder(options)
+  }
+
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+    operation.newWriteBuilder(info)
+  }
+}

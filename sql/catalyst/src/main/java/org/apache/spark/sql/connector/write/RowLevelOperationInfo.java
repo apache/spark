@@ -17,42 +17,25 @@
 
 package org.apache.spark.sql.connector.write;
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.types.StructType;
+import org.apache.spark.annotation.Experimental;
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
- * This interface contains logical write information that data sources can use when generating a
- * {@link WriteBuilder}.
+ * An interface with logical information for a row-level operation such as DELETE or MERGE.
  *
- * @since 3.0.0
+ * @since 3.3.0
  */
-@Evolving
-public interface LogicalWriteInfo {
+@Experimental
+public interface RowLevelOperationInfo {
+
   /**
-   * the options that the user specified when writing the dataset
+   * Returns options that the user specified when performing the row-level operation.
    */
   CaseInsensitiveStringMap options();
 
   /**
-   * {@code queryId} is a unique string of the query. It's possible that there are many queries
-   * running at the same time, or a query is restarted and resumed. {@link BatchWrite} can use
-   * this id to identify the query.
+   * Returns the SQL command (e.g. DELETE, UPDATE, MERGE) of this row-level operation.
    */
-  String queryId();
-
-  /**
-   * the schema of the input data from Spark to data source.
-   */
-  StructType schema();
-
-  /**
-   * the schema of the input metadata from Spark to data source.
-   */
-  StructType metadataSchema();
-
-  /**
-   * the schema of the ID columns from Spark to data source.
-   */
-  StructType rowIdSchema();
+  Command command();
 }
