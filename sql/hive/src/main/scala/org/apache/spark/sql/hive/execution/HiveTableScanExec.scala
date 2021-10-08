@@ -64,9 +64,6 @@ case class HiveTableScanExec(
 
   override def nodeName: String = s"Scan hive ${relation.tableMeta.qualifiedName}"
 
-  private def isDynamicPruningFilter(e: Expression): Boolean =
-    e.find(_.isInstanceOf[PlanExpression[_]]).isDefined
-
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
@@ -80,13 +77,9 @@ case class HiveTableScanExec(
     requestedAttributes.map(originalAttributes)
   }
 
-  private lazy val (partitionPruningPredNotDynamic, partitionPruningPredOfDynamic) =
-    partitionPruningPred.partition(!isDynamicPruningFilter(_))
-
   // Bind all partition key attribute references in the partition pruning predicate for later
   // evaluation.
-  private lazy val boundPruningPred = partitionPruningPredNotDynamic
-    .reduceLeftOption(And).map { pred =>
+  private lazy val boundPruningPred = partitionPruningPred.reduceLeftOption(And).map { pred =>
     require(pred.dataType == BooleanType,
       s"Data type of predicate $pred must be ${BooleanType.catalogString} rather than " +
         s"${pred.dataType.catalogString}.")
@@ -174,14 +167,14 @@ case class HiveTableScanExec(
     if (relation.prunedPartitions.nonEmpty) {
       val hivePartitions =
         relation.prunedPartitions.get.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
-      if (partitionPruningPredNotDynamic.forall(!ExecSubqueryExpression.hasSubquery(_))) {
+      if (partitionPruningPred.forall(!ExecSubqueryExpression.hasSubquery(_))) {
         hivePartitions
       } else {
         prunePartitions(hivePartitions)
       }
     } else {
       if (sparkSession.sessionState.conf.metastorePartitionPruning &&
-        partitionPruningPredNotDynamic.nonEmpty) {
+        partitionPruningPred.nonEmpty) {
         rawPartitions
       } else {
         prunePartitions(rawPartitions)
@@ -193,9 +186,9 @@ case class HiveTableScanExec(
   @transient lazy val rawPartitions: Seq[HivePartition] = {
     val prunedPartitions =
       if (sparkSession.sessionState.conf.metastorePartitionPruning &&
-        partitionPruningPredNotDynamic.nonEmpty) {
+        partitionPruningPred.nonEmpty) {
         // Retrieve the original attributes based on expression ID so that capitalization matches.
-        val normalizedFilters = partitionPruningPredNotDynamic.map(_.transform {
+        val normalizedFilters = partitionPruningPred.map(_.transform {
           case a: AttributeReference => originalAttributes(a)
         })
         sparkSession.sessionState.catalog
@@ -204,34 +197,6 @@ case class HiveTableScanExec(
         sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
       }
     prunedPartitions.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
-  }
-
-  // We can only determine the actual partitions at runtime when a dynamic partition filter is
-  // present. This is because such a filter relies on information that is only available at run
-  // time (for instance the keys used in the other side of a join).
-  @transient private lazy val dynamicallyPrunedPartitions: Seq[HivePartition] = {
-    if (partitionPruningPredOfDynamic.nonEmpty) {
-      val boundPruningPredForDynamic = partitionPruningPredOfDynamic
-        .reduceLeftOption(And).map { pred =>
-        BindReferences.bindReference(pred, relation.partitionCols)
-      }
-
-      boundPruningPredForDynamic match {
-        case None => prunedPartitions
-        case Some(shouldKeep) => prunedPartitions.filter { part =>
-          val dataTypes = relation.partitionCols.map(_.dataType)
-          val castedValues = part.getValues.asScala.zip(dataTypes)
-            .map { case (value, dataType) => castFromString(value, dataType) }
-
-          // Only partitioned values are needed here, since the predicate has already been bound to
-          // partition key attribute references.
-          val row = InternalRow.fromSeq(castedValues.toSeq)
-          shouldKeep.eval(row).asInstanceOf[Boolean]
-        }
-      }
-    } else {
-      prunedPartitions
-    }
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -243,7 +208,7 @@ case class HiveTableScanExec(
       }
     } else {
       Utils.withDummyCallSite(sparkContext) {
-        hadoopReader.makeRDDForPartitionedTable(dynamicallyPrunedPartitions)
+        hadoopReader.makeRDDForPartitionedTable(prunedPartitions)
       }
     }
     val numOutputRows = longMetric("numOutputRows")
