@@ -14,13 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Dict, Optional
+from typing import cast, Any, Dict, Optional, TYPE_CHECKING
 
 from pyspark.sql import column
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 
 __all__ = ["Observation"]
+
+if TYPE_CHECKING:
+    from pyspark import SparkContext  # noqa: F401
 
 
 class Observation:
@@ -105,7 +108,10 @@ class Observation:
         observed_df = self._jo.on(  # type: ignore[attr-defined]
             df._jdf,
             exprs[0]._jc,
-            column._to_seq(df._sc, [c._jc for c in exprs[1:]])  # type: ignore[attr-defined]
+            column._to_seq(
+                cast("SparkContext", df._sc),
+                [c._jc for c in exprs[1:]]  # type: ignore[attr-defined]
+            )
         )
         return DataFrame(observed_df, df.sql_ctx)
 

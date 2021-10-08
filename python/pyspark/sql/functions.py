@@ -24,6 +24,7 @@ import functools
 import warnings
 from typing import (
     Any,
+    cast,
     Callable,
     Dict,
     List,
@@ -1770,7 +1771,7 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
     """
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if arg2 is None:
-        jc = sc._jvm.functions.log(_to_java_column(arg1))
+        jc = sc._jvm.functions.log(_to_java_column(cast("ColumnOrName", arg1)))
     else:
         jc = sc._jvm.functions.log(arg1, _to_java_column(arg2))
     return Column(jc)
