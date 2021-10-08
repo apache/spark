@@ -246,9 +246,9 @@ _options = [
         default="plotly",
         types=str,
     ),
-]  # type: List[Option]
+]
 
-_options_dict = dict(zip((option.key for option in _options), _options))  # type: Dict[str, Option]
+_options_dict = dict(zip((option.key for option in _options), _options))
 
 _key_format = "pandas_on_Spark.{}".format
 

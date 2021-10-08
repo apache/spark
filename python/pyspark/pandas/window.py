@@ -681,7 +681,7 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         # Here we need to include grouped key as an index, and shift previous index.
         #   [index_column0, index_column1] -> [grouped key, index_column0, index_column1]
-        new_index_scols = []  # type: List[Column]
+        new_index_scols: List[Column] = []
         new_index_spark_column_names = []
         new_index_names = []
         new_index_fields = []

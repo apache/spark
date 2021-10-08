@@ -169,7 +169,7 @@ class PandasConversionMixin(object):
         pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
         column_counter = Counter(self.columns)
 
-        dtype = [None] * len(self.schema)  # type: List[Optional[Type]]
+        dtype: List[Optional[Type]] = [None] * len(self.schema)
         for fieldIdx, field in enumerate(self.schema):
             # For duplicate column name, we use `iloc` to access it.
             if column_counter[field.name] > 1:

@@ -909,9 +909,7 @@ class Index(IndexOpsMixin):
             field = field.copy(name=name_like_string(name))
         elif self._internal.index_level == 1:
             name = self.name
-        column_labels = [
-            name if is_name_like_tuple(name) else (name,)
-        ]  # type: List[Optional[Label]]
+        column_labels: List[Optional[Label]] = [name if is_name_like_tuple(name) else (name,)]
         internal = self._internal.copy(
             column_labels=column_labels,
             data_spark_columns=[scol],
@@ -2181,7 +2179,7 @@ class Index(IndexOpsMixin):
         elif repeats < 0:
             raise ValueError("negative dimensions are not allowed")
 
-        psdf = DataFrame(self._internal.resolved_copy)  # type: DataFrame
+        psdf: DataFrame = DataFrame(self._internal.resolved_copy)
         if repeats == 0:
             return DataFrame(psdf._internal.with_filter(SF.lit(False))).index
         else:
@@ -2315,9 +2313,10 @@ class Index(IndexOpsMixin):
 
         sort = True if sort is None else sort
         sort = validate_bool_kwarg(sort, "sort")
+        other_idx: Index
         if isinstance(self, MultiIndex):
             if isinstance(other, MultiIndex):
-                other_idx = other  # type: Index
+                other_idx = other
             elif isinstance(other, list) and all(isinstance(item, tuple) for item in other):
                 other_idx = MultiIndex.from_tuples(other)
             else:
