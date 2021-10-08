@@ -34,7 +34,7 @@ from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.streaming import DataStreamWriter
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, LongType
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
@@ -3032,9 +3032,10 @@ def _test():
     import pyspark.sql.dataframe
     globs = pyspark.sql.dataframe.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
+    spark = SparkSession(sc)
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
-    globs['spark'] = SparkSession(sc)
+    globs['spark'] = spark
     globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')])\
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))
@@ -3050,7 +3051,10 @@ def _test():
                                    Row(age=None, name='Mallory', spy=True)]).toDF()
 
     schema = StructType([StructField("name", StringType(), False), StructField("time", LongType(), False)])
-    globs['sdf'] = spark.readStream.format('csv').load('python/test_support/sql/with-time-column.csv')
+    globs['sdf'] = spark.readStream \
+      .schema(schema) \
+      .format('csv') \
+      .load('python/test_support/sql/with-time-column.csv')
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.dataframe, globs=globs,
