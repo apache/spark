@@ -482,7 +482,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: getPartitions(catalogTable)") {
       assert(testPartitionCount ==
-        client.getPartitions(client.getTable("default", "src_part")).size)
+        client.getPartitions("default", "src_part", None).size)
     }
 
     test(s"$version: getPartitionsByFilter") {

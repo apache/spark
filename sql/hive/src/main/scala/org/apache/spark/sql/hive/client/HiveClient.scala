@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive.client
 
 import java.io.PrintStream
 
+import org.apache.hadoop.hive.ql.metadata.{Table => HiveTable}
+
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -89,6 +91,9 @@ private[hive] trait HiveClient {
   final def getTable(dbName: String, tableName: String): CatalogTable = {
     getTableOption(dbName, tableName).getOrElse(throw new NoSuchTableException(dbName, tableName))
   }
+
+  /** Returns the raw metadata for the specified table or None if it doesn't exist. */
+  def getRawTableOption(dbName: String, tableName: String): Option[HiveTable]
 
   /** Returns the metadata for the specified table or None if it doesn't exist. */
   def getTableOption(dbName: String, tableName: String): Option[CatalogTable]
@@ -215,19 +220,17 @@ private[hive] trait HiveClient {
    * Returns the partitions for the given table that match the supplied partition spec.
    * If no partition spec is specified, all partitions are returned.
    */
-  final def getPartitions(
+  def getPartitions(
       db: String,
       table: String,
-      partialSpec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = {
-    getPartitions(getTable(db, table), partialSpec)
-  }
+      partialSpec: Option[TablePartitionSpec]): Seq[CatalogTablePartition]
 
   /**
    * Returns the partitions for the given table that match the supplied partition spec.
    * If no partition spec is specified, all partitions are returned.
    */
   def getPartitions(
-      catalogTable: CatalogTable,
+      hiveTable: HiveTable,
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition]
 
   /** Returns partitions filtered by predicates for the given table. */

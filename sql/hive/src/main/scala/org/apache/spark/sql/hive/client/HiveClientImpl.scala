@@ -48,7 +48,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, PartitionAlreadyExistsException, PartitionsAlreadyExistException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, NoSuchTableException, PartitionAlreadyExistsException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -398,7 +398,7 @@ private[hive] class HiveClientImpl(
     client.getDatabasesByPattern(pattern).asScala.toSeq
   }
 
-  private def getRawTableOption(dbName: String, tableName: String): Option[HiveTable] = {
+  override def getRawTableOption(dbName: String, tableName: String): Option[HiveTable] = {
     Option(client.getTable(dbName, tableName, false /* do not throw exception */))
   }
 
@@ -733,14 +733,22 @@ private[hive] class HiveClientImpl(
     Option(hivePartition).map(fromHivePartition)
   }
 
+  override def getPartitions(
+      db: String,
+      table: String,
+      partialSpec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = withHiveState {
+    getPartitions(
+      getRawTableOption(db, table).getOrElse(throw new NoSuchTableException(db, table)),
+      partialSpec)
+  }
+
   /**
    * Returns the partitions for the given table that match the supplied partition spec.
    * If no partition spec is specified, all partitions are returned.
    */
   override def getPartitions(
-      table: CatalogTable,
+      hiveTable: HiveTable,
       spec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = withHiveState {
-    val hiveTable = toHiveTable(table, Some(userName))
     val partSpec = spec match {
       case None => CatalogTypes.emptyTablePartitionSpec
       case Some(s) =>

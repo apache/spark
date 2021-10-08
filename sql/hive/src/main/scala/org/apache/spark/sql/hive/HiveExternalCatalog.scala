@@ -1239,7 +1239,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val catalogTable = getTable(db, table)
     val partColNameMap = buildLowerCasePartColNameMap(catalogTable)
     val metaStoreSpec = partialSpec.map(toMetaStorePartitionSpec)
-    val res = client.getPartitions(catalogTable, metaStoreSpec)
+    val res = client.getPartitions(db, table, metaStoreSpec)
       .map { part => part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
     }
 
