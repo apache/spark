@@ -166,23 +166,6 @@ case class CreateTableAsSelectStatement(
 }
 
 /**
- * A CREATE VIEW statement, as parsed from SQL.
- */
-case class CreateViewStatement(
-    viewName: Seq[String],
-    userSpecifiedColumns: Seq[(String, Option[String])],
-    comment: Option[String],
-    properties: Map[String, String],
-    originalText: Option[String],
-    child: LogicalPlan,
-    allowExisting: Boolean,
-    replace: Boolean,
-    viewType: ViewType) extends UnaryParsedStatement {
-  override protected def withNewChildInternal(newChild: LogicalPlan): CreateViewStatement =
-    copy(child = newChild)
-}
-
-/**
  * A REPLACE TABLE command, as parsed from SQL.
  *
  * If the table exists prior to running this command, executing this statement
