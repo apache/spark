@@ -856,7 +856,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
-  test("SPARK-35531: Insert data with different cases") {
+  test("SPARK-35531: Insert data with different cases of bucket column") {
     withTable("TEST1") {
       val createHive =
         """
@@ -892,23 +892,21 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
 
       val createSpark =
         """
-          |create table TEST1(
+          |CREATE TABLE TEST1(
           |v1 BIGINT,
           |s1 INT)
-          |using parquet
-          |partitioned by (pk BIGINT)
-          |clustered by (v1)
-          |sorted by (s1)
-          |into 200 buckets
-          |
-          |""".stripMargin
+          |USING PARQUET
+          |PARTITIONED BY (pk BIGINT)
+          |CLUSTERED BY (v1)
+          |SORTED BY (s1)
+          |INTO 200 BUCKETS
+        """.stripMargin
 
       spark.sql(dropString)
       spark.sql(createSpark.toLowerCase(Locale.ROOT))
 
       spark.sql(insertString.toLowerCase(Locale.ROOT))
       spark.sql(insertString.toUpperCase(Locale.ROOT))
-
 
       spark.sql(dropString)
       spark.sql(createSpark.toUpperCase(Locale.ROOT))
