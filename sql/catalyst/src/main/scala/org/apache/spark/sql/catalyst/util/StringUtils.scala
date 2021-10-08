@@ -76,11 +76,7 @@ object StringUtils extends Logging {
   private[spark] def orderStringsBySimilarity(
       baseString: String,
       testStrings: Seq[String]): Seq[String] = {
-    testStrings.sortWith { (a, b) =>
-      val distA = ACLStringUtils.getLevenshteinDistance(a, baseString)
-      val distB = ACLStringUtils.getLevenshteinDistance(b, baseString)
-      distA < distB
-    }
+    testStrings.sortBy(ACLStringUtils.getLevenshteinDistance(_, baseString))
   }
 
   // scalastyle:off caselocale
