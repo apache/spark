@@ -492,7 +492,44 @@ private[joins] object UnsafeHashedRelation {
       }
     }
 
-    new UnsafeHashedRelation(key.size, numFields, binaryMap)
+    // the following is a hack to reorganize the hash map so that nodes of a
+    // given linked list are next to each other in memory. This is simply to test
+    // that ensuring such placement of the nodes improves performance
+    val candidate = new UnsafeHashedRelation(key.size, numFields, binaryMap)
+    if (binaryMap.numValues() > binaryMap.numKeys() * 2) {
+      // val keyIter = iter.map(proj).map(_.copy())
+      val keys = candidate.keys().map(keyGenerator).map(_.copy()).toArray
+      val distinctKeys = keys.distinct
+      print(s"Number of keys is ${keys.length}; distinct keys is ${distinctKeys.length}\n")
+      val sizeEstimate = binaryMap.numKeys()
+      val newBinaryMap = new BytesToBytesMap(
+        taskMemoryManager,
+        // Only 70% of the slots can be used before growing, more capacity help to reduce collision
+        (sizeEstimate * 1.5 + 1).toInt,
+        pageSizeBytes)
+      print("Building new map\n")
+      for (key <- distinctKeys) {
+        val input = candidate.get(key)
+        while (input.hasNext) {
+          val row = input.next().asInstanceOf[UnsafeRow]
+          val key = keyGenerator(row)
+          val loc = newBinaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
+          if (!(ignoresDuplicatedKey && loc.isDefined)) {
+            val success = loc.append(
+              key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
+              row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
+            if (!success) {
+              newBinaryMap.free()
+              throw QueryExecutionErrors.cannotAcquireMemoryToBuildUnsafeHashedRelationError()
+            }
+          }
+        }
+      }
+      candidate.close()
+      new UnsafeHashedRelation(key.size, numFields, newBinaryMap)
+    } else {
+      candidate
+    }
   }
 }
 
