@@ -262,7 +262,7 @@ case class HiveTableScanExec(
   // Filters unused DynamicPruningExpression expressions - one which has been replaced
   // with DynamicPruningExpression(Literal.TrueLiteral) during Physical Planning
   private def filterUnusedDynamicPruningExpressions(
-    predicates: Seq[Expression]): Seq[Expression] = {
+      predicates: Seq[Expression]): Seq[Expression] = {
     predicates.filterNot(_ == DynamicPruningExpression(Literal.TrueLiteral))
   }
 
