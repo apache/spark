@@ -398,7 +398,7 @@ private[hive] class HiveClientImpl(
     client.getDatabasesByPattern(pattern).asScala.toSeq
   }
 
-  override def getRawTableOption(dbName: String, tableName: String): Option[HiveTable] = {
+  private def getRawTableOption(dbName: String, tableName: String): Option[HiveTable] = {
     Option(client.getTable(dbName, tableName, false /* do not throw exception */))
   }
 
