@@ -18,7 +18,7 @@
 .. PySpark documentation master file
 
 =====================
-PySpark Documentation2
+PySpark Documentation
 =====================
 
 |binder|_ | `GitHub <https://github.com/apache/spark>`_ | `Issues <https://issues.apache.org/jira/projects/SPARK/issues>`_ | |examples|_ | `Community <https://spark.apache.org/community.html>`_
