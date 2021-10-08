@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.{Date, Timestamp}
+import java.time.{Duration, Period}
 import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
@@ -35,13 +36,14 @@ import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException}
 import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtilsBase}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
 
-abstract class OrcSuite extends OrcTest with BeforeAndAfterAll with CommonFileDataSourceSuite {
+abstract class OrcSuite
+  extends OrcTest with BeforeAndAfterAll with CommonFileDataSourceSuite with SQLTestUtilsBase {
   import testImplicits._
 
   override protected def dataSourceFormat = "orc"
@@ -804,6 +806,49 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
             ArrayType(
               StructType(
                 StructField("456", StringType) :: Nil))))))
+    }
+  }
+
+  Seq(true, false).foreach { vecReaderEnabled =>
+    Seq(true, false).foreach { vecReaderNestedColEnabled =>
+      test("SPARK-36931: Support reading and writing ANSI intervals (" +
+      s"${SQLConf.ORC_VECTORIZED_READER_ENABLED.key}=$vecReaderEnabled, " +
+      s"${SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key}=$vecReaderNestedColEnabled)") {
+
+        withSQLConf(
+          SQLConf.ORC_VECTORIZED_READER_ENABLED.key ->
+            vecReaderEnabled.toString,
+          SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key ->
+            vecReaderNestedColEnabled.toString) {
+          Seq(
+            YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
+            DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
+          ).foreach { case (it, f) =>
+            val data = (1 to 10).map(i => Row(i, f(i)))
+            val schema = StructType(Array(StructField("d", IntegerType, false),
+              StructField("i", it, false)))
+            withTempPath { file =>
+              val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+              df.write.orc(file.getCanonicalPath)
+              val df2 = spark.read.orc(file.getCanonicalPath)
+              checkAnswer(df2, df.collect().toSeq)
+            }
+          }
+
+          // Tests for ANSI intervals in complex types.
+          withTempPath { file =>
+            val df = spark.sql(
+              """SELECT
+                |  named_struct('interval', interval '1-2' year to month) a,
+                |  array(interval '1 2:3' day to minute) b,
+                |  map('key', interval '10' year) c,
+                |  map(interval '20' second, 'value') d""".stripMargin)
+            df.write.orc(file.getCanonicalPath)
+            val df2 = spark.read.orc(file.getCanonicalPath)
+            checkAnswer(df2, df.collect().toSeq)
+          }
+        }
+      }
     }
   }
 }
