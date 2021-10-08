@@ -47,6 +47,39 @@ abstract class DynamicPartitionPruningHiveScanSuite
       case _ => Nil
     }
   }
+
+  test("SPARK-36876: simple inner join triggers DPP with mock-up tables") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false",
+      HiveUtils.CONVERT_METASTORE_ORC.key -> "false",
+      "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withTable("df1", "df2") {
+        spark.range(1000)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df1")
+
+        spark.range(100)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df2")
+
+        val df = sql("SELECT df1.id, df2.k FROM df1 JOIN df2 ON df1.k = df2.k AND df2.id < 2")
+
+        assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size == 1)
+        checkPartitionPruningPredicate(df, true, false)
+
+        checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
+      }
+    }
+  }
 }
 
 class DynamicPartitionPruningHiveScanSuiteAEOff extends DynamicPartitionPruningHiveScanSuite
