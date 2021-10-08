@@ -563,14 +563,16 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     assert(eventTimeColumns(0).name === "second")
   }
 
-  test("EventTime watermark should be ignored in batch query.") {
-    val df = testData
-      .withColumn("eventTime", timestamp_seconds($"key"))
-      .withWatermark("eventTime", "1 minute")
-      .select("eventTime")
-      .as[Long]
+  test("EventTime watermark should not be called in batch query.") {
+    val e = intercept[AnalysisException] {
+      testData
+        .withColumn("eventTime", timestamp_seconds($"key"))
+        .withWatermark("eventTime", "1 minute")
+        .select("eventTime")
+        .as[Long]
+    }
 
-    checkDataset[Long](df, 1L to 100L: _*)
+    assert(e.getMessage contains "can be called only on streaming Dataset/DataFrame")
   }
 
   test("SPARK-21565: watermark operator accepts attributes from replacement") {
