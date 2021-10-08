@@ -189,3 +189,4 @@ SELECT if(not(a IS NULL), rand(0), 1), count(*) AS c
 FROM testData
 GROUP BY a IS NULL;
 
+SELECT a, product(CAST(b as DOUBLE)) FROM testData GROUP BY a;
