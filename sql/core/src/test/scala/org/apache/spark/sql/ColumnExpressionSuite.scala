@@ -36,6 +36,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.unsafe.types.UTF8String
 
 class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
@@ -2790,7 +2791,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           ).foreach { case (end, start) =>
             val df = Seq((end, start)).toDF("end", "start")
             val daysBetween = Duration.ofDays(ChronoUnit.DAYS.between(start, end))
-            checkAnswer(df.select($"end" - $"start"), Row(daysBetween))
+            val r = df.select($"end" - $"start").toDF("diff")
+            checkAnswer(r, Row(daysBetween))
+            assert(r.schema === new StructType().add("diff", DayTimeIntervalType(DAY)))
           }
         }
       }
@@ -2877,5 +2880,59 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         assert(e.getMessage.contains("long overflow"))
       }
     }
+  }
+
+  test("SPARK-35852: add/subtract a interval day to/from a date") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      Seq(
+        (LocalDate.of(1, 1, 1), Duration.ofDays(31)),
+        (LocalDate.of(1582, 9, 15), Duration.ofDays(30)),
+        (LocalDate.of(1900, 1, 1), Duration.ofDays(0)),
+        (LocalDate.of(1970, 1, 1), Duration.ofDays(-1)),
+        (LocalDate.of(2021, 3, 14), Duration.ofDays(1)),
+        (LocalDate.of(2020, 12, 31), Duration.ofDays(4 * 30)),
+        (LocalDate.of(2020, 2, 29), Duration.ofDays(365)),
+        (LocalDate.of(10000, 1, 1), Duration.ofDays(-2))
+      ).foreach { case (date, duration) =>
+        val days = duration.toDays
+        val add = date.plusDays(days)
+        val sub = date.minusDays(days)
+        val df = Seq((date, duration)).toDF("start", "diff")
+          .select($"start", $"diff" cast DayTimeIntervalType(DAY) as "diff")
+          .select($"start" + $"diff", $"diff" + $"start", $"start" - $"diff")
+        checkAnswer(df, Row(add, add, sub))
+      }
+    }
+  }
+
+  test("SPARK-36778: add ilike API for scala") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    // null handling
+    val nullDf = Seq("a", null).toDF("src")
+    checkAnswer(nullDf.filter($"src".ilike("A")), Row("a"))
+    checkAnswer(nullDf.filter($"src".ilike(null)), spark.emptyDataFrame)
+    // simple pattern
+    val simpleDf = Seq("a", "A", "abdef", "a_%b", "addb", "abC", "a\nb").toDF("src")
+    checkAnswer(simpleDf.filter($"src".ilike("a")), Seq("a", "A").toDF())
+    checkAnswer(simpleDf.filter($"src".ilike("A")), Seq("a", "A").toDF())
+    checkAnswer(simpleDf.filter($"src".ilike("b")), spark.emptyDataFrame)
+    checkAnswer(simpleDf.filter($"src".ilike("aBdef")), Seq("abdef").toDF())
+    checkAnswer(simpleDf.filter($"src".ilike("a\\__b")), Seq("a_%b").toDF())
+    checkAnswer(simpleDf.filter($"src".ilike("A_%b")), Seq("a_%b", "addb", "a\nb").toDF())
+    checkAnswer(simpleDf.filter($"src".ilike("a%")), simpleDf)
+    checkAnswer(simpleDf.filter($"src".ilike("a_b")), Seq("a\nb").toDF())
+    // double-escaping backslash
+    val dEscDf = Seq("""\__""", """\\__""").toDF("src")
+    checkAnswer(dEscDf.filter($"src".ilike("""\\\__""")), Seq("""\__""").toDF())
+    checkAnswer(dEscDf.filter($"src".ilike("""%\\%\%""")), spark.emptyDataFrame)
+    // unicode
+    val uncDf = Seq("a\u20ACA", "A€a", "a€AA", "a\u20ACaz", "ЀЁЂѺΏỀ").toDF("src")
+    checkAnswer(uncDf.filter($"src".ilike("_\u20AC_")), Seq("a\u20ACA", "A€a").toDF())
+    checkAnswer(uncDf.filter($"src".ilike("_€_")), Seq("a\u20ACA", "A€a").toDF())
+    checkAnswer(uncDf.filter($"src".ilike("_\u20AC_a")), Seq("a€AA").toDF())
+    checkAnswer(uncDf.filter($"src".ilike("_€_Z")), Seq("a\u20ACaz").toDF())
+    checkAnswer(uncDf.filter($"src".ilike("ѐёђѻώề")), Seq("ЀЁЂѺΏỀ").toDF())
+    // scalastyle:on
   }
 }

@@ -41,9 +41,9 @@ import org.apache.spark.sql.types._
  *
  * Currently this only handles cases where:
  *   1). `fromType` (of `fromExp`) and `toType` are of numeric types (i.e., short, int, float,
- *     decimal, etc)
+ *     decimal, etc) or boolean type
  *   2). `fromType` can be safely coerced to `toType` without precision loss (e.g., short to int,
- *     int to long, but not long to int)
+ *     int to long, but not long to int, nor int to boolean)
  *
  * If the above conditions are satisfied, the rule checks to see if the literal `value` is within
  * range `(min, max)`, where `min` and `max` are the minimum and maximum value of `fromType`,
@@ -113,7 +113,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // Not a canonical form. In this case we first canonicalize the expression by swapping the
     // literal and cast side, then process the result and swap the literal and cast again to
     // restore the original order.
-    case BinaryComparison(Literal(_, literalType), Cast(fromExp, toType, _))
+    case BinaryComparison(Literal(_, literalType), Cast(fromExp, toType, _, _))
         if canImplicitlyCast(fromExp, toType, literalType) =>
       def swap(e: Expression): Expression = e match {
         case GreaterThan(left, right) => LessThan(right, left)
@@ -130,7 +130,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // In case both sides have numeric type, optimize the comparison by removing casts or
     // moving cast to the literal side.
     case be @ BinaryComparison(
-      Cast(fromExp, toType: NumericType, _), Literal(value, literalType))
+      Cast(fromExp, toType: NumericType, _, _), Literal(value, literalType))
         if canImplicitlyCast(fromExp, toType, literalType) =>
       simplifyNumericComparison(be, fromExp, toType, value)
 
@@ -141,8 +141,9 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // values.
     // 2. this rule only handles the case when both `fromExp` and value in `in.list` are of numeric
     // type.
-    case in @ In(Cast(fromExp, toType: NumericType, _), list @ Seq(firstLit, _*))
-      if canImplicitlyCast(fromExp, toType, firstLit.dataType) =>
+    // 3. this rule doesn't optimize In when `in.list` contains an expression that is not literal.
+    case in @ In(Cast(fromExp, toType: NumericType, _, _), list @ Seq(firstLit, _*))
+      if canImplicitlyCast(fromExp, toType, firstLit.dataType) && in.inSetConvertible =>
 
       // There are 3 kinds of literals in the list:
       // 1. null literals
@@ -184,7 +185,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // The same with `In` expression, the analyzer makes sure that the hset of InSet is already of
     // the same data type, so simply check `fromExp.dataType` can implicitly cast to `toType` and
     // both `fromExp.dataType` and `toType` is numeric type or not.
-    case inSet @ InSet(Cast(fromExp, toType: NumericType, _), hset)
+    case inSet @ InSet(Cast(fromExp, toType: NumericType, _, _), hset)
       if hset.nonEmpty && canImplicitlyCast(fromExp, toType, toType) =>
 
       // The same with `In`, there are 3 kinds of literals in the hset:
@@ -356,12 +357,13 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       literalType: DataType): Boolean = {
     toType.sameType(literalType) &&
       !fromExp.foldable &&
-      fromExp.dataType.isInstanceOf[NumericType] &&
       toType.isInstanceOf[NumericType] &&
-      Cast.canUpCast(fromExp.dataType, toType)
+      ((fromExp.dataType.isInstanceOf[NumericType] && Cast.canUpCast(fromExp.dataType, toType)) ||
+        fromExp.dataType.isInstanceOf[BooleanType])
   }
 
   private[optimizer] def getRange(dt: DataType): Option[(Any, Any)] = dt match {
+    case BooleanType => Some((false, true))
     case ByteType => Some((Byte.MinValue, Byte.MaxValue))
     case ShortType => Some((Short.MinValue, Short.MaxValue))
     case IntegerType => Some((Int.MinValue, Int.MaxValue))

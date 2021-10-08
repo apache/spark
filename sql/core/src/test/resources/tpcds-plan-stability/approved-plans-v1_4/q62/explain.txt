@@ -63,7 +63,7 @@ Condition : isnotnull(w_warehouse_sk#6)
 
 (7) BroadcastExchange
 Input [2]: [w_warehouse_sk#6, w_warehouse_name#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#8]
 
 (8) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ws_warehouse_sk#4]
@@ -90,7 +90,7 @@ Condition : isnotnull(sm_ship_mode_sk#9)
 
 (13) BroadcastExchange
 Input [2]: [sm_ship_mode_sk#9, sm_type#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#11]
 
 (14) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ws_ship_mode_sk#3]
@@ -117,7 +117,7 @@ Condition : isnotnull(web_site_sk#12)
 
 (19) BroadcastExchange
 Input [2]: [web_site_sk#12, web_name#13]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#14]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#14]
 
 (20) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ws_web_site_sk#2]
@@ -148,7 +148,7 @@ Input [2]: [d_date_sk#15, d_month_seq#16]
 
 (26) BroadcastExchange
 Input [1]: [d_date_sk#15]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#17]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#17]
 
 (27) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ws_ship_date_sk#1]

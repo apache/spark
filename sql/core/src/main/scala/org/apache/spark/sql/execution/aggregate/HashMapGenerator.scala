@@ -160,7 +160,7 @@ abstract class HashMapGenerator(
       case BooleanType => hashInt(s"$input ? 1 : 0")
       case ByteType | ShortType | IntegerType | DateType | _: YearMonthIntervalType =>
         hashInt(input)
-      case LongType | TimestampType | _: DayTimeIntervalType => hashLong(input)
+      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => hashLong(input)
       case FloatType => hashInt(s"Float.floatToIntBits($input)")
       case DoubleType => hashLong(s"Double.doubleToLongBits($input)")
       case d: DecimalType =>

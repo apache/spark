@@ -30,7 +30,12 @@ class ArrowWriterSuite extends SparkFunSuite {
 
   test("simple") {
     def check(dt: DataType, data: Seq[Any], timeZoneId: String = null): Unit = {
-      val schema = new StructType().add("value", dt, nullable = true)
+      val datatype = dt match {
+        case _: DayTimeIntervalType => DayTimeIntervalType()
+        case _: YearMonthIntervalType => YearMonthIntervalType()
+        case tpe => tpe
+      }
+      val schema = new StructType().add("value", datatype, nullable = true)
       val writer = ArrowWriter.create(schema, timeZoneId)
       assert(writer.schema === schema)
 
@@ -56,6 +61,7 @@ class ArrowWriterSuite extends SparkFunSuite {
             case BinaryType => reader.getBinary(rowId)
             case DateType => reader.getInt(rowId)
             case TimestampType => reader.getLong(rowId)
+            case TimestampNTZType => reader.getLong(rowId)
             case _: YearMonthIntervalType => reader.getInt(rowId)
             case _: DayTimeIntervalType => reader.getLong(rowId)
           }
@@ -76,10 +82,12 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(BinaryType, Seq("a".getBytes(), "b".getBytes(), null, "d".getBytes()))
     check(DateType, Seq(0, 1, 2, null, 4))
     check(TimestampType, Seq(0L, 3.6e9.toLong, null, 8.64e10.toLong), "America/Los_Angeles")
+    check(TimestampNTZType, Seq(0L, 3.6e9.toLong, null, 8.64e10.toLong))
     check(NullType, Seq(null, null, null))
-    check(YearMonthIntervalType(), Seq(null, 0, 1, -1, Int.MaxValue, Int.MinValue))
-    check(DayTimeIntervalType(), Seq(null, 0L, 1000L, -1000L, (Long.MaxValue - 807L),
-      (Long.MinValue + 808L)))
+    DataTypeTestUtils.yearMonthIntervalTypes
+      .foreach(check(_, Seq(null, 0, 1, -1, Int.MaxValue, Int.MinValue)))
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach(check(_,
+      Seq(null, 0L, 1000L, -1000L, (Long.MaxValue - 807L), (Long.MinValue + 808L))))
   }
 
   test("long overflow for DayTimeIntervalType")
@@ -108,7 +116,12 @@ class ArrowWriterSuite extends SparkFunSuite {
 
   test("get multiple") {
     def check(dt: DataType, data: Seq[Any], timeZoneId: String = null): Unit = {
-      val schema = new StructType().add("value", dt, nullable = false)
+      val avroDatatype = dt match {
+        case _: DayTimeIntervalType => DayTimeIntervalType()
+        case _: YearMonthIntervalType => YearMonthIntervalType()
+        case tpe => tpe
+      }
+      val schema = new StructType().add("value", avroDatatype, nullable = false)
       val writer = ArrowWriter.create(schema, timeZoneId)
       assert(writer.schema === schema)
 
@@ -128,6 +141,7 @@ class ArrowWriterSuite extends SparkFunSuite {
         case DoubleType => reader.getDoubles(0, data.size)
         case DateType => reader.getInts(0, data.size)
         case TimestampType => reader.getLongs(0, data.size)
+        case TimestampNTZType => reader.getLongs(0, data.size)
         case _: YearMonthIntervalType => reader.getInts(0, data.size)
         case _: DayTimeIntervalType => reader.getLongs(0, data.size)
       }
@@ -144,10 +158,9 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(DoubleType, (0 until 10).map(_.toDouble))
     check(DateType, (0 until 10))
     check(TimestampType, (0 until 10).map(_ * 4.32e10.toLong), "America/Los_Angeles")
-    // TODO(SPARK-35776): Check all year-month interval types in arrow
-    check(YearMonthIntervalType(), (0 until 10))
-    // TODO(SPARK-35731): Check all day-time interval types in arrow
-    check(DayTimeIntervalType(), (-10 until 10).map(_ * 1000.toLong))
+    check(TimestampNTZType, (0 until 10).map(_ * 4.32e10.toLong))
+    DataTypeTestUtils.yearMonthIntervalTypes.foreach(check(_, (0 until 14)))
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach(check(_, (-10 until 10).map(_ * 1000.toLong)))
   }
 
   test("array") {

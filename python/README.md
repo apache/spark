@@ -4,7 +4,7 @@ Spark is a unified analytics engine for large-scale data processing. It provides
 high-level APIs in Scala, Java, Python, and R, and an optimized engine that
 supports general computation graphs for data analysis. It also supports a
 rich set of higher-level tools including Spark SQL for SQL and DataFrames,
-MLlib for machine learning, GraphX for graph processing,
+pandas API on Spark for pandas workloads, MLlib for machine learning, GraphX for graph processing,
 and Structured Streaming for stream processing.
 
 <https://spark.apache.org/>
@@ -30,3 +30,4 @@ The Python packaging for Spark is not intended to replace all of the other use c
 ## Python Requirements
 
 At its core PySpark depends on Py4J, but some additional sub-packages have their own extra requirements for some features (including numpy, pandas, and pyarrow).
+See also [Dependencies](https://spark.apache.org/docs/latest/api/python/getting_started/install.html#dependencies) for production, and [dev/requirements.txt](https://github.com/apache/spark/blob/master/dev/requirements.txt) for development.

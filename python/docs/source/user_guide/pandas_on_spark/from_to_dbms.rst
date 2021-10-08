@@ -1,3 +1,21 @@
+..  Licensed to the Apache Software Foundation (ASF) under one
+    or more contributor license agreements.  See the NOTICE file
+    distributed with this work for additional information
+    regarding copyright ownership.  The ASF licenses this file
+    to you under the Apache License, Version 2.0 (the
+    "License"); you may not use this file except in compliance
+    with the License.  You may obtain a copy of the License at
+
+..    http://www.apache.org/licenses/LICENSE-2.0
+
+..  Unless required by applicable law or agreed to in writing,
+    software distributed under the License is distributed on an
+    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, either express or implied.  See the License for the
+    specific language governing permissions and limitations
+    under the License.
+
+
 ====================
 From/to other DBMSes
 ====================
@@ -22,7 +40,7 @@ pandas-on-Spark needs a canonical JDBC URL for ``con``, and is able to take extr
 
 .. code-block:: python
 
-    ks.read_sql(..., dbtable="...", driver="", keytab="", ...)
+    ps.read_sql(..., dbtable="...", driver="", keytab="", ...)
 
 
 Reading and writing DataFrames
@@ -77,9 +95,9 @@ Now, you're ready to read the table:
 
 .. code-block:: python
 
-    import pyspark.pandas as ks
+    import pyspark.pandas as ps
 
-    df = ks.read_sql("stocks", con="jdbc:sqlite:{}/example.db".format(os.getcwd()))
+    df = ps.read_sql("stocks", con="jdbc:sqlite:{}/example.db".format(os.getcwd()))
     df
 
 .. code-block:: text
@@ -95,10 +113,10 @@ You can also write it back to the ``stocks`` table as below:
 .. code-block:: python
 
     df.price += 1
-    df.to_spark_io(
+    df.spark.to_spark_io(
         format="jdbc", mode="append",
         dbtable="stocks", url="jdbc:sqlite:{}/example.db".format(os.getcwd()))
-    ks.read_sql("stocks", con="jdbc:sqlite:{}/example.db".format(os.getcwd()))
+    ps.read_sql("stocks", con="jdbc:sqlite:{}/example.db".format(os.getcwd()))
 
 .. code-block:: text
 

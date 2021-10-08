@@ -26,6 +26,7 @@ object TreePattern extends Enumeration  {
   val AGGREGATE_EXPRESSION = Value(0)
   val ALIAS: Value = Value
   val AND_OR: Value = Value
+  val ARRAYS_ZIP: Value = Value
   val ATTRIBUTE_REFERENCE: Value = Value
   val APPEND_COLUMNS: Value = Value
   val AVERAGE: Value = Value
@@ -35,6 +36,7 @@ object TreePattern extends Enumeration  {
   val BOOL_AGG: Value = Value
   val CASE_WHEN: Value = Value
   val CAST: Value = Value
+  val COALESCE: Value = Value
   val CONCAT: Value = Value
   val COUNT: Value = Value
   val COUNT_IF: Value = Value
@@ -89,7 +91,9 @@ object TreePattern extends Enumeration  {
 
   // Logical plan patterns (alphabetically ordered)
   val AGGREGATE: Value = Value
+  val AS_OF_JOIN: Value = Value
   val COMMAND: Value = Value
+  val CTE: Value = Value
   val DISTINCT_LIKE: Value = Value
   val EVENT_TIME_WATERMARK: Value = Value
   val EXCEPT: Value = Value
@@ -100,6 +104,7 @@ object TreePattern extends Enumeration  {
   val LEFT_SEMI_OR_ANTI_JOIN: Value = Value
   val LIMIT: Value = Value
   val LOCAL_RELATION: Value = Value
+  val LOGICAL_QUERY_STAGE: Value = Value
   val NATURAL_LIKE_JOIN: Value = Value
   val OUTER_JOIN: Value = Value
   val PROJECT: Value = Value
@@ -117,6 +122,7 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_ORDINAL: Value = Value
   val UNRESOLVED_FUNCTION: Value = Value
   val UNRESOLVED_HINT: Value = Value
+  val UNRESOLVED_WINDOW_EXPRESSION: Value = Value
 
   // Unresolved Plan patterns (Alphabetically ordered)
   val UNRESOLVED_SUBQUERY_COLUMN_ALIAS: Value = Value

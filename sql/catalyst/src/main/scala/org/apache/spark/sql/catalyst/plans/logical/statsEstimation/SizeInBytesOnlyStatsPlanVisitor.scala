@@ -67,7 +67,7 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     }
   }
 
-  override def visitDistinct(p: Distinct): Statistics = default(p)
+  override def visitDistinct(p: Distinct): Statistics = visitUnaryNode(p)
 
   override def visitExcept(p: Except): Statistics = p.left.stats.copy()
 
@@ -161,4 +161,6 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
       sizeInBytes = EstimationUtils.getOutputSize(p.output, rowCount, childStats.attributeStats),
       rowCount = Some(rowCount))
   }
+
+  override def visitWithCTE(p: WithCTE): Statistics = p.plan.stats
 }

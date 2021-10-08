@@ -29,6 +29,8 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
+import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 abstract class ExtractIntervalPart[T](
@@ -125,32 +127,42 @@ object ExtractIntervalPart {
       source: Expression,
       errorHandleFunc: => Nothing): Expression = {
     (extractField.toUpperCase(Locale.ROOT), source.dataType) match {
-      case ("YEAR" | "Y" | "YEARS" | "YR" | "YRS", _: YearMonthIntervalType) =>
+      case ("YEAR" | "Y" | "YEARS" | "YR" | "YRS", YearMonthIntervalType(start, end))
+        if isUnitInIntervalRange(YEAR, start, end) =>
         ExtractANSIIntervalYears(source)
       case ("YEAR" | "Y" | "YEARS" | "YR" | "YRS", CalendarIntervalType) =>
         ExtractIntervalYears(source)
-      case ("MONTH" | "MON" | "MONS" | "MONTHS", _: YearMonthIntervalType) =>
+      case ("MONTH" | "MON" | "MONS" | "MONTHS", YearMonthIntervalType(start, end))
+        if isUnitInIntervalRange(MONTH, start, end) =>
         ExtractANSIIntervalMonths(source)
       case ("MONTH" | "MON" | "MONS" | "MONTHS", CalendarIntervalType) =>
         ExtractIntervalMonths(source)
-      case ("DAY" | "D" | "DAYS", _: DayTimeIntervalType) =>
+      case ("DAY" | "D" | "DAYS", DayTimeIntervalType(start, end))
+        if isUnitInIntervalRange(DAY, start, end) =>
         ExtractANSIIntervalDays(source)
       case ("DAY" | "D" | "DAYS", CalendarIntervalType) =>
         ExtractIntervalDays(source)
-      case ("HOUR" | "H" | "HOURS" | "HR" | "HRS", _: DayTimeIntervalType) =>
+      case ("HOUR" | "H" | "HOURS" | "HR" | "HRS", DayTimeIntervalType(start, end))
+        if isUnitInIntervalRange(HOUR, start, end) =>
         ExtractANSIIntervalHours(source)
       case ("HOUR" | "H" | "HOURS" | "HR" | "HRS", CalendarIntervalType) =>
         ExtractIntervalHours(source)
-      case ("MINUTE" | "M" | "MIN" | "MINS" | "MINUTES", _: DayTimeIntervalType) =>
+      case ("MINUTE" | "M" | "MIN" | "MINS" | "MINUTES", DayTimeIntervalType(start, end))
+        if isUnitInIntervalRange(MINUTE, start, end) =>
         ExtractANSIIntervalMinutes(source)
       case ("MINUTE" | "M" | "MIN" | "MINS" | "MINUTES", CalendarIntervalType) =>
         ExtractIntervalMinutes(source)
-      case ("SECOND" | "S" | "SEC" | "SECONDS" | "SECS", _: DayTimeIntervalType) =>
+      case ("SECOND" | "S" | "SEC" | "SECONDS" | "SECS", DayTimeIntervalType(start, end))
+        if isUnitInIntervalRange(SECOND, start, end) =>
         ExtractANSIIntervalSeconds(source)
       case ("SECOND" | "S" | "SEC" | "SECONDS" | "SECS", CalendarIntervalType) =>
         ExtractIntervalSeconds(source)
       case _ => errorHandleFunc
     }
+  }
+
+  private def isUnitInIntervalRange(unit: Byte, start: Byte, end: Byte): Boolean = {
+    start <= unit && unit <= end
   }
 }
 
@@ -215,7 +227,7 @@ case class DivideInterval(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(years, months, weeks, days, hours, mins, secs) - Make interval from years, months, weeks, days, hours, mins and secs.",
+  usage = "_FUNC_([years[, months[, weeks[, days[, hours[, mins[, secs]]]]]]]) - Make interval from years, months, weeks, days, hours, mins and secs.",
   arguments = """
     Arguments:
       * years - the number of years, positive or negative
@@ -346,8 +358,87 @@ case class MakeInterval(
     )
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(years, months) - Make year-month interval from years, months.",
+  usage = "_FUNC_([days[, hours[, mins[, secs]]]]) - Make DayTimeIntervalType duration from days, hours, mins and secs.",
+  arguments = """
+    Arguments:
+      * days - the number of days, positive or negative
+      * hours - the number of hours, positive or negative
+      * mins - the number of minutes, positive or negative
+      * secs - the number of seconds with the fractional part in microsecond precision.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1, 12, 30, 01.001001);
+       1 12:30:01.001001000
+      > SELECT _FUNC_(2);
+       2 00:00:00.000000000
+      > SELECT _FUNC_(100, null, 3);
+       NULL
+  """,
+  since = "3.2.0",
+  group = "datetime_funcs")
+// scalastyle:on line.size.limit
+case class MakeDTInterval(
+    days: Expression,
+    hours: Expression,
+    mins: Expression,
+    secs: Expression)
+  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  def this(
+      days: Expression,
+      hours: Expression,
+      mins: Expression) = {
+    this(days, hours, mins, Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
+  }
+  def this(days: Expression, hours: Expression) = this(days, hours, Literal(0))
+  def this(days: Expression) = this(days, Literal(0))
+  def this() = this(Literal(0))
+
+  override def first: Expression = days
+  override def second: Expression = hours
+  override def third: Expression = mins
+  override def fourth: Expression = secs
+
+  // Accept `secs` as DecimalType to avoid loosing precision of microseconds when converting
+  // them to the fractional part of `secs`.
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    IntegerType, IntegerType, IntegerType, DecimalType(Decimal.MAX_LONG_DIGITS, 6))
+  override def dataType: DataType = DayTimeIntervalType()
+
+  override def nullSafeEval(
+      day: Any,
+      hour: Any,
+      min: Any,
+      sec: Any): Any = {
+    IntervalUtils.makeDayTimeInterval(
+      day.asInstanceOf[Int],
+      hour.asInstanceOf[Int],
+      min.asInstanceOf[Int],
+      sec.asInstanceOf[Decimal])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (day, hour, min, sec) => {
+      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+      s"$iu.makeDayTimeInterval($day, $hour, $min, $sec)"
+    })
+  }
+
+  override def prettyName: String = "make_dt_interval"
+
+  override protected def withNewChildrenInternal(
+      days: Expression,
+      hours: Expression,
+      mins: Expression,
+      secs: Expression): MakeDTInterval =
+    copy(days, hours, mins, secs)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_([years[, months]]) - Make year-month interval from years, months.",
   arguments = """
     Arguments:
       * years - the number of years, positive or negative
@@ -361,6 +452,8 @@ case class MakeInterval(
        1-0
       > SELECT _FUNC_(-1, 1);
        -0-11
+      > SELECT _FUNC_(2);
+       2-0
   """,
   since = "3.2.0",
   group = "datetime_funcs")

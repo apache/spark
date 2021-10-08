@@ -43,13 +43,16 @@ import org.apache.spark.util.Utils
  */
 private[spark] class MergeStatus(
     private[this] var loc: BlockManagerId,
+    private[this] var _shuffleMergeId: Int,
     private[this] var mapTracker: RoaringBitmap,
     private[this] var size: Long)
   extends Externalizable with ShuffleOutputStatus {
 
-  protected def this() = this(null, null, -1) // For deserialization only
+  protected def this() = this(null, -1, null, -1) // For deserialization only
 
   def location: BlockManagerId = loc
+
+  def shuffleMergeId: Int = _shuffleMergeId
 
   def totalSize: Long = size
 
@@ -73,12 +76,14 @@ private[spark] class MergeStatus(
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     loc.writeExternal(out)
+    out.writeInt(_shuffleMergeId)
     mapTracker.writeExternal(out)
     out.writeLong(size)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     loc = BlockManagerId(in)
+    _shuffleMergeId = in.readInt()
     mapTracker = new RoaringBitmap()
     mapTracker.readExternal(in)
     size = in.readLong()
@@ -100,14 +105,20 @@ private[spark] object MergeStatus {
     assert(mergeStatuses.bitmaps.length == mergeStatuses.reduceIds.length &&
       mergeStatuses.bitmaps.length == mergeStatuses.sizes.length)
     val mergerLoc = BlockManagerId(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER, loc.host, loc.port)
+    val shuffleMergeId = mergeStatuses.shuffleMergeId
     mergeStatuses.bitmaps.zipWithIndex.map {
       case (bitmap, index) =>
-        val mergeStatus = new MergeStatus(mergerLoc, bitmap, mergeStatuses.sizes(index))
+        val mergeStatus = new MergeStatus(mergerLoc, shuffleMergeId, bitmap,
+          mergeStatuses.sizes(index))
         (mergeStatuses.reduceIds(index), mergeStatus)
     }
   }
 
-  def apply(loc: BlockManagerId, bitmap: RoaringBitmap, size: Long): MergeStatus = {
-    new MergeStatus(loc, bitmap, size)
+  def apply(
+      loc: BlockManagerId,
+      shuffleMergeId: Int,
+      bitmap: RoaringBitmap,
+      size: Long): MergeStatus = {
+    new MergeStatus(loc, shuffleMergeId, bitmap, size)
   }
 }

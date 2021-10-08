@@ -684,8 +684,8 @@ SELECT cast('3.4' as decimal(38, 18)) UNION SELECT 'foo'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-Failed to merge incompatible data types decimal(38,18) and string
+org.apache.spark.sql.AnalysisException
+Union can only be performed on tables with the compatible column types. The first column of the second table is string type which is not compatible with decimal(38,18) at same column of first table
 
 
 -- !query

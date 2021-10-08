@@ -95,28 +95,28 @@ public class JavaMapWithStateSuite extends LocalJavaStreamingContext implements 
   @Test
   public void testBasicFunction() {
     List<List<String>> inputData = Arrays.asList(
-        Collections.<String>emptyList(),
+        Collections.emptyList(),
         Arrays.asList("a"),
         Arrays.asList("a", "b"),
         Arrays.asList("a", "b", "c"),
         Arrays.asList("a", "b"),
         Arrays.asList("a"),
-        Collections.<String>emptyList()
+        Collections.emptyList()
     );
 
     List<Set<Integer>> outputData = Arrays.asList(
-        Collections.<Integer>emptySet(),
+        Collections.emptySet(),
         Sets.newHashSet(1),
         Sets.newHashSet(2, 1),
         Sets.newHashSet(3, 2, 1),
         Sets.newHashSet(4, 3),
         Sets.newHashSet(5),
-        Collections.<Integer>emptySet()
+        Collections.emptySet()
     );
 
     @SuppressWarnings("unchecked")
     List<Set<Tuple2<String, Integer>>> stateData = Arrays.asList(
-        Collections.<Tuple2<String, Integer>>emptySet(),
+        Collections.emptySet(),
         Sets.newHashSet(new Tuple2<>("a", 1)),
         Sets.newHashSet(new Tuple2<>("a", 2), new Tuple2<>("b", 1)),
         Sets.newHashSet(new Tuple2<>("a", 3), new Tuple2<>("b", 2), new Tuple2<>("c", 1)),

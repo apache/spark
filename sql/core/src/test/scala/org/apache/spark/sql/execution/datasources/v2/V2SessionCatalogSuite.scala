@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, NamespaceChange, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -825,7 +825,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
   test("loadNamespaceMetadata: fail missing namespace") {
     val catalog = newCatalog()
 
-    val exc = intercept[NoSuchNamespaceException] {
+    val exc = intercept[NoSuchDatabaseException] {
       catalog.loadNamespaceMetadata(testNs)
     }
 
@@ -951,7 +951,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
     assert(catalog.namespaceExists(testNs) === false)
 
-    val exc = intercept[NoSuchNamespaceException] {
+    val exc = intercept[NoSuchDatabaseException] {
       catalog.createTable(testIdent, schema, Array.empty, emptyProps)
     }
 
@@ -1068,7 +1068,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
     assert(catalog.namespaceExists(testNs) === false)
 
-    val exc = intercept[NoSuchNamespaceException] {
+    val exc = intercept[NoSuchDatabaseException] {
       catalog.alterNamespace(testNs, NamespaceChange.setProperty("property", "value"))
     }
 

@@ -111,7 +111,7 @@ class DebuggingSuite extends DebuggingSuiteBase with DisableAdaptiveExecutionSui
     }
 
     val output = captured.toString()
-    val hashedModeString = "HashedRelationBroadcastMode(List(input[0, bigint, false]),false)"
+    val hashedModeString = "HashedRelationBroadcastMode(List(input[0, bigint, false]),false,false)"
     assert(output.replaceAll("\\[id=#\\d+\\]", "[id=#x]").contains(
       s"""== BroadcastExchange $hashedModeString, [id=#x] ==
          |Tuples output: 0

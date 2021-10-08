@@ -1,3 +1,21 @@
+..  Licensed to the Apache Software Foundation (ASF) under one
+    or more contributor license agreements.  See the NOTICE file
+    distributed with this work for additional information
+    regarding copyright ownership.  The ASF licenses this file
+    to you under the Apache License, Version 2.0 (the
+    "License"); you may not use this file except in compliance
+    with the License.  You may obtain a copy of the License at
+
+..    http://www.apache.org/licenses/LICENSE-2.0
+
+..  Unless required by applicable law or agreed to in writing,
+    software distributed under the License is distributed on an
+    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, either express or implied.  See the License for the
+    specific language governing permissions and limitations
+    under the License.
+
+
 =====================================
 From/to pandas and PySpark DataFrames
 =====================================
@@ -23,10 +41,10 @@ as below:
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>>
-   >>> kdf = ks.range(10)
-   >>> pdf = kdf.to_pandas()
+   >>> psdf = ps.range(10)
+   >>> pdf = psdf.to_pandas()
    >>> pdf.values
    array([[0],
           [1],
@@ -43,7 +61,7 @@ pandas DataFrame can be a pandas-on-Spark DataFrame easily as below:
 
 .. code-block:: python
 
-   >>> ks.from_pandas(pdf)
+   >>> ps.from_pandas(pdf)
       id
    0   0
    1   1
@@ -71,10 +89,10 @@ as below:
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>>
-   >>> kdf = ks.range(10)
-   >>> sdf = kdf.to_spark().filter("id > 5")
+   >>> psdf = ps.range(10)
+   >>> sdf = psdf.to_spark().filter("id > 5")
    >>> sdf.show()
    +---+
    | id|
@@ -89,7 +107,7 @@ Spark DataFrame can be a pandas-on-Spark DataFrame easily as below:
 
 .. code-block:: python
 
-   >>> sdf.to_koalas()
+   >>> sdf.to_pandas_on_spark()
       id
    0   6
    1   7
@@ -103,13 +121,13 @@ to use as an index when possible.
 .. code-block:: python
 
    >>> # Create a pandas-on-Spark DataFrame with an explicit index.
-   ... kdf = ks.DataFrame({'id': range(10)}, index=range(10))
+   ... psdf = ps.DataFrame({'id': range(10)}, index=range(10))
    >>> # Keep the explicit index.
-   ... sdf = kdf.to_spark(index_col='index')
+   ... sdf = psdf.to_spark(index_col='index')
    >>> # Call Spark APIs
    ... sdf = sdf.filter("id > 5")
    >>> # Uses the explicit index to avoid to create default index.
-   ... sdf.to_koalas(index_col='index')
+   ... sdf.to_pandas_on_spark(index_col='index')
           id
    index
    6       6

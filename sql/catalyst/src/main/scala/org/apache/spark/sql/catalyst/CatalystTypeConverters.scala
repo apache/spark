@@ -32,6 +32,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -66,7 +68,7 @@ object CatalystTypeConverters {
       case DateType => DateConverter
       case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
       case TimestampType => TimestampConverter
-      case TimestampWithoutTZType => TimestampWithoutTZConverter
+      case TimestampNTZType => TimestampNTZConverter
       case dt: DecimalType => new DecimalConverter(dt)
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
@@ -75,10 +77,8 @@ object CatalystTypeConverters {
       case LongType => LongConverter
       case FloatType => FloatConverter
       case DoubleType => DoubleConverter
-      // TODO(SPARK-35726): Truncate java.time.Duration by fields of day-time interval type
-      case _: DayTimeIntervalType => DurationConverter
-      // TODO(SPARK-35769): Truncate java.time.Period by fields of year-month interval type
-      case _: YearMonthIntervalType => PeriodConverter
+      case DayTimeIntervalType(_, endField) => DurationConverter(endField)
+      case YearMonthIntervalType(_, endField) => PeriodConverter(endField)
       case dataType: DataType => IdentityConverter(dataType)
     }
     converter.asInstanceOf[CatalystTypeConverter[Any, Any, Any]]
@@ -99,17 +99,10 @@ object CatalystTypeConverters {
      * and Options.
      */
     final def toCatalyst(@Nullable maybeScalaValue: Any): CatalystType = {
-      if (maybeScalaValue == null) {
-        null.asInstanceOf[CatalystType]
-      } else if (maybeScalaValue.isInstanceOf[Option[ScalaInputType]]) {
-        val opt = maybeScalaValue.asInstanceOf[Option[ScalaInputType]]
-        if (opt.isDefined) {
-          toCatalystImpl(opt.get)
-        } else {
-          null.asInstanceOf[CatalystType]
-        }
-      } else {
-        toCatalystImpl(maybeScalaValue.asInstanceOf[ScalaInputType])
+      maybeScalaValue match {
+        case null | None => null.asInstanceOf[CatalystType]
+        case opt: Some[ScalaInputType] => toCatalystImpl(opt.get)
+        case other => toCatalystImpl(other.asInstanceOf[ScalaInputType])
       }
     }
 
@@ -357,13 +350,13 @@ object CatalystTypeConverters {
       DateTimeUtils.microsToInstant(row.getLong(column))
   }
 
-  private object TimestampWithoutTZConverter
+  private object TimestampNTZConverter
     extends CatalystTypeConverter[Any, LocalDateTime, Any] {
     override def toCatalystImpl(scalaValue: Any): Any = scalaValue match {
       case l: LocalDateTime => DateTimeUtils.localDateTimeToMicros(l)
       case other => throw new IllegalArgumentException(
         s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-          + s"cannot be converted to the ${TimestampWithoutTZType.sql} type")
+          + s"cannot be converted to the ${TimestampNTZType.sql} type")
     }
 
     override def toScala(catalystValue: Any): LocalDateTime =
@@ -432,9 +425,10 @@ object CatalystTypeConverters {
     override def toScalaImpl(row: InternalRow, column: Int): Double = row.getDouble(column)
   }
 
-  private object DurationConverter extends CatalystTypeConverter[Duration, Duration, Any] {
+  private case class DurationConverter(endField: Byte)
+      extends CatalystTypeConverter[Duration, Duration, Any] {
     override def toCatalystImpl(scalaValue: Duration): Long = {
-      IntervalUtils.durationToMicros(scalaValue)
+      IntervalUtils.durationToMicros(scalaValue, endField)
     }
     override def toScala(catalystValue: Any): Duration = {
       if (catalystValue == null) null
@@ -444,9 +438,10 @@ object CatalystTypeConverters {
       IntervalUtils.microsToDuration(row.getLong(column))
   }
 
-  private object PeriodConverter extends CatalystTypeConverter[Period, Period, Any] {
+  private case class PeriodConverter(endField: Byte)
+      extends CatalystTypeConverter[Period, Period, Any] {
     override def toCatalystImpl(scalaValue: Period): Int = {
-      IntervalUtils.periodToMonths(scalaValue)
+      IntervalUtils.periodToMonths(scalaValue, endField)
     }
     override def toScala(catalystValue: Any): Period = {
       if (catalystValue == null) null
@@ -471,10 +466,9 @@ object CatalystTypeConverters {
       // a measurable performance impact. Note that this optimization will be unnecessary if we
       // use code generation to construct Scala Row -> Catalyst Row converters.
       def convert(maybeScalaValue: Any): Any = {
-        if (maybeScalaValue.isInstanceOf[Option[Any]]) {
-          maybeScalaValue.asInstanceOf[Option[Any]].orNull
-        } else {
-          maybeScalaValue
+        maybeScalaValue match {
+          case opt: Option[Any] => opt.orNull
+          case _ => maybeScalaValue
         }
       }
       convert
@@ -509,7 +503,7 @@ object CatalystTypeConverters {
     case ld: LocalDate => LocalDateConverter.toCatalyst(ld)
     case t: Timestamp => TimestampConverter.toCatalyst(t)
     case i: Instant => InstantConverter.toCatalyst(i)
-    case l: LocalDateTime => TimestampWithoutTZConverter.toCatalyst(l)
+    case l: LocalDateTime => TimestampNTZConverter.toCatalyst(l)
     case d: BigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
     case d: JavaBigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
     case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)
@@ -522,8 +516,8 @@ object CatalystTypeConverters {
         map,
         (key: Any) => convertToCatalyst(key),
         (value: Any) => convertToCatalyst(value))
-    case d: Duration => DurationConverter.toCatalyst(d)
-    case p: Period => PeriodConverter.toCatalyst(p)
+    case d: Duration => DurationConverter(SECOND).toCatalyst(d)
+    case p: Period => PeriodConverter(MONTH).toCatalyst(p)
     case other => other
   }
 

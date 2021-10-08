@@ -47,10 +47,13 @@ NULL
 #'               \item \code{to_date} and \code{to_timestamp}: it is the string to use to parse
 #'                    Column \code{x} to DateType or TimestampType.
 #'               \item \code{trunc}: it is the string to use to specify the truncation method.
-#'                    For example, "year", "yyyy", "yy" for truncate by year, or "month", "mon",
-#'                    "mm" for truncate by month.
+#'                    'year', 'yyyy', 'yy' to truncate by year,
+#'                    or 'month', 'mon', 'mm' to truncate by month
+#'                    Other options are: 'week', 'quarter'
 #'               \item \code{date_trunc}: it is similar with \code{trunc}'s but additionally
-#'                    supports "day", "dd", "second", "minute", "hour", "week" and "quarter".
+#'                    supports
+#'                    'day', 'dd' to truncate by day,
+#'                    'microsecond', 'millisecond', 'second', 'minute' and 'hour'
 #'               }
 #' @param ... additional argument(s).
 #' @name column_datetime_functions
@@ -644,6 +647,19 @@ setMethod("bin",
           })
 
 #' @details
+#' \code{bit_length}: Calculates the bit length for the specified string column.
+#'
+#' @rdname column_string_functions
+#' @aliases bit_length bit_length,Column-method
+#' @note length since 3.3.0
+setMethod("bit_length",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "bit_length", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{bitwise_not}: Computes bitwise NOT.
 #'
 #' @rdname column_nonaggregate_functions
@@ -867,6 +883,19 @@ setMethod("cosh",
             column(jc)
           })
 
+#' @details
+#' \code{cot}: Returns the cotangent of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases cot cot,Column-method
+#' @note cot since 3.3.0
+setMethod("cot",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "cot", x@jc)
+            column(jc)
+          })
+
 #' Returns the number of items in a group
 #'
 #' This can be used as a column aggregate function with \code{Column} as input,
@@ -896,6 +925,19 @@ setMethod("crc32",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "crc32", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{csc}: Returns the cosecant of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases csc csc,Column-method
+#' @note csc since 3.3.0
+setMethod("csc",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "csc", x@jc)
             column(jc)
           })
 
@@ -1011,6 +1053,7 @@ setMethod("dayofmonth",
 #' @details
 #' \code{dayofweek}: Extracts the day of the week as an integer from a
 #' given date/timestamp/string.
+#' Ranges from 1 for a Sunday through to 7 for a Saturday
 #'
 #' @rdname column_datetime_functions
 #' @aliases dayofweek dayofweek,Column-method
@@ -1549,6 +1592,19 @@ setMethod("negate",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "negate", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{octet_length}: Calculates the byte length for the specified string column.
+#'
+#' @rdname column_string_functions
+#' @aliases octet_length octet_length,Column-method
+#' @note length since 3.3.0
+setMethod("octet_length",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "octet_length", x@jc)
             column(jc)
           })
 
@@ -2333,6 +2389,8 @@ setMethod("var_samp",
 
 #' @details
 #' \code{weekofyear}: Extracts the week number as an integer from a given date/timestamp/string.
+#' A week is considered to start on a Monday and week 1 is the first week with more than 3 days,
+#' as defined by ISO 8601
 #'
 #' @rdname column_datetime_functions
 #' @aliases weekofyear weekofyear,Column-method
@@ -3342,6 +3400,19 @@ setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "rpad",
                               x@jc, as.integer(len), pad)
+            column(jc)
+          })
+
+#' @details
+#' \code{sec}: Returns the secant of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases sec sec,Column-method
+#' @note sec since 3.3.0
+setMethod("sec",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "sec", x@jc)
             column(jc)
           })
 

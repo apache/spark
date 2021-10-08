@@ -1961,12 +1961,106 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("SHOW CREATE TABLE") {
+  test("SPARK-33898: SHOW CREATE TABLE AS SERDE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      testNotSupportedV2Command("SHOW CREATE TABLE", t)
-      testNotSupportedV2Command("SHOW CREATE TABLE", s"$t AS SERDE")
+      val e = intercept[AnalysisException] {
+        sql(s"SHOW CREATE TABLE $t AS SERDE")
+      }
+      assert(e.message.contains(s"SHOW CREATE TABLE AS SERDE is not supported for v2 tables."))
+    }
+  }
+
+  test("SPARK-33898: SHOW CREATE TABLE") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t (
+           |  a bigint NOT NULL,
+           |  b bigint,
+           |  c bigint,
+           |  `extra col` ARRAY<INT>,
+           |  `<another>` STRUCT<x: INT, y: ARRAY<BOOLEAN>>
+           |)
+           |USING foo
+           |OPTIONS (
+           |  from = 0,
+           |  to = 1,
+           |  via = 2)
+           |COMMENT 'This is a comment'
+           |TBLPROPERTIES ('prop1' = '1', 'prop2' = '2', 'prop3' = 3, 'prop4' = 4)
+           |PARTITIONED BY (a)
+           |LOCATION '/tmp'
+        """.stripMargin)
+      val showDDL = getShowCreateDDL(s"SHOW CREATE TABLE $t")
+      assert(showDDL === Array(
+        "CREATE TABLE testcat.ns1.ns2.tbl (",
+        "`a` BIGINT NOT NULL,",
+        "`b` BIGINT,",
+        "`c` BIGINT,",
+        "`extra col` ARRAY<INT>,",
+        "`<another>` STRUCT<`x`: INT, `y`: ARRAY<BOOLEAN>>)",
+        "USING foo",
+        "OPTIONS(",
+        "'from' = '0',",
+        "'to' = '1',",
+        "'via' = '2')",
+        "PARTITIONED BY (a)",
+        "COMMENT 'This is a comment'",
+        "LOCATION '/tmp'",
+        "TBLPROPERTIES(",
+        "'prop1' = '1',",
+        "'prop2' = '2',",
+        "'prop3' = '3',",
+        "'prop4' = '4')"
+      ))
+    }
+  }
+
+  test("SPARK-33898: SHOW CREATE TABLE WITH AS SELECT") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t
+           |USING foo
+           |AS SELECT 1 AS a, "foo" AS b
+         """.stripMargin)
+      val showDDL = getShowCreateDDL(s"SHOW CREATE TABLE $t")
+      assert(showDDL === Array(
+        "CREATE TABLE testcat.ns1.ns2.tbl (",
+        "`a` INT,",
+        "`b` STRING)",
+        "USING foo"
+      ))
+    }
+  }
+
+  test("SPARK-33898: SHOW CREATE TABLE PARTITIONED BY Transforms") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t (a INT, b STRING, ts TIMESTAMP) USING foo
+           |PARTITIONED BY (
+           |    a,
+           |    bucket(16, b),
+           |    years(ts),
+           |    months(ts),
+           |    days(ts),
+           |    hours(ts))
+         """.stripMargin)
+      val showDDL = getShowCreateDDL(s"SHOW CREATE TABLE $t")
+      assert(showDDL === Array(
+        "CREATE TABLE testcat.ns1.ns2.tbl (",
+        "`a` INT,",
+        "`b` STRING,",
+        "`ts` TIMESTAMP)",
+        "USING foo",
+        "PARTITIONED BY (a, bucket(16, b), years(ts), months(ts), days(ts), hours(ts))"
+      ))
     }
   }
 
@@ -2035,7 +2129,7 @@ class DataSourceV2SQLSuite
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING $provider " +
         s"TBLPROPERTIES ('user'='$user', 'status'='$status')")
 
-      val properties = sql(s"SHOW TBLPROPERTIES $t").orderBy("key")
+      val properties = sql(s"SHOW TBLPROPERTIES $t")
 
       val schema = new StructType()
         .add("key", StringType, nullable = false)
@@ -2822,6 +2916,22 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-36481: Test for SET CATALOG statement") {
+    val catalogManager = spark.sessionState.catalogManager
+    assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
+
+    sql("SET CATALOG testcat")
+    assert(catalogManager.currentCatalog.name() == "testcat")
+
+    sql("SET CATALOG testcat2")
+    assert(catalogManager.currentCatalog.name() == "testcat2")
+
+    val errMsg = intercept[CatalogNotFoundException] {
+      sql("SET CATALOG not_exist_catalog")
+    }.getMessage
+    assert(errMsg.contains("Catalog 'not_exist_catalog' plugin class not found"))
+  }
+
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
@@ -2834,6 +2944,10 @@ class DataSourceV2SQLSuite
       sql(sqlStatement)
     }.getMessage
     assert(errMsg.contains(expectedError))
+  }
+
+  private def getShowCreateDDL(showCreateTableSql: String): Array[String] = {
+    sql(showCreateTableSql).head().getString(0).split("\n").map(_.trim)
   }
 }
 

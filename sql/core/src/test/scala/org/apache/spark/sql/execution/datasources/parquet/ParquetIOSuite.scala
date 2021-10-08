@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.time.{Duration, Period}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -368,7 +369,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   private def createParquetWriter(
       schema: MessageType,
       path: Path,
-      dictionaryEnabled: Boolean = false): ParquetWriter[Group] = {
+      dictionaryEnabled: Boolean = false,
+      pageSize: Int = 1024,
+      dictionaryPageSize: Int = 1024): ParquetWriter[Group] = {
     val hadoopConf = spark.sessionState.newHadoopConf()
 
     ExampleParquetWriter
@@ -378,9 +381,75 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       .withWriterVersion(PARQUET_1_0)
       .withCompressionCodec(GZIP)
       .withRowGroupSize(1024 * 1024)
-      .withPageSize(1024)
+      .withPageSize(pageSize)
+      .withDictionaryPageSize(dictionaryPageSize)
       .withConf(hadoopConf)
       .build()
+  }
+
+  test("SPARK-34859: test multiple pages with different sizes and nulls") {
+    def makeRawParquetFile(
+        path: Path,
+        dictionaryEnabled: Boolean,
+        n: Int,
+        pageSize: Int): Seq[Option[Int]] = {
+      val schemaStr =
+        """
+          |message root {
+          |  optional boolean _1;
+          |  optional int32   _2;
+          |  optional int64   _3;
+          |  optional float   _4;
+          |  optional double  _5;
+          |}
+        """.stripMargin
+
+      val schema = MessageTypeParser.parseMessageType(schemaStr)
+      val writer = createParquetWriter(schema, path,
+        dictionaryEnabled = dictionaryEnabled, pageSize = pageSize, dictionaryPageSize = pageSize)
+
+      val rand = scala.util.Random
+      val expected = (0 until n).map { i =>
+        if (rand.nextBoolean()) {
+          None
+        } else {
+          Some(i)
+        }
+      }
+      expected.foreach { opt =>
+        val record = new SimpleGroup(schema)
+        opt match {
+          case Some(i) =>
+            record.add(0, i % 2 == 0)
+            record.add(1, i)
+            record.add(2, i.toLong)
+            record.add(3, i.toFloat)
+            record.add(4, i.toDouble)
+          case _ =>
+        }
+        writer.write(record)
+      }
+
+      writer.close()
+      expected
+    }
+
+    Seq(true, false).foreach { dictionaryEnabled =>
+      Seq(64, 128, 89).foreach { pageSize =>
+        withTempDir { dir =>
+          val path = new Path(dir.toURI.toString, "part-r-0.parquet")
+          val expected = makeRawParquetFile(path, dictionaryEnabled, 1000, pageSize)
+          readParquetFile(path.toString) { df =>
+            checkAnswer(df, expected.map {
+              case None =>
+                Row(null, null, null, null, null)
+              case Some(i) =>
+                Row(i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
+            })
+          }
+        }
+      }
+    }
   }
 
   test("read raw Parquet file") {
@@ -787,6 +856,12 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  test("SPARK-36726: test incorrect Parquet row group file offset") {
+    readParquetFile(testFile("test-data/malformed-file-offset.parquet")) { df =>
+      assert(df.count() == 3650)
+    }
+  }
+
   test("VectorizedParquetRecordReader - direct path read") {
     val data = (0 to 10).map(i => (i, (i + 'a').toChar.toString))
     withTempPath { dir =>
@@ -983,6 +1058,29 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           assert(Seq(866, 20, 492, 76, 824, 604, 343, 820, 864, 243)
             .zip(last10Df).forall(d =>
             d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
+      }
+    }
+  }
+
+  test("SPARK-36825, SPARK-36854: year-month/day-time intervals written and read as INT32/INT64") {
+    Seq(false, true).foreach { offHeapEnabled =>
+      withSQLConf(SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapEnabled.toString) {
+        Seq(
+          YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
+          DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
+        ).foreach { case (it, f) =>
+          val data = (1 to 10).map(i => Row(i, f(i)))
+          val schema = StructType(Array(StructField("d", IntegerType, false),
+            StructField("i", it, false)))
+          withTempPath { file =>
+            val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+            df.write.parquet(file.getCanonicalPath)
+            withAllParquetReaders {
+              val df2 = spark.read.parquet(file.getCanonicalPath)
+              checkAnswer(df2, df.collect().toSeq)
+            }
+          }
+        }
       }
     }
   }

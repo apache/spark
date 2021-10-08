@@ -17,12 +17,26 @@
 # limitations under the License.
 #
 
+SELF=$(cd $(dirname $0) && pwd)
+. "$SELF/util.sh"
+
+if [ -z "${JAVA_HOME}" -a "$(command -v javac)" ]; then
+  if [ "$(uname -s)" = "Darwin" ]; then
+    # For some versions of macOS, "/usr/bin/javac" is a real file instead of a symbolic link,
+    # so the JAVA_HOME may be set to path "/usr" improperly.
+    # The following command is an appropriate way of setting JAVA_HOME on macOS.
+    export JAVA_HOME="$(/usr/libexec/java_home)"
+  else
+    export JAVA_HOME="$(dirname $(dirname $(realpath $(command -v javac))))"
+  fi
+fi
+
 # Determine the current working directory
 _DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # Preserve the calling directory
 _CALLING_DIR="$(pwd)"
 # Options used during compilation
-_COMPILE_JVM_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g"
+_COMPILE_JVM_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g -Xss128m"
 
 # Installs any application tarball given a URL, the expected tarball name,
 # and, optionally, a checkable binary path to determine if the binary has

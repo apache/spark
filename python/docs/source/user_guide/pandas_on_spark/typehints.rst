@@ -1,3 +1,21 @@
+..  Licensed to the Apache Software Foundation (ASF) under one
+    or more contributor license agreements.  See the NOTICE file
+    distributed with this work for additional information
+    regarding copyright ownership.  The ASF licenses this file
+    to you under the Apache License, Version 2.0 (the
+    "License"); you may not use this file except in compliance
+    with the License.  You may obtain a copy of the License at
+
+..    http://www.apache.org/licenses/LICENSE-2.0
+
+..  Unless required by applicable law or agreed to in writing,
+    software distributed under the License is distributed on an
+    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, either express or implied.  See the License for the
+    specific language governing permissions and limitations
+    under the License.
+
+
 =================================
 Type Hints in Pandas API on Spark
 =================================
@@ -6,8 +24,8 @@ Type Hints in Pandas API on Spark
 
 Pandas API on Spark, by default, infers the schema by taking some top records from the output,
 in particular, when you use APIs that allow users to apply a function against pandas-on-Spark DataFrame
-such as :func:`DataFrame.transform`, :func:`DataFrame.apply`, :func:`DataFrame.koalas.apply_batch`,
-:func:`DataFrame.koalas.apply_batch`, :func:`Series.koalas.apply_batch`, etc.
+such as :func:`DataFrame.transform`, :func:`DataFrame.apply`, :func:`DataFrame.pandas_on_spark.apply_batch`,
+:func:`DataFrame.pandas_on_spark.apply_batch`, :func:`Series.pandas_on_spark.apply_batch`, etc.
 
 However, this is potentially expensive. If there are several expensive operations such as a shuffle
 in the upstream of the execution plan, pandas API on Spark will end up with executing the Spark job twice, once
@@ -35,17 +53,17 @@ it as a Spark schema. As an example, you can specify the return type hint as bel
 
 .. code-block:: python
 
-    >>> def pandas_div(pdf) -> ks.DataFrame[float, float]:
+    >>> def pandas_div(pdf) -> ps.DataFrame[float, float]:
     ...    # pdf is a pandas DataFrame.
     ...    return pdf[['B', 'C']] / pdf[['B', 'C']]
     ...
-    >>> df = ks.DataFrame({'A': ['a', 'a', 'b'], 'B': [1, 2, 3], 'C': [4, 6, 5]})
+    >>> df = ps.DataFrame({'A': ['a', 'a', 'b'], 'B': [1, 2, 3], 'C': [4, 6, 5]})
     >>> df.groupby('A').apply(pandas_div)
 
-The function ``pandas_div`` actually takes and outputs a pandas DataFrame instead of pandas-on-Spark :class:`DataFrame`.
-However, pandas API on Spark has to force to set the mismatched type hints.
+Notice that the function ``pandas_div`` actually takes and outputs a pandas DataFrame instead of
+pandas-on-Spark :class:`DataFrame`. So, technically the correct types should be of pandas.
 
-From pandas-on-Spark 1.0 with Python 3.7+, now you can specify the type hints by using pandas instances.
+With Python 3.7+, you can specify the type hints by using pandas instances as follows:
 
 .. code-block:: python
 
@@ -53,7 +71,7 @@ From pandas-on-Spark 1.0 with Python 3.7+, now you can specify the type hints by
     ...    # pdf is a pandas DataFrame.
     ...    return pdf[['B', 'C']] / pdf[['B', 'C']]
     ...
-    >>> df = ks.DataFrame({'A': ['a', 'a', 'b'], 'B': [1, 2, 3], 'C': [4, 6, 5]})
+    >>> df = ps.DataFrame({'A': ['a', 'a', 'b'], 'B': [1, 2, 3], 'C': [4, 6, 5]})
     >>> df.groupby('A').apply(pandas_div)
 
 Likewise, pandas Series can be also used as a type hints:
@@ -63,7 +81,7 @@ Likewise, pandas Series can be also used as a type hints:
     >>> def sqrt(x) -> pd.Series[float]:
     ...     return np.sqrt(x)
     ...
-    >>> df = ks.DataFrame([[4, 9]] * 3, columns=['A', 'B'])
+    >>> df = ps.DataFrame([[4, 9]] * 3, columns=['A', 'B'])
     >>> df.apply(sqrt, axis=0)
 
 Currently, both pandas API on Spark and pandas instances can be used to specify the type hints; however, pandas-on-Spark
@@ -73,7 +91,7 @@ plans to move gradually towards using pandas instances only as the stability bec
 Type Hinting with Names
 -----------------------
 
-In pandas-on-Spark 1.0, the new style of type hinting was introduced to overcome the limitations in the existing type
+This apporach is to overcome the limitations in the existing type
 hinting especially for DataFrame. When you use a DataFrame as the return type hint, for example,
 ``DataFrame[int, int]``, there is no way to specify the names of each Series. In the old way, pandas API on Spark just generates
 the column names as ``c#`` and this easily leads users to lose or forgot the Series mappings. See the example below:
@@ -84,7 +102,7 @@ the column names as ``c#`` and this easily leads users to lose or forgot the Ser
     ...     pdf['A'] = pdf.id + 1
     ...     return pdf
     ...
-    >>> ks.range(5).koalas.apply_batch(transform)
+    >>> ps.range(5).pandas_on_spark.apply_batch(transform)
 
 .. code-block:: bash
 
@@ -105,7 +123,7 @@ the Series names, ``id`` and ``A``, and ``int`` types respectively.
     ...     pdf['A'] = pdf.id + 1
     ...     return pdf
     ...
-    >>> ks.range(5).koalas.apply_batch(transform)
+    >>> ps.range(5).pandas_on_spark.apply_batch(transform)
 
 .. code-block:: bash
 
@@ -121,16 +139,127 @@ programmatically generate the return type and schema.
 
 .. code-block:: python
 
-    >>> def transform(pdf) -> pd.DataFrame[zip(pdf.columns, pdf.dtypes)]:
+    >>> def transform(pdf) -> pd.DataFrame[
+    ..         zip(sample.columns, sample.dtypes)]:
     ...    return pdf + 1
     ...
-    >>> kdf.koalas.apply_batch(transform)
+    >>> psdf.pandas_on_spark.apply_batch(transform)
 
 Likewise, ``dtype`` instances from pandas DataFrame can be used alone and let pandas API on Spark generate column names.
 
 .. code-block:: python
 
-    >>> def transform(pdf) -> pd.DataFrame[pdf.dtypes]:
+    >>> def transform(pdf) -> pd.DataFrame[sample.dtypes]:
     ...     return pdf + 1
     ...
-    >>> kdf.koalas.apply_batch(transform)
+    >>> psdf.pandas_on_spark.apply_batch(transform)
+
+
+Type Hinting with Index
+-----------------------
+
+When you omit index types in the type hints, pandas API on Spark attaches the default index (`compute.default_index_type`),
+and it loses the index column and information from the original data. The default index sometimes requires to have an
+expensive computation such as shuffle so it is best to specify the index type together.
+
+
+Index
+~~~~~
+
+With the pandas DataFrames below:
+
+.. code-block:: python
+
+    >>> pdf = pd.DataFrame({'id': range(5)})
+    >>> sample = pdf.copy()
+    >>> sample["a"] = sample.id + 1
+
+The ways below are allowed for a regular index:
+
+.. code-block:: python
+
+    >>> def transform(pdf) -> pd.DataFrame[int, [int, int]]:
+    ...     pdf["a"] = pdf.id + 1
+    ...     return pdf
+    ...
+    >>> ps.from_pandas(pdf).pandas_on_spark.apply_batch(transform)
+
+.. code-block:: python
+
+    >>> def transform(pdf) -> pd.DataFrame[
+    ...         sample.index.dtype, sample.dtypes]:
+    ...     pdf["a"] = pdf.id + 1
+    ...     return pdf
+    ...
+    >>> ps.from_pandas(pdf).pandas_on_spark.apply_batch(transform)
+
+.. code-block:: python
+
+    >>> def transform(pdf) -> pd.DataFrame[
+    ...         ("idxA", int), [("id", int), ("a", int)]]:
+    ...     pdf["a"] = pdf.id + 1
+    ...     return pdf
+    ...
+    >>> ps.from_pandas(pdf).pandas_on_spark.apply_batch(transform)
+
+.. code-block:: python
+
+    >>> def transform(pdf) -> pd.DataFrame[
+    ...         (sample.index.name, sample.index.dtype),
+    ...         zip(sample.columns, sample.dtypes)]:
+    ...     pdf["a"] = pdf.id + 1
+    ...     return pdf
+    ...
+    >>> ps.from_pandas(pdf).pandas_on_spark.apply_batch(transform)
+
+
+MultiIndex
+~~~~~~~~~~
+
+With the pandas DataFrames below:
+
+    >>> midx = pd.MultiIndex.from_arrays(
+    ...     [(1, 1, 2), (1.5, 4.5, 7.5)],
+    ...     names=("int", "float"))
+    >>> pdf = pd.DataFrame(range(3), index=midx, columns=["id"])
+    >>> sample = pdf.copy()
+    >>> sample["a"] = sample.id + 1
+
+The ways below are allowed for multi-index:
+
+.. code-block:: python
+
+    >>> def transform(pdf) -> pd.DataFrame[[int, float], [int, int]]:
+    ...     pdf["a"] = pdf.id + 1
+    ...     return pdf
+    ...
+    >>> ps.from_pandas(pdf).pandas_on_spark.apply_batch(transform)
+
+.. code-block:: python
+
+    >>> def transform(pdf) -> pd.DataFrame[
+    ...         sample.index.dtypes, sample.dtypes]:
+    ...     pdf["a"] = pdf.id + 1
+    ...     return pdf
+    ...
+    >>> ps.from_pandas(pdf).pandas_on_spark.apply_batch(transform)
+
+.. code-block:: python
+
+    >>> def transform(pdf) -> pd.DataFrame[
+    ...         [("int", int), ("float", float)],
+    ...         [("id", int), ("a", int)]]:
+    ...     pdf["a"] = pdf.id + 1
+    ...     return pdf
+    ...
+    >>> ps.from_pandas(pdf).pandas_on_spark.apply_batch(transform)
+
+.. code-block:: python
+
+    >>> def transform(pdf) -> pd.DataFrame[
+    ...         zip(sample.index.names, sample.index.dtypes),
+    ...         zip(sample.columns, sample.dtypes)]:
+    ...     pdf["A"] = pdf.id + 1
+    ...     return pdf
+    ...
+    >>> ps.from_pandas(pdf).pandas_on_spark.apply_batch(transform)

@@ -46,7 +46,7 @@ import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
-import org.apache.spark.sql.test.SQLTestData.{DecimalData, TestData2}
+import org.apache.spark.sql.test.SQLTestData.{ArrayStringWrapper, ContainerStringWrapper, DecimalData, StringWrapper, TestData2}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
@@ -235,7 +235,7 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("SPARK-28067: Aggregate sum should not return wrong results for decimal overflow") {
+  def checkAggResultsForDecimalOverflow(aggFn: Column => Column): Unit = {
     Seq("true", "false").foreach { wholeStageEnabled =>
       withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStageEnabled)) {
         Seq(true, false).foreach { ansiEnabled =>
@@ -256,22 +256,22 @@ class DataFrameSuite extends QueryTest
               (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
             val df = df0.union(df1)
             val df2 = df.withColumnRenamed("decNum", "decNum2").
-              join(df, "intNum").agg(sum("decNum"))
+              join(df, "intNum").agg(aggFn($"decNum"))
 
             val expectedAnswer = Row(null)
             assertDecimalSumOverflow(df2, ansiEnabled, expectedAnswer)
 
             val decStr = "1" + "0" * 19
             val d1 = spark.range(0, 12, 1, 1)
-            val d2 = d1.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(sum($"d"))
+            val d2 = d1.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(aggFn($"d"))
             assertDecimalSumOverflow(d2, ansiEnabled, expectedAnswer)
 
             val d3 = spark.range(0, 1, 1, 1).union(spark.range(0, 11, 1, 1))
-            val d4 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(sum($"d"))
+            val d4 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(aggFn($"d"))
             assertDecimalSumOverflow(d4, ansiEnabled, expectedAnswer)
 
             val d5 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d"),
-              lit(1).as("key")).groupBy("key").agg(sum($"d").alias("sumd")).select($"sumd")
+              lit(1).as("key")).groupBy("key").agg(aggFn($"d").alias("aggd")).select($"aggd")
             assertDecimalSumOverflow(d5, ansiEnabled, expectedAnswer)
 
             val nullsDf = spark.range(1, 4, 1).select(expr(s"cast(null as decimal(38,18)) as d"))
@@ -279,7 +279,7 @@ class DataFrameSuite extends QueryTest
             val largeDecimals = Seq(BigDecimal("1"* 20 + ".123"), BigDecimal("9"* 20 + ".123")).
               toDF("d")
             assertDecimalSumOverflow(
-              nullsDf.union(largeDecimals).agg(sum($"d")), ansiEnabled, expectedAnswer)
+              nullsDf.union(largeDecimals).agg(aggFn($"d")), ansiEnabled, expectedAnswer)
 
             val df3 = Seq(
               (BigDecimal("10000000000000000000"), 1),
@@ -304,6 +304,14 @@ class DataFrameSuite extends QueryTest
         }
       }
     }
+  }
+
+  test("SPARK-28067: Aggregate sum should not return wrong results for decimal overflow") {
+    checkAggResultsForDecimalOverflow(c => sum(c))
+  }
+
+  test("SPARK-35955: Aggregate avg should not return wrong results for decimal overflow") {
+    checkAggResultsForDecimalOverflow(c => avg(c))
   }
 
   test("Star Expansion - ds.explode should fail with a meaningful message if it takes a star") {
@@ -694,6 +702,18 @@ class DataFrameSuite extends QueryTest
       "The size of column names: 2 isn't equal to the size of metadata elements: 1"))
   }
 
+  test("SPARK-36642: withMetadata: replace metadata of a column") {
+    val metadata = new MetadataBuilder().putLong("key", 1L).build()
+    val df1 = sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
+    val df2 = df1.withMetadata("x", metadata)
+    assert(df2.schema(0).metadata === metadata)
+
+    val err = intercept[AnalysisException] {
+      df1.withMetadata("x1", metadata)
+    }
+    assert(err.getMessage.contains("Cannot resolve column name"))
+  }
+
   test("replace column using withColumn") {
     val df2 = sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
     val df3 = df2.withColumn("x", df2("x") + 1)
@@ -824,6 +844,56 @@ class DataFrameSuite extends QueryTest
         Row(key, value, key + 1)
       }.toSeq)
     assert(df.schema.map(_.name) === Seq("key", "valueRenamed", "newCol"))
+  }
+
+  test("SPARK-20384: Value class filter") {
+    val df = spark.sparkContext
+      .parallelize(Seq(StringWrapper("a"), StringWrapper("b"), StringWrapper("c")))
+      .toDF()
+    val filtered = df.where("s = \"a\"")
+    checkAnswer(filtered, spark.sparkContext.parallelize(Seq(StringWrapper("a"))).toDF)
+  }
+
+  test("SPARK-20384: Tuple2 of value class filter") {
+    val df = spark.sparkContext
+      .parallelize(Seq(
+        (StringWrapper("a1"), StringWrapper("a2")),
+        (StringWrapper("b1"), StringWrapper("b2"))))
+      .toDF()
+    val filtered = df.where("_2.s = \"a2\"")
+    checkAnswer(filtered,
+      spark.sparkContext.parallelize(Seq((StringWrapper("a1"), StringWrapper("a2")))).toDF)
+  }
+
+  test("SPARK-20384: Tuple3 of value class filter") {
+    val df = spark.sparkContext
+      .parallelize(Seq(
+        (StringWrapper("a1"), StringWrapper("a2"), StringWrapper("a3")),
+        (StringWrapper("b1"), StringWrapper("b2"), StringWrapper("b3"))))
+      .toDF()
+    val filtered = df.where("_3.s = \"a3\"")
+    checkAnswer(filtered,
+      spark.sparkContext.parallelize(
+        Seq((StringWrapper("a1"), StringWrapper("a2"), StringWrapper("a3")))).toDF)
+  }
+
+  test("SPARK-20384: Array value class filter") {
+    val ab = ArrayStringWrapper(Seq(StringWrapper("a"), StringWrapper("b")))
+    val cd = ArrayStringWrapper(Seq(StringWrapper("c"), StringWrapper("d")))
+
+    val df = spark.sparkContext.parallelize(Seq(ab, cd)).toDF
+    val filtered = df.where(array_contains(col("wrappers.s"), "b"))
+    checkAnswer(filtered, spark.sparkContext.parallelize(Seq(ab)).toDF)
+  }
+
+  test("SPARK-20384: Nested value class filter") {
+    val a = ContainerStringWrapper(StringWrapper("a"))
+    val b = ContainerStringWrapper(StringWrapper("b"))
+
+    val df = spark.sparkContext.parallelize(Seq(a, b)).toDF
+    // flat value class, `s` field is not in schema
+    val filtered = df.where("wrapper = \"a\"")
+    checkAnswer(filtered, spark.sparkContext.parallelize(Seq(a)).toDF)
   }
 
   private lazy val person2: DataFrame = Seq(
@@ -1813,7 +1883,7 @@ class DataFrameSuite extends QueryTest
       (1 to 100).map(i => TestData2(i % 10, i))).toDF()
 
     // Distribute and order by.
-    val df4 = data.repartition($"a").sortWithinPartitions($"b".desc)
+    val df4 = data.repartition(5, $"a").sortWithinPartitions($"b".desc)
     // Walk each partition and verify that it is sorted descending and does not contain all
     // the values.
     df4.rdd.foreachPartition { p =>
@@ -2904,6 +2974,61 @@ class DataFrameSuite extends QueryTest
             .otherwise(simpleUDF($"id")).as("output"))
         df.collect()
         assert(accum.value == 5)
+      }
+    }
+  }
+
+  test("isLocal should consider CommandResult and LocalRelation") {
+    val df1 = sql("SHOW TABLES")
+    assert(df1.isLocal)
+    val df2 = (1 to 10).toDF()
+    assert(df2.isLocal)
+  }
+
+  test("SPARK-35886: PromotePrecision should be subexpr replaced") {
+    withTable("tbl") {
+      sql(
+        """
+          |CREATE TABLE tbl (
+          |  c1 DECIMAL(18,6),
+          |  c2 DECIMAL(18,6),
+          |  c3 DECIMAL(18,6))
+          |USING parquet;
+          |""".stripMargin)
+      sql("INSERT INTO tbl SELECT 1, 1, 1")
+      checkAnswer(sql("SELECT sum(c1 * c3) + sum(c2 * c3) FROM tbl"), Row(2.00000000000) :: Nil)
+    }
+  }
+
+  test("SPARK-36338: DataFrame.withSequenceColumn should append unique sequence IDs") {
+    val ids = spark.range(10).repartition(5)
+      .withSequenceColumn("default_index").collect().map(_.getLong(0))
+    assert(ids.toSet === Range(0, 10).toSet)
+  }
+
+  test("SPARK-35320: Reading JSON with key type different to String in a map should fail") {
+    Seq(
+      (MapType(IntegerType, StringType), """{"1": "test"}"""),
+      (StructType(Seq(StructField("test", MapType(IntegerType, StringType)))),
+        """"test": {"1": "test"}"""),
+      (ArrayType(MapType(IntegerType, StringType)), """[{"1": "test"}]"""),
+      (MapType(StringType, MapType(IntegerType, StringType)), """{"key": {"1" : "test"}}""")
+    ).foreach { case (schema, jsonData) =>
+      withTempDir { dir =>
+        val colName = "col"
+        val msg = "can only contain StringType as a key type for a MapType"
+
+        val thrown1 = intercept[AnalysisException](
+          spark.read.schema(StructType(Seq(StructField(colName, schema))))
+            .json(Seq(jsonData).toDS()).collect())
+        assert(thrown1.getMessage.contains(msg))
+
+        val jsonDir = new File(dir, "json").getCanonicalPath
+        Seq(jsonData).toDF(colName).write.json(jsonDir)
+        val thrown2 = intercept[AnalysisException](
+          spark.read.schema(StructType(Seq(StructField(colName, schema))))
+            .json(jsonDir).collect())
+        assert(thrown2.getMessage.contains(msg))
       }
     }
   }

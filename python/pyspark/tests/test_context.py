@@ -220,7 +220,7 @@ class ContextTests(unittest.TestCase):
             def run():
                 # When thread is pinned, job group should be set for each thread for now.
                 # Local properties seem not being inherited like Scala side does.
-                if os.environ.get("PYSPARK_PIN_THREAD", "false").lower() == "true":
+                if os.environ.get("PYSPARK_PIN_THREAD", "true").lower() == "true":
                     sc.setJobGroup('test_progress_api', '', True)
                 try:
                     rdd.count()
@@ -230,7 +230,7 @@ class ContextTests(unittest.TestCase):
             t.daemon = True
             t.start()
             # wait for scheduler to start
-            time.sleep(1)
+            time.sleep(3)
 
             tracker = sc.statusTracker()
             jobIds = tracker.getJobIdsForGroup('test_progress_api')

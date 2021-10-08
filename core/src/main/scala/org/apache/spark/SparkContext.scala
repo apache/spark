@@ -583,6 +583,10 @@ class SparkContext(config: SparkConf) extends Logging {
     _applicationId = _taskScheduler.applicationId()
     _applicationAttemptId = _taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
+    _applicationAttemptId.foreach { attemptId =>
+      _conf.set(APP_ATTEMPT_ID, attemptId)
+      _env.blockManager.blockStoreClient.setAppAttemptId(attemptId)
+    }
     if (_conf.get(UI_REVERSE_PROXY)) {
       val proxyUrl = _conf.get(UI_REVERSE_PROXY_URL.key, "").stripSuffix("/") +
         "/proxy/" + _applicationId
@@ -595,8 +599,6 @@ class SparkContext(config: SparkConf) extends Logging {
     // The metrics system for Driver need to be set spark.app.id to app ID.
     // So it should start after we get app ID from the task scheduler and set spark.app.id.
     _env.metricsSystem.start(_conf.get(METRICS_STATIC_SOURCES_ENABLED))
-    // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
-    _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
     _eventLogger =
       if (isEventLogEnabled) {
@@ -638,20 +640,11 @@ class SparkContext(config: SparkConf) extends Logging {
     postEnvironmentUpdate()
     postApplicationStart()
 
-    // Post init
-    _taskScheduler.postStartHook()
-    if (isLocal) {
-      _env.metricsSystem.registerSource(Executor.executorSourceLocalModeOnly)
-    }
-    _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
-    _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
-    _env.metricsSystem.registerSource(new JVMCPUSource())
-    _executorMetricsSource.foreach(_.register(_env.metricsSystem))
-    _executorAllocationManager.foreach { e =>
-      _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
-    }
-    appStatusSource.foreach(_env.metricsSystem.registerSource(_))
-    _plugins.foreach(_.registerMetrics(applicationId))
+    // After application started, attach handlers to started server and start handler.
+    _ui.foreach(_.attachAllHandler())
+    // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
+    _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
+
     // Make sure the context is stopped if the user forgets about it. This avoids leaving
     // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
     // is killed, though.
@@ -666,6 +659,21 @@ class SparkContext(config: SparkConf) extends Logging {
           logWarning("Ignoring Exception while stopping SparkContext from shutdown hook", e)
       }
     }
+
+    // Post init
+    _taskScheduler.postStartHook()
+    if (isLocal) {
+      _env.metricsSystem.registerSource(Executor.executorSourceLocalModeOnly)
+    }
+    _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
+    _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
+    _env.metricsSystem.registerSource(new JVMCPUSource())
+    _executorMetricsSource.foreach(_.register(_env.metricsSystem))
+    _executorAllocationManager.foreach { e =>
+      _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
+    }
+    appStatusSource.foreach(_env.metricsSystem.registerSource(_))
+    _plugins.foreach(_.registerMetrics(applicationId))
   } catch {
     case NonFatal(e) =>
       logError("Error initializing SparkContext.", e)
@@ -690,8 +698,14 @@ class SparkContext(config: SparkConf) extends Logging {
       if (executorId == SparkContext.DRIVER_IDENTIFIER) {
         Some(Utils.getThreadDump())
       } else {
-        val endpointRef = env.blockManager.master.getExecutorEndpointRef(executorId).get
-        Some(endpointRef.askSync[Array[ThreadStackTrace]](TriggerThreadDump))
+        env.blockManager.master.getExecutorEndpointRef(executorId) match {
+          case Some(endpointRef) =>
+            Some(endpointRef.askSync[Array[ThreadStackTrace]](TriggerThreadDump))
+          case None =>
+            logWarning(s"Executor $executorId might already have stopped and " +
+              "can not request thread dump from it.")
+            None
+        }
       }
     } catch {
       case e: Exception =>
@@ -2066,11 +2080,6 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.tryLogNonFatalError {
       _ui.foreach(_.stop())
     }
-    if (env != null) {
-      Utils.tryLogNonFatalError {
-        env.metricsSystem.report()
-      }
-    }
     Utils.tryLogNonFatalError {
       _cleaner.foreach(_.stop())
     }
@@ -2087,6 +2096,11 @@ class SparkContext(config: SparkConf) extends Logging {
       Utils.tryLogNonFatalError {
         listenerBus.stop()
         _listenerBusStarted = false
+      }
+    }
+    if (env != null) {
+      Utils.tryLogNonFatalError {
+        env.metricsSystem.report()
       }
     }
     Utils.tryLogNonFatalError {

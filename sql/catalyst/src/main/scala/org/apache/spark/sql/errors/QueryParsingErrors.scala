@@ -112,6 +112,10 @@ object QueryParsingErrors {
     new ParseException(s"Unsupported LATERAL join type $joinType", ctx)
   }
 
+  def invalidLateralJoinRelationError(ctx: RelationPrimaryContext): Throwable = {
+    new ParseException(s"LATERAL can only be used with subquery", ctx)
+  }
+
   def repetitiveWindowDefinitionError(name: String, ctx: WindowClauseContext): Throwable = {
     new ParseException(s"The definition of window '$name' is repetitive", ctx)
   }
@@ -202,8 +206,12 @@ object QueryParsingErrors {
   }
 
   def fromToIntervalUnsupportedError(
-      from: String, to: String, ctx: UnitToUnitIntervalContext): Throwable = {
+      from: String, to: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"Intervals FROM $from TO $to are not supported.", ctx)
+  }
+
+  def mixedIntervalUnitsError(literal: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(s"Cannot mix year-month and day-time fields: $literal", ctx)
   }
 
   def dataTypeUnsupportedError(dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
@@ -316,7 +324,8 @@ object QueryParsingErrors {
   }
 
   def duplicateKeysError(key: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"Found duplicate keys '$key'.", ctx)
+    // Found duplicate keys '$key'
+    new ParseException(errorClass = "DUPLICATE_KEY", messageParameters = Array(key), ctx)
   }
 
   def unexpectedFomatForSetConfigurationError(ctx: SetConfigurationContext): Throwable = {

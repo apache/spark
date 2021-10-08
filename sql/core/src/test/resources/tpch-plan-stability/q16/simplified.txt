@@ -1,0 +1,37 @@
+WholeStageCodegen (6)
+  Sort [supplier_cnt,p_brand,p_type,p_size]
+    InputAdapter
+      Exchange [supplier_cnt,p_brand,p_type,p_size] #1
+        WholeStageCodegen (5)
+          HashAggregate [p_brand,p_type,p_size,count] [count(ps_suppkeyL),supplier_cnt,count]
+            InputAdapter
+              Exchange [p_brand,p_type,p_size] #2
+                WholeStageCodegen (4)
+                  HashAggregate [p_brand,p_type,p_size,ps_suppkey] [count(ps_suppkeyL),count,count]
+                    HashAggregate [p_brand,p_type,p_size,ps_suppkey]
+                      InputAdapter
+                        Exchange [p_brand,p_type,p_size,ps_suppkey] #3
+                          WholeStageCodegen (3)
+                            HashAggregate [p_brand,p_type,p_size,ps_suppkey]
+                              Project [ps_suppkey,p_brand,p_type,p_size]
+                                BroadcastHashJoin [ps_partkey,p_partkey]
+                                  BroadcastHashJoin [ps_suppkey,s_suppkey]
+                                    Filter [ps_partkey]
+                                      ColumnarToRow
+                                        InputAdapter
+                                          Scan parquet default.partsupp [ps_partkey,ps_suppkey]
+                                    InputAdapter
+                                      BroadcastExchange #4
+                                        WholeStageCodegen (1)
+                                          Project [s_suppkey]
+                                            Filter [s_comment]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.supplier [s_suppkey,s_comment]
+                                  InputAdapter
+                                    BroadcastExchange #5
+                                      WholeStageCodegen (2)
+                                        Filter [p_brand,p_type,p_size,p_partkey]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet default.part [p_partkey,p_brand,p_type,p_size]

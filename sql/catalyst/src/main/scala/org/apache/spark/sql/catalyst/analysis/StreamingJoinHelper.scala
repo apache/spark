@@ -41,7 +41,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    */
   def isWatermarkInJoinKeys(plan: LogicalPlan): Boolean = {
     plan match {
-      case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _) =>
+      case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _) =>
         (leftKeys ++ rightKeys).exists {
           case a: AttributeReference => a.metadata.contains(EventTimeWatermark.delayKey)
           case _ => false
@@ -239,7 +239,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           collect(child, negate)
         case PromotePrecision(child) =>
           collect(child, negate)
-        case Cast(child, dataType, _) =>
+        case Cast(child, dataType, _, _) =>
           dataType match {
             case _: NumericType | _: TimestampType => collect(child, negate)
             case _ =>

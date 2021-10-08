@@ -19,6 +19,8 @@ package org.apache.spark.sql.kafka010
 
 import org.apache.kafka.common.TopicPartition
 
+import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
+
 /**
  * Objects that represent desired offset range limits for starting,
  * ending, and specific offsets.
@@ -47,14 +49,18 @@ private[kafka010] case class SpecificOffsetRangeLimit(
  * greater than specific timestamp.
  */
 private[kafka010] case class SpecificTimestampRangeLimit(
-    topicTimestamps: Map[TopicPartition, Long]) extends KafkaOffsetRangeLimit
+    topicTimestamps: Map[TopicPartition, Long],
+    strategyOnNoMatchingStartingOffset: StrategyOnNoMatchStartingOffset.Value)
+  extends KafkaOffsetRangeLimit
 
 /**
  * Represents the desire to bind to earliest offset which timestamp for the offset is equal or
  * greater than specific timestamp. This applies the timestamp to the all topics/partitions.
  */
 private[kafka010] case class GlobalTimestampRangeLimit(
-    timestamp: Long) extends KafkaOffsetRangeLimit
+    timestamp: Long,
+    strategyOnNoMatchingStartingOffset: StrategyOnNoMatchStartingOffset.Value)
+  extends KafkaOffsetRangeLimit
 
 private[kafka010] object KafkaOffsetRangeLimit {
   /**

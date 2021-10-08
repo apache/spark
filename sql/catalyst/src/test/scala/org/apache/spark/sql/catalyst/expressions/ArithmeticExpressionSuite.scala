@@ -19,8 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
+import java.time.temporal.ChronoUnit
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.DecimalPrecision
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
@@ -646,6 +647,56 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           failOnError
         ),
         "overflow")
+    }
+  }
+
+  test("SPARK-34920: error class") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val operators: Seq[((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)] =
+        Seq((Divide(_, _), testDecimalAndDoubleType),
+          (IntegralDivide(_, _), testDecimalAndLongType),
+          (Remainder(_, _), testNumericDataTypes),
+          (Pmod(_, _), testNumericDataTypes))
+      operators.foreach { case (operator, testTypesFn) =>
+        testTypesFn { convert =>
+          val one = Literal(convert(1))
+          val zero = Literal(convert(0))
+          checkEvaluation(operator(Literal.create(null, one.dataType), zero), null)
+          checkEvaluation(operator(one, Literal.create(null, zero.dataType)), null)
+          checkExceptionInExpression[SparkArithmeticException](operator(one, zero),
+            "divide by zero")
+        }
+      }
+    }
+  }
+
+  test("SPARK-36920: Support year-month intervals by ABS") {
+    checkEvaluation(Abs(Literal(Period.ZERO)), Period.ZERO)
+    checkEvaluation(Abs(Literal(Period.ofMonths(-1))), Period.ofMonths(1))
+    checkEvaluation(Abs(Literal(Period.ofYears(-12345))), Period.ofYears(12345))
+    checkEvaluation(Abs(Literal.create(null, YearMonthIntervalType())), null)
+    checkExceptionInExpression[ArithmeticException](
+      Abs(Literal(Period.ofMonths(Int.MinValue))),
+      "overflow")
+
+    DataTypeTestUtils.yearMonthIntervalTypes.foreach { tpe =>
+      checkConsistencyBetweenInterpretedAndCodegen((e: Expression) => Abs(e, false), tpe)
+    }
+  }
+
+  test("SPARK-36920: Support day-time intervals by ABS") {
+    checkEvaluation(Abs(Literal(Duration.ZERO)), Duration.ZERO)
+    checkEvaluation(
+      Abs(Literal(Duration.of(-1, ChronoUnit.MICROS))),
+      Duration.of(1, ChronoUnit.MICROS))
+    checkEvaluation(Abs(Literal(Duration.ofDays(-12345))), Duration.ofDays(12345))
+    checkEvaluation(Abs(Literal.create(null, DayTimeIntervalType())), null)
+    checkExceptionInExpression[ArithmeticException](
+      Abs(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS))),
+      "overflow")
+
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach { tpe =>
+      checkConsistencyBetweenInterpretedAndCodegen((e: Expression) => Abs(e, false), tpe)
     }
   }
 }

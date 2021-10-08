@@ -20,12 +20,18 @@ A collections of builtin avro functions
 """
 
 
+from typing import Dict, Optional, TYPE_CHECKING
 from pyspark import SparkContext
-from pyspark.sql.column import Column, _to_java_column
-from pyspark.util import _print_missing_jar
+from pyspark.sql.column import Column, _to_java_column  # type: ignore[attr-defined]
+from pyspark.util import _print_missing_jar  # type: ignore[attr-defined]
+
+if TYPE_CHECKING:
+    from pyspark.sql._typing import ColumnOrName
 
 
-def from_avro(data, jsonFormatSchema, options=None):
+def from_avro(
+    data: "ColumnOrName", jsonFormatSchema: str, options: Optional[Dict[str, str]] = None
+) -> Column:
     """
     Converts a binary column of Avro format into its corresponding catalyst value.
     The specified schema must match the read data, otherwise the behavior is undefined:
@@ -67,7 +73,7 @@ def from_avro(data, jsonFormatSchema, options=None):
     [Row(value=Row(avro=Row(age=2, name='Alice')))]
     """
 
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     try:
         jc = sc._jvm.org.apache.spark.sql.avro.functions.from_avro(
             _to_java_column(data), jsonFormatSchema, options or {})
@@ -78,7 +84,7 @@ def from_avro(data, jsonFormatSchema, options=None):
     return Column(jc)
 
 
-def to_avro(data, jsonFormatSchema=""):
+def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     """
     Converts a column into binary of avro format.
 
@@ -111,7 +117,7 @@ def to_avro(data, jsonFormatSchema=""):
     [Row(suite=bytearray(b'\\x02\\x00'))]
     """
 
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     try:
         if jsonFormatSchema == "":
             jc = sc._jvm.org.apache.spark.sql.avro.functions.to_avro(_to_java_column(data))
@@ -125,7 +131,7 @@ def to_avro(data, jsonFormatSchema=""):
     return Column(jc)
 
 
-def _test():
+def _test() -> None:
     import os
     import sys
     from pyspark.testing.utils import search_jar

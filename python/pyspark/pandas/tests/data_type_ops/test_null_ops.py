@@ -19,7 +19,6 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
-from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
@@ -37,57 +36,50 @@ class NullOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: self.psser + "x")
         self.assertRaises(TypeError, lambda: self.psser + 1)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser + psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser + psser)
 
     def test_sub(self):
         self.assertRaises(TypeError, lambda: self.psser - "x")
         self.assertRaises(TypeError, lambda: self.psser - 1)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser - psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser - psser)
 
     def test_mul(self):
         self.assertRaises(TypeError, lambda: self.psser * "x")
         self.assertRaises(TypeError, lambda: self.psser * 1)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser * psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser * psser)
 
     def test_truediv(self):
         self.assertRaises(TypeError, lambda: self.psser / "x")
         self.assertRaises(TypeError, lambda: self.psser / 1)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser / psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser / psser)
 
     def test_floordiv(self):
         self.assertRaises(TypeError, lambda: self.psser // "x")
         self.assertRaises(TypeError, lambda: self.psser // 1)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser // psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser // psser)
 
     def test_mod(self):
         self.assertRaises(TypeError, lambda: self.psser % "x")
         self.assertRaises(TypeError, lambda: self.psser % 1)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser % psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser % psser)
 
     def test_pow(self):
         self.assertRaises(TypeError, lambda: self.psser ** "x")
         self.assertRaises(TypeError, lambda: self.psser ** 1)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser ** psser)
+        for psser in self.pssers:
+            self.assertRaises(TypeError, lambda: self.psser ** psser)
 
     def test_radd(self):
         self.assertRaises(TypeError, lambda: "x" + self.psser)
@@ -123,6 +115,9 @@ class NullOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser, psser.to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
+    def test_isnull(self):
+        self.assert_eq(self.pser.isnull(), self.psser.isnull())
+
     def test_astype(self):
         pser = self.pser
         psser = self.psser
@@ -131,6 +126,39 @@ class NullOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser.astype("category"), psser.astype("category"))
         cat_type = CategoricalDtype(categories=[1, 2, 3])
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
+
+    def test_neg(self):
+        self.assertRaises(TypeError, lambda: -self.psser)
+
+    def test_abs(self):
+        self.assertRaises(TypeError, lambda: abs(self.psser))
+
+    def test_invert(self):
+        self.assertRaises(TypeError, lambda: ~self.psser)
+
+    def test_eq(self):
+        pser, psser = self.pser, self.psser
+        self.assert_eq(pser == pser, psser == psser)
+
+    def test_ne(self):
+        pser, psser = self.pser, self.psser
+        self.assert_eq(pser != pser, psser != psser)
+
+    def test_lt(self):
+        pser, psser = self.pser, self.psser
+        self.assert_eq(pser < pser, psser < psser)
+
+    def test_le(self):
+        pser, psser = self.pser, self.psser
+        self.assert_eq(pser <= pser, psser <= psser)
+
+    def test_gt(self):
+        pser, psser = self.pser, self.psser
+        self.assert_eq(pser > pser, psser > psser)
+
+    def test_ge(self):
+        pser, psser = self.pser, self.psser
+        self.assert_eq(pser >= pser, psser >= psser)
 
 
 if __name__ == "__main__":

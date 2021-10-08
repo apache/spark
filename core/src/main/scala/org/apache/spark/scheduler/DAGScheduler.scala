@@ -33,6 +33,7 @@ import com.google.common.util.concurrent.{Futures, SettableFuture}
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
@@ -253,7 +254,7 @@ private[spark] class DAGScheduler(
   private[spark] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
 
-  private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(sc.getConf)
+  private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(sc.getConf, isDriver = true)
 
   private val blockManagerMasterDriverHeartbeatTimeout =
     sc.getConf.get(config.STORAGE_BLOCKMANAGER_MASTER_DRIVER_HEARTBEAT_TIMEOUT).millis
@@ -444,7 +445,7 @@ private[spark] class DAGScheduler(
         !traverseParentRDDsWithinStage(rdd, (r: RDD[_]) =>
           r.getNumPartitions == numTasksInStage &&
           r.dependencies.count(_.rdd.isBarrier()) <= 1)) {
-      throw new BarrierJobUnsupportedRDDChainException
+      throw SparkCoreErrors.barrierStageWithRDDChainPatternError()
     }
   }
 
@@ -497,7 +498,7 @@ private[spark] class DAGScheduler(
    */
   private def checkBarrierStageWithDynamicAllocation(rdd: RDD[_]): Unit = {
     if (rdd.isBarrier() && Utils.isDynamicAllocationEnabled(sc.getConf)) {
-      throw new BarrierJobRunWithDynamicAllocationException
+      throw SparkCoreErrors.barrierStageWithDynamicAllocationError()
     }
   }
 
@@ -513,7 +514,8 @@ private[spark] class DAGScheduler(
       val numPartitions = rdd.getNumPartitions
       val maxNumConcurrentTasks = sc.maxNumConcurrentTasks(rp)
       if (numPartitions > maxNumConcurrentTasks) {
-        throw new BarrierJobSlotsNumberCheckFailed(numPartitions, maxNumConcurrentTasks)
+        throw SparkCoreErrors.numPartitionsGreaterThanMaxNumConcurrentTasksError(numPartitions,
+          maxNumConcurrentTasks)
       }
     }
   }
@@ -957,7 +959,7 @@ private[spark] class DAGScheduler(
     val rdd = dependency.rdd
     val jobId = nextJobId.getAndIncrement()
     if (rdd.partitions.length == 0) {
-      throw new SparkException("Can't run submitMapStage on RDD with 0 partitions")
+      throw SparkCoreErrors.cannotRunSubmitMapStageOnZeroPartitionRDDError()
     }
 
     // We create a JobWaiter with only one "task", which will be marked as complete when the whole
@@ -1309,7 +1311,7 @@ private[spark] class DAGScheduler(
           s"${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
       } else {
         stage.shuffleDep.setShuffleMergeEnabled(false)
-        logInfo("Push-based shuffle disabled for $stage (${stage.name})")
+        logInfo(s"Push-based shuffle disabled for $stage (${stage.name})")
       }
     }
   }
@@ -1323,9 +1325,8 @@ private[spark] class DAGScheduler(
     // `findMissingPartitions()` returns all partitions every time.
     stage match {
       case sms: ShuffleMapStage if stage.isIndeterminate && !sms.isAvailable =>
-        // TODO: SPARK-32923: Clean all push-based shuffle metadata like merge enabled and
-        // TODO: finalized as we are clearing all the merge results.
         mapOutputTracker.unregisterAllMapAndMergeOutput(sms.shuffleDep.shuffleId)
+        sms.shuffleDep.newShuffleMergeState()
       case _ =>
     }
 
@@ -1520,7 +1521,7 @@ private[spark] class DAGScheduler(
         val acc: AccumulatorV2[Any, Any] = AccumulatorContext.get(id) match {
           case Some(accum) => accum.asInstanceOf[AccumulatorV2[Any, Any]]
           case None =>
-            throw new SparkException(s"attempted to access non-existent accumulator $id")
+            throw SparkCoreErrors.accessNonExistentAccumulatorError(id)
         }
         acc.merge(updates.asInstanceOf[AccumulatorV2[Any, Any]])
         // To avoid UI cruft, ignore cases where value wasn't updated
@@ -2057,7 +2058,7 @@ private[spark] class DAGScheduler(
           // TODO: SPARK-35536: Cancel finalizeShuffleMerge if the stage is cancelled
           // TODO: during shuffleMergeFinalizeWaitSec
           shuffleClient.finalizeShuffleMerge(shuffleServiceLoc.host,
-            shuffleServiceLoc.port, shuffleId,
+            shuffleServiceLoc.port, shuffleId, stage.shuffleDep.shuffleMergeId,
             new MergeFinalizerListener {
               override def onShuffleMergeSuccess(statuses: MergeStatuses): Unit = {
                 assert(shuffleId == statuses.shuffleId)
@@ -2152,8 +2153,7 @@ private[spark] class DAGScheduler(
         sms.pendingPartitions += task.partitionId
 
       case _ =>
-        throw new SparkException("TaskSetManagers should only send Resubmitted task " +
-          "statuses for tasks in ShuffleMapStages.")
+        throw SparkCoreErrors.sendResubmittedTaskStatusForShuffleMapStagesOnlyError()
     }
   }
 
@@ -2512,6 +2512,7 @@ private[spark] class DAGScheduler(
 
   def stop(): Unit = {
     messageScheduler.shutdownNow()
+    shuffleMergeFinalizeScheduler.shutdownNow()
     eventProcessLoop.stop()
     taskScheduler.stop()
   }

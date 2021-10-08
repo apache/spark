@@ -570,6 +570,7 @@ class ExecutorSuite extends SparkFunSuite
       addedJars = Map[String, Long](),
       addedArchives = Map[String, Long](),
       properties = new Properties,
+      cpus = 1,
       resources = immutable.Map[String, ResourceInformation](),
       serializedTask)
   }

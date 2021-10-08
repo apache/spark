@@ -15,13 +15,16 @@
 # limitations under the License.
 #
 
+import json
 import sys
 import random
 import warnings
+from collections.abc import Iterable
 from functools import reduce
 from html import escape as html_escape
 
 from pyspark import copy_func, since, _NoValue
+from pyspark.context import SparkContext
 from pyspark.rdd import RDD, _load_from_socket, _local_iterator_from_socket
 from pyspark.serializers import BatchedSerializer, PickleSerializer, \
     UTF8Deserializer
@@ -116,7 +119,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
     def registerTempTable(self, name):
-        """Registers this DataFrame as a temporary table using the given name.
+        """Registers this :class:`DataFrame` as a temporary table using the given name.
 
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
@@ -133,6 +136,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> sorted(df.collect()) == sorted(df2.collect())
         True
         >>> spark.catalog.dropTempView("people")
+        True
+
         """
         warnings.warn(
             "Deprecated in 2.0, use createOrReplaceTempView instead.",
@@ -161,6 +166,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...
         AnalysisException: u"Temporary table 'people' already exists;"
         >>> spark.catalog.dropTempView("people")
+        True
 
         """
         self._jdf.createTempView(name)
@@ -182,6 +188,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> sorted(df3.collect()) == sorted(df2.collect())
         True
         >>> spark.catalog.dropTempView("people")
+        True
 
         """
         self._jdf.createOrReplaceTempView(name)
@@ -206,6 +213,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...
         AnalysisException: u"Temporary table 'people' already exists;"
         >>> spark.catalog.dropGlobalTempView("people")
+        True
 
         """
         self._jdf.createGlobalTempView(name)
@@ -226,6 +234,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> sorted(df3.collect()) == sorted(df2.collect())
         True
         >>> spark.catalog.dropGlobalTempView("people")
+        True
 
         """
         self._jdf.createOrReplaceGlobalTempView(name)
@@ -301,7 +310,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
-        parameters
+        Parameters
         ----------
         extended : bool, optional
             default ``False``. If ``False``, prints only the physical plan.
@@ -424,12 +433,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     @property
     def isStreaming(self):
-        """Returns ``True`` if this :class:`Dataset` contains one or more sources that continuously
-        return data as it arrives. A :class:`Dataset` that reads data from a streaming source
-        must be executed as a :class:`StreamingQuery` using the :func:`start` method in
-        :class:`DataStreamWriter`.  Methods that return a single answer, (e.g., :func:`count` or
-        :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
-        source present.
+        """Returns ``True`` if this :class:`DataFrame` contains one or more sources that
+        continuously return data as it arrives. A :class:`DataFrame` that reads data from a
+        streaming source must be executed as a :class:`StreamingQuery` using the :func:`start`
+        method in :class:`DataStreamWriter`.  Methods that return a single answer, (e.g.,
+        :func:`count` or :func:`collect`) will throw an :class:`AnalysisException` when there
+        is a streaming source present.
 
         .. versionadded:: 2.0.0
 
@@ -542,10 +551,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             return None
 
     def checkpoint(self, eager=True):
-        """Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
-        logical plan of this :class:`DataFrame`, which is especially useful in iterative algorithms
-        where the plan may grow exponentially. It will be saved to files inside the checkpoint
-        directory set with :meth:`SparkContext.setCheckpointDir`.
+        """Returns a checkpointed version of this :class:`DataFrame`. Checkpointing can be used to
+        truncate the logical plan of this :class:`DataFrame`, which is especially useful in
+        iterative algorithms where the plan may grow exponentially. It will be saved to files
+        inside the checkpoint directory set with :meth:`SparkContext.setCheckpointDir`.
 
         .. versionadded:: 2.1.0
 
@@ -562,8 +571,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(jdf, self.sql_ctx)
 
     def localCheckpoint(self, eager=True):
-        """Returns a locally checkpointed version of this Dataset. Checkpointing can be used to
-        truncate the logical plan of this :class:`DataFrame`, which is especially useful in
+        """Returns a locally checkpointed version of this :class:`DataFrame`. Checkpointing can be
+        used to truncate the logical plan of this :class:`DataFrame`, which is especially useful in
         iterative algorithms where the plan may grow exponentially. Local checkpoints are
         stored in the executors using the caching subsystem and therefore they are not reliable.
 
@@ -918,10 +927,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+-----+
         |age| name|
         +---+-----+
-        |  5|  Bob|
+        |  2|Alice|
         |  5|  Bob|
         |  2|Alice|
-        |  2|Alice|
+        |  5|  Bob|
         +---+-----+
         >>> data = data.repartition(7, "age")
         >>> data.show()
@@ -935,7 +944,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+-----+
         >>> data.rdd.getNumPartitions()
         7
-        >>> data = data.repartition("name", "age")
+        >>> data = data.repartition(3, "name", "age")
         >>> data.show()
         +---+-----+
         |age| name|
@@ -1352,6 +1361,123 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 on = self._jseq([])
             assert isinstance(how, str), "how should be a string"
             jdf = self._jdf.join(other._jdf, on, how)
+        return DataFrame(jdf, self.sql_ctx)
+
+    # TODO(SPARK-22947): Fix the DataFrame API.
+    def _joinAsOf(
+        self,
+        other,
+        leftAsOfColumn,
+        rightAsOfColumn,
+        on=None,
+        how=None,
+        *,
+        tolerance=None,
+        allowExactMatches=True,
+        direction="backward",
+    ):
+        """
+        Perform an as-of join.
+
+        This is similar to a left-join except that we match on nearest
+        key rather than equal keys.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Right side of the join
+        leftAsOfColumn : str or :class:`Column`
+            a string for the as-of join column name, or a Column
+        rightAsOfColumn : str or :class:`Column`
+            a string for the as-of join column name, or a Column
+        on : str, list or :class:`Column`, optional
+            a string for the join column name, a list of column names,
+            a join expression (Column), or a list of Columns.
+            If `on` is a string or a list of strings indicating the name of the join column(s),
+            the column(s) must exist on both sides, and this performs an equi-join.
+        how : str, optional
+            default ``inner``. Must be one of: ``inner`` and ``left``.
+        tolerance : :class:`Column`, optional
+            an asof tolerance within this range; must be compatible
+            with the merge index.
+        allowExactMatches : bool, optional
+            default ``True``.
+        direction : str, optional
+            default ``backward``. Must be one of: ``backward``, ``forward``, and ``nearest``.
+
+        Examples
+        --------
+        The following performs an as-of join between ``left`` and ``right``.
+
+        >>> left = spark.createDataFrame([(1, "a"), (5, "b"), (10,  "c")], ["a", "left_val"])
+        >>> right = spark.createDataFrame([(1, 1), (2, 2), (3, 3), (6, 6), (7, 7)],
+        ...                               ["a", "right_val"])
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a"
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
+        [Row(a=1, left_val='a', right_val=1),
+         Row(a=5, left_val='b', right_val=3),
+         Row(a=10, left_val='c', right_val=7)]
+
+        >>> from pyspark.sql import functions as F
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", tolerance=F.lit(1)
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
+        [Row(a=1, left_val='a', right_val=1)]
+
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", how="left", tolerance=F.lit(1)
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
+        [Row(a=1, left_val='a', right_val=1),
+         Row(a=5, left_val='b', right_val=None),
+         Row(a=10, left_val='c', right_val=None)]
+
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", allowExactMatches=False
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
+        [Row(a=5, left_val='b', right_val=3),
+         Row(a=10, left_val='c', right_val=7)]
+
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", direction="forward"
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
+        [Row(a=1, left_val='a', right_val=1),
+         Row(a=5, left_val='b', right_val=6)]
+        """
+        if isinstance(leftAsOfColumn, str):
+            leftAsOfColumn = self[leftAsOfColumn]
+        left_as_of_jcol = leftAsOfColumn._jc
+        if isinstance(rightAsOfColumn, str):
+            rightAsOfColumn = other[rightAsOfColumn]
+        right_as_of_jcol = rightAsOfColumn._jc
+
+        if on is not None and not isinstance(on, list):
+            on = [on]
+
+        if on is not None:
+            if isinstance(on[0], str):
+                on = self._jseq(on)
+            else:
+                assert isinstance(on[0], Column), "on should be Column or list of Column"
+                on = reduce(lambda x, y: x.__and__(y), on)
+                on = on._jc
+
+        if how is None:
+            how = "inner"
+        assert isinstance(how, str), "how should be a string"
+
+        if tolerance is not None:
+            assert isinstance(tolerance, Column), "tolerance should be Column"
+            tolerance = tolerance._jc
+
+        jdf = self._jdf.joinAsOf(
+            other._jdf,
+            left_as_of_jcol, right_as_of_jcol,
+            on,
+            how, tolerance, allowExactMatches, direction
+        )
         return DataFrame(jdf, self.sql_ctx)
 
     def sortWithinPartitions(self, *cols, **kwargs):
@@ -1830,6 +1956,45 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return self.groupBy().agg(*exprs)
 
+    @since(3.3)
+    def observe(self, observation, *exprs):
+        """Observe (named) metrics through an :class:`Observation` instance.
+
+        A user can retrieve the metrics by accessing `Observation.get`.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        observation : :class:`Observation`
+            an :class:`Observation` instance to obtain the metric.
+        exprs : list of :class:`Column`
+            column expressions (:class:`Column`).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            the observed :class:`DataFrame`.
+
+        Notes
+        -----
+        This method does not support streaming datasets.
+
+        Examples
+        --------
+        >>> from pyspark.sql.functions import col, count, lit, max
+        >>> from pyspark.sql import Observation
+        >>> observation = Observation("my metrics")
+        >>> observed_df = df.observe(observation, count(lit(1)).alias("count"), max(col("age")))
+        >>> observed_df.count()
+        2
+        >>> observation.get
+        {'count': 2, 'max(age)': 5}
+        """
+        from pyspark.sql import Observation
+        assert isinstance(observation, Observation), "observation should be Observation"
+        return observation._on(self, *exprs)
+
     @since(2.0)
     def union(self, other):
         """ Return a new :class:`DataFrame` containing union of rows in this and another
@@ -1980,6 +2145,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |Alice|  5|    80|
         +-----+---+------+
         """
+        if subset is not None and (
+                not isinstance(subset, Iterable) or isinstance(subset, str)):
+            raise TypeError("Parameter 'subset' must be a list of columns")
+
         if subset is None:
             jdf = self._jdf.dropDuplicates()
         else:
@@ -2492,6 +2661,31 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrame(self._jdf.withColumnRenamed(existing, new), self.sql_ctx)
 
+    def withMetadata(self, columnName, metadata):
+        """Returns a new :class:`DataFrame` by updating an existing column with metadata.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        columnName : str
+            string, name of the existing column to update the metadata.
+        metadata : dict
+            dict, new metadata to be assigned to df.schema[columnName].metadata
+
+        Examples
+        --------
+        >>> df_meta = df.withMetadata('age', {'foo': 'bar'})
+        >>> df_meta.schema['age'].metadata
+        {'foo': 'bar'}
+        """
+        if not isinstance(metadata, dict):
+            raise TypeError("metadata should be a dict")
+        sc = SparkContext._active_spark_context
+        jmeta = sc._jvm.org.apache.spark.sql.types.Metadata.fromJson(
+            json.dumps(metadata))
+        return DataFrame(self._jdf.withMetadata(columnName, jmeta), self.sql_ctx)
+
     def drop(self, *cols):
         """Returns a new :class:`DataFrame` that drops the specified column.
         This is a no-op if schema doesn't contain the given column name(s).
@@ -2694,6 +2888,69 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ... ).partitionedBy("col").createOrReplace()
         """
         return DataFrameWriterV2(self, table)
+
+    def to_pandas_on_spark(self, index_col=None):
+        """
+        Converts the existing DataFrame into a pandas-on-Spark DataFrame.
+
+        If a pandas-on-Spark DataFrame is converted to a Spark DataFrame and then back
+        to pandas-on-Spark, it will lose the index information and the original index
+        will be turned into a normal column.
+
+        This is only available if Pandas is installed and available.
+
+        Parameters
+        ----------
+        index_col: str or list of str, optional, default: None
+            Index column of table in Spark.
+
+        See Also
+        --------
+        pyspark.pandas.frame.DataFrame.to_spark
+
+        Examples
+        --------
+        >>> df.show()  # doctest: +SKIP
+        +----+----+
+        |Col1|Col2|
+        +----+----+
+        |   a|   1|
+        |   b|   2|
+        |   c|   3|
+        +----+----+
+
+        >>> df.to_pandas_on_spark()  # doctest: +SKIP
+          Col1  Col2
+        0    a     1
+        1    b     2
+        2    c     3
+
+        We can specify the index columns.
+
+        >>> df.to_pandas_on_spark(index_col="Col1"): # doctest: +SKIP
+              Col2
+        Col1
+        a        1
+        b        2
+        c        3
+        """
+        from pyspark.pandas.namespace import _get_index_map
+        from pyspark.pandas.frame import DataFrame
+        from pyspark.pandas.internal import InternalFrame
+
+        index_spark_columns, index_names = _get_index_map(self, index_col)
+        internal = InternalFrame(
+            spark_frame=self, index_spark_columns=index_spark_columns, index_names=index_names
+        )
+        return DataFrame(internal)
+
+    # Keep to_koalas for backward compatibility for now.
+    def to_koalas(self, index_col=None):
+        warnings.warn(
+            "DataFrame.to_koalas is deprecated. Use DataFrame.to_pandas_on_spark instead.",
+            FutureWarning,
+        )
+        return self.to_pandas_on_spark(index_col)
 
 
 def _to_scala_map(sc, jm):

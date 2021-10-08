@@ -1,3 +1,21 @@
+..  Licensed to the Apache Software Foundation (ASF) under one
+    or more contributor license agreements.  See the NOTICE file
+    distributed with this work for additional information
+    regarding copyright ownership.  The ASF licenses this file
+    to you under the Apache License, Version 2.0 (the
+    "License"); you may not use this file except in compliance
+    with the License.  You may obtain a copy of the License at
+
+..    http://www.apache.org/licenses/LICENSE-2.0
+
+..  Unless required by applicable law or agreed to in writing,
+    software distributed under the License is distributed on an
+    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, either express or implied.  See the License for the
+    specific language governing permissions and limitations
+    under the License.
+
+
 ==============
 Best Practices
 ==============
@@ -24,7 +42,7 @@ For example, if you want to configure the executor memory in Spark, you can do a
    # Pandas API on Spark automatically uses this Spark context with the configurations set.
    SparkContext(conf=conf)
 
-   import pyspark.pandas as ks
+   import pyspark.pandas as ps
    ...
 
 Another common configuration might be Arrow optimization in PySpark. In case of SQL configuration,
@@ -34,11 +52,11 @@ it can be set into Spark session as below:
 
    from pyspark.sql import SparkSession
    builder = SparkSession.builder.appName("pandas-on-spark")
-   builder = builder.config("spark.sql.execution.arrow.enabled", "true")
+   builder = builder.config("spark.sql.execution.arrow.pyspark.enabled", "true")
    # Pandas API on Spark automatically uses this Spark session with the configurations set.
    builder.getOrCreate()
 
-   import pyspark.pandas as ks
+   import pyspark.pandas as ps
    ...
 
 All Spark features such as history server, web UI and deployment modes can be used as are with pandas API on Spark.
@@ -53,10 +71,10 @@ before the actual computation since pandas API on Spark is based on lazy executi
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'id': range(10)})
-   >>> kdf = kdf[kdf.id > 5]
-   >>> kdf.spark.explain()
+   >>> import pyspark.pandas as ps
+   >>> psdf = ps.DataFrame({'id': range(10)})
+   >>> psdf = psdf[psdf.id > 5]
+   >>> psdf.spark.explain()
    == Physical Plan ==
    *(1) Filter (id#1L > 5)
    +- *(1) Scan ExistingRDD[__index_level_0__#0L,id#1L]
@@ -78,12 +96,12 @@ or ``DataFrame.spark.local_checkpoint()`` would be helpful.
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'id': range(10)})
-   >>> kdf = kdf[kdf.id > 5]
-   >>> kdf['id'] = kdf['id'] + (10 * kdf['id'] + kdf['id'])
-   >>> kdf = kdf.groupby('id').head(2)
-   >>> kdf.spark.explain()
+   >>> import pyspark.pandas as ps
+   >>> psdf = ps.DataFrame({'id': range(10)})
+   >>> psdf = psdf[psdf.id > 5]
+   >>> psdf['id'] = psdf['id'] + (10 * psdf['id'] + psdf['id'])
+   >>> psdf = psdf.groupby('id').head(2)
+   >>> psdf.spark.explain()
    == Physical Plan ==
    *(3) Project [__index_level_0__#0L, id#31L]
    +- *(3) Filter (isnotnull(__row_number__#44) AND (__row_number__#44 <= 2))
@@ -95,8 +113,8 @@ or ``DataFrame.spark.local_checkpoint()`` would be helpful.
                      +- *(1) Filter (id#1L > 5)
                         +- *(1) Scan ExistingRDD[__index_level_0__#0L,id#1L]
 
-   >>> kdf = kdf.spark.local_checkpoint()  # or kdf.spark.checkpoint()
-   >>> kdf.spark.explain()
+   >>> psdf = psdf.spark.local_checkpoint()  # or psdf.spark.checkpoint()
+   >>> psdf.spark.explain()
    == Physical Plan ==
    *(1) Project [__index_level_0__#0L, id#31L]
    +- *(1) Scan ExistingRDD[__index_level_0__#0L,id#31L,__natural_order__#59L]
@@ -115,9 +133,9 @@ and exchange the data across multiple nodes via networks. See the example below.
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'id': range(10)}).sort_values(by="id")
-   >>> kdf.spark.explain()
+   >>> import pyspark.pandas as ps
+   >>> psdf = ps.DataFrame({'id': range(10)}).sort_values(by="id")
+   >>> psdf.spark.explain()
    == Physical Plan ==
    *(2) Sort [id#9L ASC NULLS LAST], true, 0
    +- Exchange rangepartitioning(id#9L ASC NULLS LAST, 200), true, [id=#18]
@@ -130,16 +148,16 @@ Avoid computation on single partition
 -------------------------------------
 
 Another common case is the computation on a single partition. Currently, some APIs such as
-`DataFrame.rank <https://koalas.readthedocs.io/en/latest/reference/api/pyspark.pandas.DataFrame.rank.html>`_
+`DataFrame.rank <https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.pandas.DataFrame.rank.html>`_
 uses PySpark’s Window without specifying partition specification. This leads to move all data into a single
 partition in single machine and could cause serious performance degradation.
 Such APIs should be avoided very large dataset.
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'id': range(10)})
-   >>> kdf.rank().spark.explain()
+   >>> import pyspark.pandas as ps
+   >>> psdf = ps.DataFrame({'id': range(10)})
+   >>> psdf.rank().spark.explain()
    == Physical Plan ==
    *(4) Project [__index_level_0__#16L, id#24]
    +- Window [avg(cast(_w0#26 as bigint)) windowspecdefinition(id#17L, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS id#24], [id#17L]
@@ -150,7 +168,7 @@ Such APIs should be avoided very large dataset.
                   +- *(1) Scan ExistingRDD[__index_level_0__#16L,id#17L]
 
 Instead, use 
-`GroupBy.rank <https://koalas.readthedocs.io/en/latest/reference/api/pyspark.pandas.groupby.GroupBy.rank.html>`_
+`GroupBy.rank <https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.pandas.groupby.GroupBy.rank.html>`_
 as it is less expensive because data can be distributed and computed for each group.
 
 
@@ -169,9 +187,9 @@ this behavior. For instance, see below:
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'a': [1, 2], 'b':[3, 4]})
-   >>> kdf.columns = ["a", "a"]
+   >>> import pyspark.pandas as ps
+   >>> psdf = ps.DataFrame({'a': [1, 2], 'b':[3, 4]})
+   >>> psdf.columns = ["a", "a"]
    ...
    Reference 'a' is ambiguous, could be: a, a.;
 
@@ -179,8 +197,8 @@ Additionally, it is strongly discouraged to use case sensitive column names. Pan
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'a': [1, 2], 'A':[3, 4]})
+   >>> import pyspark.pandas as ps
+   >>> psdf = ps.DataFrame({'a': [1, 2], 'A':[3, 4]})
    ...
    Reference 'a' is ambiguous, could be: a, a.;
 
@@ -193,9 +211,9 @@ However, you can turn on ``spark.sql.caseSensitive`` in Spark configuration to e
    >>> builder = builder.config("spark.sql.caseSensitive", "true")
    >>> builder.getOrCreate()
 
-   >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'a': [1, 2], 'A':[3, 4]})
-   >>> kdf
+   >>> import pyspark.pandas as ps
+   >>> psdf = ps.DataFrame({'a': [1, 2], 'A':[3, 4]})
+   >>> psdf
       a  A
    0  1  3
    1  2  4
@@ -261,12 +279,12 @@ The examples above can be converted as below:
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> ks.Series([1, 2, 3]).max()
+   >>> import pyspark.pandas as ps
+   >>> ps.Series([1, 2, 3]).max()
    3
-   >>> ks.Series([1, 2, 3]).min()
+   >>> ps.Series([1, 2, 3]).min()
    1
-   >>> ks.Series([1, 2, 3]).sum()
+   >>> ps.Series([1, 2, 3]).sum()
    6
 
 Another common pattern from pandas users might be to rely on list comprehension or generator expression.
@@ -296,17 +314,17 @@ The example above can be also changed to directly using pandas-on-Spark APIs as 
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>> import numpy as np
    >>> countries = ['London', 'New York', 'Helsinki']
-   >>> kser = ks.Series([20., 21., 12.], index=countries)
+   >>> psser = ps.Series([20., 21., 12.], index=countries)
    >>> def square(temperature) -> np.float64:
    ...     assert temperature > 0
    ...     if temperature > 1000:
    ...         temperature = None
    ...     return temperature ** 2
    ...
-   >>> kser.apply(square)
+   >>> psser.apply(square)
    London      400.0
    New York    441.0
    Helsinki    144.0

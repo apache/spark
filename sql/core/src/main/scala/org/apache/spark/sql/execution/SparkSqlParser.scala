@@ -232,6 +232,27 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create a [[ShowCurrentNamespaceCommand]] logical command.
+   */
+  override def visitShowCurrentNamespace(
+      ctx: ShowCurrentNamespaceContext) : LogicalPlan = withOrigin(ctx) {
+    ShowCurrentNamespaceCommand()
+  }
+
+  /**
+   * Create a [[SetCatalogCommand]] logical command.
+   */
+  override def visitSetCatalog(ctx: SetCatalogContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.identifier() != null) {
+      SetCatalogCommand(ctx.identifier().getText)
+    } else if (ctx.STRING() != null) {
+      SetCatalogCommand(string(ctx.STRING()))
+    } else {
+      throw new IllegalStateException("Invalid catalog name")
+    }
+  }
+
+  /**
    * Converts a multi-part identifier to a TableIdentifier.
    *
    * If the multi-part identifier has too many parts, this will throw a ParseException.

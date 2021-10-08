@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
+import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 
@@ -127,6 +128,15 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
       }
     }
   }
+
+
+  test("show table in a not existing namespace") {
+    val msg = intercept[NoSuchDatabaseException] {
+      runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
+    }.getMessage
+    assert(msg.matches("(Database|Namespace) 'unknown' not found"))
+  }
+
 }
 
 /**
