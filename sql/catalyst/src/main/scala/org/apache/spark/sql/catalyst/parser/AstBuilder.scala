@@ -4329,18 +4329,30 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     } else {
       LocalTempView
     }
-    CreateView(
-      UnresolvedDBObjectName(
+    if (viewType == PersistedView) {
+      CreateView(
+        UnresolvedDBObjectName(
+          visitMultipartIdentifier(ctx.multipartIdentifier),
+          false),
+        userSpecifiedColumns,
+        visitCommentSpecList(ctx.commentSpec()),
+        properties,
+        Option(source(ctx.query)),
+        plan(ctx.query),
+        ctx.EXISTS != null,
+        ctx.REPLACE != null)
+    } else {
+      CreateTempView(
         visitMultipartIdentifier(ctx.multipartIdentifier),
-        isNamespace = false),
-      userSpecifiedColumns,
-      visitCommentSpecList(ctx.commentSpec()),
-      properties,
-      Option(source(ctx.query)),
-      plan(ctx.query),
-      ctx.EXISTS != null,
-      ctx.REPLACE != null,
-      viewType)
+        userSpecifiedColumns,
+        visitCommentSpecList(ctx.commentSpec()),
+        properties,
+        Option(source(ctx.query)),
+        plan(ctx.query),
+        ctx.EXISTS != null,
+        ctx.REPLACE != null,
+        viewType)
+    }
   }
 
   /**

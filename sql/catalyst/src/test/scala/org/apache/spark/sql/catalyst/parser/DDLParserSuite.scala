@@ -2213,15 +2213,14 @@ class DDLParserSuite extends AnalysisTest {
       Some("SELECT * FROM tab1"),
       parsePlan("SELECT * FROM tab1"),
       false,
-      false,
-      PersistedView)
+      false)
     comparePlans(parsed1, expected1)
 
     val v2 = "CREATE TEMPORARY VIEW a.b.c AS SELECT * FROM tab1"
     val parsed2 = parsePlan(v2)
 
-    val expected2 = CreateView(
-      UnresolvedDBObjectName(Seq("a", "b", "c"), false),
+    val expected2 = CreateTempView(
+      Seq("a", "b", "c"),
       Seq.empty[(String, Option[String])],
       None,
       Map.empty[String, String],
@@ -2251,8 +2250,7 @@ class DDLParserSuite extends AnalysisTest {
       Some("SELECT * FROM tab1"),
       parsePlan("SELECT * FROM tab1"),
       false,
-      true,
-      PersistedView)
+      true)
     comparePlans(parsed1, expected1)
 
     val v2 =
@@ -2263,8 +2261,8 @@ class DDLParserSuite extends AnalysisTest {
         |AS SELECT * FROM tab1
       """.stripMargin
     val parsed2 = parsePlan(v2)
-    val expected2 = CreateView(
-      UnresolvedDBObjectName(Seq("a", "b", "c"), false),
+    val expected2 = CreateTempView(
+      Seq("a", "b", "c"),
       Seq("col1" -> None, "col3" -> Some("hello")),
       Some("BLABLA"),
       Map(),

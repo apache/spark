@@ -398,17 +398,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         originalText,
         query)
 
-    case CreateView(UnresolvedDBObjectName(tbl, _), userSpecifiedColumns, comment, properties,
-      originalText, child, allowExisting, replace, viewType) =>
-
-      val v1TableName = if (viewType != PersistedView) {
-        // temp view doesn't belong to any catalog and we shouldn't resolve catalog in the name.
-        tbl
-      } else {
-        parseV1Table(tbl, "CREATE VIEW")
-      }
+    case CreateTempView(nameParts, userSpecifiedColumns, comment, properties,
+        originalText, child, allowExisting, replace, viewType) =>
       CreateViewCommand(
-        name = v1TableName.asTableIdentifier,
+        nameParts.asTableIdentifier,
         userSpecifiedColumns = userSpecifiedColumns,
         comment = comment,
         properties = properties,
@@ -417,6 +410,23 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         allowExisting = allowExisting,
         replace = replace,
         viewType = viewType)
+
+    case CreateView(ResolvedDBObjectName(catalog, nameParts), userSpecifiedColumns, comment,
+        properties, originalText, child, allowExisting, replace) =>
+      if (isSessionCatalog(catalog)) {
+        CreateViewCommand(
+          name = nameParts.asTableIdentifier,
+          userSpecifiedColumns = userSpecifiedColumns,
+          comment = comment,
+          properties = properties,
+          originalText = originalText,
+          plan = child,
+          allowExisting = allowExisting,
+          replace = replace,
+          viewType = PersistedView)
+      } else {
+        throw QueryCompilationErrors.sqlOnlySupportedWithV1TablesError("CREATE VIEW")
+      }
 
     case ShowViews(resolved: ResolvedNamespace, pattern, output) =>
       resolved match {

@@ -957,6 +957,23 @@ case class AlterViewAs(
 }
 
 /**
+ * The logical plan of the CREATE TEMPORARY VIEW ... command.
+ */
+case class CreateTempView(
+    nameParts: Seq[String],
+    userSpecifiedColumns: Seq[(String, Option[String])],
+    comment: Option[String],
+    properties: Map[String, String],
+    originalText: Option[String],
+    child: LogicalPlan,
+    allowExisting: Boolean,
+    replace: Boolean,
+    viewType: ViewType) extends UnaryCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): CreateTempView =
+    copy(child = newChild)
+}
+
+/**
  * The logical plan of the CREATE VIEW ... command.
  */
 case class CreateView(
@@ -967,8 +984,7 @@ case class CreateView(
     originalText: Option[String],
     query: LogicalPlan,
     allowExisting: Boolean,
-    replace: Boolean,
-    viewType: ViewType) extends BinaryCommand {
+    replace: Boolean) extends BinaryCommand {
   override def left: LogicalPlan = child
   override def right: LogicalPlan = query
   override protected def withNewChildrenInternal(
