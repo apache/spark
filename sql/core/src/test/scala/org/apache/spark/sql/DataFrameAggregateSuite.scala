@@ -876,7 +876,7 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(yearOfMaxEarnings, Row("dotNET", 2013) :: Row("Java", 2013) :: Nil)
 
     checkAnswer(
-      courseSales.groupBy("course").agg(max_by("year", "earnings")),
+      courseSales.groupBy("course").agg(max_by(col("year"), col("earnings"))),
       Row("dotNET", 2013) :: Row("Java", 2013) :: Nil
     )
 
@@ -937,7 +937,7 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(yearOfMinEarnings, Row("dotNET", 2012) :: Row("Java", 2012) :: Nil)
 
     checkAnswer(
-      courseSales.groupBy("course").agg(min_by("year", "earnings")),
+      courseSales.groupBy("course").agg(min_by(col("year"), col("earnings"))),
       Row("dotNET", 2012) :: Row("Java", 2012) :: Nil
     )
 
