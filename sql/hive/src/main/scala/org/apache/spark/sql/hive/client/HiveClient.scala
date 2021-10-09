@@ -215,12 +215,10 @@ private[hive] trait HiveClient {
    * Returns the partitions for the given table that match the supplied partition spec.
    * If no partition spec is specified, all partitions are returned.
    */
-  final def getPartitions(
+  def getPartitions(
       db: String,
       table: String,
-      partialSpec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = {
-    getPartitions(getTable(db, table), partialSpec)
-  }
+      partialSpec: Option[TablePartitionSpec]): Seq[CatalogTablePartition]
 
   /**
    * Returns the partitions for the given table that match the supplied partition spec.
