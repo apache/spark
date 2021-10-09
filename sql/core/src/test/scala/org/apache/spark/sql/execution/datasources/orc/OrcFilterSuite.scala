@@ -385,7 +385,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
     }
   }
 
-  test("filter pushdown - year-month interval") {
+  test("SPARK-36960: filter pushdown - year-month interval") {
     DataTypeTestUtils.yearMonthIntervalTypes.foreach { ymIntervalType =>
 
       def periods(i: Int): Expression = Literal(Period.of(i, i, 0)).cast(ymIntervalType)
@@ -432,7 +432,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
     }
   }
 
-  test("filter pushdown - day-time interval") {
+  test("SPARK-36960: filter pushdown - day-time interval") {
     DataTypeTestUtils.dayTimeIntervalTypes.foreach { dtIntervalType =>
 
       def durations(i: Int): Expression =
