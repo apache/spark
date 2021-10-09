@@ -105,7 +105,8 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
 
     output_prefix = get_valid_filename(pyspark_python + "__" + test_name + "__").lstrip("_")
     per_test_output = tempfile.NamedTemporaryFile(prefix=output_prefix, suffix=".log")
-    LOGGER.info("Starting test(%s): %s (temp output: %s)", pyspark_python, test_name, per_test_output.name)
+    LOGGER.info(
+        "Starting test(%s): %s (temp output: %s)", pyspark_python, test_name, per_test_output.name)
     start_time = time.time()
     try:
         retcode = subprocess.Popen(
