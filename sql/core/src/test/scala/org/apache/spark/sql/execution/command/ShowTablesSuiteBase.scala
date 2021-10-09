@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
@@ -33,17 +31,13 @@ import org.apache.spark.sql.internal.SQLConf
  *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowTablesSuite`
  *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowTablesSuite`
  */
-trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils with BeforeAndAfter {
+trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "SHOW TABLES"
   protected def defaultNamespace: Seq[String]
 
   protected def runShowTablesSql(sqlText: String, expected: Seq[Row]): Unit = {
     val df = spark.sql(sqlText)
     checkAnswer(df, expected)
-  }
-
-  after {
-    spark.sessionState.catalogManager.reset()
   }
 
   test("show an existing table") {
@@ -117,17 +111,19 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils with Before
   }
 
   test("change current catalog and namespace with USE statements") {
-    withNamespaceAndTable("ns", "table") { t =>
-      sql(s"CREATE TABLE $t (name STRING, id INT) $defaultUsing")
+    withCurrentCatalogAndNamespace {
+      withNamespaceAndTable("ns", "table") { t =>
+        sql(s"CREATE TABLE $t (name STRING, id INT) $defaultUsing")
 
-      sql(s"USE $catalog")
-      // No table is matched since the current namespace is not ["ns"]
-      assert(defaultNamespace != Seq("ns"))
-      runShowTablesSql("SHOW TABLES", Seq())
+        sql(s"USE $catalog")
+        // No table is matched since the current namespace is not ["ns"]
+        assert(defaultNamespace != Seq("ns"))
+        runShowTablesSql("SHOW TABLES", Seq())
 
-      // Update the current namespace to match "ns.tbl".
-      sql(s"USE $catalog.ns")
-      runShowTablesSql("SHOW TABLES", Seq(Row("ns", "table", false)))
+        // Update the current namespace to match "ns.tbl".
+        sql(s"USE $catalog.ns")
+        runShowTablesSql("SHOW TABLES", Seq(Row("ns", "table", false)))
+      }
     }
   }
 }
