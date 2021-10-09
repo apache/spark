@@ -18,12 +18,19 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, ImplicitCastInputTypes, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types.{AbstractDataType, DataType, DoubleType}
 
-
-/** Multiply numerical values within an aggregation group */
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the multiply numerical values of `expr`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (1), (5), (2) AS tab(col);
+       10
+  """,
+  group = "agg_funcs",
+  since = "3.2.0")
 case class Product(child: Expression)
     extends DeclarativeAggregate with ImplicitCastInputTypes with UnaryLike[Expression] {
 
