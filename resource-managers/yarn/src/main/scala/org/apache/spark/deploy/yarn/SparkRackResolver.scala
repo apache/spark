@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.lang.reflect.Modifier
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
@@ -43,13 +45,22 @@ private[spark] class SparkRackResolver(conf: Configuration) extends Logging {
   }
 
   private val dnsToSwitchMapping: DNSToSwitchMapping = {
-    val dnsToSwitchMappingClass =
-      conf.getClass(CommonConfigurationKeysPublic.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
-        classOf[ScriptBasedMapping], classOf[DNSToSwitchMapping])
-    ReflectionUtils.newInstance(dnsToSwitchMappingClass, conf)
-        .asInstanceOf[DNSToSwitchMapping] match {
-      case c: CachedDNSToSwitchMapping => c
-      case o => new CachedDNSToSwitchMapping(o)
+    try {
+      RackResolver.init(conf)
+      val field = classOf[RackResolver].getDeclaredField("dnsToSwitchMapping")
+      require(Modifier.isStatic(field.getModifiers))
+      field.setAccessible(true)
+      field.get(null).asInstanceOf[DNSToSwitchMapping]
+    } catch {
+      case _: Exception =>
+        val dnsToSwitchMappingClass =
+          conf.getClass(CommonConfigurationKeysPublic.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
+            classOf[ScriptBasedMapping], classOf[DNSToSwitchMapping])
+        ReflectionUtils.newInstance(dnsToSwitchMappingClass, conf)
+          .asInstanceOf[DNSToSwitchMapping] match {
+          case c: CachedDNSToSwitchMapping => c
+          case o => new CachedDNSToSwitchMapping(o)
+        }
     }
   }
 
