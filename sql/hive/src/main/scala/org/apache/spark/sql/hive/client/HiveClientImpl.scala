@@ -736,18 +736,11 @@ private[hive] class HiveClientImpl(
   override def getPartitions(
       db: String,
       table: String,
-      spec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = withHiveState {
-    val hiveTable =
+      spec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = {
+    val hiveTable = withHiveState {
       getRawTableOption(db, table).getOrElse(throw new NoSuchTableException(db, table))
-    val partSpec = spec match {
-      case None => CatalogTypes.emptyTablePartitionSpec
-      case Some(s) =>
-        assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
-        s
     }
-    val parts = client.getPartitions(hiveTable, partSpec.asJava).asScala.map(fromHivePartition)
-    HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
-    parts.toSeq
+    getPartitions(hiveTable, spec)
   }
 
   /**
@@ -756,8 +749,14 @@ private[hive] class HiveClientImpl(
    */
   override def getPartitions(
       table: CatalogTable,
-      spec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = withHiveState {
+      spec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = {
     val hiveTable = toHiveTable(table, Some(userName))
+    getPartitions(hiveTable, spec)
+  }
+
+  private def getPartitions(
+      hiveTable: HiveTable,
+      spec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = withHiveState {
     val partSpec = spec match {
       case None => CatalogTypes.emptyTablePartitionSpec
       case Some(s) =>
