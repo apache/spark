@@ -137,4 +137,24 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     assert(index(0).properties.size == 1)
     assert(index(0).properties.get("COMMENT").equals("this is a comment"))
   }
+
+  override def testIndexUsingSQL(tbl: String): Unit = {
+    val loaded = Catalogs.load("mysql", conf)
+    val jdbcTable = loaded.asInstanceOf[TableCatalog]
+      .loadTable(Identifier.of(Array.empty[String], "new_table"))
+      .asInstanceOf[SupportsIndex]
+    assert(jdbcTable.indexExists("i1") == false)
+    assert(jdbcTable.indexExists("i2") == false)
+
+    sql(s"CREATE BTREE index i1 ON $tbl (col1)")
+    sql(s"CREATE index i2 ON $tbl (col2, col3, col5) OPTIONS (KEY_BLOCK_SIZE=10)")
+
+    assert(jdbcTable.indexExists("i1") == true)
+    assert(jdbcTable.indexExists("i2") == true)
+
+    val m = intercept[IndexAlreadyExistsException] {
+      sql(s"CREATE index i1 ON $tbl (col1)")
+    }.getMessage
+    assert(m.contains("Failed to create index: i1 in new_table"))
+  }
 }

@@ -18,11 +18,13 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import java.sql.SQLFeatureNotSupportedException
+import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.NamedReference
 
 /**
@@ -39,12 +41,27 @@ case class CreateIndexExec(
     private var properties: Map[String, String])
   extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
-
     try {
-      // Todo: replace this with the createIndex
-      throw new SQLFeatureNotSupportedException(s"CreateIndex not supported yet." +
-        s" IndexName $indexName indexType $indexType columns $columns" +
-        s" columnProperties $columnProperties properties $properties")
+      val table = catalog.loadTable(ident)
+      val colProperties: Array[util.Map[NamedReference, util.Properties]] =
+        columns.zip(columnProperties).map {
+        case (column, map) =>
+          val props = new util.Properties
+          map.foreach { case (key, value) => props.setProperty(key, value) }
+          val propMap = new util.HashMap[NamedReference, util.Properties]()
+          propMap.put(column, props)
+          propMap
+      }.toArray
+      val indexProperties = new util.Properties
+      properties.foreach { case (key, value) => indexProperties.setProperty(key, value) }
+      table match {
+        case _: SupportsIndex =>
+          table.asInstanceOf[SupportsIndex].createIndex(indexName, indexType, columns.toArray,
+            colProperties, indexProperties)
+        case _ => throw new SQLFeatureNotSupportedException(s"CreateIndex not supported yet." +
+          s" IndexName $indexName indexType $indexType columns $columns" +
+          s" columnProperties $columnProperties properties $properties")
+      }
     } catch {
       case _: IndexAlreadyExistsException if ignoreIfExists =>
         logWarning(s"Index ${indexName} already exists. Ignoring.")
