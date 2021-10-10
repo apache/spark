@@ -6006,13 +6006,24 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         pmidx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
         psmidx = ps.from_pandas(pmidx)
 
-        self.assert_eq(psmidx.dtypes, pmidx.dtypes)
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            self.assert_eq(psmidx.dtypes, pmidx.dtypes)
+        else:
+            expected = pd.Series([np.dtype("int64"), np.dtype("O")], index=["number", "color"])
+            self.assert_eq(psmidx.dtypes, expected)
 
         # multiple labels
         pmidx = pd.MultiIndex.from_arrays(arrays, names=[("zero", "first"), ("one", "second")])
         psmidx = ps.from_pandas(pmidx)
 
-        self.assert_eq(psmidx.dtypes, pmidx.dtypes)
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            self.assert_eq(psmidx.dtypes, pmidx.dtypes)
+        else:
+            expected = pd.Series(
+                [np.dtype("int64"), np.dtype("O")],
+                index=pd.Index([("zero", "first"), ("one", "second")]),
+            )
+            self.assert_eq(psmidx.dtypes, expected)
 
 
 if __name__ == "__main__":

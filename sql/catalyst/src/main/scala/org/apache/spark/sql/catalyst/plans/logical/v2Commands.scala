@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
@@ -682,6 +683,30 @@ case class RefreshFunction(child: LogicalPlan) extends UnaryCommand {
  */
 case class DescribeFunction(child: LogicalPlan, isExtended: Boolean) extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): DescribeFunction =
+    copy(child = newChild)
+}
+
+/**
+ * The logical plan of the CREATE TEMPORARY FUNCTION command.
+ */
+case class CreateTempFunction(
+    nameParts: Seq[String],
+    className: String,
+    resources: Seq[FunctionResource],
+    ifExists: Boolean,
+    replace: Boolean) extends LeafCommand {
+}
+
+/**
+ * The logical plan of the CREATE FUNCTION command.
+ */
+case class CreateFunction(
+    child: LogicalPlan,
+    className: String,
+    resources: Seq[FunctionResource],
+    ifExists: Boolean,
+    replace: Boolean) extends UnaryCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): CreateFunction =
     copy(child = newChild)
 }
 

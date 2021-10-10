@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.hive
 
+import java.time.{Duration, Period}
+import java.time.temporal.ChronoUnit
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -121,6 +124,23 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
           """.stripMargin)
       }.getMessage
       assert(msg.contains("cannot resolve 'c3' given input columns"))
+    }
+  }
+
+  test("SPARK-36948: Create a table with ANSI intervals using Hive external catalog") {
+    val tbl = "tbl_with_ansi_intervals"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (ym INTERVAL YEAR TO MONTH, dt INTERVAL DAY TO SECOND) USING PARQUET")
+      sql(
+        s"""INSERT INTO $tbl VALUES (
+           |  INTERVAL '1-1' YEAR TO MONTH,
+           |  INTERVAL '1 02:03:04.123456' DAY TO SECOND)""".stripMargin)
+      checkAnswer(
+        sql(s"SELECT * FROM $tbl"),
+        Row(
+          Period.ofYears(1).plusMonths(1),
+          Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)
+            .plus(123456, ChronoUnit.MICROS)))
     }
   }
 }
