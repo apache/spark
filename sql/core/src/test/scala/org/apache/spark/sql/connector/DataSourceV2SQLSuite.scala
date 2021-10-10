@@ -1356,6 +1356,11 @@ class DataSourceV2SQLSuite
     assert(catalogManager.currentCatalog.name() == "testcat2")
     assert(catalogManager.currentNamespace === Array("testcat"))
 
+    // Only the namespace is changed (explicit).
+    sql("USE NAMESPACE testcat.ns1.ns1_1")
+    assert(catalogManager.currentCatalog.name() == "testcat2")
+    assert(catalogManager.currentNamespace === Array("testcat", "ns1", "ns1_1"))
+
     // Catalog is resolved to `testcat`.
     sql("USE testcat")
     assert(catalogManager.currentCatalog.name() == "testcat")
