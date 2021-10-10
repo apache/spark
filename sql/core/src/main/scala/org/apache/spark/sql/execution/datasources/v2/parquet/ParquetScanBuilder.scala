@@ -23,7 +23,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownAggregates}
-import org.apache.spark.sql.execution.datasources.{PartitioningAwareFileIndex, PartitioningUtils}
+import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -89,13 +89,11 @@ case class ParquetScanBuilder(
   override def pushAggregation(aggregation: Aggregation): Boolean = {
 
     def getStructFieldForCol(col: NamedReference): StructField = {
-      schema.fields(schema.fieldNames.toList.indexOf(col.fieldNames.head))
+      schema.nameToField(col.fieldNames.head)
     }
 
     def isPartitionCol(col: NamedReference) = {
-      (readPartitionSchema.fields.map(PartitioningUtils
-        .getColName(_, sparkSession.sessionState.conf.caseSensitiveAnalysis))
-        .toSet.contains(col.fieldNames.head))
+      partitionNameSet.contains(col.fieldNames.head)
     }
 
     def processMinOrMax(agg: AggregateFunc): Boolean = {

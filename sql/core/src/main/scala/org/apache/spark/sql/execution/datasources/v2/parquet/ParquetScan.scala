@@ -49,8 +49,11 @@ case class ParquetScan(
     dataFilters: Seq[Expression] = Seq.empty) extends FileScan {
   override def isSplitable(path: Path): Boolean = true
 
-  override def readSchema(): StructType =
+  override def readSchema(): StructType = {
+    // If aggregate is pushed down, schema has already been pruned in `ParquetScanBuilder`
+    // and no need to call super.readSchema()
     if (pushedAggregate.nonEmpty) readDataSchema else super.readSchema()
+  }
 
   override def createReaderFactory(): PartitionReaderFactory = {
     val readDataSchemaAsJson = readDataSchema.json
