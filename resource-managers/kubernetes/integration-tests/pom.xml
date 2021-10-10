@@ -138,7 +138,7 @@
           <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
           <junitxml>.</junitxml>
           <filereports>SparkTestSuite.txt</filereports>
-          <argLine>-ea -Xmx4g -XX:ReservedCodeCacheSize=1g ${extraScalaTestArgs}</argLine>
+          <argLine>-ea -Xmx6g -XX:ReservedCodeCacheSize=1g ${extraScalaTestArgs}</argLine>
           <stderr/>
           <systemProperties>
             <log4j.configuration>file:src/test/resources/log4j.properties</log4j.configuration>
