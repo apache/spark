@@ -1335,6 +1335,7 @@ class DataSourceV2SQLSuite
     sql("CREATE TABLE testcat2.ns2.ns2_2.table (id bigint) USING foo")
     sql("CREATE TABLE testcat2.ns3.ns3_3.table (id bigint) USING foo")
     sql("CREATE TABLE testcat2.testcat.table (id bigint) USING foo")
+    sql("CREATE TABLE testcat2.testcat.ns1.ns1_1.table (id bigint) USING foo")
 
     // Catalog is resolved to 'testcat'.
     sql("USE testcat.ns1.ns1_1")
