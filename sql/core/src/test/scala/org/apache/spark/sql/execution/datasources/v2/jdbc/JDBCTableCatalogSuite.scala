@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-import java.sql.{Connection, DriverManager, SQLFeatureNotSupportedException}
+import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
 import org.apache.log4j.Level
