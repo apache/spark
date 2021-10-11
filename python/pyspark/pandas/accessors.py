@@ -385,7 +385,7 @@ class PandasOnSparkFrameMethods(object):
                     "hints; however, the return type was %s." % return_sig
                 )
             index_fields = cast(DataFrameType, return_type).index_fields
-            should_retain_index = index_fields is not None
+            should_retain_index = len(index_fields) > 0
             return_schema = cast(DataFrameType, return_type).spark_type
 
             output_func = GroupBy._make_pandas_df_builder_func(
@@ -688,18 +688,14 @@ class PandasOnSparkFrameMethods(object):
                 return first_series(DataFrame(internal))
             else:
                 index_fields = cast(DataFrameType, return_type).index_fields
-                index_fields = (
-                    [index_field.normalize_spark_type() for index_field in index_fields]
-                    if index_fields is not None
-                    else None
-                )
+                index_fields = [index_field.normalize_spark_type() for index_field in index_fields]
                 data_fields = [
                     field.normalize_spark_type()
                     for field in cast(DataFrameType, return_type).data_fields
                 ]
-                normalized_fields = (index_fields if index_fields is not None else []) + data_fields
+                normalized_fields = index_fields + data_fields
                 return_schema = StructType([field.struct_field for field in normalized_fields])
-                should_retain_index = index_fields is not None
+                should_retain_index = len(index_fields) > 0
 
                 self_applied = DataFrame(self._psdf._internal.resolved_copy)
 

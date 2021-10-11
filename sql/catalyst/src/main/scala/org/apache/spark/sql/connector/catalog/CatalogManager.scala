@@ -120,6 +120,7 @@ class CatalogManager(
   def setCurrentCatalog(catalogName: String): Unit = synchronized {
     // `setCurrentCatalog` is noop if it doesn't switch to a different catalog.
     if (currentCatalog.name() != catalogName) {
+      catalog(catalogName)
       _currentCatalogName = Some(catalogName)
       _currentNamespace = None
       // Reset the current database of v1 `SessionCatalog` when switching current catalog, so that

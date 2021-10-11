@@ -375,6 +375,35 @@ class MultiIndex(Index):
     def name(self, name: Name) -> None:
         raise PandasNotImplementedError(class_name="pd.MultiIndex", property_name="name")
 
+    @property
+    def dtypes(self) -> pd.Series:
+        """Return the dtypes as a Series for the underlying MultiIndex.
+
+        .. versionadded:: 3.3.0
+
+        Returns
+        -------
+        pd.Series
+            The data type of each level.
+
+        Examples
+        --------
+        >>> psmidx = ps.MultiIndex.from_arrays(
+        ...     [[0, 1, 2, 3, 4, 5, 6, 7, 8], [1, 2, 3, 4, 5, 6, 7, 8, 9]],
+        ...     names=("zero", "one"),
+        ... )
+        >>> psmidx.dtypes
+        zero    int64
+        one     int64
+        dtype: object
+        """
+        return pd.Series(
+            [field.dtype for field in self._internal.index_fields],
+            index=pd.Index(
+                [name if len(name) > 1 else name[0] for name in self._internal.index_names]
+            ),
+        )
+
     def _verify_for_rename(self, name: List[Name]) -> List[Label]:  # type: ignore[override]
         if is_list_like(name):
             if self._internal.index_level != len(name):

@@ -2538,7 +2538,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         "was %s" % return_sig
                     )
                 index_fields = cast(DataFrameType, return_type).index_fields
-                should_retain_index = index_fields is not None
+                should_retain_index = len(index_fields) > 0
                 data_fields = cast(DataFrameType, return_type).data_fields
                 return_schema = cast(DataFrameType, return_type).spark_type
             else:

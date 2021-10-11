@@ -1629,9 +1629,30 @@ def to_datetime(
     DatetimeIndex(['1960-01-02', '1960-01-03', '1960-01-04'], dtype='datetime64[ns]', freq=None)
     """
 
+    # mappings for assembling units
+    # From pandas: pandas.core.tools.datetimes
+    _unit_map = {
+        "year": "year",
+        "years": "year",
+        "month": "month",
+        "months": "month",
+        "day": "day",
+        "days": "day",
+    }
+
+    # replace passed unit with _unit_map
+    def f(value):
+        if value in _unit_map:
+            return _unit_map[value]
+
+        if value.lower() in _unit_map:
+            return _unit_map[value.lower()]
+
+        return value
+
     def pandas_to_datetime(pser_or_pdf: Union[pd.DataFrame, pd.Series]) -> Series[np.datetime64]:
         if isinstance(pser_or_pdf, pd.DataFrame):
-            pser_or_pdf = pser_or_pdf[["year", "month", "day"]]
+            pser_or_pdf = pser_or_pdf[[unit_rev["year"], unit_rev["month"], unit_rev["day"]]]
         return pd.to_datetime(
             pser_or_pdf,
             errors=errors,
@@ -1644,7 +1665,9 @@ def to_datetime(
     if isinstance(arg, Series):
         return arg.pandas_on_spark.transform_batch(pandas_to_datetime)
     if isinstance(arg, DataFrame):
-        psdf = arg[["year", "month", "day"]]
+        unit = {k: f(k) for k in arg.keys()}
+        unit_rev = {v: k for k, v in unit.items()}
+        psdf = arg[[unit_rev["year"], unit_rev["month"], unit_rev["day"]]]
         return psdf.pandas_on_spark.transform_batch(pandas_to_datetime)
     return pd.to_datetime(
         arg,

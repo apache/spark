@@ -30,6 +30,7 @@ import scala.collection.JavaConverters._
 import scala.util.Properties
 
 import com.univocity.parsers.common.TextParsingException
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
@@ -366,6 +367,7 @@ abstract class CSVSuite
       }
 
       assert(exception.getMessage.contains("Malformed CSV record"))
+      assert(ExceptionUtils.getRootCause(exception).isInstanceOf[RuntimeException])
     }
   }
 
@@ -2407,10 +2409,11 @@ abstract class CSVSuite
               .option("header", true)
               .csv(path.getCanonicalPath)
             checkAnswer(readback, Seq(Row(2, 3), Row(0, 1)))
-            val errorMsg = intercept[AnalysisException] {
+            val ex = intercept[AnalysisException] {
               readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
-            }.getMessage
-            assert(errorMsg.contains("cannot resolve 'AAA'"))
+            }
+            assert(ex.getErrorClass == "MISSING_COLUMN")
+            assert(ex.messageParameters.head == "AAA")
           }
         }
       }
