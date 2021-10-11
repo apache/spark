@@ -526,7 +526,7 @@ SELECT q1 FROM int8_tbl EXCEPT SELECT q2 FROM int8_tbl ORDER BY q2 LIMIT 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'q2' given input columns: [int8_tbl.q1]; line 1 pos 64
+Column 'q2' does not exist. Did you mean one of the following? [int8_tbl.q1]; line 1 pos 64
 
 
 -- !query

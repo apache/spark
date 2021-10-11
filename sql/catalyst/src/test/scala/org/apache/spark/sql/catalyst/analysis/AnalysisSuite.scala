@@ -100,10 +100,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation))
 
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       Project(Seq(UnresolvedAttribute("tBl.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
-      Seq("cannot resolve"))
+      "MISSING_COLUMN",
+      Array("tBl.a", "TbL.a"))
 
     checkAnalysisWithoutViewWrapper(
       Project(Seq(UnresolvedAttribute("TbL.a")),
@@ -707,8 +708,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("CTE with non-existing column alias") {
-    assertAnalysisError(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
-      Seq("cannot resolve 'y' given input columns: [t.x]"))
+    assertAnalysisErrorClass(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
+      "MISSING_COLUMN",
+      Array("y", "t.x"))
   }
 
   test("CTE with non-matching column alias") {
@@ -1138,12 +1140,14 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         |ORDER BY c.x
         |""".stripMargin))
 
-    assertAnalysisError(parsePlan(
+    assertAnalysisErrorClass(parsePlan(
      """
         |SELECT c.x
         |FROM VALUES NAMED_STRUCT('x', 'A', 'y', 1), NAMED_STRUCT('x', 'A', 'y', 2) AS t(c)
         |GROUP BY c.x
         |ORDER BY c.x + c.y
-        |""".stripMargin), "cannot resolve 'c.y' given input columns: [x]" :: Nil)
+        |""".stripMargin),
+      "MISSING_COLUMN",
+      Array("c.y", "x"))
   }
 }
