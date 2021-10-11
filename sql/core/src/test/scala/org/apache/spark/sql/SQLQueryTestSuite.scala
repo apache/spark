@@ -23,6 +23,8 @@ import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
+
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -34,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
-import org.apache.spark.util.{JavaModuleUtils, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * End-to-end test cases for SQL queries.
@@ -507,7 +509,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // behavior between Java 8 and Java 17, but it seems that the behavior of Java 17 is expected:
     // `PostgreSQL throw ERROR:  format specifies argument 0, but arguments are numbered from 1`,
     // so do independent verification here.
-    if (JavaModuleUtils.isJavaVersionAtLeast17) {
+    if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17)) {
       val jdk17SpecialCases = Set("postgreSQL/text.sql")
       cases.map {
         case PgSQLTestCase(name, inputFile, resultFile) if jdk17SpecialCases.contains(name) =>

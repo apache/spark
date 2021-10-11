@@ -399,7 +399,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // This should be set as early as possible.
     SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
 
-    JavaModuleUtils.supplementJavaModuleOptions(_conf)
+    SparkContext.supplementJavaModuleOptions(_conf)
 
     _driverLogger = DriverLogger(_conf)
 
@@ -3026,6 +3026,22 @@ object SparkContext extends Logging {
           "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol")
       }
     }
+  }
+
+  /**
+   * This is a helper function to supplement `--add-opens` options to
+   * `spark.driver.extraJavaOptions` and `spark.executor.extraJavaOptions`.
+   */
+  private def supplementJavaModuleOptions(conf: SparkConf): Unit = {
+    def supplement(source: ConfigEntry[String], target: OptionalConfigEntry[String]): Unit = {
+      val v = conf.get(target) match {
+        case Some(opts) => s"${conf.get(source)} $opts"
+        case None => conf.get(source)
+      }
+      conf.set(target.key, v)
+    }
+    supplement(DRIVER_JAVA_MODULE_OPTIONS, DRIVER_JAVA_OPTIONS)
+    supplement(EXECUTOR_JAVA_MODULE_OPTIONS, EXECUTOR_JAVA_OPTIONS)
   }
 }
 
