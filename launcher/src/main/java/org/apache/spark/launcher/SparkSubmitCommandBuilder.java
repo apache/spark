@@ -271,6 +271,12 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     // memory flag --driver-memory or configuration entry spark.driver.memory
     String driverDefaultJavaOptions = config.get(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS);
     checkJavaOptions(driverDefaultJavaOptions);
+    String driverJavaModulesOptions = config.get(SparkLauncher.DRIVER_JAVA_MODULE_OPTIONS);
+    if (isEmpty(driverJavaModulesOptions)) {
+      driverJavaModulesOptions = JavaModuleOptions.defaultModuleOptions();
+      config.put(SparkLauncher.DRIVER_JAVA_MODULE_OPTIONS, driverJavaModulesOptions);
+    }
+    checkJavaOptions(driverJavaModulesOptions);
     String driverExtraJavaOptions = config.get(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS);
     checkJavaOptions(driverExtraJavaOptions);
 
@@ -289,6 +295,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
       cmd.add("-Xmx" + memory);
       addOptionString(cmd, driverDefaultJavaOptions);
+      addOptionString(cmd, driverJavaModulesOptions);
       addOptionString(cmd, driverExtraJavaOptions);
       mergeEnvPathList(env, getLibPathEnvName(),
         config.get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));

@@ -30,7 +30,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.util.{JavaModuleUtils, Utils}
+import org.apache.spark.util.Utils
 
 trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
 
@@ -54,8 +54,8 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
       new File(new File(sparkHome, "bin"), "spark-submit")
     }
 
-    val commands = Seq(sparkSubmit.getCanonicalPath) ++
-      JavaModuleUtils.supplementJava17ModuleOptsIfNeeded(args)
+    val commands = Seq(sparkSubmit.getCanonicalPath) ++ args
+      // JavaModuleUtils.supplementJava17ModuleOptsIfNeeded(args)
     val commandLine = commands.mkString("'", "' '", "'")
 
     val builder = new ProcessBuilder(commands: _*).directory(new File(sparkHome))

@@ -399,7 +399,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // This should be set as early as possible.
     SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
 
-    JavaModuleUtils.supplementJava17ModuleOptsIfNeeded(_conf)
+    JavaModuleUtils.supplementJavaModuleOptions(_conf)
 
     _driverLogger = DriverLogger(_conf)
 
