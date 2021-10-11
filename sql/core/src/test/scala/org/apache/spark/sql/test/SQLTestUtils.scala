@@ -393,6 +393,17 @@ private[sql] trait SQLTestUtilsBase
   }
 
   /**
+   * Restores the current catalog/database after calling `f`.
+   */
+  protected def withCurrentCatalogAndNamespace(f: => Unit): Unit = {
+    val curCatalog = sql("select current_catalog()").head().getString(0)
+    val curDatabase = sql("select current_database()").head().getString(0)
+    Utils.tryWithSafeFinally(f) {
+      spark.sql(s"USE $curCatalog.$curDatabase")
+    }
+  }
+
+  /**
    * Enables Locale `language` before executing `f`, then switches back to the default locale of JVM
    * after `f` returns.
    */
