@@ -27,6 +27,7 @@ import org.apache.spark.internal.config.{DRIVER_JAVA_OPTIONS, EXECUTOR_JAVA_OPTI
 object JavaModuleUtils {
 
   private val javaModuleOptions = Set(
+    "-XX:+IgnoreUnrecognizedVMOptions",
     "--add-opens=java.base/java.lang=ALL-UNNAMED",
     "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
     "--add-opens=java.base/java.io=ALL-UNNAMED",

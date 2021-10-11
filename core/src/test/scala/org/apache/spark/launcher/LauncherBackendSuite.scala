@@ -46,22 +46,16 @@ class LauncherBackendSuite extends SparkFunSuite with Matchers {
   private def testWithMaster(master: String): Unit = {
     val env = new java.util.HashMap[String, String]()
     env.put("SPARK_PRINT_LAUNCH_COMMAND", "1")
-    val launcher = new SparkLauncher(env)
+    val handle = new SparkLauncher(env)
       .setSparkHome(sys.props("spark.test.home"))
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
       .setConf(UI_ENABLED.key, "false")
-      .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, s"-Dtest.appender=console")
+      .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,
+        s"-Dtest.appender=console ${JavaModuleUtils.defaultModuleOptions()}")
       .setMaster(master)
       .setAppResource(SparkLauncher.NO_RESOURCE)
       .setMainClass(TestApp.getClass.getName().stripSuffix("$"))
-
-    if(JavaModuleUtils.isJavaVersionAtLeast17) {
-      launcher.setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,
-        s"${JavaModuleUtils.defaultModuleOptions()} -Dtest.appender=console")
-    } else {
-      launcher.setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, s"-Dtest.appender=console")
-    }
-    val handle = launcher.startApplication()
+      .startApplication()
 
     try {
       eventually(timeout(30.seconds), interval(100.milliseconds)) {
