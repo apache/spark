@@ -743,17 +743,6 @@ private[hive] class HiveClientImpl(
     getPartitions(hiveTable, spec)
   }
 
-  /**
-   * Returns the partitions for the given table that match the supplied partition spec.
-   * If no partition spec is specified, all partitions are returned.
-   */
-  override def getPartitions(
-      table: CatalogTable,
-      spec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = {
-    val hiveTable = toHiveTable(table, Some(userName))
-    getPartitions(hiveTable, spec)
-  }
-
   private def getPartitions(
       hiveTable: HiveTable,
       spec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = withHiveState {
