@@ -47,12 +47,6 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(conf.getSizeAsGb("fake", "1k") === ByteUnit.KiB.toGiB(1))
   }
 
-  test("Test java module") {
-    val conf = new SparkConf()
-    // scalastyle:off
-    println(conf.get(DRIVER_JAVA_OPTIONS))
-  }
-
   test("Test timeString conversion") {
     val conf = new SparkConf()
     // Simply exercise the API, we don't need a complete conversion test since that's handled in

@@ -53,9 +53,7 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
     } else {
       new File(new File(sparkHome, "bin"), "spark-submit")
     }
-
     val commands = Seq(sparkSubmit.getCanonicalPath) ++ args
-      // JavaModuleUtils.supplementJava17ModuleOptsIfNeeded(args)
     val commandLine = commands.mkString("'", "' '", "'")
 
     val builder = new ProcessBuilder(commands: _*).directory(new File(sparkHome))
