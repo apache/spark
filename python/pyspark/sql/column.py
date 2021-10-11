@@ -71,7 +71,7 @@ def _to_java_column(col: "ColumnOrName") -> JavaObject:
 def _to_seq(
     sc: SparkContext,
     cols: Iterable["ColumnOrName"],
-    converter: Optional[Callable] = None,
+    converter: Optional[Callable[["ColumnOrName"], JavaObject]] = None,
 ) -> JavaObject:
     """
     Convert a list of Column (or names) into a JVM Seq of Column.
@@ -86,8 +86,8 @@ def _to_seq(
 
 def _to_list(
     sc: SparkContext,
-    cols: List[Union[str, "Column"]],
-    converter: Optional[Callable] = None,
+    cols: List["ColumnOrName"],
+    converter: Optional[Callable[["ColumnOrName"], JavaObject]] = None,
 ) -> JavaObject:
     """
     Convert a list of Column (or names) into a JVM (Scala) List of Column.
