@@ -27,8 +27,7 @@ object JavaModuleUtils {
 
   def isJavaVersionAtLeast17: Boolean = SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17)
 
-  def defaultModuleOptions(): String =
-    JavaModuleOptions.DEFAULT_MODULE_OPTIONS.mkString(" ", " ", " ")
+  def defaultModuleOptions(): String = JavaModuleOptions.DEFAULT_MODULE_OPTIONS.mkString(" ")
 
   def supplementJavaModuleOptions(conf: SparkConf): Unit = {
 
@@ -36,7 +35,7 @@ object JavaModuleUtils {
         sourceEntry: ConfigEntry[String],
         targetEntry: OptionalConfigEntry[String]): Unit = {
       val v = conf.get(targetEntry) match {
-        case Some(opts) => conf.get(sourceEntry) + opts
+        case Some(opts) => s"${conf.get(sourceEntry)} $opts"
         case None => conf.get(sourceEntry)
       }
       conf.set(targetEntry.key, v)
