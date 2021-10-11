@@ -199,6 +199,76 @@ def min(col: "ColumnOrName") -> Column:
     return _invoke_function_over_column("min", col)
 
 
+@since(3.3)
+def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
+    """
+    Returns the value associated with the maximum value of ord.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column that the value will be returned
+    ord : :class:`~pyspark.sql.Column` or str
+        column to be maximized
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        value associated with the maximum value of ord.
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import max_by
+    >>> spark.createDataFrame([
+    ...     ("Java", 2012, 20000), \\
+    ...     ("dotNET", 2012, 5000), \\
+    ...     ("dotNET", 2013, 48000), \\
+    ...     ("Java", 2013, 30000)], \\
+    ...     schema=("course", "year", "earnings")) \\
+    ...     .groupby("course").agg(max_by("year", "earnings")).collect()
+        [Row(course='Java', max_by(year, earnings)=2013), \\
+        Row(course='dotNET', max_by(year, earnings)=2013)]
+    """
+    return _invoke_function("max_by", _to_java_column(col), _to_java_column(ord))
+
+
+@since(3.3)
+def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
+    """
+    Returns the value associated with the minimum value of ord.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column that the value will be returned
+    ord : :class:`~pyspark.sql.Column` or str
+        column to be mimimized
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        value associated with the minimum value of ord.
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import max_by
+    >>> spark.createDataFrame([
+    ...     ("Java", 2012, 20000), \\
+    ...     ("dotNET", 2012, 5000), \\
+    ...     ("dotNET", 2013, 48000), \\
+    ...     ("Java", 2013, 30000)], \\
+    ...     schema=("course", "year", "earnings")) \\
+    ...     .groupby("course").agg(min_by("year", "earnings")).collect()
+        [Row(course='Java', min_by(year, earnings)=2012), \\
+        Row(course='dotNET', min_by(year, earnings)=2012)]
+    """
+    return _invoke_function("min_by", _to_java_column(col), _to_java_column(ord))
+
+
 @since(1.3)
 def count(col: "ColumnOrName") -> Column:
     """
