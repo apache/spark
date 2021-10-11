@@ -4285,6 +4285,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
 
+  def visitCreateTempView(
+    nameParts: Seq[String],
+    userSpecifiedColumns: Seq[(String, Option[String])],
+    comment: Option[String],
+    properties: Map[String, String],
+    originalText: Option[String],
+    child: LogicalPlan,
+    allowExisting: Boolean,
+    replace: Boolean,
+    viewType: ViewType): LogicalPlan = null
+
   /**
    * Create or replace a view. This creates a [[CreateView]] command.
    *
@@ -4342,7 +4353,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         ctx.EXISTS != null,
         ctx.REPLACE != null)
     } else {
-      CreateTempView(
+      visitCreateTempView(
         visitMultipartIdentifier(ctx.multipartIdentifier),
         userSpecifiedColumns,
         visitCommentSpecList(ctx.commentSpec()),

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DDLParserSuite extends AnalysisTest with SharedSparkSession {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   private lazy val parser = new SparkSqlParser()
 
   private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
@@ -323,6 +324,45 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |LATERAL VIEW explode(array(array(1, 2,  3))) `gen``tab1` AS `gen``col1`
         |LATERAL VIEW explode(`gen``tab1`.`gen``col1`) `gen``tab2` AS `gen``col2`
       """.stripMargin)
+  }
+
+  test("create view -- basic") {
+    val v = "CREATE TEMPORARY VIEW a AS SELECT * FROM tab1"
+    val parsed = parser.parsePlan(v)
+
+    val expected = CreateViewCommand(
+      Seq("a").asTableIdentifier,
+      Seq.empty[(String, Option[String])],
+      None,
+      Map.empty[String, String],
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      false,
+      LocalTempView)
+    comparePlans(parsed, expected)
+  }
+
+  test("create temp view - full") {
+    val v =
+      """
+        |CREATE OR REPLACE GLOBAL TEMPORARY VIEW a
+        |(col1, col3 COMMENT 'hello')
+        |COMMENT 'BLABLA'
+        |AS SELECT * FROM tab1
+          """.stripMargin
+    val parsed = parser.parsePlan(v)
+    val expected = CreateViewCommand(
+      Seq("a").asTableIdentifier,
+      Seq("col1" -> None, "col3" -> Some("hello")),
+      Some("BLABLA"),
+      Map(),
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      true,
+      GlobalTempView)
+    comparePlans(parsed, expected)
   }
 
   test("create table like") {

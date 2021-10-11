@@ -27,6 +27,7 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.ViewType
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
@@ -57,6 +58,7 @@ class SparkSqlParser extends AbstractSqlParser {
  */
 class SparkSqlAstBuilder extends AstBuilder {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   private val configKeyValueDef = """([a-zA-Z_\d\\.:]+)\s*=([^;]*);*""".r
   private val configKeyDef = """([a-zA-Z_\d\\.:]+)$""".r
@@ -409,6 +411,28 @@ class SparkSqlAstBuilder extends AstBuilder {
         }
       case _ => operationNotAllowed(s"Other types of operation on resources", ctx)
     }
+  }
+
+  override def visitCreateTempView(
+      nameParts: Seq[String],
+      userSpecifiedColumns: Seq[(String, Option[String])],
+      comment: Option[String],
+      properties: Map[String, String],
+      originalText: Option[String],
+      child: LogicalPlan,
+      allowExisting: Boolean,
+      replace: Boolean,
+      viewType: ViewType): LogicalPlan = {
+    CreateViewCommand(
+      nameParts.asTableIdentifier,
+      userSpecifiedColumns,
+      comment,
+      properties,
+      originalText,
+      child,
+      allowExisting,
+      replace,
+      viewType = viewType)
   }
 
   private def toStorageFormat(

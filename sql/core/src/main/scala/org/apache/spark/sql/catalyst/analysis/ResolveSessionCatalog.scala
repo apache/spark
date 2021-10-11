@@ -398,19 +398,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         originalText,
         query)
 
-    case CreateTempView(nameParts, userSpecifiedColumns, comment, properties,
-        originalText, child, allowExisting, replace, viewType) =>
-      CreateViewCommand(
-        nameParts.asTableIdentifier,
-        userSpecifiedColumns = userSpecifiedColumns,
-        comment = comment,
-        properties = properties,
-        originalText = originalText,
-        plan = child,
-        allowExisting = allowExisting,
-        replace = replace,
-        viewType = viewType)
-
     case CreateView(ResolvedDBObjectName(catalog, nameParts), userSpecifiedColumns, comment,
         properties, originalText, child, allowExisting, replace) =>
       if (isSessionCatalog(catalog)) {
