@@ -610,6 +610,10 @@ private[parquet] class ParquetRowConverter(
       //
       // If the element type does not match the Catalyst type and the underlying repeated type
       // does not belong to the legacy LIST type, then it is case 1; otherwise, it is case 2.
+      //
+      // Since `convertField` method requires a Parquet `ColumnIO` as input, here we first create
+      // a dummy message type which wraps the given repeated type, and then convert it to the
+      // `ColumnIO` using Parquet API.
       val messageType = Types.buildMessage().addField(repeatedType).named("foo")
       val column = new ColumnIOFactory().getColumnIO(messageType)
       val guessedElementType = schemaConverter.convertField(column.getChild(0)).sparkType

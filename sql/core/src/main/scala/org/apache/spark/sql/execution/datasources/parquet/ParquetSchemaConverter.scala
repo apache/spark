@@ -41,18 +41,23 @@ import org.apache.spark.sql.types._
  *        [[StringType]] fields.
  * @param assumeInt96IsTimestamp Whether unannotated INT96 fields should be assumed to be Spark SQL
  *        [[TimestampType]] fields.
+ * @param caseSensitive Whether use case sensitive analysis when comparing Spark catalyst read
+ *                      schema with Parquet schema
  */
 class ParquetToSparkSchemaConverter(
     assumeBinaryIsString: Boolean = SQLConf.PARQUET_BINARY_AS_STRING.defaultValue.get,
-    assumeInt96IsTimestamp: Boolean = SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get) {
+    assumeInt96IsTimestamp: Boolean = SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get,
+    caseSensitive: Boolean = SQLConf.CASE_SENSITIVE.defaultValue.get) {
 
   def this(conf: SQLConf) = this(
     assumeBinaryIsString = conf.isParquetBinaryAsString,
-    assumeInt96IsTimestamp = conf.isParquetINT96AsTimestamp)
+    assumeInt96IsTimestamp = conf.isParquetINT96AsTimestamp,
+    caseSensitive = conf.caseSensitiveAnalysis)
 
   def this(conf: Configuration) = this(
     assumeBinaryIsString = conf.get(SQLConf.PARQUET_BINARY_AS_STRING.key).toBoolean,
-    assumeInt96IsTimestamp = conf.get(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key).toBoolean)
+    assumeInt96IsTimestamp = conf.get(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key).toBoolean,
+    caseSensitive = conf.get(SQLConf.CASE_SENSITIVE.key).toBoolean)
 
 
   /**
@@ -76,23 +81,22 @@ class ParquetToSparkSchemaConverter(
    */
   def convertParquetType(
       parquetSchema: MessageType,
-      sparkReadSchema: Option[StructType] = None,
-      caseSensitive: Boolean = true): ParquetType = {
+      sparkReadSchema: Option[StructType] = None): ParquetType = {
     val column = new ColumnIOFactory().getColumnIO(parquetSchema)
-    convertInternal(column, sparkReadSchema, caseSensitive)
+    convertInternal(column, sparkReadSchema)
   }
 
   private def convertInternal(
       groupColumn: GroupColumnIO,
-      sparkReadSchema: Option[StructType] = None,
-      caseSensitive: Boolean = true): ParquetType = {
+      sparkReadSchema: Option[StructType] = None): ParquetType = {
     val converted = (0 until groupColumn.getChildrenCount).map { i =>
       val field = groupColumn.getChild(i)
-      var fieldReadType = sparkReadSchema.flatMap { schema =>
-        schema.find(f => isSameFieldName(f.name, field.getName, caseSensitive)).map(_.dataType)
+      val fieldFromReadSchema = sparkReadSchema.flatMap { schema =>
+        schema.find(f => isSameFieldName(f.name, field.getName, caseSensitive))
       }
+      var fieldReadType = fieldFromReadSchema.map(_.dataType)
 
-      // if a field is repeated here then it is neither contained by a `LIST` nor `MAP`
+      // If a field is repeated here then it is neither contained by a `LIST` nor `MAP`
       // annotated group (these should've been handled in `convertGroupField`), e.g.:
       //
       //  message schema {
@@ -116,11 +120,12 @@ class ParquetToSparkSchemaConverter(
       }
 
       val convertedField = convertField(field, fieldReadType)
+      val fieldName = fieldFromReadSchema.map(_.name).getOrElse(field.getType.getName)
 
       field.getType.getRepetition match {
         case OPTIONAL | REQUIRED =>
           val nullable = field.getType.getRepetition == OPTIONAL
-          (StructField(field.getType.getName, convertedField.sparkType, nullable = nullable),
+          (StructField(fieldName, convertedField.sparkType, nullable = nullable),
               convertedField)
 
         case REPEATED =>
@@ -128,7 +133,7 @@ class ParquetToSparkSchemaConverter(
           // annotated by `LIST` or `MAP` should be interpreted as a required list of required
           // elements where the element type is the type of the field.
           val arrayType = ArrayType(convertedField.sparkType, containsNull = false)
-          (StructField(field.getType.getName, arrayType, nullable = false),
+          (StructField(fieldName, arrayType, nullable = false),
               ParquetType(arrayType, None, convertedField.repetitionLevel - 1,
                 convertedField.definitionLevel - 1, required = true, convertedField.path,
                 Seq(convertedField.copy(required = true))))
@@ -139,7 +144,7 @@ class ParquetToSparkSchemaConverter(
   }
 
   private def isSameFieldName(left: String, right: String, caseSensitive: Boolean): Boolean =
-    if (caseSensitive) left.equalsIgnoreCase(right)
+    if (!caseSensitive) left.equalsIgnoreCase(right)
     else left == right
 
   /**

@@ -62,14 +62,17 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       parquetSchema: String,
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
+      caseSensitive: Boolean = false,
+      sparkReadSchema: Option[StructType] = None,
       expectedParquetType: Option[ParquetType] = None): Unit = {
     val converter = new ParquetToSparkSchemaConverter(
       assumeBinaryIsString = binaryAsString,
-      assumeInt96IsTimestamp = int96AsTimestamp)
+      assumeInt96IsTimestamp = int96AsTimestamp,
+      caseSensitive = caseSensitive)
 
     test(s"sql <= parquet: $testName") {
       val actualParquetType = converter.convertParquetType(
-          MessageTypeParser.parseMessageType(parquetSchema))
+          MessageTypeParser.parseMessageType(parquetSchema), sparkReadSchema)
       val actual = actualParquetType.sparkType
       val expected = sqlSchema
       assert(
@@ -1886,6 +1889,181 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     writeLegacyParquetFormat = true)
+
+  testParquetToCatalyst(
+    "SPARK-36935: test case insensitive when converting Parquet schema",
+    StructType(Seq(StructField("F1", ShortType))),
+    """message root {
+      |  optional int32 f1;
+      |}
+      |""".stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    sparkReadSchema = Some(StructType(Seq(StructField("F1", ShortType)))),
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(StructField("F1", ShortType))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(
+        primitiveParquetType(ShortType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
+          0, 1, Seq("f1"))
+      )
+    )))
+
+  testParquetToCatalyst(
+    "SPARK-36935: test case sensitive when converting Parquet schema",
+    StructType(Seq(StructField("f1", IntegerType))),
+    """message root {
+      |  optional int32 f1;
+      |}
+      |""".stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    caseSensitive = true,
+    sparkReadSchema = Some(StructType(Seq(StructField("F1", ShortType)))),
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(StructField("f1", IntegerType))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(
+        primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
+          0, 1, Seq("f1"))
+      )
+    )))
+
+  testParquetToCatalyst(
+    "SPARK-36935: test Spark read schema with case sensitivity",
+    StructType(Seq(
+      StructField(
+        "F1",
+        MapType(ShortType,
+          StructType(Seq(
+            StructField("G1", StringType),
+            StructField("G2", ArrayType(
+              StructType(Seq(
+                StructField("H1", ByteType, nullable = false),
+                StructField("H2", FloatType, nullable = false))))))),
+          valueContainsNull = true)))),
+    """message root {
+      |  optional group f1 (MAP_KEY_VALUE) {
+      |    repeated group key_value {
+      |      required int32 key;
+      |      optional group value {
+      |        optional binary g1 (UTF8);
+      |        optional group g2 (LIST) {
+      |          repeated group list {
+      |            optional group element {
+      |              required int32 h1;
+      |              required double h2;
+      |            }
+      |          }
+      |        }
+      |      }
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    sparkReadSchema =
+      Some(StructType(Seq(
+        StructField(
+          "F1",
+          MapType(ShortType,
+            StructType(Seq(
+              StructField("G1", StringType),
+              StructField("G2", ArrayType(
+                StructType(Seq(
+                  StructField("H1", ByteType, nullable = false),
+                  StructField("H2", FloatType, nullable = false))))))),
+            valueContainsNull = true))))),
+    expectedParquetType = Some(ParquetType(
+      sparkType = StructType(Seq(
+        StructField(
+          "F1",
+          MapType(ShortType,
+            StructType(Seq(
+              StructField("G1", StringType),
+              StructField("G2", ArrayType(
+                StructType(Seq(
+                  StructField("H1", ByteType, nullable = false),
+                  StructField("H2", FloatType, nullable = false))))))),
+            valueContainsNull = true)))),
+      descriptor = None,
+      repetitionLevel = 0,
+      definitionLevel = 0,
+      required = false,
+      path = Seq(),
+      children = Seq(
+        ParquetType(
+          sparkType =
+            MapType(ShortType,
+              StructType(Seq(
+                StructField("G1", StringType),
+                StructField("G2", ArrayType(
+                  StructType(Seq(
+                    StructField("H1", ByteType, nullable = false),
+                    StructField("H2", FloatType, nullable = false))))))),
+              valueContainsNull = true),
+          descriptor = None,
+          repetitionLevel = 0,
+          definitionLevel = 1,
+          required = false,
+          path = Seq("f1"),
+          children = Seq(
+            primitiveParquetType(ShortType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+              1, 2, Seq("f1", "key_value", "key")),
+            ParquetType(
+              sparkType =
+                StructType(Seq(
+                  StructField("G1", StringType),
+                  StructField("G2", ArrayType(
+                    StructType(Seq(
+                      StructField("H1", ByteType, nullable = false),
+                      StructField("H2", FloatType, nullable = false))))))),
+              descriptor = None,
+              repetitionLevel = 1,
+              definitionLevel = 3,
+              required = false,
+              path = Seq("f1", "key_value", "value"),
+              children = Seq(
+                primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+                  1, 4, Seq("f1", "key_value", "value", "g1"),
+                  logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())),
+                ParquetType(
+                  sparkType = ArrayType(
+                    StructType(Seq(
+                      StructField("H1", ByteType, nullable = false),
+                      StructField("H2", FloatType, nullable = false)))),
+                  descriptor = None,
+                  repetitionLevel = 1,
+                  definitionLevel = 4,
+                  required = false,
+                  path = Seq("f1", "key_value", "value", "g2"),
+                  children = Seq(
+                    ParquetType(
+                      sparkType = StructType(Seq(
+                        StructField("H1", ByteType, nullable = false),
+                        StructField("H2", FloatType, nullable = false))),
+                      descriptor = None,
+                      repetitionLevel = 2,
+                      definitionLevel = 6,
+                      required = false,
+                      path = Seq("f1", "key_value", "value", "g2", "list", "element"),
+                      children = Seq(
+                        primitiveParquetType(ByteType, PrimitiveTypeName.INT32,
+                          Repetition.REQUIRED, 2, 6,
+                          Seq("f1", "key_value", "value", "g2", "list", "element", "h1")),
+                        primitiveParquetType(FloatType, PrimitiveTypeName.DOUBLE,
+                          Repetition.REQUIRED, 2, 6,
+                          Seq("f1", "key_value", "value", "g2", "list", "element", "h2"))))))))
+          ))))))
 
   // =================================
   // Tests for conversion for decimals
