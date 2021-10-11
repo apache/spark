@@ -82,15 +82,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         convertTableProperties(c),
         writeOptions = c.writeOptions,
         orCreate = c.orCreate)
-
-    case UseStatement(isNamespaceSet, nameParts) =>
-      if (isNamespaceSet) {
-        SetCatalogAndNamespace(catalogManager, None, Some(nameParts))
-      } else {
-        val CatalogAndNamespace(catalog, ns) = nameParts
-        val namespace = if (ns.nonEmpty) Some(ns) else None
-        SetCatalogAndNamespace(catalogManager, Some(catalog.name()), namespace)
-      }
   }
 
   object NonSessionCatalogAndTable {

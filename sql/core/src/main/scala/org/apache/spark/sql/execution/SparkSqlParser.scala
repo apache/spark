@@ -240,6 +240,14 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create a [[SetNamespaceCommand]] logical command.
+   */
+  override def visitUseNamespace(ctx: UseNamespaceContext): LogicalPlan = withOrigin(ctx) {
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
+    SetNamespaceCommand(nameParts)
+  }
+
+  /**
    * Create a [[SetCatalogCommand]] logical command.
    */
   override def visitSetCatalog(ctx: SetCatalogContext): LogicalPlan = withOrigin(ctx) {

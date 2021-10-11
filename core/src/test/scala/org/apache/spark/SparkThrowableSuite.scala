@@ -128,8 +128,8 @@ class SparkThrowableSuite extends SparkFunSuite {
   }
 
   test("Error message is formatted") {
-    assert(getMessage("MISSING_COLUMN", Array("foo", "bar")) ==
-      "cannot resolve 'foo' given input columns: [bar]")
+    assert(getMessage("MISSING_COLUMN", Array("foo", "bar, baz")) ==
+      "Column 'foo' does not exist. Did you mean one of the following? [bar, baz]")
   }
 
   test("Try catching legacy SparkError") {

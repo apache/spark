@@ -3565,11 +3565,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[UseStatement]] logical plan.
+   * Create a [[SetCatalogAndNamespace]] command.
    */
   override def visitUse(ctx: UseContext): LogicalPlan = withOrigin(ctx) {
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
-    UseStatement(ctx.NAMESPACE != null, nameParts)
+    SetCatalogAndNamespace(UnresolvedDBObjectName(nameParts, isNamespace = true))
   }
 
   /**

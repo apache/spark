@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -167,9 +167,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
-            val from = operator.inputSet.toSeq.map(_.qualifiedName).mkString(", ")
-            // cannot resolve '${a.sql}' given input columns: [$from]
-            a.failAnalysis(errorClass = "MISSING_COLUMN", messageParameters = Array(a.sql, from))
+            val missingCol = a.sql
+            val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
+            val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates)
+            a.failAnalysis(
+              errorClass = "MISSING_COLUMN",
+              messageParameters = Array(missingCol, orderedCandidates.mkString(", ")))
 
           case s: Star =>
             withPosition(s) {

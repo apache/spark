@@ -1098,7 +1098,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |order by struct.a, struct.b
             |""".stripMargin)
     }
-    assert(error.message contains "cannot resolve 'struct.a' given input columns: [a, b]")
+    assert(error.getErrorClass == "MISSING_COLUMN")
+    assert(error.messageParameters.sameElements(Array("struct.a", "a, b")))
 
   }
 
@@ -2700,8 +2701,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(sql("SELECT i from (SELECT i FROM v)"), Row(1))
 
       val e = intercept[AnalysisException](sql("SELECT v.i from (SELECT i FROM v)"))
-      assert(e.message ==
-        "cannot resolve 'v.i' given input columns: [__auto_generated_subquery_name.i]")
+      assert(e.getErrorClass == "MISSING_COLUMN")
+      assert(e.messageParameters.sameElements(Array("v.i", "__auto_generated_subquery_name.i")))
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
     }
