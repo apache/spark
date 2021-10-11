@@ -1655,9 +1655,6 @@ def to_datetime(
         "us": "us",
         "microsecond": "us",
         "microseconds": "us",
-        "ns": "ns",
-        "nanosecond": "ns",
-        "nanoseconds": "ns",
     }
 
     # replace passed unit with _unit_map
@@ -1688,7 +1685,7 @@ def to_datetime(
         unit = {k: f(k) for k in arg.keys()}
         unit_rev = {v: k for k, v in unit.items()}
         list_cols = [unit_rev["year"], unit_rev["month"], unit_rev["day"]]
-        for u in ["h", "m", "s", "ms", "us", "ns"]:
+        for u in ["h", "m", "s", "ms", "us"]:
             value = unit_rev.get(u)
             if value is not None and value in arg:
                 list_cols.append(value)
