@@ -42,7 +42,7 @@ public interface SupportsIndex extends Table {
    * @param columns the columns on which index to be created
    * @param columnsProperties the properties of the columns on which index to be created
    * @param properties the properties of the index to be created
-   * @throws IndexAlreadyExistsException If the index already exists (optional)
+   * @throws IndexAlreadyExistsException If the index already exists.
    */
   void createIndex(String indexName,
       String indexType,
@@ -55,7 +55,7 @@ public interface SupportsIndex extends Table {
    * Drops the index with the given name.
    *
    * @param indexName the name of the index to be dropped.
-   * @throws NoSuchIndexException If the index does not exist (optional)
+   * @throws NoSuchIndexException If the index does not exist.
    */
   void dropIndex(String indexName) throws NoSuchIndexException;
 

@@ -66,11 +66,6 @@ public final class TableIndex {
   public NamedReference[] columns() { return columns; }
 
   /**
-   * set columns using the passed in param columns
-   */
-  public void columns_(NamedReference[] columns) { this.columns = columns; }
-
-  /**
    * @return the map of column and column property map.
    */
   public Map<NamedReference, Properties> columnProperties() { return columnProperties; }

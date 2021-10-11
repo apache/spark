@@ -128,9 +128,17 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
         indexProperties = indexProperties + " " + s"$k $v"
       }
     }
-
+    val iType = if (indexType.isEmpty) {
+      ""
+    } else {
+      if (indexType.length > 1 && !indexType.equalsIgnoreCase("BTREE") &&
+        !indexType.equalsIgnoreCase("HASH")) {
+        throw new UnsupportedOperationException(s"Index Type $indexType is not supported." +
+          " The supported Index Types are: BTREE and HASH")
+      }
+      s"USING $indexType"
+    }
     // columnsProperties doesn't apply to MySQL so it is ignored
-    val iType = if (indexType.isEmpty) "" else s"USING $indexType"
     s"CREATE INDEX ${quoteIdentifier(indexName)} $iType ON" +
       s" ${quoteIdentifier(tableName)} (${columnList.mkString(", ")}) $indexProperties"
   }
@@ -180,7 +188,10 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
         val indexComment = rs.getString("Index_comment")
         if (indexMap.contains(indexName)) {
           val index = indexMap.get(indexName).get
-          index.columns_(index.columns() :+ FieldReference(colName))
+          val newIndex = new TableIndex(indexName, indexType,
+            index.columns() :+ FieldReference(colName),
+            index.columnProperties, index.properties)
+          indexMap += (indexName -> newIndex)
         } else {
           // The only property we are building here is `COMMENT` because it's the only one
           // we can get from `SHOW INDEXES`.
@@ -199,18 +210,18 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
   }
 
   override def classifyException(message: String, e: Throwable): AnalysisException = {
-    if (e.isInstanceOf[SQLException]) {
-      // Error codes are from
-      // https://mariadb.com/kb/en/mariadb-error-codes/#shared-mariadbmysql-error-codes
-      e.asInstanceOf[SQLException].getErrorCode match {
-        // ER_DUP_KEYNAME
-        case 1061 =>
-          throw new IndexAlreadyExistsException(message, cause = Some(e))
-        case 1091 =>
-          throw new NoSuchIndexException(message, cause = Some(e))
-        case _ =>
-      }
+    e match {
+      case sqlException: SQLException =>
+        sqlException.getErrorCode match {
+          // ER_DUP_KEYNAME
+          case 1061 =>
+            throw new IndexAlreadyExistsException(message, cause = Some(e))
+          case 1091 =>
+            throw new NoSuchIndexException(message, cause = Some(e))
+          case _ => super.classifyException(message, e)
+        }
+      case unsupported: UnsupportedOperationException => throw unsupported
+      case _ => super.classifyException(message, e)
     }
-    super.classifyException(message, e)
   }
 }
