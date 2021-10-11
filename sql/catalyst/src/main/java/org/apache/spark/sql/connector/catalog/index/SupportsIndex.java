@@ -40,14 +40,14 @@ public interface SupportsIndex extends Table {
    * @param indexName the name of the index to be created
    * @param indexType the IndexType of the index to be created
    * @param columns the columns on which index to be created
-   * @param columnProperties the properties of the columns on which index to be created
+   * @param columnsProperties the properties of the columns on which index to be created
    * @param properties the properties of the index to be created
    * @throws IndexAlreadyExistsException If the index already exists (optional)
    */
   void createIndex(String indexName,
       String indexType,
       NamedReference[] columns,
-      Map<NamedReference, Properties>[] columnProperties,
+      Map<NamedReference, Properties>[] columnsProperties,
       Properties properties)
       throws IndexAlreadyExistsException;
 

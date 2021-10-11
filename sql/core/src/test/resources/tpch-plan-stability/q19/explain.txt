@@ -48,7 +48,7 @@ Condition : (((isnotnull(p_size#9) AND (p_size#9 >= 1)) AND isnotnull(p_partkey#
 
 (8) BroadcastExchange
 Input [4]: [p_partkey#7, p_brand#8, p_size#9, p_container#10]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false,false), [id=#14]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#14]
 
 (9) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [l_partkey#1]

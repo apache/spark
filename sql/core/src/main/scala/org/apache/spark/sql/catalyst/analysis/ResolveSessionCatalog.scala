@@ -269,7 +269,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case d @ DropNamespace(DatabaseInSessionCatalog(db), _, _) =>
       DropDatabaseCommand(db, d.ifExists, d.cascade)
 
-    case ShowTables(DatabaseInSessionCatalog(db), pattern, output) =>
+    case ShowTables(DatabaseInSessionCatalog(db), pattern, output) if conf.useV1Command =>
       val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
         assert(output.length == 3)
         output.head.withName("database") +: output.tail

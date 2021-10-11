@@ -76,7 +76,7 @@ Condition : isnotnull(i_item_sk#6)
 
 (7) BroadcastExchange
 Input [1]: [i_item_sk#6]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#7]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#7]
 
 (8) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [inv_item_sk#1]
@@ -103,7 +103,7 @@ Condition : isnotnull(w_warehouse_sk#8)
 
 (13) BroadcastExchange
 Input [2]: [w_warehouse_sk#8, w_warehouse_name#9]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#10]
 
 (14) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [inv_warehouse_sk#2]
@@ -231,7 +231,7 @@ Input [5]: [w_warehouse_sk#35, i_item_sk#34, d_moy#38, stdev#26, mean#27]
 
 (41) BroadcastExchange
 Input [5]: [w_warehouse_sk#35, i_item_sk#34, d_moy#38, mean#50, cov#51]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false,false), [id=#52]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [id=#52]
 
 (42) BroadcastHashJoin [codegen id : 10]
 Left keys [2]: [i_item_sk#6, w_warehouse_sk#8]
@@ -276,7 +276,7 @@ Input [3]: [d_date_sk#11, d_year#54, d_moy#12]
 
 (49) BroadcastExchange
 Input [2]: [d_date_sk#11, d_moy#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#55]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#55]
 
 Subquery:2 Hosting operator id = 24 Hosting Expression = inv_date_sk#32 IN dynamicpruning#33
 BroadcastExchange (54)
@@ -306,6 +306,6 @@ Input [3]: [d_date_sk#37, d_year#56, d_moy#38]
 
 (54) BroadcastExchange
 Input [2]: [d_date_sk#37, d_moy#38]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#57]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#57]
 
 

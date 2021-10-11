@@ -158,17 +158,6 @@ trait HashJoin extends JoinCodegenSupport {
         output, (streamedPlan.output ++ buildPlan.output).map(_.withNullability(true)))
   }
 
-  // Exposed for testing
-  @transient lazy val ignoreDuplicatedKey = joinType match {
-    case LeftExistence(_) =>
-      // For building hash relation, ignore duplicated rows with same join keys if:
-      // 1. Join condition is empty, or
-      // 2. Join condition only references streamed attributes and build join keys.
-      val streamedOutputAndBuildKeys = AttributeSet(streamedOutput ++ buildKeys)
-      condition.forall(_.references.subsetOf(streamedOutputAndBuildKeys))
-    case _ => false
-  }
-
   private def innerJoin(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation): Iterator[InternalRow] = {

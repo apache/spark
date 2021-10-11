@@ -112,7 +112,7 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
 
   test("SPARK-33323: Add query resolved check before convert hive relation") {
     withTable("t") {
-      val msg = intercept[AnalysisException] {
+      val ex = intercept[AnalysisException] {
         sql(
           s"""
              |CREATE TABLE t STORED AS PARQUET AS
@@ -122,8 +122,9 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
              |  )
              |)
           """.stripMargin)
-      }.getMessage
-      assert(msg.contains("cannot resolve 'c3' given input columns"))
+      }
+      assert(ex.getErrorClass == "MISSING_COLUMN")
+      assert(ex.messageParameters.head == "c3")
     }
   }
 

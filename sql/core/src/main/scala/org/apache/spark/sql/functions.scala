@@ -674,6 +674,14 @@ object functions {
   def max(columnName: String): Column = max(Column(columnName))
 
   /**
+   * Aggregate function: returns the value associated with the maximum value of ord.
+   *
+   * @group agg_funcs
+   * @since 3.3.0
+   */
+  def max_by(e: Column, ord: Column): Column = withAggregateFunction { MaxBy(e.expr, ord.expr) }
+
+  /**
    * Aggregate function: returns the average of the values in a group.
    * Alias for avg.
    *
@@ -706,6 +714,14 @@ object functions {
    * @since 1.3.0
    */
   def min(columnName: String): Column = min(Column(columnName))
+
+  /**
+   * Aggregate function: returns the value associated with the minimum value of ord.
+   *
+   * @group agg_funcs
+   * @since 3.3.0
+   */
+  def min_by(e: Column, ord: Column): Column = withAggregateFunction { MinBy(e.expr, ord.expr) }
 
   /**
    * Aggregate function: returns the approximate `percentile` of the numeric column `col` which
