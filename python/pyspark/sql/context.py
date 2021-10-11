@@ -53,6 +53,7 @@ if TYPE_CHECKING:
     from pyspark.sql.types import DataType, AtomicType, StructType
     from pyspark.sql.pandas._typing import DataFrameLike
     from pyspark.sql.streaming import StreamingQueryManager
+    from pyspark.conf import SparkConf
 
 __all__ = ["SQLContext", "HiveContext"]
 
@@ -129,7 +130,7 @@ class SQLContext(object):
             SQLContext._instantiatedContext = self
 
     @property
-    def _ssql_ctx(self):  # type: ignore[no-untyped-def]
+    def _ssql_ctx(self) -> JavaObject:
         """Accessor for the JVM Spark SQL context.
 
         Subclasses can override this property to provide their own
@@ -138,7 +139,7 @@ class SQLContext(object):
         return self._jsqlContext
 
     @property
-    def _conf(self):  # type: ignore[no-untyped-def]
+    def _conf(self) -> "SparkConf":
         """Accessor for the JVM SQL-specific configurations"""
         return self.sparkSession._jsparkSession.sessionState().conf()
 
@@ -735,15 +736,17 @@ class HiveContext(SQLContext):
         SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)
 
     @classmethod
-    def _createForTesting(cls, sparkContext):  # type: ignore[no-untyped-def]
+    def _createForTesting(cls, sparkContext: SparkContext) -> "HiveContext":
         """(Internal use only) Create a new HiveContext for testing.
 
         All test code that touches HiveContext *must* go through this method. Otherwise,
         you may end up launching multiple derby instances and encounter with incredibly
         confusing error messages.
         """
-        jsc = sparkContext._jsc.sc()
-        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(jsc, False)
+        jsc = sparkContext._jsc.sc()  # type: ignore[attr-defined]
+        jtestHive = sparkContext.\
+            _jvm.org.apache.spark.sql.hive.test.TestHiveContext(  # type: ignore[attr-defined]
+                jsc, False)
         return cls(sparkContext, jtestHive)
 
     def refreshTable(self, tableName: str) -> None:
