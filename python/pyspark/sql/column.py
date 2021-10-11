@@ -224,7 +224,7 @@ class Column(object):
     )
     __rsub__ = cast(
         Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"],
-        _bin_op("minus")
+        _reverse_op("minus")
     )
     __rmul__ = cast(
         Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"],
@@ -232,15 +232,15 @@ class Column(object):
     )
     __rdiv__ = cast(
         Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"],
-        _bin_op("divide")
+        _reverse_op("divide")
     )
     __rtruediv__ = cast(
         Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"],
-        _bin_op("divide")
+        _reverse_op("divide")
     )
     __rmod__ = cast(
         Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"],
-        _bin_op("mod")
+        _reverse_op("mod")
     )
 
     __pow__ = _bin_func_op("pow")
