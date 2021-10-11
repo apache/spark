@@ -250,8 +250,20 @@ class Column(object):
     )
 
     # logistic operators
-    __eq__ = _bin_op("equalTo")  # type: ignore[assignment]
-    __ne__ = cast(Callable[[Any], "Column"], _bin_op("notEqual"))  # type: ignore[assignment]
+    def __eq__(   # type: ignore[override]
+        self,
+        other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"],
+    ) -> "Column":
+        """binary function"""
+        return _bin_op("equalTo")(self, other)
+
+    def __ne__(   # type: ignore[override]
+        self,
+        other: Any,
+    ) -> "Column":
+        """binary function"""
+        return _bin_op("notEqual")(self, other)
+
     __lt__ = _bin_op("lt")
     __le__ = _bin_op("leq")
     __ge__ = _bin_op("geq")
