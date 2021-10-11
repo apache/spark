@@ -98,25 +98,29 @@ class SampledPlotBase:
             )
 
 
+def _prepare_numeric_data(data):
+    from pyspark.pandas.series import Series
+
+    if isinstance(data, Series):
+        data = data.to_frame()
+
+    numeric_data = data.select_dtypes(
+        include=["byte", "decimal", "integer", "float", "long", "double", np.datetime64]
+    )
+
+    # no empty frames or series allowed
+    if len(numeric_data.columns) == 0:
+        raise TypeError(
+            "Empty {0!r}: no numeric data to " "plot".format(numeric_data.__class__.__name__)
+        )
+
+    return data, numeric_data
+
+
 class HistogramPlotBase:
     @staticmethod
     def prepare_hist_data(data, bins):
-        # TODO: this logic is similar with KdePlotBase. Might have to deduplicate it.
-        from pyspark.pandas.series import Series
-
-        if isinstance(data, Series):
-            data = data.to_frame()
-
-        numeric_data = data.select_dtypes(
-            include=["byte", "decimal", "integer", "float", "long", "double", np.datetime64]
-        )
-
-        # no empty frames or series allowed
-        if len(numeric_data.columns) == 0:
-            raise TypeError(
-                "Empty {0!r}: no numeric data to " "plot".format(numeric_data.__class__.__name__)
-            )
-
+        data, numeric_data = _prepare_numeric_data(data)
         if is_integer(bins):
             # computes boundaries for the column
             bins = HistogramPlotBase.get_bins(data.to_spark(), bins)
@@ -343,22 +347,7 @@ class BoxPlotBase:
 class KdePlotBase:
     @staticmethod
     def prepare_kde_data(data):
-        # TODO: this logic is similar with HistogramPlotBase. Might have to deduplicate it.
-        from pyspark.pandas.series import Series
-
-        if isinstance(data, Series):
-            data = data.to_frame()
-
-        numeric_data = data.select_dtypes(
-            include=["byte", "decimal", "integer", "float", "long", "double", np.datetime64]
-        )
-
-        # no empty frames or series allowed
-        if len(numeric_data.columns) == 0:
-            raise TypeError(
-                "Empty {0!r}: no numeric data to " "plot".format(numeric_data.__class__.__name__)
-            )
-
+        _, numeric_data = _prepare_numeric_data(data)
         return numeric_data
 
     @staticmethod
