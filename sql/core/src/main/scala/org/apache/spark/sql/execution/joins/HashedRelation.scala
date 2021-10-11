@@ -497,10 +497,12 @@ private[joins] object UnsafeHashedRelation {
     // that ensuring such placement of the nodes improves performance
     val candidate = new UnsafeHashedRelation(key.size, numFields, binaryMap)
     if (binaryMap.numValues() > binaryMap.numKeys() * 2) {
-      // val keyIter = iter.map(proj).map(_.copy())
-      val keys = candidate.keys().map(keyGenerator).map(_.copy()).toArray
+     val keys = candidate.valuesWithKeyIndex().map(_.getValue)
+        .map(keyGenerator).map(_.copy()).toArray
+      // val keys = candidate.keys().map(keyGenerator).map(_.copy()).toArray
       val distinctKeys = keys.distinct
-      print(s"Number of keys is ${keys.length}; distinct keys is ${distinctKeys.length}\n")
+      print(s"Number of keys is ${keys.length}; distinct keys is ${distinctKeys.length} " +
+        s"key schema ${key}\n")
       val sizeEstimate = binaryMap.numKeys()
       val newBinaryMap = new BytesToBytesMap(
         taskMemoryManager,
@@ -508,15 +510,16 @@ private[joins] object UnsafeHashedRelation {
         (sizeEstimate * 1.5 + 1).toInt,
         pageSizeBytes)
       print("Building new map\n")
-      for (key <- distinctKeys) {
-        val input = candidate.get(key)
+      for (keyFromOldMap <- distinctKeys) {
+        val input = candidate.get(keyFromOldMap)
         while (input.hasNext) {
           val row = input.next().asInstanceOf[UnsafeRow]
-          val key = keyGenerator(row)
-          val loc = newBinaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
+          val unsafeKey = keyGenerator(row)
+          val loc = newBinaryMap.lookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
+            unsafeKey.getSizeInBytes)
           if (!(ignoresDuplicatedKey && loc.isDefined)) {
             val success = loc.append(
-              key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
+              unsafeKey.getBaseObject, unsafeKey.getBaseOffset, unsafeKey.getSizeInBytes,
               row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
             if (!success) {
               newBinaryMap.free()
