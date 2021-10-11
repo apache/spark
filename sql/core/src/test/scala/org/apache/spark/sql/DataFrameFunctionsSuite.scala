@@ -2328,7 +2328,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex3 = intercept[AnalysisException] {
       df.selectExpr("transform(a, x -> x)")
     }
-    assert(ex3.getMessage.contains("cannot resolve 'a'"))
+    assert(ex3.getErrorClass == "MISSING_COLUMN")
+    assert(ex3.messageParameters.head == "a")
   }
 
   test("map_filter") {
@@ -2399,7 +2400,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("map_filter(a, (k, v) -> k > v)")
     }
-    assert(ex4.getMessage.contains("cannot resolve 'a'"))
+    assert(ex4.getErrorClass == "MISSING_COLUMN")
+    assert(ex4.messageParameters.head == "a")
   }
 
   test("filter function - array for primitive type not containing null") {
@@ -2558,7 +2560,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("filter(a, x -> x)")
     }
-    assert(ex4.getMessage.contains("cannot resolve 'a'"))
+    assert(ex4.getErrorClass == "MISSING_COLUMN")
+    assert(ex4.messageParameters.head == "a")
   }
 
   test("exists function - array for primitive type not containing null") {
@@ -2690,7 +2693,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("exists(a, x -> x)")
     }
-    assert(ex4.getMessage.contains("cannot resolve 'a'"))
+    assert(ex4.getErrorClass == "MISSING_COLUMN")
+    assert(ex4.messageParameters.head == "a")
   }
 
   test("forall function - array for primitive type not containing null") {
@@ -2836,12 +2840,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("forall(a, x -> x)")
     }
-    assert(ex4.getMessage.contains("cannot resolve 'a'"))
+    assert(ex4.getErrorClass == "MISSING_COLUMN")
+    assert(ex4.messageParameters.head == "a")
 
     val ex4a = intercept[AnalysisException] {
       df.select(forall(col("a"), x => x))
     }
-    assert(ex4a.getMessage.contains("cannot resolve 'a'"))
+    assert(ex4a.getErrorClass == "MISSING_COLUMN")
+    assert(ex4a.messageParameters.head == "a")
   }
 
   test("aggregate function - array for primitive type not containing null") {
@@ -3018,7 +3024,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex5 = intercept[AnalysisException] {
       df.selectExpr("aggregate(a, 0, (acc, x) -> x)")
     }
-    assert(ex5.getMessage.contains("cannot resolve 'a'"))
+    assert(ex5.getErrorClass == "MISSING_COLUMN")
+    assert(ex5.messageParameters.head == "a")
   }
 
   test("map_zip_with function - map of primitive types") {
@@ -3571,7 +3578,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("zip_with(a1, a, (acc, x) -> x)")
     }
-    assert(ex4.getMessage.contains("cannot resolve 'a'"))
+    assert(ex4.getErrorClass == "MISSING_COLUMN")
+    assert(ex4.messageParameters.head == "a")
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {

@@ -2811,10 +2811,11 @@ abstract class JsonSuite
             val readback = spark.read.schema("aaa integer, BBB integer")
               .json(path.getCanonicalPath)
             checkAnswer(readback, Seq(Row(null, null), Row(0, 1)))
-            val errorMsg = intercept[AnalysisException] {
+            val ex = intercept[AnalysisException] {
               readback.filter($"AAA" === 0 && $"bbb" === 1).collect()
-            }.getMessage
-            assert(errorMsg.contains("cannot resolve 'AAA'"))
+            }
+            assert(ex.getErrorClass == "MISSING_COLUMN")
+            assert(ex.messageParameters.head == "AAA")
             // Schema inferring
             val readback2 = spark.read.json(path.getCanonicalPath)
             checkAnswer(

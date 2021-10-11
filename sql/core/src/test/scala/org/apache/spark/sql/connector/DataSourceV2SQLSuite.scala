@@ -173,9 +173,10 @@ class DataSourceV2SQLSuite
         Row("data_type", "string"),
         Row("comment", "hello")))
 
-      assertAnalysisError(
+      assertAnalysisErrorClass(
         s"DESCRIBE $t invalid_col",
-        "cannot resolve 'invalid_col' given input columns: [testcat.tbl.data, testcat.tbl.id]")
+        "MISSING_COLUMN",
+        Array("invalid_col", "testcat.tbl.id, testcat.tbl.data"))
     }
   }
 
@@ -962,7 +963,8 @@ class DataSourceV2SQLSuite
       val ex = intercept[AnalysisException] {
         sql(s"SELECT ns1.ns2.ns3.tbl.id from $t")
       }
-      assert(ex.getMessage.contains("cannot resolve 'ns1.ns2.ns3.tbl.id"))
+      assert(ex.getErrorClass == "MISSING_COLUMN")
+      assert(ex.messageParameters.head == "ns1.ns2.ns3.tbl.id")
     }
   }
 
@@ -1805,12 +1807,20 @@ class DataSourceV2SQLSuite
         "Table or view not found")
 
       // UPDATE non-existing column
-      assertAnalysisError(
+      assertAnalysisErrorClass(
         s"UPDATE $t SET dummy='abc'",
-        "cannot resolve")
-      assertAnalysisError(
+        "MISSING_COLUMN",
+        Array(
+          "dummy",
+          "testcat.ns1.ns2.tbl.p, testcat.ns1.ns2.tbl.id, " +
+            "testcat.ns1.ns2.tbl.age, testcat.ns1.ns2.tbl.name"))
+      assertAnalysisErrorClass(
         s"UPDATE $t SET name='abc' WHERE dummy=1",
-        "cannot resolve")
+        "MISSING_COLUMN",
+        Array(
+          "dummy",
+          "testcat.ns1.ns2.tbl.p, testcat.ns1.ns2.tbl.id, " +
+            "testcat.ns1.ns2.tbl.age, testcat.ns1.ns2.tbl.name"))
 
       // UPDATE is not implemented yet.
       val e = intercept[UnsupportedOperationException] {
@@ -2939,11 +2949,24 @@ class DataSourceV2SQLSuite
     assert(e.message.contains(s"$sqlCommand is not supported for v2 tables"))
   }
 
-  private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {
-    val errMsg = intercept[AnalysisException] {
+  private def assertAnalysisError(
+      sqlStatement: String,
+      expectedError: String): Unit = {
+    val ex = intercept[AnalysisException] {
       sql(sqlStatement)
-    }.getMessage
-    assert(errMsg.contains(expectedError))
+    }
+    assert(ex.getMessage.contains(expectedError))
+  }
+
+  private def assertAnalysisErrorClass(
+      sqlStatement: String,
+      expectedErrorClass: String,
+      expectedErrorMessageParameters: Array[String]): Unit = {
+    val ex = intercept[AnalysisException] {
+      sql(sqlStatement)
+    }
+    assert(ex.getErrorClass == expectedErrorClass)
+    assert(ex.messageParameters.sameElements(expectedErrorMessageParameters))
   }
 
   private def getShowCreateDDL(showCreateTableSql: String): Array[String] = {
