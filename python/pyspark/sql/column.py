@@ -914,8 +914,8 @@ class Column(object):
 
     def between(
         self,
-        lowerBound: Union["Column", "LiteralType", "DecimalLiteral", "DecimalLiteral"],
-        upperBound: Union["Column", "LiteralType", "DecimalLiteral", "DecimalLiteral"],
+        lowerBound: Union["Column", "LiteralType", "DateTimeLiteral", "DecimalLiteral"],
+        upperBound: Union["Column", "LiteralType", "DateTimeLiteral", "DecimalLiteral"],
     ) -> "Column":
         """
         True if the current column is between the lower bound and upper bound, inclusive.
