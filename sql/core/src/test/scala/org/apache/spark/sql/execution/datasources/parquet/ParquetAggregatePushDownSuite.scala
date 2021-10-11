@@ -221,7 +221,7 @@ abstract class ParquetAggregatePushDownSuite
     }
   }
 
-  test("aggregate push down - query with filter not push down") {
+  test("aggregate push down - aggregate with data filter cannot be pushed down") {
     val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
       (9, "mno", 7), (2, null, 7))
     withParquetTable(data, "t") {
@@ -236,6 +236,30 @@ abstract class ParquetAggregatePushDownSuite
             checkKeywordsExistsInExplain(selectAgg, expected_plan_fragment)
         }
         checkAnswer(selectAgg, Seq(Row(2)))
+      }
+    }
+  }
+
+  test("aggregate push down - aggregate with partition filter can be pushed down") {
+    withTempPath { dir =>
+      spark.range(10).selectExpr("id", "id % 3 as p")
+        .write.partitionBy("p").parquet(dir.getCanonicalPath)
+      withTempView("tmp") {
+        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+        val enableVectorizedReader = Seq("false", "true")
+        for (testVectorizedReader <- enableVectorizedReader) {
+          withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
+            vectorizedReaderEnabledKey -> testVectorizedReader) {
+            val max = sql("SELECT max(id) FROM tmp WHERE p = 0")
+            max.queryExecution.optimizedPlan.collect {
+              case _: DataSourceV2ScanRelation =>
+                val expected_plan_fragment =
+                  "PushedAggregation: [MAX(id)]"
+                checkKeywordsExistsInExplain(max, expected_plan_fragment)
+            }
+            checkAnswer(max, Seq(Row(9)))
+          }
+        }
       }
     }
   }
