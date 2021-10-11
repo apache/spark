@@ -904,11 +904,13 @@ def _parse_datatype_string(s: str) -> DataType:
 
     def from_ddl_schema(type_str: str) -> DataType:
         return _parse_datatype_json_string(
-            sc._jvm.org.apache.spark.sql.types.StructType.fromDDL(type_str).json())
+            sc._jvm.org.apache.spark.sql.types.StructType.fromDDL(  # type: ignore[union-attr]
+                type_str).json())
 
     def from_ddl_datatype(type_str: str) -> DataType:
         return _parse_datatype_json_string(
-            sc._jvm.org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str).json())
+            sc._jvm.org.apache.spark.sql.api.python  # type: ignore[union-attr]
+            .PythonSQLUtils.parseDataType(type_str).json())
 
     try:
         # DDL format, "fieldname datatype, fieldname datatype".
@@ -1795,8 +1797,9 @@ class DatetimeNTZConverter(object):
 
         seconds = calendar.timegm(obj.utctimetuple())
         jvm = SparkContext._jvm  # type: ignore[attr-defined]
-        return jvm.org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToLocalDateTime(
-            int(seconds) * 1000000 + obj.microsecond
+        return (
+            jvm.org.apache.spark.sql.catalyst.util.  # type: ignore[union-attr]
+            DateTimeUtils.microsToLocalDateTime(int(seconds) * 1000000 + obj.microsecond)
         )
 
 

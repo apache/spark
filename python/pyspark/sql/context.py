@@ -165,7 +165,7 @@ class SQLContext(object):
 
         if (cls._instantiatedContext is None
                 or SQLContext._instantiatedContext._sc._jsc is None):  # type: ignore[union-attr]
-            jsqlContext = sc._jvm.SparkSession.builder().sparkContext(  # type: ignore[attr-defined]
+            jsqlContext = sc._jvm.SparkSession.builder().sparkContext(  # type: ignore[union-attr]
                 sc._jsc.sc()).getOrCreate().sqlContext()  # type: ignore[attr-defined]
             sparkSession = SparkSession(sc, jsqlContext.sparkSession())
             cls(sc, sparkSession, jsqlContext)
@@ -742,7 +742,7 @@ class HiveContext(SQLContext):
         """
         jsc = sparkContext._jsc.sc()  # type: ignore[attr-defined]
         jtestHive = sparkContext.\
-            _jvm.org.apache.spark.sql.hive.test.TestHiveContext(  # type: ignore[attr-defined]
+            _jvm.org.apache.spark.sql.hive.test.TestHiveContext(  # type: ignore[union-attr]
                 jsc, False)
         return cls(sparkContext, jtestHive)
 

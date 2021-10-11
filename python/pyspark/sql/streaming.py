@@ -1022,7 +1022,7 @@ class DataStreamWriter(object):
                                  processingTime)
             interval = processingTime.strip()
             jTrigger = (
-                self._spark._sc  # type: ignore[attr-defined]
+                self._spark._sc  # type: ignore[attr-defined, union-attr]
                 ._jvm.org.apache.spark.sql.streaming.Trigger.ProcessingTime(interval)
             )
 
@@ -1030,7 +1030,7 @@ class DataStreamWriter(object):
             if once is not True:
                 raise ValueError('Value for once must be True. Got: %s' % once)
             jTrigger = (
-                self._spark._sc  # type: ignore[attr-defined]
+                self._spark._sc  # type: ignore[attr-defined, union-attr]
                 ._jvm.org.apache.spark.sql.streaming.Trigger.Once()
             )
 
@@ -1040,7 +1040,7 @@ class DataStreamWriter(object):
                                  continuous)
             interval = continuous.strip()
             jTrigger = (
-                self._spark._sc  # type: ignore[attr-defined]
+                self._spark._sc  # type: ignore[attr-defined, union-attr]
                 ._jvm.org.apache.spark.sql.streaming.Trigger.Continuous(interval)
             )
 
@@ -1217,7 +1217,7 @@ class DataStreamWriter(object):
         serializer = AutoBatchedSerializer(PickleSerializer())
         wrapped_func = _wrap_function(self._spark._sc, func, serializer, serializer)
         jForeachWriter = (
-            self._spark._sc    # type: ignore[attr-defined]
+            self._spark._sc    # type: ignore[attr-defined, union-attr]
             ._jvm.org.apache.spark.sql.execution.python.PythonForeachWriter(
                 wrapped_func, self._df._jdf.schema())
         )
@@ -1253,10 +1253,16 @@ class DataStreamWriter(object):
 
         from pyspark.java_gateway import ensure_callback_server_started
         gw = self._spark._sc._gateway  # type: ignore[attr-defined]
-        java_import(gw.jvm, "org.apache.spark.sql.execution.streaming.sources.*")
+        java_import(
+            gw.jvm,  # type: ignore[union-attr]
+            "org.apache.spark.sql.execution.streaming.sources.*"
+        )
 
         wrapped_func = ForeachBatchFunction(self._spark, func)
-        gw.jvm.PythonForeachBatchHelper.callForeachBatch(self._jwrite, wrapped_func)
+        gw.jvm.PythonForeachBatchHelper.callForeachBatch(  # type: ignore[union-attr]
+            self._jwrite,
+            wrapped_func
+        )
         ensure_callback_server_started(gw)
         return self
 

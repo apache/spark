@@ -277,12 +277,16 @@ class SparkSession(SparkConversionMixin):
         self._jsc = self._sc._jsc  # type: ignore[attr-defined]
         self._jvm = self._sc._jvm  # type: ignore[attr-defined]
         if jsparkSession is None:
-            if self._jvm.SparkSession.getDefaultSession().isDefined() \
-                    and not self._jvm.SparkSession.getDefaultSession().get() \
-                        .sparkContext().isStopped():
-                jsparkSession = self._jvm.SparkSession.getDefaultSession().get()
+            if (
+                self._jvm.SparkSession.getDefaultSession().isDefined()  # type: ignore[union-attr]
+                and
+                not self._jvm.SparkSession.getDefaultSession().get()  # type: ignore[union-attr]
+                        .sparkContext().isStopped()
+            ):
+                jsparkSession = \
+                    self._jvm.SparkSession.getDefaultSession().get()  # type: ignore[union-attr]
             else:
-                jsparkSession = self._jvm.SparkSession(self._jsc.sc())
+                jsparkSession = self._jvm.SparkSession(self._jsc.sc())  # type: ignore[union-attr]
         self._jsparkSession = jsparkSession
         self._jwrapped = self._jsparkSession.sqlContext()
         self._wrapped = SQLContext(self._sc, self, self._jwrapped)
@@ -295,8 +299,9 @@ class SparkSession(SparkConversionMixin):
                 or SparkSession._instantiatedSession._sc._jsc is None:  # type: ignore[attr-defined]
             SparkSession._instantiatedSession = self
             SparkSession._activeSession = self
-            self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
-            self._jvm.SparkSession.setActiveSession(self._jsparkSession)
+            self._jvm.SparkSession.setDefaultSession(  # type: ignore[union-attr]
+                self._jsparkSession)
+            self._jvm.SparkSession.setActiveSession(self._jsparkSession)  # type: ignore[union-attr]
 
     def _repr_html_(self) -> str:
         return """
@@ -344,8 +349,9 @@ class SparkSession(SparkConversionMixin):
         if sc is None:
             return None
         else:
-            if sc._jvm.SparkSession.getActiveSession().isDefined():
-                SparkSession(sc, sc._jvm.SparkSession.getActiveSession().get())
+            if sc._jvm.SparkSession.getActiveSession().isDefined():  # type: ignore[union-attr]
+                SparkSession(
+                    sc, sc._jvm.SparkSession.getActiveSession().get())  # type: ignore[union-attr]
                 return SparkSession._activeSession
             else:
                 return None
@@ -610,8 +616,10 @@ class SparkSession(SparkConversionMixin):
         try:
             # Try to access HiveConf, it will raise exception if Hive is not added
             conf = SparkConf()
-            if conf.get('spark.sql.catalogImplementation', 'hive').lower() == 'hive':
-                (SparkContext._jvm  # type: ignore[attr-defined]
+            if conf.get(
+                'spark.sql.catalogImplementation', 'hive'
+            ).lower() == 'hive':  # type: ignore[union-attr]
+                (SparkContext._jvm  # type: ignore[attr-defined, union-attr]
                  .org.apache.hadoop.hive.conf.HiveConf())
                 return SparkSession.builder\
                     .enableHiveSupport()\
@@ -619,7 +627,9 @@ class SparkSession(SparkConversionMixin):
             else:
                 return SparkSession.builder.getOrCreate()
         except (py4j.protocol.Py4JError, TypeError):
-            if conf.get('spark.sql.catalogImplementation', '').lower() == 'hive':
+            if conf.get(
+                'spark.sql.catalogImplementation', ''
+            ).lower() == 'hive':  # type: ignore[union-attr]
                 warnings.warn("Fall back to non-hive support because failing to access HiveConf, "
                               "please make sure you build spark with hive")
 
@@ -785,7 +795,7 @@ class SparkSession(SparkConversionMixin):
         Py4JJavaError: ...
         """
         SparkSession._activeSession = self
-        self._jvm.SparkSession.setActiveSession(self._jsparkSession)
+        self._jvm.SparkSession.setActiveSession(self._jsparkSession)  # type: ignore[union-attr]
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
 
@@ -840,7 +850,7 @@ class SparkSession(SparkConversionMixin):
             rdd, struct = self._createFromRDD(data.map(prepare), schema, samplingRatio)
         else:
             rdd, struct = self._createFromLocal(map(prepare, data), schema)
-        jrdd = self._jvm.SerDeUtil.toJavaArray(
+        jrdd = self._jvm.SerDeUtil.toJavaArray(  # type: ignore[union-attr]
             rdd._to_java_object_rdd()  # type: ignore[attr-defined]
         )
         jdf = self._jsparkSession.applySchemaToPythonRDD(jrdd.rdd(), struct.json())
@@ -941,8 +951,8 @@ class SparkSession(SparkConversionMixin):
         from pyspark.sql.context import SQLContext
         self._sc.stop()
         # We should clean the default session up. See SPARK-23228.
-        self._jvm.SparkSession.clearDefaultSession()
-        self._jvm.SparkSession.clearActiveSession()
+        self._jvm.SparkSession.clearDefaultSession()  # type: ignore[union-attr]
+        self._jvm.SparkSession.clearActiveSession()  # type: ignore[union-attr]
         SparkSession._instantiatedSession = None
         SparkSession._activeSession = None
         SQLContext._instantiatedContext = None

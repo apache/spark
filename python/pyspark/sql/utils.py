@@ -47,7 +47,7 @@ class CapturedException(Exception):
         self.stackTrace = (
             stackTrace if stackTrace is not None
             else (
-                SparkContext._jvm  # type: ignore[attr-defined]
+                SparkContext._jvm  # type: ignore[union-attr]
                 .org.apache.spark.util.Utils.exceptionString(origin)
             )
         )

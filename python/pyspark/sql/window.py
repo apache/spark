@@ -77,7 +77,9 @@ class Window(object):
         Creates a :class:`WindowSpec` with the partitioning defined.
         """
         sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.partitionBy(_to_java_cols(cols))
+        jspec = \
+            sc._jvm.org.apache.spark.sql.expressions.Window.partitionBy(  # type: ignore[union-attr]
+                _to_java_cols(cols))
         return WindowSpec(jspec)
 
     @staticmethod
@@ -87,7 +89,8 @@ class Window(object):
         Creates a :class:`WindowSpec` with the ordering defined.
         """
         sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.orderBy(_to_java_cols(cols))
+        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.orderBy(  # type: ignore[union-attr]
+            _to_java_cols(cols))
         return WindowSpec(jspec)
 
     @staticmethod
@@ -151,7 +154,9 @@ class Window(object):
         if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
         sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rowsBetween(start, end)
+        jspec = \
+            sc._jvm.org.apache.spark.sql.expressions.Window.rowsBetween(  # type: ignore[union-attr]
+                start, end)
         return WindowSpec(jspec)
 
     @staticmethod
@@ -218,7 +223,10 @@ class Window(object):
         if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
         sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rangeBetween(start, end)
+        jspec = (
+            sc._jvm  # type: ignore[union-attr]
+            .org.apache.spark.sql.expressions.Window.rangeBetween(start, end)
+        )
         return WindowSpec(jspec)
 
 

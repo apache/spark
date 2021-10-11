@@ -75,11 +75,11 @@ def from_avro(
 
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     try:
-        jc = sc._jvm.org.apache.spark.sql.avro.functions.from_avro(
+        jc = sc._jvm.org.apache.spark.sql.avro.functions.from_avro(  # type: ignore[union-attr]
             _to_java_column(data), jsonFormatSchema, options or {})
     except TypeError as e:
         if str(e) == "'JavaPackage' object is not callable":
-            _print_missing_jar("Avro", "avro", "avro", sc.version)
+            _print_missing_jar("Avro", "avro", "avro", sc.version)  # type: ignore[union-attr]
         raise
     return Column(jc)
 
@@ -120,13 +120,14 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     try:
         if jsonFormatSchema == "":
-            jc = sc._jvm.org.apache.spark.sql.avro.functions.to_avro(_to_java_column(data))
+            jc = sc._jvm.org.apache.spark.sql.avro.functions.to_avro(  # type: ignore[union-attr]
+                _to_java_column(data))
         else:
-            jc = sc._jvm.org.apache.spark.sql.avro.functions.to_avro(
+            jc = sc._jvm.org.apache.spark.sql.avro.functions.to_avro(  # type: ignore[union-attr]
                 _to_java_column(data), jsonFormatSchema)
     except TypeError as e:
         if str(e) == "'JavaPackage' object is not callable":
-            _print_missing_jar("Avro", "avro", "avro", sc.version)
+            _print_missing_jar("Avro", "avro", "avro", sc.version)  # type: ignore[union-attr]
         raise
     return Column(jc)
 

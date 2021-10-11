@@ -46,12 +46,12 @@ __all__ = ["Column"]
 
 def _create_column_from_literal(literal: Union["LiteralType", "DecimalLiteral"]) -> "Column":
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-    return sc._jvm.functions.lit(literal)
+    return sc._jvm.functions.lit(literal)  # type: ignore[union-attr]
 
 
 def _create_column_from_name(name: str) -> "Column":
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-    return sc._jvm.functions.col(name)
+    return sc._jvm.functions.col(name)  # type: ignore[union-attr]
 
 
 def _to_java_column(col: "ColumnOrName") -> JavaObject:
@@ -69,7 +69,7 @@ def _to_java_column(col: "ColumnOrName") -> JavaObject:
 
 
 def _to_seq(
-    sc: SparkContext,
+    sc: Optional[SparkContext],
     cols: Iterable["ColumnOrName"],
     converter: Optional[Callable[["ColumnOrName"], JavaObject]] = None,
 ) -> JavaObject:
@@ -81,7 +81,7 @@ def _to_seq(
     """
     if converter:
         cols = [converter(c) for c in cols]
-    return sc._jvm.PythonUtils.toSeq(cols)  # type: ignore[attr-defined]
+    return sc._jvm.PythonUtils.toSeq(cols)  # type: ignore[union-attr]
 
 
 def _to_list(
@@ -97,7 +97,7 @@ def _to_list(
     """
     if converter:
         cols = [converter(c) for c in cols]
-    return sc._jvm.PythonUtils.toList(cols)  # type: ignore[attr-defined]
+    return sc._jvm.PythonUtils.toList(cols)  # type: ignore[union-attr]
 
 
 def _unary_op(
@@ -115,7 +115,7 @@ def _unary_op(
 def _func_op(name: str, doc: str = '') -> Callable[["Column"], "Column"]:
     def _(self: "Column") -> "Column":
         sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-        jc = getattr(sc._jvm.functions, name)(self._jc)
+        jc = getattr(sc._jvm.functions, name)(self._jc)  # type: ignore[union-attr]
         return Column(jc)
     _.__doc__ = doc
     return _
@@ -128,7 +128,7 @@ def _bin_func_op(
 ) -> Callable[["Column", Union["Column", "LiteralType", "DecimalLiteral"]], "Column"]:
     def _(self: "Column", other: Union["Column", "LiteralType", "DecimalLiteral"]) -> "Column":
         sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-        fn = getattr(sc._jvm.functions, name)
+        fn = getattr(sc._jvm.functions, name)  # type: ignore[union-attr]
         jc = other._jc if isinstance(other, Column) else _create_column_from_literal(other)
         njc = fn(self._jc, jc) if not reverse else fn(jc, self._jc)
         return Column(njc)
@@ -874,8 +874,10 @@ class Column(object):
         sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
         if len(alias) == 1:
             if metadata:
-                jmeta = sc._jvm.org.apache.spark.sql.types.Metadata.fromJson(
-                    json.dumps(metadata))
+                jmeta = (
+                    sc._jvm.org.apache.spark.sql.types  # type: ignore[union-attr]
+                    .Metadata.fromJson(json.dumps(metadata))
+                )
                 return Column(getattr(self._jc, "as")(alias[0], jmeta))
             else:
                 return Column(getattr(self._jc, "as")(alias[0]))
