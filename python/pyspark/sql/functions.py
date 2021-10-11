@@ -229,7 +229,7 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     schema=("course", "year", "earnings")) \\
     ...     .groupby("course").agg(max_by("year", "earnings")).collect()
         [Row(course='Java', max_by(year, earnings)=2013), \
-        Row(course='dotNET', max_by(year, earnings)=2013)]
+    Row(course='dotNET', max_by(year, earnings)=2013)]
     """
     return _invoke_function("max_by", _to_java_column(col), _to_java_column(ord))
 
@@ -264,7 +264,7 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     schema=("course", "year", "earnings")) \\
     ...     .groupby("course").agg(min_by("year", "earnings")).collect()
         [Row(course='Java', min_by(year, earnings)=2012), \
-        Row(course='dotNET', min_by(year, earnings)=2012)]
+    Row(course='dotNET', min_by(year, earnings)=2012)]
     """
     return _invoke_function("min_by", _to_java_column(col), _to_java_column(ord))
 
