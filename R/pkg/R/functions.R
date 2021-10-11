@@ -1480,6 +1480,19 @@ setMethod("max",
           })
 
 #' @details
+#' \code{max_by}: Returns the value associated with the maximum value of ord.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases max_by max_by,Column-method
+#' @note max_by since 3.3.0
+setMethod("max_by",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "max_by", x@jc, y@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{md5}: Calculates the MD5 digest of a binary column and returns the value
 #' as a 32 character hex string.
 #'
@@ -1528,6 +1541,19 @@ setMethod("min",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "min", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{min_by}: Returns the value associated with the minimum value of ord.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases min_by min_by,Column-method
+#' @note min_by since 3.3.0
+setMethod("min_by",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "min_by", x@jc, y@jc)
             column(jc)
           })
 
