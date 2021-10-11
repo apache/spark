@@ -29,7 +29,6 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable.{Map => IMap}
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.util.control.NonFatal
-import scala.util.matching.Regex
 
 import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
@@ -38,7 +37,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.util.{Shell, StringUtils}
+import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords._
@@ -1499,65 +1498,9 @@ private[spark] object Client extends Logging {
           "getUserClasspath should only return 'file' or 'local' URIs but found: " + uri)
         inputPath
       }
-      val envVarResolvedFilePath = replaceEnvVars(replacedFilePath, sys.env)
+      val envVarResolvedFilePath = YarnSparkHadoopUtil.replaceEnvVars(replacedFilePath, sys.env)
       Paths.get(envVarResolvedFilePath).toAbsolutePath.toUri.toURL
     }
-  }
-
-  // scalastyle:off line.size.limit
-  /**
-   * Replace environment variables in a string according to the same rules as [[Environment]]:
-   * `$VAR_NAME` for Unix, `%VAR_NAME%` for Windows, and `{{VAR_NAME}}` for all OS.
-   * This support escapes for `$` and `%` characters, e.g.
-   * `\$FOO`, `^%FOO^%`, and `%%FOO%%` will be resolved to `$FOO`, `%FOO%`, and `%FOO%`,
-   * respectively, instead of being treated as variable names. Note that Unix variable naming
-   * conventions (alphanumeric plus underscore, case-sensitive, can't start with a digit) are
-   * used for both Unix and Windows, following the convention of Hadoop's [[Shell]]
-   * (see specifically [[Shell.getEnvironmentVariableRegex]]).
-   *
-   * @param unresolvedString The unresolved string which may contain variable references.
-   * @param env The System environment
-   * @param isWindows True iff running in a Windows environment
-   * @return The input string with variables replaced with their values from `env`
-   * @see [[https://pubs.opengroup.org/onlinepubs/000095399/basedefs/xbd_chap08.html Environment Variables (IEEE Std 1003.1-2017)]]
-   * @see [[https://en.wikibooks.org/wiki/Windows_Batch_Scripting#Quoting_and_escaping Windows Batch Scripting | Quoting and Escaping]]
-   */
-  // scalastyle:on line.size.limit
-  def replaceEnvVars(
-      unresolvedString: String,
-      env: IMap[String, String],
-      isWindows: Boolean = Shell.WINDOWS): String = {
-    val osResolvedString = if (isWindows) {
-      // ^% or %% can both be used as escapes for Windows
-      val windowsPattern = """(?i)(?:\^\^|\^%|%%|%([A-Z_][A-Z0-9_]*)%)""".r
-      windowsPattern.replaceAllIn(unresolvedString, m =>
-        Regex.quoteReplacement(m.matched match {
-          case "^^" => "^"
-          case "^%" => "%"
-          case "%%" => "%"
-          case _ => env.getOrElse(m.group(1), "")
-        })
-      )
-    } else {
-      val unixPattern = """(?i)(?:\\\\|\\\$|\$([A-Z_][A-Z0-9_]*)|\$\{([A-Z_][A-Z0-9_]*)})""".r
-      unixPattern.replaceAllIn(unresolvedString, m =>
-        Regex.quoteReplacement(m.matched match {
-          case """\\""" => """\"""
-          case """\$""" => """$"""
-          case str if str.startsWith("${") => env.getOrElse(m.group(2), "")
-          case _ => env.getOrElse(m.group(1), "")
-        })
-      )
-    }
-
-    // YARN uses `{{...}}` to represent OS-agnostic variable expansion strings. Normally the
-    // NodeManager would replace this string with an OS-specific replacement before launching
-    // the container. Here, it gets directly treated as an additional expansion string, which
-    // has the same net result.
-    // Ref: Javadoc for org.apache.hadoop.yarn.api.ApplicationConstants.Environment.$$()
-    val yarnPattern = """(?i)\{\{([A-Z_][A-Z0-9_]*)}}""".r
-    yarnPattern.replaceAllIn(osResolvedString,
-      m => Regex.quoteReplacement(env.getOrElse(m.group(1), "")))
   }
 
   private def getMainJarUri(mainJar: Option[String]): Option[URI] = {

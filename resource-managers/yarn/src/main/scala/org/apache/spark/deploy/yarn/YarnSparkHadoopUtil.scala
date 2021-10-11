@@ -19,7 +19,9 @@ package org.apache.spark.deploy.yarn
 
 import java.util.regex.{Matcher, Pattern}
 
+import scala.collection.immutable.{Map => IMap}
 import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.util.matching.Regex
 
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
@@ -93,12 +95,81 @@ object YarnSparkHadoopUtil {
     }
   }
 
+  /**
+   * Regex pattern to match the name of an environment variable. Note that Unix variable naming
+   * conventions (alphanumeric plus underscore, case-sensitive, can't start with a digit)
+   * are used for both Unix and Windows, following the convention of Hadoop's `Shell` class
+   * (see specifically [[org.apache.hadoop.util.Shell.getEnvironmentVariableRegex]]).
+   */
+  private val envVarNameRegex: String = "[A-Za-z_][A-Za-z0-9_]*"
+
+  /**
+   * Note that this regex only supports the `$VAR_NAME` and `%VAR_NAME%` syntax, for Unix and
+   * Windows respectively, and does not perform any handling of escapes. The Unix `${VAR_NAME}`
+   * syntax is not supported.
+   */
   private val environmentVariableRegex: String = {
     if (Utils.isWindows) {
-      "%([A-Za-z_][A-Za-z0-9_]*?)%"
+      s"%($envVarNameRegex)%"
     } else {
-      "\\$([A-Za-z_][A-Za-z0-9_]*)"
+      s"\\$$($envVarNameRegex)"
     }
+  }
+
+  // scalastyle:off line.size.limit
+  /**
+   * Replace environment variables in a string according to the same rules as
+   * [[org.apache.hadoop.yarn.api.ApplicationConstants.Environment]]:
+   * `$VAR_NAME` for Unix, `%VAR_NAME%` for Windows, and `{{VAR_NAME}}` for all OS.
+   * The `${VAR_NAME}` syntax is also supported for Unix.
+   * This support escapes for `$` and `\` (on Unix) and `%` and `^` characters (on Windows), e.g.
+   * `\$FOO`, `^%FOO^%`, and `%%FOO%%` will be resolved to `$FOO`, `%FOO%`, and `%FOO%`,
+   * respectively, instead of being treated as variable names.
+   *
+   * @param unresolvedString The unresolved string which may contain variable references.
+   * @param env The System environment
+   * @param isWindows True iff running in a Windows environment
+   * @return The input string with variables replaced with their values from `env`
+   * @see [[https://pubs.opengroup.org/onlinepubs/000095399/basedefs/xbd_chap08.html Environment Variables (IEEE Std 1003.1-2017)]]
+   * @see [[https://en.wikibooks.org/wiki/Windows_Batch_Scripting#Quoting_and_escaping Windows Batch Scripting | Quoting and Escaping]]
+   */
+  // scalastyle:on line.size.limit
+  def replaceEnvVars(
+      unresolvedString: String,
+      env: IMap[String, String],
+      isWindows: Boolean = Utils.isWindows): String = {
+    val osResolvedString = if (isWindows) {
+      // ^% or %% can both be used as escapes for Windows
+      val windowsPattern = ("""(?i)(?:\^\^|\^%|%%|%(""" + envVarNameRegex + ")%)").r
+      windowsPattern.replaceAllIn(unresolvedString, m =>
+        Regex.quoteReplacement(m.matched match {
+          case "^^" => "^"
+          case "^%" => "%"
+          case "%%" => "%"
+          case _ => env.getOrElse(m.group(1), "")
+        })
+      )
+    } else {
+      val unixPattern =
+        ("""(?i)(?:\\\\|\\\$|\$(""" + envVarNameRegex + """)|\$\{(""" + envVarNameRegex + ")})").r
+      unixPattern.replaceAllIn(unresolvedString, m =>
+        Regex.quoteReplacement(m.matched match {
+          case """\\""" => """\"""
+          case """\$""" => """$"""
+          case str if str.startsWith("${") => env.getOrElse(m.group(2), "")
+          case _ => env.getOrElse(m.group(1), "")
+        })
+      )
+    }
+
+    // YARN uses `{{...}}` to represent OS-agnostic variable expansion strings. Normally the
+    // NodeManager would replace this string with an OS-specific replacement before launching
+    // the container. Here, it gets directly treated as an additional expansion string, which
+    // has the same net result.
+    // Ref: Javadoc for org.apache.hadoop.yarn.api.ApplicationConstants.Environment.$$()
+    val yarnPattern = ("""(?i)\{\{(""" + envVarNameRegex + ")}}").r
+    yarnPattern.replaceAllIn(osResolvedString,
+      m => Regex.quoteReplacement(env.getOrElse(m.group(1), "")))
   }
 
   /**

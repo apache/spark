@@ -649,45 +649,6 @@ class ClientSuite extends SparkFunSuite with Matchers {
     assertUserClasspathUrls(cluster = true, replacementRootPath)
   }
 
-  test("SPARK-35672: test replaceEnvVars in Unix mode") {
-    Map(
-      "F_O_O$FOO$BAR" -> "F_O_OBAR",
-      "$FOO" -> "BAR",
-      "$F_O_O$FOO" -> "BarBAR",
-      "${FOO}" -> "BAR",
-      "$FOO.baz$BAR" -> "BAR.baz",
-      "{{FOO}}" -> "BAR",
-      "{{FOO}}$FOO" -> "BARBAR",
-      "%FOO%" -> "%FOO%",
-      """\$FOO\\\$FOO\${FOO}\\$FOO\\\\""" -> """$FOO\$FOO${FOO}\BAR\\"""
-    ).foreach { case (input, expected) =>
-      withClue(s"input string `$input`: ") {
-        val replaced =
-          Client.replaceEnvVars(input, Map("F_O_O" -> "Bar", "FOO" -> "BAR"), isWindows = false)
-        assert(replaced === expected)
-      }
-    }
-  }
-
-  test("SPARK-35672: test replaceEnvVars in Windows mode") {
-    Map(
-      "Foo%FOO%%BAR%" -> "FooBAR",
-      "%FOO%" -> "BAR",
-      "%F_O_O%%FOO%" -> "BarBAR",
-      "{{FOO}}%FOO%" -> "BARBAR",
-      "$FOO" -> "$FOO",
-      "${FOO}" -> "${FOO}",
-      "%%FOO%%%FOO%%%%%%FOO%" -> "%FOO%BAR%%BAR",
-      "%FOO%^^^%FOO^%^FOO^^^^%FOO%" -> "BAR^%FOO%^FOO^^BAR"
-    ).foreach { case (input, expected) =>
-      withClue(s"input string `$input`: ") {
-        val replaced =
-          Client.replaceEnvVars(input, Map("F_O_O" -> "Bar", "FOO" -> "BAR"), isWindows = true)
-        assert(replaced === expected)
-      }
-    }
-  }
-
   private val matching = Seq(
     ("files URI match test1", "file:///file1", "file:///file2"),
     ("files URI match test2", "file:///c:file1", "file://c:file2"),
