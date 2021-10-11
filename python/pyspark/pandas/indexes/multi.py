@@ -1148,7 +1148,7 @@ class MultiIndex(Index):
 
         index_fields = self._index_fields_for_union_like(other, func_name="intersection")
 
-        default_name: List = [SPARK_INDEX_NAME_FORMAT(i) for i in range(self.nlevels)]
+        default_name: List[Name] = [SPARK_INDEX_NAME_FORMAT(i) for i in range(self.nlevels)]
         spark_frame_self = self.to_frame(name=default_name).to_spark()
         spark_frame_intersected = spark_frame_self.intersect(spark_frame_other)
         if keep_name:
@@ -1158,7 +1158,9 @@ class MultiIndex(Index):
 
         internal = InternalFrame(
             spark_frame=spark_frame_intersected,
-            index_spark_columns=[scol_for(spark_frame_intersected, col) for col in default_name],
+            index_spark_columns=[
+                scol_for(spark_frame_intersected, cast(str, col)) for col in default_name
+            ],
             index_names=index_names,
             index_fields=index_fields,
         )

@@ -10445,14 +10445,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ) -> List[Label]:
             newnames: List[Name]
             if is_scalar(v):
-                newnames = [cast(Any, v)]
+                newnames = [cast(Name, v)]
             elif is_list_like(v) and not is_dict_like(v):
-                newnames = list(cast(Sequence[Any], v))
+                newnames = list(cast(Sequence[Name], v))
             elif is_dict_like(v):
-                v_dict = cast(Dict[Name, Any], v)
+                v_dict = cast(Dict[Name, Name], v)
                 newnames = [v_dict[name] if name in v_dict else name for name in curnames]
             elif callable(v):
-                v_callable = cast(Callable[[Name], Any], v)
+                v_callable = cast(Callable[[Name], Name], v)
                 newnames = [v_callable(name) for name in curnames]
             else:
                 raise ValueError(
@@ -10949,9 +10949,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # |[[0.25, 2, 6], [0.5, 3, 7], [0.75, 4, 8]]|
             # +-----------------------------------------+
 
-            percentile_cols = []
-            percentile_col_names = []
-            column_labels = []
+            percentile_cols: List[Column] = []
+            percentile_col_names: List[str] = []
+            column_labels: List[Label] = []
             for label, column in zip(
                 self._internal.column_labels, self._internal.data_spark_column_names
             ):
@@ -10979,7 +10979,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # |[2, 3, 4]|[6, 7, 8]|
             # +---------+---------+
 
-            cols_dict: OrderedDict = OrderedDict()
+            cols_dict: Dict[str, List[Column]] = OrderedDict()
             for column in percentile_col_names:
                 cols_dict[column] = list()
                 for i in range(len(qq)):

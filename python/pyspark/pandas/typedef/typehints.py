@@ -41,11 +41,12 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype, pandas_dtype
 from pandas.api.extensions import ExtensionDtype
 
+extension_dtypes: Tuple[type, ...]
 try:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
 
     extension_dtypes_available = True
-    extension_dtypes: Tuple = (Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype)
+    extension_dtypes = (Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype)
 
     try:
         from pandas import BooleanDtype, StringDtype
