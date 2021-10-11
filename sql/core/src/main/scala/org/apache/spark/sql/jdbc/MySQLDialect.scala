@@ -17,14 +17,21 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
+import java.sql.{Connection, SQLException, Types}
+import java.util
 import java.util.Locale
 
+import scala.collection.JavaConverters._
+
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types.{BooleanType, DataType, FloatType, LongType, MetadataBuilder}
 
-private case object MySQLDialect extends JdbcDialect {
+private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
   override def canHandle(url : String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:mysql")
@@ -101,5 +108,66 @@ private case object MySQLDialect extends JdbcDialect {
     // We override getJDBCType so that FloatType is mapped to FLOAT instead
     case FloatType => Option(JdbcType("FLOAT", java.sql.Types.FLOAT))
     case _ => JdbcUtils.getCommonJDBCType(dt)
+  }
+
+  // CREATE INDEX syntax
+  // https://dev.mysql.com/doc/refman/8.0/en/create-index.html
+  override def createIndex(
+      indexName: String,
+      indexType: String,
+      tableName: String,
+      columns: Array[NamedReference],
+      columnsProperties: Array[util.Map[NamedReference, util.Properties]],
+      properties: util.Properties): String = {
+    val columnList = columns.map(col => quoteIdentifier(col.fieldNames.head))
+    var indexProperties: String = ""
+    val scalaProps = properties.asScala
+    if (!properties.isEmpty) {
+      scalaProps.foreach { case (k, v) =>
+        indexProperties = indexProperties + " " + s"$k $v"
+      }
+    }
+
+    // columnsProperties doesn't apply to MySQL so it is ignored
+    s"CREATE $indexType INDEX ${quoteIdentifier(indexName)} ON" +
+      s" ${quoteIdentifier(tableName)}" + s" (${columnList.mkString(", ")}) $indexProperties"
+  }
+
+  // SHOW INDEX syntax
+  // https://dev.mysql.com/doc/refman/8.0/en/show-index.html
+  override def indexExists(
+      conn: Connection,
+      indexName: String,
+      tableName: String,
+      options: JDBCOptions): Boolean = {
+    val sql = s"SHOW INDEXES FROM ${quoteIdentifier(tableName)}"
+    try {
+      val rs = JdbcUtils.executeQuery(conn, options, sql)
+      while (rs.next()) {
+        val retrievedIndexName = rs.getString("key_name")
+        if (conf.resolver(retrievedIndexName, indexName)) {
+          return true
+        }
+      }
+      false
+    } catch {
+      case _: Exception =>
+        logWarning("Cannot retrieved index info.")
+        false
+    }
+  }
+
+  override def classifyException(message: String, e: Throwable): AnalysisException = {
+    if (e.isInstanceOf[SQLException]) {
+      // Error codes are from
+      // https://mariadb.com/kb/en/mariadb-error-codes/#shared-mariadbmysql-error-codes
+      e.asInstanceOf[SQLException].getErrorCode match {
+        // ER_DUP_KEYNAME
+        case 1061 =>
+          throw new IndexAlreadyExistsException(message, cause = Some(e))
+        case _ =>
+      }
+    }
+    super.classifyException(message, e)
   }
 }

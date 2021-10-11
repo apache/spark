@@ -919,7 +919,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-33294: Add query resolved check before analyze InsertIntoDir") {
     withTempPath { path =>
-      val msg = intercept[AnalysisException] {
+      val ex = intercept[AnalysisException] {
         sql(
           s"""
             |INSERT OVERWRITE DIRECTORY '${path.getAbsolutePath}' USING PARQUET
@@ -929,8 +929,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             |  )
             |)
           """.stripMargin)
-      }.getMessage
-      assert(msg.contains("cannot resolve 'c3' given input columns"))
+      }
+      assert(ex.getErrorClass == "MISSING_COLUMN")
+      assert(ex.messageParameters.head == "c3")
     }
   }
 

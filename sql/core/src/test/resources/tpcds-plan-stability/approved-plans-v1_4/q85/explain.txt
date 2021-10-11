@@ -66,7 +66,7 @@ Condition : ((((isnotnull(ws_item_sk#1) AND isnotnull(ws_order_number#3)) AND is
 
 (4) BroadcastExchange
 Input [7]: [ws_item_sk#1, ws_web_page_sk#2, ws_order_number#3, ws_quantity#4, ws_sales_price#5, ws_net_profit#6, ws_sold_date_sk#7]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, false] as bigint), 32) | (cast(input[2, int, false] as bigint) & 4294967295))),false,false), [id=#9]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, false] as bigint), 32) | (cast(input[2, int, false] as bigint) & 4294967295))),false), [id=#9]
 
 (5) Scan parquet default.web_returns
 Output [9]: [wr_item_sk#10, wr_refunded_cdemo_sk#11, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_order_number#15, wr_fee#16, wr_refunded_cash#17, wr_returned_date_sk#18]
@@ -111,7 +111,7 @@ Condition : isnotnull(wp_web_page_sk#19)
 
 (14) BroadcastExchange
 Input [1]: [wp_web_page_sk#19]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#20]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#20]
 
 (15) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ws_web_page_sk#2]
@@ -138,7 +138,7 @@ Condition : (((isnotnull(cd_demo_sk#21) AND isnotnull(cd_marital_status#22)) AND
 
 (20) BroadcastExchange
 Input [3]: [cd_demo_sk#21, cd_marital_status#22, cd_education_status#23]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#24]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#24]
 
 (21) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [wr_refunded_cdemo_sk#11]
@@ -165,7 +165,7 @@ Condition : ((isnotnull(cd_demo_sk#25) AND isnotnull(cd_marital_status#26)) AND 
 
 (26) BroadcastExchange
 Input [3]: [cd_demo_sk#25, cd_marital_status#26, cd_education_status#27]
-Arguments: HashedRelationBroadcastMode(List(input[0, int, false], input[1, string, false], input[2, string, false]),false,false), [id=#28]
+Arguments: HashedRelationBroadcastMode(List(input[0, int, false], input[1, string, false], input[2, string, false]),false), [id=#28]
 
 (27) BroadcastHashJoin [codegen id : 8]
 Left keys [3]: [wr_returning_cdemo_sk#13, cd_marital_status#22, cd_education_status#23]
@@ -196,7 +196,7 @@ Input [3]: [ca_address_sk#29, ca_state#30, ca_country#31]
 
 (33) BroadcastExchange
 Input [2]: [ca_address_sk#29, ca_state#30]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#32]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#32]
 
 (34) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [wr_refunded_addr_sk#12]
@@ -235,7 +235,7 @@ Condition : isnotnull(r_reason_sk#34)
 
 (42) BroadcastExchange
 Input [2]: [r_reason_sk#34, r_reason_desc#35]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#36]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#36]
 
 (43) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [wr_reason_sk#14]
@@ -298,6 +298,6 @@ Input [2]: [d_date_sk#33, d_year#57]
 
 (53) BroadcastExchange
 Input [1]: [d_date_sk#33]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#58]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#58]
 
 
