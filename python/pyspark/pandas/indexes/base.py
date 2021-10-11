@@ -2405,27 +2405,30 @@ class Index(IndexOpsMixin):
         """
         from pyspark.pandas.indexes.multi import MultiIndex
 
+        other_idx: Index
         if isinstance(other, DataFrame):
             raise ValueError("Index data must be 1-dimensional")
         elif isinstance(other, MultiIndex):
             # Always returns a no-named empty Index if `other` is MultiIndex.
             return self._psdf.head(0).index.rename(None)
         elif isinstance(other, Index):
-            spark_frame_other = other.to_frame().to_spark()
-            keep_name = self.name == other.name
+            other_idx = other
+            spark_frame_other = other_idx.to_frame().to_spark()
+            keep_name = self.name == other_idx.name
         elif isinstance(other, Series):
-            spark_frame_other = other.to_frame().to_spark()
+            other_idx = Index(other)
+            spark_frame_other = other_idx.to_frame().to_spark()
             keep_name = True
         elif is_list_like(other):
-            other = Index(other)
-            if isinstance(other, MultiIndex):
-                return other.to_frame().head(0).index
-            spark_frame_other = other.to_frame().to_spark()
+            other_idx = Index(other)
+            if isinstance(other_idx, MultiIndex):
+                return other_idx.to_frame().head(0).index
+            spark_frame_other = other_idx.to_frame().to_spark()
             keep_name = True
         else:
             raise TypeError("Input must be Index or array-like")
 
-        index_fields = self._index_fields_for_union_like(other, func_name="intersection")
+        index_fields = self._index_fields_for_union_like(other_idx, func_name="intersection")
 
         spark_frame_self = self.to_frame(name=SPARK_DEFAULT_INDEX_NAME).to_spark()
         spark_frame_intersected = spark_frame_self.intersect(spark_frame_other)

@@ -437,8 +437,9 @@ class DataFrame(Frame, Generic[T]):
     4  2  5  4  3  9
     """
 
-    @no_type_check
-    def __init__(self, data=None, index=None, columns=None, dtype=None, copy=False):
+    def __init__(  # type: ignore[no-untyped-def]
+        self, data=None, index=None, columns=None, dtype=None, copy=False
+    ):
         if isinstance(data, InternalFrame):
             assert index is None
             assert columns is None
@@ -5286,7 +5287,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
                 internal = internal.with_filter(cond)
 
-            psdf = DataFrame(internal)
+            psdf: DataFrame = DataFrame(internal)
 
             null_counts = []
             for label in internal.column_labels:
@@ -10185,11 +10186,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ) -> Tuple[Callable[[Any], Any], Dtype, DataType]:
             if isinstance(mapper, dict):
                 mapper_dict = cast(dict, mapper)
-                if len(mapper_dict) == 0:
-                    if errors == "raise":
-                        raise KeyError("Index include label which is not in the `mapper`.")
-                    else:
-                        return DataFrame(self._internal)
 
                 type_set = set(map(lambda x: type(x), mapper_dict.values()))
                 if len(type_set) > 1:

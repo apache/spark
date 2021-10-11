@@ -387,8 +387,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Copy input data
     """
 
-    @no_type_check
-    def __init__(self, data=None, index=None, dtype=None, name=None, copy=False, fastpath=False):
+    def __init__(  # type: ignore[no-untyped-def]
+        self, data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
+    ):
         assert data is not None
 
         self._anchor: DataFrame

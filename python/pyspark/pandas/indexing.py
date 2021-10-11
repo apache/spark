@@ -551,6 +551,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         )
         psdf = DataFrame(internal)
 
+        psdf_or_psser: Union[DataFrame, Series]
         if returns_series:
             psdf_or_psser = first_series(psdf)
             if series_name is not None and series_name != psdf_or_psser.name:
