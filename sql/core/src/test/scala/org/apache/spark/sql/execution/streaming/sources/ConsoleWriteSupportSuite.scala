@@ -143,7 +143,7 @@ class ConsoleWriteSupportSuite extends StreamTest {
         .load()
         .select('value)
 
-      val query = input.writeStream.format("console").trigger(Trigger.Continuous(200)).start()
+      val query = input.writeStream.format("console").trigger(Trigger.continuous(200)).start()
       assert(query.isActive)
       query.stop()
     }

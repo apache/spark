@@ -217,7 +217,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     testStream(aggWithWatermark)(
       // batchId 0
       AddData(inputData, 15),
-      StartStream(Trigger.ProcessingTime("interval 1 second"), clock),
+      StartStream(Trigger.processingTime("interval 1 second"), clock),
       CheckAnswer(), // watermark = 0
       AssertOnQuery { _.stateNodes.size === 1 },
       AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
@@ -426,7 +426,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       val aggregated = x._2
       val clock = new StreamManualClock
       testStream(aggregated, Complete)(
-        StartStream(Trigger.ProcessingTime("10 seconds"), triggerClock = clock),
+        StartStream(Trigger.processingTime("10 seconds"), triggerClock = clock),
 
         // advance clock to 10 seconds, all keys retained
         AddData(inputData, 0L, 5L, 5L, 10L),
@@ -453,7 +453,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
           clock.advance(60 * 1000L)
           true
         },
-        StartStream(Trigger.ProcessingTime("10 seconds"), triggerClock = clock),
+        StartStream(Trigger.processingTime("10 seconds"), triggerClock = clock),
         // The commit log blown, causing the last batch to re-run
         CheckLastBatch((20L, 1), (85L, 1)),
         AssertOnQuery { q =>
@@ -482,7 +482,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         .where($"value".cast("date") >= date_sub(current_date(), 10))
         .select(($"value".cast("long") / SECONDS_PER_DAY).cast("long"), $"count(1)")
     testStream(aggregated, Complete)(
-      StartStream(Trigger.ProcessingTime("10 day"), triggerClock = clock),
+      StartStream(Trigger.processingTime("10 day"), triggerClock = clock),
       // advance clock to 10 days, should retain all keys
       AddData(inputData, 0L, 5L, 5L, 10L),
       AdvanceManualClock(MILLIS_PER_DAY * 10),
@@ -506,7 +506,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         clock.advance(MILLIS_PER_DAY * 60)
         true
       },
-      StartStream(Trigger.ProcessingTime("10 day"), triggerClock = clock),
+      StartStream(Trigger.processingTime("10 day"), triggerClock = clock),
       // Commit log blown, causing a re-run of the last batch
       CheckLastBatch((20L, 1), (85L, 1)),
 

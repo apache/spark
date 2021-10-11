@@ -133,7 +133,7 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
         def startQuery(): StreamingQuery = {
           df1.union(df2).writeStream
             .format("parquet")
-            .trigger(Trigger.AvailableNow)
+            .trigger(Trigger.availableNow)
             .option("checkpointLocation", checkpoint)
             .start(targetDir)
         }
@@ -194,7 +194,7 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
           df.writeStream
             .format("memory")
             .queryName(tableName)
-            .trigger(Trigger.AvailableNow)
+            .trigger(Trigger.availableNow)
             .start()
         }
 

@@ -892,7 +892,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         .flatMapGroupsWithState(Update, ProcessingTimeTimeout)(stateFunc)
 
     testStream(result, Update)(
-      StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+      StartStream(Trigger.processingTime("1 second"), triggerClock = clock),
       AddData(inputData, "a"),
       AdvanceManualClock(1 * 1000),
       CheckNewAnswer(("a", "1")),
@@ -910,7 +910,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(1))),
 
       StopStream,
-      StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+      StartStream(Trigger.processingTime("1 second"), triggerClock = clock),
 
       AddData(inputData, "c"),
       AdvanceManualClock(11 * 1000),
@@ -1577,7 +1577,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         .flatMapGroupsWithState(Update, ProcessingTimeTimeout(), initialState)(stateFunc)
 
     testStream(result, Update)(
-      StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+      StartStream(Trigger.processingTime("1 second"), triggerClock = clock),
       AddData(inputData, ("a", 1L)),
       AdvanceManualClock(1 * 1000), // a and c are processed here for the first time.
       CheckNewAnswer(("a", "1"), ("c", "2")),
@@ -1616,7 +1616,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
           .flatMapGroupsWithState(Update, ProcessingTimeTimeout)(stateFunc)
 
       testStream(result, Update)(
-        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        StartStream(Trigger.processingTime("1 second"), triggerClock = clock),
         AddData(inputData, ("a", 1L)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("a", "1"))

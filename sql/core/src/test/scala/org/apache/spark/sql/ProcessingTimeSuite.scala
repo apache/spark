@@ -32,15 +32,15 @@ class ProcessingTimeSuite extends SparkFunSuite {
       trigger.asInstanceOf[ProcessingTimeTrigger].intervalMs
     }
 
-    assert(getIntervalMs(Trigger.ProcessingTime(10.seconds)) === 10 * 1000)
-    assert(getIntervalMs(Trigger.ProcessingTime(10, TimeUnit.SECONDS)) === 10 * 1000)
-    assert(getIntervalMs(Trigger.ProcessingTime("1 minute")) === 60 * 1000)
-    assert(getIntervalMs(Trigger.ProcessingTime("interval 1 minute")) === 60 * 1000)
+    assert(getIntervalMs(Trigger.processingTime(10.seconds)) === 10 * 1000)
+    assert(getIntervalMs(Trigger.processingTime(10, TimeUnit.SECONDS)) === 10 * 1000)
+    assert(getIntervalMs(Trigger.processingTime("1 minute")) === 60 * 1000)
+    assert(getIntervalMs(Trigger.processingTime("interval 1 minute")) === 60 * 1000)
 
-    intercept[IllegalArgumentException] { Trigger.ProcessingTime(null: String) }
-    intercept[IllegalArgumentException] { Trigger.ProcessingTime("") }
-    intercept[IllegalArgumentException] { Trigger.ProcessingTime("invalid") }
-    intercept[IllegalArgumentException] { Trigger.ProcessingTime("1 month") }
-    intercept[IllegalArgumentException] { Trigger.ProcessingTime("1 year") }
+    intercept[IllegalArgumentException] { Trigger.processingTime(null: String) }
+    intercept[IllegalArgumentException] { Trigger.processingTime("") }
+    intercept[IllegalArgumentException] { Trigger.processingTime("invalid") }
+    intercept[IllegalArgumentException] { Trigger.processingTime("1 month") }
+    intercept[IllegalArgumentException] { Trigger.processingTime("1 year") }
   }
 }

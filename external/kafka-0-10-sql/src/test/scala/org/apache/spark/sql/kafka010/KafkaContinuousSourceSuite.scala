@@ -235,7 +235,7 @@ class KafkaContinuousSourceStressForDontFailOnDataLossSuite
     ds.writeStream
       .format("memory")
       .queryName("memory")
-      .trigger(Trigger.Continuous("1 second"))
+      .trigger(Trigger.continuous("1 second"))
       .start()
   }
 }

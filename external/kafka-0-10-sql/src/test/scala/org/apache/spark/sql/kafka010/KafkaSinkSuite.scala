@@ -342,7 +342,7 @@ class KafkaContinuousSinkSuite extends KafkaSinkStreamingSuiteBase {
     }
   }
 
-  override protected def defaultTrigger: Option[Trigger] = Some(Trigger.Continuous(1000))
+  override protected def defaultTrigger: Option[Trigger] = Some(Trigger.continuous(1000))
 
   test("generic - write big data with small producer buffer") {
     /* This test ensures that we understand the semantics of Kafka when

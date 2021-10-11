@@ -88,7 +88,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
               .withWatermark("timestamp", "0 second")
               .groupBy(windowFn($"timestamp", "10 seconds", "2 seconds"), $"mod")
               .agg(avg("value").as("avg_value"))
-              .writeStream.format("noop").trigger(Trigger.ProcessingTime("5 seconds")).start()
+              .writeStream.format("noop").trigger(Trigger.processingTime("5 seconds")).start()
           val completedQuery =
             input2.join(input3, "value").writeStream.format("noop").start()
           completedQuery.stop()

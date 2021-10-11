@@ -521,7 +521,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private var outputMode: OutputMode = OutputMode.Append
 
-  private var trigger: Trigger = Trigger.ProcessingTime(0L)
+  private var trigger: Trigger = Trigger.processingTime(0L)
 
   private var extraOptions = CaseInsensitiveMap[String](Map.empty)
 

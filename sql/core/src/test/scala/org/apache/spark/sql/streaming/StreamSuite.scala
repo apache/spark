@@ -321,7 +321,7 @@ class StreamSuite extends StreamTest {
 
     val inputData = MemoryStream[Int]
     testStream(inputData.toDS())(
-      StartStream(Trigger.ProcessingTime("10 seconds"), new StreamManualClock),
+      StartStream(Trigger.processingTime("10 seconds"), new StreamManualClock),
 
       /* -- batch 0 ----------------------- */
       // Add some data in batch 0
@@ -362,7 +362,7 @@ class StreamSuite extends StreamTest {
 
       /* Stop then restart the Stream  */
       StopStream,
-      StartStream(Trigger.ProcessingTime("10 seconds"), new StreamManualClock(60 * 1000)),
+      StartStream(Trigger.processingTime("10 seconds"), new StreamManualClock(60 * 1000)),
 
       /* -- batch 1 no rerun ----------------- */
       // batch 1 would not re-run because the latest batch id logged in commit log is 1
@@ -545,7 +545,7 @@ class StreamSuite extends StreamTest {
     // Test StreamingQuery.display
     val q = df.writeStream.queryName("memory_continuous_explain")
       .outputMode(OutputMode.Update()).format("memory")
-      .trigger(Trigger.Continuous("1 seconds"))
+      .trigger(Trigger.continuous("1 seconds"))
       .start()
       .asInstanceOf[StreamingQueryWrapper]
       .streamingQuery
@@ -584,7 +584,7 @@ class StreamSuite extends StreamTest {
     val q = df.writeStream.queryName("memory_microbatch_codegen")
       .outputMode(OutputMode.Update)
       .format("memory")
-      .trigger(Trigger.ProcessingTime("1 seconds"))
+      .trigger(Trigger.processingTime("1 seconds"))
       .start()
 
     try {
@@ -609,7 +609,7 @@ class StreamSuite extends StreamTest {
     val q = df.writeStream.queryName("memory_continuous_codegen")
       .outputMode(OutputMode.Update)
       .format("memory")
-      .trigger(Trigger.Continuous("1 seconds"))
+      .trigger(Trigger.continuous("1 seconds"))
       .start()
 
     try {
@@ -1157,7 +1157,7 @@ class StreamSuite extends StreamTest {
       .map(i => TaskContext.get().getLocalProperty(StreamExecution.IS_CONTINUOUS_PROCESSING))
       .writeStream.format("memory")
       .queryName("output")
-      .trigger(Trigger.Continuous("1 seconds"))
+      .trigger(Trigger.continuous("1 seconds"))
       .start()
     try {
       input.addData(1)
@@ -1238,7 +1238,7 @@ class StreamSuite extends StreamTest {
 
   // ProcessingTime trigger generates MicroBatchExecution, and ContinuousTrigger starts a
   // ContinuousExecution
-  Seq(Trigger.ProcessingTime("1 second"), Trigger.Continuous("1 second")).foreach { trigger =>
+  Seq(Trigger.processingTime("1 second"), Trigger.continuous("1 second")).foreach { trigger =>
     test(s"SPARK-30143: stop waits until timeout if blocked - trigger: $trigger") {
       BlockOnStopSourceProvider.enableBlocking()
       val sq = spark.readStream.format(classOf[BlockOnStopSourceProvider].getName)

@@ -84,9 +84,9 @@ class ContinuousSuiteBase extends StreamTest {
 
   // A continuous trigger that will only fire the initial time for the duration of a test.
   // This allows clean testing with manual epoch advancement.
-  protected val longContinuousTrigger = Trigger.Continuous("1 hour")
+  protected val longContinuousTrigger = Trigger.continuous("1 hour")
 
-  override protected val defaultTrigger = Trigger.Continuous(100)
+  override protected val defaultTrigger = Trigger.continuous(100)
 }
 
 class ContinuousSuite extends ContinuousSuiteBase {
@@ -234,7 +234,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
     spark.sparkContext.addSparkListener(listener)
     try {
       testStream(df)(
-        StartStream(Trigger.Continuous(100)),
+        StartStream(Trigger.continuous(100)),
         AddData(input, 0, 1, 2, 3),
         Execute { _ =>
           // Wait until a task is started, then kill its first attempt.
@@ -262,7 +262,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
     val query = df.writeStream
       .format("memory")
       .queryName("noharness")
-      .trigger(Trigger.Continuous(100))
+      .trigger(Trigger.continuous(100))
       .start()
 
     val expected = Set(0, 1, 2, 3)
@@ -329,7 +329,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       .select('value)
 
     testStream(df)(
-      StartStream(Trigger.Continuous(2012)),
+      StartStream(Trigger.continuous(2012)),
       AwaitEpoch(0),
       Execute { exec =>
         waitForRateSourceTriggers(exec.asInstanceOf[ContinuousExecution], 5)
@@ -348,24 +348,24 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       .select('value)
 
     testStream(df)(
-      StartStream(Trigger.Continuous(1012)),
+      StartStream(Trigger.continuous(1012)),
       AwaitEpoch(2),
       StopStream,
-      StartStream(Trigger.Continuous(1012)),
+      StartStream(Trigger.continuous(1012)),
       AwaitEpoch(4),
       StopStream,
-      StartStream(Trigger.Continuous(1012)),
+      StartStream(Trigger.continuous(1012)),
       AwaitEpoch(5),
       StopStream,
-      StartStream(Trigger.Continuous(1012)),
+      StartStream(Trigger.continuous(1012)),
       AwaitEpoch(6),
       StopStream,
-      StartStream(Trigger.Continuous(1012)),
+      StartStream(Trigger.continuous(1012)),
       AwaitEpoch(8),
       StopStream,
-      StartStream(Trigger.Continuous(1012)),
+      StartStream(Trigger.continuous(1012)),
       StopStream,
-      StartStream(Trigger.Continuous(1012)),
+      StartStream(Trigger.continuous(1012)),
       AwaitEpoch(15),
       StopStream,
       CheckAnswerRowsContains(scala.Range(0, 2500).map(Row(_))))
@@ -395,7 +395,7 @@ class ContinuousMetaSuite extends ContinuousSuiteBase {
       })
 
       testStream(df)(
-        StartStream(trigger = Trigger.Continuous(100),
+        StartStream(trigger = Trigger.continuous(100),
           checkpointLocation = checkpointDir.getAbsolutePath),
         AddData(input, 1),
         CheckAnswer(2),
@@ -439,7 +439,7 @@ class ContinuousEpochBacklogSuite extends ContinuousSuiteBase {
         .select('value)
 
       testStream(df)(
-        StartStream(Trigger.Continuous(1)),
+        StartStream(Trigger.continuous(1)),
         ExpectFailure[IllegalStateException] { e =>
           e.getMessage.contains("queue has exceeded its maximum")
         }

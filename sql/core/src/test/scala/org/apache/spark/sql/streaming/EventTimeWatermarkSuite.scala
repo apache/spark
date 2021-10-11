@@ -185,39 +185,39 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     // Trigger.Once to ensure that first and only trigger picks up the new data.
 
     testStream(aggWithWatermark)(
-      StartStream(Trigger.Once),  // to make sure the query is not running when adding data 1st time
+      StartStream(Trigger.once),  // to make sure the query is not running when adding data 1st time
       awaitTermination(),
 
       AddData(inputData, 15),
-      StartStream(Trigger.Once),
+      StartStream(Trigger.once),
       awaitTermination(),
       CheckNewAnswer(),
       assertEventStats(min = 15, max = 15, avg = 15, wtrmark = 0),
       // watermark should be updated to 15 - 10 = 5
 
       AddData(inputData, 10, 12, 14),
-      StartStream(Trigger.Once),
+      StartStream(Trigger.once),
       awaitTermination(),
       CheckNewAnswer(),
       assertEventStats(min = 10, max = 14, avg = 12, wtrmark = 5),
       // watermark should stay at 5
 
       AddData(inputData, 25),
-      StartStream(Trigger.Once),
+      StartStream(Trigger.once),
       awaitTermination(),
       CheckNewAnswer(),
       assertEventStats(min = 25, max = 25, avg = 25, wtrmark = 5),
       // watermark should be updated to 25 - 10 = 15
 
       AddData(inputData, 50),
-      StartStream(Trigger.Once),
+      StartStream(Trigger.once),
       awaitTermination(),
       CheckNewAnswer((10, 3)),   // watermark = 15 is used to generate this
       assertEventStats(min = 50, max = 50, avg = 50, wtrmark = 15),
       // watermark should be updated to 50 - 10 = 40
 
       AddData(inputData, 50),
-      StartStream(Trigger.Once),
+      StartStream(Trigger.once),
       awaitTermination(),
       CheckNewAnswer((15, 1), (25, 1)), // watermark = 40 is used to generate this
       assertEventStats(min = 50, max = 50, avg = 50, wtrmark = 40))
@@ -261,25 +261,25 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       // Offset log should have watermark recorded as 5.
       */
 
-      StartStream(Trigger.Once),
+      StartStream(Trigger.once),
       awaitTermination(),
 
       AddData(inputData, 25),
-      StartStream(Trigger.Once, checkpointLocation = checkpointDir.getAbsolutePath),
+      StartStream(Trigger.once, checkpointLocation = checkpointDir.getAbsolutePath),
       awaitTermination(),
       CheckNewAnswer(),
       assertEventStats(min = 25, max = 25, avg = 25, wtrmark = 5),
       // watermark should be updated to 25 - 10 = 15
 
       AddData(inputData, 50),
-      StartStream(Trigger.Once, checkpointLocation = checkpointDir.getAbsolutePath),
+      StartStream(Trigger.once, checkpointLocation = checkpointDir.getAbsolutePath),
       awaitTermination(),
       CheckNewAnswer((10, 3)),   // watermark = 15 is used to generate this
       assertEventStats(min = 50, max = 50, avg = 50, wtrmark = 15),
       // watermark should be updated to 50 - 10 = 40
 
       AddData(inputData, 50),
-      StartStream(Trigger.Once, checkpointLocation = checkpointDir.getAbsolutePath),
+      StartStream(Trigger.once, checkpointLocation = checkpointDir.getAbsolutePath),
       awaitTermination(),
       CheckNewAnswer((15, 1), (25, 1)), // watermark = 40 is used to generate this
       assertEventStats(min = 50, max = 50, avg = 50, wtrmark = 40))

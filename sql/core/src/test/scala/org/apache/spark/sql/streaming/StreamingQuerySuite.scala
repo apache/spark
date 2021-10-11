@@ -171,7 +171,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   }
 
   testQuietly("OneTime trigger, commit log, and exception") {
-    import Trigger.Once
+    import Trigger.once
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map { 6 / _}
 
@@ -179,7 +179,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertOnQuery(_.isActive),
       StopStream,
       AddData(inputData, 1, 2),
-      StartStream(trigger = Once),
+      StartStream(trigger = once),
       CheckAnswer(6, 3),
       StopStream, // clears out StreamTest state
       AssertOnQuery { q =>
@@ -193,15 +193,15 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         q.sink.asInstanceOf[MemorySink].clear()
         true
       },
-      StartStream(trigger = Once),
+      StartStream(trigger = once),
       CheckAnswer(6, 3), // ensure we fall back to offset log and reprocess batch
       StopStream,
       AddData(inputData, 3),
-      StartStream(trigger = Once),
+      StartStream(trigger = once),
       CheckLastBatch(2), // commit log should be back in place
       StopStream,
       AddData(inputData, 0),
-      StartStream(trigger = Once),
+      StartStream(trigger = once),
       ExpectFailure[SparkException](),
       AssertOnQuery(_.isActive === false),
       AssertOnQuery(q => {
@@ -266,7 +266,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     var lastProgressBeforeStop: StreamingQueryProgress = null
 
     testStream(mapped, OutputMode.Complete)(
-      StartStream(Trigger.ProcessingTime(1000), triggerClock = clock),
+      StartStream(Trigger.processingTime(1000), triggerClock = clock),
       AssertStreamExecThreadIsWaitingForTime(1000),
       AssertOnQuery(_.status.isDataAvailable === false),
       AssertOnQuery(_.status.isTriggerActive === false),
@@ -379,7 +379,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertOnQuery(_.status.message === "Stopped"),
 
       // Test status and progress after query terminated with error
-      StartStream(Trigger.ProcessingTime(1000), triggerClock = clock),
+      StartStream(Trigger.processingTime(1000), triggerClock = clock),
       AdvanceManualClock(1000), // ensure initial trigger completes before AddData
       AddData(inputData, 0),
       AdvanceManualClock(1000), // allow another trigger
@@ -834,7 +834,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val input = MemoryStream[Int]
     input.addData(1)
     val query = input.toDF().writeStream
-      .trigger(Trigger.Once())
+      .trigger(Trigger.once())
       .format("console")
       .start()
     failAfter(streamingTimeout) {
@@ -921,7 +921,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     )
 
     testStream(df)(
-      StartStream(trigger = Trigger.Continuous(100)),
+      StartStream(trigger = Trigger.continuous(100)),
       AssertOnQuery(_.logicalPlan.toJSON.contains("StreamingDataSourceV2Relation"))
     )
   }

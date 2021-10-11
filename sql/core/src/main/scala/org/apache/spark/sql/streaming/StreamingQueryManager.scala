@@ -297,17 +297,17 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
    */
   @throws[TimeoutException]
   private[sql] def startQuery(
-      userSpecifiedName: Option[String],
-      userSpecifiedCheckpointLocation: Option[String],
-      df: DataFrame,
-      extraOptions: Map[String, String],
-      sink: Table,
-      outputMode: OutputMode,
-      useTempCheckpointLocation: Boolean = false,
-      recoverFromCheckpointLocation: Boolean = true,
-      trigger: Trigger = Trigger.ProcessingTime(0),
-      triggerClock: Clock = new SystemClock(),
-      catalogAndIdent: Option[(TableCatalog, Identifier)] = None): StreamingQuery = {
+                               userSpecifiedName: Option[String],
+                               userSpecifiedCheckpointLocation: Option[String],
+                               df: DataFrame,
+                               extraOptions: Map[String, String],
+                               sink: Table,
+                               outputMode: OutputMode,
+                               useTempCheckpointLocation: Boolean = false,
+                               recoverFromCheckpointLocation: Boolean = true,
+                               trigger: Trigger = Trigger.processingTime(0),
+                               triggerClock: Clock = new SystemClock(),
+                               catalogAndIdent: Option[(TableCatalog, Identifier)] = None): StreamingQuery = {
     val query = createQuery(
       userSpecifiedName,
       userSpecifiedCheckpointLocation,

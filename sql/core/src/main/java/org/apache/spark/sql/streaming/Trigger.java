@@ -41,7 +41,7 @@ public class Trigger {
    *
    * @since 2.2.0
    */
-  public static Trigger ProcessingTime(long intervalMs) {
+  public static Trigger processingTime(long intervalMs) {
       return ProcessingTimeTrigger.create(intervalMs, TimeUnit.MILLISECONDS);
   }
 
@@ -57,7 +57,7 @@ public class Trigger {
    *
    * @since 2.2.0
    */
-  public static Trigger ProcessingTime(long interval, TimeUnit timeUnit) {
+  public static Trigger processingTime(long interval, TimeUnit timeUnit) {
       return ProcessingTimeTrigger.create(interval, timeUnit);
   }
 
@@ -72,7 +72,7 @@ public class Trigger {
    * }}}
    * @since 2.2.0
    */
-  public static Trigger ProcessingTime(Duration interval) {
+  public static Trigger processingTime(Duration interval) {
       return ProcessingTimeTrigger.apply(interval);
   }
 
@@ -85,7 +85,7 @@ public class Trigger {
    * }}}
    * @since 2.2.0
    */
-  public static Trigger ProcessingTime(String interval) {
+  public static Trigger processingTime(String interval) {
       return ProcessingTimeTrigger.apply(interval);
   }
 
@@ -97,7 +97,7 @@ public class Trigger {
    *
    * @since 2.2.0
    */
-  public static Trigger Once() {
+  public static Trigger once() {
     return OneTimeTrigger$.MODULE$;
   }
 
@@ -107,7 +107,7 @@ public class Trigger {
    *
    * @since 3.3.0
    */
-  public static Trigger AvailableNow() {
+  public static Trigger availableNow() {
     return AvailableNowTrigger$.MODULE$;
   }
 
@@ -117,7 +117,7 @@ public class Trigger {
    *
    * @since 2.3.0
    */
-  public static Trigger Continuous(long intervalMs) {
+  public static Trigger continuous(long intervalMs) {
     return ContinuousTrigger.apply(intervalMs);
   }
 
@@ -132,7 +132,7 @@ public class Trigger {
    *
    * @since 2.3.0
    */
-  public static Trigger Continuous(long interval, TimeUnit timeUnit) {
+  public static Trigger continuous(long interval, TimeUnit timeUnit) {
     return ContinuousTrigger.create(interval, timeUnit);
   }
 
@@ -147,7 +147,7 @@ public class Trigger {
    * }}}
    * @since 2.3.0
    */
-  public static Trigger Continuous(Duration interval) {
+  public static Trigger continuous(Duration interval) {
     return ContinuousTrigger.apply(interval);
   }
 
@@ -160,7 +160,7 @@ public class Trigger {
    * }}}
    * @since 2.3.0
    */
-  public static Trigger Continuous(String interval) {
+  public static Trigger continuous(String interval) {
     return ContinuousTrigger.apply(interval);
   }
 }

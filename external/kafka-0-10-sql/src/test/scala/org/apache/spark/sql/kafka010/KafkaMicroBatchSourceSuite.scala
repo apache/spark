@@ -270,7 +270,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     val clock = new StreamManualClock
 
     testStream(mapped)(
-      StartStream(Trigger.ProcessingTime(100), clock),
+      StartStream(Trigger.processingTime(100), clock),
       waitUntilBatchProcessed(clock),
       // 1 from smallest, 1 from middle, 8 from biggest
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107),
@@ -281,7 +281,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         11, 108, 109, 110, 111, 112, 113, 114, 115, 116
       ),
       StopStream,
-      StartStream(Trigger.ProcessingTime(100), clock),
+      StartStream(Trigger.processingTime(100), clock),
       waitUntilBatchProcessed(clock),
       // smallest now empty, 1 more from middle, 9 more from biggest
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
@@ -302,7 +302,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     val allData = Seq(1) ++ (10 to 20) ++ (100 to 200)
     withTempDir { dir =>
       testStream(mapped)(
-        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        StartStream(Trigger.once(), checkpointLocation = dir.getCanonicalPath),
         AssertOnQuery { q =>
           q.processAllAvailable()
           true
@@ -311,7 +311,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         StopStream,
 
         AddKafkaData(Set(topic), 1000 to 1010: _*),
-        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        StartStream(Trigger.once(), checkpointLocation = dir.getCanonicalPath),
         AssertOnQuery { q =>
           q.processAllAvailable()
           true
@@ -345,7 +345,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     val clock = new StreamManualClock
 
     testStream(mapped)(
-      StartStream(Trigger.ProcessingTime(100), clock),
+      StartStream(Trigger.processingTime(100), clock),
       waitUntilBatchProcessed(clock),
       // First Batch is always processed
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
@@ -399,7 +399,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     val allData = Seq(1, 2) ++ (10 to 25) ++ (100 to 125)
     withTempDir { dir =>
       testStream(mapped)(
-        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        StartStream(Trigger.once(), checkpointLocation = dir.getCanonicalPath),
         AssertOnQuery { q =>
           q.processAllAvailable()
           true
@@ -408,7 +408,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         StopStream,
 
         AddKafkaData(Set(topic), 1000 to 1010: _*),
-        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        StartStream(Trigger.once(), checkpointLocation = dir.getCanonicalPath),
         AssertOnQuery { q =>
           q.processAllAvailable()
           true
@@ -443,7 +443,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     val clock = new StreamManualClock
 
     testStream(mapped)(
-      StartStream(Trigger.ProcessingTime(100), clock),
+      StartStream(Trigger.processingTime(100), clock),
       waitUntilBatchProcessed(clock),
       // First Batch is always processed but it will process only 20
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
@@ -493,7 +493,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     val allData = Seq(1, 2) ++ (10 to 30) ++ (100 to 128)
     withTempDir { dir =>
       testStream(mapped)(
-        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        StartStream(Trigger.once(), checkpointLocation = dir.getCanonicalPath),
         AssertOnQuery { q =>
           q.processAllAvailable()
           true
@@ -502,7 +502,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         StopStream,
 
         AddKafkaData(Set(topic), 1000 to 1010: _*),
-        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        StartStream(Trigger.once(), checkpointLocation = dir.getCanonicalPath),
         AssertOnQuery { q =>
           q.processAllAvailable()
           true
@@ -529,7 +529,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     val mapped = kafka.map(kv => kv._2.toInt + 1)
     testStream(mapped)(
-      StartStream(trigger = Trigger.ProcessingTime(1)),
+      StartStream(trigger = Trigger.processingTime(1)),
       makeSureGetOffsetCalled,
       AddKafkaData(Set(topic), 1, 2, 3),
       CheckAnswer(2, 3, 4),
@@ -845,7 +845,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     val clock = new StreamManualClock
 
     testStream(kafka)(
-      StartStream(Trigger.ProcessingTime(100), clock),
+      StartStream(Trigger.processingTime(100), clock),
       waitUntilBatchProcessed(clock),
       // 5 from smaller topic, 5 from bigger one
       CheckLastBatch((0 to 4) ++ (100 to 104): _*),
@@ -858,7 +858,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       // smaller topic empty, 5 from bigger one
       CheckLastBatch(110 to 114: _*),
       StopStream,
-      StartStream(Trigger.ProcessingTime(100), clock),
+      StartStream(Trigger.processingTime(100), clock),
       waitUntilBatchProcessed(clock),
       // smallest now empty, 5 from bigger one
       CheckLastBatch(115 to 119: _*),
@@ -1024,7 +1024,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     // The message values are the same as their offsets to make the test easy to follow
     testUtils.withTransactionalProducer { producer =>
       testStream(mapped)(
-        StartStream(Trigger.ProcessingTime(100), clock),
+        StartStream(Trigger.processingTime(100), clock),
         waitUntilBatchProcessed,
         CheckAnswer(),
         WithOffsetSync(topicPartition, expectedOffset = 5) { () =>
@@ -1147,7 +1147,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     // The message values are the same as their offsets to make the test easy to follow
     testUtils.withTransactionalProducer { producer =>
       testStream(mapped)(
-        StartStream(Trigger.ProcessingTime(100), clock),
+        StartStream(Trigger.processingTime(100), clock),
         waitUntilBatchProcessed,
         CheckNewAnswer(),
         WithOffsetSync(topicPartition, expectedOffset = 5) { () =>
@@ -1273,7 +1273,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
   }
 
   test("SPARK-27494: read kafka record containing null key/values.") {
-    testNullableKeyValue(Trigger.ProcessingTime(100))
+    testNullableKeyValue(Trigger.processingTime(100))
   }
 
   test("SPARK-30656: minPartitions") {

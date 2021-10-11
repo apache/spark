@@ -274,7 +274,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
     val query = inputData.toDS()
 
     testStream(query)(
-      StartStream(Trigger.ProcessingTime(1000), triggerClock = clock),
+      StartStream(Trigger.processingTime(1000), triggerClock = clock),
       AdvanceManualClock(1000),
       waitUntilBatchProcessed,
       AssertOnQuery(query => {

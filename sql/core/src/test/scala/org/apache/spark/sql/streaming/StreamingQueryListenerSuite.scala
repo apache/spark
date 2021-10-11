@@ -83,7 +83,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       testStream(df, OutputMode.Append)(
 
         // Start event generated when query started
-        StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
+        StartStream(Trigger.processingTime(100), triggerClock = clock),
         AssertOnQuery { query =>
           assert(listener.startEvent !== null)
           assert(listener.startEvent.id === query.id)
@@ -125,7 +125,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         },
 
         // Termination event generated with exception message when stopped with error
-        StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
+        StartStream(Trigger.processingTime(100), triggerClock = clock),
         AssertStreamExecThreadToWaitForClock(),
         AddData(inputData, 0),
         AdvanceManualClock(100), // process bad data
@@ -182,7 +182,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     try {
       listeners.foreach(listener => spark.streams.addListener(listener))
       testStream(df, OutputMode.Append)(
-        StartStream(Trigger.Continuous(1000)),
+        StartStream(Trigger.continuous(1000)),
         StopStream,
         AssertOnQuery { query =>
           eventually(Timeout(streamingTimeout)) {
@@ -309,7 +309,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         }
         val clock = new StreamManualClock()
         val actions = mutable.ArrayBuffer[StreamAction]()
-        actions += StartStream(trigger = Trigger.ProcessingTime(10), triggerClock = clock)
+        actions += StartStream(trigger = Trigger.processingTime(10), triggerClock = clock)
         for (_ <- 1 to 100) {
           actions += AdvanceManualClock(10)
         }
@@ -437,7 +437,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       spark.streams.addListener(listener)
       testStream(df, OutputMode.Append)(
         StartStream(
-          Trigger.ProcessingTime(100),
+          Trigger.processingTime(100),
           triggerClock = clock,
           Map(noDataProgressIntervalKey -> "100")),
         // Batch 1
@@ -494,7 +494,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         val clock = new StreamManualClock()
         val result = input.toDF().select("value")
         testStream(result)(
-          StartStream(trigger = Trigger.ProcessingTime(10), triggerClock = clock),
+          StartStream(trigger = Trigger.processingTime(10), triggerClock = clock),
           AddData(input, 10),
           checkProgressEvent(1),
           AdvanceManualClock(10),

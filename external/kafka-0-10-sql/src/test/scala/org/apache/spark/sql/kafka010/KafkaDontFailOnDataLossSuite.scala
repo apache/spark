@@ -164,7 +164,7 @@ class KafkaDontFailOnDataLossSuite extends StreamTest with KafkaMissingOffsetsTe
       val query = df.writeStream
         .format("memory")
         .queryName(table)
-        .trigger(Trigger.Continuous(100))
+        .trigger(Trigger.continuous(100))
         .start()
       try {
         // `processAllAvailable` doesn't work for continuous processing, so just wait until the last

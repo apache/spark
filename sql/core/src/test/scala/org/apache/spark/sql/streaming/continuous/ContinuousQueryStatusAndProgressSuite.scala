@@ -33,7 +33,7 @@ class ContinuousQueryStatusAndProgressSuite extends ContinuousSuiteBase {
       assert(stream.status.isTriggerActive === false)
     }
 
-    val trigger = Trigger.Continuous(100)
+    val trigger = Trigger.continuous(100)
     testStream(input.toDF())(
       StartStream(trigger),
       Execute(assertStatus),

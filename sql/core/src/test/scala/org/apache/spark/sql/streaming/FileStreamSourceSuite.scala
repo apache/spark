@@ -1275,7 +1275,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       def startQuery(): StreamingQuery = {
         df.writeStream
           .format("parquet")
-          .trigger(Trigger.Once)
+          .trigger(Trigger.once)
           .option("checkpointLocation", checkpoint)
           .start(targetDir)
       }
@@ -1330,7 +1330,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       def startTriggerOnceQuery(): StreamingQuery = {
         df.writeStream
           .foreachBatch((_: Dataset[Row], _: Long) => {})
-          .trigger(Trigger.Once)
+          .trigger(Trigger.once)
           .option("checkpointLocation", checkpoint)
           .start()
       }
@@ -1355,7 +1355,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
             index += 1
             checkAnswer(df, Row(index.toString))
           })
-          .trigger(Trigger.AvailableNow)
+          .trigger(Trigger.availableNow)
           .option("checkpointLocation", checkpoint)
           .start()
       }
@@ -1707,7 +1707,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       options = srcOptions)
     val clock = new StreamManualClock()
     testStream(fileStream)(
-      StartStream(trigger = Trigger.ProcessingTime(10), triggerClock = clock),
+      StartStream(trigger = Trigger.processingTime(10), triggerClock = clock),
       AssertOnQuery { _ =>
         // Block until the first batch finishes.
         eventually(timeout(streamingTimeout)) {

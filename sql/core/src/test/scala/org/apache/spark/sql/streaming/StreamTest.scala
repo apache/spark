@@ -84,7 +84,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
     }
   }
 
-  protected val defaultTrigger = Trigger.ProcessingTime(0)
+  protected val defaultTrigger = Trigger.processingTime(0)
 
   /** How long to wait for an active stream to catch up when checking a result. */
   val streamingTimeout = 60.seconds

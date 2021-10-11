@@ -62,7 +62,7 @@ class NoopStreamSuite extends StreamTest {
 
   test("continuous") {
     val input = getRateDataFrame()
-    val query = input.writeStream.format("noop").trigger(Trigger.Continuous(200)).start()
+    val query = input.writeStream.format("noop").trigger(Trigger.continuous(200)).start()
     assert(query.isActive)
     query.stop()
   }
@@ -74,7 +74,7 @@ class NoopStreamSuite extends StreamTest {
         val query = input.writeStream
           .option("checkpointLocation", checkpointDir.getAbsolutePath)
           .format("noop")
-          .trigger(Trigger.Continuous(200))
+          .trigger(Trigger.continuous(200))
           .start()
         assert(query.isActive)
         query.stop()

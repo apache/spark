@@ -29,7 +29,7 @@ import org.apache.spark.sql.test.TestSparkSession
 
 // Trait to configure StreamTest for kafka continuous execution tests.
 trait KafkaContinuousTest extends KafkaSourceTest {
-  override val defaultTrigger = Trigger.Continuous(1000)
+  override val defaultTrigger = Trigger.continuous(1000)
 
   // We need more than the default local[2] to be able to schedule all partitions simultaneously.
   override protected def createSparkSession = new TestSparkSession(
