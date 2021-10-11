@@ -404,4 +404,16 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(fileFormat6.locationUri.isEmpty)
     assert(provider6 == Some("ORC"))
   }
+
+  test("SET CATALOG") {
+    comparePlans(
+      parser.parsePlan("SET CATALOG abc"),
+      SetCatalogCommand("abc"))
+    comparePlans(
+      parser.parsePlan("SET CATALOG 'a b c'"),
+      SetCatalogCommand("a b c"))
+    comparePlans(
+      parser.parsePlan("SET CATALOG `a b c`"),
+      SetCatalogCommand("a b c"))
+  }
 }

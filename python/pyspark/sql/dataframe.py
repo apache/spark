@@ -136,6 +136,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> sorted(df.collect()) == sorted(df2.collect())
         True
         >>> spark.catalog.dropTempView("people")
+        True
+
         """
         warnings.warn(
             "Deprecated in 2.0, use createOrReplaceTempView instead.",
@@ -164,6 +166,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...
         AnalysisException: u"Temporary table 'people' already exists;"
         >>> spark.catalog.dropTempView("people")
+        True
 
         """
         self._jdf.createTempView(name)
@@ -185,6 +188,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> sorted(df3.collect()) == sorted(df2.collect())
         True
         >>> spark.catalog.dropTempView("people")
+        True
 
         """
         self._jdf.createOrReplaceTempView(name)
@@ -209,6 +213,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...
         AnalysisException: u"Temporary table 'people' already exists;"
         >>> spark.catalog.dropGlobalTempView("people")
+        True
 
         """
         self._jdf.createGlobalTempView(name)
@@ -229,6 +234,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> sorted(df3.collect()) == sorted(df2.collect())
         True
         >>> spark.catalog.dropGlobalTempView("people")
+        True
 
         """
         self._jdf.createOrReplaceGlobalTempView(name)

@@ -105,7 +105,6 @@ class MissingPandasLikeMultiIndex(object):
     # Functions
     argsort = _unsupported_function("argsort")
     asof_locs = _unsupported_function("asof_locs")
-    equal_levels = _unsupported_function("equal_levels")
     factorize = _unsupported_function("factorize")
     format = _unsupported_function("format")
     get_indexer = _unsupported_function("get_indexer")

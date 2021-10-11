@@ -16,8 +16,11 @@
 #
 
 import sys
+from typing import Any, Optional
 
-from pyspark import since, _NoValue
+from py4j.java_gateway import JavaObject
+
+from pyspark import since, _NoValue  # type: ignore[attr-defined]
 
 
 class RuntimeConfig(object):
@@ -26,17 +29,17 @@ class RuntimeConfig(object):
     Options set here are automatically propagated to the Hadoop configuration during I/O.
     """
 
-    def __init__(self, jconf):
+    def __init__(self, jconf: JavaObject) -> None:
         """Create a new RuntimeConfig that wraps the underlying JVM object."""
         self._jconf = jconf
 
     @since(2.0)
-    def set(self, key, value):
+    def set(self, key: str, value: str) -> None:
         """Sets the given Spark runtime configuration property."""
         self._jconf.set(key, value)
 
     @since(2.0)
-    def get(self, key, default=_NoValue):
+    def get(self, key: str, default: Optional[str] = _NoValue) -> str:
         """Returns the value of Spark runtime configuration property for the given key,
         assuming it is set.
         """
@@ -49,25 +52,25 @@ class RuntimeConfig(object):
             return self._jconf.get(key, default)
 
     @since(2.0)
-    def unset(self, key):
+    def unset(self, key: str) -> None:
         """Resets the configuration property for the given key."""
         self._jconf.unset(key)
 
-    def _checkType(self, obj, identifier):
+    def _checkType(self, obj: Any, identifier: str) -> None:
         """Assert that an object is of type str."""
         if not isinstance(obj, str):
             raise TypeError("expected %s '%s' to be a string (was '%s')" %
                             (identifier, obj, type(obj).__name__))
 
     @since(2.4)
-    def isModifiable(self, key):
+    def isModifiable(self, key: str) -> bool:
         """Indicates whether the configuration property with the given key
         is modifiable in the current session.
         """
         return self._jconf.isModifiable(key)
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     from pyspark.sql.session import SparkSession
