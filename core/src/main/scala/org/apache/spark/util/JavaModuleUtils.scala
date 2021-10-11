@@ -21,13 +21,10 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config.{ConfigEntry, DRIVER_JAVA_MODULE_OPTIONS, DRIVER_JAVA_OPTIONS, EXECUTOR_JAVA_MODULE_OPTIONS, EXECUTOR_JAVA_OPTIONS, OptionalConfigEntry}
-import org.apache.spark.launcher.JavaModuleOptions
 
 object JavaModuleUtils {
 
   def isJavaVersionAtLeast17: Boolean = SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17)
-
-  def defaultModuleOptions(): String = JavaModuleOptions.DEFAULT_MODULE_OPTIONS.mkString(" ")
 
   def supplementJavaModuleOptions(conf: SparkConf): Unit = {
 

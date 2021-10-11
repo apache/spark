@@ -20,7 +20,7 @@ package org.apache.spark.internal
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.launcher.{JavaModuleOptions, SparkLauncher}
 import org.apache.spark.metrics.GarbageCollectionMetrics
 import org.apache.spark.network.shuffle.Constants
 import org.apache.spark.network.util.ByteUnit
@@ -28,7 +28,7 @@ import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.util.{JavaModuleUtils, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader.MAX_BUFFER_SIZE_BYTES
 
 package object config {
@@ -71,7 +71,7 @@ package object config {
     ConfigBuilder(SparkLauncher.DRIVER_JAVA_MODULE_OPTIONS)
       .version("3.3.0")
       .stringConf
-      .createWithDefault(JavaModuleUtils.defaultModuleOptions())
+      .createWithDefault(JavaModuleOptions.defaultModuleOptions())
 
   private[spark] val DRIVER_JAVA_OPTIONS =
     ConfigBuilder(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS)
@@ -288,7 +288,7 @@ package object config {
     ConfigBuilder(SparkLauncher.EXECUTOR_JAVA_MODULE_OPTIONS)
       .version("3.3.0")
       .stringConf
-      .createWithDefault(JavaModuleUtils.defaultModuleOptions())
+      .createWithDefault(JavaModuleOptions.defaultModuleOptions())
 
   private[spark] val EXECUTOR_JAVA_OPTIONS =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS)
