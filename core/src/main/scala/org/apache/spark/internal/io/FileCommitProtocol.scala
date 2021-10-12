@@ -25,7 +25,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapreduce._
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.EXEC_STAGING_DIR
@@ -56,6 +55,11 @@ import org.apache.spark.util.Utils
 @Unstable
 abstract class FileCommitProtocol extends Logging {
   import FileCommitProtocol._
+
+  /**
+   * The output path of this committer.
+   */
+  def outputPath: Path
 
   /**
    * Setups up a job. Must be called on the driver before any other methods can be invoked.
@@ -236,8 +240,7 @@ object FileCommitProtocol extends Logging {
 
   def getStagingDir(path: String, jobId: String, conf: Configuration): Path = {
     newVersionExternalTempPath(
-      new Path(path), conf,
-      SparkContext.getActive.get.conf.get(EXEC_STAGING_DIR), "spark", jobId)
+      new Path(path), conf, conf.get(EXEC_STAGING_DIR.key, ".spark-staging"), "spark", jobId)
   }
 
 
