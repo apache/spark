@@ -21,7 +21,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 
 public class JavaModuleOptions {
-    public static final String[] DEFAULT_MODULE_OPTIONS = new String[] {
+    private static final String[] DEFAULT_MODULE_OPTIONS = new String[] {
       "-XX:+IgnoreUnrecognizedVMOptions",
       "--add-opens=java.base/java.lang=ALL-UNNAMED",
       "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
