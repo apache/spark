@@ -21,7 +21,7 @@ name: Update build status workflow
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+  - cron: "*/15 * * * *"
 
 jobs:
   update:
