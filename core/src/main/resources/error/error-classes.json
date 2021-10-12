@@ -29,10 +29,6 @@
     "message" : [ "Cannot recognize hive type string: %s, column: %s" ],
     "sqlState" : "42000"
   },
-  "CANNOT_SET_TIMEOUT_DURATION" : {
-    "message" : [ "Cannot set timeout duration without enabling processing time timeout in [map|flatMap]GroupsWithState" ],
-    "sqlState" : "0A000"
-  },
   "CAST_CAUSES_OVERFLOW" : {
     "message" : [ "Casting %s to %s causes overflow" ],
     "sqlState" : "22005"
@@ -136,10 +132,6 @@
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
     "sqlState" : "42000"
   },
-  "MISSING_PARTITION_COLUMN" : {
-    "message" : [ "Partition column %s not found in schema %s" ],
-    "sqlState" : "42000"
-  },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [ "Unknown static partition column: %s" ],
     "sqlState" : "42000"
@@ -175,9 +167,6 @@
   "SERDE_INTERFACE_NOT_FOUND" : {
     "message" : [ "The SerDe interface removed since Hive 2.3(HIVE-15167). Please migrate your custom SerDes to Hive 2.3. See HIVE-15167 for more details." ],
     "sqlState" : "0A000"
-  },
-  "STATE_NOT_DEFINED_OR_ALREADY_REMOVED" : {
-    "message" : [ "State is either not defined or has already been removed" ]
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
