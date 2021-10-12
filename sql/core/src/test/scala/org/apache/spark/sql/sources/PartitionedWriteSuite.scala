@@ -25,7 +25,6 @@ import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
 import org.apache.spark.TestUtils
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.EXEC_STAGING_DIR
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -186,33 +185,6 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
             .mode("overwrite")
             .saveAsTable("t")
           checkAnswer(sql("select * from t"), df)
-        }
-      }
-    }
-  }
-
-  test("SPARK-36579: dynamic partition overwrite can use user defined staging dir") {
-    withTempDir { stagingDir =>
-      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
-        SQLConf.PartitionOverwriteMode.DYNAMIC.toString,
-        EXEC_STAGING_DIR.key -> stagingDir.getAbsolutePath) {
-        withTempDir { d =>
-          withTable("t") {
-            sql(
-              s"""
-                 | CREATE TABLE t(c1 int, p1 int) USING PARQUET PARTITIONED BY(p1)
-                 | LOCATION '${d.getAbsolutePath}'
-               """.stripMargin)
-
-            val df = Seq((1, 2), (3, 4)).toDF("c1", "p1")
-            df.write
-              .partitionBy("p1")
-              .mode("overwrite")
-              .saveAsTable("t")
-            checkAnswer(sql("SELECT * FROM t"), df)
-            checkAnswer(sql("SELECT * FROM t WHERE p1 = 2"), Row(1, 2) :: Nil)
-            checkAnswer(sql("SELECT * FROM t WHERE p1 = 4"), Row(3, 4) :: Nil)
-          }
         }
       }
     }
