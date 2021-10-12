@@ -501,15 +501,15 @@ private[joins] object UnsafeHashedRelation {
         .map(keyGenerator).map(_.copy()).toArray
       // val keys = candidate.keys().map(keyGenerator).map(_.copy()).toArray
       val distinctKeys = keys.distinct
-      print(s"Number of keys is ${keys.length}; distinct keys is ${distinctKeys.length} " +
-        s"key schema ${key}\n")
+      scala.Console.err.print(s"Number of keys is ${keys.length}; distinct keys is " +
+        s"${distinctKeys.length} key schema ${key}\n")
       val sizeEstimate = binaryMap.numKeys()
       val newBinaryMap = new BytesToBytesMap(
         taskMemoryManager,
         // Only 70% of the slots can be used before growing, more capacity help to reduce collision
         (sizeEstimate * 1.5 + 1).toInt,
         pageSizeBytes)
-      print("Building new map\n")
+      scala.Console.err.print(s"Compacting binary map at ${System.currentTimeMillis()}\n")
       for (keyFromOldMap <- distinctKeys) {
         val input = candidate.get(keyFromOldMap)
         while (input.hasNext) {
@@ -529,6 +529,7 @@ private[joins] object UnsafeHashedRelation {
         }
       }
       candidate.close()
+      scala.Console.err.print(s"Done compacting binary map at ${System.currentTimeMillis()}\n")
       new UnsafeHashedRelation(key.size, numFields, newBinaryMap)
     } else {
       candidate
@@ -1122,7 +1123,7 @@ private[joins] object LongHashedRelation {
     // if needed, compact the nodes of each linked lists such
     // that they are contiguous in memory
     val mapToUse = if (!map.keyIsUnique) {
-      scala.Console.err.print(s"Compacting map at ${System.currentTimeMillis()}\n")
+      scala.Console.err.print(s"Compacting long map at ${System.currentTimeMillis()}\n")
       val resultRow = new UnsafeRow(numFields)
       val keyIt = map.keys()
       val compactMap = new LongToUnsafeRowMap(taskMemoryManager, map.numUniqueKeys.toInt)
@@ -1135,7 +1136,7 @@ private[joins] object LongHashedRelation {
         }
       }
       map.free()
-      scala.Console.err.print(s"Done compacting map at ${System.currentTimeMillis()}\n")
+      scala.Console.err.print(s"Done compacting long map at ${System.currentTimeMillis()}\n")
       compactMap
     } else {
       map
