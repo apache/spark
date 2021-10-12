@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedDBObjectName}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
@@ -327,10 +327,24 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("create view -- basic") {
-    val v = "CREATE TEMPORARY VIEW a AS SELECT * FROM tab1"
-    val parsed = parser.parsePlan(v)
+    val v1 = "CREATE VIEW view1 AS SELECT * FROM tab1"
+    val parsed1 = parser.parsePlan(v1)
 
-    val expected = CreateViewCommand(
+    val expected1 = CreateView(
+      UnresolvedDBObjectName(Seq("view1"), false),
+      Seq.empty[(String, Option[String])],
+      None,
+      Map.empty[String, String],
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      false)
+    comparePlans(parsed1, expected1)
+
+    val v2 = "CREATE TEMPORARY VIEW a AS SELECT * FROM tab1"
+    val parsed2 = parser.parsePlan(v2)
+
+    val expected2 = CreateViewCommand(
       Seq("a").asTableIdentifier,
       Seq.empty[(String, Option[String])],
       None,
@@ -340,19 +354,39 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       false,
       false,
       LocalTempView)
-    comparePlans(parsed, expected)
+    comparePlans(parsed2, expected2)
   }
 
   test("create temp view - full") {
-    val v =
+    val v1 =
+      """
+        |CREATE OR REPLACE VIEW view1
+        |(col1, col3 COMMENT 'hello')
+        |TBLPROPERTIES('prop1Key'="prop1Val")
+        |COMMENT 'BLABLA'
+        |AS SELECT * FROM tab1
+      """.stripMargin
+    val parsed1 = parser.parsePlan(v1)
+    val expected1 = CreateView(
+      UnresolvedDBObjectName(Seq("view1"), false),
+      Seq("col1" -> None, "col3" -> Some("hello")),
+      Some("BLABLA"),
+      Map("prop1Key" -> "prop1Val"),
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      true)
+    comparePlans(parsed1, expected1)
+
+    val v2 =
       """
         |CREATE OR REPLACE GLOBAL TEMPORARY VIEW a
         |(col1, col3 COMMENT 'hello')
         |COMMENT 'BLABLA'
         |AS SELECT * FROM tab1
           """.stripMargin
-    val parsed = parser.parsePlan(v)
-    val expected = CreateViewCommand(
+    val parsed2 = parser.parsePlan(v2)
+    val expected2 = CreateViewCommand(
       Seq("a").asTableIdentifier,
       Seq("col1" -> None, "col3" -> Some("hello")),
       Some("BLABLA"),
@@ -362,7 +396,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       false,
       true,
       GlobalTempView)
-    comparePlans(parsed, expected)
+    comparePlans(parsed2, expected2)
   }
 
   test("create table like") {

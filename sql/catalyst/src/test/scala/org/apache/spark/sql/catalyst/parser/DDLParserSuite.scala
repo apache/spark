@@ -2201,44 +2201,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsed, expected)
   }
 
-  test("create view -- basic") {
-    val v = "CREATE VIEW view1 AS SELECT * FROM tab1"
-    val parsed = parsePlan(v)
-
-    val expected = CreateView(
-      UnresolvedDBObjectName(Seq("view1"), false),
-      Seq.empty[(String, Option[String])],
-      None,
-      Map.empty[String, String],
-      Some("SELECT * FROM tab1"),
-      parsePlan("SELECT * FROM tab1"),
-      false,
-      false)
-    comparePlans(parsed, expected)
-  }
-
-  test("create view - full") {
-    val v =
-      """
-        |CREATE OR REPLACE VIEW view1
-        |(col1, col3 COMMENT 'hello')
-        |TBLPROPERTIES('prop1Key'="prop1Val")
-        |COMMENT 'BLABLA'
-        |AS SELECT * FROM tab1
-      """.stripMargin
-    val parsed = parsePlan(v)
-    val expected = CreateView(
-      UnresolvedDBObjectName(Seq("view1"), false),
-      Seq("col1" -> None, "col3" -> Some("hello")),
-      Some("BLABLA"),
-      Map("prop1Key" -> "prop1Val"),
-      Some("SELECT * FROM tab1"),
-      parsePlan("SELECT * FROM tab1"),
-      false,
-      true)
-    comparePlans(parsed, expected)
-  }
-
   test("create view -- partitioned view") {
     val v1 = "CREATE VIEW view1 partitioned on (ds, hr) as select * from srcpart"
     intercept[ParseException] {
