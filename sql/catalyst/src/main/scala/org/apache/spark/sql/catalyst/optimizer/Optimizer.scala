@@ -281,7 +281,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewritePredicateSubquery.ruleName ::
       NormalizeFloatingNumbers.ruleName ::
       ReplaceUpdateFieldsExpression.ruleName ::
-      PullOutGroupingExpressions.ruleName :: Nil
+      PullOutGroupingExpressions.ruleName ::
+      RewriteLateralSubquery.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
