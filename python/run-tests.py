@@ -49,6 +49,7 @@ def print_red(text):
 
 
 def get_valid_filename(s):
+    """Replace whitespaces and special characters in the given string to get a valid file name."""
     s = s.strip().replace(' ', '_').replace(os.sep, '_')
     return re.sub(r'(?u)[^-\w.]', '', s)
 
