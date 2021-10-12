@@ -36,14 +36,17 @@ private[spark] class ExecutorPodsPollingSnapshotSource(
     pollingExecutor: ScheduledExecutorService) extends Logging {
 
   private val pollingInterval = conf.get(KUBERNETES_EXECUTOR_API_POLLING_INTERVAL)
+  private val pollingEnabled = conf.get(KUBERNETES_EXECUTOR_ENABLE_API_POLLING)
 
   private var pollingFuture: Future[_] = _
 
   def start(applicationId: String): Unit = {
-    require(pollingFuture == null, "Cannot start polling more than once.")
-    logDebug(s"Starting to check for executor pod state every $pollingInterval ms.")
-    pollingFuture = pollingExecutor.scheduleWithFixedDelay(
-      new PollRunnable(applicationId), pollingInterval, pollingInterval, TimeUnit.MILLISECONDS)
+    if (pollingEnabled) {
+      require(pollingFuture == null, "Cannot start polling more than once.")
+      logDebug(s"Starting to check for executor pod state every $pollingInterval ms.")
+      pollingFuture = pollingExecutor.scheduleWithFixedDelay(
+        new PollRunnable(applicationId), pollingInterval, pollingInterval, TimeUnit.MILLISECONDS)
+    }
   }
 
   def stop(): Unit = {
