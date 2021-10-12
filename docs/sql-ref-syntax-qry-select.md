@@ -180,6 +180,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
 * [Common Table Expression](sql-ref-syntax-qry-select-cte.html)
 * [Hints](sql-ref-syntax-qry-select-hints.html)
+* [FROM statement](sql-ref-syntax-qry-select-from-statement.html)
 * [Inline Table](sql-ref-syntax-qry-select-inline-table.html)
 * [File](sql-ref-syntax-qry-select-file.html)
 * [JOIN](sql-ref-syntax-qry-select-join.html)
