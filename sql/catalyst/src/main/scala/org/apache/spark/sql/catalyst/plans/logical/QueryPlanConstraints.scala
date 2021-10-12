@@ -118,10 +118,11 @@ trait ConstraintHelper {
     }
 
   /**
-   * Recursively explores the expressions which are null intolerant and returns all attributes
-   * in these expressions.
+   * Recursively explores the expressions which are null intolerant and returns all
+   * attributes/ExtractValues in these expressions for scalar/nested types respectively.
    */
-  private def scanNullIntolerantAttribute(expr: Expression): Seq[Attribute] = expr match {
+  private def scanNullIntolerantAttribute(expr: Expression): Seq[Expression] = expr match {
+    case e: ExtractValue => Seq(e)
     case a: Attribute => Seq(a)
     case _: NullIntolerant => expr.children.flatMap(scanNullIntolerantAttribute)
     case _ => Seq.empty[Attribute]

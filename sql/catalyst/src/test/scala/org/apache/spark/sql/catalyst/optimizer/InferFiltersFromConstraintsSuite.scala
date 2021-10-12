@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, LongType}
+import org.apache.spark.sql.types._
 
 class InferFiltersFromConstraintsSuite extends PlanTest {
 
@@ -315,5 +315,20 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         Inner,
         condition)
     }
+  }
+
+  test("SPARK-36978: IsNotNull constraints on nested types should apply at the member" +
+    "field instead of the root level nested type") {
+     val nestedTestRelation = LocalRelation('a.struct(StructType(
+      StructField("cstr", StringType) :: StructField("cint", IntegerType) :: Nil)))
+    val originalQuery = nestedTestRelation.
+      where('a.getField("cint") === 1 && 'a.getField("cstr") === "abc").analyze
+
+    val correctAnswer = nestedTestRelation
+      .where(IsNotNull('a.getField("cint")) && IsNotNull('a.getField("cstr"))
+        && 'a.getField("cint") === 1 && 'a.getField("cstr") === "abc")
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
   }
 }
