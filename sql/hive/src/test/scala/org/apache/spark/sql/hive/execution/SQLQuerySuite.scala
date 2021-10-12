@@ -2632,6 +2632,21 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
   }
+
+  test("SPARK-36905: read hive views without without explicit column names") {
+    withTempDir { dir =>
+      val t1Loc = s"file:///$dir/t1"
+      withTable("t1") {
+        withView("test_view") {
+          hiveClient.runSqlHive(
+            s"create table t1(id int) stored as avro location '$t1Loc'")
+          hiveClient.runSqlHive("insert into t1 select 2")
+          hiveClient.runSqlHive("create view test_view as select 1, id + 1 from t1")
+          checkAnswer(sql("select * from test_view"), Seq(Row(1, 3)))
+        }
+      }
+    }
+  }
 }
 
 @SlowHiveTest
