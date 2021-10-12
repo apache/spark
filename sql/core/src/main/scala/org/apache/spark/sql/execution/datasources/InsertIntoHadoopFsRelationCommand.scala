@@ -109,6 +109,7 @@ case class InsertIntoHadoopFsRelationCommand(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = jobId,
       outputPath = outputPath.toString,
+      hadoopConf,
       dynamicPartitionOverwrite = dynamicPartitionOverwrite)
 
     val doInsertion = if (mode == SaveMode.Append) {

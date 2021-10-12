@@ -17,6 +17,8 @@
 
 package org.apache.spark.internal.io
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.SparkFunSuite
 
 /**
@@ -58,8 +60,7 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
       FileCommitProtocol.instantiate(
         classOf[Other].getCanonicalName,
         "job",
-        "path",
-        false)
+        "path")
     }
   }
 
@@ -68,8 +69,7 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
       FileCommitProtocol.instantiate(
         classOf[NoMatchingArgs].getCanonicalName,
         "job",
-        "path",
-        false)
+        "path")
     }
   }
 
@@ -83,6 +83,7 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
       classOf[ClassicConstructorCommitProtocol].getCanonicalName,
       "job",
       "path",
+      new Configuration(),
       dynamic).asInstanceOf[ClassicConstructorCommitProtocol]
   }
 
@@ -97,6 +98,7 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
       classOf[FullConstructorCommitProtocol].getCanonicalName,
       "job",
       "path",
+      new Configuration(),
       dynamic).asInstanceOf[FullConstructorCommitProtocol]
   }
 
@@ -121,7 +123,7 @@ private class FullConstructorCommitProtocol(
   arg2: String,
   b: Boolean,
   val argCount: Int)
-  extends HadoopMapReduceCommitProtocol(arg1, arg2, b) {
+  extends HadoopMapReduceCommitProtocol(arg1, arg2, new Configuration(), b) {
 
   def this(arg1: String, arg2: String) = {
     this(arg1, arg2, false, 2)
