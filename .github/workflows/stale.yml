@@ -35,7 +35,8 @@ jobs:
           This isn't a judgement on the merit of the PR in any way. It's just
           a way of keeping the PR queue manageable.
 
-          If you'd like to revive this PR, please reopen it and ask a committer to remove the Stale tag!
+          If you'd like to revive this PR, please reopen it and ask a
+          committer to remove the Stale tag!
         days-before-stale: 100
         # Setting this to 0 is the same as setting it to 1.
         # See: https://github.com/actions/stale/issues/28
