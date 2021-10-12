@@ -248,7 +248,7 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     col : :class:`~pyspark.sql.Column` or str
         target column that the value will be returned
     ord : :class:`~pyspark.sql.Column` or str
-        column to be mimimized
+        column to be minimized
 
     Returns
     -------
