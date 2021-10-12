@@ -1,7 +1,7 @@
 ---
 layout: global
-title: SELECT
-displayTitle: SELECT
+title: FROM Statement
+displayTitle: FROM statement
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
