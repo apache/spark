@@ -2201,40 +2201,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsed, expected)
   }
 
-  test("create view -- partitioned view") {
-    val v1 = "CREATE VIEW view1 partitioned on (ds, hr) as select * from srcpart"
-    intercept[ParseException] {
-      parsePlan(v1)
-    }
-  }
-
-  test("create view - duplicate clauses") {
-    def createViewStatement(duplicateClause: String): String = {
-      s"""
-         |CREATE OR REPLACE VIEW view1
-         |(col1, col3 COMMENT 'hello')
-         |$duplicateClause
-         |$duplicateClause
-         |AS SELECT * FROM tab1
-      """.stripMargin
-    }
-    val sql1 = createViewStatement("COMMENT 'BLABLA'")
-    val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
-    intercept(sql1, "Found duplicate clauses: COMMENT")
-    intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
-  }
-
-  test("SPARK-32374: create temporary view with properties not allowed") {
-    assertUnsupported(
-      sql = """
-        |CREATE OR REPLACE TEMPORARY VIEW a.b.c
-        |(col1, col3 COMMENT 'hello')
-        |TBLPROPERTIES('prop1Key'="prop1Val")
-        |AS SELECT * FROM tab1
-      """.stripMargin,
-      containsThesePhrases = Seq("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"))
-  }
-
   test("SHOW TBLPROPERTIES table") {
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c"),
