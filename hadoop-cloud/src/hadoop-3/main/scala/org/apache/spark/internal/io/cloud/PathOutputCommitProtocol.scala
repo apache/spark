@@ -19,10 +19,10 @@ package org.apache.spark.internal.io.cloud
 
 import java.io.IOException
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, PathOutputCommitter, PathOutputCommitterFactory}
-
 import org.apache.spark.internal.io.FileNameSpec
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 
@@ -51,7 +51,7 @@ class PathOutputCommitProtocol(
     jobId: String,
     dest: String,
     dynamicPartitionOverwrite: Boolean = false)
-  extends HadoopMapReduceCommitProtocol(jobId, dest, false) with Serializable {
+  extends HadoopMapReduceCommitProtocol(jobId, dest, new Configuration(), false) with Serializable {
 
   if (dynamicPartitionOverwrite) {
     // until there's explicit extensions to the PathOutputCommitProtocols
