@@ -114,7 +114,8 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
 
     val podsWatchEventSource = new ExecutorPodsWatchSnapshotSource(
       snapshotsStore,
-      kubernetesClient)
+      kubernetesClient,
+      sc.conf)
 
     val eventsPollingExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
       "kubernetes-executor-pod-polling-sync")
