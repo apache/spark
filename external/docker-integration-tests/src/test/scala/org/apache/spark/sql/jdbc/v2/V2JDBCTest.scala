@@ -203,6 +203,14 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(jdbcTable.indexExists("i2") == false)
 
         val properties = new util.Properties();
+        val indexType = "DUMMY"
+        var m = intercept[UnsupportedOperationException] {
+          jdbcTable.createIndex("i1", indexType, Array(FieldReference("col1")),
+            Array.empty[util.Map[NamedReference, util.Properties]], properties)
+        }.getMessage
+        assert(m.contains(s"Index Type $indexType is not supported." +
+          s" The supported Index Types are: BTREE and HASH"))
+
         jdbcTable.createIndex("i1", "BTREE", Array(FieldReference("col1")),
           Array.empty[util.Map[NamedReference, util.Properties]], properties)
 
@@ -213,7 +221,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(jdbcTable.indexExists("i1") == true)
         assert(jdbcTable.indexExists("i2") == true)
 
-        var m = intercept[IndexAlreadyExistsException] {
+        m = intercept[IndexAlreadyExistsException] {
           jdbcTable.createIndex("i1", "", Array(FieldReference("col1")),
             Array.empty[util.Map[NamedReference, util.Properties]], properties)
         }.getMessage
