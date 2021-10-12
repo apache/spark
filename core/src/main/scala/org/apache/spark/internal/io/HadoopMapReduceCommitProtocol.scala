@@ -104,7 +104,7 @@ class HadoopMapReduceCommitProtocol(
    * The staging directory of this write job. Spark uses it to deal with files with absolute output
    * path, or writing data into partitioned directory with dynamicPartitionOverwrite=true.
    */
-  protected def stagingDir = getStagingDir(path, jobId)
+  protected var stagingDir: Path = _
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.getConstructor().newInstance()
@@ -113,6 +113,7 @@ class HadoopMapReduceCommitProtocol(
       case c: Configurable => c.setConf(context.getConfiguration)
       case _ => ()
     }
+    stagingDir = getStagingDir(path, jobId, context.getConfiguration)
     format.getOutputCommitter(context)
   }
 
@@ -168,14 +169,6 @@ class HadoopMapReduceCommitProtocol(
     // the file name is fine and won't overflow.
     val split = taskContext.getTaskAttemptID.getTaskID.getId
     f"${spec.prefix}part-$split%05d-$jobId${spec.suffix}"
-  }
-
-  override def outputPath: Path = {
-    if (dynamicPartitionOverwrite) {
-      stagingDir
-    } else {
-      new Path(path)
-    }
   }
 
   override def setupJob(jobContext: JobContext): Unit = {

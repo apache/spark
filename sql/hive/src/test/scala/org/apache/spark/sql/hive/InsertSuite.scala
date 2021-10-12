@@ -26,13 +26,13 @@ import org.apache.hadoop.hive.ql.exec.TaskRunner
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkException
+import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.SQLFileCommitProtocolUtils
 import org.apache.spark.util.Utils
 
 case class TestData(key: Int, value: String)
@@ -543,27 +543,27 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     val inputPath = new Path("/tmp/b/c")
     var stagingDir = "tmp/b"
     val id = TaskRunner.getTaskRunnerID
-    var path = SQLFileCommitProtocolUtils.
+    var path = FileCommitProtocol.
       getStagingDir(inputPath, conf, stagingDir, "hive", id.toString)
     assert(path.toString.indexOf("/tmp/b_hive_") != -1)
 
     stagingDir = "tmp/b/c"
-    path = SQLFileCommitProtocolUtils.getStagingDir(
+    path = FileCommitProtocol.getStagingDir(
       inputPath, conf, stagingDir, "hive", id.toString)
     assert(path.toString.indexOf("/tmp/b/c/.hive-staging_hive_") != -1)
 
     stagingDir = "d/e"
-    path = SQLFileCommitProtocolUtils.getStagingDir(
+    path = FileCommitProtocol.getStagingDir(
       inputPath, conf, stagingDir, "hive", id.toString)
     assert(path.toString.indexOf("/tmp/b/c/.hive-staging_hive_") != -1)
 
     stagingDir = ".d/e"
-    path = SQLFileCommitProtocolUtils.getStagingDir(
+    path = FileCommitProtocol.getStagingDir(
       inputPath, conf, stagingDir, "hive", id.toString)
     assert(path.toString.indexOf("/tmp/b/c/.d/e_hive_") != -1)
 
     stagingDir = "/tmp/c/"
-    path = SQLFileCommitProtocolUtils.getStagingDir(
+    path = FileCommitProtocol.getStagingDir(
       inputPath, conf, stagingDir, "hive", id.toString)
     assert(path.toString.indexOf("/tmp/c_hive_") != -1)
   }

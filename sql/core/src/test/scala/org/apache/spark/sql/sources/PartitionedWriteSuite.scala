@@ -25,6 +25,7 @@ import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
 import org.apache.spark.TestUtils
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.EXEC_STAGING_DIR
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -194,7 +195,7 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
     withTempDir { stagingDir =>
       withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
         SQLConf.PartitionOverwriteMode.DYNAMIC.toString,
-        SQLConf.FILE_COMMIT_STAGING_DIR.key -> stagingDir.getAbsolutePath) {
+        EXEC_STAGING_DIR.key -> stagingDir.getAbsolutePath) {
         withTempDir { d =>
           withTable("t") {
             sql(

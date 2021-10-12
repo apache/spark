@@ -40,7 +40,6 @@ import org.apache.spark.sql.execution.datasources.{BucketingUtils, FileFormatWri
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.HiveVersion
-import org.apache.spark.sql.util.SQLFileCommitProtocolUtils._
 
 // Base trait from which all hive insert statement physical execution extends.
 private[hive] trait SaveAsHiveFile extends DataWritingCommand {
@@ -135,7 +134,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     if (hiveVersionsUsingOldExternalTempPath.contains(hiveVersion)) {
       oldVersionExternalTempPath(path, hadoopConf, scratchDir)
     } else if (hiveVersionsUsingNewExternalTempPath.contains(hiveVersion)) {
-      val externalTempPath = newVersionExternalTempPath(
+      val externalTempPath = FileCommitProtocol.newVersionExternalTempPath(
         path, hadoopConf, stagingDir, "hive", TaskRunner.getTaskRunnerID.toString)
       createdTempDir = Some(externalTempPath.getParent)
       externalTempPath
@@ -168,7 +167,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       hadoopConf: Configuration,
       scratchDir: String): Path = {
     val extURI: URI = path.toUri
-    val scratchPath = new Path(scratchDir, executionId("hive"))
+    val scratchPath = new Path(scratchDir, FileCommitProtocol.executionId("hive"))
     var dirPath = new Path(
       extURI.getScheme,
       extURI.getAuthority,
