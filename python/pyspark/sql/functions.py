@@ -220,7 +220,6 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql.functions import max_by
     >>> df = spark.createDataFrame([
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
@@ -257,7 +256,6 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql.functions import min_by
     >>> df = spark.createDataFrame([
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
