@@ -46,7 +46,10 @@ trait ShowNamespacesSuiteBase extends command.ShowNamespacesSuiteBase {
   }
 }
 
-class ShowNamespacesSuite extends ShowNamespacesSuiteBase with CommandSuiteBase {
+class ShowNamespacesSuite extends ShowNamespacesSuiteBase
+    with CommandSuiteBase with TestsV1AndV2Commands {
+  override def version: String = super[TestsV1AndV2Commands].version
+
   test("case sensitivity") {
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
