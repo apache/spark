@@ -82,23 +82,33 @@ private[spark] class TaskContextImpl(
   @volatile private var _fetchFailedException: Option[FetchFailedException] = None
 
   @GuardedBy("this")
-  override def addTaskCompletionListener(listener: TaskCompletionListener)
-      : this.type = synchronized {
-    if (completed) {
+  override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
+    val needToCallListener = synchronized {
+      if (completed) {
+        true
+      } else {
+        onCompleteCallbacks += listener
+        false
+      }
+    }
+    if (needToCallListener) {
       listener.onTaskCompletion(this)
-    } else {
-      onCompleteCallbacks += listener
     }
     this
   }
 
   @GuardedBy("this")
-  override def addTaskFailureListener(listener: TaskFailureListener)
-      : this.type = synchronized {
-    if (failed) {
+  override def addTaskFailureListener(listener: TaskFailureListener): this.type = {
+    val needToCallListener = synchronized {
+      if (failed) {
+        true
+      } else {
+        onFailureCallbacks += listener
+        false
+      }
+    }
+    if (needToCallListener) {
       listener.onTaskFailure(this, failure)
-    } else {
-      onFailureCallbacks += listener
     }
     this
   }
@@ -108,19 +118,23 @@ private[spark] class TaskContextImpl(
   }
 
   @GuardedBy("this")
-  private[spark] override def markTaskFailed(error: Throwable): Unit = synchronized {
-    if (failed) return
-    failed = true
-    failure = error
+  private[spark] override def markTaskFailed(error: Throwable): Unit = {
+    synchronized {
+      if (failed) return
+      failed = true
+      failure = error
+    }
     invokeListeners(onFailureCallbacks.toSeq, "TaskFailureListener", Option(error)) {
       _.onTaskFailure(this, error)
     }
   }
 
   @GuardedBy("this")
-  private[spark] override def markTaskCompleted(error: Option[Throwable]): Unit = synchronized {
-    if (completed) return
-    completed = true
+  private[spark] override def markTaskCompleted(error: Option[Throwable]): Unit = {
+    synchronized {
+      if (completed) return
+      completed = true
+    }
     invokeListeners(onCompleteCallbacks.toSeq, "TaskCompletionListener", error) {
       _.onTaskCompletion(this)
     }
