@@ -26,7 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
  * The trait that enables running a test for both v1 and v2 command.
  */
 trait TestsV1AndV2Commands extends DDLCommandTestUtils {
-  var _version: String = ""
+  private var _version: String = ""
   override def commandVersion: String = _version
 
   // Tests using V1 catalogs will run with `spark.sql.legacy.useV1Command` on and off
@@ -34,11 +34,7 @@ trait TestsV1AndV2Commands extends DDLCommandTestUtils {
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
     (implicit pos: Position): Unit = {
     Seq(true, false).foreach { useV1Command =>
-      _version = if (useV1Command) {
-        "V1"
-      } else {
-        "V2"
-      }
+      _version = if (useV1Command) "V1" else "V2"
       super.test(testName, testTags: _*) {
         withSQLConf(SQLConf.LEGACY_USE_V1_COMMAND.key -> useV1Command.toString) {
           testFun

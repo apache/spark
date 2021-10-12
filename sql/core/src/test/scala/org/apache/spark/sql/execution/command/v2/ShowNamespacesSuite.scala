@@ -27,6 +27,8 @@ import org.apache.spark.sql.internal.SQLConf
  * The class contains tests for the `SHOW NAMESPACES` command to check V2 table catalogs.
  */
 class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSuiteBase {
+  override def commandVersion: String = "V2" // There is only V2 variant of SHOW NAMESPACES.
+
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.testcat_no_namespace", classOf[BasicInMemoryTableCatalog].getName)
 
