@@ -21,8 +21,8 @@ license: |
 
 ### Description
 
-Spark supports a `FROM` statement and conforms to the ANSI SQL standard. Queries are
-used to retrieve result sets from one or more tables. The following section
+Spark supports a hive-style `FROM` statement and conforms to the ANSI SQL standard.
+Queries are used to retrieve result sets from one or more tables. The following section
 describes the overall query syntax.
 
 ### Syntax
