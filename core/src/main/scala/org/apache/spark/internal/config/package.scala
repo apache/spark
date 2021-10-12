@@ -20,7 +20,7 @@ package org.apache.spark.internal
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.launcher.{JavaModuleOptions, SparkLauncher}
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.metrics.GarbageCollectionMetrics
 import org.apache.spark.network.shuffle.Constants
 import org.apache.spark.network.util.ByteUnit
@@ -66,12 +66,6 @@ package object config {
       .version("1.0.0")
       .stringConf
       .createOptional
-
-  private[spark] val DRIVER_JAVA_MODULE_OPTIONS =
-    ConfigBuilder(SparkLauncher.DRIVER_JAVA_MODULE_OPTIONS)
-      .version("3.3.0")
-      .stringConf
-      .createWithDefault(JavaModuleOptions.defaultModuleOptions())
 
   private[spark] val DRIVER_JAVA_OPTIONS =
     ConfigBuilder(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS)
@@ -283,12 +277,6 @@ package object config {
       .version("3.1.0")
       .stringConf
       .createWithDefaultString("file,hdfs")
-
-  private[spark] val EXECUTOR_JAVA_MODULE_OPTIONS =
-    ConfigBuilder(SparkLauncher.EXECUTOR_JAVA_MODULE_OPTIONS)
-      .version("3.3.0")
-      .stringConf
-      .createWithDefault(JavaModuleOptions.defaultModuleOptions())
 
   private[spark] val EXECUTOR_JAVA_OPTIONS =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS)

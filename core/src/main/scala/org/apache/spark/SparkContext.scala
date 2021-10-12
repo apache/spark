@@ -51,6 +51,7 @@ import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.launcher.JavaModuleOptions
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
@@ -3029,19 +3030,19 @@ object SparkContext extends Logging {
   }
 
   /**
-   * This is a helper function to supplement `--add-opens` options to
+   * SPARK-36796: This is a helper function to supplement `--add-opens` options to
    * `spark.driver.extraJavaOptions` and `spark.executor.extraJavaOptions`.
    */
   private def supplementJavaModuleOptions(conf: SparkConf): Unit = {
-    def supplement(source: ConfigEntry[String], target: OptionalConfigEntry[String]): Unit = {
-      val v = conf.get(target) match {
-        case Some(opts) => s"${conf.get(source)} $opts"
-        case None => conf.get(source)
+    def supplement(key: OptionalConfigEntry[String]): Unit = {
+      val v = conf.get(key) match {
+        case Some(opts) => s"${JavaModuleOptions.defaultModuleOptions()} $opts"
+        case None => JavaModuleOptions.defaultModuleOptions()
       }
-      conf.set(target.key, v)
+      conf.set(key.key, v)
     }
-    supplement(DRIVER_JAVA_MODULE_OPTIONS, DRIVER_JAVA_OPTIONS)
-    supplement(EXECUTOR_JAVA_MODULE_OPTIONS, EXECUTOR_JAVA_OPTIONS)
+    supplement(DRIVER_JAVA_OPTIONS)
+    supplement(EXECUTOR_JAVA_OPTIONS)
   }
 }
 
