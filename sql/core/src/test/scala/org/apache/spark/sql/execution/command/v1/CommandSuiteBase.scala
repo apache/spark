@@ -17,13 +17,8 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.scalactic.source.Position
-import org.scalatest.Tag
-
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.execution.command.DDLCommandTestUtils
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -33,7 +28,8 @@ import org.apache.spark.sql.test.SharedSparkSession
  * settings for all unified datasource V1 and V2 test suites.
  */
 trait CommandSuiteBase extends SharedSparkSession {
-  def version: String = "V1" // The prefix is added to test names
+  def catalogVersion: String = "V1" // The catalog version is added to test names
+  def commandVersion: String = "V1" // The command version is added to test names
   def catalog: String = CatalogManager.SESSION_CATALOG_NAME
   def defaultUsing: String = "USING parquet" // The clause is used in creating tables under testing
 
@@ -51,31 +47,5 @@ trait CommandSuiteBase extends SharedSparkSession {
       .first().getString(0)
     val location = information.split("\\r?\\n").filter(_.startsWith("Location:")).head
     assert(location.endsWith(expected))
-  }
-}
-
-/**
- * The trait that enables running a test for both v1 and v2 command.
- */
-trait TestsV1AndV2Commands extends DDLCommandTestUtils {
-  var _version: String = ""
-  override def version: String = _version
-
-  // Tests using V1 catalogs will run with `spark.sql.legacy.useV1Command` on and off
-  // to test both V1 and V2 commands.
-  override def test(testName: String, testTags: Tag*)(testFun: => Any)
-    (implicit pos: Position): Unit = {
-    Seq(true, false).foreach { useV1Command =>
-      _version = if (useV1Command) {
-        "using V1 catalog with V1 command"
-      } else {
-        "using V1 catalog with V2 command"
-      }
-      super.test(testName, testTags: _*) {
-        withSQLConf(SQLConf.LEGACY_USE_V1_COMMAND.key -> useV1Command.toString) {
-          testFun
-        }
-      }
-    }
   }
 }

@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
  *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowTablesSuite`
  *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowTablesSuite`
  */
-trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
+trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.TestsV1AndV2Commands {
   override def defaultNamespace: Seq[String] = Seq("default")
 
   private def withSourceViews(f: => Unit): Unit = {
@@ -141,8 +141,8 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
 /**
  * The class contains tests for the `SHOW TABLES` command to check V1 In-Memory table catalog.
  */
-class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase with TestsV1AndV2Commands {
-  override def version: String = super[TestsV1AndV2Commands].version
+class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
+  override def commandVersion: String = super[ShowTablesSuiteBase].commandVersion
 
   test("SPARK-33670: show partitions from a datasource table") {
     import testImplicits._

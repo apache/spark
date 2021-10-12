@@ -22,9 +22,8 @@ import org.apache.spark.sql.execution.command.v1
 /**
  * The class contains tests for the `SHOW TABLES` command to check V1 Hive external table catalog.
  */
-class ShowTablesSuite extends v1.ShowTablesSuiteBase
-    with CommandSuiteBase with v1.TestsV1AndV2Commands {
-  override def version: String = super[TestsV1AndV2Commands].version
+class ShowTablesSuite extends v1.ShowTablesSuiteBase with CommandSuiteBase {
+  override def commandVersion: String = super[ShowTablesSuiteBase].commandVersion
 
   test("hive client calls") {
     withNamespaceAndTable("ns", "tbl") { t =>

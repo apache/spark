@@ -24,10 +24,7 @@ import org.apache.spark.sql.internal.SQLConf
  * The class contains tests for the `SHOW NAMESPACES` and `SHOW DATABASES` commands to check
  * V1 Hive external table catalog.
  */
-class ShowNamespacesSuite extends v1.ShowNamespacesSuiteBase
-    with CommandSuiteBase with v1.TestsV1AndV2Commands {
-  override def version: String = super[TestsV1AndV2Commands].version
-
+class ShowNamespacesSuite extends v1.ShowNamespacesSuiteBase with CommandSuiteBase {
   test("case sensitivity") {
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {

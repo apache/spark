@@ -38,18 +38,9 @@ trait ShowNamespacesSuiteBase extends command.ShowNamespacesSuiteBase {
     }.getMessage
     assert(errMsg.contains("Namespace 'dummy' not found"))
   }
-
-  test("SPARK-34359: keep the legacy output schema") {
-    withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
-      assert(sql("SHOW NAMESPACES").schema.fieldNames.toSeq == Seq("databaseName"))
-    }
-  }
 }
 
-class ShowNamespacesSuite extends ShowNamespacesSuiteBase
-    with CommandSuiteBase with TestsV1AndV2Commands {
-  override def version: String = super[TestsV1AndV2Commands].version
-
+class ShowNamespacesSuite extends ShowNamespacesSuiteBase with CommandSuiteBase {
   test("case sensitivity") {
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
