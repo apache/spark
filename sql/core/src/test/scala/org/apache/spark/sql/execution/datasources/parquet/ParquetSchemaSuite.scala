@@ -45,7 +45,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
       writeLegacyParquetFormat: Boolean,
-      expectedParquetType: Option[ParquetType] = None): Unit = {
+      expectedParquetColumn: Option[ParquetColumn] = None): Unit = {
     testSchema(
       testName,
       StructType.fromAttributes(ScalaReflection.attributesFor[T]),
@@ -53,7 +53,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       binaryAsString,
       int96AsTimestamp,
       writeLegacyParquetFormat,
-      expectedParquetType = expectedParquetType)
+      expectedParquetColumn = expectedParquetColumn)
   }
 
   protected def testParquetToCatalyst(
@@ -64,16 +64,16 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       int96AsTimestamp: Boolean,
       caseSensitive: Boolean = false,
       sparkReadSchema: Option[StructType] = None,
-      expectedParquetType: Option[ParquetType] = None): Unit = {
+      expectedParquetColumn: Option[ParquetColumn] = None): Unit = {
     val converter = new ParquetToSparkSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
       caseSensitive = caseSensitive)
 
     test(s"sql <= parquet: $testName") {
-      val actualParquetType = converter.convertParquetType(
+      val actualParquetColumn = converter.convertParquetColumn(
           MessageTypeParser.parseMessageType(parquetSchema), sparkReadSchema)
-      val actual = actualParquetType.sparkType
+      val actual = actualParquetColumn.sparkType
       val expected = sqlSchema
       assert(
         actual === expected,
@@ -82,8 +82,8 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
            |Actual schema:   ${actual.json}
          """.stripMargin)
 
-      if (expectedParquetType.isDefined) {
-        compareParquetType(actualParquetType, expectedParquetType.get)
+      if (expectedParquetColumn.isDefined) {
+        compareParquetColumn(actualParquetColumn, expectedParquetColumn.get)
       }
     }
   }
@@ -116,7 +116,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       writeLegacyParquetFormat: Boolean,
       outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
         SQLConf.ParquetOutputTimestampType.INT96,
-      expectedParquetType: Option[ParquetType] = None): Unit = {
+      expectedParquetColumn: Option[ParquetColumn] = None): Unit = {
 
     testCatalystToParquet(
       testName,
@@ -131,10 +131,10 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       parquetSchema,
       binaryAsString,
       int96AsTimestamp,
-      expectedParquetType = expectedParquetType)
+      expectedParquetColumn = expectedParquetColumn)
   }
 
-  protected def compareParquetType(actual: ParquetType, expected: ParquetType): Unit = {
+  protected def compareParquetColumn(actual: ParquetColumn, expected: ParquetColumn): Unit = {
     assert(actual.sparkType == expected.sparkType, "sparkType mismatch: " +
         s"actual = ${actual.sparkType}, expected = ${expected.sparkType}")
     assert(actual.descriptor === expected.descriptor, "column descriptor mismatch: " +
@@ -161,18 +161,18 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
     assert(actual.children.size == expected.children.size, "number of children mismatch: " +
         s"actual = ${actual.children.size}, expected = ${expected.children.size}")
     actual.children.zip(expected.children).foreach { case (actualChild, expectedChild) =>
-      compareParquetType(actualChild, expectedChild)
+      compareParquetColumn(actualChild, expectedChild)
     }
   }
 
-  protected def primitiveParquetType(
+  protected def primitiveParquetColumn(
       sparkType: DataType,
       parquetTypeName: PrimitiveTypeName,
       repetition: Repetition,
       repLevel: Int,
       defLevel: Int,
       path: Seq[String],
-      logicalTypeAnnotation: Option[LogicalTypeAnnotation] = None): ParquetType = {
+      logicalTypeAnnotation: Option[LogicalTypeAnnotation] = None): ParquetColumn = {
     var typeBuilder = repetition match {
       case Repetition.REQUIRED => Types.required(parquetTypeName)
       case Repetition.OPTIONAL => Types.optional(parquetTypeName)
@@ -181,7 +181,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
     if (logicalTypeAnnotation.isDefined) {
       typeBuilder = typeBuilder.as(logicalTypeAnnotation.get)
     }
-    ParquetType(
+    ParquetColumn(
       sparkType = sparkType,
       descriptor = Some(new ColumnDescriptor(path.toArray,
         typeBuilder.named(path.last), repLevel, defLevel)),
@@ -209,8 +209,8 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     binaryAsString = false,
     int96AsTimestamp = true,
     writeLegacyParquetFormat = true,
-    expectedParquetType = Some(
-      ParquetType(
+    expectedParquetColumn = Some(
+      ParquetColumn(
         sparkType = StructType.fromAttributes(
           ScalaReflection.attributesFor[(Boolean, Int, Long, Float, Double, Array[Byte])]),
         descriptor = None,
@@ -219,17 +219,17 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
         required = false,
         path = Seq(),
         children = Seq(
-          primitiveParquetType(BooleanType, PrimitiveTypeName.BOOLEAN, Repetition.REQUIRED,
+          primitiveParquetColumn(BooleanType, PrimitiveTypeName.BOOLEAN, Repetition.REQUIRED,
             0, 0, Seq("_1")),
-          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+          primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
             0, 0, Seq("_2")),
-          primitiveParquetType(LongType, PrimitiveTypeName.INT64, Repetition.REQUIRED,
+          primitiveParquetColumn(LongType, PrimitiveTypeName.INT64, Repetition.REQUIRED,
             0, 0, Seq("_3")),
-          primitiveParquetType(FloatType, PrimitiveTypeName.FLOAT, Repetition.REQUIRED,
+          primitiveParquetColumn(FloatType, PrimitiveTypeName.FLOAT, Repetition.REQUIRED,
             0, 0, Seq("_4")),
-          primitiveParquetType(DoubleType, PrimitiveTypeName.DOUBLE, Repetition.REQUIRED,
+          primitiveParquetColumn(DoubleType, PrimitiveTypeName.DOUBLE, Repetition.REQUIRED,
             0, 0, Seq("_5")),
-          primitiveParquetType(BinaryType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+          primitiveParquetColumn(BinaryType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
             0, 1, Seq("_6"))
         )))
   )
@@ -248,8 +248,8 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     binaryAsString = true,
     int96AsTimestamp = true,
     writeLegacyParquetFormat = true,
-    expectedParquetType = Some(
-      ParquetType(
+    expectedParquetColumn = Some(
+      ParquetColumn(
         sparkType = StructType.fromAttributes(
           ScalaReflection.attributesFor[(Byte, Short, Int, Long, java.sql.Date)]),
         descriptor = None,
@@ -258,15 +258,15 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
         required = false,
         path = Seq(),
         children = Seq(
-          primitiveParquetType(ByteType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+          primitiveParquetColumn(ByteType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
             0, 0, Seq("_1"), logicalTypeAnnotation = Some(LogicalTypeAnnotation.intType(8, true))),
-          primitiveParquetType(ShortType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+          primitiveParquetColumn(ShortType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
             0, 0, Seq("_2"), logicalTypeAnnotation = Some(LogicalTypeAnnotation.intType(16, true))),
-          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+          primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
             0, 0, Seq("_3"), logicalTypeAnnotation = Some(LogicalTypeAnnotation.intType(32, true))),
-          primitiveParquetType(LongType, PrimitiveTypeName.INT64, Repetition.REQUIRED,
+          primitiveParquetColumn(LongType, PrimitiveTypeName.INT64, Repetition.REQUIRED,
             0, 0, Seq("_4"), logicalTypeAnnotation = Some(LogicalTypeAnnotation.intType(64, true))),
-          primitiveParquetType(DateType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
+          primitiveParquetColumn(DateType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
             0, 1, Seq("_5"), logicalTypeAnnotation = Some(LogicalTypeAnnotation.dateType()))
         ))))
 
@@ -280,8 +280,8 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     binaryAsString = true,
     int96AsTimestamp = true,
     writeLegacyParquetFormat = true,
-    expectedParquetType = Some(
-      ParquetType(
+    expectedParquetColumn = Some(
+      ParquetColumn(
         sparkType = StructType.fromAttributes(
           ScalaReflection.attributesFor[Tuple1[String]]),
         descriptor = None,
@@ -290,7 +290,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
         required = false,
         path = Seq(),
         children = Seq(
-          primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+          primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
             0, 1, Seq("_1"), logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType()))
         ))))
 
@@ -304,8 +304,8 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     binaryAsString = true,
     int96AsTimestamp = true,
     writeLegacyParquetFormat = true,
-    expectedParquetType = Some(
-      ParquetType(
+    expectedParquetColumn = Some(
+      ParquetColumn(
         sparkType = StructType.fromAttributes(
           ScalaReflection.attributesFor[Tuple1[String]]),
         descriptor = None,
@@ -314,7 +314,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
         required = false,
         path = Seq(),
         children = Seq(
-          primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+          primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
             0, 1, Seq("_1"), logicalTypeAnnotation = Some(LogicalTypeAnnotation.enumType()))
         ))))
 
@@ -330,7 +330,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     binaryAsString = true,
     int96AsTimestamp = true,
     writeLegacyParquetFormat = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "_1",
@@ -340,7 +340,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       definitionLevel = 0,
       required = false,
       path = Seq(),
-      children = Seq(ParquetType(
+      children = Seq(ParquetColumn(
         sparkType = ArrayType(IntegerType, containsNull = false),
         descriptor = None,
         repetitionLevel = 0,
@@ -348,7 +348,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
         required = false,
         path = Seq("_1"),
         children = Seq(
-          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REPEATED,
+          primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REPEATED,
             1, 2, Seq("_1", "array")))
       )))))
 
@@ -366,7 +366,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     binaryAsString = true,
     int96AsTimestamp = true,
     writeLegacyParquetFormat = false,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "_1",
@@ -376,7 +376,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       definitionLevel = 0,
       required = false,
       path = Seq(),
-      children = Seq(ParquetType(
+      children = Seq(ParquetColumn(
         sparkType = ArrayType(IntegerType, containsNull = false),
         descriptor = None,
         repetitionLevel = 0,
@@ -384,7 +384,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
         required = false,
         path = Seq("_1"),
         children = Seq(
-          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+          primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
             1, 2, Seq("_1", "list", "element"))
         ))))))
 
@@ -402,7 +402,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     binaryAsString = true,
     int96AsTimestamp = true,
     writeLegacyParquetFormat = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "_1",
@@ -412,7 +412,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       definitionLevel = 0,
       required = false,
       path = Seq(),
-      children = Seq(ParquetType(
+      children = Seq(ParquetColumn(
         sparkType = ArrayType(IntegerType, containsNull = true),
         descriptor = None,
         repetitionLevel = 0,
@@ -420,7 +420,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
         required = false,
         path = Seq("_1"),
         children = Seq(
-          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
+          primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
             1, 3, Seq("_1", "bag", "array"))
         ))))))
 
@@ -438,7 +438,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     binaryAsString = true,
     int96AsTimestamp = true,
     writeLegacyParquetFormat = false,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "_1",
@@ -448,7 +448,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       definitionLevel = 0,
       required = false,
       path = Seq(),
-      children = Seq(ParquetType(
+      children = Seq(ParquetColumn(
         sparkType = ArrayType(IntegerType, containsNull = true),
         descriptor = None,
         repetitionLevel = 0,
@@ -456,7 +456,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
         required = false,
         path = Seq("_1"),
         children = Seq(
-          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
+          primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
             1, 3, Seq("_1", "list", "element"))
         ))))))
 
@@ -475,7 +475,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     binaryAsString = true,
     int96AsTimestamp = true,
     writeLegacyParquetFormat = false,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "_1",
@@ -487,7 +487,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       required = false,
       path = Seq(),
       children = Seq(
-        ParquetType(
+        ParquetColumn(
           sparkType = MapType(IntegerType, StringType, valueContainsNull = true),
           descriptor = None,
           repetitionLevel = 0,
@@ -495,9 +495,9 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("_1"),
           children = Seq(
-            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
               1, 2, Seq("_1", "key_value", "key")),
-            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+            primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
               1, 3, Seq("_1", "key_value", "value"),
               logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
         )))))
@@ -517,7 +517,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     binaryAsString = true,
     int96AsTimestamp = true,
     writeLegacyParquetFormat = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "_1",
@@ -529,7 +529,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       required = false,
       path = Seq(),
       children = Seq(
-        ParquetType(
+        ParquetColumn(
           sparkType = MapType(IntegerType, StringType, valueContainsNull = true),
           descriptor = None,
           repetitionLevel = 0,
@@ -537,9 +537,9 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("_1"),
           children = Seq(
-            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
               1, 2, Seq("_1", "key_value", "key")),
-            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+            primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
               1, 3, Seq("_1", "key_value", "value"),
               logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
           )))))
@@ -562,7 +562,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     binaryAsString = true,
     int96AsTimestamp = true,
     writeLegacyParquetFormat = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "_1",
@@ -575,7 +575,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       required = false,
       path = Seq(),
       children = Seq(
-        ParquetType(
+        ParquetColumn(
           sparkType = MapType(
             StructType(Seq(StructField("_1", StringType), StructField("_2", StringType))),
             StringType, valueContainsNull = true),
@@ -585,7 +585,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("_1"),
           children = Seq(
-            ParquetType(
+            ParquetColumn(
               sparkType =
                 StructType(Seq(StructField("_1", StringType), StructField("_2", StringType))),
               descriptor = None,
@@ -594,14 +594,14 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
               required = true,
               path = Seq("_1", "key_value", "key"),
               children = Seq(
-                primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+                primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
                   1, 3, Seq("_1", "key_value", "key", "_1"),
                   logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())),
-                primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+                primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
                   1, 3, Seq("_1", "key_value", "key", "_2"),
                   logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
             ),
-            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+            primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
               1, 3, Seq("_1", "key_value", "value"),
               logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
         )))))
@@ -619,7 +619,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     binaryAsString = true,
     int96AsTimestamp = true,
     writeLegacyParquetFormat = false,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "_1",
@@ -632,7 +632,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       required = false,
       path = Seq(),
       children = Seq(
-        ParquetType(
+        ParquetColumn(
           sparkType = StructType(Seq(
             StructField("_1", IntegerType, nullable = false),
             StructField("_2", StringType))),
@@ -642,9 +642,9 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("_1"),
           children = Seq(
-            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
               0, 1, Seq("_1", "_1")),
-            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+            primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
               0, 2, Seq("_1", "_2"),
               logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
         )))))
@@ -674,7 +674,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     binaryAsString = true,
     int96AsTimestamp = true,
     writeLegacyParquetFormat = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "_1",
@@ -692,7 +692,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       required = false,
       path = Seq(),
       children = Seq(
-        ParquetType(
+        ParquetColumn(
           sparkType =
             MapType(IntegerType,
               StructType(Seq(
@@ -708,9 +708,9 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("_1"),
           children = Seq(
-            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
               1, 2, Seq("_1", "key_value", "key")),
-            ParquetType(
+            ParquetColumn(
               sparkType =
                 StructType(Seq(
                   StructField("_1", StringType),
@@ -724,10 +724,10 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
               required = false,
               path = Seq("_1", "key_value", "value"),
               children = Seq(
-                primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+                primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
                   1, 4, Seq("_1", "key_value", "value", "_1"),
                   logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())),
-                ParquetType(
+                ParquetColumn(
                   sparkType = ArrayType(
                     StructType(Seq(
                       StructField("_1", IntegerType, nullable = false),
@@ -738,7 +738,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
                   required = false,
                   path = Seq("_1", "key_value", "value", "_2"),
                   children = Seq(
-                    ParquetType(
+                    ParquetColumn(
                       sparkType = StructType(Seq(
                         StructField("_1", IntegerType, nullable = false),
                         StructField("_2", DoubleType, nullable = false))),
@@ -748,10 +748,10 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
                       required = false,
                       path = Seq("_1", "key_value", "value", "_2", "bag", "array"),
                       children = Seq(
-                        primitiveParquetType(IntegerType, PrimitiveTypeName.INT32,
+                        primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32,
                           Repetition.REQUIRED, 2, 6,
                           Seq("_1", "key_value", "value", "_2", "bag", "array", "_1")),
-                        primitiveParquetType(DoubleType, PrimitiveTypeName.DOUBLE,
+                        primitiveParquetColumn(DoubleType, PrimitiveTypeName.DOUBLE,
                           Repetition.REQUIRED, 2, 6,
                           Seq("_1", "key_value", "value", "_2", "bag", "array", "_2"))
                       ))))))
@@ -782,7 +782,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     binaryAsString = true,
     int96AsTimestamp = true,
     writeLegacyParquetFormat = false,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "_1",
@@ -800,7 +800,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       required = false,
       path = Seq(),
       children = Seq(
-        ParquetType(
+        ParquetColumn(
           sparkType =
             MapType(IntegerType,
               StructType(Seq(
@@ -816,9 +816,9 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("_1"),
           children = Seq(
-            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
               1, 2, Seq("_1", "key_value", "key")),
-            ParquetType(
+            ParquetColumn(
               sparkType =
                 StructType(Seq(
                   StructField("_1", StringType),
@@ -832,10 +832,10 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
               required = false,
               path = Seq("_1", "key_value", "value"),
               children = Seq(
-                primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+                primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
                   1, 4, Seq("_1", "key_value", "value", "_1"),
                   logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())),
-                ParquetType(
+                ParquetColumn(
                   sparkType = ArrayType(
                     StructType(Seq(
                       StructField("_1", IntegerType, nullable = false),
@@ -846,7 +846,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
                   required = false,
                   path = Seq("_1", "key_value", "value", "_2"),
                   children = Seq(
-                    ParquetType(
+                    ParquetColumn(
                       sparkType = StructType(Seq(
                         StructField("_1", IntegerType, nullable = false),
                         StructField("_2", DoubleType, nullable = false))),
@@ -856,10 +856,10 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
                       required = false,
                       path = Seq("_1", "key_value", "value", "_2", "list", "element"),
                       children = Seq(
-                        primitiveParquetType(IntegerType, PrimitiveTypeName.INT32,
+                        primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32,
                           Repetition.REQUIRED, 2, 6,
                           Seq("_1", "key_value", "value", "_2", "list", "element", "_1")),
-                        primitiveParquetType(DoubleType, PrimitiveTypeName.DOUBLE,
+                        primitiveParquetColumn(DoubleType, PrimitiveTypeName.DOUBLE,
                           Repetition.REQUIRED, 2, 6,
                           Seq("_1", "key_value", "value", "_2", "list", "element", "_2"))))))))
         ))))))
@@ -880,7 +880,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     binaryAsString = true,
     int96AsTimestamp = true,
     writeLegacyParquetFormat = false,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField("_1", IntegerType),
         StructField("_2", MapType(IntegerType, DoubleType, valueContainsNull = true)))),
@@ -890,7 +890,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       required = false,
       path = Seq(),
       children = Seq(
-        ParquetType(
+        ParquetColumn(
           sparkType = IntegerType,
           descriptor = Some(new ColumnDescriptor(Array("_1"),
             Types.optional(PrimitiveTypeName.INT32).named("_1"), 0, 1)),
@@ -899,7 +899,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("_1"),
           children = Seq()),
-        ParquetType(
+        ParquetColumn(
           sparkType = MapType(IntegerType, DoubleType, valueContainsNull = true),
           descriptor = None,
           repetitionLevel = 0,
@@ -907,9 +907,9 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("_2"),
           children = Seq(
-            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
               1, 2, Seq("_2", "key_value", "key")),
-            primitiveParquetType(DoubleType, PrimitiveTypeName.DOUBLE, Repetition.OPTIONAL,
+            primitiveParquetColumn(DoubleType, PrimitiveTypeName.DOUBLE, Repetition.OPTIONAL,
               1, 3, Seq("_2", "key_value", "value")))))
     )))
 }
@@ -1026,7 +1026,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "f1",
@@ -1036,7 +1036,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       definitionLevel = 0,
       required = false,
       path = Seq(),
-      children = Seq(ParquetType(
+      children = Seq(ParquetColumn(
         sparkType = ArrayType(IntegerType, containsNull = true),
         descriptor = None,
         repetitionLevel = 0,
@@ -1044,7 +1044,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         required = false,
         path = Seq("f1"),
         children = Seq(
-          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
+          primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
             1, 3, Seq("f1", "list", "element"))))
       ))))
 
@@ -1065,7 +1065,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
         sparkType = StructType(Seq(
           StructField(
             "f1",
@@ -1075,7 +1075,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         definitionLevel = 0,
         required = false,
         path = Seq(),
-        children = Seq(ParquetType(
+        children = Seq(ParquetColumn(
           sparkType = ArrayType(IntegerType, containsNull = true),
           descriptor = None,
           repetitionLevel = 0,
@@ -1083,7 +1083,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("f1"),
           children = Seq(
-            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
+            primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
               1, 3, Seq("f1", "element", "num"))))
         ))))
 
@@ -1101,7 +1101,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "f1",
@@ -1111,7 +1111,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       definitionLevel = 0,
       required = false,
       path = Seq(),
-      children = Seq(ParquetType(
+      children = Seq(ParquetColumn(
         sparkType = ArrayType(IntegerType, containsNull = false),
         descriptor = None,
         repetitionLevel = 0,
@@ -1119,7 +1119,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         required = false,
         path = Seq("f1"),
         children = Seq(
-          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+          primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
             1, 2, Seq("f1", "list", "element"))))
       ))))
 
@@ -1137,7 +1137,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "f1",
@@ -1147,7 +1147,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       definitionLevel = 0,
       required = false,
       path = Seq(),
-      children = Seq(ParquetType(
+      children = Seq(ParquetColumn(
         sparkType = ArrayType(IntegerType, containsNull = false),
         descriptor = None,
         repetitionLevel = 0,
@@ -1155,7 +1155,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         required = false,
         path = Seq("f1"),
         children = Seq(
-          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+          primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
             1, 2, Seq("f1", "element", "num"))))
       ))))
 
@@ -1171,7 +1171,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "f1",
@@ -1181,7 +1181,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       definitionLevel = 0,
       required = false,
       path = Seq(),
-      children = Seq(ParquetType(
+      children = Seq(ParquetColumn(
         sparkType = ArrayType(IntegerType, containsNull = false),
         descriptor = None,
         repetitionLevel = 0,
@@ -1189,7 +1189,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         required = false,
         path = Seq("f1"),
         children = Seq(
-          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REPEATED,
+          primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REPEATED,
             1, 2, Seq("f1", "element"))))
       ))))
 
@@ -1215,7 +1215,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "f1",
@@ -1229,7 +1229,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       definitionLevel = 0,
       required = false,
       path = Seq(),
-      children = Seq(ParquetType(
+      children = Seq(ParquetColumn(
         ArrayType(
           StructType(Seq(
             StructField("str", StringType, nullable = false),
@@ -1240,7 +1240,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         definitionLevel = 1,
         required = false,
         path = Seq("f1"),
-        children = Seq(ParquetType(
+        children = Seq(ParquetColumn(
           sparkType = StructType(Seq(
             StructField("str", StringType, nullable = false),
             StructField("num", IntegerType, nullable = false))),
@@ -1250,10 +1250,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("f1", "element"),
           children = Seq(
-            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
+            primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
               1, 2, Seq("f1", "element", "str"),
               logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())),
-            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
               1, 2, Seq("f1", "element", "num")))))
       )))))
 
@@ -1277,7 +1277,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "f1",
@@ -1291,7 +1291,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       definitionLevel = 0,
       required = false,
       path = Seq(),
-      children = Seq(ParquetType(
+      children = Seq(ParquetColumn(
         sparkType = ArrayType(
           StructType(Seq(
             StructField("str", StringType, nullable = false))),
@@ -1301,7 +1301,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         definitionLevel = 1,
         required = false,
         path = Seq("f1"),
-        children = Seq(ParquetType(
+        children = Seq(ParquetColumn(
           sparkType = StructType(Seq(
               StructField("str", StringType, nullable = false))),
           descriptor = None,
@@ -1310,7 +1310,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("f1", "array"),
           children = Seq(
-            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
+            primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
               1, 2, Seq("f1", "array", "str"),
               logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType()))))))
       ))))
@@ -1335,7 +1335,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "f1",
@@ -1349,7 +1349,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       definitionLevel = 0,
       required = false,
       path = Seq(),
-      children = Seq(ParquetType(
+      children = Seq(ParquetColumn(
         sparkType = ArrayType(
           StructType(Seq(
             StructField("str", StringType, nullable = false))),
@@ -1359,7 +1359,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         definitionLevel = 1,
         required = false,
         path = Seq("f1"),
-        children = Seq(ParquetType(
+        children = Seq(ParquetColumn(
           sparkType = StructType(Seq(
             StructField("str", StringType, nullable = false))),
           descriptor = None,
@@ -1368,7 +1368,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("f1", "f1_tuple"),
           children = Seq(
-            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
+            primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
               1, 2, Seq("f1", "f1_tuple", "str"),
               logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType()))))))
       ))))
@@ -1384,7 +1384,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "f1",
@@ -1394,7 +1394,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       definitionLevel = 0,
       required = false,
       path = Seq(),
-      children = Seq(ParquetType(
+      children = Seq(ParquetColumn(
         sparkType = ArrayType(IntegerType, containsNull = false),
         descriptor = None,
         repetitionLevel = 0,
@@ -1402,7 +1402,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         required = true,
         path = Seq("f1"),
         children = Seq(
-          primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REPEATED,
+          primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REPEATED,
             1, 1, Seq("f1")))))
       )))
 
@@ -1427,7 +1427,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "f1",
@@ -1441,7 +1441,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       definitionLevel = 0,
       required = false,
       path = Seq(),
-      children = Seq(ParquetType(
+      children = Seq(ParquetColumn(
         sparkType = ArrayType(
           new StructType()
               .add("c1", StringType, nullable = true)
@@ -1453,7 +1453,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         required = true,
         path = Seq("f1"),
         children = Seq(
-          ParquetType(
+          ParquetColumn(
             sparkType = new StructType()
                 .add("c1", StringType, nullable = true)
                 .add("c2", IntegerType, nullable = false),
@@ -1463,10 +1463,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
             required = true,
             path = Seq("f1"),
             children = Seq(
-              primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+              primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
                 1, 2, Seq("f1", "c1"),
                 logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())),
-              primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+              primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
                 1, 1, Seq("f1", "c2")))))
         )))))
 
@@ -1562,7 +1562,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "f1",
@@ -1574,7 +1574,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       required = false,
       path = Seq(),
       children = Seq(
-        ParquetType(
+        ParquetColumn(
           sparkType = MapType(IntegerType, StringType, valueContainsNull = false),
           descriptor = None,
           repetitionLevel = 0,
@@ -1582,9 +1582,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("f1"),
           children = Seq(
-            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
               1, 2, Seq("f1", "key_value", "key")),
-            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
+            primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
               1, 2, Seq("f1", "key_value", "value"),
               logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType()))
           ))))))
@@ -1607,7 +1607,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "f1",
@@ -1619,7 +1619,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       required = false,
       path = Seq(),
       children = Seq(
-        ParquetType(
+        ParquetColumn(
           sparkType = MapType(IntegerType, StringType, valueContainsNull = false),
           descriptor = None,
           repetitionLevel = 0,
@@ -1627,9 +1627,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("f1"),
           children = Seq(
-            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
               1, 2, Seq("f1", "key_value", "num")),
-            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
+            primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
               1, 2, Seq("f1", "key_value", "str"),
               logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType()))
           ))))))
@@ -1652,7 +1652,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "f1",
@@ -1664,7 +1664,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       required = false,
       path = Seq(),
       children = Seq(
-        ParquetType(
+        ParquetColumn(
           sparkType = MapType(IntegerType, StringType, valueContainsNull = false),
           descriptor = None,
           repetitionLevel = 0,
@@ -1672,9 +1672,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("f1"),
           children = Seq(
-            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
               1, 2, Seq("f1", "key_value", "key")),
-            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
+            primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.REQUIRED,
               1, 2, Seq("f1", "key_value", "value"),
               logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
         )))))
@@ -1697,7 +1697,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "f1",
@@ -1709,7 +1709,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       required = false,
       path = Seq(),
       children = Seq(
-        ParquetType(
+        ParquetColumn(
           sparkType = MapType(IntegerType, StringType, valueContainsNull = true),
           descriptor = None,
           repetitionLevel = 0,
@@ -1717,9 +1717,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("f1"),
           children = Seq(
-            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
               1, 2, Seq("f1", "key_value", "key")),
-            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+            primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
               1, 3, Seq("f1", "key_value", "value"),
               logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
         )))))
@@ -1742,7 +1742,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "f1",
@@ -1754,7 +1754,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       required = false,
       path = Seq(),
       children = Seq(
-        ParquetType(
+        ParquetColumn(
           sparkType = MapType(IntegerType, StringType, valueContainsNull = true),
           descriptor = None,
           repetitionLevel = 0,
@@ -1762,9 +1762,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("f1"),
           children = Seq(
-            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
               1, 2, Seq("f1", "key_value", "num")),
-            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+            primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
               1, 3, Seq("f1", "key_value", "str"),
               logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
         )))))
@@ -1787,7 +1787,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "f1",
@@ -1799,7 +1799,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       required = false,
       path = Seq(),
       children = Seq(
-        ParquetType(
+        ParquetColumn(
           sparkType = MapType(IntegerType, StringType, valueContainsNull = true),
           descriptor = None,
           repetitionLevel = 0,
@@ -1807,9 +1807,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("f1"),
           children = Seq(
-            primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
               1, 2, Seq("f1", "key_value", "key")),
-            primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+            primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
               1, 3, Seq("f1", "key_value", "value"),
               logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())))
         )))))
@@ -1900,7 +1900,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     binaryAsString = true,
     int96AsTimestamp = true,
     sparkReadSchema = Some(StructType(Seq(StructField("F1", ShortType)))),
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(StructField("F1", ShortType))),
       descriptor = None,
       repetitionLevel = 0,
@@ -1908,7 +1908,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       required = false,
       path = Seq(),
       children = Seq(
-        primitiveParquetType(ShortType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
+        primitiveParquetColumn(ShortType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
           0, 1, Seq("f1"))
       )
     )))
@@ -1924,7 +1924,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     int96AsTimestamp = true,
     caseSensitive = true,
     sparkReadSchema = Some(StructType(Seq(StructField("F1", ShortType)))),
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(StructField("f1", IntegerType))),
       descriptor = None,
       repetitionLevel = 0,
@@ -1932,7 +1932,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       required = false,
       path = Seq(),
       children = Seq(
-        primitiveParquetType(IntegerType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
+        primitiveParquetColumn(IntegerType, PrimitiveTypeName.INT32, Repetition.OPTIONAL,
           0, 1, Seq("f1"))
       )
     )))
@@ -1983,7 +1983,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
                   StructField("H1", ByteType, nullable = false),
                   StructField("H2", FloatType, nullable = false))))))),
             valueContainsNull = true))))),
-    expectedParquetType = Some(ParquetType(
+    expectedParquetColumn = Some(ParquetColumn(
       sparkType = StructType(Seq(
         StructField(
           "F1",
@@ -2001,7 +2001,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       required = false,
       path = Seq(),
       children = Seq(
-        ParquetType(
+        ParquetColumn(
           sparkType =
             MapType(ShortType,
               StructType(Seq(
@@ -2017,9 +2017,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           required = false,
           path = Seq("f1"),
           children = Seq(
-            primitiveParquetType(ShortType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
+            primitiveParquetColumn(ShortType, PrimitiveTypeName.INT32, Repetition.REQUIRED,
               1, 2, Seq("f1", "key_value", "key")),
-            ParquetType(
+            ParquetColumn(
               sparkType =
                 StructType(Seq(
                   StructField("G1", StringType),
@@ -2033,10 +2033,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
               required = false,
               path = Seq("f1", "key_value", "value"),
               children = Seq(
-                primitiveParquetType(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
+                primitiveParquetColumn(StringType, PrimitiveTypeName.BINARY, Repetition.OPTIONAL,
                   1, 4, Seq("f1", "key_value", "value", "g1"),
                   logicalTypeAnnotation = Some(LogicalTypeAnnotation.stringType())),
-                ParquetType(
+                ParquetColumn(
                   sparkType = ArrayType(
                     StructType(Seq(
                       StructField("H1", ByteType, nullable = false),
@@ -2047,7 +2047,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
                   required = false,
                   path = Seq("f1", "key_value", "value", "g2"),
                   children = Seq(
-                    ParquetType(
+                    ParquetColumn(
                       sparkType = StructType(Seq(
                         StructField("H1", ByteType, nullable = false),
                         StructField("H2", FloatType, nullable = false))),
@@ -2057,10 +2057,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
                       required = false,
                       path = Seq("f1", "key_value", "value", "g2", "list", "element"),
                       children = Seq(
-                        primitiveParquetType(ByteType, PrimitiveTypeName.INT32,
+                        primitiveParquetColumn(ByteType, PrimitiveTypeName.INT32,
                           Repetition.REQUIRED, 2, 6,
                           Seq("f1", "key_value", "value", "g2", "list", "element", "h1")),
-                        primitiveParquetType(FloatType, PrimitiveTypeName.DOUBLE,
+                        primitiveParquetColumn(FloatType, PrimitiveTypeName.DOUBLE,
                           Repetition.REQUIRED, 2, 6,
                           Seq("f1", "key_value", "value", "g2", "list", "element", "h2"))))))))
           ))))))

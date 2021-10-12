@@ -26,41 +26,41 @@ import org.apache.parquet.schema.Type.Repetition
 import org.apache.spark.sql.types.DataType
 
 /**
- * Rich type information for a Parquet type together with its SparkSQL type.
+ * Rich information for a Parquet column together with its SparkSQL type.
  */
-case class ParquetType(
+case class ParquetColumn(
     sparkType: DataType,
-    descriptor: Option[ColumnDescriptor], // only set when this is a primitive type
+    descriptor: Option[ColumnDescriptor], // only set when this is a primitive column
     repetitionLevel: Int,
     definitionLevel: Int,
     required: Boolean,
     path: Seq[String],
-    children: Seq[ParquetType]) {
+    children: Seq[ParquetColumn]) {
 
   def isPrimitive: Boolean = descriptor.nonEmpty
 
   /**
    * Returns all the leaves (i.e., primitive columns) of this, in depth-first order.
    */
-  def leaves: Seq[ParquetType] = {
-    val buffer = mutable.ArrayBuffer[ParquetType]()
+  def leaves: Seq[ParquetColumn] = {
+    val buffer = mutable.ArrayBuffer[ParquetColumn]()
     leaves0(buffer)
     buffer.toSeq
   }
 
-  private def leaves0(buffer: mutable.ArrayBuffer[ParquetType]): Unit = {
+  private def leaves0(buffer: mutable.ArrayBuffer[ParquetColumn]): Unit = {
     children.foreach(_.leaves0(buffer))
   }
 }
 
-object ParquetType {
-  def apply(sparkType: DataType, io: PrimitiveColumnIO): ParquetType = {
+object ParquetColumn {
+  def apply(sparkType: DataType, io: PrimitiveColumnIO): ParquetColumn = {
     this(sparkType, Some(io.getColumnDescriptor), ColumnIOUtil.getRepetitionLevel(io),
       ColumnIOUtil.getDefinitionLevel(io), io.getType.isRepetition(Repetition.REQUIRED),
       ColumnIOUtil.getFieldPath(io), Seq.empty)
   }
 
-  def apply(sparkType: DataType, io: GroupColumnIO, children: Seq[ParquetType]): ParquetType = {
+  def apply(sparkType: DataType, io: GroupColumnIO, children: Seq[ParquetColumn]): ParquetColumn = {
     this(sparkType, None, ColumnIOUtil.getRepetitionLevel(io),
       ColumnIOUtil.getDefinitionLevel(io), io.getType.isRepetition(Repetition.REQUIRED),
       ColumnIOUtil.getFieldPath(io), children)
