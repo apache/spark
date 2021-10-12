@@ -699,4 +699,85 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkConsistencyBetweenInterpretedAndCodegen((e: Expression) => Abs(e, false), tpe)
     }
   }
+
+  test("SPARK-36921: Support YearMonthIntervalType by div") {
+    checkEvaluation(IntegralDivide(Literal(Period.ZERO), Literal(Period.ZERO)), null)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+      Literal(Period.ZERO)), null)
+    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MinValue),
+      Literal(Period.ZERO)), null)
+    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MaxValue),
+      Literal(Period.ZERO)), null)
+
+    checkEvaluation(IntegralDivide(Literal.create(null, YearMonthIntervalType()),
+      Literal.create(null, YearMonthIntervalType())), null)
+    checkEvaluation(IntegralDivide(Literal.create(null, YearMonthIntervalType()),
+      Literal(Period.ofYears(1))), null)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+      Literal.create(null, YearMonthIntervalType())), null)
+
+    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MaxValue),
+      Period.ofMonths(Int.MaxValue)), 1L)
+    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MaxValue),
+      Period.ofMonths(Int.MinValue)), 0L)
+    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MinValue),
+      Period.ofMonths(Int.MinValue)), 1L)
+    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MinValue),
+      Period.ofMonths(Int.MaxValue)), -1L)
+
+    checkEvaluation(IntegralDivide(Literal(Period.ZERO),
+      Literal(Period.ofYears(-1))), 0L)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(2)),
+      Literal(Period.ofYears(1))), 2L)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(2)),
+      Literal(Period.ofYears(-1))), -2L)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+      Literal(Period.ofMonths(3))), 4L)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+      Literal(Period.ofMonths(-3))), -4L)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+      Literal(Period.ofMonths(5))), 2L)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+      Literal(Period.ofMonths(-5))), -2L)
+  }
+  test("SPARK-36921: Support DayTimeIntervalType by div") {
+    checkEvaluation(IntegralDivide(Literal(Duration.ZERO), Literal(Duration.ZERO)), null)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+      Literal(Duration.ZERO)), null)
+    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
+      Literal(Duration.ZERO)), null)
+    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS)),
+      Literal(Duration.ZERO)), null)
+
+    checkEvaluation(IntegralDivide(Literal.create(null, DayTimeIntervalType()),
+      Literal.create(null, DayTimeIntervalType())), null)
+    checkEvaluation(IntegralDivide(Literal.create(null, DayTimeIntervalType()),
+      Literal(Duration.ofDays(1))), null)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+      Literal.create(null, DayTimeIntervalType())), null)
+
+    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
+      Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS))), 1L)
+    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS)),
+      Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS))), 1L)
+    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
+      Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS))), 0L)
+    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS)),
+      Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS))), -1L)
+
+    checkEvaluation(IntegralDivide(Literal(Duration.ZERO),
+      Literal(Duration.ofDays(-1))), 0L)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(2)),
+      Literal(Duration.ofDays(1))), 2L)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(2)),
+      Literal(Duration.ofDays(-1))), -2L)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+      Literal(Duration.ofHours(4))), 6L)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+      Literal(Duration.ofHours(-4))), -6L)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+      Literal(Duration.ofHours(5))), 4L)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+      Literal(Duration.ofHours(-5))), -4L)
+  }
 }
