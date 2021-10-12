@@ -67,6 +67,7 @@ ability to generate logical and physical plan for a given query using
    * [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
    * [HAVING Clause](sql-ref-syntax-qry-select-having.html)
    * [Hints](sql-ref-syntax-qry-select-hints.html)
+   * [FROM statement](sql-ref-syntax-qry-select-from-statement.html)
    * [Inline Table](sql-ref-syntax-qry-select-inline-table.html)
    * [File](sql-ref-syntax-qry-select-file.html)
    * [JOIN](sql-ref-syntax-qry-select-join.html)
