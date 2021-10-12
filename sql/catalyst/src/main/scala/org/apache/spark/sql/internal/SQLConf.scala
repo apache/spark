@@ -3394,6 +3394,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_USE_V1_COMMAND =
+    buildConf("spark.sql.legacy.useV1Command")
+      .internal()
+      .doc("When true, Spark will use legacy V1 SQL commands.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4114,6 +4122,8 @@ class SQLConf extends Serializable with Logging {
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
+
+  def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
 
   /** ********************** SQLConf functionality methods ************ */
 

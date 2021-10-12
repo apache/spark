@@ -314,7 +314,7 @@ Condition : isnotnull(key#x)
 
 (7) BroadcastExchange
 Input [2]: [key#x, val#x]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#x]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#x]
 
 (8) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [key#x]
@@ -366,7 +366,7 @@ Condition : isnotnull(key#x)
 
 (6) BroadcastExchange
 Input [2]: [key#x, val#x]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#x]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#x]
 
 (7) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [key#x]
@@ -749,7 +749,7 @@ Condition : (isnotnull(key#x) AND (key#x > 10))
 
 (7) BroadcastExchange
 Input [2]: [key#x, val#x]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#x]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#x]
 
 (8) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [key#x]
@@ -826,7 +826,7 @@ Results [2]: [key#x, max(val#x)#x AS max(val)#x]
 
 (9) BroadcastExchange
 Input [2]: [key#x, max(val)#x]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#x]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#x]
 
 (10) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [key#x]

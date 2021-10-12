@@ -62,7 +62,7 @@ Input [3]: [o_orderkey#8, o_custkey#9, o_orderdate#10]
 
 (8) BroadcastExchange
 Input [2]: [o_orderkey#8, o_custkey#9]
-Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false,false), [id=#11]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false), [id=#11]
 
 (9) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [c_custkey#1]
@@ -93,7 +93,7 @@ Input [4]: [l_orderkey#12, l_extendedprice#13, l_discount#14, l_returnflag#15]
 
 (15) BroadcastExchange
 Input [3]: [l_orderkey#12, l_extendedprice#13, l_discount#14]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false,false), [id=#16]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#16]
 
 (16) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [o_orderkey#8]
@@ -120,7 +120,7 @@ Condition : isnotnull(n_nationkey#17)
 
 (21) BroadcastExchange
 Input [2]: [n_nationkey#17, n_name#18]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false,false), [id=#19]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#19]
 
 (22) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [c_nationkey#4]
