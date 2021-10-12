@@ -75,7 +75,7 @@ if __name__ == "__main__":
         schema_rdd = sc.textFile(sys.argv[2], 1).collect()
         conf = {"avro.schema.input.key": reduce(lambda x, y: x + y, schema_rdd)}
 
-    avro_rdd = sc.newAPIHadoopFile(
+    avro_rdd = sc.newAPIHadoopFile(  # type: ignore[var-annotated]
         path,
         "org.apache.avro.mapreduce.AvroKeyInputFormat",
         "org.apache.avro.mapred.AvroKey",

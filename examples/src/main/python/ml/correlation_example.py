@@ -40,10 +40,10 @@ if __name__ == "__main__":
     df = spark.createDataFrame(data, ["features"])
 
     r1 = Correlation.corr(df, "features").head()
-    print("Pearson correlation matrix:\n" + str(r1[0]))
+    print("Pearson correlation matrix:\n" + str(r1[0]))  # type: ignore[index]
 
     r2 = Correlation.corr(df, "features", "spearman").head()
-    print("Spearman correlation matrix:\n" + str(r2[0]))
+    print("Spearman correlation matrix:\n" + str(r2[0]))  # type: ignore[index]
     # $example off$
 
     spark.stop()

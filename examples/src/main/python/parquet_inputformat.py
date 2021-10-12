@@ -54,7 +54,7 @@ if __name__ == "__main__":
 
     sc = spark.sparkContext
 
-    parquet_rdd = sc.newAPIHadoopFile(
+    parquet_rdd = sc.newAPIHadoopFile(  # type: ignore[var-annotated]
         path,
         'org.apache.parquet.avro.AvroParquetInputFormat',
         'java.lang.Void',

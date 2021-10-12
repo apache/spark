@@ -42,9 +42,9 @@ if __name__ == "__main__":
     df = spark.createDataFrame(data, ["label", "features"])
 
     r = ChiSquareTest.test(df, "features", "label").head()
-    print("pValues: " + str(r.pValues))
-    print("degreesOfFreedom: " + str(r.degreesOfFreedom))
-    print("statistics: " + str(r.statistics))
+    print("pValues: " + str(r.pValues))  # type: ignore[union-attr]
+    print("degreesOfFreedom: " + str(r.degreesOfFreedom))  # type: ignore[union-attr]
+    print("statistics: " + str(r.statistics))   # type: ignore[union-attr]
     # $example off$
 
     spark.stop()

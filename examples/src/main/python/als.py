@@ -77,8 +77,8 @@ if __name__ == "__main__":
           (M, U, F, ITERATIONS, partitions))
 
     R = matrix(rand(M, F)) * matrix(rand(U, F).T)
-    ms = matrix(rand(M, F))
-    us = matrix(rand(U, F))
+    ms = matrix(rand(M, F))  # type: ignore[var-annotated]
+    us = matrix(rand(U, F))  # type: ignore[var-annotated]
 
     Rb = sc.broadcast(R)
     msb = sc.broadcast(ms)
@@ -87,15 +87,15 @@ if __name__ == "__main__":
     for i in range(ITERATIONS):
         ms = sc.parallelize(range(M), partitions) \
                .map(lambda x: update(x, usb.value, Rb.value)) \
-               .collect()
+               .collect()  # type: ignore[assignment]
         # collect() returns a list, so array ends up being
         # a 3-d array, we take the first 2 dims for the matrix
-        ms = matrix(np.array(ms)[:, :, 0])
+        ms = matrix(np.array(ms)[:, :, 0])  # type: ignore[assignment]
         msb = sc.broadcast(ms)
 
         us = sc.parallelize(range(U), partitions) \
                .map(lambda x: update(x, msb.value, Rb.value.T)) \
-               .collect()
+               .collect()  # type: ignore[assignment]
         us = matrix(np.array(us)[:, :, 0])
         usb = sc.broadcast(us)
 
