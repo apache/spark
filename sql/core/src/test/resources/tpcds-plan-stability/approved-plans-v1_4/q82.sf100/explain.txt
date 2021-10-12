@@ -49,7 +49,7 @@ Input [5]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, i_manufa
 
 (5) BroadcastExchange
 Input [4]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#6]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#6]
 
 (6) Scan parquet default.inventory
 Output [3]: [inv_item_sk#7, inv_quantity_on_hand#8, inv_date_sk#9]
@@ -186,6 +186,6 @@ Input [2]: [d_date_sk#11, d_date#17]
 
 (33) BroadcastExchange
 Input [1]: [d_date_sk#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#18]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#18]
 
 

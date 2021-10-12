@@ -73,7 +73,7 @@ Condition : (isnotnull(total_revenue#16) AND (total_revenue#16 = Subquery scalar
 
 (12) BroadcastExchange
 Input [2]: [supplier_no#15, total_revenue#16]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false,false), [id=#19]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#19]
 
 (13) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [s_suppkey#1]
