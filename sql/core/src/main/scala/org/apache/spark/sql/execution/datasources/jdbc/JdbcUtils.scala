@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
 import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
@@ -1038,6 +1039,29 @@ object JdbcUtils extends Logging with SQLConfHelper {
       options: JDBCOptions): Boolean = {
     val dialect = JdbcDialects.get(options.url)
     dialect.indexExists(conn, indexName, tableName, options)
+  }
+
+  /**
+   * Drop an index.
+   */
+  def dropIndex(
+      conn: Connection,
+      indexName: String,
+      tableName: String,
+      options: JDBCOptions): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    executeStatement(conn, options, dialect.dropIndex(indexName, tableName))
+  }
+
+  /**
+   * List all the indexes in a table.
+   */
+  def listIndexes(
+      conn: Connection,
+      tableName: String,
+      options: JDBCOptions): Array[TableIndex] = {
+    val dialect = JdbcDialects.get(options.url)
+    dialect.listIndexes(conn, tableName, options)
   }
 
   private def executeStatement(conn: Connection, options: JDBCOptions, sql: String): Unit = {
