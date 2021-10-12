@@ -54,8 +54,8 @@ INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
 * **query**
 
     A query that produces the rows to be inserted. It can be in one of following formats:
-    * a `SELECT` statement
-    * a `TABLE` statement
+    * a [SELECT](sql-ref-syntax-qry-select.html) statement
+    * a [Inline Table](sql-ref-syntax-qry-select-inline-table.html) statement
     * a `FROM` statement
 
 ### Examples
