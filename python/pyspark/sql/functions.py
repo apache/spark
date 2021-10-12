@@ -264,7 +264,7 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ...     schema=("course", "year", "earnings"))
     >>> df.groupby("course").agg(min_by("year", "earnings")).show()
     +------+----------------------+
-    |course|max_by(year, earnings)|
+    |course|min_by(year, earnings)|
     +------+----------------------+
     |  Java|                  2012|
     |dotNET|                  2012|
