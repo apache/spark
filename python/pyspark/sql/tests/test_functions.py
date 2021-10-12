@@ -23,7 +23,7 @@ import math
 from py4j.protocol import Py4JJavaError
 from pyspark.sql import Row, Window, types
 from pyspark.sql.functions import udf, input_file_name, col, percentile_approx, \
-    lit, assert_true, sum_distinct, sumDistinct, max_by, min_by, shiftleft, shiftLeft, shiftRight, \
+    lit, assert_true, sum_distinct, sumDistinct, shiftleft, shiftLeft, shiftRight, \
     shiftright, shiftrightunsigned, shiftRightUnsigned, octet_length, bit_length, \
     sec, csc, cot
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
@@ -491,26 +491,6 @@ class FunctionsTests(ReusedSQLTestCase):
 
         for r, ex in zip(sorted(rs), sorted(expected)):
             self.assertEqual(tuple(r), ex[:len(r)])
-
-    def test_max_by(self):
-        # SPARK-36972 Add max_by API to PySpark
-        df = self.spark.createDataFrame([
-            ("Java", 2012, 20000),
-            ("dotNET", 2012, 5000),
-            ("dotNET", 2013, 48000),
-            ("Java", 2013, 30000)], schema=("course", "year", "earnings"))
-        actual = df.groupby("course").agg(max_by("year", "earnings")).collect()
-        self.assertEqual([Row("Java", 2013), Row("dotNET", 2013)], actual)
-
-    def test_min_by(self):
-        # SPARK-36972 Add min_by API to PySpark
-        df = self.spark.createDataFrame([
-            ("Java", 2012, 20000),
-            ("dotNET", 2012, 5000),
-            ("dotNET", 2013, 48000),
-            ("Java", 2013, 30000)], schema=("course", "year", "earnings"))
-        actual = df.groupby("course").agg(min_by("year", "earnings")).collect()
-        self.assertEqual([Row("Java", 2012), Row("dotNET", 2012)], actual)
 
     def test_higher_order_function_failures(self):
         from pyspark.sql.functions import col, transform
