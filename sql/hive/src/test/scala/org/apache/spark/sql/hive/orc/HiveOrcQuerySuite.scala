@@ -383,4 +383,21 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
       }
     }
   }
+
+  test("SPARK-36949: Disallow tables with ANSI intervals stored as orc") {
+    val tbl = "tbl_with_ansi_intervals"
+    withTable(tbl) {
+      val errMsg = intercept[UnsupportedOperationException] {
+        sql(
+          s"""
+             |CREATE TABLE $tbl
+             |STORED AS ORC
+             |AS SELECT
+             |  INTERVAL '1-1' YEAR TO MONTH AS YM,
+             |  INTERVAL '1 02:03:04.123456' DAY TO SECOND AS DT
+             |""".stripMargin)
+      }.getMessage
+      assert(errMsg.contains(s"Hive table `default`.`$tbl` with ANSI intervals is not supported"))
+    }
+  }
 }
