@@ -552,6 +552,9 @@ object DataSourceStrategy
     case expressions.Literal(false, BooleanType) =>
       Some(sources.AlwaysFalse)
 
+    case e @ pushableColumn(name) if e.dataType.isInstanceOf[BooleanType] =>
+      Some(sources.EqualTo(name, true))
+
     case _ => None
   }
 
@@ -644,7 +647,7 @@ object DataSourceStrategy
    * If the underlying subquery hasn't completed yet, this method will throw an exception.
    */
   protected[sql] def translateRuntimeFilter(expr: Expression): Option[Filter] = expr match {
-    case in @ InSubqueryExec(e @ PushableColumnAndNestedColumn(name), _, _, _) =>
+    case in @ InSubqueryExec(e @ PushableColumnAndNestedColumn(name), _, _, _, _, _) =>
       val values = in.values().getOrElse {
         throw new IllegalStateException(s"Can't translate $in to source filter, no subquery result")
       }
@@ -702,20 +705,19 @@ object DataSourceStrategy
     if (aggregates.filter.isEmpty) {
       aggregates.aggregateFunction match {
         case aggregate.Min(PushableColumnWithoutNestedColumn(name)) =>
-          Some(new Min(FieldReference(name).asInstanceOf[FieldReference]))
+          Some(new Min(FieldReference(name)))
         case aggregate.Max(PushableColumnWithoutNestedColumn(name)) =>
-          Some(new Max(FieldReference(name).asInstanceOf[FieldReference]))
+          Some(new Max(FieldReference(name)))
         case count: aggregate.Count if count.children.length == 1 =>
           count.children.head match {
             // SELECT COUNT(*) FROM table is translated to SELECT 1 FROM table
             case Literal(_, _) => Some(new CountStar())
             case PushableColumnWithoutNestedColumn(name) =>
-              Some(new Count(FieldReference(name).asInstanceOf[FieldReference],
-                aggregates.isDistinct))
+              Some(new Count(FieldReference(name), aggregates.isDistinct))
             case _ => None
           }
         case sum @ aggregate.Sum(PushableColumnWithoutNestedColumn(name), _) =>
-          Some(new Sum(FieldReference(name).asInstanceOf[FieldReference], aggregates.isDistinct))
+          Some(new Sum(FieldReference(name), aggregates.isDistinct))
         case _ => None
       }
     } else {

@@ -692,4 +692,18 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
     assert(logs.size == 2)
     logs.forall(_.contains("no equi-join keys"))
   }
+
+  test("SPARK-36652: AQE dynamic join selection should not apply to non-equi join") {
+    val hintAppender = new LogAppender(s"join hint check for equi-join")
+    withLogAppender(hintAppender, level = Some(Level.WARN)) {
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "64MB") {
+        df1.join(df2.repartition($"b1"), $"a1" =!= $"b1").collect()
+      }
+      val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
+        .filter(_.contains("is not supported in the query: no equi-join keys"))
+      assert(logs.isEmpty)
+    }
+  }
 }

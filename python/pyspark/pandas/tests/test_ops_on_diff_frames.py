@@ -503,6 +503,12 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             (pdf1.A + 1).loc[pdf2.A > -3].sort_index(), (psdf1.A + 1).loc[psdf2.A > -3].sort_index()
         )
 
+        pser = pd.Series([0, 1, 2, 3, 4], index=[20, 10, 30, 0, 50])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.loc[pdf2.A > -3].sort_index(), psser.loc[psdf2.A > -3].sort_index())
+        pser.name = psser.name = "B"
+        self.assert_eq(pser.loc[pdf2.A > -3].sort_index(), psser.loc[psdf2.A > -3].sort_index())
+
     def test_bitwise(self):
         pser1 = pd.Series([True, False, True, False, np.nan, np.nan, True, False, np.nan])
         pser2 = pd.Series([True, False, False, True, True, False, np.nan, np.nan, np.nan])
@@ -654,30 +660,35 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             psser1.combine_first(psser2).sort_index(), pser1.combine_first(pser2).sort_index()
         )
 
-        # Series come from same DataFrame
-        pdf = pd.DataFrame(
-            {
-                "A": {"falcon": 330.0, "eagle": 160.0},
-                "B": {"falcon": 345.0, "eagle": 200.0, "duck": 30.0},
-            }
-        )
-        pser1 = pdf.A
-        pser2 = pdf.B
-        psser1 = ps.from_pandas(pser1)
-        psser2 = ps.from_pandas(pser2)
+        # DataFrame
+        pdf1 = pd.DataFrame({"A": [None, 0], "B": [4, None]})
+        psdf1 = ps.from_pandas(pdf1)
+        pdf2 = pd.DataFrame({"C": [3, 3], "B": [1, 1]})
+        psdf2 = ps.from_pandas(pdf2)
 
-        self.assert_eq(
-            psser1.combine_first(psser2).sort_index(), pser1.combine_first(pser2).sort_index()
-        )
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
+            self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2).sort_index())
+        else:
+            # pandas < 1.2.0 returns unexpected dtypes,
+            # please refer to https://github.com/pandas-dev/pandas/issues/28481 for details
+            expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
+            self.assert_eq(expected_pdf, psdf1.combine_first(psdf2).sort_index())
 
-        psser1.name = ("X", "A")
-        psser2.name = ("Y", "B")
-        pser1.name = ("X", "A")
-        pser2.name = ("Y", "B")
+        pdf1.columns = pd.MultiIndex.from_tuples([("A", "willow"), ("B", "pine")])
+        psdf1 = ps.from_pandas(pdf1)
+        pdf2.columns = pd.MultiIndex.from_tuples([("C", "oak"), ("B", "pine")])
+        psdf2 = ps.from_pandas(pdf2)
 
-        self.assert_eq(
-            psser1.combine_first(psser2).sort_index(), pser1.combine_first(pser2).sort_index()
-        )
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
+            self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2).sort_index())
+        else:
+            # pandas < 1.2.0 returns unexpected dtypes,
+            # please refer to https://github.com/pandas-dev/pandas/issues/28481 for details
+            expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
+            expected_pdf.columns = pd.MultiIndex.from_tuples(
+                [("A", "willow"), ("B", "pine"), ("C", "oak")]
+            )
+            self.assert_eq(expected_pdf, psdf1.combine_first(psdf2).sort_index())
 
     def test_insert(self):
         #
@@ -1353,6 +1364,15 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.sort_index(), pser.sort_index())
         self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
+        pser1 = pd.Series([None, 2, 3, 4, 5, 6, 7, 8, None])
+        pser2 = pd.Series([None, 5, None, 3, 2, 1, None, 0, 0])
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
+
+        pser1.update(pser2)
+        psser1.update(psser2)
+        self.assert_eq(psser1, pser1)
+
     def test_where(self):
         pdf1 = pd.DataFrame({"A": [0, 1, 2, 3, 4], "B": [100, 200, 300, 400, 500]})
         pdf2 = pd.DataFrame({"A": [0, -1, -2, -3, -4], "B": [-100, -200, -300, -400, -500]})
@@ -1788,6 +1808,43 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             pdf["Col2"].rank().loc[pdf["Col1"] == 20], psdf["Col2"].rank().loc[psdf["Col1"] == 20]
         )
 
+    def test_cov(self):
+        pser1 = pd.Series([0.90010907, 0.13484424, 0.62036035], index=[0, 1, 2])
+        pser2 = pd.Series([0.12528585, 0.26962463, 0.51111198], index=[1, 2, 3])
+        self._test_cov(pser1, pser2)
+
+        pser1 = pd.Series([0.90010907, 0.13484424, 0.62036035], index=[0, 1, 2])
+        pser2 = pd.Series([0.12528585, 0.26962463, 0.51111198, 0.32076008], index=[1, 2, 3, 4])
+        self._test_cov(pser1, pser2)
+
+        pser1 = pd.Series([0.90010907, 0.13484424, 0.62036035, 0.32076008], index=[0, 1, 2, 3])
+        pser2 = pd.Series([0.12528585, 0.26962463], index=[1, 2])
+        self._test_cov(pser1, pser2)
+
+        psser1 = ps.from_pandas(pser1)
+        with self.assertRaisesRegex(TypeError, "unsupported type: <class 'list'>"):
+            psser1.cov([0.12528585, 0.26962463, 0.51111198])
+        with self.assertRaisesRegex(
+            TypeError, "unsupported type: <class 'pandas.core.series.Series'>"
+        ):
+            psser1.cov(pser2)
+
+    def _test_cov(self, pser1, pser2):
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
+
+        pcov = pser1.cov(pser2)
+        pscov = psser1.cov(psser2)
+        self.assert_eq(pcov, pscov, almost=True)
+
+        pcov = pser1.cov(pser2, min_periods=2)
+        pscov = psser1.cov(psser2, min_periods=2)
+        self.assert_eq(pcov, pscov, almost=True)
+
+        pcov = pser1.cov(pser2, min_periods=3)
+        pscov = psser1.cov(psser2, min_periods=3)
+        self.assert_eq(pcov, pscov, almost=True)
+
 
 class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
     @classmethod
@@ -1954,6 +2011,33 @@ class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
             psser ** psser_other
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
             psser.rpow(psser_other)
+
+    def test_equals(self):
+        psidx1 = ps.Index([1, 2, 3, 4])
+        psidx2 = ps.Index([1, 2, 3, 4])
+
+        with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
+            psidx1.equals(psidx2)
+
+    def test_combine_first(self):
+        pdf1 = pd.DataFrame({"A": [None, 0], "B": [4, None]})
+        psdf1 = ps.from_pandas(pdf1)
+
+        self.assertRaises(TypeError, lambda: psdf1.combine_first(ps.Series([1, 2])))
+
+        pser1 = pd.Series({"falcon": 330.0, "eagle": 160.0})
+        pser2 = pd.Series({"falcon": 345.0, "eagle": 200.0, "duck": 30.0})
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
+        with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
+            psser1.combine_first(psser2)
+
+        pdf1 = pd.DataFrame({"A": [None, 0], "B": [4, None]})
+        psdf1 = ps.from_pandas(pdf1)
+        pdf2 = pd.DataFrame({"C": [3, 3], "B": [1, 1]})
+        psdf2 = ps.from_pandas(pdf2)
+        with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
+            psdf1.combine_first(psdf2)
 
 
 if __name__ == "__main__":

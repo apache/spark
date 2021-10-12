@@ -19,6 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Date, Timestamp}
 import java.time.{Instant, LocalDate}
+import java.util
 
 import scala.collection.mutable.ArrayBuilder
 
@@ -30,8 +31,9 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -285,6 +287,43 @@ abstract class JdbcDialect extends Serializable with Logging{
 
   def removeSchemaCommentQuery(schema: String): String = {
     s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS NULL"
+  }
+
+  /**
+   * Creates an index.
+   *
+   * @param indexName         the name of the index to be created
+   * @param indexType         the type of the index to be created
+   * @param tableName         the table on which index to be created
+   * @param columns           the columns on which index to be created
+   * @param columnsProperties the properties of the columns on which index to be created
+   * @param properties        the properties of the index to be created
+   */
+  def createIndex(
+      indexName: String,
+      indexType: String,
+      tableName: String,
+      columns: Array[NamedReference],
+      columnsProperties: Array[util.Map[NamedReference, util.Properties]],
+      properties: util.Properties): String = {
+    throw new UnsupportedOperationException("createIndex is not supported")
+  }
+
+  /**
+   * Checks whether an index exists
+   *
+   * @param indexName the name of the index
+   * @param tableName the table name on which index to be checked
+   * @param options JDBCOptions of the table
+   * @return true if the index with `indexName` exists in the table with `tableName`,
+   *         false otherwise
+   */
+  def indexExists(
+      conn: Connection,
+      indexName: String,
+      tableName: String,
+      options: JDBCOptions): Boolean = {
+    throw new UnsupportedOperationException("indexExists is not supported")
   }
 
   /**

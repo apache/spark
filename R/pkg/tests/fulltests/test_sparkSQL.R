@@ -1435,6 +1435,7 @@ test_that("column functions", {
     desc_nulls_first(c1) + desc_nulls_last(c1)
   c29 <- acosh(c1) + asinh(c1) + atanh(c1)
   c30 <- product(c1) + product(c1 * 0.5)
+  c31 <- sec(c1) + csc(c1) + cot(c1)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1987,6 +1988,17 @@ test_that("string operators", {
     collect(select(df5, repeat_string(df5$a, -1)))[1, 1],
     ""
   )
+
+  l6 <- list(list("cat"), list("\ud83d\udc08"))
+  df6 <- createDataFrame(l6)
+  expect_equal(
+    collect(select(df6, octet_length(df6$"_1")))[, 1],
+    c(3, 4)
+  )
+  expect_equal(
+    collect(select(df6, bit_length(df6$"_1")))[, 1],
+    c(24, 32)
+  )
 })
 
 test_that("date functions on a DataFrame", {
@@ -2118,6 +2130,8 @@ test_that("higher order functions", {
       expr("transform(xs, (x, i) -> CASE WHEN ((i % 2.0) = 0.0) THEN x ELSE (- x) END)"),
     array_exists("vs", function(v) rlike(v, "FAILED")) ==
       expr("exists(vs, v -> (v RLIKE 'FAILED'))"),
+    array_exists("vs", function(v) ilike(v, "failed")) ==
+      expr("exists(vs, v -> (v ILIKE 'failed'))"),
     array_forall("xs", function(x) x > 0) ==
       expr("forall(xs, x -> x > 0)"),
     array_filter("xs", function(x, i) x > 0 | i %% 2 == 0) ==

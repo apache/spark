@@ -31,6 +31,12 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case UnresolvedDBObjectName(CatalogAndNamespace(catalog, name), isNamespace) if isNamespace =>
+      ResolvedDBObjectName(catalog, name)
+
+    case UnresolvedDBObjectName(CatalogAndIdentifier(catalog, identifier), _) =>
+      ResolvedDBObjectName(catalog, identifier.namespace :+ identifier.name())
+
     case c @ CreateTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
       CreateV2Table(
@@ -76,22 +82,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         convertTableProperties(c),
         writeOptions = c.writeOptions,
         orCreate = c.orCreate)
-
-    case c @ CreateNamespaceStatement(CatalogAndNamespace(catalog, ns), _, _)
-        if !isSessionCatalog(catalog) =>
-      CreateNamespace(catalog.asNamespaceCatalog, ns, c.ifNotExists, c.properties)
-
-    case UseStatement(isNamespaceSet, nameParts) =>
-      if (isNamespaceSet) {
-        SetCatalogAndNamespace(catalogManager, None, Some(nameParts))
-      } else {
-        val CatalogAndNamespace(catalog, ns) = nameParts
-        val namespace = if (ns.nonEmpty) Some(ns) else None
-        SetCatalogAndNamespace(catalogManager, Some(catalog.name()), namespace)
-      }
-
-    case ShowCurrentNamespaceStatement() =>
-      ShowCurrentNamespace(catalogManager)
   }
 
   object NonSessionCatalogAndTable {

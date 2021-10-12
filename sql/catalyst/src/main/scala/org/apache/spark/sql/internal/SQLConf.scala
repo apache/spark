@@ -341,18 +341,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO =
-    buildConf("spark.sql.optimizer.dynamicPartitionPruning.pruningSideExtraFilterRatio")
-      .internal()
-      .doc("When filtering side doesn't support broadcast by join type, and doing DPP means " +
-        "running an extra query that may have significant overhead. This config will be used " +
-        "as the extra filter ratio for computing the data size of the pruning side after DPP, " +
-        "in order to evaluate if it is worth adding an extra subquery as the pruning filter.")
-      .version("3.2.0")
-      .doubleConf
-      .checkValue(ratio => ratio > 0.0 && ratio <= 1.0, "The ratio value must be in (0.0, 1.0].")
-      .createWithDefault(0.04)
-
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
@@ -666,6 +654,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN =
+    buildConf("spark.sql.adaptive.forceOptimizeSkewedJoin")
+      .doc("When true, force enable OptimizeSkewedJoin even if it introduces extra shuffle.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS =
     buildConf("spark.sql.adaptive.customCostEvaluatorClass")
       .doc("The custom cost evaluator class to be used for adaptive execution. If not being set," +
@@ -857,6 +852,14 @@ object SQLConf {
       .intConf
       .checkValue(threshold => threshold >= 0, "The threshold must not be negative.")
       .createWithDefault(10)
+
+  val PARQUET_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.aggregatePushdown")
+    .doc("If true, MAX/MIN/COUNT without filter and group by will be pushed" +
+      " down to Parquet for optimization. MAX/MIN/COUNT for complex types and timestamp" +
+      " can't be pushed down")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
     .doc("If true, data will be written in a way of Spark 1.4 and earlier. For example, decimal " +
@@ -1871,6 +1874,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val COLLAPSE_PROJECT_ALWAYS_INLINE = buildConf("spark.sql.optimizer.collapseProjectAlwaysInline")
+    .doc("Whether to always collapse two adjacent projections and inline expressions even if " +
+      "it causes extra duplication.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
     .doc("Whether to delete the expired log files in file stream sink.")
@@ -2657,7 +2667,6 @@ object SQLConf {
 
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
-      .internal()
       .doc("In SQL queries with a SORT followed by a LIMIT like " +
           "'SELECT x FROM t ORDER BY y LIMIT m', if m is under this threshold, do a top-K sort" +
           " in memory, otherwise do a global sort which spills to disk if necessary.")
@@ -3546,9 +3555,6 @@ class SQLConf extends Serializable with Logging {
   def dynamicPartitionPruningReuseBroadcastOnly: Boolean =
     getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
 
-  def dynamicPartitionPruningPruningSideExtraFilterRatio: Double =
-    getConf(DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO)
-
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
   def isStateSchemaCheckEnabled: Boolean = getConf(STATE_SCHEMA_CHECK_ENABLED)
@@ -3671,6 +3677,8 @@ class SQLConf extends Serializable with Logging {
 
   def parquetFilterPushDownInFilterThreshold: Int =
     getConf(PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD)
+
+  def parquetAggregatePushDown: Boolean = getConf(PARQUET_AGGREGATE_PUSHDOWN_ENABLED)
 
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
 

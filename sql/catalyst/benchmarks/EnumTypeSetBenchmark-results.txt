@@ -1,0 +1,104 @@
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Test contains use empty Set:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                           1              1           0       1316.2           0.8       1.0X
+Use EnumSet                                           0              0           0   16393442.6           0.0   12454.9X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Test contains use 1 item Set:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          12             14           2         85.0          11.8       1.0X
+Use EnumSet                                           0              0           0   15625000.0           0.0  183921.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Test contains use 3 items Set:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          19             19           0         53.4          18.7       1.0X
+Use EnumSet                                           0              0           0   15873015.9           0.0  297149.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Test contains use 5 items Set:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          17             17           0         57.4          17.4       1.0X
+Use EnumSet                                           0              0           0   15873015.9           0.0  276457.7X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Test contains use 10 items Set:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          19             19           0         52.4          19.1       1.0X
+Use EnumSet                                           0              0           0   15873015.9           0.0  302849.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Test create empty Set:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                           1              1           0        135.6           7.4       1.0X
+Use EnumSet                                           2              2           1         64.4          15.5       0.5X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Test create 1 item Set:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          17             18           1          5.9         169.7       1.0X
+Use EnumSet                                           2              3           1         55.6          18.0       9.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Test create 3 items Set:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          38             38           0          2.6         378.0       1.0X
+Use EnumSet                                           2              2           1         55.7          18.0      21.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Test create 5 items Set:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          71             72           5          1.4         705.5       1.0X
+Use EnumSet                                           2              2           1         57.2          17.5      40.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Test create 10 items Set:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          85             85           0          1.2         847.9       1.0X
+Use EnumSet                                           1              2           1         70.0          14.3      59.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Test create and contains use empty Set:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                           1              1           0        704.4           1.4       1.0X
+Use EnumSet                                           0              0           0   34482758.6           0.0   48954.9X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Test create and contains use 1 item Set:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                           35             35           0         28.4          35.2       1.0X
+Use EnumSet                                            0              0           0   29411764.7           0.0 1034921.5X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Test create and contains use 3 items Set:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                              54             54           1         18.6          53.8       1.0X
+Use EnumSet                                               0              0           0   30303030.3           0.0 1630614.5X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Test create and contains use 5 items Set:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                            105            106           1          9.5         105.2       1.0X
+Use EnumSet                                              0              0           0   28571428.6           0.0 3007082.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Test create and contains use 10 items Set:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+Use HashSet                                          125            126           1          8.0         124.6       1.0X
+Use EnumSet                                            0              0           0   31250000.0           0.0 3894392.1X

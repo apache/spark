@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -255,16 +255,16 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropView(r: ResolvedView, ifExists) =>
       DropTableCommand(r.identifier.asTableIdentifier, ifExists, isView = true, purge = false)
 
-    case c @ CreateNamespaceStatement(CatalogAndNamespace(catalog, ns), _, _)
+    case c @ CreateNamespace(ResolvedDBObjectName(catalog, name), _, _)
         if isSessionCatalog(catalog) =>
-      if (ns.length != 1) {
-        throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
+      if (name.length != 1) {
+        throw QueryCompilationErrors.invalidDatabaseNameError(name.quoted)
       }
 
       val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)
       val location = c.properties.get(SupportsNamespaces.PROP_LOCATION)
       val newProperties = c.properties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
-      CreateDatabaseCommand(ns.head, c.ifNotExists, location, comment, newProperties)
+      CreateDatabaseCommand(name.head, c.ifNotExists, location, comment, newProperties)
 
     case d @ DropNamespace(DatabaseInSessionCatalog(db), _, _) =>
       DropDatabaseCommand(db, d.ifExists, d.cascade)
@@ -451,36 +451,46 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       val funcIdentifier = identifier.asFunctionIdentifier
       DropFunctionCommand(funcIdentifier.database, funcIdentifier.funcName, ifExists, isTemp)
 
-    case CreateFunctionStatement(nameParts,
-      className, resources, isTemp, ignoreIfExists, replace) =>
-      if (isTemp) {
-        // temp func doesn't belong to any catalog and we shouldn't resolve catalog in the name.
-        val database = if (nameParts.length > 2) {
-          throw QueryCompilationErrors.unsupportedFunctionNameError(nameParts.quoted)
-        } else if (nameParts.length == 2) {
-          Some(nameParts.head)
-        } else {
-          None
-        }
-        CreateFunctionCommand(
-          database,
-          nameParts.last,
-          className,
-          resources,
-          isTemp,
-          ignoreIfExists,
-          replace)
+    case CreateTempFunction(nameParts, className, resources, ignoreIfExists, replace) =>
+      // temp func doesn't belong to any catalog and we shouldn't resolve catalog in the name.
+      convertToV1CreateFunction(nameParts, className, resources, true, ignoreIfExists, replace)
+
+    case CreateFunction(ResolvedDBObjectName(catalog, nameParts),
+        className, resources, ignoreIfExists, replace) =>
+      if (isSessionCatalog(catalog)) {
+        convertToV1CreateFunction(nameParts, className, resources, false, ignoreIfExists, replace)
       } else {
-        val FunctionIdentifier(function, database) =
-          parseSessionCatalogFunctionIdentifier(nameParts)
-        CreateFunctionCommand(database, function, className, resources, isTemp, ignoreIfExists,
-          replace)
+        throw QueryCompilationErrors.functionUnsupportedInV2CatalogError()
       }
 
     case RefreshFunction(ResolvedFunc(identifier)) =>
       // Fallback to v1 command
       val funcIdentifier = identifier.asFunctionIdentifier
       RefreshFunctionCommand(funcIdentifier.database, funcIdentifier.funcName)
+  }
+
+  private def convertToV1CreateFunction(
+      nameParts: Seq[String],
+      className: String,
+      resources: Seq[FunctionResource],
+      isTemp: Boolean,
+      ignoreIfExists: Boolean,
+      replace: Boolean) = {
+    val database = if (nameParts.length > 2) {
+      throw QueryCompilationErrors.unsupportedFunctionNameError(nameParts.quoted)
+    } else if (nameParts.length == 2) {
+      Some(nameParts.head)
+    } else {
+      None
+    }
+    CreateFunctionCommand(
+      database,
+      nameParts.last,
+      className,
+      resources,
+      isTemp,
+      ignoreIfExists,
+      replace)
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = tableName match {

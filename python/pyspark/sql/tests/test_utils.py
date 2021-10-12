@@ -31,7 +31,7 @@ class UtilsTests(ReusedSQLTestCase):
         try:
             self.spark.sql("select `中文字段`")
         except AnalysisException as e:
-            self.assertRegex(str(e), "cannot resolve '`中文字段`'")
+            self.assertRegex(str(e), "Column '`中文字段`' does not exist")
 
     def test_capture_parse_exception(self):
         self.assertRaises(ParseException, lambda: self.spark.sql("abc"))

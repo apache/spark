@@ -254,7 +254,7 @@ private[spark] class DAGScheduler(
   private[spark] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
 
-  private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(sc.getConf)
+  private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(sc.getConf, isDriver = true)
 
   private val blockManagerMasterDriverHeartbeatTimeout =
     sc.getConf.get(config.STORAGE_BLOCKMANAGER_MASTER_DRIVER_HEARTBEAT_TIMEOUT).millis

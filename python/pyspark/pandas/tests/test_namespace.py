@@ -71,6 +71,27 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
             ps.to_datetime([1, 2, 3], unit="D", origin=pd.Timestamp("1960-01-01")),
         )
 
+        pdf = pd.DataFrame({"years": [2015, 2016], "month": [2, 3], "day": [4, 5]})
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame({"years": [2015, 2016], "months": [2, 3], "day": [4, 5]})
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame({"years": [2015, 2016], "months": [2, 3], "days": [4, 5]})
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
     def test_date_range(self):
         self.assert_eq(
             ps.date_range(start="1/1/2018", end="1/08/2018"),
@@ -334,6 +355,54 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
             ValueError,
             "version and timestamp cannot be used together",
             lambda: read_delta("fake_path", version="0", timestamp="2021-06-22"),
+        )
+
+    def test_to_numeric(self):
+        pser = pd.Series(["1", "2", None, "4", "hello"])
+        psser = ps.from_pandas(pser)
+
+        # "coerce" and "raise" with Series that contains un-parsable data.
+        self.assert_eq(
+            pd.to_numeric(pser, errors="coerce"), ps.to_numeric(psser, errors="coerce"), almost=True
+        )
+
+        # "raise" with Series that contains parsable data only.
+        pser = pd.Series(["1", "2", None, "4", "5.0"])
+        psser = ps.from_pandas(pser)
+
+        self.assert_eq(
+            pd.to_numeric(pser, errors="raise"), ps.to_numeric(psser, errors="raise"), almost=True
+        )
+
+        # "coerce", "ignore" and "raise" with non-Series.
+        data = ["1", "2", None, "4", "hello"]
+        self.assert_eq(pd.to_numeric(data, errors="coerce"), ps.to_numeric(data, errors="coerce"))
+        self.assert_eq(pd.to_numeric(data, errors="ignore"), ps.to_numeric(data, errors="ignore"))
+
+        self.assertRaisesRegex(
+            ValueError,
+            'Unable to parse string "hello"',
+            lambda: ps.to_numeric(data, errors="raise"),
+        )
+
+        # "raise" with non-Series that contains parsable data only.
+        data = ["1", "2", None, "4", "5.0"]
+
+        self.assert_eq(
+            pd.to_numeric(data, errors="raise"), ps.to_numeric(data, errors="raise"), almost=True
+        )
+
+        # Wrong string for `errors` parameter.
+        self.assertRaisesRegex(
+            ValueError,
+            "invalid error value specified",
+            lambda: ps.to_numeric(psser, errors="errors"),
+        )
+        # NotImplementedError
+        self.assertRaisesRegex(
+            NotImplementedError,
+            "'ignore' is not implemented yet, when the `arg` is Series.",
+            lambda: ps.to_numeric(psser, errors="ignore"),
         )
 
 

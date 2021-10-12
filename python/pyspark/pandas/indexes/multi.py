@@ -16,7 +16,7 @@
 #
 
 from distutils.version import LooseVersion
-from functools import partial
+from functools import partial, reduce
 from typing import Any, Callable, Iterator, List, Optional, Tuple, Union, cast, no_type_check
 
 import pandas as pd
@@ -375,6 +375,35 @@ class MultiIndex(Index):
     def name(self, name: Name) -> None:
         raise PandasNotImplementedError(class_name="pd.MultiIndex", property_name="name")
 
+    @property
+    def dtypes(self) -> pd.Series:
+        """Return the dtypes as a Series for the underlying MultiIndex.
+
+        .. versionadded:: 3.3.0
+
+        Returns
+        -------
+        pd.Series
+            The data type of each level.
+
+        Examples
+        --------
+        >>> psmidx = ps.MultiIndex.from_arrays(
+        ...     [[0, 1, 2, 3, 4, 5, 6, 7, 8], [1, 2, 3, 4, 5, 6, 7, 8, 9]],
+        ...     names=("zero", "one"),
+        ... )
+        >>> psmidx.dtypes
+        zero    int64
+        one     int64
+        dtype: object
+        """
+        return pd.Series(
+            [field.dtype for field in self._internal.index_fields],
+            index=pd.Index(
+                [name if len(name) > 1 else name[0] for name in self._internal.index_names]
+            ),
+        )
+
     def _verify_for_rename(self, name: List[Name]) -> List[Label]:  # type: ignore[override]
         if is_list_like(name):
             if self._internal.index_level != len(name):
@@ -704,7 +733,7 @@ class MultiIndex(Index):
                     ('d', 'h')],
                    )
         """
-        return super().copy(deep=deep)  # type: ignore
+        return cast(MultiIndex, super().copy(deep=deep))
 
     def symmetric_difference(  # type: ignore[override]
         self,
@@ -911,7 +940,7 @@ class MultiIndex(Index):
         if hasattr(MissingPandasLikeMultiIndex, item):
             property_or_func = getattr(MissingPandasLikeMultiIndex, item)
             if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
+                return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
         raise AttributeError("'MultiIndex' object has no attribute '{}'".format(item))
@@ -1111,7 +1140,7 @@ class MultiIndex(Index):
             keep_name = self.names == other.names
         elif isinstance(other, Index):
             # Always returns an empty MultiIndex if `other` is Index.
-            return self.to_frame().head(0).index  # type: ignore
+            return cast(MultiIndex, self.to_frame().head(0).index)
         elif not all(isinstance(item, tuple) for item in other):
             raise TypeError("other must be a MultiIndex or a list of tuples")
         else:
@@ -1136,6 +1165,41 @@ class MultiIndex(Index):
             index_fields=index_fields,
         )
         return cast(MultiIndex, DataFrame(internal).index)
+
+    def equal_levels(self, other: "MultiIndex") -> bool:
+        """
+        Return True if the levels of both MultiIndex objects are the same
+
+        .. versionadded:: 3.3.0
+
+        Examples
+        --------
+        >>> psmidx1 = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        >>> psmidx2 = ps.MultiIndex.from_tuples([("b", "y"), ("a", "x"), ("c", "z")])
+        >>> psmidx1.equal_levels(psmidx2)
+        True
+
+        >>> psmidx2 = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "j")])
+        >>> psmidx1.equal_levels(psmidx2)
+        False
+        """
+        nlevels = self.nlevels
+        if nlevels != other.nlevels:
+            return False
+
+        self_sdf = self._internal.spark_frame
+        other_sdf = other._internal.spark_frame
+        subtract_list = []
+        for nlevel in range(nlevels):
+            self_index_scol = self._internal.index_spark_columns[nlevel]
+            other_index_scol = other._internal.index_spark_columns[nlevel]
+            self_subtract_other = self_sdf.select(self_index_scol).subtract(
+                other_sdf.select(other_index_scol)
+            )
+            subtract_list.append(self_subtract_other)
+
+        unioned_subtracts = reduce(lambda x, y: x.union(y), subtract_list)
+        return len(unioned_subtracts.head(1)) == 0
 
     @property
     def hasnans(self) -> bool:
