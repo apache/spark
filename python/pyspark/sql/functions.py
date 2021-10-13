@@ -200,7 +200,6 @@ def min(col: "ColumnOrName") -> Column:
     return _invoke_function_over_column("min", col)
 
 
-@since(3.3)
 def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     """
     Returns the value associated with the maximum value of ord.
@@ -236,7 +235,6 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     return _invoke_function("max_by", _to_java_column(col), _to_java_column(ord))
 
 
-@since(3.3)
 def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     """
     Returns the value associated with the minimum value of ord.
