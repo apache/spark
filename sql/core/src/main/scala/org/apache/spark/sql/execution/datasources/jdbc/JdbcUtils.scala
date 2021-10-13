@@ -301,7 +301,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
             rsmd.getClass.getName == "org.apache.hive.jdbc.HiveResultSetMetaData" => true
         }
       }
-      val nullable = if (alwaysNullable) {
+      val nullable = if (alwaysNullable || typeName.toString().equals("TIMESTAMP")) {
         true
       } else {
         rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
