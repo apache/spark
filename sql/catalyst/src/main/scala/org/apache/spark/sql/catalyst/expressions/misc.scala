@@ -393,7 +393,7 @@ case class AesEncrypt(input: Expression, key: Expression, child: Expression)
 case class AesDecrypt(input: Expression, key: Expression, child: Expression)
     extends RuntimeReplaceable {
 
-  def this(input: Expression, key: Expression) {
+  def this(input: Expression, key: Expression) = {
     this(input,
       key,
       StaticInvoke(
