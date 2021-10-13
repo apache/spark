@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.{NewSQLHadoopMapReduceCommitProtocol, SQLHadoopMapReduceCommitProtocol}
+import org.apache.spark.sql.execution.datasources.{SQLPathHadoopMapReduceCommitProtocol, SQLHadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -196,7 +196,7 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
         "spark.sql.source.stagingDir" -> s"${stagingDir.getAbsolutePath}/.spark-stagingDir",
         "spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version" -> "2",
         SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
-          classOf[NewSQLHadoopMapReduceCommitProtocol].getName) {
+          classOf[SQLPathHadoopMapReduceCommitProtocol].getName) {
         withTempDir { d =>
           withTable("t") {
             sql(
