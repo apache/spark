@@ -178,6 +178,7 @@ class Index(IndexOpsMixin):
         from pyspark.pandas.indexes.multi import MultiIndex
         from pyspark.pandas.indexes.numeric import Float64Index, Int64Index
 
+        instance: Index
         if anchor._internal.index_level > 1:
             instance = object.__new__(MultiIndex)
         elif isinstance(anchor._internal.index_fields[0].dtype, CategoricalDtype):
@@ -198,7 +199,7 @@ class Index(IndexOpsMixin):
         else:
             instance = object.__new__(Index)
 
-        instance._anchor = anchor
+        instance._anchor = anchor  # type: ignore[attr-defined]
         return instance
 
     @property
