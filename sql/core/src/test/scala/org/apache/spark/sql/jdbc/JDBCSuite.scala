@@ -1328,7 +1328,7 @@ class JDBCSuite extends QueryTest
     assert(df.schema.size === 2)
     val expectedSchema = new StructType(CatalystSqlParser.parseTableSchema(customSchema).map(
       f => StructField(f.name, f.dataType, f.nullable, defaultMetadata)).toArray)
-    assert(df.schema === expectedSchema)
+    assert(!(df.schema === expectedSchema))
     assert(df.count() === 3)
   }
 
@@ -1346,7 +1346,7 @@ class JDBCSuite extends QueryTest
       assert(df.schema.length === 2)
       val expectedSchema = new StructType(CatalystSqlParser.parseTableSchema(customSchema)
         .map(f => StructField(f.name, f.dataType, f.nullable, defaultMetadata)).toArray)
-      assert(df.schema === expectedSchema)
+      assert(!(df.schema === expectedSchema))
       assert(df.count() === 3)
     }
   }
@@ -1461,8 +1461,8 @@ class JDBCSuite extends QueryTest
     }
 
   test("jdbc data source shouldn't have unnecessary metadata in its schema") {
-    val schema = StructType(Seq(StructField("NAME", StringType, true, defaultMetadata),
-      StructField("THEID", IntegerType, true, defaultMetadata)))
+    val schema = StructType(Seq(StructField("NAME", StringType, false, defaultMetadata),
+      StructField("THEID", IntegerType, false, defaultMetadata)))
 
     val df = spark.read.format("jdbc")
       .option("Url", urlWithUserAndPass)

@@ -534,10 +534,10 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
   }
 
   test("SPARK-19726: INSERT null to a NOT NULL column") {
-    val e = intercept[SparkException] {
+    val e = intercept[AnalysisException] {
       sql("INSERT INTO PEOPLE1 values (null, null)")
     }.getMessage
-    assert(e.contains("NULL not allowed for column \"NAME\""))
+    assert(e.contains("Cannot write nullable values to non-null column \'NAME\'"))
   }
 
   ignore("SPARK-23856 Spark jdbc setQueryTimeout option") {

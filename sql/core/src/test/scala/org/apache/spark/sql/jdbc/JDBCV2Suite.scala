@@ -102,7 +102,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedFilters: [IsNotNull(ID), GreaterThan(ID,1)]"
+          "PushedFilters: [GreaterThan(ID,1)]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
 
@@ -266,7 +266,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [MAX(ID), MIN(ID)], " +
-            "PushedFilters: [IsNotNull(ID), GreaterThan(ID,0)], " +
+            "PushedFilters: [GreaterThan(ID,0)], " +
             "PushedGroupby: []"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
