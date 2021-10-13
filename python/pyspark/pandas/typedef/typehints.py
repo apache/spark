@@ -41,11 +41,12 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype, pandas_dtype
 from pandas.api.extensions import ExtensionDtype
 
+extension_dtypes: Tuple[type, ...]
 try:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
 
     extension_dtypes_available = True
-    extension_dtypes = (Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype)  # type: Tuple
+    extension_dtypes = (Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype)
 
     try:
         from pandas import BooleanDtype, StringDtype
@@ -665,10 +666,9 @@ def create_type_for_series_type(param: Any) -> Type[SeriesType]:
     """
     from pyspark.pandas.typedef import NameTypeHolder
 
+    new_class: Type[NameTypeHolder]
     if isinstance(param, ExtensionDtype):
-        new_class = type(
-            NameTypeHolder.short_name, (NameTypeHolder,), {}
-        )  # type: Type[NameTypeHolder]
+        new_class = type(NameTypeHolder.short_name, (NameTypeHolder,), {})
         new_class.tpe = param
     else:
         new_class = param.type if isinstance(param, np.dtype) else param
@@ -815,9 +815,9 @@ def _new_type_holders(
         # DataFrame["id": int, "A": int]
         new_params = []
         for param in params:
-            new_param = type(
+            new_param: Type[Union[NameTypeHolder, IndexNameTypeHolder]] = type(
                 holder_clazz.short_name, (holder_clazz,), {}
-            )  # type: Type[Union[NameTypeHolder, IndexNameTypeHolder]]
+            )
             new_param.name = param.start
             if isinstance(param.stop, ExtensionDtype):
                 new_param.tpe = param.stop
@@ -830,9 +830,9 @@ def _new_type_holders(
         # DataFrame[float, float]
         new_types = []
         for param in params:
-            new_type = type(
+            new_type: Type[Union[NameTypeHolder, IndexNameTypeHolder]] = type(
                 holder_clazz.short_name, (holder_clazz,), {}
-            )  # type: Type[Union[NameTypeHolder, IndexNameTypeHolder]]
+            )
             if isinstance(param, ExtensionDtype):
                 new_type.tpe = param
             else:
