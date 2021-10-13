@@ -4464,15 +4464,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Create an index, returning a [[CreateIndex]] logical plan.
    * For example:
    * {{{
-   * CREATE [index_type] INDEX index_name ON [TABLE] table_name (column_index_property_list)
+   * CREATE INDEX index_name ON [TABLE] table_name [USING index_type] (column_index_property_list)
    *   [OPTIONS indexPropertyList]
    *   column_index_property_list: column_name [OPTIONS(indexPropertyList)]  [ ,  . . . ]
    *   indexPropertyList: index_property_name [= index_property_value] [ ,  . . . ]
    * }}}
    */
   override def visitCreateIndex(ctx: CreateIndexContext): LogicalPlan = withOrigin(ctx) {
-    val (indexType, indexName) = if (ctx.identifier.size() == 1) {
-      (null, ctx.identifier(0).getText)
+    val (indexName, indexType) = if (ctx.identifier.size() == 1) {
+      (ctx.identifier(0).getText, null)
     } else {
       (ctx.identifier(0).getText, ctx.identifier(1).getText)
     }

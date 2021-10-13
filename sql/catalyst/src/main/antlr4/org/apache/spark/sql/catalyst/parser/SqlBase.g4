@@ -247,8 +247,9 @@ statement
     | SET .*?                                                          #setConfiguration
     | RESET configKey                                                  #resetQuotedConfiguration
     | RESET .*?                                                        #resetConfiguration
-    | CREATE indexType=identifier? INDEX (IF NOT EXISTS)? identifier ON TABLE?
-        multipartIdentifier '(' columns=multipartIdentifierPropertyList ')'
+    | CREATE INDEX (IF NOT EXISTS)? identifier ON TABLE?
+        multipartIdentifier (USING indexType=identifier)?
+        '(' columns=multipartIdentifierPropertyList ')'
         (OPTIONS options=propertyList)?                                #createIndex
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;

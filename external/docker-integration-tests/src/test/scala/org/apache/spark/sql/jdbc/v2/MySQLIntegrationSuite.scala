@@ -146,7 +146,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     assert(jdbcTable.indexExists("i1") == false)
     assert(jdbcTable.indexExists("i2") == false)
 
-    sql(s"CREATE BTREE index i1 ON $tbl (col1)")
+    sql(s"CREATE index i1 ON $tbl USING BTREE (col1)")
     sql(s"CREATE index i2 ON $tbl (col2, col3, col5) OPTIONS (KEY_BLOCK_SIZE=10)")
 
     assert(jdbcTable.indexExists("i1") == true)
