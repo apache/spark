@@ -523,9 +523,11 @@ class SparkSqlAstBuilder extends AstBuilder {
         ctx.EXISTS != null,
         ctx.REPLACE != null)
     } else {
-      // Temporary function names should not contain database prefix like "database.function"
-      val database = if (functionIdentifier.length != 1) {
+      if (functionIdentifier.length > 2) {
         throw QueryCompilationErrors.unsupportedFunctionNameError(functionIdentifier.quoted)
+      } else if (functionIdentifier.length == 2) {
+        // Temporary function names should not contain database prefix like "database.function"
+        throw QueryCompilationErrors.specifyingDBInCreateTempFuncError(functionIdentifier.head)
       }
       CreateFunctionCommand(
         None,
