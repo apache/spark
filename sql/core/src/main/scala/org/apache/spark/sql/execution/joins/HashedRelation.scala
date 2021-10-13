@@ -497,9 +497,7 @@ private[joins] object UnsafeHashedRelation {
     // that ensuring such placement of the nodes improves performance
     val candidate = new UnsafeHashedRelation(key.size, numFields, binaryMap)
     if (binaryMap.numValues() > binaryMap.numKeys() * 2) {
-     val keys = candidate.valuesWithKeyIndex().map(_.getValue)
-        .map(keyGenerator).map(_.copy()).toArray
-      // val keys = candidate.keys().map(keyGenerator).map(_.copy()).toArray
+     val keys = candidate.keys.map(_.copy()).toArray
       val distinctKeys = keys.distinct
       scala.Console.err.print(s"Number of keys is ${keys.length}; distinct keys is " +
         s"${distinctKeys.length} key schema ${key}\n")
