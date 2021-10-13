@@ -48,6 +48,14 @@ class UtilsTests(ReusedSQLTestCase):
             self.assertRegex(e.desc, "1024 is not in the permitted values")
             self.assertRegex(e.stackTrace, "org.apache.spark.sql.functions")
 
+    def test_get_error_class_state(self):
+        # SPARK-36953: test CapturedException.getErrorClass and getSqlState (from SparkThrowable)
+        try:
+            self.spark.sql("""SELECT a""")
+        except AnalysisException as e:
+            self.assertEquals(e.getErrorClass(), "MISSING_COLUMN")
+            self.assertEquals(e.getSqlState(), "42000")
+
 
 if __name__ == "__main__":
     import unittest
