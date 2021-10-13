@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import javax.crypto.Cipher
-import javax.crypto.spec.SecretKeySpec
-
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
@@ -28,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -308,32 +304,6 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
 }
 
 /**
- * The concrete implementation for AES encryption and decryption.
- */
-object AesImpl {
-  def encrypt(input: Array[Byte], key: Array[Byte]): Array[Byte] = {
-    doInternal(input, key, Cipher.ENCRYPT_MODE)
-  }
-
-  def decrypt(input: Array[Byte], key: Array[Byte]): Array[Byte] = {
-    doInternal(input, key, Cipher.DECRYPT_MODE)
-  }
-
- private def doInternal(input: Array[Byte], key: Array[Byte], mode: Int): Array[Byte] = {
-    val inputLength = input.length
-    val keyLength = key.length
-    val secretKey = keyLength match {
-      case 16 | 23 | 32 => new SecretKeySpec(key, 0, keyLength, "AES")
-      case _ => throw QueryExecutionErrors.invalidAesKeyLengthError(keyLength)
-    }
-
-   val cipher = Cipher.getInstance("AES")
-   cipher.init(mode, secretKey)
-   cipher.doFinal(input, 0, inputLength)
-  }
-}
-
-/**
  * A function that encrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
  * For versions prior to JDK 8u161, 192 and 256 bits keys can be used
  * if Java Cryptography Extension (JCE) Unlimited Strength Jurisdiction Policy Files are installed.
@@ -359,9 +329,9 @@ case class AesEncrypt(input: Expression, key: Expression, child: Expression)
     this(input,
       key,
       StaticInvoke(
-        AesImpl.getClass,
+        classOf[ExpressionImplUtils],
         BinaryType,
-        "encrypt",
+        "aesEncrypt",
         Seq(input, key),
         Seq(BinaryType, BinaryType)))
   }
@@ -397,9 +367,9 @@ case class AesDecrypt(input: Expression, key: Expression, child: Expression)
     this(input,
       key,
       StaticInvoke(
-        AesImpl.getClass,
+        classOf[ExpressionImplUtils],
         BinaryType,
-        "decrypt",
+        "aesDecrypt",
         Seq(input, key),
         Seq(BinaryType, BinaryType)))
   }

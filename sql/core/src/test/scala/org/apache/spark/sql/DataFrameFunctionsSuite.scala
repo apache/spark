@@ -248,36 +248,58 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("misc aes function") {
+    val key16 = "abcdefghijklmnop"
+    val key24 = "abcdefghijklmnop12345678"
+    val key32 = "abcdefghijklmnop12345678ABCDEFGH"
+    val dummyKey16 = "1234567812345678"
+    val dummyKey24 = "123456781234567812345678"
+    val dummyKey32 = "12345678123456781234567812345678"
+    val encryptedText16 = "4Hv0UKCx6nfUeAoPZo1z+w=="
+    val encryptedText24 = "NeTYNgA+PCQBN50DA//O2w=="
+    val encryptedText32 = "9J3iZbIxnmaG+OIA9Amd+A=="
+    val encryptedEmptyText16 = "jmTOhz8XTbskI/zYFFgOFQ=="
+    val encryptedEmptyText24 = "9RDK70sHNzqAFRcpfGM5gQ=="
+    val encryptedEmptyText32 = "j9IDsCvlYXtcVJUf4FAjQQ=="
+
     def checkInvalidKeyLength(df: => DataFrame): Unit = {
       val e = intercept[Exception] {
         df.collect
       }
-      assert(e.getMessage.contains("The key length should be one of 16, 24 or 32 bytes"))
+      assert(e.getMessage.contains(
+        "The key length of aes_encrypt/aes_decrypt should be one of 16, 24 or 32 bytes"))
     }
 
-    val df1 = Seq("ABC", "").toDF
+    val df1 = Seq("Spark", "").toDF
 
     // Successful encryption
-    checkAnswer(
-      df1.selectExpr("base64(aes_encrypt(value, '1234567890123456'))"),
-      Seq(Row("y6Ss+zCYObpCbgfWfyNWTw=="), Row("BQGHoM3lqYcsurCRq3PlUw==")))
-    checkAnswer(
-      df1.selectExpr("base64(aes_encrypt(binary(value), '1234567890123456'))"),
-      Seq(Row("y6Ss+zCYObpCbgfWfyNWTw=="), Row("BQGHoM3lqYcsurCRq3PlUw==")))
+    Seq(
+      (key16, encryptedText16, encryptedEmptyText16),
+      (key24, encryptedText24, encryptedEmptyText24),
+      (key32, encryptedText32, encryptedEmptyText32)).foreach {
+      case (key, encryptedText, encryptedEmptyText) =>
+        checkAnswer(
+          df1.selectExpr(s"base64(aes_encrypt(value, '$key'))"),
+          Seq(Row(encryptedText), Row(encryptedEmptyText)))
+        checkAnswer(
+          df1.selectExpr(s"base64(aes_encrypt(binary(value), '$key'))"),
+          Seq(Row(encryptedText), Row(encryptedEmptyText)))
+    }
 
     // Encryption failure - input or key is null
-    checkAnswer(
-      df1.selectExpr("aes_encrypt(cast(null as string), '1234567890123456')"),
-      Seq(Row(null), Row(null)))
-    checkAnswer(
-      df1.selectExpr("aes_encrypt(cast(null as binary), '1234567890123456')"),
-      Seq(Row(null), Row(null)))
-    checkAnswer(
-      df1.selectExpr("aes_encrypt(cast(null as string), binary('1234567890123456'))"),
-      Seq(Row(null), Row(null)))
-    checkAnswer(
-      df1.selectExpr("aes_encrypt(cast(null as binary), binary('1234567890123456'))"),
-      Seq(Row(null), Row(null)))
+    Seq(key16, key24, key32).foreach { key =>
+      checkAnswer(
+        df1.selectExpr(s"aes_encrypt(cast(null as string), '$key')"),
+        Seq(Row(null), Row(null)))
+      checkAnswer(
+        df1.selectExpr(s"aes_encrypt(cast(null as binary), '$key')"),
+        Seq(Row(null), Row(null)))
+      checkAnswer(
+        df1.selectExpr(s"aes_encrypt(cast(null as string), binary('$key'))"),
+        Seq(Row(null), Row(null)))
+      checkAnswer(
+        df1.selectExpr(s"aes_encrypt(cast(null as binary), binary('$key'))"),
+        Seq(Row(null), Row(null)))
+    }
     checkAnswer(
       df1.selectExpr("aes_encrypt(value, cast(null as string))"),
       Seq(Row(null), Row(null)))
@@ -290,41 +312,66 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, binary('123456789012345'))"))
     checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, binary(''))"))
 
-    val df2 = Seq("y6Ss+zCYObpCbgfWfyNWTw==", "BQGHoM3lqYcsurCRq3PlUw==").toDF
+    val df2 = Seq(
+      (encryptedText16, encryptedText24, encryptedText32),
+      (encryptedEmptyText16, encryptedEmptyText24, encryptedEmptyText32)
+    ).toDF("value16", "value24", "value32")
 
     // Successful decryption
-    checkAnswer(
-      df2.selectExpr("cast(aes_decrypt(unbase64(value), '1234567890123456') as string)"),
-      Seq(Row("ABC"), Row("")))
-    checkAnswer(
-      df2.selectExpr("cast(aes_decrypt(unbase64(value), binary('1234567890123456')) as string)"),
-      Seq(Row("ABC"), Row("")))
+    Seq(
+      ("value16", key16),
+      ("value24", key24),
+      ("value32", key32)).foreach {
+      case (colName, key) =>
+        checkAnswer(
+          df2.selectExpr(s"cast(aes_decrypt(unbase64($colName), '$key') as string)"),
+          Seq(Row("Spark"), Row("")))
+        checkAnswer(
+          df2.selectExpr(s"cast(aes_decrypt(unbase64($colName), binary('$key')) as string)"),
+          Seq(Row("Spark"), Row("")))
+    }
 
     // Decryption failure - input or key is null
-    checkAnswer(
-      df2.selectExpr("aes_decrypt(cast(null as binary), '1234567890123456')"),
-      Seq(Row(null), Row(null)))
-    checkAnswer(
-      df2.selectExpr("aes_decrypt(cast(null as binary), binary('1234567890123456'))"),
-      Seq(Row(null), Row(null)))
-    checkAnswer(
-      df2.selectExpr("aes_decrypt(value, cast(null as string))"),
-      Seq(Row(null), Row(null)))
-    checkAnswer(
-      df2.selectExpr("aes_decrypt(value, cast(null as binary))"),
-      Seq(Row(null), Row(null)))
+    Seq(key16, key24, key32).foreach { key =>
+      checkAnswer(
+        df2.selectExpr(s"aes_decrypt(cast(null as binary), '$key')"),
+        Seq(Row(null), Row(null)))
+      checkAnswer(
+        df2.selectExpr(s"aes_decrypt(cast(null as binary), binary('$key'))"),
+        Seq(Row(null), Row(null)))
+    }
+    Seq("value16", "value24", "value32").foreach { colName =>
+      checkAnswer(
+        df2.selectExpr(s"aes_decrypt($colName, cast(null as string))"),
+        Seq(Row(null), Row(null)))
+      checkAnswer(
+        df2.selectExpr(s"aes_decrypt($colName, cast(null as binary))"),
+        Seq(Row(null), Row(null)))
+    }
 
     // Decryption failure - invalid key length
-    checkInvalidKeyLength(df2.selectExpr("aes_decrypt(unbase64(value), '12345678901234567')"))
-    checkInvalidKeyLength(df2.selectExpr("aes_decrypt(unbase64(value), binary('123456789012345'))"))
-    checkInvalidKeyLength(df2.selectExpr("aes_decrypt(unbase64(value), '')"))
-    checkInvalidKeyLength(df2.selectExpr("aes_decrypt(unbase64(value), binary(''))"))
+    Seq("value16", "value24", "value32").foreach { colName =>
+      checkInvalidKeyLength(df2.selectExpr(
+        s"aes_decrypt(unbase64($colName), '12345678901234567')"))
+      checkInvalidKeyLength(df2.selectExpr(
+        s"aes_decrypt(unbase64($colName), binary('123456789012345'))"))
+      checkInvalidKeyLength(df2.selectExpr(
+        s"aes_decrypt(unbase64($colName), '')"))
+      checkInvalidKeyLength(df2.selectExpr(
+        s"aes_decrypt(unbase64($colName), binary(''))"))
+    }
 
     // Decryption failure - key mismatch
-    val e = intercept[Exception] {
-      df2.selectExpr("aes_decrypt(unbase64(value), binary('abcdefghijklmnop'))").collect
+    Seq(
+      ("value16", dummyKey16),
+      ("value24", dummyKey24),
+      ("value32", dummyKey32)).foreach {
+      case (colName, key) =>
+        val e = intercept[Exception] {
+          df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'))").collect
+        }
+        assert(e.getMessage.contains("BadPaddingException"))
     }
-    assert(e.getMessage.contains("BadPaddingException"))
   }
 
   test("string function find_in_set") {

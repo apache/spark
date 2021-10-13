@@ -1827,8 +1827,9 @@ object QueryExecutionErrors {
     new UnsupportedOperationException("pivot is only supported after a groupBy")
   }
 
-  def invalidAesKeyLengthError(actualLength: Int): Throwable = {
-    new SparkException(
-      s"The key length should be one of 16, 24 or 32 bytes (the actual length is $actualLength)")
+  def invalidAesKeyLengthError(actualLength: Int): RuntimeException = {
+    new RuntimeException(
+      s"The key length of aes_encrypt/aes_decrypt should be " +
+        "one of 16, 24 or 32 bytes, but got: $actualLength")
   }
 }
