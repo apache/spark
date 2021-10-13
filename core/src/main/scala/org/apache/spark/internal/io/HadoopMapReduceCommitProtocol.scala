@@ -118,7 +118,9 @@ class HadoopMapReduceCommitProtocol(
     format.getOutputCommitter(context)
   }
 
-  override def outputPath: Path = {
+  override def getOutputPath(): Path = new Path(path)
+
+  override def getWorkPath: Path = {
     if (dynamicPartitionOverwrite) {
       stagingDir
     } else {

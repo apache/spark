@@ -57,9 +57,26 @@ abstract class FileCommitProtocol extends Logging {
   import FileCommitProtocol._
 
   /**
-   * The output path of this committer.
+   * Get the final directory where work will be placed once the job
+   * is committed. This may be null, in which case, there is no output
+   * path to write data to.
    */
-  def outputPath: Path
+  def getOutputPath(): Path = null
+
+  /**
+   * Get the directory that the task should write results into.
+   * Warning: there's no guarantee that this work path is on the same
+   * FS as the final output, or that it's visible across machines.
+   * May be null.
+   */
+  def getWorkPath(): Path = null
+
+  /**
+   * Predicate: is there an output path?
+   */
+  def hasOutputPath(): Boolean = {
+    getOutputPath() != null;
+  }
 
   /**
    * Setups up a job. Must be called on the driver before any other methods can be invoked.
