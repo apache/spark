@@ -924,11 +924,12 @@ object DDLUtils extends Logging {
     }
   }
 
-  private[sql] def checkDataColNames(table: CatalogTable): Unit = {
-    checkDataColNames(table, table.dataSchema)
+  private[sql] def checkTableColumns(table: CatalogTable): Unit = {
+    checkTableColumns(table, table.dataSchema)
   }
 
-  private[sql] def checkDataColNames(table: CatalogTable, schema: StructType): Unit = {
+  // Checks correctness of table's column names and types.
+  private[sql] def checkTableColumns(table: CatalogTable, schema: StructType): Unit = {
     table.provider.foreach {
       _.toLowerCase(Locale.ROOT) match {
         case HIVE_PROVIDER =>
