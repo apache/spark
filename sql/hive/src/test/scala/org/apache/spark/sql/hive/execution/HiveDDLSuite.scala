@@ -2999,4 +2999,27 @@ class HiveDDLSuite
       assert(spark.sparkContext.listJars().exists(_.contains(jarName)))
     }
   }
+
+  test("SPARK-36949: Disallow tables with ANSI intervals when the provider is Hive") {
+    val tbl = "tbl_with_ansi_intervals"
+    withTable(tbl) {
+      val errMsg = intercept[UnsupportedOperationException] {
+        sql(
+          s"""
+             |CREATE TABLE $tbl
+             |STORED AS ORC
+             |AS SELECT
+             |  INTERVAL '1-1' YEAR TO MONTH AS YM,
+             |  INTERVAL '1 02:03:04.123456' DAY TO SECOND AS DT
+             |""".stripMargin)
+      }.getMessage
+      assert(errMsg.contains(s"Hive table `default`.`$tbl` with ANSI intervals is not supported"))
+
+      sql(s"CREATE TABLE $tbl STORED AS PARQUET AS SELECT 1")
+      val errMsg2 = intercept[ParseException] {
+        sql(s"ALTER TABLE $tbl ADD COLUMNS (ym INTERVAL YEAR)")
+      }.getMessage
+      assert(errMsg2.contains("Cannot use interval type in the table schema"))
+    }
+  }
 }
