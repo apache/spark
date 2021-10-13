@@ -835,8 +835,7 @@ case class CustomFileCommitProtocol(
     path: String,
     stagingPath: String,
     dynamicPartitionOverwrite: Boolean = false)
-  extends SQLHadoopMapReduceCommitProtocol(
-    jobId, path, stagingPath, dynamicPartitionOverwrite) {
+  extends SQLHadoopMapReduceCommitProtocol(jobId, path, stagingPath, dynamicPartitionOverwrite) {
   override def commitTask(
     taskContext: TaskAttemptContext): FileCommitProtocol.TaskCommitMessage = {
     Thread.sleep(Random.nextInt(100))

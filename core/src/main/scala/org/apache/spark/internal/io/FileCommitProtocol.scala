@@ -245,7 +245,7 @@ object FileCommitProtocol extends Logging {
         classOf[String], classOf[String], classOf[String], classOf[Boolean])
       logDebug("Using (String, String, Configuration,  Boolean) constructor")
       ctor.newInstance(jobId, outputPath,
-        stagingDir.getOrElse(new Path(outputPath, ".spark-staging-" + jobId)),
+        stagingDir.getOrElse(new Path(outputPath, ".spark-staging-" + jobId).toString),
         dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean])
     } catch {
       case _: NoSuchMethodException =>

@@ -58,7 +58,8 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
       FileCommitProtocol.instantiate(
         classOf[Other].getCanonicalName,
         "job",
-        "path")
+        "path",
+        false)
     }
   }
 
@@ -67,7 +68,8 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
       FileCommitProtocol.instantiate(
         classOf[NoMatchingArgs].getCanonicalName,
         "job",
-        "path")
+        "path",
+        false)
     }
   }
 
