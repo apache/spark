@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal.io
 
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.{TaskAttemptContext => NewTaskAttemptContext}
 
@@ -27,7 +28,8 @@ import org.apache.hadoop.mapreduce.{TaskAttemptContext => NewTaskAttemptContext}
  * Unlike Hadoop's OutputCommitter, this implementation is serializable.
  */
 class HadoopMapRedCommitProtocol(jobId: String, path: String)
-  extends HadoopMapReduceCommitProtocol(jobId, path, "") {
+  extends HadoopMapReduceCommitProtocol(
+    jobId, path, new Path(path, ".spark-staging-" + jobId).toString) {
 
   override def setupCommitter(context: NewTaskAttemptContext): OutputCommitter = {
     val config = context.getConfiguration.asInstanceOf[JobConf]

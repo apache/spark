@@ -32,7 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
 class SQLHadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
-    stagingPath: String = "",
+    stagingPath: String,
     dynamicPartitionOverwrite: Boolean = false)
   extends HadoopMapReduceCommitProtocol(jobId, path, stagingPath, dynamicPartitionOverwrite)
     with Serializable with Logging {
