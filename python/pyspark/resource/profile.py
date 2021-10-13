@@ -38,45 +38,43 @@ class ResourceProfile(object):
     """
 
     @overload
-    def __init__(
-        self,
-        _java_resource_profile: JavaObject,
-    ) -> None:
+    def __init__(self, _java_resource_profile: JavaObject):
         ...
 
     @overload
     def __init__(
         self,
-        _exec_req: Optional[Dict[str, ExecutorResourceRequest]] = None,
-        _task_req: Optional[Dict[str, TaskResourceRequest]] = None
-    ) -> None:
+        _java_resource_profile: None = ...,
+        _exec_req: Optional[Dict[str, ExecutorResourceRequest]] = ...,
+        _task_req: Optional[Dict[str, TaskResourceRequest]] = ...,
+    ):
         ...
 
-    def __init__(  # type: ignore[misc]
+    def __init__(
         self,
-        _java_resource_profile: None = None,
+        _java_resource_profile: Optional[JavaObject] = None,
         _exec_req: Optional[Dict[str, ExecutorResourceRequest]] = None,
         _task_req: Optional[Dict[str, TaskResourceRequest]] = None
-    ) -> None:
+    ):
         if _java_resource_profile is not None:
             self._java_resource_profile = _java_resource_profile
         else:
-            self._java_resource_profile = None  # type: ignore[has-type]
+            self._java_resource_profile = None
             self._executor_resource_requests = _exec_req or {}
             self._task_resource_requests = _task_req or {}
 
     @property
     def id(self) -> int:
-        if self._java_resource_profile is not None:  # type: ignore[has-type]
-            return self._java_resource_profile.id()  # type: ignore[has-type]
+        if self._java_resource_profile is not None:
+            return self._java_resource_profile.id()
         else:
             raise RuntimeError("SparkContext must be created to get the id, get the id "
                                "after adding the ResourceProfile to an RDD")
 
     @property
     def taskResources(self) -> Dict[str, TaskResourceRequest]:
-        if self._java_resource_profile is not None:  # type: ignore[has-type]
-            taskRes = self._java_resource_profile.taskResourcesJMap()  # type: ignore[has-type]
+        if self._java_resource_profile is not None:
+            taskRes = self._java_resource_profile.taskResourcesJMap()
             result = {}
             for k, v in taskRes.items():
                 result[k] = TaskResourceRequest(v.resourceName(), v.amount())
@@ -86,8 +84,8 @@ class ResourceProfile(object):
 
     @property
     def executorResources(self) -> Dict[str, ExecutorResourceRequest]:
-        if self._java_resource_profile is not None:  # type: ignore[has-type]
-            execRes = self._java_resource_profile.executorResourcesJMap()  # type: ignore[has-type]
+        if self._java_resource_profile is not None:
+            execRes = self._java_resource_profile.executorResourcesJMap()
             result = {}
             for k, v in execRes.items():
                 result[k] = ExecutorResourceRequest(v.resourceName(), v.amount(),

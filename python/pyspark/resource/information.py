@@ -40,7 +40,7 @@ class ResourceInformation(object):
     This API is evolving.
     """
 
-    def __init__(self, name: str, addresses: List[str]) -> None:
+    def __init__(self, name: str, addresses: List[str]):
         self._name = name
         self._addresses = addresses
 
