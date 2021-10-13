@@ -32,9 +32,9 @@ import org.apache.spark.sql.internal.SQLConf
 class SQLHadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
-    stagingPath: String,
+    stagingDir: Path,
     dynamicPartitionOverwrite: Boolean = false)
-  extends HadoopMapReduceCommitProtocol(jobId, path, stagingPath, dynamicPartitionOverwrite)
+  extends HadoopMapReduceCommitProtocol(jobId, path, stagingDir, dynamicPartitionOverwrite)
     with Serializable with Logging {
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {

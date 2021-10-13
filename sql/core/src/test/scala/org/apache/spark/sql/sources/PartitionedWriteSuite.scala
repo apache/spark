@@ -37,9 +37,9 @@ import org.apache.spark.util.Utils
 private class OnlyDetectCustomPathFileCommitProtocol(
     jobId: String,
     path: String,
-    stagingPath: String,
+    stagingDir: Path,
     dynamicPartitionOverwrite: Boolean)
-  extends SQLHadoopMapReduceCommitProtocol(jobId, path, stagingPath, dynamicPartitionOverwrite)
+  extends SQLHadoopMapReduceCommitProtocol(jobId, path, stagingDir, dynamicPartitionOverwrite)
     with Serializable with Logging {
 
   override def newTaskTempFileAbsPath(
@@ -202,10 +202,9 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
 private class PartitionFileExistCommitProtocol(
     jobId: String,
     path: String,
-    stagingPath: String,
+    stagingDir: Path,
     dynamicPartitionOverwrite: Boolean)
-  extends SQLHadoopMapReduceCommitProtocol(
-    jobId, path, stagingPath, dynamicPartitionOverwrite) {
+  extends SQLHadoopMapReduceCommitProtocol(jobId, path, stagingDir, dynamicPartitionOverwrite) {
   override def setupJob(jobContext: JobContext): Unit = {
     super.setupJob(jobContext)
     val stagingDir = new File(new Path(path).toUri.getPath, s".spark-staging-$jobId")

@@ -232,7 +232,7 @@ object FileCommitProtocol extends Logging {
       jobId: String,
       outputPath: String,
       dynamicPartitionOverwrite: Boolean = false,
-      stagingDir: Option[String] = None): FileCommitProtocol = {
+      stagingDir: Option[Path] = None): FileCommitProtocol = {
 
     logDebug(s"Creating committer $className; job $jobId; output=$outputPath;" +
       s" dynamic=$dynamicPartitionOverwrite")
@@ -242,10 +242,10 @@ object FileCommitProtocol extends Logging {
     // If that doesn't exist, try the one with (jobId: string, outputPath: String).
     try {
       val ctor = clazz.getDeclaredConstructor(
-        classOf[String], classOf[String], classOf[String], classOf[Boolean])
-      logDebug("Using (String, String, Configuration,  Boolean) constructor")
+        classOf[String], classOf[String], classOf[Path], classOf[Boolean])
+      logDebug("Using (String, String, Path,  Boolean) constructor")
       ctor.newInstance(jobId, outputPath,
-        stagingDir.getOrElse(new Path(outputPath, ".spark-staging-" + jobId).toString),
+        stagingDir.getOrElse(new Path(outputPath, ".spark-staging-" + jobId)),
         dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean])
     } catch {
       case _: NoSuchMethodException =>

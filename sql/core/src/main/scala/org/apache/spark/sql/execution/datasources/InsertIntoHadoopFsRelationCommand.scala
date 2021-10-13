@@ -114,7 +114,7 @@ case class InsertIntoHadoopFsRelationCommand(
       jobId = jobId,
       outputPath = outputPath.toString,
       dynamicPartitionOverwrite = dynamicPartitionOverwrite,
-      stagingDir = Some(tmpLocation.toString))
+      stagingDir = Some(tmpLocation))
 
     val doInsertion = if (mode == SaveMode.Append) {
       true
