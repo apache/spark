@@ -1826,4 +1826,9 @@ object QueryExecutionErrors {
   def pivotNotAfterGroupByUnsupportedError(): Throwable = {
     new UnsupportedOperationException("pivot is only supported after a groupBy")
   }
+
+  def invalidAesKeyLengthError(actualLength: Int): Throwable = {
+    new SparkException(
+      s"The key length should be one of 16, 24 or 32 bytes (the actual length is $actualLength)")
+  }
 }

@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.security.{GeneralSecurityException, NoSuchAlgorithmException}
-import javax.crypto.{Cipher, NoSuchPaddingException}
+import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
 
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
@@ -26,8 +25,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -307,82 +308,28 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
 }
 
 /**
- * The base implementation for AES encryption and decryption.
+ * The concrete implementation for AES encryption and decryption.
  */
-abstract class AesBase(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
-
-  override def dataType: DataType = BinaryType
-  override def nullable: Boolean = true
-  override def inputTypes: Seq[DataType] = Seq(BinaryType, BinaryType)
-  protected val cipherMode: Int
-
-  @transient lazy protected val cipher: Cipher = try {
-    Cipher.getInstance("AES")
-  } catch {
-    case e @ (_: NoSuchPaddingException | _: NoSuchAlgorithmException) =>
-      throw new RuntimeException(e)
+object AesImpl {
+  def encrypt(input: Array[Byte], key: Array[Byte]): Array[Byte] = {
+    doInternal(input, key, Cipher.ENCRYPT_MODE)
   }
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    val input = input1.asInstanceOf[Array[Byte]]
-    val key = input2.asInstanceOf[Array[Byte]]
+  def decrypt(input: Array[Byte], key: Array[Byte]): Array[Byte] = {
+    doInternal(input, key, Cipher.DECRYPT_MODE)
+  }
+
+ private def doInternal(input: Array[Byte], key: Array[Byte], mode: Int): Array[Byte] = {
     val inputLength = input.length
     val keyLength = key.length
     val secretKey = keyLength match {
-      case 16 | 24 | 32 => new SecretKeySpec(key, 0, keyLength, "AES")
-      case _ => null
+      case 16 | 23 | 32 => new SecretKeySpec(key, 0, keyLength, "AES")
+      case _ => throw QueryExecutionErrors.invalidAesKeyLengthError(keyLength)
     }
 
-    if (secretKey == null) {
-      return null
-    }
-
-    try {
-      cipher.init(cipherMode, secretKey)
-      cipher.doFinal(input, 0, inputLength)
-    } catch {
-      case _: GeneralSecurityException =>
-        null
-    }
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val inputLength = ctx.freshName("inputLength")
-    val keyLength = ctx.freshName("keyLength")
-    val secretKey = ctx.freshName("secretKey")
-    val cipher = ctx.addMutableState("javax.crypto.Cipher", "cihper", v =>
-      s"""
-        try {
-          $v = javax.crypto.Cipher.getInstance("AES");
-        } catch (javax.crypto.NoSuchPaddingException e) {
-          throw new RuntimeException(e);
-        } catch (java.security.NoSuchAlgorithmException e) {
-          throw new RuntimeException(e);
-        }""")
-
-    nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-      s"""
-        int $inputLength = $eval1.length;
-        int $keyLength = $eval2.length;
-        javax.crypto.SecretKey $secretKey = null;
-        if ($keyLength == 16 || $keyLength == 24 || $keyLength == 32) {
-          $secretKey = new javax.crypto.spec.SecretKeySpec($eval2, 0, $keyLength, "AES");
-        } else {
-          ${ev.isNull} = true;
-        }
-        if ($secretKey == null) {
-          ${ev.isNull} = true;
-        } else {
-          try {
-            $cipher.init($cipherMode, $secretKey);
-            ${ev.value} = $cipher.doFinal($eval1, 0, $inputLength);
-          } catch (java.security.GeneralSecurityException e) {
-            ${ev.isNull} = true;
-          }
-        }
-       """
-    })
+   val cipher = Cipher.getInstance("AES")
+   cipher.init(mode, secretKey)
+   cipher.doFinal(input, 0, inputLength)
   }
 }
 
@@ -405,12 +352,23 @@ abstract class AesBase(left: Expression, right: Expression)
   """,
   since = "3.3.0",
   group = "misc_funcs")
-case class AesEncrypt(left: Expression, right: Expression) extends AesBase(left, right) {
-  override protected val cipherMode: Int = Cipher.ENCRYPT_MODE
-  override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): AesEncrypt =
-    copy(left = newLeft, right = newRight)
+case class AesEncrypt(input: Expression, key: Expression, child: Expression)
+    extends RuntimeReplaceable {
+
+  def this(input: Expression, key: Expression) = {
+    this(input,
+      key,
+      StaticInvoke(
+        AesImpl.getClass,
+        BinaryType,
+        "encrypt",
+        Seq(input, key),
+        Seq(BinaryType, BinaryType)))
+  }
+
+  def exprsReplaced: Seq[Expression] = Seq(input, key)
+  protected def withNewChildInternal(newChild: Expression): AesEncrypt =
+    copy(child = newChild)
 }
 
 /**
@@ -432,10 +390,21 @@ case class AesEncrypt(left: Expression, right: Expression) extends AesBase(left,
   """,
   since = "3.3.0",
   group = "misc_funcs")
-case class AesDecrypt(left: Expression, right: Expression) extends AesBase(left, right) {
-  override protected val cipherMode: Int = Cipher.DECRYPT_MODE
-  override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): AesDecrypt =
-    copy(left = newLeft, right = newRight)
+case class AesDecrypt(input: Expression, key: Expression, child: Expression)
+    extends RuntimeReplaceable {
+
+  def this(input: Expression, key: Expression) {
+    this(input,
+      key,
+      StaticInvoke(
+        AesImpl.getClass,
+        BinaryType,
+        "decrypt",
+        Seq(input, key),
+        Seq(BinaryType, BinaryType)))
+  }
+
+  def exprsReplaced: Seq[Expression] = Seq(input, key)
+  protected def withNewChildInternal(newChild: Expression): AesDecrypt =
+    copy(child = newChild)
 }

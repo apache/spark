@@ -248,6 +248,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("misc aes function") {
+    def checkInvalidKeyLength(df: => DataFrame): Unit = {
+      val e = intercept[Exception] {
+        df.collect
+      }
+      assert(e.getMessage.contains("The key length should be one of 16, 24 or 32 bytes"))
+    }
+
     val df1 = Seq("ABC", "").toDF
 
     // Successful encryption
@@ -279,17 +286,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(null), Row(null)))
 
     // Encryption failure - invalid key length
-    checkAnswer(
-      df1.selectExpr("aes_encrypt(value, '12345678901234567')"),
-      Seq(Row(null), Row(null)))
-    checkAnswer(
-      df1.selectExpr("aes_encrypt(value, binary('123456789012345'))"),
-      Seq(Row(null), Row(null)))
-    checkAnswer(
-      df1.selectExpr("aes_encrypt(value, binary(''))"),
-      Seq(Row(null), Row(null)))
+    checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, '12345678901234567')"))
+    checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, binary('123456789012345'))"))
+    checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, binary(''))"))
 
-   val df2 = Seq("y6Ss+zCYObpCbgfWfyNWTw==", "BQGHoM3lqYcsurCRq3PlUw==").toDF
+    val df2 = Seq("y6Ss+zCYObpCbgfWfyNWTw==", "BQGHoM3lqYcsurCRq3PlUw==").toDF
 
     // Successful decryption
     checkAnswer(
@@ -314,23 +315,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(null), Row(null)))
 
     // Decryption failure - invalid key length
-    checkAnswer(
-      df2.selectExpr("aes_decrypt(unbase64(value), '12345678901234567')"),
-      Seq(Row(null), Row(null)))
-    checkAnswer(
-      df2.selectExpr("aes_decrypt(unbase64(value), binary('123456789012345'))"),
-      Seq(Row(null), Row(null)))
-    checkAnswer(
-      df2.selectExpr("aes_decrypt(unbase64(value), '')"),
-      Seq(Row(null), Row(null)))
-    checkAnswer(
-      df2.selectExpr("aes_decrypt(unbase64(value), binary(''))"),
-      Seq(Row(null), Row(null)))
+    checkInvalidKeyLength(df2.selectExpr("aes_decrypt(unbase64(value), '12345678901234567')"))
+    checkInvalidKeyLength(df2.selectExpr("aes_decrypt(unbase64(value), binary('123456789012345'))"))
+    checkInvalidKeyLength(df2.selectExpr("aes_decrypt(unbase64(value), '')"))
+    checkInvalidKeyLength(df2.selectExpr("aes_decrypt(unbase64(value), binary(''))"))
 
     // Decryption failure - key mismatch
-    checkAnswer(
-      df2.selectExpr("aes_decrypt(unbase64(value), binary('abcdefghijklmnop'))"),
-      Seq(Row(null), Row(null)))
+    val e = intercept[Exception] {
+      df2.selectExpr("aes_decrypt(unbase64(value), binary('abcdefghijklmnop'))").collect
+    }
+    assert(e.getMessage.contains("BadPaddingException"))
   }
 
   test("string function find_in_set") {
