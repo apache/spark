@@ -568,6 +568,8 @@ case class Divide(
     Examples:
       > SELECT 3 _FUNC_ 2;
        1
+      > SELECT INTERVAL '1-1' YEAR TO MONTH _FUNC_ INTERVAL '-1' MONTH;
+       -13
   """,
   since = "3.0.0",
   group = "math_funcs")
@@ -584,7 +586,8 @@ case class IntegralDivide(
     case _ => false
   }
 
-  override def inputType: AbstractDataType = TypeCollection(LongType, DecimalType)
+  override def inputType: AbstractDataType = TypeCollection(
+    LongType, DecimalType, YearMonthIntervalType, DayTimeIntervalType)
 
   override def dataType: DataType = LongType
 
@@ -599,6 +602,10 @@ case class IntegralDivide(
         i.integral.asInstanceOf[Integral[Any]]
       case d: DecimalType =>
         d.asIntegral.asInstanceOf[Integral[Any]]
+      case _: YearMonthIntervalType =>
+        IntegerType.integral.asInstanceOf[Integral[Any]]
+      case _: DayTimeIntervalType =>
+        LongType.integral.asInstanceOf[Integral[Any]]
     }
     (x, y) => {
       val res = integral.quot(x, y)
