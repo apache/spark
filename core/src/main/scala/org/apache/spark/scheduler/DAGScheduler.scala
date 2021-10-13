@@ -734,6 +734,7 @@ private[spark] class DAGScheduler(
 
   /** Invoke `.partitions` on the given RDD and all of its ancestors  */
   private def eagerlyComputePartitionsForRddAndAncestors(rdd: RDD[_]): Unit = {
+    val startTime = System.nanoTime
     val visitedRdds = new HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
@@ -756,6 +757,8 @@ private[spark] class DAGScheduler(
     while (waitingForVisit.nonEmpty) {
       visit(waitingForVisit.remove(0))
     }
+    logDebug("eagerlyComputePartitionsForRddAndAncestors for RDD %d took %f seconds"
+      .format(rdd.id, (System.nanoTime - startTime) / 1e9))
   }
 
   /**
