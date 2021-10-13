@@ -24,6 +24,8 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException
+import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -146,14 +148,22 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     assert(jdbcTable.indexExists("i1") == false)
     assert(jdbcTable.indexExists("i2") == false)
 
-    sql(s"CREATE index i1 ON $tbl USING BTREE (col1)")
-    sql(s"CREATE index i2 ON $tbl (col2, col3, col5) OPTIONS (KEY_BLOCK_SIZE=10)")
+    val indexType = "DUMMY"
+    var m = intercept[UnsupportedOperationException] {
+      sql(s"CREATE index i1 ON $catalogName.new_table USING DUMMY (col1)")
+    }.getMessage
+    assert(m.contains(s"Index Type $indexType is not supported." +
+      s" The supported Index Types are: BTREE and HASH"))
+
+    sql(s"CREATE index i1 ON $catalogName.new_table USING BTREE (col1)")
+    sql(s"CREATE index i2 ON $catalogName.new_table (col2, col3, col5)" +
+      s" OPTIONS (KEY_BLOCK_SIZE=10)")
 
     assert(jdbcTable.indexExists("i1") == true)
     assert(jdbcTable.indexExists("i2") == true)
 
-    val m = intercept[IndexAlreadyExistsException] {
-      sql(s"CREATE index i1 ON $tbl (col1)")
+    m = intercept[IndexAlreadyExistsException] {
+      sql(s"CREATE index i1 ON $catalogName.new_table (col1)")
     }.getMessage
     assert(m.contains("Failed to create index: i1 in new_table"))
   }

@@ -89,7 +89,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         ResolvedDBObjectName(catalog, name),
         c.indexName,
         c.indexType,
-        c.ifNotExists,
+        c.ignoreIfExists,
         c.columns,
         c.columnsProperties,
         c.properties)
