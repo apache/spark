@@ -248,14 +248,14 @@ abstract class ParquetAggregatePushDownSuite
         Seq("false", "true").foreach { enableVectorizedReader =>
           withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
             vectorizedReaderEnabledKey -> enableVectorizedReader) {
-            val max = sql("SELECT max(id) FROM tmp WHERE p = 0")
+            val max = sql("SELECT max(id), min(id), count(id) FROM tmp WHERE p = 0")
             max.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>
                 val expected_plan_fragment =
-                  "PushedAggregation: [MAX(id)]"
+                  "[MAX(id), MIN(id), COUNT(id)]"
                 checkKeywordsExistsInExplain(max, expected_plan_fragment)
             }
-            checkAnswer(max, Seq(Row(9)))
+            checkAnswer(max, Seq(Row(9, 0, 4)))
           }
         }
       }
