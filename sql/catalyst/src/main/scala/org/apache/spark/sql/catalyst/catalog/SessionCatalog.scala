@@ -877,35 +877,35 @@ class SessionCatalog(
     val parsedPlan = SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs, isTempView)) {
       parser.parsePlan(viewText)
     }
-    val viewColumnNames = if (metadata.viewQueryColumnNames.isEmpty) {
-      // For view created before Spark 2.2.0, the view text is already fully qualified, the plan
-      // output is the same with the view output.
-      metadata.schema.fieldNames.toSeq
-    } else {
-      assert(metadata.viewQueryColumnNames.length == metadata.schema.length)
-      metadata.viewQueryColumnNames
-    }
-
-    // For view queries like `SELECT * FROM t`, the schema of the referenced table/view may
-    // change after the view has been created. We need to add an extra SELECT to pick the columns
-    // according to the recorded column names (to get the correct view column ordering and omit
-    // the extra columns that we don't require), with UpCast (to make sure the type change is
-    // safe) and Alias (to respect user-specified view column names) according to the view schema
-    // in the catalog.
-    // Note that, the column names may have duplication, e.g. `CREATE VIEW v(x, y) AS
-    // SELECT 1 col, 2 col`. We need to make sure that the matching attributes have the same
-    // number of duplications, and pick the corresponding attribute by ordinal.
-    val viewConf = View.effectiveSQLConf(metadata.viewSQLConfigs, isTempView)
-    val normalizeColName: String => String = if (viewConf.caseSensitiveAnalysis) {
-      identity
-    } else {
-      _.toLowerCase(Locale.ROOT)
-    }
-    val nameToCounts = viewColumnNames.groupBy(normalizeColName).mapValues(_.length)
-    val nameToCurrentOrdinal = scala.collection.mutable.HashMap.empty[String, Int]
-    val viewDDL = buildViewDDL(metadata, isTempView)
-
     val projectList = if (!isHiveCreatedView(metadata)) {
+      val viewColumnNames = if (metadata.viewQueryColumnNames.isEmpty) {
+        // For view created before Spark 2.2.0, the view text is already fully qualified, the plan
+        // output is the same with the view output.
+        metadata.schema.fieldNames.toSeq
+      } else {
+        assert(metadata.viewQueryColumnNames.length == metadata.schema.length)
+        metadata.viewQueryColumnNames
+      }
+
+      // For view queries like `SELECT * FROM t`, the schema of the referenced table/view may
+      // change after the view has been created. We need to add an extra SELECT to pick the columns
+      // according to the recorded column names (to get the correct view column ordering and omit
+      // the extra columns that we don't require), with UpCast (to make sure the type change is
+      // safe) and Alias (to respect user-specified view column names) according to the view schema
+      // in the catalog.
+      // Note that, the column names may have duplication, e.g. `CREATE VIEW v(x, y) AS
+      // SELECT 1 col, 2 col`. We need to make sure that the matching attributes have the same
+      // number of duplications, and pick the corresponding attribute by ordinal.
+      val viewConf = View.effectiveSQLConf(metadata.viewSQLConfigs, isTempView)
+      val normalizeColName: String => String = if (viewConf.caseSensitiveAnalysis) {
+        identity
+      } else {
+        _.toLowerCase(Locale.ROOT)
+      }
+      val nameToCounts = viewColumnNames.groupBy(normalizeColName).mapValues(_.length)
+      val nameToCurrentOrdinal = scala.collection.mutable.HashMap.empty[String, Int]
+      val viewDDL = buildViewDDL(metadata, isTempView)
+
       viewColumnNames.zip(metadata.schema).map { case (name, field) =>
         val normalizedName = normalizeColName(name)
         val count = nameToCounts(normalizedName)
