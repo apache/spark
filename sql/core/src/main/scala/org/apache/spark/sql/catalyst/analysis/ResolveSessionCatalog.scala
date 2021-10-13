@@ -121,14 +121,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case SetNamespaceLocation(DatabaseInSessionCatalog(db), location) =>
       AlterDatabaseSetLocationCommand(db, location)
 
-    case s @ ShowNamespaces(ResolvedNamespace(cata, _), _, output) if isSessionCatalog(cata) =>
-      if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
-        assert(output.length == 1)
-        s.copy(output = Seq(output.head.withName("databaseName")))
-      } else {
-        s
-      }
-
     case RenameTable(ResolvedV1TableOrViewIdentifier(oldName), newName, isView) =>
       AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
 
@@ -270,13 +262,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       DropDatabaseCommand(db, d.ifExists, d.cascade)
 
     case ShowTables(DatabaseInSessionCatalog(db), pattern, output) if conf.useV1Command =>
-      val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
-        assert(output.length == 3)
-        output.head.withName("database") +: output.tail
-      } else {
-        output
-      }
-      ShowTablesCommand(Some(db), pattern, newOutput)
+      ShowTablesCommand(Some(db), pattern, output)
 
     case ShowTableExtended(
         DatabaseInSessionCatalog(db),
