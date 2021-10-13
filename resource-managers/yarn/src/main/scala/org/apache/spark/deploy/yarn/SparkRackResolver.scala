@@ -17,10 +17,10 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.lang.reflect.Modifier
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.util.{Failure, Success, Try}
+import scala.util.control.NonFatal
 
 import com.google.common.base.Strings
 import org.apache.hadoop.conf.Configuration
@@ -44,24 +44,25 @@ private[spark] class SparkRackResolver(conf: Configuration) extends Logging {
     Logger.getLogger(classOf[RackResolver]).setLevel(Level.WARN)
   }
 
-  private val dnsToSwitchMapping: DNSToSwitchMapping = {
-    try {
-      RackResolver.init(conf)
-      val field = classOf[RackResolver].getDeclaredField("dnsToSwitchMapping")
-      require(Modifier.isStatic(field.getModifiers))
-      field.setAccessible(true)
-      field.get(null).asInstanceOf[DNSToSwitchMapping]
-    } catch {
-      case _: Exception =>
-        val dnsToSwitchMappingClass =
-          conf.getClass(CommonConfigurationKeysPublic.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
-            classOf[ScriptBasedMapping], classOf[DNSToSwitchMapping])
-        ReflectionUtils.newInstance(dnsToSwitchMappingClass, conf)
-          .asInstanceOf[DNSToSwitchMapping] match {
-          case c: CachedDNSToSwitchMapping => c
-          case o => new CachedDNSToSwitchMapping(o)
-        }
-    }
+  private val dnsToSwitchMapping: DNSToSwitchMapping = Try {
+    RackResolver.init(conf)
+    val field = classOf[RackResolver].getDeclaredField("dnsToSwitchMapping")
+    field.setAccessible(true)
+    field.get(null).asInstanceOf[DNSToSwitchMapping]
+  } match {
+    case Success(result) =>
+      logInfo(s"Using yarn RackResolver dnsToSwitchMapping.")
+      result
+    case Failure(NonFatal(_)) =>
+      logInfo(s"Using spark RackResolver dnsToSwitchMapping.")
+      val dnsToSwitchMappingClass =
+        conf.getClass(CommonConfigurationKeysPublic.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
+          classOf[ScriptBasedMapping], classOf[DNSToSwitchMapping])
+      ReflectionUtils.newInstance(dnsToSwitchMappingClass, conf)
+        .asInstanceOf[DNSToSwitchMapping] match {
+        case c: CachedDNSToSwitchMapping => c
+        case o => new CachedDNSToSwitchMapping(o)
+      }
   }
 
   def resolve(hostName: String): String = {

@@ -44,7 +44,7 @@ import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RetrieveLastAllocatedExecutorId
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils
-import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
+import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 /**
  * YarnAllocator is charged with requesting containers from the YARN ResourceManager and deciding
@@ -507,17 +507,26 @@ private[yarn] class YarnAllocator(
           }
         }
 
-        newLocalityRequests.foreach { request =>
+        val (localized, anyHost) = newLocalityRequests.partition(_.getNodes() != null)
+        anyHost.foreach { request =>
           amClient.addContainerRequest(request)
+        }
+        val (_, localizedTimeDuration) = Utils.timeTakenMs {
+          localized.foreach { request =>
+            amClient.addContainerRequest(request)
+          }
         }
 
         if (log.isInfoEnabled()) {
-          val (localized, anyHost) = newLocalityRequests.partition(_.getNodes() != null)
           if (anyHost.nonEmpty) {
             logInfo(s"Submitted ${anyHost.size} unlocalized container requests.")
           }
-          localized.foreach { request =>
-            logInfo(s"Submitted container request for host ${hostStr(request)}.")
+          if (localized.nonEmpty) {
+            localized.foreach { request =>
+              logInfo(s"Submitted container request for host ${hostStr(request)}.")
+            }
+            logInfo(s"Submitted ${localized.size} localized container requests " +
+              s"took $localizedTimeDuration ms.")
           }
         }
       } else if (numPendingAllocate > 0 && missing < 0) {
