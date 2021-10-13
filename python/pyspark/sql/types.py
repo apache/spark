@@ -26,13 +26,14 @@ import base64
 from array import array
 import ctypes
 from typing import (
+    cast,
+    overload,
     Any,
     Callable,
     Dict,
     Iterator,
     List,
     Optional,
-    overload,
     Union,
     Tuple,
     Type,
@@ -110,7 +111,7 @@ class DataType(object):
 class DataTypeSingleton(type):
     """Metaclass for DataType"""
 
-    _instances: Dict = {}
+    _instances: Dict[Type["DataTypeSingleton"], "DataTypeSingleton"] = {}
 
     def __call__(cls: Type[T]) -> T:  # type: ignore[override, attr-defined]
         if cls not in cls._instances:  # type: ignore[attr-defined]
@@ -248,7 +249,7 @@ class DecimalType(FractionalType):
         the number of digits on right side of dot. (default: 0)
     """
 
-    def __init__(self, precision: int = 10, scale: int = 0) -> None:
+    def __init__(self, precision: int = 10, scale: int = 0):
         self.precision = precision
         self.scale = scale
         self.hasPrecisionInfo = True  # this is a public API
@@ -324,7 +325,7 @@ class ArrayType(DataType):
     False
     """
 
-    def __init__(self, elementType: DataType, containsNull: bool = True) -> None:
+    def __init__(self, elementType: DataType, containsNull: bool = True):
         assert isinstance(elementType, DataType),\
             "elementType %s should be an instance of %s" % (elementType, DataType)
         self.elementType = elementType
@@ -389,7 +390,7 @@ class MapType(DataType):
 
     def __init__(
         self, keyType: DataType, valueType: DataType, valueContainsNull: bool = True
-    ) -> None:
+    ):
         assert isinstance(keyType, DataType),\
             "keyType %s should be an instance of %s" % (keyType, DataType)
         assert isinstance(valueType, DataType),\
@@ -461,9 +462,9 @@ class StructField(DataType):
         self,
         name: str,
         dataType: DataType,
-        nullable: Optional[bool] = True,
+        nullable: bool = True,
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> None:
+    ):
         assert isinstance(dataType, DataType),\
             "dataType %s should be an instance of %s" % (dataType, DataType)
         assert isinstance(name, str), "field name %s should be a string" % (name)
@@ -533,7 +534,7 @@ class StructType(DataType):
     >>> struct1 == struct2
     False
     """
-    def __init__(self, fields: Optional[List[StructField]] = None) -> None:
+    def __init__(self, fields: Optional[List[StructField]] = None):
         if not fields:
             self.fields = []
             self.names = []
@@ -564,7 +565,7 @@ class StructType(DataType):
         self,
         field: Union[str, StructField],
         data_type: Optional[Union[str, DataType]] = None,
-        nullable: Optional[bool] = True,
+        nullable: bool = True,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> "StructType":
         """
@@ -716,12 +717,14 @@ class StructType(DataType):
         if isinstance(obj, Row):
             # it's already converted by pickler
             return obj
+
+        values: Union[Tuple, List]
         if self._needSerializeAnyField:
             # Only calling fromInternal function for fields that need conversion
             values = [f.fromInternal(v) if c else v
                       for f, v, c in zip(self.fields, obj, self._needConversion)]
         else:
-            values: Tuple = obj  # type: ignore[no-redef]
+            values = obj
         return _create_row(self.names, values)
 
 
@@ -1051,7 +1054,7 @@ def _int_size_to_type(
         return None
 
 # The list of all supported array typecodes, is stored here
-_array_type_mappings = {
+_array_type_mappings: Dict[str, Type[DataType]] = {
     # Warning: Actual properties for float and double in C is not specified in C.
     # On almost every system supported by both python and JVM, they are IEEE 754
     # single-precision binary floating-point format and IEEE 754 double-precision
@@ -1065,7 +1068,7 @@ for _typecode in _array_signed_int_typecode_ctype_mappings.keys():
     size = ctypes.sizeof(_array_signed_int_typecode_ctype_mappings[_typecode]) * 8
     dt = _int_size_to_type(size)
     if dt is not None:
-        _array_type_mappings[_typecode] = dt  # type: ignore[assignment]
+        _array_type_mappings[_typecode] = dt
 
 # compute array typecode mappings for unsigned integer types
 for _typecode in _array_unsigned_int_typecode_ctype_mappings.keys():
@@ -1074,7 +1077,7 @@ for _typecode in _array_unsigned_int_typecode_ctype_mappings.keys():
     size = ctypes.sizeof(_array_unsigned_int_typecode_ctype_mappings[_typecode]) * 8 + 1
     dt = _int_size_to_type(size)
     if dt is not None:
-        _array_type_mappings[_typecode] = dt  # type: ignore[assignment]
+        _array_type_mappings[_typecode] = dt
 
 # Type code 'u' in Python's array is deprecated since version 3.3, and will be
 # removed in version 4.0. See: https://docs.python.org/3/library/array.html
@@ -1109,7 +1112,7 @@ def _infer_type(
             struct = StructType()
             for key, value in obj.items():
                 if key is not None and value is not None:
-                    struct.add(  # type: ignore[call-overload]
+                    struct.add(
                         key, _infer_type(value, infer_dict_as_struct, prefer_timestamp_ntz), True)
             return struct
         else:
@@ -1139,21 +1142,20 @@ def _infer_type(
 
 def _infer_schema(
     row: Any,
-    names: Optional[str] = None,
+    names: Optional[List[str]] = None,
     infer_dict_as_struct: bool = False,
     prefer_timestamp_ntz: bool = False,
 ) -> StructType:
     """Infer the schema from dict/namedtuple/object"""
+    items: Union[zip[Tuple[Any, Any]], List[Tuple[Any, Any]]]
     if isinstance(row, dict):
         items = sorted(row.items())
 
     elif isinstance(row, (tuple, list)):
         if hasattr(row, "__fields__"):  # Row
-            items: zip[Tuple[Any, Any]] = zip(  # type: ignore[no-redef]
-                row.__fields__, tuple(row))  # type: ignore[assignment, union-attr, no-redef]
+            items = zip(row.__fields__, tuple(row))  # type: ignore[union-attr]
         elif hasattr(row, "_fields"):  # namedtuple
-            items: zip[Tuple[Any, Any]] = zip(  # type: ignore[no-redef]
-                row._fields, tuple(row))  # type: ignore[union-attr]
+            items = zip(row._fields, tuple(row))  # type: ignore[union-attr]
         else:
             if names is None:
                 names = [
@@ -1213,7 +1215,7 @@ def _merge_type(a: DataType, b: DataType, name: Optional[str] = None) -> DataTyp
 
     # same type
     if isinstance(a, StructType):
-        nfs = dict((f.name, f.dataType) for f in b.fields)  # type: ignore[attr-defined]
+        nfs = dict((f.name, f.dataType) for f in cast(StructType, b).fields)
         fields = [StructField(f.name, _merge_type(f.dataType, nfs.get(f.name, NullType()),
                                                   name=new_name(f.name)))
                   for f in a.fields]
@@ -1224,14 +1226,14 @@ def _merge_type(a: DataType, b: DataType, name: Optional[str] = None) -> DataTyp
         return StructType(fields)
 
     elif isinstance(a, ArrayType):
-        return ArrayType(_merge_type(a.elementType, b.elementType,  # type: ignore[attr-defined]
+        return ArrayType(_merge_type(cast(ArrayType, a).elementType, cast(ArrayType, b).elementType,
                                      name='element in array %s' % name), True)
 
     elif isinstance(a, MapType):
         return MapType(
-            _merge_type(a.keyType, b.keyType,  # type: ignore[attr-defined]
+            _merge_type(cast(MapType, a).keyType, cast(MapType, b).keyType,
                         name='key of map %s' % name),
-            _merge_type(a.valueType, b.valueType,  # type: ignore[attr-defined]
+            _merge_type(cast(MapType, a).valueType, cast(MapType, b).valueType,
                         name='value of map %s' % name),
             True)
     else:
@@ -1535,7 +1537,7 @@ def _create_row_inbound_converter(dataType: DataType) -> Callable:
     return lambda *a: dataType.fromInternal(a)
 
 
-def _create_row(fields: Any, values: Any) -> "Row":
+def _create_row(fields: Union[Row, List[str]], values: Union[Tuple[Any, ...], List[Any]]) -> "Row":
     row = Row(*values)
     row.__fields__ = fields
     return row
