@@ -1198,7 +1198,7 @@ setGeneric("max_by", function(x, y) { standardGeneric("max_by") })
 #' @name NULL
 setGeneric("md5", function(x) { standardGeneric("md5") })
 
-#' @rdname column_aggregate_functions¥
+#' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("min_by", function(x, y) { standardGeneric("min_by") })
 
