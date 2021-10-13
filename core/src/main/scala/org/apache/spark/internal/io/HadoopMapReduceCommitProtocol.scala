@@ -67,9 +67,16 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
 class HadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
-    stagingPath: String = "",
+    stagingPath: String,
     dynamicPartitionOverwrite: Boolean = false)
   extends FileCommitProtocol with Serializable with Logging {
+
+  def this(jobId: String, path: String) =
+    this(jobId, path, new Path(path, ".spark-staging-" + jobId).toString)
+
+  def this(jobId: String, path: String, dynamicPartitionOverwrite: Boolean) =
+    this(jobId, path, new Path(path, ".spark-staging-" + jobId).toString,
+      dynamicPartitionOverwrite)
 
   import FileCommitProtocol._
 
