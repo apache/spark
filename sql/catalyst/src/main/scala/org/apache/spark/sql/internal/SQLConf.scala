@@ -1705,10 +1705,20 @@ object SQLConf {
       .doc("Enable two-level aggregate hash map. When enabled, records will first be " +
         "inserted/looked-up at a 1st-level, small, fast map, and then fallback to a " +
         "2nd-level, larger, slower map when 1st level is full or keys cannot be found. " +
-        "When disabled, records go directly to the 2nd level.")
+        "When disabled, records go directly to the 2nd level. Enable for partial aggregate only.")
       .version("2.3.0")
       .booleanConf
       .createWithDefault(true)
+
+  val ENABLE_TWOLEVEL_FINAL_AGG_MAP =
+    buildConf("spark.sql.codegen.aggregate.final.map.twolevel.enabled")
+      .internal()
+      .doc("Enable two-level aggregate hash map for final aggregate as well. Disable by default " +
+        "because final aggregate might get more distinct keys compared to partial aggregate. " +
+        "Overhead of looking up 1st-level map might dominate when having a lot of distinct keys.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val ENABLE_VECTORIZED_HASH_MAP =
     buildConf("spark.sql.codegen.aggregate.map.vectorized.enable")
@@ -3864,6 +3874,8 @@ class SQLConf extends Serializable with Logging {
   def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
   def enableTwoLevelAggMap: Boolean = getConf(ENABLE_TWOLEVEL_AGG_MAP)
+
+  def enableTwoLevelFinalAggMap: Boolean = getConf(ENABLE_TWOLEVEL_FINAL_AGG_MAP)
 
   def enableVectorizedHashMap: Boolean = getConf(ENABLE_VECTORIZED_HASH_MAP)
 
