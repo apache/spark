@@ -144,14 +144,16 @@ case class UnaryPositive(child: Expression)
 }
 
 /**
- * A function that get the absolute value of the numeric value.
+ * A function that get the absolute value of the numeric or interval value.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the absolute value of the numeric value.",
+  usage = "_FUNC_(expr) - Returns the absolute value of the numeric or interval value.",
   examples = """
     Examples:
       > SELECT _FUNC_(-1);
        1
+      > SELECT _FUNC_(INTERVAL -'1-1' YEAR TO MONTH);
+       1-1
   """,
   since = "1.2.0",
   group = "math_funcs")
@@ -160,11 +162,15 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
 
   def this(child: Expression) = this(child, SQLConf.get.ansiEnabled)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndAnsiInterval)
 
   override def dataType: DataType = child.dataType
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
+  private lazy val numeric = (dataType match {
+    case _: DayTimeIntervalType => LongExactNumeric
+    case _: YearMonthIntervalType => IntegerExactNumeric
+    case _ => TypeUtils.getNumeric(dataType, failOnError)
+  }).asInstanceOf[Numeric[Any]]
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType =>
@@ -187,6 +193,8 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
     case IntegerType | LongType if failOnError =>
       defineCodeGen(ctx, ev, c => s"$c < 0 ? java.lang.Math.negateExact($c) : $c")
 
+    case _: AnsiIntervalType =>
+      defineCodeGen(ctx, ev, c => s"$c < 0 ? java.lang.Math.negateExact($c) : $c")
 
     case dt: NumericType =>
       defineCodeGen(ctx, ev, c => s"(${CodeGenerator.javaType(dt)})(java.lang.Math.abs($c))")

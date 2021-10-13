@@ -22,13 +22,13 @@ import java.nio.charset.StandardCharsets
 
 import scala.util.control.NonFatal
 
+import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataInputStream, Path}
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 
@@ -63,7 +63,7 @@ object StreamMetadata extends Logging {
           logError(s"Error reading stream metadata from $metadataFile", e)
           throw e
       } finally {
-        JavaUtils.closeQuietly(input)
+        IOUtils.closeQuietly(input)
       }
     } else None
   }

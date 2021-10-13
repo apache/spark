@@ -15,21 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.sql.connector.expressions.filter;
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * Physical plan node for showing current catalog/namespace.
+ * A filter that evaluates to {@code true} iff the {@code column} evaluates to
+ * a string that ends with {@code value}.
+ *
+ * @since 3.3.0
  */
-case class ShowCurrentNamespaceExec(
-    output: Seq[Attribute],
-    catalogManager: CatalogManager)
-  extends LeafV2CommandExec {
-  override protected def run(): Seq[InternalRow] = {
-    Seq(toCatalystRow(catalogManager.currentCatalog.name, catalogManager.currentNamespace.quoted))
+@Evolving
+public final class StringEndsWith extends StringPredicate {
+
+  public StringEndsWith(NamedReference column, UTF8String value) {
+    super(column, value);
   }
+
+  @Override
+  public String toString() { return "STRING_ENDS_WITH(" + column.describe() + ", " + value + ")"; }
 }

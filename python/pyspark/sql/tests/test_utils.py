@@ -31,7 +31,7 @@ class UtilsTests(ReusedSQLTestCase):
         try:
             self.spark.sql("select `中文字段`")
         except AnalysisException as e:
-            self.assertRegex(str(e), "cannot resolve '`中文字段`'")
+            self.assertRegex(str(e), "Column '`中文字段`' does not exist")
 
     def test_capture_parse_exception(self):
         self.assertRaises(ParseException, lambda: self.spark.sql("abc"))
@@ -47,6 +47,14 @@ class UtilsTests(ReusedSQLTestCase):
         except IllegalArgumentException as e:
             self.assertRegex(e.desc, "1024 is not in the permitted values")
             self.assertRegex(e.stackTrace, "org.apache.spark.sql.functions")
+
+    def test_get_error_class_state(self):
+        # SPARK-36953: test CapturedException.getErrorClass and getSqlState (from SparkThrowable)
+        try:
+            self.spark.sql("""SELECT a""")
+        except AnalysisException as e:
+            self.assertEquals(e.getErrorClass(), "MISSING_COLUMN")
+            self.assertEquals(e.getSqlState(), "42000")
 
 
 if __name__ == "__main__":

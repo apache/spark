@@ -30,7 +30,7 @@ and building from the source.
 Python Version Supported
 ------------------------
 
-Python 3.6 and above.
+Python 3.7 and above.
 
 
 Using PyPI

@@ -27,6 +27,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark._
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.security.SocketAuthHelper
@@ -219,12 +220,11 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
           daemonPort = in.readInt()
         } catch {
           case _: EOFException if daemon.isAlive =>
-            throw new SparkException("EOFException occurred while reading the port number " +
-              s"from $daemonModule's stdout")
+            throw SparkCoreErrors.eofExceptionWhileReadPortNumberError(
+              daemonModule)
           case _: EOFException =>
-            throw new SparkException(
-              s"EOFException occurred while reading the port number from $daemonModule's" +
-              s" stdout and terminated with code: ${daemon.exitValue}.")
+            throw SparkCoreErrors.
+              eofExceptionWhileReadPortNumberError(daemonModule, Some(daemon.exitValue))
         }
 
         // test that the returned port number is within a valid range.
