@@ -1228,7 +1228,7 @@ class DataStreamWriter(object):
         return self
 
     def foreachBatch(
-        self, func: Callable[[DataFrame, int], None]
+        self, func: Callable[["DataFrame", int], None]
     ) -> "DataStreamWriter":
         """
         Sets the output of the streaming query to be processed using the provided
