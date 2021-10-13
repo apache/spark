@@ -343,7 +343,7 @@ class PandasOnSparkFrameMethods(object):
         original_func = func
         func = lambda o: original_func(o, *args, **kwds)
 
-        self_applied = DataFrame(self._psdf._internal.resolved_copy)  # type: DataFrame
+        self_applied: DataFrame = DataFrame(self._psdf._internal.resolved_copy)
 
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
@@ -356,7 +356,7 @@ class PandasOnSparkFrameMethods(object):
                     "The given function should return a frame; however, "
                     "the return type was %s." % type(applied)
                 )
-            psdf = ps.DataFrame(applied)  # type: DataFrame
+            psdf: DataFrame = DataFrame(applied)
             if len(pdf) <= limit:
                 return psdf
 
@@ -632,7 +632,7 @@ class PandasOnSparkFrameMethods(object):
                     [field.struct_field for field in index_fields + data_fields]
                 )
 
-                self_applied = DataFrame(self._psdf._internal.resolved_copy)  # type: DataFrame
+                self_applied: DataFrame = DataFrame(self._psdf._internal.resolved_copy)
 
                 output_func = GroupBy._make_pandas_df_builder_func(
                     self_applied, func, return_schema, retain_index=True
@@ -893,7 +893,7 @@ class PandasOnSparkSeriesMethods(object):
             limit = ps.get_option("compute.shortcut_limit")
             pser = self._psser.head(limit + 1)._to_internal_pandas()
             transformed = pser.transform(func)
-            psser = Series(transformed)  # type: Series
+            psser: Series = Series(transformed)
 
             field = psser._internal.data_fields[0].normalize_spark_type()
         else:

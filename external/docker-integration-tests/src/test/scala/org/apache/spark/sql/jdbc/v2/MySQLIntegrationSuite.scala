@@ -24,8 +24,6 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException
-import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -121,31 +119,22 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     assert(t.schema === expectedSchema)
   }
 
-  override def testIndex(tbl: String): Unit = {
-    val loaded = Catalogs.load("mysql", conf)
-    val jdbcTable = loaded.asInstanceOf[TableCatalog]
-      .loadTable(Identifier.of(Array.empty[String], "new_table"))
-      .asInstanceOf[SupportsIndex]
-    assert(jdbcTable.indexExists("i1") == false)
-    assert(jdbcTable.indexExists("i2") == false)
+  override def supportsIndex: Boolean = true
 
+  override def testIndexProperties(jdbcTable: SupportsIndex): Unit = {
     val properties = new util.Properties();
     properties.put("KEY_BLOCK_SIZE", "10")
     properties.put("COMMENT", "'this is a comment'")
-    jdbcTable.createIndex("i1", "", Array(FieldReference("col1")),
+    // MySQL doesn't allow property set on individual column, so use empty Array for
+    // column properties
+    jdbcTable.createIndex("i1", "BTREE", Array(FieldReference("col1")),
       Array.empty[util.Map[NamedReference, util.Properties]], properties)
 
-    jdbcTable.createIndex("i2", "",
-      Array(FieldReference("col2"), FieldReference("col3"), FieldReference("col5")),
-      Array.empty[util.Map[NamedReference, util.Properties]], new util.Properties)
-
-    assert(jdbcTable.indexExists("i1") == true)
-    assert(jdbcTable.indexExists("i2") == true)
-
-    val m = intercept[IndexAlreadyExistsException] {
-      jdbcTable.createIndex("i1", "", Array(FieldReference("col1")),
-        Array.empty[util.Map[NamedReference, util.Properties]], properties)
-    }.getMessage
-    assert(m.contains("Failed to create index: i1 in new_table"))
+    var index = jdbcTable.listIndexes()
+    // The index property size is actually 1. Even though the index is created
+    // with properties "KEY_BLOCK_SIZE", "10" and "COMMENT", "'this is a comment'", when
+    // retrieving index using `SHOW INDEXES`, MySQL only returns `COMMENT`.
+    assert(index(0).properties.size == 1)
+    assert(index(0).properties.get("COMMENT").equals("this is a comment"))
   }
 }

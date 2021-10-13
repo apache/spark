@@ -165,7 +165,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             }
         }
 
-        operator transformExpressionsUp {
+        val exprs = operator match {
+          // `groupingExpressions` may rely on `aggregateExpressions`, due to the GROUP BY alias
+          // feature. We should check errors in `aggregateExpressions` first.
+          case a: Aggregate => a.aggregateExpressions ++ a.groupingExpressions
+          case _ => operator.expressions
+        }
+
+        exprs.foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
             val missingCol = a.sql
             val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
@@ -209,27 +216,26 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis(s"${wf.prettyName} function can only be evaluated in an ordered " +
               s"row-based window frame with a single offset: $w")
 
-          case w @ WindowExpression(e, s) =>
+          case w: WindowExpression =>
             // Only allow window functions with an aggregate expression or an offset window
             // function or a Pandas window UDF.
-            e match {
+            w.windowFunction match {
               case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
-                  _: AggregateWindowFunction =>
-                w
-              case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) =>
-                w
-              case _ =>
-                failAnalysis(s"Expression '$e' not supported within a window function.")
+                  _: AggregateWindowFunction => // OK
+              case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) => // OK
+              case other =>
+                failAnalysis(s"Expression '$other' not supported within a window function.")
             }
 
           case s: SubqueryExpression =>
             checkSubqueryExpression(operator, s)
-            s
 
           case e: ExpressionWithRandomSeed if !e.seedExpression.foldable =>
             failAnalysis(
               s"Input argument to ${e.prettyName} must be a constant.")
-        }
+
+          case _ =>
+        })
 
         operator match {
           case etw: EventTimeWatermark =>

@@ -24,6 +24,7 @@ import functools
 import warnings
 from typing import (
     Any,
+    cast,
     Callable,
     Dict,
     List,
@@ -197,6 +198,78 @@ def min(col: "ColumnOrName") -> Column:
     Aggregate function: returns the minimum value of the expression in a group.
     """
     return _invoke_function_over_column("min", col)
+
+
+@since(3.3)
+def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
+    """
+    Returns the value associated with the maximum value of ord.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column that the value will be returned
+    ord : :class:`~pyspark.sql.Column` or str
+        column to be maximized
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        value associated with the maximum value of ord.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([
+    ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
+    ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
+    ...     schema=("course", "year", "earnings"))
+    >>> df.groupby("course").agg(max_by("year", "earnings")).show()
+    +------+----------------------+
+    |course|max_by(year, earnings)|
+    +------+----------------------+
+    |  Java|                  2013|
+    |dotNET|                  2013|
+    +------+----------------------+
+    """
+    return _invoke_function("max_by", _to_java_column(col), _to_java_column(ord))
+
+
+@since(3.3)
+def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
+    """
+    Returns the value associated with the minimum value of ord.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column that the value will be returned
+    ord : :class:`~pyspark.sql.Column` or str
+        column to be minimized
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        value associated with the minimum value of ord.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([
+    ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
+    ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
+    ...     schema=("course", "year", "earnings"))
+    >>> df.groupby("course").agg(min_by("year", "earnings")).show()
+    +------+----------------------+
+    |course|min_by(year, earnings)|
+    +------+----------------------+
+    |  Java|                  2012|
+    |dotNET|                  2012|
+    +------+----------------------+
+    """
+    return _invoke_function("min_by", _to_java_column(col), _to_java_column(ord))
 
 
 @since(1.3)
@@ -1698,7 +1771,7 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
     """
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if arg2 is None:
-        jc = sc._jvm.functions.log(_to_java_column(arg1))
+        jc = sc._jvm.functions.log(_to_java_column(cast("ColumnOrName", arg1)))
     else:
         jc = sc._jvm.functions.log(arg1, _to_java_column(arg2))
     return Column(jc)

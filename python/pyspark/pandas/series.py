@@ -387,18 +387,21 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Copy input data
     """
 
-    @no_type_check
-    def __init__(self, data=None, index=None, dtype=None, name=None, copy=False, fastpath=False):
+    def __init__(  # type: ignore[no-untyped-def]
+        self, data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
+    ):
         assert data is not None
 
+        self._anchor: DataFrame
+        self._col_label: Label
         if isinstance(data, DataFrame):
             assert dtype is None
             assert name is None
             assert not copy
             assert not fastpath
 
-            self._anchor = data  # type: DataFrame
-            self._col_label = index  # type: Label
+            self._anchor = data
+            self._col_label = index
         else:
             if isinstance(data, pd.Series):
                 assert index is None
@@ -1145,7 +1148,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             data_fields=[field],
             column_label_names=None,
         )
-        psdf = DataFrame(internal)  # type: DataFrame
+        psdf: DataFrame = DataFrame(internal)
 
         if kwargs.get("inplace", False):
             self._col_label = index
@@ -5019,7 +5022,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 if not self.index.sort_values().equals(other.index.sort_values()):
                     raise ValueError("matrices are not aligned")
 
-            other_copy = other.copy()  # type: DataFrame
+            other_copy: DataFrame = other.copy()
             column_labels = other_copy._internal.column_labels
 
             self_column_label = verify_temp_column_name(other_copy, "__self_column__")
@@ -5215,7 +5218,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         # The data is expected to be small so it's fine to transpose/use default index.
         with ps.option_context("compute.default_index_type", "distributed", "compute.max_rows", 1):
-            psdf = ps.DataFrame(sdf)  # type: DataFrame
+            psdf: DataFrame = DataFrame(sdf)
             psdf.columns = pd.Index(where)
             return first_series(psdf.transpose()).rename(self.name)
 
@@ -5808,6 +5811,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> reset_option("compute.ops_on_diff_frames")
         """
+        combined: DataFrame
         if same_anchor(self, other):
             self_column_label = verify_temp_column_name(other.to_frame(), "__self_column__")
             other_column_label = verify_temp_column_name(self.to_frame(), "__other_column__")
@@ -5815,7 +5819,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 self._internal.with_new_columns(
                     [self.rename(self_column_label), other.rename(other_column_label)]
                 )
-            )  # type: DataFrame
+            )
         else:
             if not self.index.equals(other.index):
                 raise ValueError("Can only compare identically-labeled Series objects")

@@ -14,13 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from pyspark.sql import column
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 
 __all__ = ["Observation"]
+
+if TYPE_CHECKING:
+    from pyspark import SparkContext  # noqa: F401
 
 
 class Observation:
