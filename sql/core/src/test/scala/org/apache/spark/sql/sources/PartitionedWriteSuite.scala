@@ -37,8 +37,9 @@ import org.apache.spark.util.Utils
 private class OnlyDetectCustomPathFileCommitProtocol(
     jobId: String,
     path: String,
-    stagingPath: String)
-  extends SQLHadoopMapReduceCommitProtocol(jobId, path, stagingPath)
+    stagingPath: String,
+    dynamicPartitionOverwrite: Boolean)
+  extends SQLHadoopMapReduceCommitProtocol(jobId, path, stagingPath, dynamicPartitionOverwrite)
     with Serializable with Logging {
 
   override def newTaskTempFileAbsPath(
