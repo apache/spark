@@ -31,7 +31,7 @@ import org.apache.hadoop.util.{DurationInfo, Progressable}
 
 import org.apache.spark.internal.Logging
 
-class NewFileOutputCommitter(
+class SQLPathOutputCommitter(
     stagingDir: Path,
     outputPath: Path,
     context: TaskAttemptContext)
@@ -504,7 +504,7 @@ class NewFileOutputCommitter(
   }
 }
 
-object NewFileOutputCommitter extends Logging {
+object SQLPathOutputCommitter extends Logging {
   def newVersionExternalTempPath(
       jobId: String,
       path: Path,

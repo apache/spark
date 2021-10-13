@@ -29,26 +29,26 @@ import org.apache.spark.sql.internal.SQLConf
  * A variant of [[HadoopMapReduceCommitProtocol]] that allows specifying the actual
  * Hadoop output committer using an option specified in SQLConf.
  */
-class NewSQLHadoopMapReduceCommitProtocol(
+class SQLPathHadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
     dynamicPartitionOverwrite: Boolean = false)
   extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
     with Serializable with Logging {
 
-  private val committerStagingDir = NewFileOutputCommitter.newVersionExternalTempPath(
+  private val committerStagingDir = SQLPathOutputCommitter.newVersionExternalTempPath(
     jobId, new Path(path), SparkSession.getActiveSession.get.sharedState.hadoopConf,
     SQLConf.get.getConfString("spark.sql.source.stagingDir", ".stagingDir"))
 
-  def currentCommitter: NewFileOutputCommitter =
-    getCommitter.asInstanceOf[NewFileOutputCommitter]
+  def currentCommitter: SQLPathOutputCommitter =
+    getCommitter.asInstanceOf[SQLPathOutputCommitter]
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     // The specified output committer is a FileOutputCommitter.
     // So, we will use the FileOutputCommitter-specified constructor.
     val committerOutputPath = new Path(path)
     val committer =
-      new NewFileOutputCommitter(committerStagingDir, committerOutputPath, context)
+      new SQLPathOutputCommitter(committerStagingDir, committerOutputPath, context)
     logInfo(s"Using output committer class ${committer.getClass.getCanonicalName}")
     committer
   }
