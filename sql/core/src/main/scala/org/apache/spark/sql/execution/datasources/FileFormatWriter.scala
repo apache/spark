@@ -27,7 +27,7 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
+import org.apache.spark.internal.io.SparkHadoopWriterUtils
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -96,7 +96,7 @@ object FileFormatWriter extends Logging {
       sparkSession: SparkSession,
       plan: SparkPlan,
       fileFormat: FileFormat,
-      committer: FileCommitProtocol,
+      committer: SQLFileCommitProtocol,
       outputSpec: OutputSpec,
       hadoopConf: Configuration,
       partitionColumns: Seq[Attribute],
@@ -282,7 +282,7 @@ object FileFormatWriter extends Logging {
       sparkStageId: Int,
       sparkPartitionId: Int,
       sparkAttemptNumber: Int,
-      committer: FileCommitProtocol,
+      committer: SQLFileCommitProtocol,
       iterator: Iterator[InternalRow],
       concurrentOutputWriterSpec: Option[ConcurrentOutputWriterSpec]): WriteTaskResult = {
 

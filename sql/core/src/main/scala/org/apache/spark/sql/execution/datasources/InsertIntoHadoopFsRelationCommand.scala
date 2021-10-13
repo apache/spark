@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -105,7 +104,7 @@ case class InsertIntoHadoopFsRelationCommand(
     }
 
     val jobId = java.util.UUID.randomUUID().toString
-    val committer = FileCommitProtocol.instantiate(
+    val committer = SQLFileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = jobId,
       outputPath = outputPath.toString,
@@ -162,15 +161,6 @@ case class InsertIntoHadoopFsRelationCommand(
         }
       }
 
-      // For dynamic partition overwrite, FileOutputCommitter's output path is staging path, files
-      // will be renamed from staging path to final output path during commit job
-      val committerOutputPath = if (dynamicPartitionOverwrite) {
-        FileCommitProtocol.getStagingDir(outputPath.toString, jobId)
-          .makeQualified(fs.getUri, fs.getWorkingDirectory)
-      } else {
-        qualifiedOutputPath
-      }
-
       val updatedPartitionPaths =
         FileFormatWriter.write(
           sparkSession = sparkSession,
@@ -178,7 +168,7 @@ case class InsertIntoHadoopFsRelationCommand(
           fileFormat = fileFormat,
           committer = committer,
           outputSpec = FileFormatWriter.OutputSpec(
-            committerOutputPath.toString, customPartitionLocations, outputColumns),
+            committer.getWorkPath.toString, customPartitionLocations, outputColumns),
           hadoopConf = hadoopConf,
           partitionColumns = partitionColumns,
           bucketSpec = bucketSpec,
@@ -221,7 +211,7 @@ case class InsertIntoHadoopFsRelationCommand(
       fs: FileSystem,
       qualifiedOutputPath: Path,
       customPartitionLocations: Map[TablePartitionSpec, String],
-      committer: FileCommitProtocol): Unit = {
+      committer: SQLFileCommitProtocol): Unit = {
     val staticPartitionPrefix = if (staticPartitions.nonEmpty) {
       "/" + partitionColumns.flatMap { p =>
         staticPartitions.get(p.name).map(getPartitionPathString(p.name, _))
