@@ -40,8 +40,8 @@ class SQLPathHadoopMapReduceCommitProtocol(
     jobId, new Path(path), SparkSession.getActiveSession.get.sharedState.hadoopConf,
     SQLConf.get.getConfString("spark.sql.source.stagingDir", ".stagingDir"))
 
-  def currentCommitter: SQLPathOutputCommitter =
-    getCommitter.asInstanceOf[SQLPathOutputCommitter]
+  val sqlPathOutputCommitter: SQLPathOutputCommitter =
+    committer.asInstanceOf[SQLPathOutputCommitter]
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     // The specified output committer is a FileOutputCommitter.
@@ -59,9 +59,10 @@ class SQLPathHadoopMapReduceCommitProtocol(
     ext: String): String = {
     val filename = getFilename(taskContext, ext)
     dir.map { d =>
-      new Path(new Path(currentCommitter.getTaskAttemptPath(taskContext), d), filename).toString
+      new Path(
+        new Path(sqlPathOutputCommitter.getTaskAttemptPath(taskContext), d), filename).toString
     }.getOrElse {
-      new Path(currentCommitter.getTaskAttemptPath(taskContext), filename).toString
+      new Path(sqlPathOutputCommitter.getTaskAttemptPath(taskContext), filename).toString
     }
   }
 }
