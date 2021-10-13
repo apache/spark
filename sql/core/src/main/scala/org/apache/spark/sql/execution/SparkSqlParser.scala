@@ -531,7 +531,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         None,
         functionIdentifier.last,
         string(ctx.className),
-        resources,
+        resources.toSeq,
         true,
         ctx.EXISTS != null,
         ctx.REPLACE != null)
