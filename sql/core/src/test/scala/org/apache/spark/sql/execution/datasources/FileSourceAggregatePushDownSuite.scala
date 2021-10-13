@@ -15,33 +15,39 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.parquet
+package org.apache.spark.sql.execution.datasources
 
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql._
+import org.apache.spark.sql.{ExplainSuiteHelper, QueryTest, Row}
+import org.apache.spark.sql.execution.datasources.orc.OrcTest
+import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.functions.min
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DateType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructField, StructType, TimestampType}
 
 /**
- * A test suite that tests Max/Min/Count push down.
+ * A test suite that tests aggregate push down for Parquet and ORC.
  */
-abstract class ParquetAggregatePushDownSuite
+trait FileSourceAggregatePushDownSuite
   extends QueryTest
-  with ParquetTest
+  with FileBasedDataSourceTest
   with SharedSparkSession
   with ExplainSuiteHelper {
+
   import testImplicits._
 
-  test("aggregate push down - nested column: Max(top level column) not push down") {
+  protected def format: String
+  // The SQL config key for enabling aggregate push down.
+  protected val aggPushDownEnabledKey: String
+
+  test("nested column: Max(top level column) not push down") {
     val data = (1 to 10).map(i => Tuple1((i, Seq(s"val_$i"))))
-    withSQLConf(
-      SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true") {
-      withParquetTable(data, "t") {
+    withSQLConf(aggPushDownEnabledKey -> "true") {
+      withDataSourceTable(data, "t") {
         val max = sql("SELECT Max(_1) FROM t")
         max.queryExecution.optimizedPlan.collect {
           case _: DataSourceV2ScanRelation =>
@@ -53,11 +59,10 @@ abstract class ParquetAggregatePushDownSuite
     }
   }
 
-  test("aggregate push down - nested column: Count(top level column) push down") {
+  test("nested column: Count(top level column) push down") {
     val data = (1 to 10).map(i => Tuple1((i, Seq(s"val_$i"))))
-    withSQLConf(
-      SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true") {
-      withParquetTable(data, "t") {
+    withSQLConf(aggPushDownEnabledKey -> "true") {
+      withDataSourceTable(data, "t") {
         val count = sql("SELECT Count(_1) FROM t")
         count.queryExecution.optimizedPlan.collect {
           case _: DataSourceV2ScanRelation =>
@@ -70,11 +75,10 @@ abstract class ParquetAggregatePushDownSuite
     }
   }
 
-  test("aggregate push down - nested column: Max(nested column) not push down") {
+  test("nested column: Max(nested sub-field) not push down") {
     val data = (1 to 10).map(i => Tuple1((i, Seq(s"val_$i"))))
-    withSQLConf(
-      SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true") {
-      withParquetTable(data, "t") {
+    withSQLConf(aggPushDownEnabledKey-> "true") {
+      withDataSourceTable(data, "t") {
         val max = sql("SELECT Max(_1._2[0]) FROM t")
         max.queryExecution.optimizedPlan.collect {
           case _: DataSourceV2ScanRelation =>
@@ -86,11 +90,10 @@ abstract class ParquetAggregatePushDownSuite
     }
   }
 
-  test("aggregate push down - nested column: Count(nested column) not push down") {
+  test("nested column: Count(nested sub-field) not push down") {
     val data = (1 to 10).map(i => Tuple1((i, Seq(s"val_$i"))))
-    withSQLConf(
-      SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true") {
-      withParquetTable(data, "t") {
+    withSQLConf(aggPushDownEnabledKey -> "true") {
+      withDataSourceTable(data, "t") {
         val count = sql("SELECT Count(_1._2[0]) FROM t")
         count.queryExecution.optimizedPlan.collect {
           case _: DataSourceV2ScanRelation =>
@@ -103,13 +106,13 @@ abstract class ParquetAggregatePushDownSuite
     }
   }
 
-  test("aggregate push down - Max(partition Col): not push dow") {
+  test("Max(partition column): not push down") {
     withTempPath { dir =>
       spark.range(10).selectExpr("id", "id % 3 as p")
-        .write.partitionBy("p").parquet(dir.getCanonicalPath)
+        .write.partitionBy("p").format(format).save(dir.getCanonicalPath)
       withTempView("tmp") {
-        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
-        withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true") {
+        spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+        withSQLConf(aggPushDownEnabledKey -> "true") {
           val max = sql("SELECT Max(p) FROM tmp")
           max.queryExecution.optimizedPlan.collect {
             case _: DataSourceV2ScanRelation =>
@@ -146,12 +149,11 @@ abstract class ParquetAggregatePushDownSuite
     }
   }
 
-  test("aggregate push down - Filter alias over aggregate") {
+  test("filter alias over aggregate") {
     val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
       (9, "mno", 7), (2, null, 6))
-    withParquetTable(data, "t") {
-      withSQLConf(
-        SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true") {
+    withDataSourceTable(data, "t") {
+      withSQLConf(aggPushDownEnabledKey -> "true") {
         val selectAgg = sql("SELECT min(_1) + max(_1) as res FROM t having res > 1")
         selectAgg.queryExecution.optimizedPlan.collect {
           case _: DataSourceV2ScanRelation =>
@@ -164,12 +166,11 @@ abstract class ParquetAggregatePushDownSuite
     }
   }
 
-  test("aggregate push down - alias over aggregate") {
+  test("alias over aggregate") {
     val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
       (9, "mno", 7), (2, null, 6))
-    withParquetTable(data, "t") {
-      withSQLConf(
-        SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true") {
+    withDataSourceTable(data, "t") {
+      withSQLConf(aggPushDownEnabledKey -> "true") {
         val selectAgg = sql("SELECT min(_1) + 1 as minPlus1, min(_1) + 2 as minPlus2 FROM t")
         selectAgg.queryExecution.optimizedPlan.collect {
           case _: DataSourceV2ScanRelation =>
@@ -182,12 +183,11 @@ abstract class ParquetAggregatePushDownSuite
     }
   }
 
-  test("aggregate push down - aggregate over alias not push down") {
+  test("aggregate over alias not push down") {
     val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
       (9, "mno", 7), (2, null, 6))
-    withParquetTable(data, "t") {
-      withSQLConf(
-        SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true") {
+    withDataSourceTable(data, "t") {
+      withSQLConf(aggPushDownEnabledKey -> "true") {
         val df = spark.table("t")
         val query = df.select($"_1".as("col1")).agg(min($"col1"))
         query.queryExecution.optimizedPlan.collect {
@@ -201,12 +201,11 @@ abstract class ParquetAggregatePushDownSuite
     }
   }
 
-  test("aggregate push down - query with group by not push down") {
+  test("query with group by not push down") {
     val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
       (9, "mno", 7), (2, null, 7))
-    withParquetTable(data, "t") {
-      withSQLConf(
-        SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true") {
+    withDataSourceTable(data, "t") {
+      withSQLConf(aggPushDownEnabledKey -> "true") {
         // aggregate not pushed down if there is group by
         val selectAgg = sql("SELECT min(_1) FROM t GROUP BY _3 ")
         selectAgg.queryExecution.optimizedPlan.collect {
@@ -220,12 +219,11 @@ abstract class ParquetAggregatePushDownSuite
     }
   }
 
-  test("aggregate push down - aggregate with data filter cannot be pushed down") {
+  test("aggregate with data filter cannot be pushed down") {
     val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
       (9, "mno", 7), (2, null, 7))
-    withParquetTable(data, "t") {
-      withSQLConf(
-        SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true") {
+    withDataSourceTable(data, "t") {
+      withSQLConf(aggPushDownEnabledKey -> "true") {
         // aggregate not pushed down if there is filter
         val selectAgg = sql("SELECT min(_3) FROM t WHERE _1 > 0")
         selectAgg.queryExecution.optimizedPlan.collect {
@@ -239,14 +237,14 @@ abstract class ParquetAggregatePushDownSuite
     }
   }
 
-  test("aggregate push down - aggregate with partition filter can be pushed down") {
+  test("aggregate with partition filter can be pushed down") {
     withTempPath { dir =>
       spark.range(10).selectExpr("id", "id % 3 as p")
-        .write.partitionBy("p").parquet(dir.getCanonicalPath)
+        .write.partitionBy("p").format(format).save(dir.getCanonicalPath)
       withTempView("tmp") {
-        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+        spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
         Seq("false", "true").foreach { enableVectorizedReader =>
-          withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
+          withSQLConf(aggPushDownEnabledKey -> "true",
             vectorizedReaderEnabledKey -> enableVectorizedReader) {
             val max = sql("SELECT max(id), min(id), count(id) FROM tmp WHERE p = 0")
             max.queryExecution.optimizedPlan.collect {
@@ -262,12 +260,11 @@ abstract class ParquetAggregatePushDownSuite
     }
   }
 
-  test("aggregate push down - push down only if all the aggregates can be pushed down") {
+  test("push down only if all the aggregates can be pushed down") {
     val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
       (9, "mno", 7), (2, null, 7))
-    withParquetTable(data, "t") {
-      withSQLConf(
-        SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true") {
+    withDataSourceTable(data, "t") {
+      withSQLConf(aggPushDownEnabledKey -> "true") {
         // not push down since sum can't be pushed down
         val selectAgg = sql("SELECT min(_1), sum(_3) FROM t")
         selectAgg.queryExecution.optimizedPlan.collect {
@@ -284,9 +281,8 @@ abstract class ParquetAggregatePushDownSuite
   test("aggregate push down - MIN/MAX/COUNT") {
     val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
       (9, "mno", 7), (2, null, 6))
-    withParquetTable(data, "t") {
-      withSQLConf(
-        SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true") {
+    withDataSourceTable(data, "t") {
+      withSQLConf(aggPushDownEnabledKey -> "true") {
         val selectAgg = sql("SELECT min(_3), min(_3), max(_3), min(_1), max(_1), max(_1)," +
           " count(*), count(_1), count(_2), count(_3) FROM t")
         selectAgg.queryExecution.optimizedPlan.collect {
@@ -375,11 +371,11 @@ abstract class ParquetAggregatePushDownSuite
 
     val rdd = sparkContext.parallelize(rows)
     withTempPath { file =>
-      spark.createDataFrame(rdd, schema).write.parquet(file.getCanonicalPath)
+      spark.createDataFrame(rdd, schema).write.format(format).save(file.getCanonicalPath)
       withTempView("test") {
-        spark.read.parquet(file.getCanonicalPath).createOrReplaceTempView("test")
+        spark.read.format(format).load(file.getCanonicalPath).createOrReplaceTempView("test")
         Seq("false", "true").foreach { enableVectorizedReader =>
-          withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
+          withSQLConf(aggPushDownEnabledKey -> "true",
             vectorizedReaderEnabledKey -> enableVectorizedReader) {
 
             val testMinWithAllTypes = sql("SELECT min(StringCol), min(BooleanCol), min(ByteCol), " +
@@ -389,7 +385,8 @@ abstract class ParquetAggregatePushDownSuite
             // INT96 (Timestamp) sort order is undefined, parquet doesn't return stats for this type
             // so aggregates are not pushed down
             // In addition, Parquet Binary min/max could be truncated, so we disable aggregate
-            // push down for Parquet Binary (could be Spark StringType, BinaryType or DecimalType)
+            // push down for Parquet Binary (could be Spark StringType, BinaryType or DecimalType).
+            // Also do not push down for ORC with same reason.
             testMinWithAllTypes.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>
                 val expected_plan_fragment =
@@ -430,7 +427,8 @@ abstract class ParquetAggregatePushDownSuite
             // INT96 (Timestamp) sort order is undefined, parquet doesn't return stats for this type
             // so aggregates are not pushed down
             // In addition, Parquet Binary min/max could be truncated, so we disable aggregate
-            // push down for Parquet Binary (could be Spark StringType, BinaryType or DecimalType)
+            // push down for Parquet Binary (could be Spark StringType, BinaryType or DecimalType).
+            // Also do not push down for ORC with same reason.
             testMaxWithAllTypes.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>
                 val expected_plan_fragment =
@@ -494,15 +492,15 @@ abstract class ParquetAggregatePushDownSuite
     }
   }
 
-  test("aggregate push down - column name case sensitivity") {
+  test("column name case sensitivity") {
     Seq("false", "true").foreach { enableVectorizedReader =>
-      withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
+      withSQLConf(aggPushDownEnabledKey -> "true",
         vectorizedReaderEnabledKey -> enableVectorizedReader) {
         withTempPath { dir =>
           spark.range(10).selectExpr("id", "id % 3 as p")
-            .write.partitionBy("p").parquet(dir.getCanonicalPath)
+            .write.partitionBy("p").format(format).save(dir.getCanonicalPath)
           withTempView("tmp") {
-            spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+            spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
             val selectAgg = sql("SELECT max(iD), min(Id) FROM tmp")
             selectAgg.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>
@@ -518,18 +516,41 @@ abstract class ParquetAggregatePushDownSuite
   }
 }
 
+abstract class ParquetAggregatePushDownSuite
+  extends FileSourceAggregatePushDownSuite with ParquetTest {
+
+  override def format: String = "parquet"
+  override protected val aggPushDownEnabledKey: String =
+    SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key
+}
+
 class ParquetV1AggregatePushDownSuite extends ParquetAggregatePushDownSuite {
 
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 }
 
 class ParquetV2AggregatePushDownSuite extends ParquetAggregatePushDownSuite {
 
   override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_LIST, "")
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
+}
+
+abstract class OrcAggregatePushDownSuite extends OrcTest with FileSourceAggregatePushDownSuite {
+
+  override def format: String = "orc"
+  override protected val aggPushDownEnabledKey: String =
+    SQLConf.ORC_AGGREGATE_PUSHDOWN_ENABLED.key
+}
+
+class OrcV1AggregatePushDownSuite extends OrcAggregatePushDownSuite {
+
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "orc")
+}
+
+class OrcV2AggregatePushDownSuite extends OrcAggregatePushDownSuite {
+
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

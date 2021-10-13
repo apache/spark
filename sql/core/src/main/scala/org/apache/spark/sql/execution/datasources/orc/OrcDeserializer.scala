@@ -68,6 +68,22 @@ class OrcDeserializer(
     resultRow
   }
 
+  def deserializeFromValues(orcValues: Seq[WritableComparable[_]]): InternalRow = {
+    var targetColumnIndex = 0
+    while (targetColumnIndex < fieldWriters.length) {
+      if (fieldWriters(targetColumnIndex) != null) {
+        val value = orcValues(requestedColIds(targetColumnIndex))
+        if (value == null) {
+          resultRow.setNullAt(targetColumnIndex)
+        } else {
+          fieldWriters(targetColumnIndex)(value)
+        }
+      }
+      targetColumnIndex += 1
+    }
+    resultRow
+  }
+
   /**
    * Creates a writer to write ORC values to Catalyst data structure at the given ordinal.
    */

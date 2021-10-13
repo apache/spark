@@ -17,16 +17,14 @@
 package org.apache.spark.sql.execution.datasources.v2.parquet
 
 import scala.collection.JavaConverters._
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetInputFormat
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
-import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
+import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetOptions, ParquetReadSupport, ParquetWriteSupport}
 import org.apache.spark.sql.execution.datasources.v2.FileScan
 import org.apache.spark.sql.internal.SQLConf
@@ -101,7 +99,7 @@ case class ParquetScan(
   override def equals(obj: Any): Boolean = obj match {
     case p: ParquetScan =>
       val pushedDownAggEqual = if (pushedAggregate.nonEmpty && p.pushedAggregate.nonEmpty) {
-        equivalentAggregations(pushedAggregate.get, p.pushedAggregate.get)
+        AggregatePushDownUtils.equivalentAggregations(pushedAggregate.get, p.pushedAggregate.get)
       } else {
         pushedAggregate.isEmpty && p.pushedAggregate.isEmpty
       }
@@ -129,11 +127,5 @@ case class ParquetScan(
     super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters)) ++
       Map("PushedAggregation" -> pushedAggregationsStr) ++
       Map("PushedGroupBy" -> pushedGroupByStr)
-  }
-
-  private def equivalentAggregations(a: Aggregation, b: Aggregation): Boolean = {
-    a.aggregateExpressions.sortBy(_.hashCode())
-      .sameElements(b.aggregateExpressions.sortBy(_.hashCode())) &&
-      a.groupByColumns.sortBy(_.hashCode()).sameElements(b.groupByColumns.sortBy(_.hashCode()))
   }
 }

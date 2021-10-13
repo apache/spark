@@ -960,6 +960,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ORC_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.aggregatePushdown")
+    .doc("If true, MAX/MIN/COUNT without filter and group by will be pushed" +
+      " down to ORC for optimization. MAX/MIN for complex types can't be pushed down")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val ORC_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.orc.mergeSchema")
     .doc("When true, the Orc data source merges schemas collected from all data files, " +
       "otherwise the schema is picked from a random data file.")
@@ -3697,6 +3704,8 @@ class SQLConf extends Serializable with Logging {
   def parquetAggregatePushDown: Boolean = getConf(PARQUET_AGGREGATE_PUSHDOWN_ENABLED)
 
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
+
+  def orcAggregatePushDown: Boolean = getConf(ORC_AGGREGATE_PUSHDOWN_ENABLED)
 
   def isOrcSchemaMergingEnabled: Boolean = getConf(ORC_SCHEMA_MERGING_ENABLED)
 
