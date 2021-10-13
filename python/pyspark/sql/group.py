@@ -14,11 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from __future__ import annotations
 
 import sys
 
-from typing import Callable, List, Optional, Type, TYPE_CHECKING
+from typing import Callable, List, Optional, Type, TYPE_CHECKING, overload, Dict, Union, cast, Tuple
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import LiteralType
@@ -34,7 +33,7 @@ __all__ = ["GroupedData"]
 
 
 def dfapi(f: Callable) -> Callable:
-    def _api(self: Type[GroupedData]) -> DataFrame:
+    def _api(self: Type["GroupedData"]) -> DataFrame:
         name = f.__name__
         jdf = getattr(self._jgd, name)()
         return DataFrame(jdf, self.sql_ctx)
@@ -44,7 +43,7 @@ def dfapi(f: Callable) -> Callable:
 
 
 def df_varargs_api(f: Callable) -> Callable:
-    def _api(self: Type[GroupedData], *cols: Column) -> DataFrame:
+    def _api(self: Type["GroupedData"], *cols: Column) -> DataFrame:
         name = f.__name__
         # TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
         jdf = getattr(self._jgd, name)(
@@ -64,12 +63,20 @@ class GroupedData(PandasGroupedOpsMixin):
     .. versionadded:: 1.3
     """
 
-    def __init__(self, jgd: JavaObject, df: DataFrame) -> None:
+    def __init__(self, jgd: JavaObject, df: DataFrame):
         self._jgd = jgd
         self._df = df
         self.sql_ctx: SQLContext = df.sql_ctx
 
+    @overload
     def agg(self, *exprs: Column) -> DataFrame:
+        ...
+
+    @overload
+    def agg(self, __exprs: Dict[str, str]) -> DataFrame:
+        ...
+
+    def agg(self, *exprs: Union[Column, Dict[str, str]]) -> DataFrame:
         """Compute aggregates and returns the result as a :class:`DataFrame`.
 
         The available aggregate functions can be:
@@ -126,6 +133,7 @@ class GroupedData(PandasGroupedOpsMixin):
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
+            exprs = cast(Tuple[Column, ...], exprs)
             # TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
             jdf = self._jgd.agg(
                 exprs[0]._jc,
@@ -239,7 +247,7 @@ class GroupedData(PandasGroupedOpsMixin):
         [Row(sum(age)=7, sum(height)=165)]
         """
 
-    def pivot(self, pivot_col: str, values: Optional[List[LiteralType]] = None) -> GroupedData:
+    def pivot(self, pivot_col: str, values: Optional[List["LiteralType"]] = None) -> "GroupedData":
         """
         Pivots a column of the current :class:`DataFrame` and perform the specified aggregation.
         There are two versions of pivot function: one that requires the caller to specify the list
