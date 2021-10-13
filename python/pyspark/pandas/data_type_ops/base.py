@@ -376,11 +376,98 @@ class DataTypeOps(object, metaclass=ABCMeta):
         raise TypeError(">= can not be applied to %s." % self.pretty_name)
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
+        if isinstance(right, (list, tuple)):
+            from pyspark.pandas.series import first_series, scol_for
+            from pyspark.pandas.frame import DataFrame
+            from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, InternalField
 
-        _sanitize_list_like(right)
+            len_right = len(right)
+            if len(left) != len(right):
+                raise ValueError("Lengths must be equal")
 
-        return column_op(Column.__eq__)(left, right)
+            sdf = left._internal.spark_frame
+            structed_scol = F.struct(
+                sdf[NATURAL_ORDER_COLUMN_NAME],
+                *left._internal.index_spark_columns,
+                left.spark.column
+            )
+            # The size of the list is expected to be small.
+            collected_structed_scol = F.collect_list(structed_scol)
+            # Sort the array by NATURAL_ORDER_COLUMN so that we can guarantee the order.
+            collected_structed_scol = F.array_sort(collected_structed_scol)
+            right_values_scol = F.array([F.lit(x) for x in right])  # type: ignore
+            index_scol_names = left._internal.index_spark_column_names
+            scol_name = left._internal.spark_column_name_for(left._internal.column_labels[0])
+            # Compare the values of left and right by using zip_with function.
+            cond = F.zip_with(
+                collected_structed_scol,
+                right_values_scol,
+                lambda x, y: F.struct(
+                    *[
+                        x[index_scol_name].alias(index_scol_name)
+                        for index_scol_name in index_scol_names
+                    ],
+                    F.when(x[scol_name].isNull() | y.isNull(), False)
+                    .otherwise(
+                        x[scol_name] == y,
+                    )
+                    .alias(scol_name)
+                ),
+            ).alias(scol_name)
+            # 1. `sdf_new` here looks like the below (the first field of each set is Index):
+            # +----------------------------------------------------------+
+            # |0                                                         |
+            # +----------------------------------------------------------+
+            # |[{0, false}, {1, true}, {2, false}, {3, true}, {4, false}]|
+            # +----------------------------------------------------------+
+            sdf_new = sdf.select(cond)
+            # 2. `sdf_new` after the explode looks like the below:
+            # +----------+
+            # |       col|
+            # +----------+
+            # |{0, false}|
+            # | {1, true}|
+            # |{2, false}|
+            # | {3, true}|
+            # |{4, false}|
+            # +----------+
+            sdf_new = sdf_new.select(F.explode(scol_name))
+            # 3. Here, the final `sdf_new` looks like the below:
+            # +-----------------+-----+
+            # |__index_level_0__|    0|
+            # +-----------------+-----+
+            # |                0|false|
+            # |                1| true|
+            # |                2|false|
+            # |                3| true|
+            # |                4|false|
+            # +-----------------+-----+
+            sdf_new = sdf_new.select("col.*")
+
+            index_spark_columns = [
+                scol_for(sdf_new, index_scol_name) for index_scol_name in index_scol_names
+            ]
+            data_spark_columns = [scol_for(sdf_new, scol_name)]
+
+            internal = left._internal.copy(
+                spark_frame=sdf_new,
+                index_spark_columns=index_spark_columns,
+                data_spark_columns=data_spark_columns,
+                index_fields=[
+                    InternalField.from_struct_field(index_field)
+                    for index_field in sdf_new.select(index_spark_columns).schema.fields
+                ],
+                data_fields=[
+                    InternalField.from_struct_field(
+                        sdf_new.select(data_spark_columns).schema.fields[0]
+                    )
+                ],
+            )
+            return first_series(DataFrame(internal))
+        else:
+            from pyspark.pandas.base import column_op
+
+            return column_op(Column.__eq__)(left, right)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
