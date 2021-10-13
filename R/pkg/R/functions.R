@@ -1489,9 +1489,9 @@ setMethod("max",
 #'
 #' \dontrun{
 #' df <- createDataFrame(
-#' list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
+#'   list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
 #'      list("dotNET", 2013, 48000), list("Java", 2013, 30000)),
-#' list("course", "year", "earnings")
+#'   list("course", "year", "earnings")
 #' )
 #' tmp <- agg(groupBy(df, df$"course"), "max_by" = max_by(df$"year", df$"earnings"))
 #' head(tmp)}
@@ -1564,9 +1564,9 @@ setMethod("min",
 #'
 #' \dontrun{
 #' df <- createDataFrame(
-#' list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
+#'   list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
 #'      list("dotNET", 2013, 48000), list("Java", 2013, 30000)),
-#' list("course", "year", "earnings")
+#'   list("course", "year", "earnings")
 #' )
 #' tmp <- agg(groupBy(df, df$"course"), "min_by" = min_by(df$"year", df$"earnings"))
 #' head(tmp)}
