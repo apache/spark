@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedDBObjectName}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DDLParserSuite extends AnalysisTest with SharedSparkSession {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   private lazy val parser = new SparkSqlParser()
 
   private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
@@ -42,6 +43,9 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       assert(e.getMessage.toLowerCase(Locale.ROOT).contains(p.toLowerCase(Locale.ROOT)))
     }
   }
+
+  private def intercept(sqlCommand: String, messages: String*): Unit =
+    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)
 
   private def compareTransformQuery(sql: String, expected: LogicalPlan): Unit = {
     val plan = parser.parsePlan(sql).asInstanceOf[ScriptTransformation].copy(ioschema = null)
@@ -323,6 +327,113 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |LATERAL VIEW explode(array(array(1, 2,  3))) `gen``tab1` AS `gen``col1`
         |LATERAL VIEW explode(`gen``tab1`.`gen``col1`) `gen``tab2` AS `gen``col2`
       """.stripMargin)
+  }
+
+  test("create view -- basic") {
+    val v1 = "CREATE VIEW view1 AS SELECT * FROM tab1"
+    val parsed1 = parser.parsePlan(v1)
+
+    val expected1 = CreateView(
+      UnresolvedDBObjectName(Seq("view1"), false),
+      Seq.empty[(String, Option[String])],
+      None,
+      Map.empty[String, String],
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      false)
+    comparePlans(parsed1, expected1)
+
+    val v2 = "CREATE TEMPORARY VIEW a AS SELECT * FROM tab1"
+    val parsed2 = parser.parsePlan(v2)
+
+    val expected2 = CreateViewCommand(
+      Seq("a").asTableIdentifier,
+      Seq.empty[(String, Option[String])],
+      None,
+      Map.empty[String, String],
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      false,
+      LocalTempView)
+    comparePlans(parsed2, expected2)
+  }
+
+  test("create temp view - full") {
+    val v1 =
+      """
+        |CREATE OR REPLACE VIEW view1
+        |(col1, col3 COMMENT 'hello')
+        |TBLPROPERTIES('prop1Key'="prop1Val")
+        |COMMENT 'BLABLA'
+        |AS SELECT * FROM tab1
+      """.stripMargin
+    val parsed1 = parser.parsePlan(v1)
+    val expected1 = CreateView(
+      UnresolvedDBObjectName(Seq("view1"), false),
+      Seq("col1" -> None, "col3" -> Some("hello")),
+      Some("BLABLA"),
+      Map("prop1Key" -> "prop1Val"),
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      true)
+    comparePlans(parsed1, expected1)
+
+    val v2 =
+      """
+        |CREATE OR REPLACE GLOBAL TEMPORARY VIEW a
+        |(col1, col3 COMMENT 'hello')
+        |COMMENT 'BLABLA'
+        |AS SELECT * FROM tab1
+          """.stripMargin
+    val parsed2 = parser.parsePlan(v2)
+    val expected2 = CreateViewCommand(
+      Seq("a").asTableIdentifier,
+      Seq("col1" -> None, "col3" -> Some("hello")),
+      Some("BLABLA"),
+      Map(),
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      true,
+      GlobalTempView)
+    comparePlans(parsed2, expected2)
+  }
+
+  test("create view -- partitioned view") {
+    val v1 = "CREATE VIEW view1 partitioned on (ds, hr) as select * from srcpart"
+    intercept[ParseException] {
+      parser.parsePlan(v1)
+    }
+  }
+
+  test("create view - duplicate clauses") {
+    def createViewStatement(duplicateClause: String): String = {
+      s"""
+         |CREATE OR REPLACE VIEW view1
+         |(col1, col3 COMMENT 'hello')
+         |$duplicateClause
+         |$duplicateClause
+         |AS SELECT * FROM tab1
+      """.stripMargin
+    }
+    val sql1 = createViewStatement("COMMENT 'BLABLA'")
+    val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
+    intercept(sql1, "Found duplicate clauses: COMMENT")
+    intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
+  }
+
+  test("SPARK-32374: create temporary view with properties not allowed") {
+    assertUnsupported(
+      sql = """
+              |CREATE OR REPLACE TEMPORARY VIEW a.b.c
+              |(col1, col3 COMMENT 'hello')
+              |TBLPROPERTIES('prop1Key'="prop1Val")
+              |AS SELECT * FROM tab1
+      """.stripMargin,
+      containsThesePhrases = Seq("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"))
   }
 
   test("create table like") {

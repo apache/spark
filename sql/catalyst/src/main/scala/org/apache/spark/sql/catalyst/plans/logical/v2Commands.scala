@@ -958,6 +958,25 @@ case class AlterViewAs(
 }
 
 /**
+ * The logical plan of the CREATE VIEW ... command.
+ */
+case class CreateView(
+    child: LogicalPlan,
+    userSpecifiedColumns: Seq[(String, Option[String])],
+    comment: Option[String],
+    properties: Map[String, String],
+    originalText: Option[String],
+    query: LogicalPlan,
+    allowExisting: Boolean,
+    replace: Boolean) extends BinaryCommand {
+  override def left: LogicalPlan = child
+  override def right: LogicalPlan = query
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
+    copy(child = newLeft, query = newRight)
+}
+
+/**
  * The logical plan of the ALTER VIEW ... SET TBLPROPERTIES command.
  */
 case class SetViewProperties(

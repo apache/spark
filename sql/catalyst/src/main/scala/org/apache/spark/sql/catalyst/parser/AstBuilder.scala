@@ -4286,62 +4286,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create or replace a view. This creates a [[CreateViewStatement]]
-   *
-   * For example:
-   * {{{
-   *   CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] multi_part_name
-   *   [(column_name [COMMENT column_comment], ...) ]
-   *   create_view_clauses
-   *
-   *   AS SELECT ...;
-   *
-   *   create_view_clauses (order insensitive):
-   *     [COMMENT view_comment]
-   *     [TBLPROPERTIES (property_name = property_value, ...)]
-   * }}}
-   */
-  override def visitCreateView(ctx: CreateViewContext): LogicalPlan = withOrigin(ctx) {
-    if (!ctx.identifierList.isEmpty) {
-      operationNotAllowed("CREATE VIEW ... PARTITIONED ON", ctx)
-    }
-
-    checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
-    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED ON", ctx)
-    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
-
-    val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
-      icl.identifierComment.asScala.map { ic =>
-        ic.identifier.getText -> Option(ic.commentSpec()).map(visitCommentSpec)
-      }
-    }
-
-    val properties = ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues)
-      .getOrElse(Map.empty)
-    if (ctx.TEMPORARY != null && !properties.isEmpty) {
-      operationNotAllowed("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW", ctx)
-    }
-
-    val viewType = if (ctx.TEMPORARY == null) {
-      PersistedView
-    } else if (ctx.GLOBAL != null) {
-      GlobalTempView
-    } else {
-      LocalTempView
-    }
-    CreateViewStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
-      userSpecifiedColumns,
-      visitCommentSpecList(ctx.commentSpec()),
-      properties,
-      Option(source(ctx.query)),
-      plan(ctx.query),
-      ctx.EXISTS != null,
-      ctx.REPLACE != null,
-      viewType)
-  }
-
-  /**
    * Alter the query of a view. This creates a [[AlterViewAs]]
    *
    * For example:
