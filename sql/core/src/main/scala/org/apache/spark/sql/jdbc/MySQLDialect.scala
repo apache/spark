@@ -25,8 +25,9 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException
-import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
+import org.apache.spark.sql.connector.catalog.index.TableIndex
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types.{BooleanType, DataType, FloatType, LongType, MetadataBuilder}
@@ -127,10 +128,19 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
         indexProperties = indexProperties + " " + s"$k $v"
       }
     }
-
+    val iType = if (indexType.isEmpty) {
+      ""
+    } else {
+      if (indexType.length > 1 && !indexType.equalsIgnoreCase("BTREE") &&
+        !indexType.equalsIgnoreCase("HASH")) {
+        throw new UnsupportedOperationException(s"Index Type $indexType is not supported." +
+          " The supported Index Types are: BTREE and HASH")
+      }
+      s"USING $indexType"
+    }
     // columnsProperties doesn't apply to MySQL so it is ignored
-    s"CREATE $indexType INDEX ${quoteIdentifier(indexName)} ON" +
-      s" ${quoteIdentifier(tableName)}" + s" (${columnList.mkString(", ")}) $indexProperties"
+    s"CREATE INDEX ${quoteIdentifier(indexName)} $iType ON" +
+      s" ${quoteIdentifier(tableName)} (${columnList.mkString(", ")}) $indexProperties"
   }
 
   // SHOW INDEX syntax
@@ -157,17 +167,61 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     }
   }
 
-  override def classifyException(message: String, e: Throwable): AnalysisException = {
-    if (e.isInstanceOf[SQLException]) {
-      // Error codes are from
-      // https://mariadb.com/kb/en/mariadb-error-codes/#shared-mariadbmysql-error-codes
-      e.asInstanceOf[SQLException].getErrorCode match {
-        // ER_DUP_KEYNAME
-        case 1061 =>
-          throw new IndexAlreadyExistsException(message, cause = Some(e))
-        case _ =>
+  override def dropIndex(indexName: String, tableName: String): String = {
+    s"DROP INDEX ${quoteIdentifier(indexName)} ON $tableName"
+  }
+
+  // SHOW INDEX syntax
+  // https://dev.mysql.com/doc/refman/8.0/en/show-index.html
+  override def listIndexes(
+      conn: Connection,
+      tableName: String,
+      options: JDBCOptions): Array[TableIndex] = {
+    val sql = s"SHOW INDEXES FROM $tableName"
+    var indexMap: Map[String, TableIndex] = Map()
+    try {
+      val rs = JdbcUtils.executeQuery(conn, options, sql)
+      while (rs.next()) {
+        val indexName = rs.getString("key_name")
+        val colName = rs.getString("column_name")
+        val indexType = rs.getString("index_type")
+        val indexComment = rs.getString("Index_comment")
+        if (indexMap.contains(indexName)) {
+          val index = indexMap.get(indexName).get
+          val newIndex = new TableIndex(indexName, indexType,
+            index.columns() :+ FieldReference(colName),
+            index.columnProperties, index.properties)
+          indexMap += (indexName -> newIndex)
+        } else {
+          // The only property we are building here is `COMMENT` because it's the only one
+          // we can get from `SHOW INDEXES`.
+          val properties = new util.Properties();
+          if (indexComment.nonEmpty) properties.put("COMMENT", indexComment)
+          val index = new TableIndex(indexName, indexType, Array(FieldReference(colName)),
+            new util.HashMap[NamedReference, util.Properties](), properties)
+          indexMap += (indexName -> index)
+        }
       }
+    } catch {
+      case _: Exception =>
+        logWarning("Cannot retrieved index info.")
     }
-    super.classifyException(message, e)
+    indexMap.values.toArray
+  }
+
+  override def classifyException(message: String, e: Throwable): AnalysisException = {
+    e match {
+      case sqlException: SQLException =>
+        sqlException.getErrorCode match {
+          // ER_DUP_KEYNAME
+          case 1061 =>
+            throw new IndexAlreadyExistsException(message, cause = Some(e))
+          case 1091 =>
+            throw new NoSuchIndexException(message, cause = Some(e))
+          case _ => super.classifyException(message, e)
+        }
+      case unsupported: UnsupportedOperationException => throw unsupported
+      case _ => super.classifyException(message, e)
+    }
   }
 }

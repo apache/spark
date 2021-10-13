@@ -101,11 +101,11 @@ import org.apache.spark.SparkConf;
 
 <div data-lang="python"  markdown="1">
 
-Spark {{site.SPARK_VERSION}} works with Python 3.6+. It can use the standard CPython interpreter,
-so C libraries like NumPy can be used. It also works with PyPy 2.3+.
+Spark {{site.SPARK_VERSION}} works with Python 3.7+. It can use the standard CPython interpreter,
+so C libraries like NumPy can be used. It also works with PyPy 7.3.6+.
 
 Python 2, 3.4 and 3.5 supports were removed in Spark 3.1.0.
-Python 3.6 support is deprecated in Spark 3.2.0.
+Python 3.6 support was removed in Spark 3.3.0.
 
 Spark applications in Python can either be run with the `bin/spark-submit` script which includes Spark at runtime, or by including it in your setup.py as:
 

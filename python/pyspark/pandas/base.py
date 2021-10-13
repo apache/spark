@@ -394,7 +394,11 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     # comparison operators
     def __eq__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
-        return self._dtype_op.eq(self, other)
+        # pandas always returns False for all items with dict and set.
+        if isinstance(other, (dict, set)):
+            return self != self
+        else:
+            return self._dtype_op.eq(self, other)
 
     def __ne__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
         return self._dtype_op.ne(self, other)

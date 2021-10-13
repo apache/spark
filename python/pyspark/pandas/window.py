@@ -22,6 +22,7 @@ from typing import (  # noqa: F401 (SPARK-34943)
     Generic,
     List,
     Optional,
+    cast,
 )
 
 from pyspark.sql import Window
@@ -178,9 +179,12 @@ class Rolling(RollingLike[FrameLike]):
         raise AttributeError(item)
 
     def _apply_as_series_or_frame(self, func: Callable[[Column], Column]) -> FrameLike:
-        return self._psdf_or_psser._apply_series_op(
-            lambda psser: psser._with_new_scol(func(psser.spark.column)),  # TODO: dtype?
-            should_resolve=True,
+        return cast(
+            FrameLike,
+            self._psdf_or_psser._apply_series_op(
+                lambda psser: psser._with_new_scol(func(psser.spark.column)),  # TODO: dtype?
+                should_resolve=True,
+            ),
         )
 
     def count(self) -> FrameLike:
@@ -681,7 +685,7 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         # Here we need to include grouped key as an index, and shift previous index.
         #   [index_column0, index_column1] -> [grouped key, index_column0, index_column1]
-        new_index_scols = []  # type: List[Column]
+        new_index_scols: List[Column] = []
         new_index_spark_column_names = []
         new_index_names = []
         new_index_fields = []

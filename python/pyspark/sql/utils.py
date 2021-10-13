@@ -16,23 +16,58 @@
 #
 
 import py4j
+from py4j.java_gateway import is_instance_of
 
 from pyspark import SparkContext
 
 
 class CapturedException(Exception):
-    def __init__(self, desc, stackTrace, cause=None):
-        self.desc = desc
-        self.stackTrace = stackTrace
+    def __init__(self, desc=None, stackTrace=None, cause=None, origin=None):
+        # desc & stackTrace vs origin are mutually exclusive.
+        # cause is optional.
+        assert ((origin is not None and desc is None and stackTrace is None)
+                or (origin is None and desc is not None and stackTrace is not None))
+
+        self.desc = desc if desc is not None else origin.getMessage()
+        self.stackTrace = (
+            stackTrace if stackTrace is not None
+            else SparkContext._jvm.org.apache.spark.util.Utils.exceptionString(origin)
+        )
         self.cause = convert_exception(cause) if cause is not None else None
+        if self.cause is None and origin is not None and origin.getCause() is not None:
+            self.cause = convert_exception(origin.getCause())
+        self._origin = origin
 
     def __str__(self):
-        sql_conf = SparkContext._jvm.org.apache.spark.sql.internal.SQLConf.get()
+        assert SparkContext._jvm is not None
+
+        jvm = SparkContext._jvm
+        sql_conf = jvm.org.apache.spark.sql.internal.SQLConf.get()
         debug_enabled = sql_conf.pysparkJVMStacktraceEnabled()
         desc = self.desc
         if debug_enabled:
             desc = desc + "\n\nJVM stacktrace:\n%s" % self.stackTrace
         return str(desc)
+
+    def getErrorClass(self):
+        assert SparkContext._gateway is not None
+
+        gw = SparkContext._gateway
+        if self._origin is not None and is_instance_of(
+                gw, self._origin, "org.apache.spark.SparkThrowable"):
+            return self._origin.getErrorClass()
+        else:
+            return None
+
+    def getSqlState(self):
+        assert SparkContext._gateway is not None
+
+        gw = SparkContext._gateway
+        if self._origin is not None and is_instance_of(
+                gw, self._origin, "org.apache.spark.SparkThrowable"):
+            return self._origin.getSqlState()
+        else:
+            return None
 
 
 class AnalysisException(CapturedException):
@@ -78,31 +113,37 @@ class UnknownException(CapturedException):
 
 
 def convert_exception(e):
-    s = e.toString()
-    c = e.getCause()
-    stacktrace = SparkContext._jvm.org.apache.spark.util.Utils.exceptionString(e)
+    assert e is not None
+    assert SparkContext._jvm is not None
+    assert SparkContext._gateway is not None
 
-    if s.startswith('org.apache.spark.sql.AnalysisException: '):
-        return AnalysisException(s.split(': ', 1)[1], stacktrace, c)
-    if s.startswith('org.apache.spark.sql.catalyst.analysis'):
-        return AnalysisException(s.split(': ', 1)[1], stacktrace, c)
-    if s.startswith('org.apache.spark.sql.catalyst.parser.ParseException: '):
-        return ParseException(s.split(': ', 1)[1], stacktrace, c)
-    if s.startswith('org.apache.spark.sql.streaming.StreamingQueryException: '):
-        return StreamingQueryException(s.split(': ', 1)[1], stacktrace, c)
-    if s.startswith('org.apache.spark.sql.execution.QueryExecutionException: '):
-        return QueryExecutionException(s.split(': ', 1)[1], stacktrace, c)
-    if s.startswith('java.lang.IllegalArgumentException: '):
-        return IllegalArgumentException(s.split(': ', 1)[1], stacktrace, c)
+    jvm = SparkContext._jvm
+    gw = SparkContext._gateway
+
+    if is_instance_of(gw, e, "org.apache.spark.sql.catalyst.parser.ParseException"):
+        return ParseException(origin=e)
+    # Order matters. ParseException inherits AnalysisException.
+    elif is_instance_of(gw, e, 'org.apache.spark.sql.AnalysisException'):
+        return AnalysisException(origin=e)
+    elif is_instance_of(gw, e, 'org.apache.spark.sql.streaming.StreamingQueryException'):
+        return StreamingQueryException(origin=e)
+    elif is_instance_of(gw, e, 'org.apache.spark.sql.execution.QueryExecutionException'):
+        return QueryExecutionException(origin=e)
+    elif is_instance_of(gw, e, 'java.lang.IllegalArgumentException'):
+        return IllegalArgumentException(origin=e)
+
+    c = e.getCause()
+    stacktrace = jvm.org.apache.spark.util.Utils.exceptionString(e)
     if c is not None and (
-            c.toString().startswith('org.apache.spark.api.python.PythonException: ')
+            is_instance_of(gw, c, 'org.apache.spark.api.python.PythonException')
             # To make sure this only catches Python UDFs.
             and any(map(lambda v: "org.apache.spark.sql.execution.python" in v.toString(),
                         c.getStackTrace()))):
         msg = ("\n  An exception was thrown from the Python worker. "
                "Please see the stack trace below.\n%s" % c.getMessage())
         return PythonException(msg, stacktrace)
-    return UnknownException(s, stacktrace, c)
+
+    return UnknownException(desc=e.toString(), stackTrace=stacktrace, cause=c)
 
 
 def capture_sql_exception(f):

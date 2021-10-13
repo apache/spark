@@ -15,21 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution.command
+package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.execution.command.v1
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ShowTables}
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
+import org.apache.spark.sql.internal.SQLConf
 
 /**
- * The class contains tests for the `SHOW TABLES` command to check V1 Hive external table catalog.
+ * A rule for keeping the SQL command's legacy outputs.
  */
-class ShowTablesSuite extends v1.ShowTablesSuiteBase with CommandSuiteBase {
-  override def version: String = super[ShowTablesSuiteBase].version
-
-  test("hive client calls") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id int) $defaultUsing")
-      checkHiveClientCalls(expected = 3) {
-        sql(s"SHOW TABLES IN $catalog.ns")
+object KeepLegacyOutputs extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+      plan
+    } else {
+      plan.resolveOperatorsUpWithPruning(
+        _.containsPattern(COMMAND)) {
+        case s: ShowTables =>
+          assert(s.output.length == 3)
+          val newOutput = s.output.head.withName("database") +: s.output.tail
+          s.copy(output = newOutput)
       }
     }
   }

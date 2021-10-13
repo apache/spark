@@ -39,7 +39,7 @@ Input [1]: [o_custkey#6]
 
 (6) BroadcastExchange
 Input [1]: [o_custkey#6]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false,true), [id=#7]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#7]
 
 (7) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [c_custkey#1]

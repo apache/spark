@@ -257,14 +257,14 @@ class SQLProcessor(object):
         # All the temporary views created when executing this statement
         # The key is the name of the variable in {}
         # The value is the cached Spark Dataframe.
-        self._temp_views = {}  # type: Dict[str, SDataFrame]
+        self._temp_views: Dict[str, SDataFrame] = {}
         # All the other variables, converted to a normalized form.
         # The normalized form is typically a string
-        self._cached_vars = {}  # type: Dict[str, Any]
+        self._cached_vars: Dict[str, Any] = {}
         # The SQL statement after:
         # - all the dataframes have been registered as temporary views
         # - all the values have been converted normalized to equivalent SQL representations
-        self._normalized_statement = None  # type: Optional[str]
+        self._normalized_statement: Optional[str] = None
         self._session = session
 
     def execute(self, index_col: Optional[Union[str, List[str]]]) -> DataFrame:

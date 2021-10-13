@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import org.scalactic.source.Position
+import org.scalatest.Tag
+
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.execution.command
@@ -32,6 +35,26 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
   override def defaultNamespace: Seq[String] = Seq("default")
+  var _version: String = ""
+  override def version: String = _version
+
+  // Tests using V1 catalogs will run with `spark.sql.legacy.useV1Command` on and off
+  // to test both V1 and V2 commands.
+  override def test(testName: String, testTags: Tag*)(testFun: => Any)
+    (implicit pos: Position): Unit = {
+    Seq(true, false).foreach { useV1Command =>
+      _version = if (useV1Command) {
+        "using V1 catalog with V1 command"
+      } else {
+        "using V1 catalog with V2 command"
+      }
+      super.test(testName, testTags: _*) {
+        withSQLConf(SQLConf.LEGACY_USE_V1_COMMAND.key -> useV1Command.toString) {
+          testFun
+        }
+      }
+    }
+  }
 
   private def withSourceViews(f: => Unit): Unit = {
     withTable("source", "source2") {
@@ -84,7 +107,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
         false -> "PARTITION(YEAR = 2015, Month = 1)"
       ).foreach { case (caseSensitive, partitionSpec) =>
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-          val df = sql(s"SHOW TABLE EXTENDED LIKE 'part_table' $partitionSpec")
+          val df = sql(s"SHOW TABLE EXTENDED IN ns LIKE 'part_table' $partitionSpec")
           val information = df.select("information").first().getString(0)
           assert(information.contains("Partition Values: [year=2015, month=1]"))
         }
@@ -129,7 +152,6 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
     }
   }
 
-
   test("show table in a not existing namespace") {
     val msg = intercept[NoSuchDatabaseException] {
       runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
@@ -143,6 +165,8 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
  * The class contains tests for the `SHOW TABLES` command to check V1 In-Memory table catalog.
  */
 class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
+  override def version: String = super[ShowTablesSuiteBase].version
+
   test("SPARK-33670: show partitions from a datasource table") {
     import testImplicits._
     withNamespace(s"$catalog.ns") {
