@@ -16,6 +16,7 @@
 #
 import sys
 from typing import (
+    cast,
     overload,
     Dict,
     Iterable,
@@ -29,13 +30,13 @@ from typing import (
 from py4j.java_gateway import JavaClass, JavaObject
 
 from pyspark import RDD, since
-from pyspark.sql.column import _to_seq, _to_java_column, Column  # type: ignore[attr-defined]
+from pyspark.sql.column import _to_seq, _to_java_column, Column
 from pyspark.sql.types import StructType
 from pyspark.sql import utils
 from pyspark.sql.utils import to_str
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import OptionalPrimitiveType
+    from pyspark.sql._typing import OptionalPrimitiveType, ColumnOrName
     from pyspark.sql.context import SQLContext
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.streaming import StreamingQuery
@@ -72,7 +73,7 @@ class DataFrameReader(OptionUtils):
     .. versionadded:: 1.4
     """
 
-    def __init__(self, spark: "SQLContext") -> None:
+    def __init__(self, spark: "SQLContext") :
         self._jreader = spark._ssql_ctx.read()  # type: ignore[attr-defined]
         self._spark = spark
 
@@ -691,7 +692,7 @@ class DataFrameWriter(OptionUtils):
 
     .. versionadded:: 1.4
     """
-    def __init__(self, df: "DataFrame") -> None:
+    def __init__(self, df: "DataFrame"):
         self._df = df
         self._spark = df.sql_ctx
         self._jwrite = df._jdf.write()  # type: ignore[operator]
@@ -782,7 +783,11 @@ class DataFrameWriter(OptionUtils):
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]  # type: ignore[assignment]
         self._jwrite = self._jwrite.partitionBy(
-            _to_seq(self._spark._sc, cols))  # type: ignore[attr-defined]
+            _to_seq(
+                self._spark._sc,  # type: ignore[attr-defined]
+                cast(Iterable["ColumnOrName"], cols)
+            )
+        )
         return self
 
     @overload
@@ -841,7 +846,13 @@ class DataFrameWriter(OptionUtils):
             raise TypeError("all names should be `str`")
 
         self._jwrite = self._jwrite.bucketBy(
-            numBuckets, col, _to_seq(self._spark._sc, cols))  # type: ignore[attr-defined]
+            numBuckets,
+            col,
+            _to_seq(
+                self._spark._sc,    # type: ignore[attr-defined]
+                cast(Iterable["ColumnOrName"], cols)
+            )
+        )
         return self
 
     @overload
@@ -886,7 +897,12 @@ class DataFrameWriter(OptionUtils):
             raise TypeError("all names should be `str`")
 
         self._jwrite = self._jwrite.sortBy(
-            col, _to_seq(self._spark._sc, cols))  # type: ignore[attr-defined]
+            col,
+            _to_seq(
+                self._spark._sc,  # type: ignore[attr-defined]
+                cast(Iterable["ColumnOrName"], cols)
+            )
+        )
         return self
 
     def save(
@@ -1301,7 +1317,7 @@ class DataFrameWriterV2(object):
     .. versionadded:: 3.1.0
     """
 
-    def __init__(self, df: "DataFrame", table: str) -> None:
+    def __init__(self, df: "DataFrame", table: str):
         self._df = df
         self._spark = df.sql_ctx
         self._jwriter = df._jdf.writeTo(table)  # type: ignore[operator]
