@@ -56,6 +56,8 @@ class CapturedException(Exception):
         if self._origin is not None and is_instance_of(
                 gw, self._origin, "org.apache.spark.SparkThrowable"):
             return self._origin.getErrorClass()
+        else:
+            return None
 
     def getSqlState(self):
         assert SparkContext._gateway is not None
@@ -64,6 +66,8 @@ class CapturedException(Exception):
         if self._origin is not None and is_instance_of(
                 gw, self._origin, "org.apache.spark.SparkThrowable"):
             return self._origin.getSqlState()
+        else:
+            return None
 
 
 class AnalysisException(CapturedException):
