@@ -122,7 +122,7 @@ class NumericPlotBase:
 class HistogramPlotBase(NumericPlotBase):
     @staticmethod
     def prepare_hist_data(data, bins):
-        data, numeric_data = self.prepare_numeric_data(data)
+        data, numeric_data = NumericPlotBase.prepare_numeric_data(data)
         if is_integer(bins):
             # computes boundaries for the column
             bins = HistogramPlotBase.get_bins(data.to_spark(), bins)
@@ -349,7 +349,7 @@ class BoxPlotBase:
 class KdePlotBase(NumericPlotBase):
     @staticmethod
     def prepare_kde_data(data):
-        _, numeric_data = self.prepare_numeric_data(data)
+        _, numeric_data = NumericPlotBase.prepare_numeric_data(data)
         return numeric_data
 
     @staticmethod
