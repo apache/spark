@@ -19,7 +19,9 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
+import org.apache.spark.internal.config.EXEC_STAGING_DIR
 import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.internal.io.FileCommitProtocol.newVersionExternalTempPath
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -105,12 +107,14 @@ case class InsertIntoHadoopFsRelationCommand(
     }
 
     val jobId = java.util.UUID.randomUUID().toString
+    val tmpLocation = newVersionExternalTempPath(new Path(outputPath.toString), hadoopConf,
+      hadoopConf.get(EXEC_STAGING_DIR.key, ".spark-staging"), "spark", jobId)
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = jobId,
       outputPath = outputPath.toString,
-      hadoopConf,
-      dynamicPartitionOverwrite = dynamicPartitionOverwrite)
+      dynamicPartitionOverwrite = dynamicPartitionOverwrite,
+      stagingDir = Some(tmpLocation.toString))
 
     val doInsertion = if (mode == SaveMode.Append) {
       true

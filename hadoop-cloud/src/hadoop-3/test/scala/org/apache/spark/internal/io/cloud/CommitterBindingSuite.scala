@@ -124,7 +124,7 @@ class CommitterBindingSuite extends SparkFunSuite {
   test("local filesystem instantiation") {
     val instance = FileCommitProtocol.instantiate(
       pathCommitProtocolClassname,
-      jobId, "file:///tmp", new Configuration(), false)
+      jobId, "file:///tmp", false)
 
     val protocol = instance.asInstanceOf[PathOutputCommitProtocol]
     assert("file:///tmp" === protocol.destination)
@@ -134,7 +134,7 @@ class CommitterBindingSuite extends SparkFunSuite {
     val cause = intercept[InvocationTargetException] {
       FileCommitProtocol.instantiate(
         pathCommitProtocolClassname,
-        jobId, "file:///tmp", new Configuration(), true)
+        jobId, "file:///tmp", true)
     }.getCause
     if (cause == null || !cause.isInstanceOf[IOException]
         || !cause.getMessage.contains(PathOutputCommitProtocol.UNSUPPORTED)) {

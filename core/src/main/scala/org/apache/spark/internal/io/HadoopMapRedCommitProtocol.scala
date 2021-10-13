@@ -27,7 +27,7 @@ import org.apache.hadoop.mapreduce.{TaskAttemptContext => NewTaskAttemptContext}
  * Unlike Hadoop's OutputCommitter, this implementation is serializable.
  */
 class HadoopMapRedCommitProtocol(jobId: String, path: String)
-  extends HadoopMapReduceCommitProtocol(jobId, path) {
+  extends HadoopMapReduceCommitProtocol(jobId, path, "") {
 
   override def setupCommitter(context: NewTaskAttemptContext): OutputCommitter = {
     val config = context.getConfiguration.asInstanceOf[JobConf]

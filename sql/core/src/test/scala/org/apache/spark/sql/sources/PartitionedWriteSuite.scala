@@ -20,7 +20,6 @@ package org.apache.spark.sql.sources
 import java.io.File
 import java.sql.Timestamp
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
@@ -35,8 +34,11 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
-private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String)
-  extends SQLHadoopMapReduceCommitProtocol(jobId, path, new Configuration())
+private class OnlyDetectCustomPathFileCommitProtocol(
+    jobId: String,
+    path: String,
+    stagingPath: String)
+  extends SQLHadoopMapReduceCommitProtocol(jobId, path, stagingPath)
     with Serializable with Logging {
 
   override def newTaskTempFileAbsPath(
@@ -199,9 +201,10 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
 private class PartitionFileExistCommitProtocol(
     jobId: String,
     path: String,
+    stagingPath: String,
     dynamicPartitionOverwrite: Boolean)
   extends SQLHadoopMapReduceCommitProtocol(
-    jobId, path, new Configuration(), dynamicPartitionOverwrite) {
+    jobId, path, stagingPath, dynamicPartitionOverwrite) {
   override def setupJob(jobContext: JobContext): Unit = {
     super.setupJob(jobContext)
     val stagingDir = new File(new Path(path).toUri.getPath, s".spark-staging-$jobId")

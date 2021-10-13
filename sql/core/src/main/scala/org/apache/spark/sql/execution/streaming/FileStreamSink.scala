@@ -150,8 +150,7 @@ class FileStreamSink(
       val committer = FileCommitProtocol.instantiate(
         className = sparkSession.sessionState.conf.streamingFileCommitProtocolClass,
         jobId = batchId.toString,
-        outputPath = path,
-        sparkSession.sessionState.newHadoopConf())
+        outputPath = path)
 
       committer match {
         case manifestCommitter: ManifestFileCommitProtocol =>
