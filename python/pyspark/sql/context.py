@@ -41,6 +41,7 @@ from pyspark.sql.udf import UDFRegistration  # noqa: F401
 from pyspark.sql.utils import install_exception_handler
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD
+from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import (
@@ -50,7 +51,7 @@ if TYPE_CHECKING:
         LiteralType,
         DecimalLiteral
     )
-    from pyspark.sql.types import DataType, AtomicType, StructType
+    from pyspark.sql.types import DataType, AtomicType
     from pyspark.sql.pandas._typing import DataFrameLike
     from pyspark.sql.streaming import StreamingQueryManager
     from pyspark.conf import SparkConf
@@ -107,7 +108,7 @@ class SQLContext(object):
         sparkContext: SparkContext,
         sparkSession: Optional[SparkSession] = None,
         jsqlContext: Optional[JavaObject] = None
-    ) -> None:
+    ):
         if sparkSession is None:
             warnings.warn(
                 "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
@@ -302,7 +303,7 @@ class SQLContext(object):
         return self.sparkSession.udf.registerJavaFunction(name, javaClassName, returnType)
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession
-    def _inferSchema(self, rdd, samplingRatio=None):  # type: ignore[no-untyped-def]
+    def _inferSchema(self, rdd: RDD, samplingRatio: Optional[float] = None) -> StructType:
         """
         Infer schema from an RDD of Row or tuple.
 
@@ -375,7 +376,7 @@ class SQLContext(object):
     def createDataFrame(  # type: ignore[misc]
         self,
         data: Union["RDD[RowLike]", "Iterable[RowLike]"],
-        schema: Union[List[str], Tuple[str, ...]] = None,  # type: ignore[assignment]
+        schema: Optional[Union[List[str], Tuple[str, ...]]] = None,
         samplingRatio: Optional[float] = None,
         verifySchema: bool = True
     ) -> DataFrame:
@@ -720,7 +721,7 @@ class HiveContext(SQLContext):
         self,
         sparkContext: SparkContext,
         jhiveContext: Optional[JavaObject] = None
-    ) -> None:
+    ):
         warnings.warn(
             "HiveContext is deprecated in Spark 2.0.0. Please use " +
             "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
