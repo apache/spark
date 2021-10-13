@@ -129,10 +129,9 @@ abstract class ParquetAggregatePushDownSuite
         .write.partitionBy("p").parquet(dir.getCanonicalPath)
       withTempView("tmp") {
         spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
-        val enableVectorizedReader = Seq("false", "true")
-        for (testVectorizedReader <- enableVectorizedReader) {
+        Seq("false", "true").foreach { enableVectorizedReader =>
           withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
-            vectorizedReaderEnabledKey -> testVectorizedReader) {
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
             val count = sql("SELECT COUNT(p) FROM tmp")
             count.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>
@@ -246,10 +245,9 @@ abstract class ParquetAggregatePushDownSuite
         .write.partitionBy("p").parquet(dir.getCanonicalPath)
       withTempView("tmp") {
         spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
-        val enableVectorizedReader = Seq("false", "true")
-        for (testVectorizedReader <- enableVectorizedReader) {
+        Seq("false", "true").foreach { enableVectorizedReader =>
           withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
-            vectorizedReaderEnabledKey -> testVectorizedReader) {
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
             val max = sql("SELECT max(id) FROM tmp WHERE p = 0")
             max.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>
@@ -380,10 +378,9 @@ abstract class ParquetAggregatePushDownSuite
       spark.createDataFrame(rdd, schema).write.parquet(file.getCanonicalPath)
       withTempView("test") {
         spark.read.parquet(file.getCanonicalPath).createOrReplaceTempView("test")
-        val enableVectorizedReader = Seq("false", "true")
-        for (testVectorizedReader <- enableVectorizedReader) {
+        Seq("false", "true").foreach { enableVectorizedReader =>
           withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
-            vectorizedReaderEnabledKey -> testVectorizedReader) {
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
 
             val testMinWithTS = sql("SELECT min(StringCol), min(BooleanCol), min(ByteCol), " +
               "min(BinaryCol), min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +
@@ -501,10 +498,9 @@ abstract class ParquetAggregatePushDownSuite
   }
 
   test("aggregate push down - column name case sensitivity") {
-    val enableVectorizedReader = Seq("false", "true")
-    for (testVectorizedReader <- enableVectorizedReader) {
+    Seq("false", "true").foreach { enableVectorizedReader =>
       withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
-        vectorizedReaderEnabledKey -> testVectorizedReader) {
+        vectorizedReaderEnabledKey -> enableVectorizedReader) {
         withTempPath { dir =>
           spark.range(10).selectExpr("id", "id % 3 as p")
             .write.partitionBy("p").parquet(dir.getCanonicalPath)
