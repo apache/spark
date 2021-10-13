@@ -262,6 +262,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveHints.ResolveCoalesceHints),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
+    Batch("Keep Legacy Outputs", Once,
+      KeepLegacyOutputs),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions(v1SessionCatalog) ::
       ResolveNamespace(catalogManager) ::

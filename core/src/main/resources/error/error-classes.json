@@ -90,7 +90,7 @@
     "message" : [ "Key %s does not exist." ]
   },
   "MISSING_COLUMN" : {
-    "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
+    "message" : [ "Column '%s' does not exist. Did you mean one of the following? [%s]" ],
     "sqlState" : "42000"
   },
   "MISSING_STATIC_PARTITION_COLUMN" : {

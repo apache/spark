@@ -93,7 +93,7 @@ Condition : (isnotnull(i_item_sk#6) AND isnotnull(i_item_id#7))
 
 (10) BroadcastExchange
 Input [2]: [i_item_sk#6, i_item_id#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#8]
 
 (11) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_item_sk#1]
@@ -189,7 +189,7 @@ Condition : isnotnull(cs_item_rev#26)
 
 (30) BroadcastExchange
 Input [2]: [item_id#25, cs_item_rev#26]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false,false), [id=#27]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#27]
 
 (31) BroadcastHashJoin [codegen id : 15]
 Left keys [1]: [item_id#13]
@@ -263,7 +263,7 @@ Condition : isnotnull(ws_item_rev#39)
 
 (46) BroadcastExchange
 Input [2]: [item_id#38, ws_item_rev#39]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false,false), [id=#40]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#40]
 
 (47) BroadcastHashJoin [codegen id : 15]
 Left keys [1]: [item_id#13]
@@ -328,7 +328,7 @@ Input [2]: [d_date#46, d_week_seq#47]
 
 (57) BroadcastExchange
 Input [1]: [d_date#46]
-Arguments: HashedRelationBroadcastMode(List(input[0, date, true]),false,true), [id=#50]
+Arguments: HashedRelationBroadcastMode(List(input[0, date, true]),false), [id=#50]
 
 (58) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [d_date#45]
@@ -341,7 +341,7 @@ Input [2]: [d_date_sk#5, d_date#45]
 
 (60) BroadcastExchange
 Input [1]: [d_date_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#51]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#51]
 
 Subquery:2 Hosting operator id = 55 Hosting Expression = Subquery scalar-subquery#48, [id=#49]
 * Project (64)
