@@ -252,7 +252,7 @@ abstract class ParquetAggregatePushDownSuite
             max.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>
                 val expected_plan_fragment =
-                  "[MAX(id), MIN(id), COUNT(id)]"
+                  "PushedAggregation: [MAX(id), MIN(id), COUNT(id)]"
                 checkKeywordsExistsInExplain(max, expected_plan_fragment)
             }
             checkAnswer(max, Seq(Row(9, 0, 4)))
