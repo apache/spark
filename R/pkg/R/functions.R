@@ -1485,6 +1485,16 @@ setMethod("max",
 #' @rdname column_aggregate_functions
 #' @aliases max_by max_by,Column-method
 #' @note max_by since 3.3.0
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(
+#' list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
+#'      list("dotNET", 2013, 48000), list("Java", 2013, 30000)),
+#' list("course", "year", "earnings")
+#' )
+#' tmp <- agg(groupBy(df, df$"course"), "max_by" = max_by(df$"year", df$"earnings"))
+#' head(tmp)}
 setMethod("max_by",
           signature(x = "Column", y = "Column"),
           function(x, y) {
@@ -1550,6 +1560,16 @@ setMethod("min",
 #' @rdname column_aggregate_functions
 #' @aliases min_by min_by,Column-method
 #' @note min_by since 3.3.0
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(
+#' list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
+#'      list("dotNET", 2013, 48000), list("Java", 2013, 30000)),
+#' list("course", "year", "earnings")
+#' )
+#' tmp <- agg(groupBy(df, df$"course"), "min_by" = min_by(df$"year", df$"earnings"))
+#' head(tmp)}
 setMethod("min_by",
           signature(x = "Column", y = "Column"),
           function(x, y) {
