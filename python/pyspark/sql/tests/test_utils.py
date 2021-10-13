@@ -17,7 +17,8 @@
 #
 
 from pyspark.sql.functions import sha2
-from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
+from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException, \
+    SparkUpgradeException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -32,6 +33,13 @@ class UtilsTests(ReusedSQLTestCase):
             self.spark.sql("select `中文字段`")
         except AnalysisException as e:
             self.assertRegex(str(e), "Column '`中文字段`' does not exist")
+
+    def test_spark_upgrade_exception(self):
+        from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
+        df = self.spark.createDataFrame([("2014-31-12",)], ['date_str'])
+        df2 = df.select('date_str',
+                        to_date(from_unixtime(unix_timestamp('date_str', 'yyyy-dd-aa'))))
+        self.assertRaises(SparkUpgradeException, lambda: df2.show(1, False))
 
     def test_capture_parse_exception(self):
         self.assertRaises(ParseException, lambda: self.spark.sql("abc"))
@@ -63,6 +71,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
+
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
