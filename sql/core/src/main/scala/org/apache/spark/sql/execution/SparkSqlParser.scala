@@ -453,6 +453,10 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
     }
 
+    if (ctx.EXISTS != null && ctx.REPLACE != null) {
+      throw QueryCompilationErrors.createViewWithBothIfNotExistsAndReplaceError()
+    }
+
     val properties = ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues)
       .getOrElse(Map.empty)
     if (ctx.TEMPORARY != null && !properties.isEmpty) {
@@ -467,6 +471,8 @@ class SparkSqlAstBuilder extends AstBuilder {
       LocalTempView
     }
     if (viewType == PersistedView) {
+      require(Option(source(ctx.query)).isDefined,
+        "'originalText' must be provided to create permanent view")
       CreateView(
         UnresolvedDBObjectName(
           visitMultipartIdentifier(ctx.multipartIdentifier),
@@ -479,8 +485,21 @@ class SparkSqlAstBuilder extends AstBuilder {
         ctx.EXISTS != null,
         ctx.REPLACE != null)
     } else {
+      // Disallows 'CREATE TEMPORARY VIEW IF NOT EXISTS' to be consistent with
+      // 'CREATE TEMPORARY TABLE'
+      if (ctx.EXISTS != null) {
+        throw QueryCompilationErrors.defineTempViewWithIfNotExistsError()
+      }
+
+      val tableIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier).asTableIdentifier
+      if (tableIdentifier.database.isDefined) {
+        // Temporary view names should NOT contain database prefix like "database.table"
+        throw QueryCompilationErrors
+          .notAllowedToAddDBPrefixForTempViewError(tableIdentifier.database.get)
+      }
+
       CreateViewCommand(
-        visitMultipartIdentifier(ctx.multipartIdentifier).asTableIdentifier,
+        tableIdentifier,
         userSpecifiedColumns,
         visitCommentSpecList(ctx.commentSpec()),
         properties,
@@ -512,6 +531,10 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
     }
 
+    if (ctx.EXISTS != null && ctx.REPLACE != null) {
+      throw QueryCompilationErrors.createFuncWithBothIfNotExistsAndReplaceError()
+    }
+
     val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
     if (ctx.TEMPORARY == null) {
       CreateFunction(
@@ -523,6 +546,11 @@ class SparkSqlAstBuilder extends AstBuilder {
         ctx.EXISTS != null,
         ctx.REPLACE != null)
     } else {
+      // Disallow to define a temporary function with `IF NOT EXISTS`
+      if (ctx.EXISTS != null) {
+        throw QueryCompilationErrors.defineTempFuncWithIfNotExistsError()
+      }
+
       if (functionIdentifier.length > 2) {
         throw QueryCompilationErrors.unsupportedFunctionNameError(functionIdentifier.quoted)
       } else if (functionIdentifier.length == 2) {
