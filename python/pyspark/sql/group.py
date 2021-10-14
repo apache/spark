@@ -17,23 +17,24 @@
 
 import sys
 
-from typing import Callable, List, Optional, Type, TYPE_CHECKING, overload, Dict, Union, cast, Tuple
+from typing import Callable, List, Optional, TYPE_CHECKING, overload, Dict, Union, cast, Tuple
 
-if TYPE_CHECKING:
-    from pyspark.sql._typing import LiteralType
+from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark.sql.column import Column, _to_seq  # type: ignore[attr-defined]
 from pyspark.sql.context import SQLContext
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.group_ops import PandasGroupedOpsMixin
 from pyspark.sql.types import StructType, StructField, IntegerType, StringType
-from py4j.java_gateway import JavaObject  # type: ignore[import]
+
+if TYPE_CHECKING:
+    from pyspark.sql._typing import LiteralType
 
 __all__ = ["GroupedData"]
 
 
 def dfapi(f: Callable) -> Callable:
-    def _api(self: Type["GroupedData"]) -> DataFrame:
+    def _api(self: "GroupedData") -> DataFrame:
         name = f.__name__
         jdf = getattr(self._jgd, name)()
         return DataFrame(jdf, self.sql_ctx)
@@ -43,7 +44,7 @@ def dfapi(f: Callable) -> Callable:
 
 
 def df_varargs_api(f: Callable) -> Callable:
-    def _api(self: Type["GroupedData"], *cols: Column) -> DataFrame:
+    def _api(self: "GroupedData", *cols: str) -> DataFrame:
         name = f.__name__
         # TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
         jdf = getattr(self._jgd, name)(
