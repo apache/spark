@@ -140,8 +140,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("load a table") {
     val t = spark.table("h2.test.people")
     val expectedSchema = new StructType()
-      .add("NAME", StringType, true, defaultMetadata)
-      .add("ID", IntegerType, true, defaultMetadata)
+      .add("NAME", StringType, false, defaultMetadata)
+      .add("ID", IntegerType, false, defaultMetadata)
     assert(t.schema === expectedSchema)
     Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
       val msg = intercept[AnalysisException] {
@@ -338,7 +338,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql(s"CREATE TABLE $tableName (c1 INTEGER NOT NULL, c2 INTEGER)")
       var t = spark.table(tableName)
       var expectedSchema = new StructType()
-        .add("c1", IntegerType, true, defaultMetadata)
+        .add("c1", IntegerType, false, defaultMetadata)
         .add("c2", IntegerType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
 
@@ -352,7 +352,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         sql(s"ALTER TABLE $tableName RENAME COLUMN C2 TO c3")
         expectedSchema = new StructType()
-          .add("c1", IntegerType, true, defaultMetadata)
+          .add("c1", IntegerType, false, defaultMetadata)
           .add("c3", IntegerType, true, defaultMetadata)
         t = spark.table(tableName)
         assert(t.schema === expectedSchema)
@@ -367,7 +367,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         sql(s"ALTER TABLE $tableName DROP COLUMN C3")
-        expectedSchema = new StructType().add("c1", IntegerType, true, defaultMetadata)
+        expectedSchema = new StructType().add("c1", IntegerType, false, defaultMetadata)
         t = spark.table(tableName)
         assert(t.schema === expectedSchema)
       }
@@ -381,7 +381,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         sql(s"ALTER TABLE $tableName ALTER COLUMN C1 TYPE DOUBLE")
-        expectedSchema = new StructType().add("c1", DoubleType, true, defaultMetadata)
+        expectedSchema = new StructType().add("c1", DoubleType, false, defaultMetadata)
         t = spark.table(tableName)
         assert(t.schema === expectedSchema)
       }
@@ -395,7 +395,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         sql(s"ALTER TABLE $tableName ALTER COLUMN C1 DROP NOT NULL")
-        expectedSchema = new StructType().add("c1", DoubleType, true, defaultMetadata)
+        expectedSchema = new StructType().add("c1", DoubleType, false, defaultMetadata)
         t = spark.table(tableName)
         assert(t.schema === expectedSchema)
       }

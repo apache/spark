@@ -46,11 +46,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     var t = spark.table(s"$catalogName.alt_table")
     // nullable is true in the expectedSchema because Spark always sets nullable to true
     // regardless of the JDBC metadata https://github.com/apache/spark/pull/18445
-    var expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
+    var expectedSchema = new StructType().add("ID", StringType, false, defaultMetadata)
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN ID DROP NOT NULL")
     t = spark.table(s"$catalogName.alt_table")
-    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
+    expectedSchema = new StructType().add("ID", StringType, false, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update nullability of not existing column
     val msg = intercept[AnalysisException] {
@@ -62,8 +62,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   def testRenameColumn(tbl: String): Unit = {
     sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO RENAMED")
     val t = spark.table(s"$tbl")
-    val expectedSchema = new StructType().add("RENAMED", StringType, true, defaultMetadata)
-      .add("ID1", StringType, true, defaultMetadata).add("ID2", StringType, true, defaultMetadata)
+    val expectedSchema = new StructType().add("RENAMED", StringType, false, defaultMetadata)
+      .add("ID1", StringType, true, defaultMetadata).add("ID2", StringType, false, defaultMetadata)
     assert(t.schema === expectedSchema)
   }
 
