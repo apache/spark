@@ -949,10 +949,7 @@ private[hive] class HiveClientImpl(
     shim.dropFunction(client, db, name)
   }
 
-  override def renameFunction(
-      db: String,
-      oldName: String,
-      newName: String): Unit = withHiveState {
+  override def renameFunction(db: String, oldName: String, newName: String): Unit = withHiveState {
     shim.renameFunction(client, db, oldName, newName)
   }
 
@@ -1011,7 +1008,6 @@ private[hive] class HiveClientImpl(
           // HIVE-18448 Hive 3.0 remove index APIs
           hiveClientCalls += 1
           client.dropTable("default", t)
-
       }
     }
     client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>
