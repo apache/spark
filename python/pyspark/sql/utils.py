@@ -128,6 +128,12 @@ class UnknownException(CapturedException):
     """
 
 
+class SparkUpgradeException(CapturedException):
+    """
+    Exception thrown because of Spark upgrade
+    """
+
+
 def convert_exception(e: Py4JJavaError) -> CapturedException:
     assert e is not None
     assert SparkContext._jvm is not None  # type: ignore[attr-defined]
@@ -147,6 +153,8 @@ def convert_exception(e: Py4JJavaError) -> CapturedException:
         return QueryExecutionException(origin=e)
     elif is_instance_of(gw, e, 'java.lang.IllegalArgumentException'):
         return IllegalArgumentException(origin=e)
+    elif is_instance_of(gw, e, 'org.apache.spark.SparkUpgradeException'):
+        return SparkUpgradeException(origin=e)
 
     c: Py4JJavaError = e.getCause()
     stacktrace: str = jvm.org.apache.spark.util.Utils.exceptionString(e)

@@ -18,6 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
+import java.time.{Duration, Period}
+import java.time.temporal.ChronoUnit
 
 import com.google.common.math.LongMath
 
@@ -703,5 +705,24 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BRound(-3.5, 0), -4.0)
     checkEvaluation(BRound(-0.35, 1), -0.4)
     checkEvaluation(BRound(-35, -1), -40)
+  }
+
+  test("SPARK-36922: Support ANSI intervals for SIGN/SIGNUM") {
+    checkEvaluation(Signum(Literal(Period.ZERO)), 0.0)
+    checkEvaluation(Signum(Literal(Period.ofYears(10))), 1.0)
+    checkEvaluation(Signum(Literal(Period.ofMonths(10))), 1.0)
+    checkEvaluation(Signum(Literal(Period.ofYears(-10))), -1.0)
+    checkEvaluation(Signum(Literal(Period.ofMonths(-10))), -1.0)
+    checkEvaluation(Signum(Literal.create(null, YearMonthIntervalType())), null)
+    checkEvaluation(Signum(Literal(Period.ofMonths(Int.MaxValue))), 1.0)
+    checkEvaluation(Signum(Literal(Period.ofMonths(Int.MinValue))), -1.0)
+
+    checkEvaluation(Signum(Literal(Duration.ZERO)), 0.0)
+    checkEvaluation(Signum(Literal(Duration.ofDays(10))), 1.0)
+    checkEvaluation(Signum(Literal(Duration.ofDays(-10))), -1.0)
+    checkEvaluation(Signum(Literal(Duration.ofDays(-12345))), -1.0)
+    checkEvaluation(Signum(Literal.create(null, DayTimeIntervalType())), null)
+    checkEvaluation(Signum(Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS))), 1.0)
+    checkEvaluation(Signum(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS))), -1.0)
   }
 }

@@ -2948,6 +2948,27 @@ class DataSourceV2SQLSuite
     assert(errMsg.contains("Catalog 'not_exist_catalog' plugin class not found"))
   }
 
+  test("SPARK-35973: ShowCatalogs") {
+    val schema = new StructType()
+      .add("catalog", StringType, nullable = false)
+
+    val df = sql("SHOW CATALOGS")
+    assert(df.schema === schema)
+    assert(df.collect === Array(Row("spark_catalog")))
+
+    sql("use testcat")
+    sql("use testpart")
+    sql("use testcat2")
+    assert(sql("SHOW CATALOGS").collect === Array(
+      Row("spark_catalog"), Row("testcat"), Row("testcat2"), Row("testpart")))
+
+    assert(sql("SHOW CATALOGS LIKE 'test*'").collect === Array(
+      Row("testcat"), Row("testcat2"), Row("testpart")))
+
+    assert(sql("SHOW CATALOGS LIKE 'testcat*'").collect === Array(
+      Row("testcat"), Row("testcat2")))
+  }
+
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")

@@ -654,10 +654,17 @@ case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND
     Examples:
       > SELECT _FUNC_(40);
        1.0
+      > SELECT _FUNC_(INTERVAL -'100' YEAR);
+       -1.0
   """,
   since = "1.4.0",
   group = "math_funcs")
 case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "SIGNUM") {
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType))
+  protected override def nullSafeEval(input: Any): Any = {
+    f(input.asInstanceOf[Number].doubleValue())
+  }
   override protected def withNewChildInternal(newChild: Expression): Signum = copy(child = newChild)
 }
 
