@@ -921,7 +921,7 @@ class SessionCatalog(
       // the schema in metadata will be `_c0` while the parsed view plan has column named `1`
       metadata.schema.zipWithIndex.map { case (field, index) =>
         val col = GetColumnByOrdinal(index, field.dataType)
-        Alias(col, field.name)(explicitMetadata = Some(field.metadata))
+        Alias(UpCast(col, field.dataType), field.name)(explicitMetadata = Some(field.metadata))
       }
     }
     View(desc = metadata, isTempView = isTempView, child = Project(projectList, parsedPlan))
