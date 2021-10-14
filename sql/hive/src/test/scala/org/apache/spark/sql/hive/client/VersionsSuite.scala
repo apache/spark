@@ -777,7 +777,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     test(s"$version: withHiveState and addJar") {
       val newClassPath = "."
       client.addJar(newClassPath)
-      client.withHiveState {
+      client.withHiveState(0) {
         // No exception should be thrown.
         // withHiveState changes the classloader to MutableURLClassLoader
         val classLoader = Thread.currentThread().getContextClassLoader
@@ -785,7 +785,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
         val urls = classLoader.getURLs()
         urls.contains(new File(newClassPath).toURI.toURL)
-      }(0)
+      }
     }
 
     test(s"$version: reset") {

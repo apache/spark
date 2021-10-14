@@ -286,7 +286,7 @@ private[hive] trait HiveClient {
   def newSession(): HiveClient
 
   /** Run a function within Hive state (SessionState, HiveConf, Hive client and class loader) */
-  def withHiveState[A](f: => A)(numClientCalls: Int = 1): A
+  def withHiveState[A](numClientCalls: Int)(f: => A): A
 
   /** Used for testing only.  Removes all metadata from this instance of Hive. */
   def reset(): Unit
