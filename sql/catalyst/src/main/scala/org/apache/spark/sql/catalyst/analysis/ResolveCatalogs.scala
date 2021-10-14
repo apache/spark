@@ -82,17 +82,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         convertTableProperties(c),
         writeOptions = c.writeOptions,
         orCreate = c.orCreate)
-
-    case c @ CreateIndex(UnresolvedDBObjectName(
-      NonSessionCatalogAndTable(catalog, name), _), _, _, _, _, _, _) =>
-      CreateIndex(
-        ResolvedDBObjectName(catalog, name),
-        c.indexName,
-        c.indexType,
-        c.ignoreIfExists,
-        c.columns,
-        c.columnsProperties,
-        c.properties)
   }
 
   object NonSessionCatalogAndTable {
