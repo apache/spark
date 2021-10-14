@@ -134,7 +134,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     if (hiveVersionsUsingOldExternalTempPath.contains(hiveVersion)) {
       oldVersionExternalTempPath(path, hadoopConf, scratchDir)
     } else if (hiveVersionsUsingNewExternalTempPath.contains(hiveVersion)) {
-      val externalTempPath = FileCommitProtocol.newVersionExternalTempPath(
+      val externalTempPath = FileCommitProtocol.externalTempPath(
         path, hadoopConf, stagingDir, "hive", TaskRunner.getTaskRunnerID.toString)
       createdTempDir = Some(externalTempPath.getParent)
       externalTempPath

@@ -251,7 +251,7 @@ object FileCommitProtocol extends Logging {
     Try { new Path(path, ".spark-staging-" + jobId) }.getOrElse(null)
   }
 
-  def newVersionExternalTempPath(
+  def externalTempPath(
       path: Path,
       hadoopConf: Configuration,
       stagingDir: String,
