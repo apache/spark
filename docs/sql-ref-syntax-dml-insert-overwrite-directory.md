@@ -57,6 +57,10 @@ USING file_format [ OPTIONS ( key = val [ , ... ] ) ]
 
     Specifies one or more options for the writing of the file format.
 
+* **hive_format**
+
+    Specifies the file format to use for the insert. Both `row_format` and `hive_serde` are optional. `ROW FORMAT SERDE` can only be used with `TEXTFILE`, `SEQUENCEFILE`, or `RCFILE`, while `ROW FORMAT DELIMITED` can only be used with `TEXTFILE`. If both are not defined, spark uses `TEXTFILE`.
+
 * **row_format**
 
     Specifies the row format for this insert. Valid options are `SERDE` clause and `DELIMITED` clause. `SERDE` clause can be used to specify a custom `SerDe` for this insert. Alternatively, `DELIMITED` clause can be used to specify the native `SerDe` and state the delimiter, escape character, null character, and so on.
@@ -64,10 +68,6 @@ USING file_format [ OPTIONS ( key = val [ , ... ] ) ]
 * **hive_serde**
 
     Specifies the file format for this insert. Valid options are `TEXTFILE`, `SEQUENCEFILE`, `RCFILE`, `ORC`, `PARQUET`, and `AVRO`. You can also specify your own input and output format using `INPUTFORMAT` and `OUTPUTFORMAT`.
-
-* **hive_format**
-
-    Specifies the file format to use for the insert. Both `row_format` and `hive_serde` are optional. `ROW FORMAT SERDE` can only be used with `TEXTFILE`, `SEQUENCEFILE`, or `RCFILE`, while `ROW FORMAT DELIMITED` can only be used with `TEXTFILE`. If both are not defined, spark uses `TEXTFILE`.
 
 * **VALUES ( { value `|` NULL } [ , ... ] ) [ , ( ... ) ]**
 
