@@ -53,7 +53,7 @@ private[spark] class SparkRackResolver(conf: Configuration) extends Logging {
     case Success(result) =>
       logInfo(s"Using yarn RackResolver dnsToSwitchMapping.")
       result
-    case Failure(NonFatal(_)) =>
+    case Failure(_) =>
       logInfo(s"Using spark RackResolver dnsToSwitchMapping.")
       val dnsToSwitchMappingClass =
         conf.getClass(CommonConfigurationKeysPublic.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
