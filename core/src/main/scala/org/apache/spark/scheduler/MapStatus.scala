@@ -255,9 +255,24 @@ private[spark] object HighlyCompressedMapStatus {
     // we expect that there will be far fewer of them, so we will perform fewer bitmap insertions.
     val emptyBlocks = new RoaringBitmap()
     val totalNumBlocks = uncompressedSizes.length
-    val threshold = Option(SparkEnv.get)
-      .map(_.conf.get(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD))
-      .getOrElse(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD.defaultValue.get)
+    val medianSize: Long = {
+      val sortedSizes = uncompressedSizes.sorted
+      if (totalNumBlocks % 2 == 0) {
+        Math.max((sortedSizes(totalNumBlocks / 2) + sortedSizes(totalNumBlocks / 2 - 1)) / 2, 1)
+      } else {
+        Math.max(sortedSizes(totalNumBlocks / 2), 1)
+      }
+    }
+    val skewSizeThreshold =
+      medianSize * Option(SparkEnv.get)
+        .map(_.conf.get(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR))
+        .getOrElse(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR.defaultValue.get)
+    val threshold =
+      Math.min(
+        Option(SparkEnv.get)
+          .map(_.conf.get(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD))
+          .getOrElse(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD.defaultValue.get),
+        skewSizeThreshold)
     val hugeBlockSizes = mutable.Map.empty[Int, Byte]
     while (i < totalNumBlocks) {
       val size = uncompressedSizes(i)
