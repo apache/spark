@@ -34,10 +34,6 @@ case class ShowCatalogsCommand(pattern: Option[String]) extends LeafRunnableComm
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val rows = new ArrayBuffer[Row]
     val catalogManager = sparkSession.sessionState.catalogManager
-    val catalogs = catalogManager.listCatalogs(pattern)
-    catalogs.foreach { name =>
-      rows += Row(name)
-    }
-    rows.toSeq
+    catalogManager.listCatalogs(pattern).map(Row(_))
   }
 }
