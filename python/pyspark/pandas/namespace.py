@@ -1658,7 +1658,7 @@ def to_datetime(
     }
 
     def pandas_to_datetime(
-        pser_or_pdf: Union[pd.DataFrame, pd.Series], cols: List[str]
+        pser_or_pdf: Union[pd.DataFrame, pd.Series], cols: Optional[List[str]] = None
     ) -> Series[np.datetime64]:
         if isinstance(pser_or_pdf, pd.DataFrame):
             pser_or_pdf = pser_or_pdf[cols]
