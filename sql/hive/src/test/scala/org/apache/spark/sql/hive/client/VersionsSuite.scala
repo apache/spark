@@ -785,7 +785,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
         val urls = classLoader.getURLs()
         urls.contains(new File(newClassPath).toURI.toURL)
-      }
+      }(0)
     }
 
     test(s"$version: reset") {
