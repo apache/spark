@@ -22,7 +22,6 @@ import java.io.File
 import scala.reflect.{classTag, ClassTag}
 import scala.util.Random
 
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 import org.apache.spark.internal.io.FileCommitProtocol
@@ -834,9 +833,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 case class CustomFileCommitProtocol(
     jobId: String,
     path: String,
-    stagingDir: Path,
     dynamicPartitionOverwrite: Boolean = false)
-  extends SQLHadoopMapReduceCommitProtocol(jobId, path, stagingDir, dynamicPartitionOverwrite) {
+  extends SQLHadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite) {
   override def commitTask(
     taskContext: TaskAttemptContext): FileCommitProtocol.TaskCommitMessage = {
     Thread.sleep(Random.nextInt(100))

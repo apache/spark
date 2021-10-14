@@ -56,10 +56,6 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
     this.batchId = batchId
   }
 
-  override def getOutputPath: Path = new Path(path)
-
-  override def getWorkPath(): Path = new Path(path)
-
   override def setupJob(jobContext: JobContext): Unit = {
     require(fileLog != null, "setupManifestOptions must be called before this function")
     pendingCommitFiles = new ArrayBuffer[Path]

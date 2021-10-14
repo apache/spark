@@ -167,6 +167,14 @@ case class InsertIntoHadoopFsRelationCommand(
         }
       }
 
+      // For dynamic partition overwrite, FileOutputCommitter's output path is staging path, files
+      // will be renamed from staging path to final output path during commit job
+      val committerOutputPath = if (dynamicPartitionOverwrite) {
+        tmpLocation
+      } else {
+        qualifiedOutputPath
+      }
+
       val updatedPartitionPaths =
         FileFormatWriter.write(
           sparkSession = sparkSession,
@@ -174,7 +182,7 @@ case class InsertIntoHadoopFsRelationCommand(
           fileFormat = fileFormat,
           committer = committer,
           outputSpec = FileFormatWriter.OutputSpec(
-            committer.getWorkPath.toString, customPartitionLocations, outputColumns),
+            committerOutputPath.toString, customPartitionLocations, outputColumns),
           hadoopConf = hadoopConf,
           partitionColumns = partitionColumns,
           bucketSpec = bucketSpec,

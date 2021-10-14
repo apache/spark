@@ -58,33 +58,6 @@ abstract class FileCommitProtocol extends Logging {
   import FileCommitProtocol._
 
   /**
-   * Get the final directory where work will be placed once the job
-   * is committed. This may be null, in which case, there is no output
-   * path to write data to.
-   */
-  def getOutputPath(): Path = null
-
-  /**
-   * Get the directory that the task should write results into.
-   * Warning: there's no guarantee that this work path is on the same
-   * FS as the final output, or that it's visible across machines.
-   * May be null.
-   */
-  def getWorkPath(): Path = null
-
-  /**
-   * Checks whether there are files to be committed to a valid output location.
-   *
-   * As committing and aborting a job occurs on driver, where `addedAbsPathFiles` is always null,
-   * it is necessary to check whether a valid output path is specified.
-   * [[HadoopMapReduceCommitProtocol#path]] need not be a valid [[org.apache.hadoop.fs.Path]] for
-   * committers not writing to distributed file systems.
-   */
-  def hasOutputPath(): Boolean = {
-    getOutputPath() != null;
-  }
-
-  /**
    * Setups up a job. Must be called on the driver before any other methods can be invoked.
    */
   def setupJob(jobContext: JobContext): Unit
