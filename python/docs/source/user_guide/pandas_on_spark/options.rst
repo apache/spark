@@ -280,6 +280,13 @@ compute.ordered_head            False          'compute.ordered_head' sets wheth
                                                'compute.ordered_head' is set to True, pandas-on-
                                                Spark performs natural ordering beforehand, but it
                                                will cause a performance overhead.
+compute.check_identical_indices True           'compute.check_identical_indices' sets whether or not
+                                               to operate dot with identical indexes checking. If
+                                               'compute.check_identical_indices' is set to True,
+                                               pandas-on-Spark performs identical indexes checking
+                                               beforehand, but it will cause a performance overhead.
+                                               Otherwise, pandas-on-Spark just proceeds and performs
+                                               by ignoring mismatches with NaN permissively.
 compute.isin_limit              80             'compute.isin_limit' sets the limit for filtering by
                                                'Column.isin(list)'. If the length of the ‘list’ is
                                                above the limit, broadcast join is used instead for

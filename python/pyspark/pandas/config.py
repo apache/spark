@@ -195,6 +195,18 @@ _options: List[Option] = [
         types=bool,
     ),
     Option(
+        key="compute.check_identical_indices",
+        doc=(
+            "'compute.check_identical_indices' sets whether or not to operate dot with identical "
+            "indexes checking. If 'compute.check_identical_indices' is set to True, "
+            "pandas-on-Spark performs identical indexes checking beforehand, but it will cause a "
+            "performance overhead. Otherwise, pandas-on-Spark just proceeds and performs by "
+            "ignoring mismatches with NaN permissively."
+        ),
+        default=True,
+        types=bool,
+    ),
+    Option(
         key="compute.isin_limit",
         doc=(
             "'compute.isin_limit' sets the limit for filtering by 'Column.isin(list)'. "
