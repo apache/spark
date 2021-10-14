@@ -2737,7 +2737,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       Seq((Period.ofYears(9999), 0)).toDF("i", "n").select($"i" / $"n").collect()
     }.getCause
     assert(e.isInstanceOf[ArithmeticException])
-    assert(e.getMessage.contains("/ by zero"))
+    assert(e.getMessage.contains("divide by zero"))
+
+    val e2 = intercept[SparkException] {
+      Seq((Period.ofYears(9999), 0d)).toDF("i", "n").select($"i" / $"n").collect()
+    }.getCause
+    assert(e2.isInstanceOf[ArithmeticException])
+    assert(e2.getMessage.contains("divide by zero"))
+
+    val e3 = intercept[SparkException] {
+      Seq((Period.ofYears(9999), BigDecimal(0))).toDF("i", "n").select($"i" / $"n").collect()
+    }.getCause
+    assert(e3.isInstanceOf[ArithmeticException])
+    assert(e3.getMessage.contains("divide by zero"))
   }
 
   test("SPARK-34875: divide day-time interval by numeric") {
@@ -2772,7 +2784,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       Seq((Duration.ofDays(9999), 0)).toDF("i", "n").select($"i" / $"n").collect()
     }.getCause
     assert(e.isInstanceOf[ArithmeticException])
-    assert(e.getMessage.contains("/ by zero"))
+    assert(e.getMessage.contains("divide by zero"))
+
+    val e2 = intercept[SparkException] {
+      Seq((Duration.ofDays(9999), 0d)).toDF("i", "n").select($"i" / $"n").collect()
+    }.getCause
+    assert(e2.isInstanceOf[ArithmeticException])
+    assert(e2.getMessage.contains("divide by zero"))
+
+    val e3 = intercept[SparkException] {
+      Seq((Duration.ofDays(9999), BigDecimal(0))).toDF("i", "n").select($"i" / $"n").collect()
+    }.getCause
+    assert(e3.isInstanceOf[ArithmeticException])
+    assert(e3.getMessage.contains("divide by zero"))
   }
 
   test("SPARK-34896: return day-time interval from dates subtraction") {
