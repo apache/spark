@@ -28,8 +28,18 @@ Hive support must be enabled to use Hive Serde. The inserted rows can be specifi
 
 ```sql
 INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
-    { USING spark_file_format [ OPTIONS ( key = val [ , ... ] ) ] | [ ROW FORMAT row_format ] [ STORED AS hive_file_format ] }
+    { spark_format | hive_format }
     { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
+```
+
+While `spark_format` is defined as
+```sql
+USING spark_file_format [ OPTIONS ( key = val [ , ... ] ) ]
+```
+
+`hive_format` is defined as
+```sql
+ [ ROW FORMAT row_format ] [ STORED AS hive_serde ]
 ```
 
 ### Parameters
@@ -51,9 +61,13 @@ INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
 
     Specifies the row format for this insert. Valid options are `SERDE` clause and `DELIMITED` clause. `SERDE` clause can be used to specify a custom `SerDe` for this insert. Alternatively, `DELIMITED` clause can be used to specify the native `SerDe` and state the delimiter, escape character, null character, and so on.
 
-* **hive_file_format**
+* **hive_serde**
 
-    Specifies the file format for this insert. Valid options are `TEXTFILE`, `SEQUENCEFILE`, `RCFILE`, `ORC`, `PARQUET`, and `AVRO`. You can also specify your own input and output format using `INPUTFORMAT` and `OUTPUTFORMAT`. `ROW FORMAT SERDE` can only be used with `TEXTFILE`, `SEQUENCEFILE`, or `RCFILE`, while `ROW FORMAT DELIMITED` can only be used with `TEXTFILE`.
+    Specifies the file format for this insert. Valid options are `TEXTFILE`, `SEQUENCEFILE`, `RCFILE`, `ORC`, `PARQUET`, and `AVRO`. You can also specify your own input and output format using `INPUTFORMAT` and `OUTPUTFORMAT`.
+
+* **hive_format**
+
+    Specifies the file format to use for the insert. Both `row_format` and `hive_serde` are both optional. `ROW FORMAT SERDE` can only be used with `TEXTFILE`, `SEQUENCEFILE`, or `RCFILE`, while `ROW FORMAT DELIMITED` can only be used with `TEXTFILE`. If both are not defined, spark uses `LazySimpleSerDe`.
 
 * **VALUES ( { value `|` NULL } [ , ... ] ) [ , ( ... ) ]**
 
