@@ -144,6 +144,7 @@ public class TaskMemoryManager {
     // off-heap memory. This is subject to change, though, so it may be risky to make this
     // optimization now in case we forget to undo it late when making changes.
     synchronized (this) {
+      consumers.add(requestingConsumer);
       long got = memoryManager.acquireExecutionMemory(required, taskAttemptId, mode);
 
       // Try to release memory from other consumers first, then we can reduce the frequency of
@@ -192,7 +193,6 @@ public class TaskMemoryManager {
         }
       }
 
-      consumers.add(requestingConsumer);
       logger.debug("Task {} acquired {} for {}", taskAttemptId, Utils.bytesToString(got),
               requestingConsumer);
       return got;
