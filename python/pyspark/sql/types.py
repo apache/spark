@@ -25,6 +25,7 @@ import re
 import base64
 from array import array
 import ctypes
+from collections.abc import Iterable
 from typing import (
     cast,
     overload,
@@ -837,12 +838,13 @@ class UserDefinedType(DataType):
         return type(self) == type(other)
 
 
-_atomic_types = [StringType, BinaryType, BooleanType, DecimalType, FloatType, DoubleType,
-                 ByteType, ShortType, IntegerType, LongType, DateType, TimestampType,
-                 TimestampNTZType, NullType]
-_all_atomic_types = dict((t.typeName(), t) for t in _atomic_types)  # type: ignore[attr-defined]
-_all_complex_types = dict((v.typeName(), v)  # type: ignore[attr-defined]
-                          for v in [ArrayType, MapType, StructType])
+_atomic_types: List[Type[DataType]] = [
+    StringType, BinaryType, BooleanType, DecimalType, FloatType, DoubleType,
+    ByteType, ShortType, IntegerType, LongType, DateType, TimestampType,
+    TimestampNTZType, NullType]
+_all_atomic_types: Dict[str, Type[DataType]] = dict((t.typeName(), t) for t in _atomic_types)
+_complex_types: List[Type[DataType]] = [ArrayType, MapType, StructType]
+_all_complex_types: Dict[str, Type[DataType]] = dict((v.typeName(), v) for v in _complex_types)
 
 
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
@@ -1082,7 +1084,7 @@ for _typecode in _array_unsigned_int_typecode_ctype_mappings.keys():
 # Type code 'u' in Python's array is deprecated since version 3.3, and will be
 # removed in version 4.0. See: https://docs.python.org/3/library/array.html
 if sys.version_info[0] < 4:
-    _array_type_mappings['u'] = StringType  # type: ignore[assignment]
+    _array_type_mappings['u'] = StringType
 
 
 def _infer_type(
@@ -1147,7 +1149,7 @@ def _infer_schema(
     prefer_timestamp_ntz: bool = False,
 ) -> StructType:
     """Infer the schema from dict/namedtuple/object"""
-    items: Union[zip[Tuple[Any, Any]], List[Tuple[Any, Any]]]
+    items: Iterable[Tuple[str, Any]]
     if isinstance(row, dict):
         items = sorted(row.items())
 
@@ -1159,11 +1161,11 @@ def _infer_schema(
         else:
             if names is None:
                 names = [
-                    '_%d' % i for i in range(1, len(row) + 1)]  # type: ignore[no-redef, assignment]
+                    '_%d' % i for i in range(1, len(row) + 1)]
             elif len(names) < len(row):
-                names.extend(  # type: ignore[attr-defined]
+                names.extend(
                     '_%d' % i for i in range(len(names) + 1, len(row) + 1))
-            items = zip(names, row)  # type: ignore[arg-type, assignment]
+            items = zip(names, row)
 
     elif hasattr(row, "__dict__"):  # object
         items = sorted(row.__dict__.items())
@@ -1193,7 +1195,31 @@ def _has_nulltype(dt: DataType) -> bool:
         return isinstance(dt, NullType)
 
 
+@overload
+def _merge_type(a: StructType, b: StructType, name: Optional[str] = None) -> StructType:
+    ...
+
+
+@overload
+def _merge_type(a: ArrayType, b: ArrayType, name: Optional[str] = None) -> ArrayType:
+    ...
+
+
+@overload
+def _merge_type(a: MapType, b: MapType, name: Optional[str] = None) -> MapType:
+    ...
+
+
+@overload
 def _merge_type(a: DataType, b: DataType, name: Optional[str] = None) -> DataType:
+    ...
+
+
+def _merge_type(
+    a: Union[StructType, ArrayType, MapType, DataType],
+    b: Union[StructType, ArrayType, MapType, DataType],
+    name: Optional[str] = None,
+) -> Union[StructType, ArrayType, MapType, DataType]:
     if name is None:
         new_msg = lambda msg: msg
         new_name = lambda n: "field %s" % n
@@ -1226,15 +1252,13 @@ def _merge_type(a: DataType, b: DataType, name: Optional[str] = None) -> DataTyp
         return StructType(fields)
 
     elif isinstance(a, ArrayType):
-        return ArrayType(_merge_type(cast(ArrayType, a).elementType, cast(ArrayType, b).elementType,
+        return ArrayType(_merge_type(a.elementType, cast(ArrayType, b).elementType,
                                      name='element in array %s' % name), True)
 
     elif isinstance(a, MapType):
         return MapType(
-            _merge_type(cast(MapType, a).keyType, cast(MapType, b).keyType,
-                        name='key of map %s' % name),
-            _merge_type(cast(MapType, a).valueType, cast(MapType, b).valueType,
-                        name='value of map %s' % name),
+            _merge_type(a.keyType, cast(MapType, b).keyType, name='key of map %s' % name),
+            _merge_type(a.valueType, cast(MapType, b).valueType, name='value of map %s' % name),
             True)
     else:
         return a
