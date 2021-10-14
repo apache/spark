@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ViewType}
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
@@ -163,23 +163,6 @@ case class CreateTableAsSelectStatement(
   override def child: LogicalPlan = asSelect
   override protected def withNewChildInternal(newChild: LogicalPlan): CreateTableAsSelectStatement =
     copy(asSelect = newChild)
-}
-
-/**
- * A CREATE VIEW statement, as parsed from SQL.
- */
-case class CreateViewStatement(
-    viewName: Seq[String],
-    userSpecifiedColumns: Seq[(String, Option[String])],
-    comment: Option[String],
-    properties: Map[String, String],
-    originalText: Option[String],
-    child: LogicalPlan,
-    allowExisting: Boolean,
-    replace: Boolean,
-    viewType: ViewType) extends UnaryParsedStatement {
-  override protected def withNewChildInternal(newChild: LogicalPlan): CreateViewStatement =
-    copy(child = newChild)
 }
 
 /**

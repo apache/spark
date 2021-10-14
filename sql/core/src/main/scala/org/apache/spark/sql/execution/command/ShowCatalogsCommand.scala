@@ -15,22 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution.command
+package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.execution.command.v1
+import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.types.StringType
+
 
 /**
- * The class contains tests for the `SHOW TABLES` command to check V1 Hive external table catalog.
+ * The command for `SHOW CATALOGS`.
  */
-class ShowTablesSuite extends v1.ShowTablesSuiteBase with CommandSuiteBase {
-  override def commandVersion: String = super[ShowTablesSuiteBase].commandVersion
+case class ShowCatalogsCommand(pattern: Option[String]) extends LeafRunnableCommand {
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("catalog", StringType, nullable = false)())
 
-  test("hive client calls") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id int) $defaultUsing")
-      checkHiveClientCalls(expected = 3) {
-        sql(s"SHOW TABLES IN $catalog.ns")
-      }
-    }
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalogManager = sparkSession.sessionState.catalogManager
+    catalogManager.listCatalogs(pattern).map(Row(_))
   }
 }

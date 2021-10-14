@@ -675,7 +675,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     koalas = CachedAccessor("koalas", PandasOnSparkSeriesMethods)
 
     # Comparison Operators
-    def eq(self, other: Any) -> bool:
+    def eq(self, other: Any) -> "Series":
         """
         Compare if the current value is equal to the other.
 
