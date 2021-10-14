@@ -1657,19 +1657,11 @@ def to_datetime(
         "microseconds": "us",
     }
 
-    # replace passed unit with _unit_map
-    def f(value):
-        if value in _unit_map:
-            return _unit_map[value]
-
-        if value.lower() in _unit_map:
-            return _unit_map[value.lower()]
-
-        return value
-
-    def pandas_to_datetime(pser_or_pdf: Union[pd.DataFrame, pd.Series]) -> Series[np.datetime64]:
+    def pandas_to_datetime(
+        pser_or_pdf: Union[pd.DataFrame, pd.Series], cols: List[str]
+    ) -> Series[np.datetime64]:
         if isinstance(pser_or_pdf, pd.DataFrame):
-            pser_or_pdf = pser_or_pdf[list_cols]
+            pser_or_pdf = pser_or_pdf[cols]
         return pd.to_datetime(
             pser_or_pdf,
             errors=errors,
@@ -1682,7 +1674,7 @@ def to_datetime(
     if isinstance(arg, Series):
         return arg.pandas_on_spark.transform_batch(pandas_to_datetime)
     if isinstance(arg, DataFrame):
-        unit = {k: f(k) for k in arg.keys()}
+        unit = {k: _unit_map[k.lower()] for k in arg.keys() if k.lower() in _unit_map}
         unit_rev = {v: k for k, v in unit.items()}
         list_cols = [unit_rev["year"], unit_rev["month"], unit_rev["day"]]
         for u in ["h", "m", "s", "ms", "us"]:
@@ -1691,7 +1683,7 @@ def to_datetime(
                 list_cols.append(value)
 
         psdf = arg[list_cols]
-        return psdf.pandas_on_spark.transform_batch(pandas_to_datetime)
+        return psdf.pandas_on_spark.transform_batch(pandas_to_datetime, list_cols)
     return pd.to_datetime(
         arg,
         errors=errors,
