@@ -34,7 +34,7 @@ INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
 
 While `spark_format` is defined as
 ```sql
-USING spark_file_format [ OPTIONS ( key = val [ , ... ] ) ]
+USING file_format [ OPTIONS ( key = val [ , ... ] ) ]
 ```
 
 `hive_format` is defined as
@@ -49,7 +49,7 @@ USING spark_file_format [ OPTIONS ( key = val [ , ... ] ) ]
     Specifies the destination directory. The `LOCAL` keyword is used to specify that the directory is on the local file system.
     In spark file format, it can also be specified in `OPTIONS` using `path`, but `directory_path` and `path` option can not be both specified.
 
-* **spark_file_format**
+* **file_format**
 
     Specifies the file format to use for the insert. Valid options are `TEXT`, `CSV`, `JSON`, `JDBC`, `PARQUET`, `ORC`, `HIVE`, `LIBSVM`, or a fully qualified class name of a custom implementation of `org.apache.spark.sql.execution.datasources.FileFormat`.
 
