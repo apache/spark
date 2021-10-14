@@ -166,7 +166,6 @@ def capture_sql_exception(f):
                 raise converted from None
             else:
                 raise
-
     return deco
 
 
