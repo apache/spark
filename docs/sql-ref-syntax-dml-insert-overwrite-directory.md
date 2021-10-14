@@ -21,13 +21,18 @@ license: |
 
 ### Description
 
-The `INSERT OVERWRITE DIRECTORY` statement overwrites the existing data in the directory with the new values using a given Spark file format. The inserted rows can be specified by value expressions or result from a query.
+The `INSERT OVERWRITE DIRECTORY` statement overwrites the existing data in the directory with the new values using following two formats:
+   
+   1. Spark file format such as `USING file_format [ OPTIONS ( ket = val [ , ... ] ) ]`.
+   2. Hive format using Hive `Serde` such as `[ ROW FORMAT row_format ] [ STORED AS file_format ]`. Hive support must be enabled to use this command.
+
+The inserted rows can be specified by value expressions or result from a query.
 
 ### Syntax
 
 ```sql
 INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
-    USING file_format [ OPTIONS ( key = val [ , ... ] ) ]
+    { USING file_format [ OPTIONS ( key = val [ , ... ] ) ] | [ ROW FORMAT row_format ] [ STORED AS file_format ] }
     { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
 ```
 
@@ -46,6 +51,18 @@ INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
 
     Specifies one or more options for the writing of the file format.
 
+* **directory_path**
+
+    Specifies the destination directory. The `LOCAL` keyword is used to specify that the directory is on the local file system.
+
+* **row_format**
+
+    Specifies the row format for this insert. Valid options are `SERDE` clause and `DELIMITED` clause. `SERDE` clause can be used to specify a custom `SerDe` for this insert. Alternatively, `DELIMITED` clause can be used to specify the native `SerDe` and state the delimiter, escape character, null character, and so on.
+
+* **file_format**
+
+    Specifies the file format for this insert. Valid options are `TEXTFILE`, `SEQUENCEFILE`, `RCFILE`, `ORC`, `PARQUET`, and `AVRO`. You can also specify your own input and output format using `INPUTFORMAT` and `OUTPUTFORMAT`. `ROW FORMAT SERDE` can only be used with `TEXTFILE`, `SEQUENCEFILE`, or `RCFILE`, while `ROW FORMAT DELIMITED` can only be used with `TEXTFILE`.
+
 * **VALUES ( { value `|` NULL } [ , ... ] ) [ , ( ... ) ]**
 
     Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted.
@@ -60,6 +77,7 @@ INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
 
 ### Examples
 
+#### Spark format
 ```sql
 INSERT OVERWRITE DIRECTORY '/tmp/destination'
     USING parquet
@@ -72,8 +90,18 @@ INSERT OVERWRITE DIRECTORY
     SELECT * FROM test_table;
 ```
 
+#### Hive format
+
+```sql
+INSERT OVERWRITE LOCAL DIRECTORY '/tmp/destination'
+    STORED AS orc
+    SELECT * FROM test_table;
+
+INSERT OVERWRITE LOCAL DIRECTORY '/tmp/destination'
+    ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+    SELECT * FROM test_table;
+```
+
 ### Related Statements
 
-* [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
-* [INSERT OVERWRITE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
-* [INSERT OVERWRITE DIRECTORY with Hive format statement](sql-ref-syntax-dml-insert-overwrite-directory-hive.html)
+* [INSERT TABLE statement](sql-ref-syntax-dml-insert-table.html)
