@@ -60,9 +60,6 @@ class PathOutputCommitProtocol(
     throw new IOException(PathOutputCommitProtocol.UNSUPPORTED)
   }
 
-  /** The committer created. */
-  @transient override protected var committer: PathOutputCommitter = _
-
   require(dest != null, "Null destination specified")
 
   private[cloud] val destination: String = dest
@@ -115,7 +112,7 @@ class PathOutputCommitProtocol(
         logTrace(s"Committer $committer may not be tolerant of task commit failures")
       }
     }
-    committer
+    committer.asInstanceOf[PathOutputCommitter]
   }
 
   /**
@@ -131,7 +128,7 @@ class PathOutputCommitProtocol(
       dir: Option[String],
       spec: FileNameSpec): String = {
 
-    val workDir = committer.getWorkPath
+    val workDir = committer.asInstanceOf[PathOutputCommitter].getWorkPath
     val parent = dir.map {
       d => new Path(workDir, d)
     }.getOrElse(workDir)
