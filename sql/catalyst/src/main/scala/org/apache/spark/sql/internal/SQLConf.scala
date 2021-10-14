@@ -3875,8 +3875,6 @@ class SQLConf extends Serializable with Logging {
 
   def enableTwoLevelAggMap: Boolean = getConf(ENABLE_TWOLEVEL_AGG_MAP)
 
-  def enableTwoLevelAggMapPartialOnly: Boolean = getConf(ENABLE_TWOLEVEL_AGG_MAP_PARTIAL_ONLY)
-
   def enableVectorizedHashMap: Boolean = getConf(ENABLE_VECTORIZED_HASH_MAP)
 
   def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)

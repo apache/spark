@@ -671,7 +671,7 @@ case class HashAggregateExec(
       if (modes.forall(mode => mode == Partial || mode == PartialMerge)) {
         true
       } else {
-        !conf.enableTwoLevelAggMapPartialOnly
+        !conf.getConf(SQLConf.ENABLE_TWOLEVEL_AGG_MAP_PARTIAL_ONLY)
       }
 
     isSupported && isNotByteArrayDecimalType && isEnabledForAggModes
