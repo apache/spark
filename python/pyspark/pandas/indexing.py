@@ -33,6 +33,7 @@ import numpy as np
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import Label, Name, Scalar
 from pyspark.pandas.internal import (
+    DEFAULT_SERIES_NAME,
     InternalField,
     InternalFrame,
     NATURAL_ORDER_COLUMN_NAME,
@@ -53,11 +54,12 @@ from pyspark.pandas.utils import (
 
 if TYPE_CHECKING:
     from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.generic import Frame  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
 class IndexerLike(object):
-    def __init__(self, psdf_or_psser: Union["Series", "DataFrame"]):
+    def __init__(self, psdf_or_psser: "Frame"):
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.series import Series
 
@@ -435,11 +437,12 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
 
         if self._is_series:
             if isinstance(key, Series) and not same_anchor(key, self._psdf_or_psser):
-                psdf = self._psdf_or_psser.to_frame()
+                name = self._psdf_or_psser.name or DEFAULT_SERIES_NAME
+                psdf = self._psdf_or_psser.to_frame(name)
                 temp_col = verify_temp_column_name(psdf, "__temp_col__")
 
                 psdf[temp_col] = key
-                return type(self)(psdf[self._psdf_or_psser.name])[psdf[temp_col]]
+                return type(self)(psdf[name].rename(self._psdf_or_psser.name))[psdf[temp_col]]
 
             cond, limit, remaining_index = self._select_rows(key)
             if cond is None and limit is None:
@@ -532,7 +535,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         except AnalysisException:
             raise KeyError(
                 "[{}] don't exist in columns".format(
-                    [col._jc.toString() for col in data_spark_columns]  # type: ignore
+                    [col._jc.toString() for col in data_spark_columns]  # type: ignore[operator]
                 )
             )
 
@@ -548,6 +551,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         )
         psdf = DataFrame(internal)
 
+        psdf_or_psser: Union[DataFrame, Series]
         if returns_series:
             psdf_or_psser = first_series(psdf)
             if series_name is not None and series_name != psdf_or_psser.name:
@@ -594,7 +598,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                     psdf[temp_key_col] = key
                 if isinstance(value, Series):
                     psdf[temp_value_col] = value
-                psdf = psdf.sort_values(temp_natural_order).drop(temp_natural_order)
+                psdf = psdf.sort_values(temp_natural_order).drop(columns=temp_natural_order)
 
                 psser = psdf._psser_for(column_label)
                 if isinstance(key, Series):
@@ -686,7 +690,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                     psdf[temp_key_col] = rows_sel
                 if isinstance(value, Series):
                     psdf[temp_value_col] = value
-                psdf = psdf.sort_values(temp_natural_order).drop(temp_natural_order)
+                psdf = psdf.sort_values(temp_natural_order).drop(columns=temp_natural_order)
 
                 if isinstance(rows_sel, Series):
                     rows_sel = F.col(
@@ -706,7 +710,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 return
 
             cond, limit, remaining_index = self._select_rows(rows_sel)
-            missing_keys = []  # type: Optional[List[Name]]
+            missing_keys: List[Name] = []
             _, data_spark_columns, _, _, _ = self._select_cols(cols_sel, missing_keys=missing_keys)
 
             if cond is None:
@@ -1030,7 +1034,7 @@ class LocIndexer(LocIndexerLike):
             stop = [row[1] for row in start_and_stop if row[0] == stop]
             stop = stop[-1] if len(stop) > 0 else None
 
-            conds = []  # type: List[Column]
+            conds: List[Column] = []
             if start is not None:
                 conds.append(F.col(NATURAL_ORDER_COLUMN_NAME) >= SF.lit(start).cast(LongType()))
             if stop is not None:
@@ -1197,6 +1201,7 @@ class LocIndexer(LocIndexerLike):
             return self._get_from_multiindex_column((str(key),), missing_keys, labels, recursed + 1)
         else:
             returns_series = all(lbl is None or len(lbl) == 0 for _, lbl in labels)
+            series_name: Optional[Name]
             if returns_series:
                 label_set = set(label for label, _ in labels)
                 assert len(label_set) == 1
@@ -1205,7 +1210,7 @@ class LocIndexer(LocIndexerLike):
                 data_spark_columns = [self._internal.spark_column_for(label)]
                 data_fields = [self._internal.field_for(label)]
                 if label is None:
-                    series_name = None  # type: Name
+                    series_name = None
                 else:
                     if recursed > 0:
                         label = label[:-recursed]
@@ -1243,9 +1248,7 @@ class LocIndexer(LocIndexerLike):
         bool,
         Optional[Name],
     ]:
-        column_labels = [
-            (self._internal.spark_frame.select(cols_sel).columns[0],)
-        ]  # type: List[Label]
+        column_labels: List[Label] = [(self._internal.spark_frame.select(cols_sel).columns[0],)]
         data_spark_columns = [cols_sel]
         return column_labels, data_spark_columns, None, True, None
 
@@ -1657,14 +1660,13 @@ class iLocIndexer(LocIndexerLike):
                 "however, normalised index was [%s]" % new_rows_sel
             )
 
-        sequence_scol = sdf[self._sequence_col]
-        cond = []
-        for key in new_rows_sel:
-            cond.append(sequence_scol == SF.lit(int(key)).cast(LongType()))
-
-        if len(cond) == 0:
-            cond = [SF.lit(False)]
-        return reduce(lambda x, y: x | y, cond), None, None
+        if len(new_rows_sel) == 0:
+            cond = SF.lit(False)
+        else:
+            cond = sdf[self._sequence_col].isin(
+                [SF.lit(int(key)).cast(LongType()) for key in new_rows_sel]
+            )
+        return cond, None, None
 
     def _select_rows_else(
         self, rows_sel: Any

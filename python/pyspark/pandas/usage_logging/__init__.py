@@ -113,8 +113,8 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
     except ImportError:
         pass
 
-    sql_processor._CAPTURE_SCOPES = 3  # type: ignore
-    modules.append(sql_processor)  # type: ignore
+    sql_processor._CAPTURE_SCOPES = 3
+    modules.append(sql_processor)
 
     # Modules
     for target_module in modules:

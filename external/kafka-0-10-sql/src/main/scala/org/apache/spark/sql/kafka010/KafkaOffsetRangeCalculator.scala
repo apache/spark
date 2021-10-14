@@ -33,12 +33,13 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
    * Calculate the offset ranges that we are going to process this batch. If `minPartitions`
    * is not set or is set less than or equal the number of `topicPartitions` that we're going to
    * consume, then we fall back to a 1-1 mapping of Spark tasks to Kafka partitions. If
-   * `numPartitions` is set higher than the number of our `topicPartitions`, then we will split up
+   * `minPartitions` is set higher than the number of our `topicPartitions`, then we will split up
    * the read tasks of the skewed partitions to multiple Spark tasks.
-   * The number of Spark tasks will be *approximately* `numPartitions`. It can be less or more
+   * The number of Spark tasks will be *approximately* `minPartitions`. It can be less or more
    * depending on rounding errors or Kafka partitions that didn't receive any new data.
    *
-   * Empty ranges (`KafkaOffsetRange.size <= 0`) will be dropped.
+   * Empty (`KafkaOffsetRange.size == 0`) or invalid (`KafkaOffsetRange.size < 0`) ranges  will be
+   * dropped.
    */
   def getRanges(
       ranges: Seq[KafkaOffsetRange],
@@ -56,11 +57,29 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
 
       // Splits offset ranges with relatively large amount of data to smaller ones.
       val totalSize = offsetRanges.map(_.size).sum
+
+      // First distinguish between any small (i.e. unsplit) ranges and large (i.e. split) ranges,
+      // in order to exclude the contents of unsplit ranges from the proportional math applied to
+      // split ranges
+      val unsplitRanges = offsetRanges.filter { range =>
+        getPartCount(range.size, totalSize, minPartitions.get) == 1
+      }
+
+      val unsplitRangeTotalSize = unsplitRanges.map(_.size).sum
+      val splitRangeTotalSize = totalSize - unsplitRangeTotalSize
+      val unsplitRangeTopicPartitions = unsplitRanges.map(_.topicPartition).toSet
+      val splitRangeMinPartitions = math.max(minPartitions.get - unsplitRanges.size, 1)
+
+      // Now we can apply the main calculation logic
       offsetRanges.flatMap { range =>
         val tp = range.topicPartition
         val size = range.size
         // number of partitions to divvy up this topic partition to
-        val parts = math.max(math.round(size.toDouble / totalSize * minPartitions.get), 1).toInt
+        val parts = if (unsplitRangeTopicPartitions.contains(tp)) {
+          1
+        } else {
+          getPartCount(size, splitRangeTotalSize, splitRangeMinPartitions)
+        }
         var remaining = size
         var startOffset = range.fromOffset
         (0 until parts).map { part =>
@@ -74,6 +93,10 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
         }
       }.filter(_.size > 0)
     }
+  }
+
+  private def getPartCount(size: Long, totalSize: Long, minParts: Int): Int = {
+    math.max(math.round(size.toDouble / totalSize * minParts), 1).toInt
   }
 
   private def getLocation(tp: TopicPartition, executorLocations: Seq[String]): Option[String] = {

@@ -117,6 +117,11 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     testOneToOneMathFunction(sin, math.sin)
   }
 
+  test("csc") {
+    testOneToOneMathFunction(csc,
+      (x: Double) => (1 / math.sin(x)) )
+  }
+
   test("asin") {
     testOneToOneMathFunction(asin, math.asin)
   }
@@ -134,6 +139,11 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     testOneToOneMathFunction(cos, math.cos)
   }
 
+  test("sec") {
+    testOneToOneMathFunction(sec,
+      (x: Double) => (1 / math.cos(x)) )
+  }
+
   test("acos") {
     testOneToOneMathFunction(acos, math.acos)
   }
@@ -149,6 +159,11 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("tan") {
     testOneToOneMathFunction(tan, math.tan)
+  }
+
+  test("cot") {
+    testOneToOneMathFunction(cot,
+      (x: Double) => (1 / math.tan(x)) )
   }
 
   test("atan") {

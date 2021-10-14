@@ -126,4 +126,49 @@ class UISeleniumSuite
       }
     }
   }
+
+  test("SPARK-36400: Redact sensitive information in UI by config") {
+    withJdbcStatement("test_tbl1", "test_tbl2") { statement =>
+      val baseURL = s"http://localhost:$uiPort"
+
+      val Seq(nonMaskedQuery, maskedQuery) = Seq("test_tbl1", "test_tbl2").map (tblName =>
+        s"CREATE TABLE $tblName(a int) " +
+          s"OPTIONS(url='jdbc:postgresql://localhost:5432/$tblName', " +
+          "user='test_user', password='abcde')")
+      statement.execute(nonMaskedQuery)
+
+      statement.execute("SET spark.sql.redaction.string.regex=((?i)(?<=password=))('.*')")
+      statement.execute(maskedQuery)
+
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
+        go to (baseURL + "/sqlserver")
+        // Take description of 2 statements executed within this test.
+        val statements = findAll(cssSelector("span.description-input"))
+          .map(_.text).filter(_.startsWith("CREATE")).take(2).toSeq
+
+        val nonMaskedStatement = statements.filter(_.contains("test_tbl1"))
+        nonMaskedStatement.size should be (1)
+        nonMaskedStatement.head should be (nonMaskedQuery)
+        val maskedStatement = statements.filter(_.contains("test_tbl2"))
+        maskedStatement.size should be (1)
+        maskedStatement.head should be (maskedQuery.replace("'abcde'", "*********(redacted)"))
+      }
+
+      val sessionLink =
+        find(cssSelector("table#sessionstat td a")).head.underlying.getAttribute("href")
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
+        go to sessionLink
+        val statements = findAll(
+          cssSelector("span.description-input")).map(_.text).filter(_.startsWith("CREATE")).toSeq
+        statements.size should be (2)
+
+        val nonMaskedStatement = statements.filter(_.contains("test_tbl1"))
+        nonMaskedStatement.size should be (1)
+        nonMaskedStatement.head should be (nonMaskedQuery)
+        val maskedStatement = statements.filter(_.contains("test_tbl2"))
+        maskedStatement.size should be (1)
+        maskedStatement.head should be (maskedQuery.replace("'abcde'", "*********(redacted)"))
+      }
+    }
+  }
 }

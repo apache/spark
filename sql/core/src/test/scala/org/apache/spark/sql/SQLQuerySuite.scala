@@ -136,8 +136,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-14415: All functions should have own descriptions") {
     for (f <- spark.sessionState.functionRegistry.listFunction()) {
-      if (!Seq("cube", "grouping", "grouping_id", "rollup", "window",
-          "session_window").contains(f.unquotedString)) {
+      if (!Seq("cube", "grouping", "grouping_id", "rollup").contains(f.unquotedString)) {
         checkKeywordsNotExist(sql(s"describe function $f"), "N/A.")
       }
     }
@@ -1099,7 +1098,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |order by struct.a, struct.b
             |""".stripMargin)
     }
-    assert(error.message contains "cannot resolve 'struct.a' given input columns: [a, b]")
+    assert(error.getErrorClass == "MISSING_COLUMN")
+    assert(error.messageParameters.sameElements(Array("struct.a", "a, b")))
 
   }
 
@@ -1446,32 +1446,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
     val ymDF = sql("select interval 3 years -3 month")
     checkAnswer(ymDF, Row(Period.of(2, 9, 0)))
-    withTempPath(f => {
-      val e = intercept[AnalysisException] {
-        ymDF.write.json(f.getCanonicalPath)
-      }
-      e.message.contains("Cannot save interval data type into external storage")
-    })
 
     val dtDF = sql("select interval 5 days 8 hours 12 minutes 50 seconds")
     checkAnswer(dtDF, Row(Duration.ofDays(5).plusHours(8).plusMinutes(12).plusSeconds(50)))
-    withTempPath(f => {
-      val e = intercept[AnalysisException] {
-        dtDF.write.json(f.getCanonicalPath)
-      }
-      e.message.contains("Cannot save interval data type into external storage")
-    })
 
     withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
       val df = sql("select interval 3 years -3 month 7 week 123 microseconds")
       checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123)))
-      withTempPath(f => {
-        // Currently we don't yet support saving out values of interval data type.
-        val e = intercept[AnalysisException] {
-          df.write.json(f.getCanonicalPath)
-        }
-        e.message.contains("Cannot save interval data type into external storage")
-      })
     }
   }
 
@@ -2690,10 +2671,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val m1 = intercept[AnalysisException] {
-        sql("SELECT struct(1 a) UNION ALL (SELECT struct(2 A))")
-      }.message
-      assert(m1.contains("Union can only be performed on tables with the compatible column types"))
+      // Union resolves nested columns by position too.
+      checkAnswer(sql("SELECT struct(1 a) UNION ALL (SELECT struct(2 A))"),
+        Row(Row(1)) :: Row(Row(2)) :: Nil)
 
       val m2 = intercept[AnalysisException] {
         sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")
@@ -2721,8 +2701,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(sql("SELECT i from (SELECT i FROM v)"), Row(1))
 
       val e = intercept[AnalysisException](sql("SELECT v.i from (SELECT i FROM v)"))
-      assert(e.message ==
-        "cannot resolve 'v.i' given input columns: [__auto_generated_subquery_name.i]")
+      assert(e.getErrorClass == "MISSING_COLUMN")
+      assert(e.messageParameters.sameElements(Array("v.i", "__auto_generated_subquery_name.i")))
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
     }
@@ -4223,6 +4203,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(sql("""SELECT R"a\tb\nc""""), Row("""a\tb\nc"""))
     checkAnswer(sql("""SELECT from_json(r'{"a": "\\"}', 'a string')"""), Row(Row("\\")))
     checkAnswer(sql("""SELECT from_json(R'{"a": "\\"}', 'a string')"""), Row(Row("\\")))
+  }
+
+  test("SPARK-36979: Add RewriteLateralSubquery rule into nonExcludableRules") {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+      "org.apache.spark.sql.catalyst.optimizer.RewriteLateralSubquery") {
+      sql("SELECT * FROM testData, LATERAL (SELECT * FROM testData)").collect()
+    }
   }
 }
 

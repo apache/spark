@@ -239,8 +239,9 @@ class CategoricalAccessor(object):
                 FutureWarning,
             )
 
+        categories: List[Any]
         if is_list_like(new_categories):
-            categories = list(new_categories)  # type: List
+            categories = list(new_categories)
         else:
             categories = [new_categories]
 
@@ -433,8 +434,9 @@ class CategoricalAccessor(object):
                 FutureWarning,
             )
 
+        categories: List[Any]
         if is_list_like(removals):
-            categories = [cat for cat in removals if cat is not None]  # type: List
+            categories = [cat for cat in removals if cat is not None]
         elif removals is None:
             categories = []
         else:

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
+import java.time.temporal.ChronoUnit
 
 import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -667,5 +668,116 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         }
       }
     }
+  }
+
+  test("SPARK-36920: Support year-month intervals by ABS") {
+    checkEvaluation(Abs(Literal(Period.ZERO)), Period.ZERO)
+    checkEvaluation(Abs(Literal(Period.ofMonths(-1))), Period.ofMonths(1))
+    checkEvaluation(Abs(Literal(Period.ofYears(-12345))), Period.ofYears(12345))
+    checkEvaluation(Abs(Literal.create(null, YearMonthIntervalType())), null)
+    checkExceptionInExpression[ArithmeticException](
+      Abs(Literal(Period.ofMonths(Int.MinValue))),
+      "overflow")
+
+    DataTypeTestUtils.yearMonthIntervalTypes.foreach { tpe =>
+      checkConsistencyBetweenInterpretedAndCodegen((e: Expression) => Abs(e, false), tpe)
+    }
+  }
+
+  test("SPARK-36920: Support day-time intervals by ABS") {
+    checkEvaluation(Abs(Literal(Duration.ZERO)), Duration.ZERO)
+    checkEvaluation(
+      Abs(Literal(Duration.of(-1, ChronoUnit.MICROS))),
+      Duration.of(1, ChronoUnit.MICROS))
+    checkEvaluation(Abs(Literal(Duration.ofDays(-12345))), Duration.ofDays(12345))
+    checkEvaluation(Abs(Literal.create(null, DayTimeIntervalType())), null)
+    checkExceptionInExpression[ArithmeticException](
+      Abs(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS))),
+      "overflow")
+
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach { tpe =>
+      checkConsistencyBetweenInterpretedAndCodegen((e: Expression) => Abs(e, false), tpe)
+    }
+  }
+
+  test("SPARK-36921: Support YearMonthIntervalType by div") {
+    checkEvaluation(IntegralDivide(Literal(Period.ZERO), Literal(Period.ZERO)), null)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+      Literal(Period.ZERO)), null)
+    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MinValue),
+      Literal(Period.ZERO)), null)
+    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MaxValue),
+      Literal(Period.ZERO)), null)
+
+    checkEvaluation(IntegralDivide(Literal.create(null, YearMonthIntervalType()),
+      Literal.create(null, YearMonthIntervalType())), null)
+    checkEvaluation(IntegralDivide(Literal.create(null, YearMonthIntervalType()),
+      Literal(Period.ofYears(1))), null)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+      Literal.create(null, YearMonthIntervalType())), null)
+
+    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MaxValue),
+      Period.ofMonths(Int.MaxValue)), 1L)
+    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MaxValue),
+      Period.ofMonths(Int.MinValue)), 0L)
+    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MinValue),
+      Period.ofMonths(Int.MinValue)), 1L)
+    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MinValue),
+      Period.ofMonths(Int.MaxValue)), -1L)
+
+    checkEvaluation(IntegralDivide(Literal(Period.ZERO),
+      Literal(Period.ofYears(-1))), 0L)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(2)),
+      Literal(Period.ofYears(1))), 2L)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(2)),
+      Literal(Period.ofYears(-1))), -2L)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+      Literal(Period.ofMonths(3))), 4L)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+      Literal(Period.ofMonths(-3))), -4L)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+      Literal(Period.ofMonths(5))), 2L)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+      Literal(Period.ofMonths(-5))), -2L)
+  }
+  test("SPARK-36921: Support DayTimeIntervalType by div") {
+    checkEvaluation(IntegralDivide(Literal(Duration.ZERO), Literal(Duration.ZERO)), null)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+      Literal(Duration.ZERO)), null)
+    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
+      Literal(Duration.ZERO)), null)
+    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS)),
+      Literal(Duration.ZERO)), null)
+
+    checkEvaluation(IntegralDivide(Literal.create(null, DayTimeIntervalType()),
+      Literal.create(null, DayTimeIntervalType())), null)
+    checkEvaluation(IntegralDivide(Literal.create(null, DayTimeIntervalType()),
+      Literal(Duration.ofDays(1))), null)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+      Literal.create(null, DayTimeIntervalType())), null)
+
+    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
+      Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS))), 1L)
+    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS)),
+      Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS))), 1L)
+    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
+      Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS))), 0L)
+    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS)),
+      Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS))), -1L)
+
+    checkEvaluation(IntegralDivide(Literal(Duration.ZERO),
+      Literal(Duration.ofDays(-1))), 0L)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(2)),
+      Literal(Duration.ofDays(1))), 2L)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(2)),
+      Literal(Duration.ofDays(-1))), -2L)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+      Literal(Duration.ofHours(4))), 6L)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+      Literal(Duration.ofHours(-4))), -6L)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+      Literal(Duration.ofHours(5))), 4L)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+      Literal(Duration.ofHours(-5))), -4L)
   }
 }
