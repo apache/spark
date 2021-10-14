@@ -40,7 +40,7 @@ class WholeStageCodegenSparkSubmitSuite extends SparkSubmitTestUtils
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
 
     // HotSpot JVM specific: Set up a local cluster with the driver/executor using mismatched
-    // settings of UseCompressedOops JVM option.
+    // settings of UseCompressedClassPointers JVM option.
     val argsForSparkSubmit = Seq(
       "--class", WholeStageCodegenSparkSubmitSuite.getClass.getName.stripSuffix("$"),
       "--master", "local-cluster[1,1,1024]",
