@@ -599,7 +599,13 @@ trait IntervalDivide {
     }
   }
 
-  def divideByZeroCheckCodegen(expr: Expression, value: String): String = expr.dataType match {
+  def divideByZeroCheck(dataType: DataType, num: Any): Unit = dataType match {
+    case _: DecimalType =>
+      if (num.asInstanceOf[Decimal].isZero) throw QueryExecutionErrors.divideByZeroError()
+    case _ => if (num == 0) throw QueryExecutionErrors.divideByZeroError()
+  }
+
+  def divideByZeroCheckCodegen(dataType: DataType, value: String): String = dataType match {
     case _: DecimalType => s"if ($value.isZero()) throw QueryExecutionErrors.divideByZeroError();"
     case _ => s"if ($value == 0) throw QueryExecutionErrors.divideByZeroError();"
   }
@@ -618,13 +624,6 @@ case class DivideYMInterval(
   override def dataType: DataType = YearMonthIntervalType()
 
   @transient
-  private lazy val divideByZeroCheck: Any => Unit = right.dataType match {
-    case _: DecimalType => (num) =>
-      if (num.asInstanceOf[Decimal].isZero) throw QueryExecutionErrors.divideByZeroError()
-    case _ => (num) => if (num == 0) throw QueryExecutionErrors.divideByZeroError()
-  }
-
-  @transient
   private lazy val evalFunc: (Int, Any) => Any = right.dataType match {
     case LongType => (months: Int, num) =>
       // Year-month interval has `Int` as the internal type. The result of the divide operation
@@ -641,7 +640,7 @@ case class DivideYMInterval(
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
     checkDivideOverflow(interval.asInstanceOf[Int], Int.MinValue, right, num)
-    divideByZeroCheck(num)
+    divideByZeroCheck(right.dataType, num)
     evalFunc(interval.asInstanceOf[Int], num)
   }
 
@@ -663,14 +662,14 @@ case class DivideYMInterval(
         // Similarly to non-codegen code. The result of `divide(Int, Long, ...)` must fit to `Int`.
         // Casting to `Int` is safe here.
         s"""
-           |${divideByZeroCheckCodegen(right, n)}
+           |${divideByZeroCheckCodegen(right.dataType, n)}
            |$checkIntegralDivideOverflow
            |${ev.value} = ($javaType)$math.divide($m, $n, java.math.RoundingMode.HALF_UP);
         """.stripMargin)
     case _: DecimalType =>
       nullSafeCodeGen(ctx, ev, (m, n) =>
         s"""
-           |${divideByZeroCheckCodegen(right, n)}
+           |${divideByZeroCheckCodegen(right.dataType, n)}
            |${ev.value} = ((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()
            |  .setScale(0, java.math.RoundingMode.HALF_UP).intValueExact();
          """.stripMargin)
@@ -678,7 +677,7 @@ case class DivideYMInterval(
       val math = classOf[DoubleMath].getName
       nullSafeCodeGen(ctx, ev, (m, n) =>
         s"""
-           |${divideByZeroCheckCodegen(right, n)}
+           |${divideByZeroCheckCodegen(right.dataType, n)}
            |${ev.value} = $math.roundToInt($m / (double)$n, java.math.RoundingMode.HALF_UP);
          """.stripMargin)
   }
@@ -704,13 +703,6 @@ case class DivideDTInterval(
   override def dataType: DataType = DayTimeIntervalType()
 
   @transient
-  private lazy val divideByZeroCheck: Any => Unit = right.dataType match {
-    case _: DecimalType => (num) =>
-      if (num.asInstanceOf[Decimal].isZero) throw QueryExecutionErrors.divideByZeroError()
-    case _ => (num) => if (num == 0) throw QueryExecutionErrors.divideByZeroError()
-  }
-
-  @transient
   private lazy val evalFunc: (Long, Any) => Any = right.dataType match {
     case _: IntegralType => (micros: Long, num) =>
       LongMath.divide(micros, num.asInstanceOf[Number].longValue(), RoundingMode.HALF_UP)
@@ -723,7 +715,7 @@ case class DivideDTInterval(
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
     checkDivideOverflow(interval.asInstanceOf[Long], Long.MinValue, right, num)
-    divideByZeroCheck(num)
+    divideByZeroCheck(right.dataType, num)
     evalFunc(interval.asInstanceOf[Long], num)
   }
 
@@ -739,14 +731,14 @@ case class DivideDTInterval(
            |""".stripMargin
       nullSafeCodeGen(ctx, ev, (m, n) =>
         s"""
-           |${divideByZeroCheckCodegen(right, n)}
+           |${divideByZeroCheckCodegen(right.dataType, n)}
            |$checkIntegralDivideOverflow
            |${ev.value} = $math.divide($m, $n, java.math.RoundingMode.HALF_UP);
         """.stripMargin)
     case _: DecimalType =>
       nullSafeCodeGen(ctx, ev, (m, n) =>
         s"""
-           |${divideByZeroCheckCodegen(right, n)}
+           |${divideByZeroCheckCodegen(right.dataType, n)}
            |${ev.value} = ((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()
            |  .setScale(0, java.math.RoundingMode.HALF_UP).longValueExact();
          """.stripMargin)
@@ -754,7 +746,7 @@ case class DivideDTInterval(
       val math = classOf[DoubleMath].getName
       nullSafeCodeGen(ctx, ev, (m, n) =>
         s"""
-           |${divideByZeroCheckCodegen(right, n)}
+           |${divideByZeroCheckCodegen(right.dataType, n)}
            |${ev.value} = $math.roundToLong($m / (double)$n, java.math.RoundingMode.HALF_UP);
          """.stripMargin)
   }
