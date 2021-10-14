@@ -245,7 +245,7 @@ object FileCommitProtocol extends Logging {
         classOf[String], classOf[String], classOf[Path], classOf[Boolean])
       logDebug("Using (String, String, Path,  Boolean) constructor")
       ctor.newInstance(jobId, outputPath,
-        stagingDir.getOrElse(new Path(outputPath, ".spark-staging-" + jobId)),
+        stagingDir.getOrElse(getStagingDir(outputPath, jobId)),
         dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean])
     } catch {
       case _: NoSuchMethodException =>
@@ -258,6 +258,13 @@ object FileCommitProtocol extends Logging {
     }
   }
 
+  def getStagingDir(path: String, jobId: String): Path = {
+    try {
+      new Path(path, ".spark-staging-" + jobId)
+    } catch {
+      case _: Exception => null
+    }
+  }
 
   def newVersionExternalTempPath(
       path: Path,

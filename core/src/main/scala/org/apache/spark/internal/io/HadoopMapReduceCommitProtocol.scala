@@ -30,6 +30,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.io.FileCommitProtocol.getStagingDir
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 
 /**
@@ -75,10 +76,10 @@ class HadoopMapReduceCommitProtocol(
   extends FileCommitProtocol with Serializable with Logging {
 
   def this(jobId: String, path: String) =
-    this(jobId, path, new Path(path, ".spark-staging-" + jobId))
+    this(jobId, path, getStagingDir(path, jobId))
 
   def this(jobId: String, path: String, dynamicPartitionOverwrite: Boolean) =
-    this(jobId, path, new Path(path, ".spark-staging-" + jobId), dynamicPartitionOverwrite)
+    this(jobId, path, getStagingDir(path, jobId), dynamicPartitionOverwrite)
 
   import FileCommitProtocol._
 
