@@ -249,12 +249,21 @@ object FileCommitProtocol extends Logging {
         dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean])
     } catch {
       case _: NoSuchMethodException =>
-        logDebug("Falling back to (String, String) constructor")
-        require(!dynamicPartitionOverwrite,
-          "Dynamic Partition Overwrite is enabled but" +
-            s" the committer ${className} does not have the appropriate constructor")
-        val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
-        ctor.newInstance(jobId, outputPath)
+        try {
+          logDebug("Falling back to (String, String, Boolean) constructor")
+          val ctor = clazz.getDeclaredConstructor(
+            classOf[String], classOf[String], classOf[Boolean])
+          ctor.newInstance(jobId, outputPath,
+            dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean])
+        } catch {
+          case _: NoSuchMethodException =>
+            logDebug("Falling back to (String, String) constructor")
+            require(!dynamicPartitionOverwrite,
+              "Dynamic Partition Overwrite is enabled but" +
+                s" the committer ${className} does not have the appropriate constructor")
+            val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
+            ctor.newInstance(jobId, outputPath)
+        }
     }
   }
 

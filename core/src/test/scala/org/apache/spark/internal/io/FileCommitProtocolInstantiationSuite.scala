@@ -17,8 +17,6 @@
 
 package org.apache.spark.internal.io
 
-import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkFunSuite
 
 /**
@@ -121,17 +119,16 @@ private class ClassicConstructorCommitProtocol(arg1: String, arg2: String)
 private class FullConstructorCommitProtocol(
   arg1: String,
   arg2: String,
-  arg3: Path,
   b: Boolean,
   val argCount: Int)
-  extends HadoopMapReduceCommitProtocol(arg1, arg2, arg3, b) {
+  extends HadoopMapReduceCommitProtocol(arg1, arg2, b) {
 
-  def this(arg1: String, arg2: String, arg3: Path) = {
-    this(arg1, arg2, arg3, false, 2)
+  def this(arg1: String, arg2: String) = {
+    this(arg1, arg2, false, 2)
   }
 
-  def this(arg1: String, arg2: String, arg3: Path, b: Boolean) = {
-    this(arg1, arg2, arg3, false, 3)
+  def this(arg1: String, arg2: String, b: Boolean) = {
+    this(arg1, arg2, false, 3)
   }
 }
 
