@@ -87,16 +87,6 @@ class HadoopMapReduceCommitProtocol(
   @transient private var committer: OutputCommitter = _
 
   /**
-   * Checks whether there are files to be committed to a valid output location.
-   *
-   * As committing and aborting a job occurs on driver, where `addedAbsPathFiles` is always null,
-   * it is necessary to check whether a valid output path is specified.
-   * [[HadoopMapReduceCommitProtocol#path]] need not be a valid [[org.apache.hadoop.fs.Path]] for
-   * committers not writing to distributed file systems.
-   */
-  private val hasValidPath = Try { new Path(path) }.isSuccess
-
-  /**
    * Tracks files staged by this task for absolute output paths. These outputs are not managed by
    * the Hadoop OutputCommitter, so we must move these to their final locations on job commit.
    *
@@ -121,13 +111,13 @@ class HadoopMapReduceCommitProtocol(
     format.getOutputCommitter(context)
   }
 
-  override def getOutputPath(): Path = new Path(path)
+  override def getOutputPath(): Path = Try { new Path(path) }.getOrElse(null)
 
   override def getWorkPath: Path = {
     if (dynamicPartitionOverwrite) {
       stagingDir
     } else {
-      new Path(path)
+      getOutputPath()
     }
   }
 
@@ -206,7 +196,7 @@ class HadoopMapReduceCommitProtocol(
   override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
     committer.commitJob(jobContext)
 
-    if (hasValidPath) {
+    if (hasOutputPath()) {
       val (allAbsPathFiles, allPartitionPaths) =
         taskCommits.map(_.obj.asInstanceOf[(Map[String, String], Set[String])]).unzip
       val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
@@ -270,7 +260,7 @@ class HadoopMapReduceCommitProtocol(
         logWarning(s"Exception while aborting ${jobContext.getJobID}", e)
     }
     try {
-      if (hasValidPath) {
+      if (hasOutputPath()) {
         val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
         fs.delete(stagingDir, true)
       }

@@ -21,6 +21,8 @@ import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, Random}
 
+import scala.util.Try
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapreduce._
@@ -71,7 +73,12 @@ abstract class FileCommitProtocol extends Logging {
   def getWorkPath(): Path = null
 
   /**
-   * Predicate: is there an output path?
+   * Checks whether there are files to be committed to a valid output location.
+   *
+   * As committing and aborting a job occurs on driver, where `addedAbsPathFiles` is always null,
+   * it is necessary to check whether a valid output path is specified.
+   * [[HadoopMapReduceCommitProtocol#path]] need not be a valid [[org.apache.hadoop.fs.Path]] for
+   * committers not writing to distributed file systems.
    */
   def hasOutputPath(): Boolean = {
     getOutputPath() != null;
@@ -268,11 +275,7 @@ object FileCommitProtocol extends Logging {
   }
 
   def getStagingDir(path: String, jobId: String): Path = {
-    try {
-      new Path(path, ".spark-staging-" + jobId)
-    } catch {
-      case _: Exception => null
-    }
+    Try { new Path(path, ".spark-staging-" + jobId) }.getOrElse(null)
   }
 
   def newVersionExternalTempPath(
@@ -290,15 +293,14 @@ object FileCommitProtocol extends Logging {
     }
   }
 
-
   private def getExtTmpPathRelTo(
       path: Path,
       hadoopConf: Configuration,
       stagingDir: String,
       engineType: String,
       jobId: String): Path = {
-    new Path(getStagingDir(path, hadoopConf, stagingDir, engineType, jobId),
-      "-ext-10000") // Hive uses 10000
+    // Hive uses 10000
+    new Path(getStagingDir(path, hadoopConf, stagingDir, engineType, jobId), "-ext-10000")
   }
 
   private def getExternalScratchDir(
