@@ -17,8 +17,10 @@
 #
 
 from pyspark.sql.functions import sha2
-from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
+from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException, \
+    SparkUpgradeException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
 
 
 class UtilsTests(ReusedSQLTestCase):
@@ -32,6 +34,13 @@ class UtilsTests(ReusedSQLTestCase):
             self.spark.sql("select `中文字段`")
         except AnalysisException as e:
             self.assertRegex(str(e), "Column '`中文字段`' does not exist")
+
+    def test_spark_upgrade_exception(self):
+        # SPARK-32161 : Test case to Handle SparkUpgradeException in pythonic way
+        df = self.spark.createDataFrame([("2014-31-12",)], ['date_str'])
+        df2 = df.select('date_str',
+                        to_date(from_unixtime(unix_timestamp('date_str', 'yyyy-dd-aa'))))
+        self.assertRaises(SparkUpgradeException, df2.collect)
 
     def test_capture_parse_exception(self):
         self.assertRaises(ParseException, lambda: self.spark.sql("abc"))
@@ -47,6 +56,14 @@ class UtilsTests(ReusedSQLTestCase):
         except IllegalArgumentException as e:
             self.assertRegex(e.desc, "1024 is not in the permitted values")
             self.assertRegex(e.stackTrace, "org.apache.spark.sql.functions")
+
+    def test_get_error_class_state(self):
+        # SPARK-36953: test CapturedException.getErrorClass and getSqlState (from SparkThrowable)
+        try:
+            self.spark.sql("""SELECT a""")
+        except AnalysisException as e:
+            self.assertEquals(e.getErrorClass(), "MISSING_COLUMN")
+            self.assertEquals(e.getSqlState(), "42000")
 
 
 if __name__ == "__main__":

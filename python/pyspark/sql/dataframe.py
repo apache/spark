@@ -1279,7 +1279,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 raise ValueError("Weights must be positive. Found weight value: %s" % w)
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
         rdd_array = self._jdf.randomSplit(
-            _to_list(self.sql_ctx._sc, weights), int(seed)  # type: ignore[attr-defined]
+            _to_list(
+                self.sql_ctx._sc,  # type: ignore[attr-defined]
+                cast(List["ColumnOrName"], weights)
+            ),
+            int(seed)
         )
         return [DataFrame(rdd, self.sql_ctx) for rdd in rdd_array]
 
@@ -1674,7 +1678,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             raise ValueError("should sort by at least one column")
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
-        jcols = [_to_java_column(c) for c in cols]
+        jcols = [_to_java_column(cast("ColumnOrName", c)) for c in cols]
         ascending = kwargs.get('ascending', True)
         if isinstance(ascending, (bool, int)):
             if not ascending:
@@ -2723,7 +2727,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         for c in col:
             if not isinstance(c, str):
                 raise TypeError("columns should be strings, but got %r" % type(c))
-        col = _to_list(self._sc, col)
+        col = _to_list(self._sc, cast(List["ColumnOrName"], col))
 
         if not isinstance(probabilities, (list, tuple)):
             raise TypeError("probabilities should be a list or tuple")
@@ -2732,7 +2736,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         for p in probabilities:
             if not isinstance(p, (float, int)) or p < 0 or p > 1:
                 raise ValueError("probabilities should be numerical (float, int) in [0,1].")
-        probabilities = _to_list(self._sc, probabilities)
+        probabilities = _to_list(self._sc, cast(List["ColumnOrName"], probabilities))
 
         if not isinstance(relativeError, (float, int)):
             raise TypeError("relativeError should be numerical (float, int)")

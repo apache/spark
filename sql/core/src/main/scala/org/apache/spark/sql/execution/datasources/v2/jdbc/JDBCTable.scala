@@ -73,11 +73,18 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
     }
   }
 
-  override def dropIndex(indexName: String): Boolean = {
-    throw new UnsupportedOperationException("dropIndex is not supported yet")
+  override def dropIndex(indexName: String): Unit = {
+    JdbcUtils.withConnection(jdbcOptions) { conn =>
+      JdbcUtils.classifyException(s"Failed to drop index: $indexName",
+        JdbcDialects.get(jdbcOptions.url)) {
+        JdbcUtils.dropIndex(conn, indexName, name, jdbcOptions)
+      }
+    }
   }
 
   override def listIndexes(): Array[TableIndex] = {
-    throw new UnsupportedOperationException("listIndexes is not supported yet")
+    JdbcUtils.withConnection(jdbcOptions) { conn =>
+      JdbcUtils.listIndexes(conn, name, jdbcOptions)
+    }
   }
 }

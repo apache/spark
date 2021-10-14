@@ -116,7 +116,7 @@ class Option:
 #     See the examples below:
 #     >>> from pyspark.pandas.config import show_options
 #     >>> show_options()
-_options = [
+_options: List[Option] = [
     Option(
         key="display.max_rows",
         doc=(
@@ -246,9 +246,9 @@ _options = [
         default="plotly",
         types=str,
     ),
-]  # type: List[Option]
+]
 
-_options_dict = dict(zip((option.key for option in _options), _options))  # type: Dict[str, Option]
+_options_dict: Dict[str, Option] = dict(zip((option.key for option in _options), _options))
 
 _key_format = "pandas_on_Spark.{}".format
 

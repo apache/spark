@@ -98,9 +98,9 @@ class PythonModelWrapper(object):
             # However, this is only possible with spark >= 3.0
             # s = F.struct(*data.columns)
             # return_col = self._model_udf(s)
-            column_labels = [
+            column_labels: List[Label] = [
                 (col,) for col in data._internal.spark_frame.select(return_col).columns
-            ]  # type: List[Label]
+            ]
             internal = data._internal.copy(
                 column_labels=column_labels, data_spark_columns=[return_col], data_fields=None
             )

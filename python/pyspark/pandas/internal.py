@@ -664,14 +664,14 @@ class InternalFrame(object):
                 NATURAL_ORDER_COLUMN_NAME, F.monotonically_increasing_id()
             )
 
-        self._sdf = spark_frame  # type: SparkDataFrame
+        self._sdf: SparkDataFrame = spark_frame
 
         # index_spark_columns
         assert all(
             isinstance(index_scol, Column) for index_scol in index_spark_columns
         ), index_spark_columns
 
-        self._index_spark_columns = index_spark_columns  # type: List[Column]
+        self._index_spark_columns: List[Column] = index_spark_columns
 
         # data_spark_columns
         if data_spark_columns is None:
@@ -684,10 +684,10 @@ class InternalFrame(object):
                 )
                 and col not in HIDDEN_COLUMNS
             ]
-            self._data_spark_columns = data_spark_columns  # type: List[Column]
         else:
             assert all(isinstance(scol, Column) for scol in data_spark_columns)
-            self._data_spark_columns = data_spark_columns
+
+        self._data_spark_columns: List[Column] = data_spark_columns
 
         # fields
         if index_fields is None:
@@ -755,7 +755,7 @@ class InternalFrame(object):
                 for index_field, struct_field in zip(index_fields, struct_fields)
             ), (index_fields, struct_fields)
 
-        self._index_fields = index_fields  # type: List[InternalField]
+        self._index_fields: List[InternalField] = index_fields
 
         assert all(
             isinstance(ops.dtype, Dtype.__args__)  # type: ignore[attr-defined]
@@ -773,7 +773,7 @@ class InternalFrame(object):
                 for data_field, struct_field in zip(data_fields, struct_fields)
             ), (data_fields, struct_fields)
 
-        self._data_fields = data_fields  # type: List[InternalField]
+        self._data_fields: List[InternalField] = data_fields
 
         # index_names
         if not index_names:
@@ -787,13 +787,11 @@ class InternalFrame(object):
             is_name_like_tuple(index_name, check_type=True) for index_name in index_names
         ), index_names
 
-        self._index_names = index_names  # type: List[Optional[Label]]
+        self._index_names: List[Optional[Label]] = index_names
 
         # column_labels
         if column_labels is None:
-            self._column_labels = [
-                (col,) for col in spark_frame.select(self._data_spark_columns).columns
-            ]  # type: List[Label]
+            column_labels = [(col,) for col in spark_frame.select(self._data_spark_columns).columns]
         else:
             assert len(column_labels) == len(self._data_spark_columns), (
                 len(column_labels),
@@ -808,13 +806,12 @@ class InternalFrame(object):
                     for column_label in column_labels
                 ), column_labels
                 assert len(set(len(label) for label in column_labels)) <= 1, column_labels
-            self._column_labels = column_labels
+
+        self._column_labels: List[Label] = column_labels
 
         # column_label_names
         if column_label_names is None:
-            self._column_label_names = [None] * column_labels_level(
-                self._column_labels
-            )  # type: List[Optional[Label]]
+            column_label_names = [None] * column_labels_level(self._column_labels)
         else:
             if len(self._column_labels) > 0:
                 assert len(column_label_names) == column_labels_level(self._column_labels), (
@@ -827,7 +824,8 @@ class InternalFrame(object):
                 is_name_like_tuple(column_label_name, check_type=True)
                 for column_label_name in column_label_names
             ), column_label_names
-            self._column_label_names = column_label_names
+
+        self._column_label_names: List[Optional[Label]] = column_label_names
 
     @staticmethod
     def attach_default_index(
@@ -1439,18 +1437,20 @@ class InternalFrame(object):
         :return: the created immutable DataFrame
         """
 
-        index_names = [
+        index_names: List[Optional[Label]] = [
             name if name is None or isinstance(name, tuple) else (name,) for name in pdf.index.names
-        ]  # type: List[Optional[Label]]
+        ]
 
         columns = pdf.columns
+        column_labels: List[Label]
         if isinstance(columns, pd.MultiIndex):
-            column_labels = columns.tolist()  # type: List[Label]
+            column_labels = columns.tolist()
         else:
             column_labels = [(col,) for col in columns]
-        column_label_names = [
+
+        column_label_names: List[Optional[Label]] = [
             name if name is None or isinstance(name, tuple) else (name,) for name in columns.names
-        ]  # type: List[Optional[Label]]
+        ]
 
         prefer_timestamp_ntz = is_timestamp_ntz_preferred()
 

@@ -1710,6 +1710,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_TWOLEVEL_AGG_MAP_PARTIAL_ONLY =
+    buildConf("spark.sql.codegen.aggregate.map.twolevel.partialOnly")
+      .internal()
+      .doc("Enable two-level aggregate hash map for partial aggregate only, " +
+        "because final aggregate might get more distinct keys compared to partial aggregate. " +
+        "Overhead of looking up 1st-level map might dominate when having a lot of distinct keys.")
+      .version("3.2.1")
+      .booleanConf
+      .createWithDefault(true)
+
   val ENABLE_VECTORIZED_HASH_MAP =
     buildConf("spark.sql.codegen.aggregate.map.vectorized.enable")
       .internal()
@@ -3364,7 +3374,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.keepCommandOutputSchema")
       .internal()
       .doc("When true, Spark will keep the output schema of commands such as SHOW DATABASES " +
-        "unchanged, for v1 catalog and/or table.")
+        "unchanged.")
       .version("3.0.2")
       .booleanConf
       .createWithDefault(false)
