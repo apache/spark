@@ -21,9 +21,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{OutputCommitter, TaskAttemptContext}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.internal.io.{FileNameSpec, HadoopMapReduceCommitProtocol}
 
 /**
  * A variant of [[HadoopMapReduceCommitProtocol]] that allows specifying the actual
@@ -32,32 +30,25 @@ import org.apache.spark.sql.internal.SQLConf
 class SQLPathHadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
+    stagingDir: Path,
     dynamicPartitionOverwrite: Boolean = false)
-  extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
+  extends HadoopMapReduceCommitProtocol(jobId, path, stagingDir, dynamicPartitionOverwrite)
     with Serializable with Logging {
-
-  private val committerStagingDir = SQLPathOutputCommitter.newVersionExternalTempPath(
-    jobId, new Path(path), SparkSession.getActiveSession.get.sharedState.hadoopConf,
-    SQLConf.get.getConfString("spark.sql.source.stagingDir", ".stagingDir"))
 
   val sqlPathOutputCommitter: SQLPathOutputCommitter =
     committer.asInstanceOf[SQLPathOutputCommitter]
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
-    // The specified output committer is a FileOutputCommitter.
-    // So, we will use the FileOutputCommitter-specified constructor.
-    val committerOutputPath = new Path(path)
-    val committer =
-      new SQLPathOutputCommitter(committerStagingDir, committerOutputPath, context)
+    val committer = new SQLPathOutputCommitter(stagingDir, new Path(path), context)
     logInfo(s"Using output committer class ${committer.getClass.getCanonicalName}")
     committer
   }
 
   override def newTaskTempFile(
-    taskContext: TaskAttemptContext,
-    dir: Option[String],
-    ext: String): String = {
-    val filename = getFilename(taskContext, ext)
+      taskContext: TaskAttemptContext,
+      dir: Option[String],
+      spec: FileNameSpec): String = {
+    val filename = getFilename(taskContext, spec)
     dir.map { d =>
       new Path(
         new Path(sqlPathOutputCommitter.getTaskAttemptPath(taskContext), d), filename).toString

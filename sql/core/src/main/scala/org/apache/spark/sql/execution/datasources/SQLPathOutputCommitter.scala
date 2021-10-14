@@ -199,10 +199,13 @@ class SQLPathOutputCommitter(
       if (this.skipCleanup) {
         logInfo("Skip cleanup the _temporary folders under job's output directory in commitJob.")
       } else {
-        try this.cleanupJob(context)
-        catch {
+        try {
+          this.cleanupJob(context)
+        } catch {
           case var8: IOException =>
-            if (!this.ignoreCleanupFailures) throw var8
+            if (!this.ignoreCleanupFailures) {
+              throw var8
+            }
             logError("Error in cleanup job, manually cleanup is needed.", var8)
         }
       }
@@ -267,13 +270,13 @@ class SQLPathOutputCommitter(
     } finally {
       if (d != null) {
         if (var6 != null) {
-          try d.close()
-          catch {
+          try {
+            d.close()
+          } catch {
             case var20: Throwable =>
               var6.addSuppressed(var20)
           }
-        }
-        else {
+        } else {
           d.close()
         }
       }
@@ -296,8 +299,7 @@ class SQLPathOutputCommitter(
       if (!(fs.rename(from.getPath, to))) {
         throw new IOException("Failed to rename " + from + " to " + to)
       }
-    }
-    else {
+    } else {
       fs.mkdirs(to)
       val var5: Array[FileStatus] = fs.listStatus(from.getPath)
       val var6: Int = var5.length
@@ -316,8 +318,9 @@ class SQLPathOutputCommitter(
     if (this.hasOutputPath) {
       val pendingJobAttemptsPath: Path = this.getPendingJobAttemptsPath
       val fs: FileSystem = pendingJobAttemptsPath.getFileSystem(context.getConfiguration)
-      try fs.delete(pendingJobAttemptsPath, true)
-      catch {
+      try {
+        fs.delete(pendingJobAttemptsPath, true)
+      } catch {
         case var5: FileNotFoundException =>
           if (!(this.isCommitJobRepeatable(context))) {
             throw var5
@@ -466,12 +469,10 @@ class SQLPathOutputCommitter(
             throw new IOException(
               "Could not rename " + previousCommittedTaskPath + " to " + committedTaskPath)
           }
-        }
-        else {
+        } else {
           logWarning(attemptId + " had no output to recover.")
         }
-      }
-      else {
+      } else {
         try {
           val from: FileStatus = fs.getFileStatus(previousCommittedTaskPath)
           logInfo("Recovering task for upgrading scenario, moving files from " +
@@ -483,8 +484,7 @@ class SQLPathOutputCommitter(
         }
         logInfo("Done recovering task " + attemptId)
       }
-    }
-    else {
+    } else {
       logWarning("Output Path is null in recoverTask()")
     }
   }
@@ -501,85 +501,5 @@ class SQLPathOutputCommitter(
     sb.append(", ignoreCleanupFailures=").append(this.ignoreCleanupFailures)
     sb.append('}')
     sb.toString
-  }
-}
-
-object SQLPathOutputCommitter extends Logging {
-  def newVersionExternalTempPath(
-      jobId: String,
-      path: Path,
-      hadoopConf: Configuration,
-      stagingDir: String): Path = {
-    val extURI = path.toUri
-    if (extURI.getScheme == "viewfs") {
-      getExtTmpPathRelTo(path.getParent, hadoopConf, stagingDir, jobId)
-    } else {
-      new Path(getExternalScratchDir(extURI, hadoopConf, stagingDir, jobId), "-ext-10000")
-    }
-  }
-
-
-  private def getExtTmpPathRelTo(
-      path: Path,
-      hadoopConf: Configuration,
-      stagingDir: String,
-      jobId: String): Path = {
-    new Path(getStagingDir(path, hadoopConf, stagingDir, jobId), "-ext-10000") // Hive uses 10000
-  }
-
-  private def getExternalScratchDir(
-      extURI: URI,
-      hadoopConf: Configuration,
-      stagingDir: String,
-      jobId: String): Path = {
-      getStagingDir(
-      new Path(extURI.getScheme, extURI.getAuthority, extURI.getPath),
-      hadoopConf,
-      stagingDir,
-      jobId: String)
-  }
-
-  private def getStagingDir(
-      inputPath: Path,
-      hadoopConf: Configuration,
-      stagingDir: String,
-      jobId: String): Path = {
-    val inputPathName: String = inputPath.toString
-    val fs: FileSystem = inputPath.getFileSystem(hadoopConf)
-    var stagingPathName: String =
-      if (inputPathName.indexOf(stagingDir) == -1) {
-        new Path(inputPathName, stagingDir).toString
-      } else {
-        inputPathName.substring(0, inputPathName.indexOf(stagingDir) + stagingDir.length)
-      }
-
-    // SPARK-20594: This is a walk-around fix to resolve a Hive bug. Hive requires that the
-    // staging directory needs to avoid being deleted when users set hive.exec.stagingdir
-    // under the table directory.
-    if (isSubDir(new Path(stagingPathName), inputPath, fs) &&
-      !stagingPathName.stripPrefix(inputPathName).stripPrefix("/").startsWith(".")) {
-      logDebug(s"The staging dir '$stagingPathName' should be a child directory starts " +
-        "with '.' to avoid being deleted if we set hive.exec.stagingdir under the table " +
-        "directory.")
-      stagingPathName = new Path(inputPathName, ".hive-staging").toString
-    }
-
-    val dir = fs.makeQualified(
-      new Path(stagingPathName + "_" + executionId + "-" + jobId))
-    logDebug("Created staging dir = " + dir + " for path = " + inputPath)
-    dir
-  }
-
-  // HIVE-14259 removed FileUtils.isSubDir(). Adapted it from Hive 1.2's FileUtils.isSubDir().
-  private def isSubDir(p1: Path, p2: Path, fs: FileSystem): Boolean = {
-    val path1 = fs.makeQualified(p1).toString + Path.SEPARATOR
-    val path2 = fs.makeQualified(p2).toString + Path.SEPARATOR
-    path1.startsWith(path2)
-  }
-
-  private def executionId: String = {
-    val rand: Random = new Random
-    val format = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS", Locale.US)
-    "spark_" + format.format(new Date) + "_" + Math.abs(rand.nextLong)
   }
 }
