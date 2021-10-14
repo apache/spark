@@ -20,7 +20,6 @@ package org.apache.spark.deploy.yarn
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
-import scala.util.control.NonFatal
 
 import com.google.common.base.Strings
 import org.apache.hadoop.conf.Configuration
