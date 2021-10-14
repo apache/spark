@@ -292,6 +292,8 @@ abstract class BaseDynamicPartitionDataWriter(
       committer.newTaskTempFile(taskAttemptContext, partDir, fileNameSpec)
     }
 
+    println(s"write current path = ${currentPath}")
+
     currentWriter = description.outputWriterFactory.newInstance(
       path = currentPath,
       dataSchema = description.dataColumns.toStructType,

@@ -35,10 +35,11 @@ class SQLPathHadoopMapReduceCommitProtocol(
   extends HadoopMapReduceCommitProtocol(jobId, path, stagingDir, dynamicPartitionOverwrite)
     with Serializable with Logging {
 
-  val sqlPathOutputCommitter: SQLPathOutputCommitter =
+  def sqlPathOutputCommitter(): SQLPathOutputCommitter =
     committer.asInstanceOf[SQLPathOutputCommitter]
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
+    println(s"output path = ${path}")
     val committer = new SQLPathOutputCommitter(stagingDir, new Path(path), context)
     logInfo(s"Using output committer class ${committer.getClass.getCanonicalName}")
     committer

@@ -18,12 +18,8 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.{FileNotFoundException, IOException}
-import java.net.URI
-import java.text.SimpleDateFormat
-import java.util.{Date, Locale, Random}
 
 import com.google.common.base.Preconditions
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.mapreduce.{JobContext, JobStatus, TaskAttemptContext, TaskAttemptID}
 import org.apache.hadoop.mapreduce.lib.output.PathOutputCommitter
