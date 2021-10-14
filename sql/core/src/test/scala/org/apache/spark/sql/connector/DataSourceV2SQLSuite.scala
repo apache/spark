@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import java.sql.Timestamp
+import java.sql.{SQLFeatureNotSupportedException, Timestamp}
 import java.time.LocalDate
 
 import scala.collection.JavaConverters._
@@ -2967,6 +2967,17 @@ class DataSourceV2SQLSuite
 
     assert(sql("SHOW CATALOGS LIKE 'testcat*'").collect === Array(
       Row("testcat"), Row("testcat2")))
+  }
+
+  test("CREATE INDEX should fail") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string COMMENT 'hello') USING foo")
+      val ex = intercept[SQLFeatureNotSupportedException] {
+        sql(s"CREATE index i1 ON $t(col1)")
+      }
+      assert(ex.getMessage.contains("CreateIndex not supported yet."))
+    }
   }
 
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
