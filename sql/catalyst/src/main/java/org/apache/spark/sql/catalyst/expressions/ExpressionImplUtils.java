@@ -27,35 +27,35 @@ import java.security.GeneralSecurityException;
  * An utility class for constructing expressions.
  */
 public class ExpressionImplUtils {
-    public static byte[] aesEncrypt(byte[] input, byte[] key) {
-      return aesInternal(input, key, Cipher.ENCRYPT_MODE);
-    }
+  public static byte[] aesEncrypt(byte[] input, byte[] key) {
+    return aesInternal(input, key, Cipher.ENCRYPT_MODE);
+  }
 
-    public static byte[] aesDecrypt(byte[] input, byte[] key) {
-      return aesInternal(input, key, Cipher.DECRYPT_MODE);
-    }
+  public static byte[] aesDecrypt(byte[] input, byte[] key) {
+    return aesInternal(input, key, Cipher.DECRYPT_MODE);
+  }
 
-    private static byte[] aesInternal(byte[] input, byte[] key, int mode) {
-      int inputLength = input.length;
-      int keyLength = key.length;
-      SecretKeySpec secretKey;
+  private static byte[] aesInternal(byte[] input, byte[] key, int mode) {
+    int inputLength = input.length;
+    int keyLength = key.length;
+    SecretKeySpec secretKey;
 
-      switch (keyLength) {
-        case 16:
-        case 24:
-        case 32:
-          secretKey = new SecretKeySpec(key, 0, keyLength, "AES");
-          break;
-        default:
-          throw QueryExecutionErrors.invalidAesKeyLengthError(keyLength);
-        }
-
-      try {
-        Cipher cipher = Cipher.getInstance("AES");
-        cipher.init(mode, secretKey);
-        return cipher.doFinal(input, 0, inputLength);
-      } catch (GeneralSecurityException e) {
-          throw new RuntimeException(e);
+    switch (keyLength) {
+      case 16:
+      case 24:
+      case 32:
+        secretKey = new SecretKeySpec(key, 0, keyLength, "AES");
+        break;
+      default:
+        throw QueryExecutionErrors.invalidAesKeyLengthError(keyLength);
       }
+
+    try {
+      Cipher cipher = Cipher.getInstance("AES");
+      cipher.init(mode, secretKey);
+      return cipher.doFinal(input, 0, inputLength);
+    } catch (GeneralSecurityException e) {
+        throw new RuntimeException(e);
     }
+  }
 }
