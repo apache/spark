@@ -39,7 +39,7 @@ USING file_format [ OPTIONS ( key = val [ , ... ] ) ]
 
 `hive_format` is defined as
 ```sql
- [ ROW FORMAT row_format ] [ STORED AS hive_serde ]
+[ ROW FORMAT row_format ] [ STORED AS hive_serde ]
 ```
 
 ### Parameters
@@ -67,7 +67,7 @@ USING file_format [ OPTIONS ( key = val [ , ... ] ) ]
 
 * **hive_format**
 
-    Specifies the file format to use for the insert. Both `row_format` and `hive_serde` are both optional. `ROW FORMAT SERDE` can only be used with `TEXTFILE`, `SEQUENCEFILE`, or `RCFILE`, while `ROW FORMAT DELIMITED` can only be used with `TEXTFILE`. If both are not defined, spark uses `LazySimpleSerDe`.
+    Specifies the file format to use for the insert. Both `row_format` and `hive_serde` are optional. `ROW FORMAT SERDE` can only be used with `TEXTFILE`, `SEQUENCEFILE`, or `RCFILE`, while `ROW FORMAT DELIMITED` can only be used with `TEXTFILE`. If both are not defined, spark uses `TEXTFILE`.
 
 * **VALUES ( { value `|` NULL } [ , ... ] ) [ , ( ... ) ]**
 
