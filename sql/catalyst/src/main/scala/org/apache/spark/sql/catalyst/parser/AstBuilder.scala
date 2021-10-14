@@ -4416,7 +4416,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitCreateIndex(ctx: CreateIndexContext): LogicalPlan = withOrigin(ctx) {
     val (indexName, indexType) = if (ctx.identifier.size() == 1) {
-      (ctx.identifier(0).getText, null)
+      (ctx.identifier(0).getText, "")
     } else {
       (ctx.identifier(0).getText, ctx.identifier(1).getText)
     }

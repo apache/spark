@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.sql.SQLFeatureNotSupportedException
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.NamedReference
 
@@ -31,8 +30,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference
  * Physical plan node for creating an index.
  */
 case class CreateIndexExec(
-    catalog: TableCatalog,
-    ident: Identifier,
+    table: Table,
     indexName: String,
     indexType: String,
     ignoreIfExists: Boolean,
@@ -42,7 +40,6 @@ case class CreateIndexExec(
   extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     try {
-      val table = catalog.loadTable(ident)
       val colProperties: Array[util.Map[NamedReference, util.Properties]] =
         columns.zip(columnProperties).map {
         case (column, map) =>
@@ -58,9 +55,7 @@ case class CreateIndexExec(
         case _: SupportsIndex =>
           table.asInstanceOf[SupportsIndex].createIndex(indexName, indexType, columns.toArray,
             colProperties, indexProperties)
-        case _ => throw new SQLFeatureNotSupportedException(s"CreateIndex not supported yet." +
-          s" IndexName $indexName indexType $indexType columns $columns" +
-          s" columnProperties $columnProperties properties $properties")
+        case _ =>
       }
     } catch {
       case _: IndexAlreadyExistsException if ignoreIfExists =>

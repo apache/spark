@@ -128,7 +128,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
         indexProperties = indexProperties + " " + s"$k $v"
       }
     }
-    val iType = if (indexType == null || indexType.isEmpty) {
+    val iType = if (indexType.isEmpty) {
       ""
     } else {
       if (indexType.length > 1 && !indexType.equalsIgnoreCase("BTREE") &&
