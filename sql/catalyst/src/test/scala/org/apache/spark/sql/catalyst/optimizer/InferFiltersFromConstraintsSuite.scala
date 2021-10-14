@@ -317,16 +317,32 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     }
   }
 
-  test("SPARK-36978: IsNotNull constraints on nested types should apply at the member" +
+  test("SPARK-36978: IsNotNull constraints on nested types should apply at the member " +
     "field instead of the root level nested type") {
-     val nestedTestRelation = LocalRelation('a.struct(StructType(
-      StructField("cstr", StringType) :: StructField("cint", IntegerType) :: Nil)))
-    val originalQuery = nestedTestRelation.
-      where('a.getField("cint") === 1 && 'a.getField("cstr") === "abc").analyze
+    val structTestRelation = LocalRelation('a.struct(StructType(
+      StructField("cstruct", StructType(StructField("cstr", StringType) :: Nil))
+        :: StructField("cint", IntegerType) :: Nil)))
+    val originalQuery = structTestRelation
+      .where('a.getField("cint") === 1 && 'a.getField("cstruct").getField("cstr") === "abc").analyze
 
-    val correctAnswer = nestedTestRelation
-      .where(IsNotNull('a.getField("cint")) && IsNotNull('a.getField("cstr"))
-        && 'a.getField("cint") === 1 && 'a.getField("cstr") === "abc")
+    val correctAnswer = structTestRelation
+      .where(IsNotNull('a.getField("cint")) && IsNotNull('a.getField("cstruct").getField("cstr"))
+        && 'a.getField("cint") === 1 && 'a.getField("cstruct").getField("cstr") === "abc")
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-36978: IsNotNull constraints for nested types apply to the ExtractValue which " +
+    "only has ExtractValue/Attribute children") {
+    val arrayTestRelation = LocalRelation('a.array(IntegerType))
+    val originalQuery = arrayTestRelation
+      .where(GetArrayItem(ArrayDistinct('a), 0) === 1 && GetArrayItem('a, 1) === 1)
+      .analyze
+
+    val correctAnswer = arrayTestRelation
+      .where(IsNotNull('a) && IsNotNull(GetArrayItem('a, 1))
+        && GetArrayItem(ArrayDistinct('a), 0) === 1 && GetArrayItem('a, 1) === 1)
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)

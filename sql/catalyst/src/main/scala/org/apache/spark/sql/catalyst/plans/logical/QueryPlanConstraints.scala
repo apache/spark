@@ -117,12 +117,30 @@ trait ConstraintHelper {
       case _ => scanNullIntolerantAttribute(constraint).map(IsNotNull(_))
     }
 
+  private def isLeafExtractValue(e: ExtractValue): Boolean = {
+    e.children.map(c => c.isInstanceOf[Attribute] || c.isInstanceOf[Literal]).forall(_ == true)
+  }
+
+  /*
+   * Returns true iff `expr` is a tree of `ExtractValue`s.
+   */
+  private def isExtractValueSeq(expr: Expression): Boolean = expr match {
+    case e: ExtractValue => isLeafExtractValue(e) ||
+      e.children.map(isExtractValueSeq).forall(_ == true)
+    case _ => false
+  }
+
   /**
    * Recursively explores the expressions which are null intolerant and returns all
    * attributes/ExtractValues in these expressions for scalar/nested types respectively.
    */
   private def scanNullIntolerantAttribute(expr: Expression): Seq[Expression] = expr match {
-    case e: ExtractValue => Seq(e)
+    case e: ExtractValue =>
+      if (isExtractValueSeq(e)) {
+        Seq(e)
+      } else {
+        expr.children.flatMap(scanNullIntolerantAttribute)
+      }
     case a: Attribute => Seq(a)
     case _: NullIntolerant => expr.children.flatMap(scanNullIntolerantAttribute)
     case _ => Seq.empty[Attribute]
