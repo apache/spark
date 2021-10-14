@@ -22,6 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
@@ -127,6 +128,11 @@ class CatalogManager(
       // when we switch back to session catalog, the current namespace definitely is ["default"].
       v1SessionCatalog.setCurrentDatabase(SessionCatalog.DEFAULT_DATABASE)
     }
+  }
+
+  def listCatalogs(pattern: Option[String]): Seq[String] = {
+    val allCatalogs = synchronized(catalogs.keys.toSeq).sorted
+    pattern.map(StringUtils.filterPattern(allCatalogs, _)).getOrElse(allCatalogs)
   }
 
   // Clear all the registered catalogs. Only used in tests.

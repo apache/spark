@@ -567,4 +567,13 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       parser.parsePlan("SET CATALOG `a b c`"),
       SetCatalogCommand("a b c"))
   }
+
+  test("SHOW CATALOGS") {
+    comparePlans(
+      parser.parsePlan("SHOW CATALOGS"),
+      ShowCatalogsCommand(None))
+    comparePlans(
+      parser.parsePlan("SHOW CATALOGS LIKE 'defau*'"),
+      ShowCatalogsCommand(Some("defau*")))
+  }
 }
