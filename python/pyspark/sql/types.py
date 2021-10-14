@@ -1537,7 +1537,9 @@ def _create_row_inbound_converter(dataType: DataType) -> Callable:
     return lambda *a: dataType.fromInternal(a)
 
 
-def _create_row(fields: Union[Row, List[str]], values: Union[Tuple[Any, ...], List[Any]]) -> "Row":
+def _create_row(
+    fields: Union["Row", List[str]], values: Union[Tuple[Any, ...], List[Any]]
+) -> "Row":
     row = Row(*values)
     row.__fields__ = fields
     return row
