@@ -132,11 +132,8 @@ class CatalogManager(
   }
 
   def listCatalogs(pattern: Option[String]): Seq[String] = synchronized {
-    val result = new ArrayBuffer[String]
-    val allCatalogs = catalogs.keys.toSeq.sorted
-    val matched = pattern.map(StringUtils.filterPattern(allCatalogs, _)).getOrElse(allCatalogs)
-    result ++= matched
-    result.toSeq
+    val allCatalogs = synchronized(catalogs.keys.toSeq).sorted
+    pattern.map(StringUtils.filterPattern(allCatalogs, _)).getOrElse(allCatalogs)
   }
 
   // Clear all the registered catalogs. Only used in tests.
