@@ -349,7 +349,7 @@ private[hive] class HiveClientImpl(
       name: String,
       ignoreIfNotExists: Boolean,
       cascade: Boolean): Unit = withHiveState {
-      client.dropDatabase(name, true, ignoreIfNotExists, cascade)
+    client.dropDatabase(name, true, ignoreIfNotExists, cascade)
   }
 
   override def alterDatabase(database: CatalogDatabase): Unit = withHiveState {
