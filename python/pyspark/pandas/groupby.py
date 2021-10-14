@@ -55,10 +55,7 @@ else:
     _builtin_table = SelectionMixin._builtin_table
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
-from pyspark.sql.types import (  # noqa: F401
-    DataType,
-    FloatType,
-    DoubleType,
+from pyspark.sql.types import (
     NumericType,
     StructField,
     StructType,
@@ -98,7 +95,7 @@ from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_pre
 from pyspark.pandas.exceptions import DataError
 
 if TYPE_CHECKING:
-    from pyspark.pandas.window import RollingGroupby, ExpandingGroupby  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.window import RollingGroupby, ExpandingGroupby
 
 
 # to keep it the same as pandas

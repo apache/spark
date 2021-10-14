@@ -25,12 +25,11 @@ import typing
 from collections import Iterable
 from distutils.version import LooseVersion
 from inspect import getfullargspec, isclass
-from typing import (  # noqa: F401
+from typing import (
     Any,
     Callable,
     Generic,
     List,
-    Optional,
     Tuple,
     Union,
     Type,

@@ -16,7 +16,7 @@
 #
 from abc import ABCMeta, abstractmethod
 from functools import partial
-from typing import (  # noqa: F401 (SPARK-34943)
+from typing import (
     Any,
     Callable,
     Generic,

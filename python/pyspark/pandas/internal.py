@@ -29,7 +29,6 @@ from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame, Win
 from pyspark.sql.types import (  # noqa: F401
     BooleanType,
     DataType,
-    IntegralType,
     LongType,
     StructField,
     StructType,
@@ -43,7 +42,7 @@ from pyspark.pandas._typing import Label
 
 if TYPE_CHECKING:
     # This is required in old Python 3.5 to prevent circular reference.
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.series import Series
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.typedef import (

@@ -112,10 +112,10 @@ from pyspark.pandas.typedef import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import ColumnOrName  # noqa: F401 (SPARK-34943)
+    from pyspark.sql._typing import ColumnOrName
 
-    from pyspark.pandas.groupby import SeriesGroupBy  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.groupby import SeriesGroupBy
+    from pyspark.pandas.indexes import Index
 
 # This regular expression pattern is complied and defined here to avoid to compile the same
 # pattern every time it is used in _repr_ in Series.
