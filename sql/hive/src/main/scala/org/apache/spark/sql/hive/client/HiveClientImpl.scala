@@ -771,7 +771,8 @@ private[hive] class HiveClientImpl(
       table: CatalogTable,
       predicates: Seq[Expression]): Seq[CatalogTablePartition] = withHiveState {
     val hiveTable = toHiveTable(table, Some(userName))
-    val parts = shim.getPartitionsByFilter(client, hiveTable, predicates).map(fromHivePartition)
+    val parts = shim.getPartitionsByFilter(client, hiveTable, predicates)
+      .map(fromHivePartition)
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
     parts
   }
@@ -895,7 +896,7 @@ private[hive] class HiveClientImpl(
       replace: Boolean,
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit = withHiveState {
-    client.getTable(dbName, tableName, true /* throw exception */)
+    val hiveTable = client.getTable(dbName, tableName, true /* throw exception */)
     shim.loadPartition(
       client,
       new Path(loadPath), // TODO: Use URI
@@ -927,7 +928,7 @@ private[hive] class HiveClientImpl(
       partSpec: java.util.LinkedHashMap[String, String],
       replace: Boolean,
       numDP: Int): Unit = withHiveState {
-    client.getTable(dbName, tableName, true /* throw exception */)
+    val hiveTable = client.getTable(dbName, tableName, true /* throw exception */)
     shim.loadDynamicPartitions(
       client,
       new Path(loadPath),
@@ -955,7 +956,7 @@ private[hive] class HiveClientImpl(
   }
 
   override def getFunctionOption(
-    db: String, name: String): Option[CatalogFunction] = withHiveState {
+      db: String, name: String): Option[CatalogFunction] = withHiveState {
     shim.getFunctionOption(client, db, name)
   }
 
