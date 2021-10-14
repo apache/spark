@@ -32,7 +32,7 @@ The inserted rows can be specified by value expressions or result from a query.
 
 ```sql
 INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
-    { USING file_format [ OPTIONS ( key = val [ , ... ] ) ] | [ ROW FORMAT row_format ] [ STORED AS file_format ] }
+    { USING spark_file_format [ OPTIONS ( key = val [ , ... ] ) ] | [ ROW FORMAT row_format ] [ STORED AS hive_file_format ] }
     { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
 ```
 
@@ -40,10 +40,10 @@ INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
 
 * **directory_path**
 
-    Specifies the destination directory. It can also be specified in `OPTIONS` using `path`.
-    The `LOCAL` keyword is used to specify that the directory is on the local file system.
+    Specifies the destination directory. The `LOCAL` keyword is used to specify that the directory is on the local file system.
+    In spark file format, it can also be specified in `OPTIONS` using `path`.
 
-* **file_format**
+* **spark_file_format**
 
     Specifies the file format to use for the insert. Valid options are `TEXT`, `CSV`, `JSON`, `JDBC`, `PARQUET`, `ORC`, `HIVE`, `LIBSVM`, or a fully qualified class name of a custom implementation of `org.apache.spark.sql.execution.datasources.FileFormat`.
 
@@ -51,15 +51,11 @@ INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
 
     Specifies one or more options for the writing of the file format.
 
-* **directory_path**
-
-    Specifies the destination directory. The `LOCAL` keyword is used to specify that the directory is on the local file system.
-
 * **row_format**
 
     Specifies the row format for this insert. Valid options are `SERDE` clause and `DELIMITED` clause. `SERDE` clause can be used to specify a custom `SerDe` for this insert. Alternatively, `DELIMITED` clause can be used to specify the native `SerDe` and state the delimiter, escape character, null character, and so on.
 
-* **file_format**
+* **hive_file_format**
 
     Specifies the file format for this insert. Valid options are `TEXTFILE`, `SEQUENCEFILE`, `RCFILE`, `ORC`, `PARQUET`, and `AVRO`. You can also specify your own input and output format using `INPUTFORMAT` and `OUTPUTFORMAT`. `ROW FORMAT SERDE` can only be used with `TEXTFILE`, `SEQUENCEFILE`, or `RCFILE`, while `ROW FORMAT DELIMITED` can only be used with `TEXTFILE`.
 
