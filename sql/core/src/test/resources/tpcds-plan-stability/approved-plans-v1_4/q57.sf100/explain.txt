@@ -289,26 +289,6 @@ Condition : ((((d_year#7 = 1999) OR ((d_year#7 = 1998) AND (d_moy#8 = 12))) OR (
 
 (53) BroadcastExchange
 Input [3]: [d_date_sk#6, d_year#7, d_moy#8]
-<<<<<<< HEAD
-<<<<<<< HEAD
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#45]
-=======
-<<<<<<< HEAD
-<<<<<<< HEAD
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#48]
-=======
-<<<<<<< HEAD
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#48]
-=======
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#46]
->>>>>>> 7b99e32a26 (wip)
->>>>>>> 661766cab5 (wip)
-=======
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#45]
->>>>>>> 7190faa7a9 (update manifest files)
->>>>>>> 10c61d45bc (update manifest files)
-=======
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#45]
->>>>>>> 1afa00695f (fix after rebase)
 
 

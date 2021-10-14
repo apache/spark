@@ -689,6 +689,7 @@ Input [12]: [ss_item_sk#120, ss_customer_sk#121, ss_cdemo_sk#122, ss_hdemo_sk#12
 Condition : (((((((isnotnull(ss_item_sk#120) AND isnotnull(ss_ticket_number#127)) AND isnotnull(ss_store_sk#125)) AND isnotnull(ss_customer_sk#121)) AND isnotnull(ss_cdemo_sk#122)) AND isnotnull(ss_promo_sk#126)) AND isnotnull(ss_hdemo_sk#123)) AND isnotnull(ss_addr_sk#124))
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 (114) BroadcastExchange
 Input [12]: [ss_item_sk#120, ss_customer_sk#121, ss_cdemo_sk#122, ss_hdemo_sk#123, ss_addr_sk#124, ss_store_sk#125, ss_promo_sk#126, ss_ticket_number#127, ss_wholesale_cost#128, ss_list_price#129, ss_coupon_amt#130, ss_sold_date_sk#131]
 Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, false] as bigint), 32) | (cast(input[7, int, false] as bigint) & 4294967295))),false), [id=#133]
@@ -711,6 +712,11 @@ Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, false]
 Input [12]: [ss_item_sk#120, ss_customer_sk#121, ss_cdemo_sk#122, ss_hdemo_sk#123, ss_addr_sk#124, ss_store_sk#125, ss_promo_sk#126, ss_ticket_number#127, ss_wholesale_cost#128, ss_list_price#129, ss_coupon_amt#130, ss_sold_date_sk#131]
 Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, false] as bigint), 32) | (cast(input[7, int, false] as bigint) & 4294967295))),false,false), [id=#133]
 >>>>>>> 0b00377599 (fix after rebase)
+=======
+(114) BroadcastExchange
+Input [12]: [ss_item_sk#120, ss_customer_sk#121, ss_cdemo_sk#122, ss_hdemo_sk#123, ss_addr_sk#124, ss_store_sk#125, ss_promo_sk#126, ss_ticket_number#127, ss_wholesale_cost#128, ss_list_price#129, ss_coupon_amt#130, ss_sold_date_sk#131]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, false] as bigint), 32) | (cast(input[7, int, false] as bigint) & 4294967295))),false), [id=#133]
+>>>>>>> b5a1d077b4 (rebase)
 
 (115) Scan parquet default.store_returns
 Output [3]: [sr_item_sk#134, sr_ticket_number#135, sr_returned_date_sk#136]
@@ -1019,6 +1025,7 @@ Condition : ((isnotnull(d_year#43) AND (d_year#43 = 1999)) AND isnotnull(d_date_
 (185) BroadcastExchange
 Input [2]: [d_date_sk#42, d_year#43]
 <<<<<<< HEAD
+<<<<<<< HEAD
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#199]
 =======
 <<<<<<< HEAD
@@ -1052,6 +1059,9 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#199]
 >>>>>>> 1afa00695f (fix after rebase)
 >>>>>>> 0b00377599 (fix after rebase)
+=======
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#199]
+>>>>>>> b5a1d077b4 (rebase)
 
 Subquery:2 Hosting operator id = 111 Hosting Expression = ss_sold_date_sk#131 IN dynamicpruning#132
 BroadcastExchange (189)
@@ -1067,6 +1077,7 @@ Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 =======
 <<<<<<< HEAD
@@ -1094,6 +1105,8 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 =======
 >>>>>>> 1afa00695f (fix after rebase)
 >>>>>>> 0b00377599 (fix after rebase)
+=======
+>>>>>>> b5a1d077b4 (rebase)
 (187) ColumnarToRow [codegen id : 1]
 Input [2]: [d_date_sk#146, d_year#147]
 
@@ -1102,6 +1115,7 @@ Input [2]: [d_date_sk#146, d_year#147]
 Condition : ((isnotnull(d_year#147) AND (d_year#147 = 2000)) AND isnotnull(d_date_sk#146))
 
 (189) BroadcastExchange
+<<<<<<< HEAD
 <<<<<<< HEAD
 Input [2]: [d_date_sk#146, d_year#147]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#200]
@@ -1125,5 +1139,9 @@ Input [2]: [d_date_sk#146, d_year#147]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#200]
 >>>>>>> 1afa00695f (fix after rebase)
 >>>>>>> 0b00377599 (fix after rebase)
+=======
+Input [2]: [d_date_sk#146, d_year#147]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#200]
+>>>>>>> b5a1d077b4 (rebase)
 
 

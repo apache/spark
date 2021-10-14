@@ -284,19 +284,7 @@ Input [3]: [d_date_sk#8, d_year#45, d_moy#46]
 
 (51) BroadcastExchange
 Input [1]: [d_date_sk#8]
-<<<<<<< HEAD
-<<<<<<< HEAD
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#49]
-=======
-<<<<<<< HEAD
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#49]
-=======
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#47]
->>>>>>> 7190faa7a9 (update manifest files)
->>>>>>> 10c61d45bc (update manifest files)
-=======
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#47]
->>>>>>> 1afa00695f (fix after rebase)
 
 Subquery:2 Hosting operator id = 23 Hosting Expression = sr_returned_date_sk#22 IN dynamicpruning#23
 BroadcastExchange (56)
@@ -324,25 +312,9 @@ Condition : (((((isnotnull(d_moy#49) AND isnotnull(d_year#48)) AND (d_moy#49 >= 
 Output [1]: [d_date_sk#24]
 Input [3]: [d_date_sk#24, d_year#48, d_moy#49]
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-(59) BroadcastExchange
-Input [1]: [d_date_sk#25]
-<<<<<<< HEAD
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#52]
-=======
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#52]
-=======
 (56) BroadcastExchange
 Input [1]: [d_date_sk#24]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#50]
->>>>>>> 7190faa7a9 (update manifest files)
->>>>>>> 10c61d45bc (update manifest files)
-=======
-(56) BroadcastExchange
-Input [1]: [d_date_sk#24]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#50]
->>>>>>> 1afa00695f (fix after rebase)
 
 Subquery:3 Hosting operator id = 33 Hosting Expression = cs_sold_date_sk#29 IN dynamicpruning#23
 
