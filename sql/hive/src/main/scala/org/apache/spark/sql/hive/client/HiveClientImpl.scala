@@ -275,20 +275,12 @@ private[hive] class HiveClientImpl(
   }
 
   /** Return the associated Hive [[SessionState]] of this [[HiveClientImpl]] */
-  override def getState: SessionState = withHiveState(state)
-
-  def withHiveClientCall[A](f: => A): A = {
-    try {
-      f
-    } finally {
-      HiveCatalogMetrics.incrementHiveClientCalls(1)
-    }
-  }
+  override def getState: SessionState = withHiveState(state)(0)
 
   /**
    * Runs `f` with ThreadLocal session state and classloaders configured for this version of hive.
    */
-  def withHiveState[A](f: => A): A = retryLocked {
+  def withHiveState[A](f: => A)(numClientCalls: Int = 1): A = retryLocked {
     val original = Thread.currentThread().getContextClassLoader
     val originalConfLoader = state.getConf.getClassLoader
     // We explicitly set the context class loader since "conf.setClassLoader" does
@@ -315,21 +307,22 @@ private[hive] class HiveClientImpl(
     } finally {
       state.getConf.setClassLoader(originalConfLoader)
       Thread.currentThread().setContextClassLoader(original)
+      HiveCatalogMetrics.incrementHiveClientCalls(numClientCalls)
     }
     ret
   }
 
   def setOut(stream: PrintStream): Unit = withHiveState {
     state.out = stream
-  }
+  }(0)
 
   def setInfo(stream: PrintStream): Unit = withHiveState {
     state.info = stream
-  }
+  }(0)
 
   def setError(stream: PrintStream): Unit = withHiveState {
     state.err = stream
-  }
+  }(0)
 
   private def setCurrentDatabaseRaw(db: String): Unit = {
     if (state.getCurrentDatabase != db) {
@@ -341,26 +334,22 @@ private[hive] class HiveClientImpl(
     }
   }
 
-  override def setCurrentDatabase(databaseName: String): Unit = withHiveState {
-      setCurrentDatabaseRaw(databaseName)
+  override def setCurrentDatabase(databaseName: String): Unit = {
+    setCurrentDatabaseRaw(databaseName)
   }
 
   override def createDatabase(
       database: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = withHiveState {
     val hiveDb = toHiveDatabase(database, Some(userName))
-    withHiveClientCall {
-      client.createDatabase(hiveDb, ignoreIfExists)
-    }
+    client.createDatabase(hiveDb, ignoreIfExists)
   }
 
   override def dropDatabase(
       name: String,
       ignoreIfNotExists: Boolean,
       cascade: Boolean): Unit = withHiveState {
-    withHiveClientCall {
       client.dropDatabase(name, true, ignoreIfNotExists, cascade)
-    }
   }
 
   override def alterDatabase(database: CatalogDatabase): Unit = withHiveState {
@@ -371,9 +360,7 @@ private[hive] class HiveClientImpl(
       }
     }
     val hiveDb = toHiveDatabase(database)
-    withHiveClientCall {
-      client.alterDatabase(database.name, hiveDb)
-    }
+    client.alterDatabase(database.name, hiveDb)
   }
 
   private def toHiveDatabase(
@@ -385,59 +372,53 @@ private[hive] class HiveClientImpl(
       CatalogUtils.URIToString(database.locationUri),
       (props -- Seq(PROP_OWNER)).asJava)
     props.get(PROP_OWNER).orElse(userName).foreach { ownerName =>
-      withHiveClientCall {
-        shim.setDatabaseOwnerName(hiveDb, ownerName)
-      }
+      HiveCatalogMetrics.incrementHiveClientCalls(1)
+      shim.setDatabaseOwnerName(hiveDb, ownerName)
     }
     hiveDb
   }
 
   override def getDatabase(dbName: String): CatalogDatabase = withHiveState {
-    withHiveClientCall {
-      Option(client.getDatabase(dbName)).map { d =>
-        val params = Option(d.getParameters).map(_.asScala.toMap).getOrElse(Map()) ++
-          Map(PROP_OWNER -> withHiveClientCall {
-            shim.getDatabaseOwnerName(d)
-          })
+    Option(client.getDatabase(dbName)).map { d =>
+      HiveCatalogMetrics.incrementHiveClientCalls(1)
+      val params = Option(d.getParameters).map(_.asScala.toMap).getOrElse(Map()) ++
+        Map(PROP_OWNER -> shim.getDatabaseOwnerName(d))
 
-        CatalogDatabase(
-          name = d.getName,
-          description = Option(d.getDescription).getOrElse(""),
-          locationUri = CatalogUtils.stringToURI(d.getLocationUri),
-          properties = params)
-      }.getOrElse(throw new NoSuchDatabaseException(dbName))
-    }
+      CatalogDatabase(
+        name = d.getName,
+        description = Option(d.getDescription).getOrElse(""),
+        locationUri = CatalogUtils.stringToURI(d.getLocationUri),
+        properties = params)
+    }.getOrElse(throw new NoSuchDatabaseException(dbName))
   }
 
   override def databaseExists(dbName: String): Boolean = withHiveState {
-    withHiveClientCall {
-      client.databaseExists(dbName)
-    }
+    client.databaseExists(dbName)
   }
 
   override def listDatabases(pattern: String): Seq[String] = withHiveState {
-    withHiveClientCall {
-      client.getDatabasesByPattern(pattern).asScala.toSeq
+    client.getDatabasesByPattern(pattern).asScala.toSeq
+  }
+
+  private def getRawTableOption(
+      dbName: String,
+      tableName: String): Option[HiveTable] = withHiveState {
+    Option(client.getTable(dbName, tableName, false /* do not throw exception */))
+  }
+
+  private def getRawTablesByName(dbName: String, tableNames: Seq[String]): Seq[HiveTable] = {
+    try {
+      msClient.getTableObjectsByName(dbName, tableNames.asJava).asScala
+        .map(extraFixesForNonView).map(new HiveTable(_)).toSeq
+    } catch {
+      case ex: Exception =>
+        throw QueryExecutionErrors.cannotFetchTablesOfDatabaseError(dbName, ex)
+    } finally {
+      HiveCatalogMetrics.incrementHiveClientCalls(1)
     }
   }
 
-  private def getRawTableOption(dbName: String, tableName: String): Option[HiveTable] =
-    withHiveClientCall {
-      Option(client.getTable(dbName, tableName, false /* do not throw exception */))
-    }
-
-  private def getRawTablesByName(dbName: String, tableNames: Seq[String]): Seq[HiveTable] =
-    withHiveClientCall {
-      try {
-        msClient.getTableObjectsByName(dbName, tableNames.asJava).asScala
-          .map(extraFixesForNonView).map(new HiveTable(_)).toSeq
-      } catch {
-        case ex: Exception =>
-          throw QueryExecutionErrors.cannotFetchTablesOfDatabaseError(dbName, ex)
-      }
-    }
-
-  override def tableExists(dbName: String, tableName: String): Boolean = withHiveState {
+  override def tableExists(dbName: String, tableName: String): Boolean = {
     getRawTableOption(dbName, tableName).nonEmpty
   }
 
@@ -542,9 +523,7 @@ private[hive] class HiveClientImpl(
       createTime = h.getTTable.getCreateTime.toLong * 1000,
       lastAccessTime = h.getLastAccessTime.toLong * 1000,
       storage = CatalogStorageFormat(
-        locationUri = withHiveClientCall {
-          shim.getDataLocation(h).map(CatalogUtils.stringToURI)
-        },
+        locationUri = shim.getDataLocation(h).map(CatalogUtils.stringToURI),
         // To avoid ClassNotFound exception, we try our best to not get the format class, but get
         // the class name directly. However, for non-native tables, there is no interface to get
         // the format class name, so we may still throw ClassNotFound in this case.
@@ -577,9 +556,7 @@ private[hive] class HiveClientImpl(
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
     verifyColumnDataType(table.dataSchema)
-    withHiveClientCall {
-      client.createTable(toHiveTable(table, Some(userName)), ignoreIfExists)
-    }
+    client.createTable(toHiveTable(table, Some(userName)), ignoreIfExists)
   }
 
   override def dropTable(
@@ -587,9 +564,7 @@ private[hive] class HiveClientImpl(
       tableName: String,
       ignoreIfNotExists: Boolean,
       purge: Boolean): Unit = withHiveState {
-    withHiveClientCall {
-      shim.dropTable(client, dbName, tableName, true, ignoreIfNotExists, purge)
-    }
+    shim.dropTable(client, dbName, tableName, true, ignoreIfNotExists, purge)
   }
 
   override def alterTable(
@@ -605,9 +580,7 @@ private[hive] class HiveClientImpl(
       table.copy(properties = table.ignoredProperties ++ table.properties), Some(userName))
     // Do not use `table.qualifiedName` here because this may be a rename
     val qualifiedTableName = s"$dbName.$tableName"
-    withHiveClientCall {
-      shim.alterTable(client, qualifiedTableName, hiveTable)
-    }
+    shim.alterTable(client, qualifiedTableName, hiveTable)
   }
 
   override def alterTableDataSchema(
@@ -615,9 +588,7 @@ private[hive] class HiveClientImpl(
       tableName: String,
       newDataSchema: StructType,
       schemaProps: Map[String, String]): Unit = withHiveState {
-    val oldTable = withHiveClientCall {
-      client.getTable(dbName, tableName)
-    }
+    val oldTable = client.getTable(dbName, tableName)
     verifyColumnDataType(newDataSchema)
     val hiveCols = newDataSchema.map(toHiveColumn)
     oldTable.setFields(hiveCols.asJava)
@@ -635,10 +606,8 @@ private[hive] class HiveClientImpl(
     schemaProps.foreach { case (k, v) => oldTable.setProperty(k, v) }
 
     val qualifiedTableName = s"$dbName.$tableName"
-    withHiveClientCall {
-      shim.alterTable(client, qualifiedTableName, oldTable)
-    }
-  }
+    shim.alterTable(client, qualifiedTableName, oldTable)
+  }(2)
 
   override def createPartitions(
       db: String,
@@ -651,9 +620,7 @@ private[hive] class HiveClientImpl(
       case _ => throw e
     }
     try {
-      withHiveClientCall {
-        shim.createPartitions(client, db, table, parts, ignoreIfExists)
-      }
+      shim.createPartitions(client, db, table, parts, ignoreIfExists)
     } catch {
       case e: InvocationTargetException => replaceExistException(e.getCause)
       case e: Throwable => replaceExistException(e)
@@ -668,9 +635,7 @@ private[hive] class HiveClientImpl(
       purge: Boolean,
       retainData: Boolean): Unit = withHiveState {
     // TODO: figure out how to drop multiple partitions in one call
-    val hiveTable = withHiveClientCall {
-      client.getTable(db, table, true /* throw exception */)
-    }
+    val hiveTable = client.getTable(db, table, true /* throw exception */)
     // do the check at first and collect all the matching partitions
     val matchingParts =
       specs.flatMap { s =>
@@ -678,9 +643,8 @@ private[hive] class HiveClientImpl(
         // The provided spec here can be a partial spec, i.e. it will match all partitions
         // whose specs are supersets of this partial spec. E.g. If a table has partitions
         // (b='1', c='1') and (b='1', c='2'), a partial spec of (b='1') will match both.
-        val parts = withHiveClientCall {
-          client.getPartitions(hiveTable, s.asJava).asScala
-        }
+        HiveCatalogMetrics.incrementHiveClientCalls(1)
+        val parts = client.getPartitions(hiveTable, s.asJava).asScala
         if (parts.isEmpty && !ignoreIfNotExists) {
           throw new NoSuchPartitionsException(db, table, Seq(s))
         }
@@ -689,9 +653,7 @@ private[hive] class HiveClientImpl(
     var droppedParts = ArrayBuffer.empty[java.util.List[String]]
     matchingParts.foreach { partition =>
       try {
-        withHiveClientCall {
-          shim.dropPartition(client, db, table, partition, !retainData, purge)
-        }
+        shim.dropPartition(client, db, table, partition, !retainData, purge)
       } catch {
         case e: Exception =>
           val remainingParts = matchingParts.toBuffer --= droppedParts
@@ -707,6 +669,8 @@ private[hive] class HiveClientImpl(
                |======================
              """.stripMargin)
           throw e
+      } finally {
+        HiveCatalogMetrics.incrementHiveClientCalls(1)
       }
       droppedParts += partition
     }
@@ -721,17 +685,15 @@ private[hive] class HiveClientImpl(
     val catalogTable = getTable(db, table)
     val hiveTable = toHiveTable(catalogTable, Some(userName))
     specs.zip(newSpecs).foreach { case (oldSpec, newSpec) =>
-      withHiveClientCall {
-        if (client.getPartition(hiveTable, newSpec.asJava, false) != null) {
-          throw new PartitionAlreadyExistsException(db, table, newSpec)
-        }
+      HiveCatalogMetrics.incrementHiveClientCalls(1)
+      if (client.getPartition(hiveTable, newSpec.asJava, false) != null) {
+        throw new PartitionAlreadyExistsException(db, table, newSpec)
       }
       val hivePart = getPartitionOption(catalogTable, oldSpec)
         .map { p => toHivePartition(p.copy(spec = newSpec), hiveTable) }
         .getOrElse { throw new NoSuchPartitionException(db, table, oldSpec) }
-      withHiveClientCall {
-        client.renamePartition(hiveTable, oldSpec.asJava, hivePart)
-      }
+      HiveCatalogMetrics.incrementHiveClientCalls(1)
+      client.renamePartition(hiveTable, oldSpec.asJava, hivePart)
     }
   }
 
@@ -747,9 +709,7 @@ private[hive] class HiveClientImpl(
     try {
       setCurrentDatabaseRaw(db)
       val hiveTable = toHiveTable(getTable(db, table), Some(userName))
-      withHiveClientCall {
-        shim.alterPartitions(client, table, newParts.map { toHivePartition(_, hiveTable) }.asJava)
-      }
+      shim.alterPartitions(client, table, newParts.map { toHivePartition(_, hiveTable) }.asJava)
     } finally {
       state.setCurrentDatabase(original)
     }
@@ -768,14 +728,10 @@ private[hive] class HiveClientImpl(
       partialSpec match {
         case None =>
           // -1 for result limit means "no limit/return all"
-          withHiveClientCall {
-            client.getPartitionNames(table.database, table.identifier.table, -1)
-          }
+          client.getPartitionNames(table.database, table.identifier.table, -1)
         case Some(s) =>
           assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
-          withHiveClientCall {
-            client.getPartitionNames(table.database, table.identifier.table, s.asJava, -1)
-          }
+          client.getPartitionNames(table.database, table.identifier.table, s.asJava, -1)
       }
     hivePartitionNames.asScala.sorted.toSeq
   }
@@ -784,9 +740,7 @@ private[hive] class HiveClientImpl(
       table: CatalogTable,
       spec: TablePartitionSpec): Option[CatalogTablePartition] = withHiveState {
     val hiveTable = toHiveTable(table, Some(userName))
-    val hivePartition = withHiveClientCall {
-      client.getPartition(hiveTable, spec.asJava, false)
-    }
+    val hivePartition = client.getPartition(hiveTable, spec.asJava, false)
     Option(hivePartition).map(fromHivePartition)
   }
 
@@ -794,9 +748,8 @@ private[hive] class HiveClientImpl(
       db: String,
       table: String,
       spec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = {
-    val hiveTable = withHiveState {
+    val hiveTable =
       getRawTableOption(db, table).getOrElse(throw new NoSuchTableException(db, table))
-    }
     getPartitions(hiveTable, spec)
   }
 
@@ -809,9 +762,7 @@ private[hive] class HiveClientImpl(
         assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
         s
     }
-    val parts = withHiveClientCall {
-      client.getPartitions(hiveTable, partSpec.asJava).asScala.map(fromHivePartition)
-    }
+    val parts = client.getPartitions(hiveTable, partSpec.asJava).asScala.map(fromHivePartition)
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
     parts.toSeq
   }
@@ -820,23 +771,17 @@ private[hive] class HiveClientImpl(
       table: CatalogTable,
       predicates: Seq[Expression]): Seq[CatalogTablePartition] = withHiveState {
     val hiveTable = toHiveTable(table, Some(userName))
-    val parts = withHiveClientCall {
-      shim.getPartitionsByFilter(client, hiveTable, predicates).map(fromHivePartition)
-    }
+    val parts = shim.getPartitionsByFilter(client, hiveTable, predicates).map(fromHivePartition)
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
     parts
   }
 
   override def listTables(dbName: String): Seq[String] = withHiveState {
-    withHiveClientCall {
-      client.getAllTables(dbName).asScala.toSeq
-    }
+    client.getAllTables(dbName).asScala.toSeq
   }
 
   override def listTables(dbName: String, pattern: String): Seq[String] = withHiveState {
-    withHiveClientCall {
-      client.getTablesByPattern(dbName, pattern).asScala.toSeq
-    }
+    client.getTablesByPattern(dbName, pattern).asScala.toSeq
   }
 
   override def listTablesByType(
@@ -846,20 +791,16 @@ private[hive] class HiveClientImpl(
     val hiveTableType = toHiveTableType(tableType)
     try {
       // Try with Hive API getTablesByType first, it's supported from Hive 2.3+.
-      withHiveClientCall {
-        shim.getTablesByType(client, dbName, pattern, hiveTableType)
-      }
+      shim.getTablesByType(client, dbName, pattern, hiveTableType)
     } catch {
       case _: UnsupportedOperationException =>
         // Fallback to filter logic if getTablesByType not supported.
-        val tableNames = withHiveClientCall {
-          client.getTablesByPattern(dbName, pattern).asScala
-        }
+        val tableNames = client.getTablesByPattern(dbName, pattern).asScala
         getRawTablesByName(dbName, tableNames.toSeq)
           .filter(_.getTableType == hiveTableType)
           .map(_.getTableName)
     }
-  }
+  }(2)
 
   /**
    * Runs the specified SQL query using Hive.
@@ -954,35 +895,29 @@ private[hive] class HiveClientImpl(
       replace: Boolean,
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit = withHiveState {
-    val hiveTable = withHiveClientCall {
-      client.getTable(dbName, tableName, true /* throw exception */)
-    }
-    withHiveClientCall {
-      shim.loadPartition(
-        client,
-        new Path(loadPath), // TODO: Use URI
-        s"$dbName.$tableName",
-        partSpec,
-        replace,
-        inheritTableSpecs,
-        isSkewedStoreAsSubdir = hiveTable.isStoredAsSubDirectories,
-        isSrcLocal = isSrcLocal)
-    }
-  }
+    client.getTable(dbName, tableName, true /* throw exception */)
+    shim.loadPartition(
+      client,
+      new Path(loadPath), // TODO: Use URI
+      s"$dbName.$tableName",
+      partSpec,
+      replace,
+      inheritTableSpecs,
+      isSkewedStoreAsSubdir = hiveTable.isStoredAsSubDirectories,
+      isSrcLocal = isSrcLocal)
+  }(2)
 
   def loadTable(
       loadPath: String, // TODO URI
       tableName: String,
       replace: Boolean,
       isSrcLocal: Boolean): Unit = withHiveState {
-    withHiveClientCall {
-      shim.loadTable(
-        client,
-        new Path(loadPath),
-        tableName,
-        replace,
-        isSrcLocal)
-    }
+    shim.loadTable(
+      client,
+      new Path(loadPath),
+      tableName,
+      replace,
+      isSrcLocal)
   }
 
   def loadDynamicPartitions(
@@ -992,56 +927,40 @@ private[hive] class HiveClientImpl(
       partSpec: java.util.LinkedHashMap[String, String],
       replace: Boolean,
       numDP: Int): Unit = withHiveState {
-    val hiveTable = withHiveClientCall {
-      client.getTable(dbName, tableName, true /* throw exception */)
-    }
-    withHiveClientCall {
-      shim.loadDynamicPartitions(
-        client,
-        new Path(loadPath),
-        s"$dbName.$tableName",
-        partSpec,
-        replace,
-        numDP,
-        listBucketingEnabled = hiveTable.isStoredAsSubDirectories)
-    }
-  }
+    client.getTable(dbName, tableName, true /* throw exception */)
+    shim.loadDynamicPartitions(
+      client,
+      new Path(loadPath),
+      s"$dbName.$tableName",
+      partSpec,
+      replace,
+      numDP,
+      listBucketingEnabled = hiveTable.isStoredAsSubDirectories)
+  }(2)
 
   override def createFunction(db: String, func: CatalogFunction): Unit = withHiveState {
-    withHiveClientCall {
-      shim.createFunction(client, db, func)
-    }
+    shim.createFunction(client, db, func)
   }
 
   override def dropFunction(db: String, name: String): Unit = withHiveState {
-    withHiveClientCall {
-      shim.dropFunction(client, db, name)
-    }
+    shim.dropFunction(client, db, name)
   }
 
   override def renameFunction(db: String, oldName: String, newName: String): Unit = withHiveState {
-    withHiveClientCall {
-      shim.renameFunction(client, db, oldName, newName)
-    }
+    shim.renameFunction(client, db, oldName, newName)
   }
 
   override def alterFunction(db: String, func: CatalogFunction): Unit = withHiveState {
-    withHiveClientCall {
-      shim.alterFunction(client, db, func)
-    }
+    shim.alterFunction(client, db, func)
   }
 
   override def getFunctionOption(
-      db: String, name: String): Option[CatalogFunction] = withHiveState {
-    withHiveClientCall {
-      shim.getFunctionOption(client, db, name)
-    }
+    db: String, name: String): Option[CatalogFunction] = withHiveState {
+    shim.getFunctionOption(client, db, name)
   }
 
   override def listFunctions(db: String, pattern: String): Seq[String] = withHiveState {
-    withHiveClientCall {
-      shim.listFunctions(client, db, pattern)
-    }
+    shim.listFunctions(client, db, pattern)
   }
 
   def addJar(path: String): Unit = {
@@ -1054,10 +973,10 @@ private[hive] class HiveClientImpl(
   }
 
   def reset(): Unit = withHiveState {
-    val allTables = withHiveClientCall {
-      client.getAllTables("default")
-    }
-    val (mvs, others) = allTables.asScala.map(t => withHiveClientCall {
+    val allTables = client.getAllTables("default")
+    var hiveClientCalls = 0
+    val (mvs, others) = allTables.asScala.map(t => {
+      hiveClientCalls += 1
       client.getTable("default", t)
     }).partition(_.getTableType.toString.equals("MATERIALIZED_VIEW"))
 
@@ -1065,42 +984,37 @@ private[hive] class HiveClientImpl(
     mvs.foreach { table =>
       val t = table.getTableName
       logDebug(s"Deleting materialized view $t")
-      withHiveClientCall {
-        client.dropTable("default", t)
-      }
+      hiveClientCalls += 1
+      client.dropTable("default", t)
     }
 
     others.foreach { table =>
       val t = table.getTableName
       logDebug(s"Deleting table $t")
       try {
-        withHiveClientCall {
-          client.getIndexes("default", t, 255).asScala.foreach { index =>
-            shim.dropIndex(client, "default", t, index.getIndexName)
-          }
+        hiveClientCalls += 1
+        client.getIndexes("default", t, 255).asScala.foreach { index =>
+          shim.dropIndex(client, "default", t, index.getIndexName)
         }
         if (!table.isIndexTable) {
-          withHiveClientCall {
-            client.dropTable("default", t)
-          }
+          hiveClientCalls += 1
+          client.dropTable("default", t)
         }
       } catch {
         case _: NoSuchMethodError =>
           // HIVE-18448 Hive 3.0 remove index APIs
-          withHiveClientCall {
-            client.dropTable("default", t)
-          }
+          hiveClientCalls += 1
+          client.dropTable("default", t)
+
       }
     }
-    withHiveClientCall {
-      client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>
-        logDebug(s"Dropping Database: $db")
-        withHiveClientCall {
-          client.dropDatabase(db, true, false, true)
-        }
-      }
+    client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>
+      logDebug(s"Dropping Database: $db")
+      hiveClientCalls += 1
+      client.dropDatabase(db, true, false, true)
     }
-  }
+    HiveCatalogMetrics.incrementHiveClientCalls(hiveClientCalls)
+  }(2)
 }
 
 private[hive] object HiveClientImpl extends Logging {
