@@ -21,12 +21,8 @@ license: |
 
 ### Description
 
-The `INSERT OVERWRITE DIRECTORY` statement overwrites the existing data in the directory with the new values using following two formats:
-   
-   1. Spark file format: `USING file_format [ OPTIONS ( ket = val [ , ... ] ) ]`.
-   2. Hive format using Hive `Serde`: `[ ROW FORMAT row_format ] [ STORED AS file_format ]`. Hive support must be enabled to use this command.
-
-The inserted rows can be specified by value expressions or result from a query.
+The `INSERT OVERWRITE DIRECTORY` statement overwrites the existing data in the directory with the new values using either spark file format or Hive Serde. 
+Hive support must be enabled to use Hive Serde. The inserted rows can be specified by value expressions or result from a query.
 
 ### Syntax
 
@@ -41,7 +37,7 @@ INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
 * **directory_path**
 
     Specifies the destination directory. The `LOCAL` keyword is used to specify that the directory is on the local file system.
-    In spark file format, it can also be specified in `OPTIONS` using `path`, but directory_path and `path` in OPTIONS should be specified one.
+    In spark file format, it can also be specified in `OPTIONS` using `path`, but `directory_path` and `path` option can not be both specified.
 
 * **spark_file_format**
 
