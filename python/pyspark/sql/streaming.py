@@ -958,15 +958,15 @@ class DataStreamWriter(object):
         return self
 
     @overload
-    def trigger(self, processingTime: str) -> "DataStreamWriter":
+    def trigger(self, *, processingTime: str) -> "DataStreamWriter":
         ...
 
     @overload
-    def trigger(self, once: bool) -> "DataStreamWriter":
+    def trigger(self, *, once: bool) -> "DataStreamWriter":
         ...
 
     @overload
-    def trigger(self, continuous: str) -> "DataStreamWriter":
+    def trigger(self, *, continuous: str) -> "DataStreamWriter":
         ...
 
     @keyword_only  # type: ignore[misc]
