@@ -17,6 +17,13 @@
 
 package org.apache.spark.internal.io
 
+import java.net.URI
+import java.text.SimpleDateFormat
+import java.util.{Date, Locale, Random}
+
+import scala.util.Try
+
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapreduce._
 
@@ -204,7 +211,8 @@ object FileCommitProtocol extends Logging {
       className: String,
       jobId: String,
       outputPath: String,
-      dynamicPartitionOverwrite: Boolean = false): FileCommitProtocol = {
+      dynamicPartitionOverwrite: Boolean = false,
+      stagingDir: Option[Path] = None): FileCommitProtocol = {
 
     logDebug(s"Creating committer $className; job $jobId; output=$outputPath;" +
       s" dynamic=$dynamicPartitionOverwrite")
@@ -213,22 +221,117 @@ object FileCommitProtocol extends Logging {
     // dynamicPartitionOverwrite: Boolean).
     // If that doesn't exist, try the one with (jobId: string, outputPath: String).
     try {
-      val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String], classOf[Boolean])
-      logDebug("Using (String, String, Boolean) constructor")
-      ctor.newInstance(jobId, outputPath, dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean])
+      val ctor = clazz.getDeclaredConstructor(
+        classOf[String], classOf[String], classOf[Path], classOf[Boolean])
+      logDebug("Using (String, String, Path,  Boolean) constructor")
+      ctor.newInstance(jobId, outputPath,
+        stagingDir.getOrElse(getStagingDir(outputPath, jobId)),
+        dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean])
     } catch {
       case _: NoSuchMethodException =>
-        logDebug("Falling back to (String, String) constructor")
-        require(!dynamicPartitionOverwrite,
-          "Dynamic Partition Overwrite is enabled but" +
-            s" the committer ${className} does not have the appropriate constructor")
-        val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
-        ctor.newInstance(jobId, outputPath)
+        try {
+          logDebug("Falling back to (String, String, Boolean) constructor")
+          val ctor = clazz.getDeclaredConstructor(
+            classOf[String], classOf[String], classOf[Boolean])
+          ctor.newInstance(jobId, outputPath,
+            dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean])
+        } catch {
+          case _: NoSuchMethodException =>
+            logDebug("Falling back to (String, String) constructor")
+            require(!dynamicPartitionOverwrite,
+              "Dynamic Partition Overwrite is enabled but" +
+                s" the committer ${className} does not have the appropriate constructor")
+            val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
+            ctor.newInstance(jobId, outputPath)
+        }
     }
   }
 
   def getStagingDir(path: String, jobId: String): Path = {
-    new Path(path, ".spark-staging-" + jobId)
+    Try { new Path(path, ".spark-staging-" + jobId) }.getOrElse(null)
+  }
+
+  def externalTempPath(
+      path: Path,
+      hadoopConf: Configuration,
+      stagingDir: String,
+      engineType: String,
+      jobId: String): Path = {
+    val extURI = path.toUri
+    if (extURI.getScheme == "viewfs") {
+      getExtTmpPathRelTo(path.getParent, hadoopConf, stagingDir, engineType, jobId)
+    } else {
+      new Path(getExternalScratchDir(extURI, hadoopConf, stagingDir, engineType, jobId),
+        "-ext-10000")
+    }
+  }
+
+  private def getExtTmpPathRelTo(
+      path: Path,
+      hadoopConf: Configuration,
+      stagingDir: String,
+      engineType: String,
+      jobId: String): Path = {
+    // Hive uses 10000
+    new Path(getStagingDir(path, hadoopConf, stagingDir, engineType, jobId), "-ext-10000")
+  }
+
+  private def getExternalScratchDir(
+      extURI: URI,
+      hadoopConf: Configuration,
+      stagingDir: String,
+      engineType: String,
+      jobId: String): Path = {
+    getStagingDir(
+      new Path(extURI.getScheme, extURI.getAuthority, extURI.getPath),
+      hadoopConf,
+      stagingDir,
+      engineType,
+      jobId)
+  }
+
+  def getStagingDir(
+      inputPath: Path,
+      hadoopConf: Configuration,
+      stagingDir: String,
+      engineType: String,
+      jobId: String): Path = {
+    val inputPathName: String = inputPath.toString
+    val fs: FileSystem = inputPath.getFileSystem(hadoopConf)
+    var stagingPathName: String =
+      if (inputPathName.indexOf(stagingDir) == -1) {
+        new Path(inputPathName, stagingDir).toString
+      } else {
+        inputPathName.substring(0, inputPathName.indexOf(stagingDir) + stagingDir.length)
+      }
+
+    // SPARK-20594: This is a walk-around fix to resolve a Hive bug. Hive requires that the
+    // staging directory needs to avoid being deleted when users set hive.exec.stagingdir
+    // under the table directory.
+    if (isSubDir(new Path(stagingPathName), inputPath, fs) &&
+      !stagingPathName.stripPrefix(inputPathName).stripPrefix("/").startsWith(".")) {
+      logDebug(s"The staging dir '$stagingPathName' should be a child directory starts " +
+        "with '.' to avoid being deleted if we set hive.exec.stagingdir under the table " +
+        "directory.")
+      stagingPathName = new Path(inputPathName, ".hive-staging").toString
+    }
+
+    val dir = fs.makeQualified(
+      new Path(stagingPathName + "_" + executionId(engineType) + "-" + jobId))
+    logDebug("Created staging dir = " + dir + " for path = " + inputPath)
+    dir
+  }
+
+  private def isSubDir(p1: Path, p2: Path, fs: FileSystem): Boolean = {
+    val path1 = fs.makeQualified(p1).toString + Path.SEPARATOR
+    val path2 = fs.makeQualified(p2).toString + Path.SEPARATOR
+    path1.startsWith(path2)
+  }
+
+  def executionId(engineType: String): String = {
+    val rand: Random = new Random
+    val format = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS", Locale.US)
+    s"${engineType}_" + format.format(new Date) + "_" + Math.abs(rand.nextLong)
   }
 }
 

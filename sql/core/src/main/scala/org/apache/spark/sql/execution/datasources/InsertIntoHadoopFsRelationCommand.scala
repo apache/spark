@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
+import org.apache.spark.internal.config.EXEC_STAGING_DIR
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
@@ -105,11 +106,14 @@ case class InsertIntoHadoopFsRelationCommand(
     }
 
     val jobId = java.util.UUID.randomUUID().toString
+    val tmpLocation = FileCommitProtocol.externalTempPath(new Path(outputPath.toString), hadoopConf,
+      hadoopConf.get(EXEC_STAGING_DIR.key, ".spark-staging"), "spark", jobId)
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = jobId,
       outputPath = outputPath.toString,
-      dynamicPartitionOverwrite = dynamicPartitionOverwrite)
+      dynamicPartitionOverwrite = dynamicPartitionOverwrite,
+      stagingDir = Some(tmpLocation))
 
     val doInsertion = if (mode == SaveMode.Append) {
       true
@@ -165,8 +169,7 @@ case class InsertIntoHadoopFsRelationCommand(
       // For dynamic partition overwrite, FileOutputCommitter's output path is staging path, files
       // will be renamed from staging path to final output path during commit job
       val committerOutputPath = if (dynamicPartitionOverwrite) {
-        FileCommitProtocol.getStagingDir(outputPath.toString, jobId)
-          .makeQualified(fs.getUri, fs.getWorkingDirectory)
+        tmpLocation
       } else {
         qualifiedOutputPath
       }
