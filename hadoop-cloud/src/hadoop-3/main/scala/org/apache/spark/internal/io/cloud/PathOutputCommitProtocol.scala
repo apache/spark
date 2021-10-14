@@ -61,7 +61,7 @@ class PathOutputCommitProtocol(
   }
 
   /** The committer created. */
-  @transient private var committer: PathOutputCommitter = _
+  @transient override protected var committer: PathOutputCommitter = _
 
   require(dest != null, "Null destination specified")
 
