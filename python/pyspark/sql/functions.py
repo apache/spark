@@ -109,7 +109,7 @@ def _invoke_binary_math_function(name: str, col1: Any, col2: Any) -> Column:
     )
 
 
-def _options_to_str(options: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+def _options_to_str(options: Optional[Dict[str, Any]] = None) -> Dict[str, Optional[str]]:
     if options:
         return {key: to_str(value) for (key, value) in options.items()}
     return {}
