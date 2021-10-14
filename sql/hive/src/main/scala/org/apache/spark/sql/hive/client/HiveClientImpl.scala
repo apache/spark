@@ -280,7 +280,7 @@ private[hive] class HiveClientImpl(
   /**
    * Runs `f` with ThreadLocal session state and classloaders configured for this version of hive.
    */
-  override def withHiveState[A](f: => A)(numClientCalls: Int = 1): A = retryLocked {
+  def withHiveState[A](f: => A)(numClientCalls: Int = 1): A = retryLocked {
     val original = Thread.currentThread().getContextClassLoader
     val originalConfLoader = state.getConf.getClassLoader
     // We explicitly set the context class loader since "conf.setClassLoader" does
