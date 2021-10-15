@@ -35,9 +35,8 @@ case class JDBCScan(
 
   private var limit: Option[Limit] = None
 
-  override def pushLimit(limit: Limit): Boolean = {
+  override def pushLimit(limit: Limit): Unit = {
     this.limit = Some(limit)
-    true
   }
 
   override def pushedLimit: Limit = if (limit.nonEmpty) limit.get else null

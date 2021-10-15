@@ -227,30 +227,26 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def applyLimit(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case globalLimit @ GlobalLimit(_, child) => child match {
-      case l @ LocalLimit(_, c) => c match {
-        case r @ DataSourceV2ScanRelation(_, scan, _) =>
-          val supportsPushDownLimit = scan match {
-            case _: SupportsPushDownLimit => true
-            case v1: V1ScanWrapper =>
-              v1.v1Scan match {
-                case _: SupportsPushDownLimit => true
-                case _ => false
-              }
-            case _ => false
-          }
-          if (supportsPushDownLimit) {
-            val value = l.limitExpr.asInstanceOf[Literal].value
-            val limit =
-              LogicalExpressions.limit(LiteralValue(value.asInstanceOf[Integer], IntegerType))
-
-            val limitPushedDown = PushDownUtils.pushLimit(scan, limit)
-            globalLimit
-          } else {
-            globalLimit
-          }
-        case _ => globalLimit
-      }
+    case globalLimit@GlobalLimit(_, LocalLimit(limitExpr, child)) => child match {
+      case r @ DataSourceV2ScanRelation(_, scan, _) =>
+        val supportsPushDownLimit = scan match {
+          case _: SupportsPushDownLimit => true
+          case v1: V1ScanWrapper =>
+            v1.v1Scan match {
+              case _: SupportsPushDownLimit => true
+              case _ => false
+            }
+          case _ => false
+        }
+        if (supportsPushDownLimit) {
+          val value = limitExpr.asInstanceOf[Literal].value
+          val limit =
+            LogicalExpressions.limit(LiteralValue(value.asInstanceOf[Integer], IntegerType))
+          PushDownUtils.pushLimit(scan, limit)
+          globalLimit
+        } else {
+          globalLimit
+        }
       case _ => globalLimit
     }
   }

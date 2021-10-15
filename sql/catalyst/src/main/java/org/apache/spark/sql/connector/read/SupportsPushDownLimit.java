@@ -30,10 +30,9 @@ import org.apache.spark.sql.connector.expressions.Limit;
 public interface SupportsPushDownLimit extends Scan {
 
   /**
-   * Pushes down Limit to the data source. Returns true if Limit can be pushed down,
-   * false otherwise.
+   * Pushes down Limit to the data source.
    */
-  boolean pushLimit(Limit limit);
+  void pushLimit(Limit limit);
 
   /**
    * Returns the Limit that is pushed to the data source via {@link #pushLimit(Limit)}.
