@@ -649,7 +649,7 @@ class SparkSession(SparkConversionMixin):
         self,
         data: Union[
             "RDD[AtomicValue]",
-            Iterable[AtomicValue],
+            Iterable["AtomicValue"],
         ],
         schema: Union[AtomicType, str],
         verifySchema: bool = ...,
