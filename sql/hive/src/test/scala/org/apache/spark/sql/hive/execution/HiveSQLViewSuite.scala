@@ -179,4 +179,32 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
       }
     }
   }
+
+  test("SPARK-33692: 2") {
+    val avgFuncClass = "test.org.apache.spark.sql.MyDoubleAverage"
+    val sumFuncClass = "test.org.apache.spark.sql.MyDoubleSum"
+    val functionName = "test_udf"
+    withTempDatabase { dbName =>
+      withUserDefinedFunction(
+        s"default.$functionName" -> false,
+        s"$dbName.$functionName" -> false,
+        functionName -> true) {
+        // create a function in default database
+        sql("USE DEFAULT")
+        sql(s"CREATE FUNCTION $functionName AS '$avgFuncClass'")
+        // create a view using a function in 'default' database
+//        val viewName = createView(
+//          "v1", s"SELECT $functionName(col1) AS func FROM VALUES (1), (2), (3)")
+//        // create function in another database with the same function name
+//        sql(s"USE $dbName")
+//        sql(s"CREATE FUNCTION $functionName AS '$sumFuncClass'")
+//        // create temporary function with the same function name
+//        sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
+//        withView(viewName) {
+//          // view v1 should still using function defined in `default` database
+//          checkViewOutput(viewName, Seq(Row(102.0)))
+//        }
+      }
+    }
+  }
 }

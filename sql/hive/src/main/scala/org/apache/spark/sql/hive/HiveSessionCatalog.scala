@@ -22,20 +22,21 @@ import java.util.Locale
 
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
-import org.apache.spark.sql.types.{DecimalType, DoubleType}
+import org.apache.spark.sql.types.{DecimalType, DoubleType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 
@@ -122,7 +123,38 @@ private[sql] class HiveSessionCatalog(
         // If `super.makeFunctionExpression` throw `InvalidUDFClassException`, we construct
         // Hive UDF/UDAF/UDTF with function definition. Otherwise, we just throw it earlier.
         case _: InvalidUDFClassException =>
-          makeHiveFunctionExpression(name, clazz, input)
+          val clsForAggregator =
+            Utils.classForName("org.apache.spark.sql.expressions.Aggregator")
+          if (clsForAggregator.isAssignableFrom(clazz)) {
+            val cls = Utils.classForName("org.apache.spark.sql.execution.aggregate.ScalaAggregator")
+            val clsForEncoder =
+              Utils.classForName("org.apache.spark.sql.catalyst.encoders.ExpressionEncoder")
+            val aggregator = clazz.getConstructor().newInstance().asInstanceOf[Aggregator[_, _, _]]
+            val schema = StructType(input.map(e => StructField("temp", e.dataType)))
+            val e = cls.getConstructor(classOf[Seq[Expression]], clsForAggregator,
+              clsForEncoder, clsForEncoder, classOf[Boolean], classOf[Boolean],
+              classOf[Int], classOf[Int], classOf[Option[String]])
+              .newInstance(
+                input,
+                aggregator,
+                RowEncoder(schema),
+                aggregator.bufferEncoder,
+                Boolean.box(true),
+                Boolean.box(true),
+                Int.box(1),
+                Int.box(1),
+                Some(name))
+              .asInstanceOf[ImplicitCastInputTypes]
+
+            // Check input argument size
+            if (e.inputTypes.size != input.size) {
+              throw QueryCompilationErrors.invalidFunctionArgumentsError(
+                name, e.inputTypes.size.toString, input.size)
+            }
+            e
+          } else {
+            makeHiveFunctionExpression(name, clazz, input)
+          }
         case NonFatal(e) => throw e
       }
     }
