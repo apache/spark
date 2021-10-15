@@ -471,7 +471,8 @@ class SparkSqlAstBuilder extends AstBuilder {
       LocalTempView
     }
     if (viewType == PersistedView) {
-      require(Option(source(ctx.query)).isDefined,
+      val originalText = source(ctx.query)
+      require(Option(originalText).isDefined,
         "'originalText' must be provided to create permanent view")
       CreateView(
         UnresolvedDBObjectName(
@@ -480,7 +481,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         userSpecifiedColumns,
         visitCommentSpecList(ctx.commentSpec()),
         properties,
-        Option(source(ctx.query)),
+        Some(originalText),
         plan(ctx.query),
         ctx.EXISTS != null,
         ctx.REPLACE != null)
