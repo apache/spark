@@ -639,6 +639,7 @@ class SparkSession(SparkConversionMixin):
         self,
         data: Union["RDD[RowLike]", Iterable["RowLike"]],
         schema: Union[StructType, str],
+        *,
         verifySchema: bool = ...,
     ) -> DataFrame:
         ...
