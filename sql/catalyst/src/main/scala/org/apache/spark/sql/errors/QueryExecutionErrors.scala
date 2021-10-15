@@ -251,6 +251,15 @@ object QueryExecutionErrors {
     new IllegalArgumentException(s"$funcName is not matched at addNewFunction")
   }
 
+  def lambdaVariableAlreadyDefinedError(name: String): Throwable = {
+    new IllegalArgumentException(s"Lambda variable $name cannot be redefined")
+  }
+
+  def lambdaVariableNotDefinedError(name: String): Throwable = {
+    new IllegalArgumentException(
+      s"Lambda variable $name is not defined in the current codegen scope")
+  }
+
   def cannotGenerateCodeForUncomparableTypeError(
       codeType: String, dataType: DataType): Throwable = {
     new IllegalArgumentException(

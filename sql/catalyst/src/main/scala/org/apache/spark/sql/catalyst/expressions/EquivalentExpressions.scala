@@ -103,16 +103,17 @@ class EquivalentExpressions {
 
   // There are some special expressions that we should not recurse into all of its children.
   //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
-  //   2. If: common subexpressions will always be evaluated at the beginning, but the true and
+  //   2. LambdaFunction: it's children operate in the context of local lambdas and can't be split
+  //   3. If: common subexpressions will always be evaluated at the beginning, but the true and
   //          false expressions in `If` may not get accessed, according to the predicate
   //          expression. We should only recurse into the predicate expression.
-  //   3. CaseWhen: like `If`, the children of `CaseWhen` only get accessed in a certain
+  //   4. CaseWhen: like `If`, the children of `CaseWhen` only get accessed in a certain
   //                condition. We should only recurse into the first condition expression as it
   //                will always get accessed.
-  //   4. Coalesce: it's also a conditional expression, we should only recurse into the first
+  //   5. Coalesce: it's also a conditional expression, we should only recurse into the first
   //                children, because others may not get accessed.
   private def childrenToRecurse(expr: Expression): Seq[Expression] = expr match {
-    case _: CodegenFallback => Nil
+    case _: CodegenFallback | _: LambdaFunction => Nil
     case i: If => i.predicate :: Nil
     case c: CaseWhen => c.children.head :: Nil
     case c: Coalesce => c.children.head :: Nil
@@ -122,7 +123,7 @@ class EquivalentExpressions {
   // For some special expressions we cannot just recurse into all of its children, but we can
   // recursively add the common expressions shared between all of its children.
   private def commonChildrenToRecurse(expr: Expression): Seq[Seq[Expression]] = expr match {
-    case _: CodegenFallback => Nil
+    case _: CodegenFallback | _: LambdaFunction => Nil
     case i: If => Seq(Seq(i.trueValue, i.falseValue))
     case c: CaseWhen =>
       // We look at subexpressions in conditions and values of `CaseWhen` separately. It is

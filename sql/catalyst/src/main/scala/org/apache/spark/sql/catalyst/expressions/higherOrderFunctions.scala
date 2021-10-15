@@ -22,9 +22,11 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.CatalystTypeConverters.isPrimitive
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, QuaternaryLike, TernaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
@@ -76,8 +78,7 @@ case class NamedLambdaVariable(
     exprId: ExprId = NamedExpression.newExprId,
     value: AtomicReference[Any] = new AtomicReference())
   extends LeafExpression
-  with NamedExpression
-  with CodegenFallback {
+  with NamedExpression {
 
   override def qualifier: Seq[String] = Seq.empty
 
@@ -98,6 +99,17 @@ case class NamedLambdaVariable(
   override def simpleString(maxFields: Int): String = {
     s"lambda $name#${exprId.id}: ${dataType.simpleString(maxFields)}"
   }
+
+  // We need to include the Expr ID in the Codegen variable name since several tests bypass
+  // `UnresolvedNamedLambdaVariable.freshVarName`
+  lazy val variableName = s"${name}_${exprId.id}"
+
+  override def genCode(ctx: CodegenContext): ExprCode = {
+    ctx.getLambdaVar(variableName)
+  }
+
+  // This won't be called as `genCode` is overridden, just overriding it to make non-abstract.
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ev
 }
 
 /**
@@ -109,7 +121,7 @@ case class LambdaFunction(
     function: Expression,
     arguments: Seq[NamedExpression],
     hidden: Boolean = false)
-  extends Expression with CodegenFallback {
+  extends Expression {
 
   override def children: Seq[Expression] = function +: arguments
   override def dataType: DataType = function.dataType
@@ -126,6 +138,23 @@ case class LambdaFunction(
   lazy val bound: Boolean = arguments.forall(_.resolved)
 
   override def eval(input: InternalRow): Any = function.eval(input)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val functionCode = function.genCode(ctx)
+
+    if (nullable) {
+      ev.copy(code = code"""
+        |${functionCode.code}
+        |boolean ${ev.isNull} = ${functionCode.isNull};
+        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${functionCode.value};
+      """.stripMargin)
+    } else {
+      ev.copy(code = code"""
+        |${functionCode.code}
+        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${functionCode.value};
+      """.stripMargin, isNull = FalseLiteral)
+    }
+  }
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): LambdaFunction =
@@ -269,6 +298,29 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction with BinaryLike[Expr
     }
   }
 
+  protected def nullSafeCodeGen(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      f: String => String): ExprCode = {
+    val argumentGen = argument.genCode(ctx)
+    val resultCode = f(argumentGen.value)
+
+    if (nullable) {
+      val nullSafeEval = ctx.nullSafeExec(argument.nullable, argumentGen.isNull)(resultCode)
+      ev.copy(code = code"""
+        |${argumentGen.code}
+        |boolean ${ev.isNull} = ${argumentGen.isNull};
+        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        |$nullSafeEval
+      """)
+    } else {
+      ev.copy(code = code"""
+        |${argumentGen.code}
+        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        |$resultCode
+      """, isNull = FalseLiteral)
+    }
+  }
 }
 
 trait ArrayBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
@@ -297,7 +349,7 @@ trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
 case class ArrayTransform(
     argument: Expression,
     function: Expression)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+  extends ArrayBasedSimpleHigherOrderFunction {
 
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
@@ -336,6 +388,68 @@ case class ArrayTransform(
       i += 1
     }
     result
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    ctx.withLambdaVar(elementVar, elementCode => {
+      ctx.withOptionalLambdaVar(indexVar, indexCode => {
+        nullSafeCodeGen(ctx, ev, arg => {
+          val numElements = ctx.freshName("numElements")
+          val arrayData = ctx.freshName("arrayData")
+          val i = ctx.freshName("i")
+
+          val argumentType = argument.dataType.asInstanceOf[ArrayType]
+          val argumentElementJavaType = CodeGenerator.javaType(argumentType.elementType)
+          val initialization = CodeGenerator.createArrayData(
+            arrayData, dataType.elementType, numElements, s" $prettyName failed.")
+          val extractElement = CodeGenerator.getValue(arg, argumentType.elementType, i)
+
+          val functionCode = function.genCode(ctx)
+
+          val elementAtomic = ctx.addReferenceObj(elementVar.variableName, elementVar.value)
+          val elementAssignment = if (elementVar.nullable) {
+            s"""
+              $argumentElementJavaType ${elementCode.value} = $extractElement;
+              boolean ${elementCode.isNull} = ${arg}.isNullAt($i);
+              $elementAtomic.set(${elementCode.value});
+            """
+          } else {
+            s"""
+              $argumentElementJavaType ${elementCode.value} = $extractElement;
+              $elementAtomic.set(${elementCode.value});
+            """
+          }
+          val indexAssignment = indexCode.map(c => {
+            val indexAtomic = ctx.addReferenceObj(indexVar.get.variableName, indexVar.get.value)
+            s"""
+              int ${c.value} = $i;
+              $indexAtomic.set(${c.value});
+            """
+          })
+          val varAssignments = (Seq(elementAssignment) ++: indexAssignment).mkString("\n")
+
+          // Some expressions return internal buffers that we have to copy
+          val copy = if (isPrimitive(function.dataType)) {
+            s"${functionCode.value}"
+          } else {
+            s"InternalRow.copyValue(${functionCode.value})"
+          }
+          val resultAssignment = CodeGenerator.setArrayElement(arrayData, dataType.elementType,
+            i, copy, isNull = Some(functionCode.isNull))
+
+          s"""
+              |final int $numElements = ${arg}.numElements();
+              |$initialization
+              |for (int $i = 0; $i < $numElements; $i++) {
+              |  $varAssignments
+              |  ${functionCode.code}
+              |  $resultAssignment
+              |}
+              |${ev.value} = $arrayData;
+            """.stripMargin
+        })
+      })
+    })
   }
 
   override def prettyName: String = "transform"
