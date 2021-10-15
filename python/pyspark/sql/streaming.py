@@ -22,7 +22,7 @@ from typing import cast, overload, Any, Callable, Dict, List, Optional, TYPE_CHE
 
 from py4j.java_gateway import java_import, JavaObject
 
-from pyspark import since, keyword_only
+from pyspark import since
 from pyspark.sql.column import _to_seq
 from pyspark.sql.readwriter import OptionUtils, to_str  # type: ignore[attr-defined]
 from pyspark.sql.types import Row, StructType, StructField, StringType
@@ -969,7 +969,6 @@ class DataStreamWriter(object):
     def trigger(self, *, continuous: str) -> "DataStreamWriter":
         ...
 
-    @keyword_only  # type: ignore[misc]
     def trigger(
         self,
         *,
