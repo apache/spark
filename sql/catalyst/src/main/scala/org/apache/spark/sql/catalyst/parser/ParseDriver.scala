@@ -161,8 +161,7 @@ object CatalystSqlParser extends CatalystSqlParser
  * only accept capitalized tokens in case it is run from other tools like antlrworks which do not
  * have the UpperCaseCharStream implementation.
  */
-
-private[parser] class UpperCaseCharStream(wrapped: CodePointCharStream) extends CharStream {
+class UpperCaseCharStream(wrapped: CodePointCharStream) extends CharStream {
   override def consume(): Unit = wrapped.consume
   override def getSourceName(): String = wrapped.getSourceName
   override def index(): Int = wrapped.index
