@@ -42,7 +42,7 @@ from pyspark.sql.types import (  # type: ignore[attr-defined]
 from pyspark.sql.utils import install_exception_handler, is_timestamp_ntz_preferred
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import DateTimeLiteral, LiteralType, DecimalLiteral, RowLike
+    from pyspark.sql._typing import AtomicValue, RowLike
     from pyspark.sql.catalog import Catalog
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
     from pyspark.sql.streaming import StreamingQueryManager
@@ -629,6 +629,7 @@ class SparkSession(SparkConversionMixin):
     def createDataFrame(
         self,
         data: Union["RDD[RowLike]", Iterable["RowLike"]],
+        schema: Union[List[str], Tuple[str, ...]] = ...,
         samplingRatio: Optional[float] = ...,
     ) -> DataFrame:
         ...
@@ -637,7 +638,7 @@ class SparkSession(SparkConversionMixin):
     def createDataFrame(
         self,
         data: Union["RDD[RowLike]", Iterable["RowLike"]],
-        schema: Union[List[str], Tuple[str, ...]] = ...,
+        schema: Union[StructType, str],
         verifySchema: bool = ...,
     ) -> DataFrame:
         ...
@@ -646,19 +647,10 @@ class SparkSession(SparkConversionMixin):
     def createDataFrame(
         self,
         data: Union[
-            "RDD[Union[DateTimeLiteral, LiteralType, DecimalLiteral]]",
-            Iterable[Union["DateTimeLiteral", "LiteralType", "DecimalLiteral"]],
+            "RDD[AtomicValue]",
+            Iterable[AtomicValue],
         ],
         schema: Union[AtomicType, str],
-        verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
-
-    @overload
-    def createDataFrame(
-        self,
-        data: Union["RDD[RowLike]", Iterable["RowLike"]],
-        schema: Union[StructType, str],
         verifySchema: bool = ...,
     ) -> DataFrame:
         ...

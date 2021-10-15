@@ -56,7 +56,7 @@ from pyspark.resource.profile import ResourceProfile
 from pyspark.statcounter import StatCounter
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import AtomicType, StructType
-from pyspark.sql._typing import DateTimeLiteral, DecimalLiteral, RowLike, AtomicValue
+from pyspark.sql._typing import AtomicValue, RowLike
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 T = TypeVar("T")
