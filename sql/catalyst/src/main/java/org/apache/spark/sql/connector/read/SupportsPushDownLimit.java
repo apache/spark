@@ -22,7 +22,7 @@ import org.apache.spark.sql.connector.expressions.Limit;
 
 /**
  * A mix-in interface for {@link Scan}. Data sources can implement this interface to
- * push down LIMIT to the data source.
+ * push down LIMIT.
  *
  * @since 3.3.0
  */
@@ -30,12 +30,12 @@ import org.apache.spark.sql.connector.expressions.Limit;
 public interface SupportsPushDownLimit extends Scan {
 
   /**
-   * Pushes down Limit to the data source.
+   * Pushes down LIMIT to the data source.
    */
   void pushLimit(Limit limit);
 
   /**
-   * Returns the Limit that is pushed to the data source via {@link #pushLimit(Limit)}.
+   * Returns the LIMIT that is pushed to the data source via {@link #pushLimit(Limit)}.
    */
   Limit pushedLimit();
 }

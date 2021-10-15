@@ -20,7 +20,8 @@ package org.apache.spark.sql.connector.expressions;
 import org.apache.spark.annotation.Experimental;
 
 /**
- * Represents a limit in the public expression API.
+ * Represents a limit (the number of rows to be returned in a SQL query)
+ * in the public expression API. e.g. SELECT * FROM t LIMIT 3
  *
  * @since 3.3.0
  */

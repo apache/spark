@@ -21,7 +21,7 @@ import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{ExplainSuiteHelper, QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
@@ -94,13 +94,27 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("simple scan with LIMIT") {
-    val df = spark.read.table("h2.test.employee").limit(4)
+    val df1 = spark.read.table("h2.test.employee").limit(4)
+    checkLimitResult(df1)
+
+    val df2 = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "1")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.employee")
+      .limit(4)
+    checkLimitResult(df2)
+  }
+
+  private def checkLimitResult(df: DataFrame): Unit = {
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedLimit: LIMIT 4"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
+
     checkAnswer(df, Seq(Row(1, "amy", 10000.00, 1000.0),
       Row(2, "alex", 12000.00, 1200.0),
       Row(1, "cathy", 9000.00, 1200.0),
@@ -115,16 +129,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .option("numPartitions", "2")
       .table("h2.test.employee")
       .limit(4)
-    df.queryExecution.optimizedPlan.collect {
-      case _: DataSourceV2ScanRelation =>
-        val expected_plan_fragment =
-          "PushedLimit: LIMIT 4"
-        checkKeywordsExistsInExplain(df, expected_plan_fragment)
-    }
-    checkAnswer(df, Seq(Row(1, "amy", 10000.00, 1000.0),
-      Row(2, "alex", 12000.00, 1200.0),
-      Row(1, "cathy", 9000.00, 1200.0),
-      Row(2, "david", 10000.00, 1300.0)))
+
   }
 
   test("scan with filter push-down") {

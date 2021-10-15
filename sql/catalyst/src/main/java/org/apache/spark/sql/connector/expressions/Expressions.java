@@ -194,7 +194,7 @@ public class Expressions {
   /**
    * Create a limit expression.
    *
-   * @param literal number of rows to be returned.
+   * @param literal a literal that specifies the number of rows to be returned.
    * @return a Limit
    *
    * @since 3.3.0
