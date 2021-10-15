@@ -977,9 +977,8 @@ private[hive] class HiveClientImpl(
 
   def reset(): Unit = withHiveState(2) {
     val allTables = client.getAllTables("default")
-    var hiveClientCalls = 0
     val (mvs, others) = allTables.asScala.map(t => {
-      hiveClientCalls += 1
+      HiveCatalogMetrics.incrementHiveClientCalls(1)
       client.getTable("default", t)
     }).partition(_.getTableType.toString.equals("MATERIALIZED_VIEW"))
 
@@ -987,7 +986,7 @@ private[hive] class HiveClientImpl(
     mvs.foreach { table =>
       val t = table.getTableName
       logDebug(s"Deleting materialized view $t")
-      hiveClientCalls += 1
+      HiveCatalogMetrics.incrementHiveClientCalls(1)
       client.dropTable("default", t)
     }
 
@@ -995,27 +994,28 @@ private[hive] class HiveClientImpl(
       val t = table.getTableName
       logDebug(s"Deleting table $t")
       try {
-        hiveClientCalls += 1
+        HiveCatalogMetrics.incrementHiveClientCalls(1)
         client.getIndexes("default", t, 255).asScala.foreach { index =>
+          HiveCatalogMetrics.incrementHiveClientCalls(1)
           shim.dropIndex(client, "default", t, index.getIndexName)
         }
         if (!table.isIndexTable) {
-          hiveClientCalls += 1
+          HiveCatalogMetrics.incrementHiveClientCalls(1)
           client.dropTable("default", t)
         }
       } catch {
         case _: NoSuchMethodError =>
           // HIVE-18448 Hive 3.0 remove index APIs
-          hiveClientCalls += 1
+          HiveCatalogMetrics.incrementHiveClientCalls(1)
           client.dropTable("default", t)
       }
     }
+    HiveCatalogMetrics.incrementHiveClientCalls(1)
     client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>
       logDebug(s"Dropping Database: $db")
-      hiveClientCalls += 1
+      HiveCatalogMetrics.incrementHiveClientCalls(1)
       client.dropDatabase(db, true, false, true)
     }
-    HiveCatalogMetrics.incrementHiveClientCalls(hiveClientCalls)
   }
 }
 
