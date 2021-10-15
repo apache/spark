@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.NumberConverter
+import org.apache.spark.sql.catalyst.util.{NumberConverter, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1613,6 +1613,10 @@ object WidthBucket {
        5
       > SELECT _FUNC_(-0.9, 5.2, 0.5, 2);
        3
+      > SELECT _FUNC_(INTERVAL '0' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, 10);
+       1
+      > SELECT _FUNC_(INTERVAL '1' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, 10);
+       2
   """,
   since = "3.1.0",
   group = "math_funcs")
@@ -1623,16 +1627,35 @@ case class WidthBucket(
     numBucket: Expression)
   extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType, DoubleType, LongType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    TypeCollection(DoubleType, YearMonthIntervalType),
+    TypeCollection(DoubleType, YearMonthIntervalType),
+    TypeCollection(DoubleType, YearMonthIntervalType),
+    LongType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case TypeCheckSuccess =>
+        (value.dataType, minValue.dataType, maxValue.dataType) match {
+          case (_: YearMonthIntervalType, _: YearMonthIntervalType, _: YearMonthIntervalType) =>
+            TypeCheckSuccess
+          case _ =>
+            val types = Seq(value.dataType, minValue.dataType, maxValue.dataType)
+            TypeUtils.checkForSameTypeInputExpr(types, s"function $prettyName")
+        }
+      case f => f
+    }
+  }
+
   override def dataType: DataType = LongType
   override def nullable: Boolean = true
   override def prettyName: String = "width_bucket"
 
   override protected def nullSafeEval(input: Any, min: Any, max: Any, numBucket: Any): Any = {
     WidthBucket.computeBucketNumber(
-      input.asInstanceOf[Double],
-      min.asInstanceOf[Double],
-      max.asInstanceOf[Double],
+      input.asInstanceOf[Number].doubleValue(),
+      min.asInstanceOf[Number].doubleValue(),
+      max.asInstanceOf[Number].doubleValue(),
       numBucket.asInstanceOf[Long])
   }
 
