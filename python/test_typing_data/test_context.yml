@@ -1,0 +1,4 @@
+- case: contextInitalization
+  main: |
+    from pyspark import SparkContext
+    sc: SparkContext = SparkContext()
