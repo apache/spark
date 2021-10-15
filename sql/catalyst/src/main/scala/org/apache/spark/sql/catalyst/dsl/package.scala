@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Duration, Instant, LocalDate, Period}
 
 import scala.language.implicitConversions
 
@@ -167,6 +167,8 @@ package object dsl {
     implicit def timestampToLiteral(t: Timestamp): Literal = Literal(t)
     implicit def instantToLiteral(i: Instant): Literal = Literal(i)
     implicit def binaryToLiteral(a: Array[Byte]): Literal = Literal(a)
+    implicit def periodToLiteral(p: Period): Literal = Literal(p)
+    implicit def durationToLiteral(d: Duration): Literal = Literal(d)
 
     implicit def symbolToUnresolvedAttribute(s: Symbol): analysis.UnresolvedAttribute =
       analysis.UnresolvedAttribute(s.name)

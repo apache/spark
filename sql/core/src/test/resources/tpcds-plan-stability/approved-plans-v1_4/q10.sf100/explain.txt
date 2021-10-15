@@ -207,7 +207,7 @@ Input [2]: [ca_address_sk#20, ca_county#21]
 
 (36) BroadcastExchange
 Input [1]: [ca_address_sk#20]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#22]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#22]
 
 (37) BroadcastHashJoin [codegen id : 14]
 Left keys [1]: [c_current_addr_sk#5]
@@ -309,7 +309,7 @@ Input [3]: [d_date_sk#10, d_year#44, d_moy#45]
 
 (56) BroadcastExchange
 Input [1]: [d_date_sk#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#46]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#46]
 
 Subquery:2 Hosting operator id = 14 Hosting Expression = ws_sold_date_sk#13 IN dynamicpruning#9
 

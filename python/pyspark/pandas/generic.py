@@ -37,7 +37,7 @@ from typing import (
 )
 import warnings
 
-import numpy as np  # noqa: F401
+import numpy as np
 import pandas as pd
 from pandas.api.types import is_list_like
 
@@ -77,11 +77,11 @@ from pyspark.pandas.utils import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.indexes.base import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.groupby import GroupBy  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.window import Rolling, Expanding  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.frame import DataFrame
+    from pyspark.pandas.indexes.base import Index
+    from pyspark.pandas.groupby import GroupBy
+    from pyspark.pandas.series import Series
+    from pyspark.pandas.window import Rolling, Expanding
 
 
 bool_type = bool
@@ -2254,10 +2254,11 @@ class Frame(object, metaclass=ABCMeta):
         2.0  2  5
         NaN  1  4
         """
+        new_by: List[Union[Label, ps.Series]]
         if isinstance(by, ps.DataFrame):
             raise ValueError("Grouper for '{}' not 1-dimensional".format(type(by).__name__))
         elif isinstance(by, ps.Series):
-            new_by = [by]  # type: List[Union[Label, ps.Series]]
+            new_by = [by]
         elif is_name_like_tuple(by):
             if isinstance(self, ps.Series):
                 raise KeyError(by)

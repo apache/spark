@@ -27,13 +27,14 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedDBObjectName}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
-import org.apache.spark.sql.errors.QueryParsingErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
@@ -57,6 +58,7 @@ class SparkSqlParser extends AbstractSqlParser {
  */
 class SparkSqlAstBuilder extends AstBuilder {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   private val configKeyValueDef = """([a-zA-Z_\d\\.:]+)\s*=([^;]*);*""".r
   private val configKeyDef = """([a-zA-Z_\d\\.:]+)$""".r
@@ -240,6 +242,14 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create a [[SetNamespaceCommand]] logical command.
+   */
+  override def visitUseNamespace(ctx: UseNamespaceContext): LogicalPlan = withOrigin(ctx) {
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
+    SetNamespaceCommand(nameParts)
+  }
+
+  /**
    * Create a [[SetCatalogCommand]] logical command.
    */
   override def visitSetCatalog(ctx: SetCatalogContext): LogicalPlan = withOrigin(ctx) {
@@ -250,6 +260,13 @@ class SparkSqlAstBuilder extends AstBuilder {
     } else {
       throw new IllegalStateException("Invalid catalog name")
     }
+  }
+
+  /**
+   * Create a [[ShowCatalogsCommand]] logical command.
+   */
+  override def visitShowCatalogs(ctx: ShowCatalogsContext) : LogicalPlan = withOrigin(ctx) {
+    ShowCatalogsCommand(Option(ctx.pattern).map(string))
   }
 
   /**
@@ -408,6 +425,125 @@ class SparkSqlAstBuilder extends AstBuilder {
           case other => operationNotAllowed(s"LIST with resource type '$other'", ctx)
         }
       case _ => operationNotAllowed(s"Other types of operation on resources", ctx)
+    }
+  }
+
+
+  /**
+   * Create or replace a view. This creates a [[CreateViewCommand]].
+   *
+   * For example:
+   * {{{
+   *   CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] multi_part_name
+   *   [(column_name [COMMENT column_comment], ...) ]
+   *   create_view_clauses
+   *
+   *   AS SELECT ...;
+   *
+   *   create_view_clauses (order insensitive):
+   *     [COMMENT view_comment]
+   *     [TBLPROPERTIES (property_name = property_value, ...)]
+   * }}}
+   */
+  override def visitCreateView(ctx: CreateViewContext): LogicalPlan = withOrigin(ctx) {
+    if (!ctx.identifierList.isEmpty) {
+      operationNotAllowed("CREATE VIEW ... PARTITIONED ON", ctx)
+    }
+
+    checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
+    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED ON", ctx)
+    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+
+    val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
+      icl.identifierComment.asScala.map { ic =>
+        ic.identifier.getText -> Option(ic.commentSpec()).map(visitCommentSpec)
+      }
+    }
+
+    val properties = ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues)
+      .getOrElse(Map.empty)
+    if (ctx.TEMPORARY != null && !properties.isEmpty) {
+      operationNotAllowed("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW", ctx)
+    }
+
+    val viewType = if (ctx.TEMPORARY == null) {
+      PersistedView
+    } else if (ctx.GLOBAL != null) {
+      GlobalTempView
+    } else {
+      LocalTempView
+    }
+    if (viewType == PersistedView) {
+      CreateView(
+        UnresolvedDBObjectName(
+          visitMultipartIdentifier(ctx.multipartIdentifier),
+          false),
+        userSpecifiedColumns,
+        visitCommentSpecList(ctx.commentSpec()),
+        properties,
+        Option(source(ctx.query)),
+        plan(ctx.query),
+        ctx.EXISTS != null,
+        ctx.REPLACE != null)
+    } else {
+      CreateViewCommand(
+        visitMultipartIdentifier(ctx.multipartIdentifier).asTableIdentifier,
+        userSpecifiedColumns,
+        visitCommentSpecList(ctx.commentSpec()),
+        properties,
+        Option(source(ctx.query)),
+        plan(ctx.query),
+        ctx.EXISTS != null,
+        ctx.REPLACE != null,
+        viewType = viewType)
+    }
+  }
+
+  /**
+   * Create a [[CreateFunctionCommand]].
+   *
+   * For example:
+   * {{{
+   *   CREATE [OR REPLACE] [TEMPORARY] FUNCTION [IF NOT EXISTS] [db_name.]function_name
+   *   AS class_name [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri']];
+   * }}}
+   */
+  override def visitCreateFunction(ctx: CreateFunctionContext): LogicalPlan = withOrigin(ctx) {
+    val resources = ctx.resource.asScala.map { resource =>
+      val resourceType = resource.identifier.getText.toLowerCase(Locale.ROOT)
+      resourceType match {
+        case "jar" | "file" | "archive" =>
+          FunctionResource(FunctionResourceType.fromString(resourceType), string(resource.STRING))
+        case other =>
+          operationNotAllowed(s"CREATE FUNCTION with resource type '$resourceType'", ctx)
+      }
+    }
+
+    val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
+    if (ctx.TEMPORARY == null) {
+      CreateFunction(
+        UnresolvedDBObjectName(
+          functionIdentifier,
+          isNamespace = false),
+        string(ctx.className),
+        resources.toSeq,
+        ctx.EXISTS != null,
+        ctx.REPLACE != null)
+    } else {
+      if (functionIdentifier.length > 2) {
+        throw QueryCompilationErrors.unsupportedFunctionNameError(functionIdentifier.quoted)
+      } else if (functionIdentifier.length == 2) {
+        // Temporary function names should not contain database prefix like "database.function"
+        throw QueryCompilationErrors.specifyingDBInCreateTempFuncError(functionIdentifier.head)
+      }
+      CreateFunctionCommand(
+        None,
+        functionIdentifier.last,
+        string(ctx.className),
+        resources.toSeq,
+        true,
+        ctx.EXISTS != null,
+        ctx.REPLACE != null)
     }
   }
 

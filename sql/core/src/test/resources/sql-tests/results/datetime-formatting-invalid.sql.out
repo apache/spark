@@ -314,7 +314,7 @@ select date_format('2018-11-17 13:33:33.333', 'B')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Unknown pattern letter: B
+Illegal pattern character: B
 
 
 -- !query

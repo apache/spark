@@ -98,10 +98,9 @@ class SampledPlotBase:
             )
 
 
-class HistogramPlotBase:
+class NumericPlotBase:
     @staticmethod
-    def prepare_hist_data(data, bins):
-        # TODO: this logic is similar with KdePlotBase. Might have to deduplicate it.
+    def prepare_numeric_data(data):
         from pyspark.pandas.series import Series
 
         if isinstance(data, Series):
@@ -117,6 +116,13 @@ class HistogramPlotBase:
                 "Empty {0!r}: no numeric data to " "plot".format(numeric_data.__class__.__name__)
             )
 
+        return data, numeric_data
+
+
+class HistogramPlotBase(NumericPlotBase):
+    @staticmethod
+    def prepare_hist_data(data, bins):
+        data, numeric_data = NumericPlotBase.prepare_numeric_data(data)
         if is_integer(bins):
             # computes boundaries for the column
             bins = HistogramPlotBase.get_bins(data.to_spark(), bins)
@@ -340,25 +346,10 @@ class BoxPlotBase:
         return fliers
 
 
-class KdePlotBase:
+class KdePlotBase(NumericPlotBase):
     @staticmethod
     def prepare_kde_data(data):
-        # TODO: this logic is similar with HistogramPlotBase. Might have to deduplicate it.
-        from pyspark.pandas.series import Series
-
-        if isinstance(data, Series):
-            data = data.to_frame()
-
-        numeric_data = data.select_dtypes(
-            include=["byte", "decimal", "integer", "float", "long", "double", np.datetime64]
-        )
-
-        # no empty frames or series allowed
-        if len(numeric_data.columns) == 0:
-            raise TypeError(
-                "Empty {0!r}: no numeric data to " "plot".format(numeric_data.__class__.__name__)
-            )
-
+        _, numeric_data = NumericPlotBase.prepare_numeric_data(data)
         return numeric_data
 
     @staticmethod

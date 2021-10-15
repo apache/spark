@@ -6000,6 +6000,31 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
             self.assert_eq(expected_pdf, psdf1.combine_first(psdf2))
 
+    def test_multi_index_dtypes(self):
+        # SPARK-36930: Support ps.MultiIndex.dtypes
+        arrays = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
+        pmidx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
+        psmidx = ps.from_pandas(pmidx)
+
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            self.assert_eq(psmidx.dtypes, pmidx.dtypes)
+        else:
+            expected = pd.Series([np.dtype("int64"), np.dtype("O")], index=["number", "color"])
+            self.assert_eq(psmidx.dtypes, expected)
+
+        # multiple labels
+        pmidx = pd.MultiIndex.from_arrays(arrays, names=[("zero", "first"), ("one", "second")])
+        psmidx = ps.from_pandas(pmidx)
+
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            self.assert_eq(psmidx.dtypes, pmidx.dtypes)
+        else:
+            expected = pd.Series(
+                [np.dtype("int64"), np.dtype("O")],
+                index=pd.Index([("zero", "first"), ("one", "second")]),
+            )
+            self.assert_eq(psmidx.dtypes, expected)
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.test_dataframe import *  # noqa: F401

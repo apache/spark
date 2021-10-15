@@ -46,8 +46,8 @@ from pyspark.pandas.utils import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.frame import DataFrame
+    from pyspark.pandas.series import Series
     from pyspark.sql._typing import UserDefinedFunctionLike
 
 
@@ -343,7 +343,7 @@ class PandasOnSparkFrameMethods(object):
         original_func = func
         func = lambda o: original_func(o, *args, **kwds)
 
-        self_applied = DataFrame(self._psdf._internal.resolved_copy)  # type: DataFrame
+        self_applied: DataFrame = DataFrame(self._psdf._internal.resolved_copy)
 
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
@@ -356,7 +356,7 @@ class PandasOnSparkFrameMethods(object):
                     "The given function should return a frame; however, "
                     "the return type was %s." % type(applied)
                 )
-            psdf = ps.DataFrame(applied)  # type: DataFrame
+            psdf: DataFrame = DataFrame(applied)
             if len(pdf) <= limit:
                 return psdf
 
@@ -385,7 +385,7 @@ class PandasOnSparkFrameMethods(object):
                     "hints; however, the return type was %s." % return_sig
                 )
             index_fields = cast(DataFrameType, return_type).index_fields
-            should_retain_index = index_fields is not None
+            should_retain_index = len(index_fields) > 0
             return_schema = cast(DataFrameType, return_type).spark_type
 
             output_func = GroupBy._make_pandas_df_builder_func(
@@ -632,7 +632,7 @@ class PandasOnSparkFrameMethods(object):
                     [field.struct_field for field in index_fields + data_fields]
                 )
 
-                self_applied = DataFrame(self._psdf._internal.resolved_copy)  # type: DataFrame
+                self_applied: DataFrame = DataFrame(self._psdf._internal.resolved_copy)
 
                 output_func = GroupBy._make_pandas_df_builder_func(
                     self_applied, func, return_schema, retain_index=True
@@ -688,18 +688,14 @@ class PandasOnSparkFrameMethods(object):
                 return first_series(DataFrame(internal))
             else:
                 index_fields = cast(DataFrameType, return_type).index_fields
-                index_fields = (
-                    [index_field.normalize_spark_type() for index_field in index_fields]
-                    if index_fields is not None
-                    else None
-                )
+                index_fields = [index_field.normalize_spark_type() for index_field in index_fields]
                 data_fields = [
                     field.normalize_spark_type()
                     for field in cast(DataFrameType, return_type).data_fields
                 ]
-                normalized_fields = (index_fields if index_fields is not None else []) + data_fields
+                normalized_fields = index_fields + data_fields
                 return_schema = StructType([field.struct_field for field in normalized_fields])
-                should_retain_index = index_fields is not None
+                should_retain_index = len(index_fields) > 0
 
                 self_applied = DataFrame(self._psdf._internal.resolved_copy)
 
@@ -897,7 +893,7 @@ class PandasOnSparkSeriesMethods(object):
             limit = ps.get_option("compute.shortcut_limit")
             pser = self._psser.head(limit + 1)._to_internal_pandas()
             transformed = pser.transform(func)
-            psser = Series(transformed)  # type: Series
+            psser: Series = Series(transformed)
 
             field = psser._internal.data_fields[0].normalize_spark_type()
         else:

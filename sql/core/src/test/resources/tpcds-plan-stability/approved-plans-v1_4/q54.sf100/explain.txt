@@ -90,7 +90,7 @@ Condition : (isnotnull(s_county#4) AND isnotnull(s_state#5))
 
 (7) BroadcastExchange
 Input [2]: [s_county#4, s_state#5]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, false], input[1, string, false]),false,false), [id=#6]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, false], input[1, string, false]),false), [id=#6]
 
 (8) BroadcastHashJoin [codegen id : 2]
 Left keys [2]: [ca_county#2, ca_state#3]
@@ -103,7 +103,7 @@ Input [5]: [ca_address_sk#1, ca_county#2, ca_state#3, s_county#4, s_state#5]
 
 (10) BroadcastExchange
 Input [1]: [ca_address_sk#1]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#7]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#7]
 
 (11) Scan parquet default.catalog_sales
 Output [3]: [cs_bill_customer_sk#8, cs_item_sk#9, cs_sold_date_sk#10]
@@ -177,7 +177,7 @@ Input [3]: [i_item_sk#22, i_class#23, i_category#24]
 
 (27) BroadcastExchange
 Input [1]: [i_item_sk#22]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#25]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#25]
 
 (28) BroadcastHashJoin [codegen id : 7]
 Left keys [1]: [item_sk#14]
@@ -364,7 +364,7 @@ Input [3]: [d_date_sk#21, d_year#46, d_moy#47]
 
 (64) BroadcastExchange
 Input [1]: [d_date_sk#21]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#48]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#48]
 
 Subquery:2 Hosting operator id = 15 Hosting Expression = ws_sold_date_sk#17 IN dynamicpruning#11
 
@@ -396,7 +396,7 @@ Input [2]: [d_date_sk#34, d_month_seq#49]
 
 (69) BroadcastExchange
 Input [1]: [d_date_sk#34]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#54]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#54]
 
 Subquery:4 Hosting operator id = 67 Hosting Expression = Subquery scalar-subquery#50, [id=#51]
 * HashAggregate (76)

@@ -106,7 +106,8 @@ singleTableSchema
 statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
-    | USE NAMESPACE? multipartIdentifier                               #use
+    | USE multipartIdentifier                                          #use
+    | USE NAMESPACE multipartIdentifier                                #useNamespace
     | SET CATALOG (identifier | STRING)                                #setCatalog
     | CREATE namespace (IF NOT EXISTS)? multipartIdentifier
         (commentSpec |
@@ -213,6 +214,7 @@ statement
         (LIKE? (multipartIdentifier | pattern=STRING))?                #showFunctions
     | SHOW CREATE TABLE multipartIdentifier (AS SERDE)?                #showCreateTable
     | SHOW CURRENT NAMESPACE                                           #showCurrentNamespace
+    | SHOW CATALOGS (LIKE? pattern=STRING)?                            #showCatalogs
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) namespace EXTENDED?
         multipartIdentifier                                            #describeNamespace
@@ -1065,6 +1067,7 @@ ansiNonReserved
     | CACHE
     | CASCADE
     | CATALOG
+    | CATALOGS
     | CHANGE
     | CLEAR
     | CLUSTER
@@ -1295,6 +1298,7 @@ nonReserved
     | CASE
     | CAST
     | CATALOG
+    | CATALOGS
     | CHANGE
     | CHECK
     | CLEAR
@@ -1550,6 +1554,7 @@ CASCADE: 'CASCADE';
 CASE: 'CASE';
 CAST: 'CAST';
 CATALOG: 'CATALOG';
+CATALOGS: 'CATALOGS';
 CHANGE: 'CHANGE';
 CHECK: 'CHECK';
 CLEAR: 'CLEAR';
