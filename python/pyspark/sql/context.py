@@ -27,7 +27,8 @@ from typing import (
     Tuple,
     overload,
     Type,
-    TYPE_CHECKING
+    ClassVar,
+    TYPE_CHECKING, cast
 )
 
 from py4j.java_gateway import JavaObject
@@ -41,7 +42,9 @@ from pyspark.sql.udf import UDFRegistration  # noqa: F401
 from pyspark.sql.utils import install_exception_handler
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD
-from pyspark.sql.types import StructType
+from pyspark.sql.types import AtomicType, DataType, StructType
+from pyspark.sql.streaming import StreamingQueryManager
+from pyspark.conf import SparkConf
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import (
@@ -51,10 +54,7 @@ if TYPE_CHECKING:
         LiteralType,
         DecimalLiteral
     )
-    from pyspark.sql.types import DataType, AtomicType
     from pyspark.sql.pandas._typing import DataFrameLike
-    from pyspark.sql.streaming import StreamingQueryManager
-    from pyspark.conf import SparkConf
 
 __all__ = ["SQLContext", "HiveContext"]
 
@@ -101,7 +101,7 @@ class SQLContext(object):
     [(1, 'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
     """
 
-    _instantiatedContext = None
+    _instantiatedContext: ClassVar[Optional["SQLContext"]] = None
 
     def __init__(
         self,
@@ -127,7 +127,7 @@ class SQLContext(object):
         _monkey_patch_RDD(self.sparkSession)
         install_exception_handler()
         if (SQLContext._instantiatedContext is None
-                or SQLContext._instantiatedContext._sc._jsc is None):
+                or SQLContext._instantiatedContext._sc._jsc is None):  # type: ignore[attr-defined]
             SQLContext._instantiatedContext = self
 
     @property
@@ -140,7 +140,7 @@ class SQLContext(object):
         return self._jsqlContext
 
     @property
-    def _conf(self) -> "SparkConf":
+    def _conf(self) -> SparkConf:
         """Accessor for the JVM SQL-specific configurations"""
         return self.sparkSession._jsparkSession.sessionState().conf()
 
@@ -169,7 +169,7 @@ class SQLContext(object):
                 sc._jsc.sc()).getOrCreate().sqlContext()  # type: ignore[attr-defined]
             sparkSession = SparkSession(sc, jsqlContext.sparkSession())
             cls(sc, sparkSession, jsqlContext)
-        return cls._instantiatedContext  # type: ignore[return-value]
+        return cast(SQLContext, cls._instantiatedContext)
 
     def newSession(self) -> "SQLContext":
         """
@@ -266,7 +266,7 @@ class SQLContext(object):
         self,
         name: str,
         f: Callable[..., Any],
-        returnType: Optional["DataType"] = None
+        returnType: Optional[DataType] = None
     ) -> "UserDefinedFunctionLike":
         """An alias for :func:`spark.udf.register`.
         See :meth:`pyspark.sql.UDFRegistration.register`.
@@ -286,7 +286,7 @@ class SQLContext(object):
         self,
         name: str,
         javaClassName: str,
-        returnType: Optional["DataType"] = None
+        returnType: Optional[DataType] = None
     ) -> None:
         """An alias for :func:`spark.udf.registerJavaFunction`.
         See :meth:`pyspark.sql.UDFRegistration.registerJavaFunction`.
@@ -344,7 +344,7 @@ class SQLContext(object):
             "RDD[Union[DateTimeLiteral, LiteralType, DecimalLiteral]]",
             "Iterable[Union[DateTimeLiteral, LiteralType, DecimalLiteral]]",
         ],
-        schema: Union["AtomicType", str],
+        schema: Union[AtomicType, str],
         verifySchema: bool = ...,
     ) -> DataFrame:
         ...
@@ -353,7 +353,7 @@ class SQLContext(object):
     def createDataFrame(
         self,
         data: Union["RDD[RowLike]", "Iterable[RowLike]"],
-        schema: Union["StructType", str],
+        schema: Union[StructType, str],
         verifySchema: bool = ...,
     ) -> DataFrame:
         ...
@@ -368,7 +368,7 @@ class SQLContext(object):
     def createDataFrame(
         self,
         data: "DataFrameLike",
-        schema: Union["StructType", str],
+        schema: Union[StructType, str],
         verifySchema: bool = ...,
     ) -> DataFrame:
         ...
@@ -514,7 +514,7 @@ class SQLContext(object):
         tableName: str,
         path: Optional[str] = None,
         source: Optional[str] = None,
-        schema: Optional["StructType"] = None,
+        schema: Optional[StructType] = None,
         **options: str
     ) -> DataFrame:
         """Creates an external table based on the dataset in a data source.
@@ -682,7 +682,7 @@ class SQLContext(object):
         return DataStreamReader(self)
 
     @property
-    def streams(self) -> "StreamingQueryManager":
+    def streams(self) -> StreamingQueryManager:
         """Returns a :class:`StreamingQueryManager` that allows managing all the
         :class:`StreamingQuery` StreamingQueries active on `this` context.
 
