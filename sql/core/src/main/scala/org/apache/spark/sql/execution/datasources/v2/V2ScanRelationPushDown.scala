@@ -227,7 +227,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def applyLimit(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case globalLimit@GlobalLimit(_, LocalLimit(limitExpr, child)) => child match {
+    case globalLimit @ GlobalLimit(_, LocalLimit(limitExpr, child)) => child match {
       case r @ DataSourceV2ScanRelation(_, scan, _) =>
         val supportsPushDownLimit = scan match {
           case _: SupportsPushDownLimit => true
