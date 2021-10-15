@@ -36,6 +36,7 @@ case class JDBCScan(
   private var limit: Option[Limit] = None
 
   override def pushLimit(limit: Limit): Unit = {
+    if (!relation.jdbcOptions.pushDownLimit) return
     this.limit = Some(limit)
   }
 

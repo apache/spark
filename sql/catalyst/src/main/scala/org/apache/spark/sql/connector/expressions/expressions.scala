@@ -363,6 +363,6 @@ private[sql] object SortValue {
 }
 
 private[sql] final case class LimitValue(number: Literal[_]) extends Limit {
-
+  assert(number.value.isInstanceOf[Integer], "LimitValue has to be an Integer")
   override def describe(): String = s"$number"
 }

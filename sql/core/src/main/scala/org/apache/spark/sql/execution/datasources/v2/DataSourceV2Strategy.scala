@@ -101,7 +101,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       val rdd = v1Relation.buildScan()
       val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
-      var limit: Limit = scan match {
+      val limit: Limit = scan match {
         case s: SupportsPushDownLimit => s.pushedLimit
         case _ => null
       }
