@@ -310,7 +310,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if self._schema is None:
             try:
-                self._schema = _parse_datatype_json_string(self._jdf.schema().json())
+                self._schema = cast(
+                    StructType, _parse_datatype_json_string(self._jdf.schema().json()))
             except Exception as e:
                 raise ValueError(
                     "Unable to parse datatype from schema. %s" % e) from e

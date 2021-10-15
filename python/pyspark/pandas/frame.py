@@ -6417,12 +6417,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         from pyspark.sql.types import _parse_datatype_string  # type: ignore[attr-defined]
 
+        include_list: List[str]
         if not is_list_like(include):
-            include_list = [include] if include is not None else []
+            include_list = [cast(str, include)] if include is not None else []
         else:
             include_list = list(include)
+        exclude_list: List[str]
         if not is_list_like(exclude):
-            exclude_list = [exclude] if exclude is not None else []
+            exclude_list = [cast(str, exclude)] if exclude is not None else []
         else:
             exclude_list = list(exclude)
 
