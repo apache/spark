@@ -92,6 +92,20 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(sql("SELECT name, id FROM h2.test.people"), Seq(Row("fred", 1), Row("mary", 2)))
   }
 
+  test("simple scan with LIMIT") {
+    val df = spark.read.table("h2.test.employee").limit(4)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedLimit: LIMIT 4"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
+    checkAnswer(df, Seq(Row(1, "amy", 10000.00, 1000.0),
+      Row(2, "alex", 12000.00, 1200.0),
+      Row(1, "cathy", 9000.00, 1200.0),
+      Row(2, "david", 10000.00, 1300.0)))
+  }
+
   test("scan with filter push-down") {
     val df = spark.table("h2.test.people").filter($"id" > 1)
     val filters = df.queryExecution.optimizedPlan.collect {

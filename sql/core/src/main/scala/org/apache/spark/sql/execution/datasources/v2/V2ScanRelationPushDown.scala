@@ -23,20 +23,21 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeRefer
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LeafNode, LocalLimit, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.expressions.{LiteralValue, LogicalExpressions}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    applyColumnPruning(pushDownAggregates(pushDownFilters(createScanBuilder(plan))))
+    applyLimit(applyColumnPruning(pushDownAggregates(pushDownFilters(createScanBuilder(plan)))))
   }
 
   private def createScanBuilder(plan: LogicalPlan) = plan.transform {
@@ -223,6 +224,35 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         withFilter
       }
       withProjection
+  }
+
+  def applyLimit(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case globalLimit @ GlobalLimit(_, child) => child match {
+      case l @ LocalLimit(_, c) => c match {
+        case r @ DataSourceV2ScanRelation(_, scan, _) =>
+          val supportsPushDownLimit = scan match {
+            case _: SupportsPushDownLimit => true
+            case v1: V1ScanWrapper =>
+              v1.v1Scan match {
+                case _: SupportsPushDownLimit => true
+                case _ => false
+              }
+            case _ => false
+          }
+          if (supportsPushDownLimit) {
+            val value = l.limitExpr.asInstanceOf[Literal].value
+            val limit =
+              LogicalExpressions.limit(LiteralValue(value.asInstanceOf[Integer], IntegerType))
+
+            val limitPushedDown = PushDownUtils.pushLimit(scan, limit)
+            globalLimit
+          } else {
+            globalLimit
+          }
+        case _ => globalLimit
+      }
+      case _ => globalLimit
+    }
   }
 
   private def getWrappedScan(

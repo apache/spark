@@ -190,4 +190,16 @@ public class Expressions {
   public static SortOrder sort(Expression expr, SortDirection direction) {
     return LogicalExpressions.sort(expr, direction, direction.defaultNullOrdering());
   }
+
+  /**
+   * Create a limit expression.
+   *
+   * @param literal number of rows to be returned.
+   * @return a Limit
+   *
+   * @since 3.3.0
+   */
+  public static Limit limit(Literal literal) {
+    return LogicalExpressions.limit(literal);
+  }
 }

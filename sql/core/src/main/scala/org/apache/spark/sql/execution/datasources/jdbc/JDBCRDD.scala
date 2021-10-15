@@ -25,6 +25,7 @@ import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskCon
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.expressions.Limit
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
@@ -179,6 +180,7 @@ object JDBCRDD extends Logging {
    * @param options - JDBC options that contains url, table and other information.
    * @param outputSchema - The schema of the columns or aggregate columns to SELECT.
    * @param groupByColumns - The pushed down group by columns.
+   * @param limit - The pushed down limit.
    *
    * @return An RDD representing "SELECT requiredColumns FROM fqTable".
    */
@@ -190,7 +192,8 @@ object JDBCRDD extends Logging {
       parts: Array[Partition],
       options: JDBCOptions,
       outputSchema: Option[StructType] = None,
-      groupByColumns: Option[Array[String]] = None): RDD[InternalRow] = {
+      groupByColumns: Option[Array[String]] = None,
+      limit: Option[Limit] = None): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = if (groupByColumns.isEmpty) {
@@ -208,7 +211,8 @@ object JDBCRDD extends Logging {
       parts,
       url,
       options,
-      groupByColumns)
+      groupByColumns,
+      limit)
   }
 }
 
@@ -226,7 +230,8 @@ private[jdbc] class JDBCRDD(
     partitions: Array[Partition],
     url: String,
     options: JDBCOptions,
-    groupByColumns: Option[Array[String]])
+    groupByColumns: Option[Array[String]],
+    limit: Option[Limit])
   extends RDD[InternalRow](sc, Nil) {
 
   /**
@@ -269,6 +274,17 @@ private[jdbc] class JDBCRDD(
     if (groupByColumns.nonEmpty && groupByColumns.get.nonEmpty) {
       // The GROUP BY columns should already be quoted by the caller side.
       s"GROUP BY ${groupByColumns.get.mkString(", ")}"
+    } else {
+      ""
+    }
+  }
+
+  /**
+   * A LIMIT clause representing pushed-down limit.
+   */
+  private def getLimitClause: String = {
+    if (limit.nonEmpty) {
+      s"LIMIT ${limit.get.number.value}"
     } else {
       ""
     }
@@ -350,7 +366,7 @@ private[jdbc] class JDBCRDD(
     val myWhereClause = getWhereClause(part)
 
     val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myWhereClause" +
-      s" $getGroupByClause"
+      s" $getGroupByClause $getLimitClause"
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)

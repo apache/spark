@@ -18,7 +18,8 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.connector.read.V1Scan
+import org.apache.spark.sql.connector.expressions.Limit
+import org.apache.spark.sql.connector.read.{SupportsPushDownLimit, V1Scan}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation
 import org.apache.spark.sql.sources.{BaseRelation, Filter, TableScan}
 import org.apache.spark.sql.types.StructType
@@ -28,9 +29,18 @@ case class JDBCScan(
     prunedSchema: StructType,
     pushedFilters: Array[Filter],
     pushedAggregateColumn: Array[String] = Array(),
-    groupByColumns: Option[Array[String]]) extends V1Scan {
+    groupByColumns: Option[Array[String]]) extends V1Scan with SupportsPushDownLimit {
 
   override def readSchema(): StructType = prunedSchema
+
+  private var limit: Option[Limit] = None
+
+  override def pushLimit(limit: Limit): Boolean = {
+    this.limit = Some(limit)
+    true
+  }
+
+  override def pushedLimit: Limit = if (limit.nonEmpty) limit.get else null
 
   override def toV1TableScan[T <: BaseRelation with TableScan](context: SQLContext): T = {
     new BaseRelation with TableScan {
@@ -43,7 +53,7 @@ case class JDBCScan(
         } else {
           pushedAggregateColumn
         }
-        relation.buildScan(columnList, prunedSchema, pushedFilters, groupByColumns)
+        relation.buildScan(columnList, prunedSchema, pushedFilters, groupByColumns, limit)
       }
     }.asInstanceOf[T]
   }
