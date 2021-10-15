@@ -97,9 +97,7 @@ class RandomForest:
         seed: Optional[int] = ...,
     ) -> RandomForestModel: ...
 
-class GradientBoostedTreesModel(
-    TreeEnsembleModel, JavaLoader[GradientBoostedTreesModel]
-): ...
+class GradientBoostedTreesModel(TreeEnsembleModel, JavaLoader[GradientBoostedTreesModel]): ...
 
 class GradientBoostedTrees:
     @classmethod

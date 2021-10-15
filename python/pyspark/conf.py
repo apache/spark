@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-__all__ = ['SparkConf']
+__all__ = ["SparkConf"]
 
 import sys
 from typing import Dict, List, Optional, Tuple, cast, overload
@@ -110,8 +110,12 @@ class SparkConf(object):
     _jconf: Optional[JavaObject]
     _conf: Optional[Dict[str, str]]
 
-    def __init__(self, loadDefaults: bool = True, _jvm: Optional[JVMView] = None,
-                 _jconf: Optional[JavaObject] = None):
+    def __init__(
+        self,
+        loadDefaults: bool = True,
+        _jvm: Optional[JVMView] = None,
+        _jconf: Optional[JavaObject] = None,
+    ):
         """
         Create a new Spark configuration.
         """
@@ -119,6 +123,7 @@ class SparkConf(object):
             self._jconf = _jconf
         else:
             from pyspark.context import SparkContext
+
             _jvm = _jvm or SparkContext._jvm  # type: ignore[attr-defined]
 
             if _jvm is not None:
@@ -169,8 +174,12 @@ class SparkConf(object):
     def setExecutorEnv(self, *, pairs: List[Tuple[str, str]]) -> "SparkConf":
         ...
 
-    def setExecutorEnv(self, key: Optional[str] = None, value: Optional[str] = None,
-                       pairs: Optional[List[Tuple[str, str]]] = None) -> "SparkConf":
+    def setExecutorEnv(
+        self,
+        key: Optional[str] = None,
+        value: Optional[str] = None,
+        pairs: Optional[List[Tuple[str, str]]] = None,
+    ) -> "SparkConf":
         """Set an environment variable to be passed to executors."""
         if (key is not None and pairs is not None) or (key is None and pairs is None):
             raise RuntimeError("Either pass one key-value pair or a list of pairs")
@@ -236,11 +245,12 @@ class SparkConf(object):
             return self._jconf.toDebugString()
         else:
             assert self._conf is not None
-            return '\n'.join('%s=%s' % (k, v) for k, v in self._conf.items())
+            return "\n".join("%s=%s" % (k, v) for k, v in self._conf.items())
 
 
 def _test() -> None:
     import doctest
+
     (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)
     if failure_count:
         sys.exit(-1)

@@ -117,7 +117,7 @@ class Frame(object, metaclass=ABCMeta):
         name: str,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Union["Series", Scalar]:
         pass
 
@@ -657,7 +657,7 @@ class Frame(object, metaclass=ABCMeta):
         mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: Any
+        **options: Any,
     ) -> Optional[str]:
         r"""
         Write object to a comma-separated values (csv) file.
@@ -900,7 +900,7 @@ class Frame(object, metaclass=ABCMeta):
         lines: bool = True,
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: Any
+        **options: Any,
     ) -> Optional[str]:
         """
         Convert the object to a JSON string.

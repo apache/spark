@@ -25,6 +25,7 @@ import sys
 import threading
 import traceback
 import types
+
 try:
     from collections.abc import Callable
 except AttributeError:
@@ -44,6 +45,7 @@ class VersionUtils(object):
     """
     Provides utility method to determine Spark versions with given input string.
     """
+
     @staticmethod
     def majorMinorVersion(sparkVersion: str):
         """
@@ -59,13 +61,15 @@ class VersionUtils(object):
         >>> VersionUtils.majorMinorVersion(sparkVersion)
         (2, 3)
         """
-        m = re.search(r'^(\d+)\.(\d+)(\..*)?$', sparkVersion)
+        m = re.search(r"^(\d+)\.(\d+)(\..*)?$", sparkVersion)
         if m is not None:
             return (int(m.group(1)), int(m.group(2)))
         else:
-            raise ValueError("Spark tried to parse '%s' as a Spark" % sparkVersion +
-                             " version string, but it could not find the major and minor" +
-                             " version numbers.")
+            raise ValueError(
+                "Spark tried to parse '%s' as a Spark" % sparkVersion
+                + " version string, but it could not find the major and minor"
+                + " version numbers."
+            )
 
 
 def fail_on_stopiteration(f):
@@ -73,13 +77,13 @@ def fail_on_stopiteration(f):
     Wraps the input function to fail on 'StopIteration' by raising a 'RuntimeError'
     prevents silent loss of data when 'f' is used in a for loop in Spark code
     """
+
     def wrapper(*args, **kwargs):
         try:
             return f(*args, **kwargs)
         except StopIteration as exc:
             raise RuntimeError(
-                "Caught StopIteration thrown from user's code; failing the task",
-                exc
+                "Caught StopIteration thrown from user's code; failing the task", exc
             )
 
     return wrapper
@@ -218,13 +222,15 @@ def try_simplify_traceback(tb):
             tb_next=tb_next,
             tb_frame=cur_tb.tb_frame,
             tb_lasti=cur_tb.tb_frame.f_lasti,
-            tb_lineno=cur_tb.tb_frame.f_lineno if cur_tb.tb_frame.f_lineno is not None else -1)
+            tb_lineno=cur_tb.tb_frame.f_lineno if cur_tb.tb_frame.f_lineno is not None else -1,
+        )
         tb_next = new_tb
     return new_tb
 
 
 def _print_missing_jar(lib_name, pkg_name, jar_name, spark_version):
-    print("""
+    print(
+        """
 ________________________________________________________________________________________________
 
   Spark %(lib_name)s libraries not found in class path. Try one of the following.
@@ -242,12 +248,14 @@ ________________________________________________________________________________
 
 ________________________________________________________________________________________________
 
-""" % {
-        "lib_name": lib_name,
-        "pkg_name": pkg_name,
-        "jar_name": jar_name,
-        "spark_version": spark_version
-    })
+"""
+        % {
+            "lib_name": lib_name,
+            "pkg_name": pkg_name,
+            "jar_name": jar_name,
+            "spark_version": spark_version,
+        }
+    )
 
 
 def _parse_memory(s):
@@ -262,7 +270,7 @@ def _parse_memory(s):
     >>> _parse_memory("2g")
     2048
     """
-    units = {'g': 1024, 'm': 1, 't': 1 << 20, 'k': 1.0 / 1024}
+    units = {"g": 1024, "m": 1, "t": 1 << 20, "k": 1.0 / 1024}
     if s[-1].lower() not in units:
         raise ValueError("invalid format: " + s)
     return int(float(s[:-1]) * units[s[-1].lower()])
@@ -320,10 +328,11 @@ def inheritable_thread_target(f: Callable) -> Callable:
         # NOTICE the internal difference vs `InheritableThread`. `InheritableThread`
         # copies local properties when the thread starts but `inheritable_thread_target`
         # copies when the function is wrapped.
-        properties = (SparkContext
-                      ._active_spark_context  # type: ignore[attr-defined]
-                      ._jsc.sc()
-                      .getLocalProperties().clone())
+        properties = (
+            SparkContext._active_spark_context._jsc.sc()  # type: ignore[attr-defined]
+            .getLocalProperties()
+            .clone()
+        )
 
         @functools.wraps(f)
         def wrapped(*args, **kwargs):
@@ -333,6 +342,7 @@ def inheritable_thread_target(f: Callable) -> Callable:
                 return f(*args, **kwargs)
             finally:
                 InheritableThread._clean_py4j_conn_for_current_thread()
+
         return wrapped
     else:
         return f
@@ -358,6 +368,7 @@ class InheritableThread(threading.Thread):
     -----
     This API is experimental.
     """
+
     def __init__(self, target, *args, **kwargs):
         from pyspark import SparkContext
 
@@ -372,8 +383,7 @@ class InheritableThread(threading.Thread):
                 finally:
                     InheritableThread._clean_py4j_conn_for_current_thread()
 
-            super(InheritableThread, self).__init__(
-                target=copy_local_properties, *args, **kwargs)
+            super(InheritableThread, self).__init__(target=copy_local_properties, *args, **kwargs)
         else:
             super(InheritableThread, self).__init__(target=target, *args, **kwargs)
 
@@ -413,9 +423,9 @@ if __name__ == "__main__":
         from pyspark.context import SparkContext
 
         globs = pyspark.util.__dict__.copy()
-        globs['sc'] = SparkContext('local[4]', 'PythonTest')
+        globs["sc"] = SparkContext("local[4]", "PythonTest")
         (failure_count, test_count) = doctest.testmod(pyspark.util, globs=globs)
-        globs['sc'].stop()
+        globs["sc"].stop()
 
         if failure_count:
             sys.exit(-1)

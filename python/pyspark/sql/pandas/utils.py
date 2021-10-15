@@ -17,46 +17,57 @@
 
 
 def require_minimum_pandas_version() -> None:
-    """ Raise ImportError if minimum version of Pandas is not installed
-    """
+    """Raise ImportError if minimum version of Pandas is not installed"""
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
     minimum_pandas_version = "0.23.2"
 
     from distutils.version import LooseVersion
+
     try:
         import pandas
+
         have_pandas = True
     except ImportError as error:
         have_pandas = False
         raised_error = error
     if not have_pandas:
-        raise ImportError("Pandas >= %s must be installed; however, "
-                          "it was not found." % minimum_pandas_version) from raised_error
+        raise ImportError(
+            "Pandas >= %s must be installed; however, " "it was not found." % minimum_pandas_version
+        ) from raised_error
     if LooseVersion(pandas.__version__) < LooseVersion(minimum_pandas_version):
-        raise ImportError("Pandas >= %s must be installed; however, "
-                          "your version was %s." % (minimum_pandas_version, pandas.__version__))
+        raise ImportError(
+            "Pandas >= %s must be installed; however, "
+            "your version was %s." % (minimum_pandas_version, pandas.__version__)
+        )
 
 
 def require_minimum_pyarrow_version() -> None:
-    """ Raise ImportError if minimum version of pyarrow is not installed
-    """
+    """Raise ImportError if minimum version of pyarrow is not installed"""
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
     minimum_pyarrow_version = "1.0.0"
 
     from distutils.version import LooseVersion
     import os
+
     try:
         import pyarrow
+
         have_arrow = True
     except ImportError as error:
         have_arrow = False
         raised_error = error
     if not have_arrow:
-        raise ImportError("PyArrow >= %s must be installed; however, "
-                          "it was not found." % minimum_pyarrow_version) from raised_error
+        raise ImportError(
+            "PyArrow >= %s must be installed; however, "
+            "it was not found." % minimum_pyarrow_version
+        ) from raised_error
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
-        raise ImportError("PyArrow >= %s must be installed; however, "
-                          "your version was %s." % (minimum_pyarrow_version, pyarrow.__version__))
+        raise ImportError(
+            "PyArrow >= %s must be installed; however, "
+            "your version was %s." % (minimum_pyarrow_version, pyarrow.__version__)
+        )
     if os.environ.get("ARROW_PRE_0_15_IPC_FORMAT", "0") == "1":
-        raise RuntimeError("Arrow legacy IPC format is not supported in PySpark, "
-                           "please unset ARROW_PRE_0_15_IPC_FORMAT")
+        raise RuntimeError(
+            "Arrow legacy IPC format is not supported in PySpark, "
+            "please unset ARROW_PRE_0_15_IPC_FORMAT"
+        )

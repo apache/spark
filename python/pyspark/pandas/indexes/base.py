@@ -128,7 +128,7 @@ class Index(IndexOpsMixin):
         copy: bool = False,
         name: Optional[Name] = None,
         tupleize_cols: bool = True,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> "Index":
         if not is_hashable(name):
             raise TypeError("Index.name must be a hashable type")
@@ -167,7 +167,7 @@ class Index(IndexOpsMixin):
                     copy=copy,
                     name=name,
                     tupleize_cols=tupleize_cols,
-                    **kwargs
+                    **kwargs,
                 )
             ),
         )

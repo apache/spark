@@ -599,7 +599,7 @@ class DataFrame(Frame, Generic[T]):
         name: str,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> "Series":
         """
         Applies sfun to each column and returns a pd.Series where the number of rows equal the
@@ -4537,7 +4537,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: Any
+        **options: Any,
     ) -> None:
         if index_col is None:
             log_advice(
@@ -4555,7 +4555,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: "OptionalPrimitiveType"
+        **options: "OptionalPrimitiveType",
     ) -> None:
         """
         Write the DataFrame out as a Delta Lake table.
@@ -4642,7 +4642,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         partition_cols: Optional[Union[str, List[str]]] = None,
         compression: Optional[str] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: Any
+        **options: Any,
     ) -> None:
         """
         Write the DataFrame out as a Parquet file or directory.
@@ -4721,7 +4721,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: "OptionalPrimitiveType"
+        **options: "OptionalPrimitiveType",
     ) -> None:
         """
         Write the DataFrame out as a ORC file or directory.
@@ -4801,7 +4801,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         mode: str = "overwrite",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: "OptionalPrimitiveType"
+        **options: "OptionalPrimitiveType",
     ) -> None:
         """An alias for :func:`DataFrame.spark.to_spark_io`.
         See :meth:`pyspark.pandas.spark.accessors.SparkFrameMethods.to_spark_io`.

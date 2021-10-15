@@ -25,14 +25,24 @@ from pyspark import RDD, since
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py
 from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.regression import (
-    LabeledPoint, LinearModel, _regression_train_wrapper,
-    StreamingLinearAlgorithm)
+    LabeledPoint,
+    LinearModel,
+    _regression_train_wrapper,
+    StreamingLinearAlgorithm,
+)
 from pyspark.mllib.util import Saveable, Loader, inherit_doc
 
 
-__all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'LogisticRegressionWithLBFGS',
-           'SVMModel', 'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes',
-           'StreamingLogisticRegressionWithSGD']
+__all__ = [
+    "LogisticRegressionModel",
+    "LogisticRegressionWithSGD",
+    "LogisticRegressionWithLBFGS",
+    "SVMModel",
+    "SVMWithSGD",
+    "NaiveBayesModel",
+    "NaiveBayes",
+    "StreamingLogisticRegressionWithSGD",
+]
 
 
 class LinearClassificationModel(LinearModel):
@@ -40,11 +50,12 @@ class LinearClassificationModel(LinearModel):
     A private abstract class representing a multiclass classification
     model. The categories are represented by int values: 0, 1, 2, etc.
     """
+
     def __init__(self, weights, intercept):
         super(LinearClassificationModel, self).__init__(weights, intercept)
         self._threshold = None
 
-    @since('1.4.0')
+    @since("1.4.0")
     def setThreshold(self, value):
         """
         Sets the threshold that separates positive predictions from
@@ -56,7 +67,7 @@ class LinearClassificationModel(LinearModel):
         self._threshold = value
 
     @property
-    @since('1.4.0')
+    @since("1.4.0")
     def threshold(self):
         """
         Returns the threshold (if any) used for converting raw
@@ -65,7 +76,7 @@ class LinearClassificationModel(LinearModel):
         """
         return self._threshold
 
-    @since('1.4.0')
+    @since("1.4.0")
     def clearThreshold(self):
         """
         Clears the threshold so that `predict` will output raw
@@ -73,7 +84,7 @@ class LinearClassificationModel(LinearModel):
         """
         self._threshold = None
 
-    @since('1.4.0')
+    @since("1.4.0")
     def predict(self, test):
         """
         Predict values for a single data point or an RDD of points
@@ -166,6 +177,7 @@ class LogisticRegressionModel(LinearClassificationModel):
     >>> mcm.predict([0.0, 0.0, 0.3])
     2
     """
+
     def __init__(self, weights, intercept, numFeatures, numClasses):
         super(LogisticRegressionModel, self).__init__(weights, intercept)
         self._numFeatures = int(numFeatures)
@@ -176,11 +188,12 @@ class LogisticRegressionModel(LinearClassificationModel):
             self._weightsMatrix = None
         else:
             self._dataWithBiasSize = self._coeff.size // (self._numClasses - 1)
-            self._weightsMatrix = self._coeff.toArray().reshape(self._numClasses - 1,
-                                                                self._dataWithBiasSize)
+            self._weightsMatrix = self._coeff.toArray().reshape(
+                self._numClasses - 1, self._dataWithBiasSize
+            )
 
     @property
-    @since('1.4.0')
+    @since("1.4.0")
     def numFeatures(self):
         """
         Dimension of the features.
@@ -188,7 +201,7 @@ class LogisticRegressionModel(LinearClassificationModel):
         return self._numFeatures
 
     @property
-    @since('1.4.0')
+    @since("1.4.0")
     def numClasses(self):
         """
         Number of possible outcomes for k classes classification problem
@@ -196,7 +209,7 @@ class LogisticRegressionModel(LinearClassificationModel):
         """
         return self._numClasses
 
-    @since('0.9.0')
+    @since("0.9.0")
     def predict(self, x):
         """
         Predict values for a single data point or an RDD of points
@@ -222,8 +235,9 @@ class LogisticRegressionModel(LinearClassificationModel):
             max_margin = 0.0
             if x.size + 1 == self._dataWithBiasSize:
                 for i in range(0, self._numClasses - 1):
-                    margin = x.dot(self._weightsMatrix[i][0:x.size]) + \
-                        self._weightsMatrix[i][x.size]
+                    margin = (
+                        x.dot(self._weightsMatrix[i][0 : x.size]) + self._weightsMatrix[i][x.size]
+                    )
                     if margin > max_margin:
                         max_margin = margin
                         best_class = i + 1
@@ -235,23 +249,25 @@ class LogisticRegressionModel(LinearClassificationModel):
                         best_class = i + 1
             return best_class
 
-    @since('1.4.0')
+    @since("1.4.0")
     def save(self, sc, path):
         """
         Save this model to the given path.
         """
         java_model = sc._jvm.org.apache.spark.mllib.classification.LogisticRegressionModel(
-            _py2java(sc, self._coeff), self.intercept, self.numFeatures, self.numClasses)
+            _py2java(sc, self._coeff), self.intercept, self.numFeatures, self.numClasses
+        )
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
-    @since('1.4.0')
+    @since("1.4.0")
     def load(cls, sc, path):
         """
         Load a model from the given path.
         """
         java_model = sc._jvm.org.apache.spark.mllib.classification.LogisticRegressionModel.load(
-            sc._jsc.sc(), path)
+            sc._jsc.sc(), path
+        )
         weights = _java2py(sc, java_model.weights())
         intercept = java_model.intercept()
         numFeatures = java_model.numFeatures()
@@ -273,10 +289,21 @@ class LogisticRegressionWithSGD(object):
     .. deprecated:: 2.0.0
         Use ml.classification.LogisticRegression or LogisticRegressionWithLBFGS.
     """
+
     @classmethod
-    def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
-              initialWeights=None, regParam=0.01, regType="l2", intercept=False,
-              validateData=True, convergenceTol=0.001):
+    def train(
+        cls,
+        data,
+        iterations=100,
+        step=1.0,
+        miniBatchFraction=1.0,
+        initialWeights=None,
+        regParam=0.01,
+        regType="l2",
+        intercept=False,
+        validateData=True,
+        convergenceTol=0.001,
+    ):
         """
         Train a logistic regression model on the given data.
 
@@ -324,12 +351,24 @@ class LogisticRegressionWithSGD(object):
         """
         warnings.warn(
             "Deprecated in 2.0.0. Use ml.classification.LogisticRegression or "
-            "LogisticRegressionWithLBFGS.", FutureWarning)
+            "LogisticRegressionWithLBFGS.",
+            FutureWarning,
+        )
 
         def train(rdd, i):
-            return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, int(iterations),
-                                 float(step), float(miniBatchFraction), i, float(regParam), regType,
-                                 bool(intercept), bool(validateData), float(convergenceTol))
+            return callMLlibFunc(
+                "trainLogisticRegressionModelWithSGD",
+                rdd,
+                int(iterations),
+                float(step),
+                float(miniBatchFraction),
+                i,
+                float(regParam),
+                regType,
+                bool(intercept),
+                bool(validateData),
+                float(convergenceTol),
+            )
 
         return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
 
@@ -342,9 +381,21 @@ class LogisticRegressionWithLBFGS(object):
     Standard feature scaling and L2 regularization are used by default.
     .. versionadded:: 1.2.0
     """
+
     @classmethod
-    def train(cls, data, iterations=100, initialWeights=None, regParam=0.0, regType="l2",
-              intercept=False, corrections=10, tolerance=1e-6, validateData=True, numClasses=2):
+    def train(
+        cls,
+        data,
+        iterations=100,
+        initialWeights=None,
+        regParam=0.0,
+        regType="l2",
+        intercept=False,
+        corrections=10,
+        tolerance=1e-6,
+        validateData=True,
+        numClasses=2,
+    ):
         """
         Train a logistic regression model on the given data.
 
@@ -405,10 +456,21 @@ class LogisticRegressionWithLBFGS(object):
         >>> lrm.predict([0.0, 1.0])
         0
         """
+
         def train(rdd, i):
-            return callMLlibFunc("trainLogisticRegressionModelWithLBFGS", rdd, int(iterations), i,
-                                 float(regParam), regType, bool(intercept), int(corrections),
-                                 float(tolerance), bool(validateData), int(numClasses))
+            return callMLlibFunc(
+                "trainLogisticRegressionModelWithLBFGS",
+                rdd,
+                int(iterations),
+                i,
+                float(regParam),
+                regType,
+                bool(intercept),
+                int(corrections),
+                float(tolerance),
+                bool(validateData),
+                int(numClasses),
+            )
 
         if initialWeights is None:
             if numClasses == 2:
@@ -478,11 +540,12 @@ class SVMModel(LinearClassificationModel):
     ... except:
     ...    pass
     """
+
     def __init__(self, weights, intercept):
         super(SVMModel, self).__init__(weights, intercept)
         self._threshold = 0.0
 
-    @since('0.9.0')
+    @since("0.9.0")
     def predict(self, x):
         """
         Predict values for a single data point or an RDD of points
@@ -498,23 +561,23 @@ class SVMModel(LinearClassificationModel):
         else:
             return 1 if margin > self._threshold else 0
 
-    @since('1.4.0')
+    @since("1.4.0")
     def save(self, sc, path):
         """
         Save this model to the given path.
         """
         java_model = sc._jvm.org.apache.spark.mllib.classification.SVMModel(
-            _py2java(sc, self._coeff), self.intercept)
+            _py2java(sc, self._coeff), self.intercept
+        )
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
-    @since('1.4.0')
+    @since("1.4.0")
     def load(cls, sc, path):
         """
         Load a model from the given path.
         """
-        java_model = sc._jvm.org.apache.spark.mllib.classification.SVMModel.load(
-            sc._jsc.sc(), path)
+        java_model = sc._jvm.org.apache.spark.mllib.classification.SVMModel.load(sc._jsc.sc(), path)
         weights = _java2py(sc, java_model.weights())
         intercept = java_model.intercept()
         threshold = java_model.getThreshold().get()
@@ -531,9 +594,19 @@ class SVMWithSGD(object):
     """
 
     @classmethod
-    def train(cls, data, iterations=100, step=1.0, regParam=0.01,
-              miniBatchFraction=1.0, initialWeights=None, regType="l2",
-              intercept=False, validateData=True, convergenceTol=0.001):
+    def train(
+        cls,
+        data,
+        iterations=100,
+        step=1.0,
+        regParam=0.01,
+        miniBatchFraction=1.0,
+        initialWeights=None,
+        regType="l2",
+        intercept=False,
+        validateData=True,
+        convergenceTol=0.001,
+    ):
         """
         Train a support vector machine on the given data.
 
@@ -579,10 +652,21 @@ class SVMWithSGD(object):
             A condition which decides iteration termination.
             (default: 0.001)
         """
+
         def train(rdd, i):
-            return callMLlibFunc("trainSVMModelWithSGD", rdd, int(iterations), float(step),
-                                 float(regParam), float(miniBatchFraction), i, regType,
-                                 bool(intercept), bool(validateData), float(convergenceTol))
+            return callMLlibFunc(
+                "trainSVMModelWithSGD",
+                rdd,
+                int(iterations),
+                float(step),
+                float(regParam),
+                float(miniBatchFraction),
+                i,
+                regType,
+                bool(intercept),
+                bool(validateData),
+                float(convergenceTol),
+            )
 
         return _regression_train_wrapper(train, SVMModel, data, initialWeights)
 
@@ -642,12 +726,13 @@ class NaiveBayesModel(Saveable, Loader):
     ... except OSError:
     ...     pass
     """
+
     def __init__(self, labels, pi, theta):
         self.labels = labels
         self.pi = pi
         self.theta = theta
 
-    @since('0.9.0')
+    @since("0.9.0")
     def predict(self, x):
         """
         Return the most likely class for a data vector
@@ -666,17 +751,19 @@ class NaiveBayesModel(Saveable, Loader):
         java_pi = _py2java(sc, self.pi.tolist())
         java_theta = _py2java(sc, self.theta.tolist())
         java_model = sc._jvm.org.apache.spark.mllib.classification.NaiveBayesModel(
-            java_labels, java_pi, java_theta)
+            java_labels, java_pi, java_theta
+        )
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
-    @since('1.4.0')
+    @since("1.4.0")
     def load(cls, sc, path):
         """
         Load a model from the given path.
         """
         java_model = sc._jvm.org.apache.spark.mllib.classification.NaiveBayesModel.load(
-            sc._jsc.sc(), path)
+            sc._jsc.sc(), path
+        )
         # Can not unpickle array.array from Pickle in Python3 with "bytes"
         py_labels = _java2py(sc, java_model.labels(), "latin1")
         py_pi = _java2py(sc, java_model.pi(), "latin1")
@@ -753,18 +840,24 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
         Value used to determine when to terminate iterations.
         (default: 0.001)
     """
-    def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0, regParam=0.0,
-                 convergenceTol=0.001):
+
+    def __init__(
+        self,
+        stepSize=0.1,
+        numIterations=50,
+        miniBatchFraction=1.0,
+        regParam=0.0,
+        convergenceTol=0.001,
+    ):
         self.stepSize = stepSize
         self.numIterations = numIterations
         self.regParam = regParam
         self.miniBatchFraction = miniBatchFraction
         self.convergenceTol = convergenceTol
         self._model = None
-        super(StreamingLogisticRegressionWithSGD, self).__init__(
-            model=self._model)
+        super(StreamingLogisticRegressionWithSGD, self).__init__(model=self._model)
 
-    @since('1.5.0')
+    @since("1.5.0")
     def setInitialWeights(self, initialWeights):
         """
         Set the initial value of weights.
@@ -774,11 +867,10 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
         initialWeights = _convert_to_vector(initialWeights)
 
         # LogisticRegressionWithSGD does only binary classification.
-        self._model = LogisticRegressionModel(
-            initialWeights, 0, initialWeights.size, 2)
+        self._model = LogisticRegressionModel(initialWeights, 0, initialWeights.size, 2)
         return self
 
-    @since('1.5.0')
+    @since("1.5.0")
     def trainOn(self, dstream):
         """Train the model on the incoming dstream."""
         self._validate(dstream)
@@ -787,9 +879,14 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
             # LogisticRegressionWithSGD.train raises an error for an empty RDD.
             if not rdd.isEmpty():
                 self._model = LogisticRegressionWithSGD.train(
-                    rdd, self.numIterations, self.stepSize,
-                    self.miniBatchFraction, self._model.weights,
-                    regParam=self.regParam, convergenceTol=self.convergenceTol)
+                    rdd,
+                    self.numIterations,
+                    self.stepSize,
+                    self.miniBatchFraction,
+                    self._model.weights,
+                    regParam=self.regParam,
+                    convergenceTol=self.convergenceTol,
+                )
 
         dstream.foreachRDD(update)
 
@@ -798,16 +895,17 @@ def _test():
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.mllib.classification
+
     globs = pyspark.mllib.classification.__dict__.copy()
-    spark = SparkSession.builder\
-        .master("local[4]")\
-        .appName("mllib.classification tests")\
-        .getOrCreate()
-    globs['sc'] = spark.sparkContext
+    spark = (
+        SparkSession.builder.master("local[4]").appName("mllib.classification tests").getOrCreate()
+    )
+    globs["sc"] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
         sys.exit(-1)
+
 
 if __name__ == "__main__":
     _test()

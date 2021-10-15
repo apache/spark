@@ -94,7 +94,7 @@ def _compare(
     right: Any,
     f: Callable[..., Column],
     *,
-    is_equality_comparison: bool = False
+    is_equality_comparison: bool = False,
 ) -> SeriesOrIndex:
     """
     Compare a Categorical operand `left` to `right` with the given Spark Column function.
