@@ -308,7 +308,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.schema
         StructType(List(StructField(age,IntegerType,true),StructField(name,StringType,true)))
         """
-        self._schema: StructType  # type: ignore[no-redef]
         if self._schema is None:
             try:
                 self._schema = cast(
