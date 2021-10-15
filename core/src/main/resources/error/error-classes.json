@@ -1,8 +1,4 @@
 {
-  "ALTER_TABLE_WITH_DROP_PARTITION_AND_PURGE_UNSUPPORTED" : {
-    "message" : [ "ALTER TABLE ... DROP PARTITION ... PURGE" ],
-    "sqlState" : "0A000"
-  },
   "AMBIGUOUS_FIELD_NAME" : {
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
@@ -39,10 +35,6 @@
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero" ],
     "sqlState" : "22012"
-  },
-  "DROP_TABLE_WITH_PURGE_UNSUPPORTED" : {
-    "message" : [ "DROP TABLE ... PURGE" ],
-    "sqlState" : "0A000"
   },
   "DUPLICATE_KEY" : {
     "message" : [ "Found duplicate keys '%s'" ],
@@ -177,6 +169,10 @@
   },
   "UNSUPPORTED_CHANGE_COLUMN" : {
     "message" : [ "Please add an implementation for a column change here" ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_COMMAND" : {
+    "message" : [ "DDL '%s' is not supported." ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATATYPE" : {

@@ -1325,14 +1325,14 @@ object QueryExecutionErrors {
 
   def dropTableWithPurgeUnsupportedError(): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "DROP_TABLE_WITH_PURGE_UNSUPPORTED",
+      errorClass = "UNSUPPORTED_COMMAND",
       messageParameters = Array.empty
     )
   }
 
   def alterTableWithDropPartitionAndPurgeUnsupportedError(): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "ALTER_TABLE_WITH_DROP_PARTITION_AND_PURGE_UNSUPPORTED",
+      errorClass = "UNSUPPORTED_COMMAND",
       messageParameters = Array.empty
     )
   }
