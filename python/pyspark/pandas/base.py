@@ -24,7 +24,7 @@ from itertools import chain
 from typing import Any, Callable, Optional, Sequence, Tuple, Union, cast, TYPE_CHECKING
 
 import numpy as np
-import pandas as pd  # noqa: F401
+import pandas as pd
 from pandas.api.types import is_list_like, CategoricalDtype
 from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import LongType, BooleanType
@@ -51,10 +51,10 @@ from pyspark.pandas.utils import (
 from pyspark.pandas.frame import DataFrame
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import ColumnOrName  # noqa: F401 (SPARK-34943)
+    from pyspark.sql._typing import ColumnOrName
 
-    from pyspark.pandas.data_type_ops.base import DataTypeOps  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.data_type_ops.base import DataTypeOps
+    from pyspark.pandas.series import Series
 
 
 def should_alignment_for_column_op(self: SeriesOrIndex, other: SeriesOrIndex) -> bool:

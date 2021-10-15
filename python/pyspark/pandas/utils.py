@@ -22,11 +22,10 @@ import functools
 from collections import OrderedDict
 from contextlib import contextmanager
 import os
-from typing import (  # noqa: F401 (SPARK-34943)
+from typing import (
     Any,
     Callable,
     Dict,
-    Iterable,
     Iterator,
     List,
     Optional,
@@ -51,11 +50,10 @@ from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef.typehints import as_spark_type
 
 if TYPE_CHECKING:
-    # This is required in old Python 3.5 to prevent circular reference.
-    from pyspark.pandas.base import IndexOpsMixin  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.internal import InternalFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.base import IndexOpsMixin
+    from pyspark.pandas.frame import DataFrame
+    from pyspark.pandas.internal import InternalFrame
+    from pyspark.pandas.series import Series
 
 
 ERROR_MESSAGE_CANNOT_COMBINE = (

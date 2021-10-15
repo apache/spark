@@ -26,7 +26,7 @@ from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import DataType
 
 # For running doctests and reference resolution in PyCharm.
-from pyspark import pandas as ps  # noqa: F401
+from pyspark import pandas as ps
 from pyspark.pandas._typing import Label, Name, Scalar
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.frame import DataFrame

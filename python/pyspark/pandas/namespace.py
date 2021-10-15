@@ -18,7 +18,7 @@
 """
 Wrappers around spark that correspond to common pandas functions.
 """
-from typing import (  # noqa: F401 (SPARK-34943)
+from typing import (
     Any,
     Callable,
     Dict,
@@ -31,7 +31,6 @@ from typing import (  # noqa: F401 (SPARK-34943)
     Union,
     cast,
     no_type_check,
-    overload,
 )
 from collections import OrderedDict
 from collections.abc import Iterable
@@ -67,7 +66,7 @@ from pyspark.sql.types import (
     DataType,
 )
 
-from pyspark import pandas as ps  # noqa: F401
+from pyspark import pandas as ps
 from pyspark.pandas._typing import Axis, Dtype, Label, Name
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.utils import (

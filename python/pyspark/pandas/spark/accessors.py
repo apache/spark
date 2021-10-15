@@ -30,11 +30,11 @@ from pyspark.pandas._typing import IndexOpsLike
 from pyspark.pandas.internal import InternalField
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import OptionalPrimitiveType  # noqa: F401 (SPARK-34943)
-    from pyspark._typing import PrimitiveType  # noqa: F401 (SPARK-34943)
+    from pyspark.sql._typing import OptionalPrimitiveType
+    from pyspark._typing import PrimitiveType
 
-    import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.frame import CachedDataFrame  # noqa: F401 (SPARK-34943)
+    import pyspark.pandas as ps
+    from pyspark.pandas.frame import CachedDataFrame
 
 
 class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
