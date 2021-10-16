@@ -21,6 +21,7 @@ from distutils.version import LooseVersion
 import inspect
 from itertools import product
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -2555,6 +2556,11 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser.hasnans, psser.hasnans)
 
         pser = pd.Series([pd.Timestamp("2020-07-30"), np.nan, pd.Timestamp("2020-07-30")])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.hasnans, psser.hasnans)
+
+        # DecimalType
+        pser = pd.Series([Decimal("0.1"), Decimal("NaN")])
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.hasnans, psser.hasnans)
 
