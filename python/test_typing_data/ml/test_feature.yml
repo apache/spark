@@ -1,0 +1,44 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+- case: stringIndexerOverloads
+  main: |
+    from pyspark.ml.feature import StringIndexer
+
+    # No arguments is OK
+    StringIndexer()
+
+    StringIndexer(inputCol="foo")
+    StringIndexer(outputCol="bar")
+    StringIndexer(inputCol="foo", outputCol="bar")
+
+    StringIndexer(inputCols=["foo"])
+    StringIndexer(outputCols=["bar"])
+    StringIndexer(inputCols=["foo"], outputCols=["bar"])
+
+    StringIndexer(inputCol="foo", outputCols=["bar"])
+    StringIndexer(inputCols=["foo"], outputCol="bar")
+
+  out: |
+    main:14: error: No overload variant of "StringIndexer" matches argument types "str", "List[str]"  [call-overload]
+    main:14: note: Possible overload variants:
+    main:14: note:     def StringIndexer(self, *, inputCol: Optional[str] = ..., outputCol: Optional[str] = ..., handleInvalid: str = ..., stringOrderType: str = ...) -> StringIndexer
+    main:14: note:     def StringIndexer(self, *, inputCols: Optional[List[str]] = ..., outputCols: Optional[List[str]] = ..., handleInvalid: str = ..., stringOrderType: str = ...) -> StringIndexer
+    main:15: error: No overload variant of "StringIndexer" matches argument types "List[str]", "str"  [call-overload]
+    main:15: note: Possible overload variants:
+    main:15: note:     def StringIndexer(self, *, inputCol: Optional[str] = ..., outputCol: Optional[str] = ..., handleInvalid: str = ..., stringOrderType: str = ...) -> StringIndexer
+    main:15: note:     def StringIndexer(self, *, inputCols: Optional[List[str]] = ..., outputCols: Optional[List[str]] = ..., handleInvalid: str = ..., stringOrderType: str = ...) -> StringIndexer
