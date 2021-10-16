@@ -49,7 +49,7 @@ public final class ByteArray {
     return getPrefix(bytes, Platform.BYTE_ARRAY_OFFSET, bytes.length);
   }
 
-  protected static long getPrefix(Object base, long offset, int numBytes) {
+  static long getPrefix(Object base, long offset, int numBytes) {
     // Since JVMs are either 4-byte aligned or 8-byte aligned, we check the size of the bytes.
     // If size is 0, just return 0.
     // If size is between 1 and 4 (inclusive), assume data is 4-byte aligned under the hood and
