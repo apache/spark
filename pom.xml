@@ -3152,6 +3152,10 @@
         </configuration>
         <dependencies>
           <dependency>
+            <!--
+              If you are changing the dependency setting for checkstyle plugin,
+              please check project/plugins.sbt too.
+            -->
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
             <version>8.43</version>
