@@ -124,13 +124,13 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override def supportsIndex: Boolean = true
 
   override def testIndexProperties(jdbcTable: SupportsIndex): Unit = {
-    val properties = new util.Properties();
+    val properties = new util.HashMap[String, String]();
     properties.put("KEY_BLOCK_SIZE", "10")
     properties.put("COMMENT", "'this is a comment'")
     // MySQL doesn't allow property set on individual column, so use empty Array for
     // column properties
     jdbcTable.createIndex("i1", "BTREE", Array(FieldReference("col1")),
-      Array.empty[util.Map[NamedReference, util.Properties]], properties)
+      Array.empty[util.Map[NamedReference, util.Map[String, String]]], properties)
 
     var index = jdbcTable.listIndexes()
     // The index property size is actually 1. Even though the index is created

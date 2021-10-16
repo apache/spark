@@ -48,8 +48,8 @@ public interface SupportsIndex extends Table {
   void createIndex(String indexName,
       String indexType,
       NamedReference[] columns,
-      Map<NamedReference, Properties>[] columnsProperties,
-      Properties properties)
+      Map<NamedReference, Map<String, String>>[] columnsProperties,
+      Map<String, String> properties)
       throws IndexAlreadyExistsException;
 
   /**

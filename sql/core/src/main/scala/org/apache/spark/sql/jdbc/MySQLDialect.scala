@@ -118,13 +118,12 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       indexType: String,
       tableName: String,
       columns: Array[NamedReference],
-      columnsProperties: Array[util.Map[NamedReference, util.Properties]],
-      properties: util.Properties): String = {
+      columnsProperties: Array[util.Map[NamedReference, util.Map[String, String]]],
+      properties: util.Map[String, String]): String = {
     val columnList = columns.map(col => quoteIdentifier(col.fieldNames.head))
     var indexProperties: String = ""
-    val scalaProps = properties.asScala
     if (!properties.isEmpty) {
-      scalaProps.foreach { case (k, v) =>
+      properties.asScala.foreach { case (k, v) =>
         indexProperties = indexProperties + " " + s"$k $v"
       }
     }
@@ -178,6 +177,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       tableName: String,
       options: JDBCOptions): Array[TableIndex] = {
     val sql = s"SHOW INDEXES FROM $tableName"
+    Array.empty[util.Map[NamedReference, util.HashMap[String, String]]]
     var indexMap: Map[String, TableIndex] = Map()
     try {
       val rs = JdbcUtils.executeQuery(conn, options, sql)

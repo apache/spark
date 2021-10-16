@@ -34,26 +34,25 @@ case class CreateIndexExec(
     indexName: String,
     indexType: String,
     ignoreIfExists: Boolean,
-    columns: Seq[NamedReference],
-    columnProperties: Seq[Map[String, String]],
-    private var properties: Map[String, String])
+    columns: Seq[(NamedReference, Map[String, String])],
+    properties: Map[String, String])
   extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     try {
-      val colProperties: Array[util.Map[NamedReference, util.Properties]] =
-        columns.zip(columnProperties).map {
+      val colProperties: Array[util.Map[NamedReference, util.Map[String, String]]] = columns.map {
         case (column, map) =>
-          val props = new util.Properties
-          map.foreach { case (key, value) => props.setProperty(key, value) }
-          val propMap = new util.HashMap[NamedReference, util.Properties]()
-          propMap.put(column, props)
+          val javaMap = new util.HashMap[String, String]
+          map.foreach { case (key, value) => javaMap.put(key, value) }
+          val propMap = new util.HashMap[NamedReference, util.Map[String, String]]
+          propMap.put(column, javaMap)
           propMap
       }.toArray
-      val indexProperties = new util.Properties
-      properties.foreach { case (key, value) => indexProperties.setProperty(key, value) }
+      val indexProperties = new util.HashMap[String, String]
+      properties.foreach { case (key, value) => indexProperties.put(key, value) }
       table match {
         case _: SupportsIndex =>
-          table.asInstanceOf[SupportsIndex].createIndex(indexName, indexType, columns.toArray,
+          val (cols, _) = columns.unzip
+          table.asInstanceOf[SupportsIndex].createIndex(indexName, indexType, cols.toArray,
             colProperties, indexProperties)
         case _ =>
       }

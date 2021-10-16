@@ -4432,8 +4432,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       indexName,
       indexType,
       ctx.EXISTS != null,
-      columns.map(FieldReference(_).asInstanceOf[FieldReference]),
-      columnsProperties,
+      columns.map(FieldReference(_).asInstanceOf[FieldReference]).zip(columnsProperties),
       options)
   }
 

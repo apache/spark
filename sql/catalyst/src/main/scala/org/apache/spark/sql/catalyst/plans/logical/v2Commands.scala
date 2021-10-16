@@ -1065,8 +1065,7 @@ case class CreateIndex(
     indexName: String,
     indexType: String,
     ignoreIfExists: Boolean,
-    columns: Seq[NamedReference],
-    columnsProperties: Seq[Map[String, String]],
+    columns: Seq[(NamedReference, Map[String, String])],
     properties: Map[String, String]) extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): CreateIndex =
     copy(child = newChild)

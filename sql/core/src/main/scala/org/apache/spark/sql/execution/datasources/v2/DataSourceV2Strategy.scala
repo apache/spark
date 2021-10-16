@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.sql.SQLFeatureNotSupportedException
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -433,14 +431,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       AlterTableExec(table.catalog, table.identifier, a.changes) :: Nil
 
     case CreateIndex(ResolvedTable(_, _, table, _),
-        indexName, indexType, ifNotExists, columns, columnProperties, properties) =>
+        indexName, indexType, ifNotExists, columns, properties) =>
       table match {
         case _: SupportsIndex =>
-          CreateIndexExec(table, indexName, indexType, ifNotExists, columns,
-            columnProperties, properties):: Nil
-        case _ => throw new SQLFeatureNotSupportedException(s"CreateIndex not supported yet." +
+          CreateIndexExec(table, indexName, indexType, ifNotExists, columns, properties):: Nil
+        case _ => throw QueryCompilationErrors.tableIndexNotSupportedError(
+          s"CreateIndex is not supported in this table." +
           s" IndexName $indexName indexType $indexType columns $columns" +
-          s" columnProperties $columnProperties properties $properties")
+          s" properties $properties")
       }
 
     case _ => Nil
