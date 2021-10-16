@@ -20,23 +20,27 @@ package org.apache.spark.sql.hive
 import java.lang.reflect.InvocationTargetException
 import java.util.Locale
 
+import scala.reflect.ClassTag
+import scala.reflect.runtime.universe._
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
+
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
-import org.apache.spark.sql.types.{DecimalType, DoubleType, StructField, StructType}
+import org.apache.spark.sql.types.{DecimalType, DoubleType}
 import org.apache.spark.util.Utils
 
 
@@ -120,24 +124,41 @@ private[sql] class HiveSessionCatalog(
       try {
         super.makeFunctionExpression(name, clazz, input)
       } catch {
-        // If `super.makeFunctionExpression` throw `InvalidUDFClassException`, we construct
-        // Hive UDF/UDAF/UDTF with function definition. Otherwise, we just throw it earlier.
+        // If `super.makeFunctionExpression` throw `InvalidUDFClassException`, we try to construct
+        // ScalaAggregator or Hive UDF/UDAF/UDTF with function definition. Otherwise,
+        // we just throw it earlier.
+        // Unfortunately we need to use reflection here because Aggregator
+        // and ScalaAggregator are defined in sql/core module.
         case _: InvalidUDFClassException =>
           val clsForAggregator =
             Utils.classForName("org.apache.spark.sql.expressions.Aggregator")
           if (clsForAggregator.isAssignableFrom(clazz)) {
-            val cls = Utils.classForName("org.apache.spark.sql.execution.aggregate.ScalaAggregator")
+            val clsForScalaAggregator =
+              Utils.classForName("org.apache.spark.sql.execution.aggregate.ScalaAggregator")
             val clsForEncoder =
               Utils.classForName("org.apache.spark.sql.catalyst.encoders.ExpressionEncoder")
             val aggregator = clazz.getConstructor().newInstance().asInstanceOf[Aggregator[_, _, _]]
-            val schema = StructType(input.map(e => StructField("temp", e.dataType)))
-            val e = cls.getConstructor(classOf[Seq[Expression]], clsForAggregator,
+            // Construct the input encoder
+            val mirror = runtimeMirror(clazz.getClassLoader)
+            val classType = mirror.classSymbol(clazz)
+            val baseClassType = typeOf[Aggregator[_, _, _]].typeSymbol.asClass
+            val baseType = internal.thisType(classType).baseType(baseClassType)
+            val tpe = baseType.typeArgs.head
+            val cls = mirror.runtimeClass(tpe)
+            val serializer = ScalaReflection.serializerForType(tpe)
+            val deserializer = ScalaReflection.deserializerForType(tpe)
+            val inputEncoder = new ExpressionEncoder(
+              serializer,
+              deserializer,
+              ClassTag(cls))
+
+            val e = clsForScalaAggregator.getConstructor(classOf[Seq[Expression]], clsForAggregator,
               clsForEncoder, clsForEncoder, classOf[Boolean], classOf[Boolean],
               classOf[Int], classOf[Int], classOf[Option[String]])
               .newInstance(
                 input,
                 aggregator,
-                RowEncoder(schema),
+                inputEncoder,
                 aggregator.bufferEncoder,
                 Boolean.box(true),
                 Boolean.box(true),
