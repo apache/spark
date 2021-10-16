@@ -197,6 +197,7 @@
     <commons-cli.version>1.2</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
     <tink.version>1.6.0</tink.version>
+    <roaringbitmap.version>0.9.22</roaringbitmap.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -759,7 +760,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>0.9.0</version>
+        <version>${roaringbitmap.version}</version>
       </dependency>
       <dependency>
         <groupId>commons-net</groupId>
