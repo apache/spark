@@ -156,22 +156,22 @@ class ResourceProfileBuilder(object):
         else:
             if self._java_resource_profile_builder is not None:
                 if (
-                    resourceRequest._java_executor_resource_requests is not None
-                ):  # type: ignore[attr-defined]
+                    resourceRequest._java_executor_resource_requests is not None  # type: ignore[attr-defined]
+                ):
                     self._java_resource_profile_builder.require(
-                        resourceRequest._java_executor_resource_requests
-                    )  # type: ignore[attr-defined]
+                        resourceRequest._java_executor_resource_requests  # type: ignore[attr-defined]
+                    )
                 else:
                     execReqs = ExecutorResourceRequests(
-                        self._jvm, resourceRequest.requests
-                    )  # type: ignore[attr-defined]
+                        self._jvm, resourceRequest.requests  # type: ignore[attr-defined]
+                    )
                     self._java_resource_profile_builder.require(
-                        execReqs._java_executor_resource_requests
-                    )  # type: ignore[attr-defined]
+                        execReqs._java_executor_resource_requests  # type: ignore[attr-defined]
+                    )
             else:
                 self._executor_resource_requests.update(  # type: ignore[union-attr]
-                    resourceRequest.requests
-                )  # type: ignore[attr-defined]
+                    resourceRequest.request  # type: ignore[attr-defined]
+                )
         return self
 
     def clearExecutorResourceRequests(self) -> None:

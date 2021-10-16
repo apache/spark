@@ -571,7 +571,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             vertical = False
             return self._jdf.showString(
                 self.sql_ctx._conf.replEagerEvalMaxNumRows(),  # type: ignore[attr-defined]
-                self.sql_ctx._conf.replEagerEvalTruncate(),
+                self.sql_ctx._conf.replEagerEvalTruncate(),  # type: ignore[attr-defined]
                 vertical,
             )  # type: ignore[attr-defined]
         else:

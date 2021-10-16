@@ -16,6 +16,7 @@
 #
 
 import unittest
+from typing import cast
 
 from pyspark.rdd import PythonEvalType
 from pyspark.sql import Row
@@ -48,8 +49,9 @@ if have_pandas:
 
 
 @unittest.skipIf(
-    not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
-)  # type: ignore[arg-type]
+    not have_pandas or not have_pyarrow,
+    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+)
 class GroupedAggPandasUDFTests(ReusedSQLTestCase):
     @property
     def data(self):

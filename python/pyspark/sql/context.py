@@ -127,8 +127,8 @@ class SQLContext(object):
         install_exception_handler()
         if (
             SQLContext._instantiatedContext is None
-            or SQLContext._instantiatedContext._sc._jsc is None
-        ):  # type: ignore[attr-defined]
+            or SQLContext._instantiatedContext._sc._jsc is None  # type: ignore[attr-defined]
+        ):
             SQLContext._instantiatedContext = self
 
     @property
@@ -165,14 +165,15 @@ class SQLContext(object):
         )
 
         if (
-            cls._instantiatedContext is None or SQLContext._instantiatedContext._sc._jsc is None
-        ):  # type: ignore[union-attr]
+            cls._instantiatedContext is None
+            or SQLContext._instantiatedContext._sc._jsc is None  # type: ignore[union-attr]
+        ):
             jsqlContext = (
-                sc._jvm.SparkSession.builder()
+                sc._jvm.SparkSession.builder()  # type: ignore[attr-defined]
                 .sparkContext(sc._jsc.sc())  # type: ignore[attr-defined]
                 .getOrCreate()
                 .sqlContext()
-            )  # type: ignore[attr-defined]
+            )
             sparkSession = SparkSession(sc, jsqlContext.sparkSession())
             cls(sc, sparkSession, jsqlContext)
         return cast(SQLContext, cls._instantiatedContext)

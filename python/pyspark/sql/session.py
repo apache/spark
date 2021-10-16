@@ -311,8 +311,8 @@ class SparkSession(SparkConversionMixin):
         # Otherwise, we will use invalid SparkSession when we call Builder.getOrCreate.
         if (
             SparkSession._instantiatedSession is None
-            or SparkSession._instantiatedSession._sc._jsc is None
-        ):  # type: ignore[attr-defined]
+            or SparkSession._instantiatedSession._sc._jsc is None  # type: ignore[attr-defined]
+        ):
             SparkSession._instantiatedSession = self
             SparkSession._activeSession = self
             self._jvm.SparkSession.setDefaultSession(self._jsparkSession)

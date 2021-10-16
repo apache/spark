@@ -22,6 +22,7 @@ import shutil
 import tempfile
 import time
 import unittest
+from typing import cast
 
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.functions import col, lit, count, sum, mean
@@ -1084,8 +1085,8 @@ class DataFrameTests(ReusedSQLTestCase):
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        pandas_requirement_message or pyarrow_requirement_message,
-    )  # type: ignore
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
     def test_to_pandas_on_spark(self):
         import pandas as pd
         from pandas.testing import assert_frame_equal
@@ -1164,8 +1165,8 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        pandas_requirement_message or pyarrow_requirement_message,
-    )  # type: ignore
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
     def test_query_execution_listener_on_collect_with_arrow(self):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
             self.assertFalse(

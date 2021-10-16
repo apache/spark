@@ -16,6 +16,7 @@
 #
 
 import unittest
+from typing import cast
 
 from pyspark.sql.functions import array, explode, col, lit, udf, pandas_udf
 from pyspark.sql.types import DoubleType, StructType, StructField, Row
@@ -37,8 +38,9 @@ if have_pyarrow:
 
 
 @unittest.skipIf(
-    not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
-)  # type: ignore[arg-type]
+    not have_pandas or not have_pyarrow,
+    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+)
 class CogroupedMapInPandasTests(ReusedSQLTestCase):
     @property
     def data1(self):

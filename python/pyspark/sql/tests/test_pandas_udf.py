@@ -17,6 +17,7 @@
 
 import unittest
 import datetime
+from typing import cast
 
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
 from pyspark.sql.types import DoubleType, StructType, StructField, LongType
@@ -33,8 +34,9 @@ from pyspark.testing.utils import QuietTest
 
 
 @unittest.skipIf(
-    not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
-)  # type: ignore[arg-type]
+    not have_pandas or not have_pyarrow,
+    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+)
 class PandasUDFTests(ReusedSQLTestCase):
     def test_pandas_udf_basic(self):
         udf = pandas_udf(lambda x: x, DoubleType())

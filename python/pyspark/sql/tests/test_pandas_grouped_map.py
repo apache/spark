@@ -20,6 +20,7 @@ import unittest
 
 from collections import OrderedDict
 from decimal import Decimal
+from typing import cast
 
 from pyspark.sql import Row
 from pyspark.sql.functions import (
@@ -68,8 +69,9 @@ if have_pyarrow:
 
 
 @unittest.skipIf(
-    not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
-)  # type: ignore[arg-type]
+    not have_pandas or not have_pyarrow,
+    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+)
 class GroupedMapInPandasTests(ReusedSQLTestCase):
     @property
     def data(self):
