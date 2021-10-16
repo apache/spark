@@ -151,7 +151,7 @@ case class RowDataSourceScanExec(
       handledFilters
     }
 
-    val limitStr = if (limit != null) s"LIMIT ${limit.number}" else "null"
+    val limitStr = if (limit != null) s"LIMIT ${limit.number}" else "[]"
 
     Map(
       "ReadSchema" -> requiredSchema.catalogString,

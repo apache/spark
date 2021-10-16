@@ -250,7 +250,7 @@ logging into the data sources.
     <td><code>pushDownLimit</code></td>
     <td><code>false</code></td>
     <td>
-     The option to enable or disable LIMIT push-down into the JDBC data source. The default value is false, in which case Spark does not push down LIMIT to the JDBC data source. Otherwise, if sets to true, LIMIT is pushed down to the JDBC data source. Please note that if LIMIT is pushed down, since only a limited number of rows is returned, JDBC doesn’t honor partitions any more and the query is done in one task. SPARK still applies LIMIT on the result from data source even if LIMIT is pushed down.
+     The option to enable or disable LIMIT push-down into the JDBC data source. The default value is false, in which case Spark does not push down LIMIT to the JDBC data source. Otherwise, if value sets to true, LIMIT is pushed down to the JDBC data source. Please note that if LIMIT is pushed down, since only a limited number of rows is returned, JDBC doesn’t honor partitions any more and the query is done in one task. SPARK still applies LIMIT on the result from data source even if LIMIT is pushed down.
     </td>
     <td>read</td>
   </tr>

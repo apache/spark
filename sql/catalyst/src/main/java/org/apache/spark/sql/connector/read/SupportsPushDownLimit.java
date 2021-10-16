@@ -22,7 +22,8 @@ import org.apache.spark.sql.connector.expressions.Limit;
 
 /**
  * A mix-in interface for {@link Scan}. Data sources can implement this interface to
- * push down LIMIT.
+ * push down LIMIT. Please note that the combination of LIMIT with other operations
+ * such as AGGREGATE, GROUP BY, SORT BY, CLUSTER BY, DISTRIBUTE BY, etc. is NOT pushed down.
  *
  * @since 3.3.0
  */

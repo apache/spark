@@ -121,17 +121,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       Row(2, "david", 10000.00, 1300.0)))
   }
 
-  test("simple scan with LIMIT and partition") {
-    val df = spark.read
-      .option("partitionColumn", "dept")
-      .option("lowerBound", "1")
-      .option("upperBound", "2")
-      .option("numPartitions", "2")
-      .table("h2.test.employee")
-      .limit(4)
-
-  }
-
   test("scan with filter push-down") {
     val df = spark.table("h2.test.people").filter($"id" > 1)
     val filters = df.queryExecution.optimizedPlan.collect {

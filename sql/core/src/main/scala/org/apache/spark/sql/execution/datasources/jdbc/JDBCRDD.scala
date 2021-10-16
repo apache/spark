@@ -282,13 +282,7 @@ private[jdbc] class JDBCRDD(
   /**
    * A LIMIT clause representing pushed-down limit.
    */
-  private def getLimitClause: String = {
-    if (limit.nonEmpty) {
-      s"LIMIT ${limit.get.number.value}"
-    } else {
-      ""
-    }
-  }
+  private def getLimitClause: String = limit.map(l => s"LIMIT ${l.number.value}").getOrElse("")
 
   /**
    * Runs the SQL query against the JDBC driver.
