@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.catalog.index;
 
 import java.util.Map;
-import java.util.Properties;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException;
