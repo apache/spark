@@ -433,8 +433,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case CreateIndex(ResolvedTable(_, _, table, _),
         indexName, indexType, ifNotExists, columns, properties) =>
       table match {
-        case _: SupportsIndex =>
-          CreateIndexExec(table, indexName, indexType, ifNotExists, columns, properties):: Nil
+        case s: SupportsIndex =>
+          CreateIndexExec(s, indexName, indexType, ifNotExists, columns, properties):: Nil
         case _ => throw QueryCompilationErrors.tableIndexNotSupportedError(
           s"CreateIndex is not supported in this table." +
           s" IndexName $indexName indexType $indexType columns $columns" +
