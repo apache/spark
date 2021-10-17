@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference
  * Physical plan node for creating an index.
  */
 case class CreateIndexExec(
-    table: Table,
+    table: SupportsIndex,
     indexName: String,
     indexType: String,
     ignoreIfExists: Boolean,
