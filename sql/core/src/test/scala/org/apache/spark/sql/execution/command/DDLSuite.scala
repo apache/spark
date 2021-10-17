@@ -225,7 +225,29 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
   }
 }
 
-abstract class DDLSuite extends QueryTest with SQLTestUtils {
+trait CommandTestUtils extends SQLTestUtils {
+  private val escapedIdentifier = "`(.+)`".r
+
+  /**
+   * Strip backticks, if any, from the string.
+   */
+  protected def cleanIdentifier(ident: String): String = {
+    ident match {
+      case escapedIdentifier(i) => i
+      case plainIdent => plainIdent
+    }
+  }
+
+  /**
+   * Returns the path to the database of the given name.
+   */
+  protected def getDBPath(dbName: String): URI = {
+    val warehousePath = makeQualifiedPath(spark.sessionState.conf.warehousePath)
+    new Path(CatalogUtils.URIToString(warehousePath), s"$dbName.db").toUri
+  }
+}
+
+abstract class DDLSuite extends QueryTest with CommandTestUtils {
 
   protected val reversedProperties = Seq(PROP_OWNER)
 
@@ -238,8 +260,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       name: TableIdentifier,
       isDataSource: Boolean = true,
       partitionCols: Seq[String] = Seq("a", "b")): CatalogTable
-
-  private val escapedIdentifier = "`(.+)`".r
 
   private def dataSource: String = {
     if (isUsingHiveMetastore) {
@@ -256,16 +276,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   private def checkCatalogTables(expected: CatalogTable, actual: CatalogTable): Unit = {
     assert(normalizeCatalogTable(actual) == normalizeCatalogTable(expected))
-  }
-
-  /**
-   * Strip backticks, if any, from the string.
-   */
-  private def cleanIdentifier(ident: String): String = {
-    ident match {
-      case escapedIdentifier(i) => i
-      case plainIdent => plainIdent
-    }
   }
 
   private def assertUnsupported(query: String): Unit = {
@@ -302,11 +312,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val part = CatalogTablePartition(
       spec, CatalogStorageFormat(None, None, None, None, false, Map()))
     catalog.createPartitions(tableName, Seq(part), ignoreIfExists = false)
-  }
-
-  private def getDBPath(dbName: String): URI = {
-    val warehousePath = makeQualifiedPath(spark.sessionState.conf.warehousePath)
-    new Path(CatalogUtils.URIToString(warehousePath), s"$dbName.db").toUri
   }
 
   test("alter table: set location (datasource table)") {
@@ -757,14 +762,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
         sql(s"CREATE DATABASE $dbName")
 
-        checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName").toDF("key", "value")
-            .where("key not like 'Owner%'"), // filter for consistency with in-memory catalog
-          Row("Database Name", dbNameWithoutBackTicks) ::
-            Row("Comment", "") ::
-            Row("Location", CatalogUtils.URIToString(location)) ::
-            Row("Properties", "") :: Nil)
-
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
 
         checkAnswer(
@@ -813,7 +810,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("Drop/Alter/Describe Database - database does not exists") {
+  test("Drop/Alter Database - database does not exists") {
     val databaseNames = Seq("db1", "`database`")
 
     databaseNames.foreach { dbName =>
@@ -829,13 +826,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
       }.getMessage
       assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
-
-      message = intercept[AnalysisException] {
-        sql(s"DESCRIBE DATABASE EXTENDED $dbName")
-      }.getMessage
-      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
-
-      sql(s"DROP DATABASE IF EXISTS $dbName")
     }
   }
 
