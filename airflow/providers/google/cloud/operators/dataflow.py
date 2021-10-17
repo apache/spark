@@ -368,9 +368,8 @@ class DataflowCreateJavaJobOperator(BaseOperator):
     ) -> None:
         # TODO: Remove one day
         warnings.warn(
-            "The `{cls}` operator is deprecated, please use "
-            "`providers.apache.beam.operators.beam.BeamRunJavaPipelineOperator` instead."
-            "".format(cls=self.__class__.__name__),
+            f"The `{self.__class__.__name__}` operator is deprecated, "
+            f"please use `providers.apache.beam.operators.beam.BeamRunJavaPipelineOperator` instead.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -1075,9 +1074,8 @@ class DataflowCreatePythonJobOperator(BaseOperator):
     ) -> None:
         # TODO: Remove one day
         warnings.warn(
-            "The `{cls}` operator is deprecated, please use "
-            "`providers.apache.beam.operators.beam.BeamRunPythonPipelineOperator` instead."
-            "".format(cls=self.__class__.__name__),
+            f"The `{self.__class__.__name__}` operator is deprecated, "
+            "please use `providers.apache.beam.operators.beam.BeamRunPythonPipelineOperator` instead.",
             DeprecationWarning,
             stacklevel=2,
         )
