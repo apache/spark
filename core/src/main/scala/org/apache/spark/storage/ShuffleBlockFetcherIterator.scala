@@ -623,18 +623,8 @@ final class ShuffleBlockFetcherIterator(
       logDebug(s"Asynchronous fetching host-local blocks without cached executors' dir: " +
         s"${hostLocalBlocksWithMissingDirs.mkString(", ")}")
 
-      // If the external shuffle service is enabled, we'll fetch the local directories for
-      // multiple executors from the external shuffle service, which located at the same host
-      // with the executors, in once. Otherwise, we'll fetch the local directories from those
-      // executors directly one by one. The fetch requests won't be too much since one host is
-      // almost impossible to have many executors at the same time practically.
-      val dirFetchRequests = if (blockManager.externalShuffleServiceEnabled) {
-        val host = blockManager.blockManagerId.host
-        val port = blockManager.externalShuffleServicePort
-        Seq((host, port, hostLocalBlocksWithMissingDirs.keys.toArray))
-      } else {
-        hostLocalBlocksWithMissingDirs.keys.map(bmId => (bmId.host, bmId.port, Array(bmId))).toSeq
-      }
+      val dirFetchRequests = hostLocalBlocksWithMissingDirs.keys.map(bmId =>
+        (bmId.host, bmId.port, Array(bmId))).toSeq
 
       dirFetchRequests.foreach { case (host, port, bmIds) =>
         hostLocalDirManager.getHostLocalDirs(host, port, bmIds.map(_.executorId)) {
