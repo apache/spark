@@ -66,6 +66,10 @@ To access error fields, catch exceptions that extend `org.apache.spark.SparkThro
 
 Error classes are a succinct, human-readable representation of the error category.
 
+#### Usable
+
+Should not add error classes that are not being used in Spark.
+
 #### Invariants
 
 - Unique

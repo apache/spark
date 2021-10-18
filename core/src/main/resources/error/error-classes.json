@@ -11,12 +11,6 @@
     "message" : [ "%s cannot be represented as Decimal(%s, %s)." ],
     "sqlState" : "22005"
   },
-  "CANNOT_EVALUATE_EXPRESSION" : {
-    "message" : [ "Cannot evaluate expression: %s" ]
-  },
-  "CANNOT_GENERATE_CODE_FOR_EXPRESSION" : {
-    "message" : [ "Cannot generate code for expression: %s" ]
-  },
   "CANNOT_GET_JDBC_TYPE" : {
     "message" : [ "Can't get JDBC type for %s" ]
   },
@@ -190,12 +184,12 @@
     "message" : [ "Please add an implementation for a column change here" ],
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_DATATYPE" : {
-    "message" : [ "Unsupported data type %s" ],
+  "UNSUPPORTED_COMMAND" : {
+    "message" : [ "DDL '%s' is not supported." ],
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_DDL" : {
-    "message" : [ "DDL '%s' is not supported." ],
+  "UNSUPPORTED_DATA_TYPE" : {
+    "message" : [ "Unsupported data type %s" ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_JDBC_TYPE" : {

@@ -136,12 +136,12 @@ object QueryExecutionErrors {
   }
 
   def dataTypeUnsupportedError(dt: DataType): Throwable = {
-    new SparkException(errorClass = "UNSUPPORTED_DATATYPE",
+    new SparkException(errorClass = "UNSUPPORTED_DATA_TYPE",
       messageParameters = Array(dt.typeName), null)
   }
 
   def dataTypeUnsupportedError(dataType: String, failure: String): Throwable = {
-    new SparkIllegalArgumentException(errorClass = "UNSUPPORTED_DATATYPE",
+    new SparkIllegalArgumentException(errorClass = "UNSUPPORTED_DATA_TYPE",
       messageParameters = Array(dataType + failure))
   }
 
@@ -725,18 +725,18 @@ object QueryExecutionErrors {
   }
 
   def dataTypeUnsupportedYetError(dataType: DataType): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_DATATYPE",
+    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_DATA_TYPE",
       messageParameters = Array(dataType.toString))
   }
 
   def unsupportedOperationForDataTypeError(dataType: DataType): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_OPERATION_FOR_DATA_TYPE",
+    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_DATA_TYPE",
       messageParameters = Array(dataType.catalogString))
   }
 
   def inputFilterNotFullyConvertibleError(owner: String): Throwable = {
-    new SparkException(errorClass = "INPUT_FILTER_NOT_FULLY_CONVERTIBLE",
-      messageParameters = Array(owner), null)
+    new SparkException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Array(s"The input filter of $owner should be fully convertible."), null)
   }
 
   def cannotReadFooterForFileError(file: Path, e: IOException): Throwable = {
@@ -762,13 +762,8 @@ object QueryExecutionErrors {
   }
 
   def ddlUnsupportedTemporarilyError(ddl: String): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_DDL",
+    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_COMMAND",
       messageParameters = Array(ddl))
-  }
-
-  def operatingOnCanonicalizationPlanError(): Throwable = {
-    new SparkIllegalStateException(errorClass = "CANNOT_OPERATE_ON_CANONICALIZATION_PLAN",
-      messageParameters = Array.empty)
   }
 
   def executeBroadcastTimeoutError(timeout: Long, ex: Option[TimeoutException]): Throwable = {
