@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.util.Properties
+import java.util.Stack
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -39,9 +40,9 @@ import org.apache.spark.util._
  * A small note on thread safety. The interrupted & fetchFailed fields are volatile, this makes
  * sure that updates are always visible across threads. The complete & failed flags and their
  * callbacks are protected by locking on the context instance. For instance, this ensures
- * that you cannot add a completion listener in one thread while we are completing (and calling
- * the completion listeners) in another thread. Other state is immutable, however the exposed
- * `TaskMetrics` & `MetricsSystem` objects are not thread safe.
+ * that you cannot add a completion listener in one thread while we are completing in another
+ * thread. Other state is immutable, however the exposed `TaskMetrics` & `MetricsSystem` objects are
+ * not thread safe.
  */
 private[spark] class TaskContextImpl(
     override val stageId: Int,
@@ -59,11 +60,22 @@ private[spark] class TaskContextImpl(
   extends TaskContext
   with Logging {
 
-  /** List of callback functions to execute when the task completes. */
-  @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
+  /**
+   * List of callback functions to execute when the task completes.
+   *
+   * Using a stack causes us to process callbacks in the reverse order of registration.
+   */
+  @transient private val onCompleteCallbacks = new Stack[TaskCompletionListener]
 
   /** List of callback functions to execute when the task fails. */
-  @transient private val onFailureCallbacks = new ArrayBuffer[TaskFailureListener]
+  @transient private val onFailureCallbacks = new Stack[TaskFailureListener]
+
+  /**
+   * The thread currently executing task completion or failure listeners, if any.
+   *
+   * The `invokeListeners()` method uses this to ensure listeners are called sequentially.
+   */
+  @transient private var listenerInvocationThread: Option[Thread] = None
 
   // If defined, the corresponding task has been killed and this option contains the reason.
   @volatile private var reasonIfKilled: Option[String] = None
@@ -84,15 +96,17 @@ private[spark] class TaskContextImpl(
   @GuardedBy("this")
   override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
     val needToCallListener = synchronized {
-      if (completed) {
-        true
-      } else {
-        onCompleteCallbacks += listener
-        false
-      }
+      // If there is already a thread invoking listeners, adding our listener to
+      // `onCompleteCallbacks` will cause that thread to execute our listener, and the call to
+      // `invokeTaskCompletionListeners()` below will be a no-op.
+      //
+      // If there is no such thread, the call to `invokeTaskCompletionListeners()` below will
+      // execute all listeners, including ours.
+      onCompleteCallbacks.push(listener)
+      completed
     }
     if (needToCallListener) {
-      listener.onTaskCompletion(this)
+      invokeTaskCompletionListeners()
     }
     this
   }
@@ -100,15 +114,11 @@ private[spark] class TaskContextImpl(
   @GuardedBy("this")
   override def addTaskFailureListener(listener: TaskFailureListener): this.type = {
     val needToCallListener = synchronized {
-      if (failed) {
-        true
-      } else {
-        onFailureCallbacks += listener
-        false
-      }
+      onFailureCallbacks.push(listener)
+      failed
     }
     if (needToCallListener) {
-      listener.onTaskFailure(this, failure)
+      invokeTaskFailureListeners()
     }
     this
   }
@@ -124,9 +134,7 @@ private[spark] class TaskContextImpl(
       failed = true
       failure = error
     }
-    invokeListeners(onFailureCallbacks.toSeq, "TaskFailureListener", Option(error)) {
-      _.onTaskFailure(this, error)
-    }
+    invokeTaskFailureListeners()
   }
 
   @GuardedBy("this")
@@ -135,19 +143,65 @@ private[spark] class TaskContextImpl(
       if (completed) return
       completed = true
     }
-    invokeListeners(onCompleteCallbacks.toSeq, "TaskCompletionListener", error) {
+    invokeTaskCompletionListeners()
+  }
+
+  private def invokeTaskCompletionListeners(): Unit = {
+    // It is safe to access the reference to `onCompleteCallbacks` without holding the TaskContext
+    // lock. `invokeListeners()` acquires the lock before accessing the contents.
+    invokeListeners(onCompleteCallbacks, "TaskCompletionListener", error) {
       _.onTaskCompletion(this)
     }
   }
 
+  private def invokeTaskFailureListeners(): Unit = {
+    invokeListeners(onFailureCallbacks, "TaskFailureListener", Option(error)) {
+      _.onTaskFailure(this, error)
+    }
+  }
+
   private def invokeListeners[T](
-      listeners: Seq[T],
+      listeners: Stack[T],
       name: String,
       error: Option[Throwable])(
       callback: T => Unit): Unit = {
+    // This method is subject to two constraints:
+    //
+    // 1. Listeners must be run sequentially to uphold the guarantee provided by the TaskContext
+    //    API.
+    //
+    // 2. Listeners may spawn threads that call methods on this TaskContext. To avoid deadlock, we
+    //    cannot call listeners while holding the TaskContext lock.
+    //
+    // We meet these constraints by ensuring there is at most one thread invoking listeners at any
+    // point in time.
+    synchronized {
+      if (listenerInvocationThread.nonEmpty) {
+        // If another thread is already invoking listeners, do nothing.
+        return
+      } else {
+        // If no other thread is invoking listeners, register this thread as the listener invocation
+        // thread. This prevents other threads from invoking listeners until this thread is
+        // unregistered.
+        listenerInvocationThread = Thread.currentThread()
+      }
+    }
+
+    def getNextListenerOrDeregisterThread(): Option[T] = synchronized {
+      if (listeners.empty()) {
+        // We have executed all listeners that have been added so far. Deregister this thread as the
+        // callback invocation thread.
+        listenerInvocationThread = None
+        None
+      } else {
+        Some(listeners.pop())
+      }
+    }
+
     val errorMsgs = new ArrayBuffer[String](2)
-    // Process callbacks in the reverse order of registration
-    listeners.reverse.foreach { listener =>
+    var listenerOption: Option[T] = None
+    while ({listenerOption = getNextListenerOrDeregisterThread(); listenerOption.nonEmpty}) {
+      val listener = listenerOption.get
       try {
         callback(listener)
       } catch {
