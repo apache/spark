@@ -5419,7 +5419,7 @@ def udf(
 
 def udf(
     f: Optional[Union[Callable[..., Any], "DataTypeOrString"]] = None,
-    returnType: Optional["DataTypeOrString"] = StringType(),
+    returnType: "DataTypeOrString" = StringType(),
 ) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
     """Creates a user defined function (UDF).
 
