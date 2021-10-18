@@ -190,7 +190,7 @@ public class Expressions {
   public static SortOrder sort(Expression expr, SortDirection direction) {
     return LogicalExpressions.sort(expr, direction, direction.defaultNullOrdering());
   }
-  
+
   /**
    * Create a tableSample expression.
    *

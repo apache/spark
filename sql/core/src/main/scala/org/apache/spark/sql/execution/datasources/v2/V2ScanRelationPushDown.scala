@@ -250,7 +250,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         sample
       }
   }
-  
+
   private def getWrappedScan(
       scan: Scan,
       sHolder: ScanBuilderHolder,
