@@ -152,7 +152,7 @@ class ExecutorResourceRequests(object):
             self._java_executor_resource_requests = None
             self._executor_resources: Dict[str, ExecutorResourceRequest] = {}
 
-    def memory(self, amount: str) -> ExecutorResourceRequests:
+    def memory(self, amount: str) -> "ExecutorResourceRequests":
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.memory(amount)
         else:
@@ -160,7 +160,7 @@ class ExecutorResourceRequests(object):
                                                                              _parse_memory(amount))
         return self
 
-    def memoryOverhead(self, amount: str) -> ExecutorResourceRequests:
+    def memoryOverhead(self, amount: str) -> "ExecutorResourceRequests":
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.memoryOverhead(amount)
         else:
@@ -168,7 +168,7 @@ class ExecutorResourceRequests(object):
                 ExecutorResourceRequest(self._OVERHEAD_MEM, _parse_memory(amount))
         return self
 
-    def pysparkMemory(self, amount: str) -> ExecutorResourceRequests:
+    def pysparkMemory(self, amount: str) -> "ExecutorResourceRequests":
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.pysparkMemory(amount)
         else:
@@ -176,7 +176,7 @@ class ExecutorResourceRequests(object):
                 ExecutorResourceRequest(self._PYSPARK_MEM, _parse_memory(amount))
         return self
 
-    def offheapMemory(self, amount: str) -> ExecutorResourceRequests:
+    def offheapMemory(self, amount: str) -> "ExecutorResourceRequests":
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.offHeapMemory(amount)
         else:
@@ -184,7 +184,7 @@ class ExecutorResourceRequests(object):
                 ExecutorResourceRequest(self._OFFHEAP_MEM, _parse_memory(amount))
         return self
 
-    def cores(self, amount: int) -> ExecutorResourceRequests:
+    def cores(self, amount: int) -> "ExecutorResourceRequests":
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.cores(amount)
         else:
@@ -197,7 +197,7 @@ class ExecutorResourceRequests(object):
         amount: int,
         discoveryScript: str = "",
         vendor: str = "",
-    ) -> ExecutorResourceRequests:
+    ) -> "ExecutorResourceRequests":
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.resource(resourceName, amount, discoveryScript,
                                                            vendor)
