@@ -725,4 +725,19 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Signum(Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS))), 1.0)
     checkEvaluation(Signum(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS))), -1.0)
   }
+
+  test("SPARK-35926: Support YearMonthIntervalType in width-bucket function") {
+    Seq(
+      (Period.ofMonths(-1), Period.ofYears(0), Period.ofYears(10), 10L) -> 0L,
+      (Period.ofMonths(0), Period.ofYears(0), Period.ofYears(10), 10L) -> 1L,
+      (Period.ofMonths(13), Period.ofYears(0), Period.ofYears(10), 10L) -> 2L,
+      (Period.ofYears(1), Period.ofYears(0), Period.ofYears(10), 10L) -> 2L,
+      (Period.ofYears(1), Period.ofYears(0), Period.ofYears(1), 10L) -> 11L,
+      (Period.ofMonths(Int.MaxValue), Period.ofYears(0), Period.ofYears(1), 10L) -> 11L,
+      (Period.ofMonths(0), Period.ofMonths(Int.MinValue), Period.ofMonths(Int.MaxValue), 10L) -> 6L,
+      (Period.ofMonths(-1), Period.ofMonths(Int.MinValue), Period.ofMonths(Int.MaxValue), 10L) -> 5L
+    ).foreach { case ((v, s, e, n), expected) =>
+      checkEvaluation(WidthBucket(Literal(v), Literal(s), Literal(e), Literal(n)), expected)
+    }
+  }
 }

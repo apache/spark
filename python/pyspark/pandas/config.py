@@ -20,7 +20,7 @@ Infrastructure of options for pandas-on-Spark.
 """
 from contextlib import contextmanager
 import json
-from typing import Any, Callable, Dict, Iterator, List, Tuple, Union  # noqa: F401 (SPARK-34943)
+from typing import Any, Callable, Dict, Iterator, List, Tuple, Union
 
 from pyspark._globals import _NoValue, _NoValueType
 

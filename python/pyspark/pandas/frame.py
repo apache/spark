@@ -56,7 +56,7 @@ from pandas.api.types import is_list_like, is_dict_like, is_scalar
 from pandas.tseries.frequencies import DateOffset, to_offset
 
 if TYPE_CHECKING:
-    from pandas.io.formats.style import Styler  # noqa: F401 (SPARK-34943)
+    from pandas.io.formats.style import Styler
 
 if LooseVersion(pd.__version__) >= LooseVersion("0.24"):
     from pandas.core.dtypes.common import infer_dtype_from_object
@@ -67,12 +67,11 @@ from pandas.core.dtypes.inference import is_sequence
 from pyspark import StorageLevel
 from pyspark.sql import Column, DataFrame as SparkDataFrame, functions as F
 from pyspark.sql.functions import pandas_udf
-from pyspark.sql.types import (  # noqa: F401 (SPARK-34943)
+from pyspark.sql.types import (
     ArrayType,
     BooleanType,
     DataType,
     DoubleType,
-    FloatType,
     NumericType,
     Row,
     StringType,
@@ -131,11 +130,11 @@ from pyspark.pandas.typedef.typehints import (
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import OptionalPrimitiveType  # noqa: F401 (SPARK-34943)
+    from pyspark.sql._typing import OptionalPrimitiveType
 
-    from pyspark.pandas.groupby import DataFrameGroupBy  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.groupby import DataFrameGroupBy
+    from pyspark.pandas.indexes import Index
+    from pyspark.pandas.series import Series
 
 
 # These regular expression patterns are complied and defined here to avoid to compile the same
@@ -6418,12 +6417,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         from pyspark.sql.types import _parse_datatype_string  # type: ignore[attr-defined]
 
+        include_list: List[str]
         if not is_list_like(include):
-            include_list = [include] if include is not None else []
+            include_list = [cast(str, include)] if include is not None else []
         else:
             include_list = list(include)
+        exclude_list: List[str]
         if not is_list_like(exclude):
-            exclude_list = [exclude] if exclude is not None else []
+            exclude_list = [cast(str, exclude)] if exclude is not None else []
         else:
             exclude_list = list(exclude)
 

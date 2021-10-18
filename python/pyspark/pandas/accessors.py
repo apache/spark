@@ -46,8 +46,8 @@ from pyspark.pandas.utils import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.frame import DataFrame
+    from pyspark.pandas.series import Series
     from pyspark.sql._typing import UserDefinedFunctionLike
 
 

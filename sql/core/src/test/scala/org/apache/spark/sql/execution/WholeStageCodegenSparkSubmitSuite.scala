@@ -47,7 +47,7 @@ class WholeStageCodegenSparkSubmitSuite extends SparkSubmitTestUtils
       "--driver-memory", "1g",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
-      // SPARK-36796: The results of `Platform.BYTE_ARRAY_OFFSET` using different Java versions
+      // SPARK-37008: The results of `Platform.BYTE_ARRAY_OFFSET` using different Java versions
       // and different args as follows table:
       // +------------------------------+--------+---------+
       // |                               |Java 8 |Java 17  |
@@ -57,7 +57,7 @@ class WholeStageCodegenSparkSubmitSuite extends SparkSubmitTestUtils
       // |-XX:-UseCompressedClassPointers|  24   |   24    |
       // |-XX:+UseCompressedClassPointers|  16   |   16    |
       // +-------------------------------+-------+---------+
-      // So SPARK-36796 replace `UseCompressedOops` with `UseCompressedClassPointers`.
+      // So SPARK-37008 replace `UseCompressedOops` with `UseCompressedClassPointers`.
       "--conf", "spark.driver.extraJavaOptions=-XX:-UseCompressedClassPointers",
       "--conf", "spark.executor.extraJavaOptions=-XX:+UseCompressedClassPointers",
       "--conf", "spark.sql.adaptive.enabled=false",
