@@ -1634,7 +1634,9 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
       val formatter = new java.util.Formatter(sb, Locale.US)
 
       val arglist = children.tail.map(_.eval(input).asInstanceOf[AnyRef])
-      formatter.format(pattern.asInstanceOf[UTF8String].toString, arglist: _*)
+      formatter.format(
+        pattern.asInstanceOf[UTF8String].toString.replace("%0$", "%1$"),
+        arglist: _*)
 
       UTF8String.fromString(sb.toString)
     }
@@ -1669,6 +1671,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     val formatter = classOf[java.util.Formatter].getName
     val sb = ctx.freshName("sb")
     val stringBuffer = classOf[StringBuffer].getName
+    val replaceMethod = ".replace(\"%0$\", \"%1$\")"
     ev.copy(code = code"""
       ${pattern.code}
       boolean ${ev.isNull} = ${pattern.isNull};
@@ -1678,7 +1681,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
         $formatter $form = new $formatter($sb, ${classOf[Locale].getName}.US);
         Object[] $argList = new Object[$numArgLists];
         $argListCodes
-        $form.format(${pattern.value}.toString(), $argList);
+        $form.format(${pattern.value}.toString()$replaceMethod, $argList);
         ${ev.value} = UTF8String.fromString($sb.toString());
       }""")
   }
