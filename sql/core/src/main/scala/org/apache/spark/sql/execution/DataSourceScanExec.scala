@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.connector.expressions.TableSample
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
@@ -104,6 +105,7 @@ case class RowDataSourceScanExec(
     filters: Set[Filter],
     handledFilters: Set[Filter],
     aggregation: Option[Aggregation],
+    sample: TableSample,
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     tableIdentifier: Option[TableIdentifier])
@@ -149,11 +151,18 @@ case class RowDataSourceScanExec(
       handledFilters
     }
 
+    val sampleStr = if (sample != null) {
+      s"TABLESAMPLE ${sample.methodName} ${sample.lowerBound} ${sample.upperBound} " +
+        s"${sample.withReplacement} ${sample.seed}"
+    } else {
+      "[]"
+    }
     Map(
       "ReadSchema" -> requiredSchema.catalogString,
       "PushedFilters" -> seqToString(markedFilters.toSeq),
       "PushedAggregates" -> aggString,
-      "PushedGroupby" -> groupByString)
+      "PushedGroupby" -> groupByString,
+      "PushedSample" -> sampleStr)
   }
 
   // Don't care about `rdd` and `tableIdentifier` when canonicalizing.

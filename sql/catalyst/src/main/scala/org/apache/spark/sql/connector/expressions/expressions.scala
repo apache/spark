@@ -61,6 +61,15 @@ private[sql] object LogicalExpressions {
       nullOrdering: NullOrdering): SortOrder = {
     SortValue(reference, direction, nullOrdering)
   }
+
+  def tableSample(
+      methodName: String,
+      lowerBound: Double,
+      upperBound: Double,
+      withReplacement: Boolean,
+      seed: Long): TableSample = {
+    TableSampleValue(methodName: String, lowerBound, upperBound, withReplacement, seed)
+  }
 }
 
 /**
@@ -356,4 +365,15 @@ private[sql] object SortValue {
     case _ =>
       None
   }
+}
+
+private[sql] final case class TableSampleValue(
+    methodName: String,
+    lowerBound: Double,
+    upperBound: Double,
+    withReplacement: Boolean,
+    seed: Long) extends TableSample {
+
+  override def describe(): String = s"$methodName $lowerBound $lowerBound $upperBound" +
+    s" $withReplacement $seed"
 }

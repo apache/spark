@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, Timesta
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.expressions.{NamedReference, TableSample}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -358,6 +358,10 @@ abstract class JdbcDialect extends Serializable with Logging{
   def classifyException(message: String, e: Throwable): AnalysisException = {
     new AnalysisException(message, cause = Some(e))
   }
+
+  def supportsTableSample: Boolean = false
+
+  def getTableSample(sample: Option[TableSample]): String = ""
 }
 
 /**

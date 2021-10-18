@@ -18,8 +18,10 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.connector.read.V1Scan
+import org.apache.spark.sql.connector.expressions.TableSample
+import org.apache.spark.sql.connector.read.{SupportsPushDownTableSample, V1Scan}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation
+import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources.{BaseRelation, Filter, TableScan}
 import org.apache.spark.sql.types.StructType
 
@@ -28,9 +30,23 @@ case class JDBCScan(
     prunedSchema: StructType,
     pushedFilters: Array[Filter],
     pushedAggregateColumn: Array[String] = Array(),
-    groupByColumns: Option[Array[String]]) extends V1Scan {
+    groupByColumns: Option[Array[String]]) extends V1Scan
+      with SupportsPushDownTableSample {
 
   override def readSchema(): StructType = prunedSchema
+  private var tableSample: Option[TableSample] = None
+
+  override def pushTableSample(sample: TableSample): Boolean = {
+    if (relation.jdbcOptions.pushDownTableSample &&
+      JdbcDialects.get(relation.jdbcOptions.url).supportsTableSample) {
+      this.tableSample = Some(sample)
+      true
+    } else {
+      false
+    }
+  }
+
+  override def pushedTableSample: TableSample = if (tableSample.nonEmpty) tableSample.get else null
 
   override def toV1TableScan[T <: BaseRelation with TableScan](context: SQLContext): T = {
     new BaseRelation with TableScan {
@@ -43,7 +59,8 @@ case class JDBCScan(
         } else {
           pushedAggregateColumn
         }
-        relation.buildScan(columnList, prunedSchema, pushedFilters, groupByColumns)
+        relation.buildScan(
+          columnList, prunedSchema, pushedFilters, groupByColumns, tableSample)
       }
     }.asInstanceOf[T]
   }
