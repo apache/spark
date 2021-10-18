@@ -23,7 +23,7 @@ import java.net.URI
 import org.apache.log4j.Level
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
+import org.apache.spark.scheduler.{JobFailed, SparkListener, SparkListenerEvent, SparkListenerJobEnd, SparkListenerJobStart}
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
@@ -2189,6 +2189,46 @@ class AdaptiveQueryExecSuite
           """.stripMargin)
         assert(findTopLevelLimit(origin2).size == 1)
         assert(findTopLevelLimit(adaptive2).isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-37043: Cancel all running job after AQE plan finished") {
+    spark.range(1).createOrReplaceTempView("v")
+    withTempView("v") {
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        // we should have two jobs for the two shuffle node in Join,
+        // LocalTableScanExec doesn't need job
+        @volatile var firstJob = true
+        @volatile var failedJob: JobFailed = null
+        val listener = new SparkListener {
+          override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+            if (firstJob) {
+              firstJob = false
+            } else {
+              jobEnd.jobResult match {
+                case job: JobFailed => failedJob = job
+                case _ =>
+              }
+            }
+          }
+        }
+        spark.sparkContext.addSparkListener(listener)
+        try {
+          val (origin, adaptive) = runAdaptiveAndVerifyResult(
+            """
+              |SELECT * FROM emptyTestData t1 JOIN (
+              | SELECT id, java_method('java.lang.Thread', 'sleep', 3000L) FROM v
+              |) t2 ON t1.key = t2.id
+              |""".stripMargin)
+          assert(origin.isInstanceOf[SortMergeJoinExec])
+          assert(adaptive.isInstanceOf[LocalTableScanExec])
+          spark.sparkContext.listenerBus.waitUntilEmpty(5000)
+          assert(failedJob != null)
+          assert(failedJob.exception.getMessage.contains("cancelled"))
+        } finally {
+          spark.sparkContext.removeSparkListener(listener)
+        }
       }
     }
   }
