@@ -3026,7 +3026,7 @@ class HiveDDLSuite
     }
   }
 
-  test("Put-in-jira: Alter view should preserve column case with view definition change") {
+  test("SPARK-37046: Alter view should preserve column case with view definition change") {
     withView("v") {
       // Changing view definition should preserve column case
       spark.sql("CREATE VIEW v AS SELECT 1 AS A, 1 AS B")
@@ -3041,7 +3041,7 @@ class HiveDDLSuite
     }
   }
 
-  test("Put-in-jira: Alter view should preserve column case with view name change") {
+  test("SPARK-37046: Alter view should preserve column case with view name change") {
     withView("v") {
       // Renaming view should preserve column case
       spark.sql("CREATE VIEW v AS SELECT 1 AS A, 1 AS B")
@@ -3056,7 +3056,7 @@ class HiveDDLSuite
     }
   }
 
-  test("Put-in-jira: Alter view should preserve column case with tbl properties change") {
+  test("SPARK-37046: Alter view should preserve column case with tbl properties change") {
     withView("v") {
       // Setting table properties should preserve column case
       spark.sql("CREATE VIEW v AS SELECT 1 AS A, 1 AS B")
