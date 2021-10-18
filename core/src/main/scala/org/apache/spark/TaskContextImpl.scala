@@ -17,8 +17,7 @@
 
 package org.apache.spark
 
-import java.util.Properties
-import java.util.Stack
+import java.util.{Properties, Stack}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -63,7 +62,9 @@ private[spark] class TaskContextImpl(
   /**
    * List of callback functions to execute when the task completes.
    *
-   * Using a stack causes us to process callbacks in the reverse order of registration.
+   * Using a stack causes us to process listeners in reverse order of registration. To ensure each
+   * listener is invoked exactly once, `invokeListeners()` pops it from the stack before invoking
+   * it.
    */
   @transient private val onCompleteCallbacks = new Stack[TaskCompletionListener]
 
@@ -73,7 +74,7 @@ private[spark] class TaskContextImpl(
   /**
    * The thread currently executing task completion or failure listeners, if any.
    *
-   * The `invokeListeners()` method uses this to ensure listeners are called sequentially.
+   * `invokeListeners()` uses this to ensure listeners are called sequentially.
    */
   @transient private var listenerInvocationThread: Option[Thread] = None
 
@@ -83,11 +84,9 @@ private[spark] class TaskContextImpl(
   // Whether the task has completed.
   private var completed: Boolean = false
 
-  // Whether the task has failed.
-  private var failed: Boolean = false
-
-  // Throwable that caused the task to fail
-  private var failure: Throwable = _
+  // If defined, the task has failed and this option contains the Throwable that caused the task to
+  // fail.
+  private var failureIfFailed: Option[Throwable] = None
 
   // If there was a fetch failure in the task, we store it here, to make sure user-code doesn't
   // hide the exception.  See SPARK-19276
@@ -96,12 +95,12 @@ private[spark] class TaskContextImpl(
   @GuardedBy("this")
   override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
     val needToCallListener = synchronized {
-      // If there is already a thread invoking listeners, adding our listener to
-      // `onCompleteCallbacks` will cause that thread to execute our listener, and the call to
+      // If there is already a thread invoking listeners, adding the new listener to
+      // `onCompleteCallbacks` will cause that thread to execute the new listener, and the call to
       // `invokeTaskCompletionListeners()` below will be a no-op.
       //
       // If there is no such thread, the call to `invokeTaskCompletionListeners()` below will
-      // execute all listeners, including ours.
+      // execute all listeners, including the new listener.
       onCompleteCallbacks.push(listener)
       completed
     }
@@ -113,11 +112,10 @@ private[spark] class TaskContextImpl(
 
   @GuardedBy("this")
   override def addTaskFailureListener(listener: TaskFailureListener): this.type = {
-    val failureOption: Option[Throwable] = synchronized {
+    synchronized {
       onFailureCallbacks.push(listener)
-      if (failed) Some(failure) else None
-    }
-    failureOption.foreach(invokeTaskFailureListeners)
+      failureIfFailed
+    }.foreach(invokeTaskFailureListeners)
     this
   }
 
@@ -128,9 +126,8 @@ private[spark] class TaskContextImpl(
   @GuardedBy("this")
   private[spark] override def markTaskFailed(error: Throwable): Unit = {
     synchronized {
-      if (failed) return
-      failed = true
-      failure = error
+      if (failureIfFailed.isDefined) return
+      failureIfFailed = Some(error)
     }
     invokeTaskFailureListeners(error)
   }
@@ -153,6 +150,8 @@ private[spark] class TaskContextImpl(
   }
 
   private def invokeTaskFailureListeners(error: Throwable): Unit = {
+    // It is safe to access the reference to `onFailureCallbacks` without holding the TaskContext
+    // lock. `invokeListeners()` acquires the lock before accessing the contents.
     invokeListeners(onFailureCallbacks, "TaskFailureListener", Option(error)) {
       _.onTaskFailure(this, error)
     }
