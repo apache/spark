@@ -84,7 +84,7 @@ Using Conda
 -----------
 
 Conda is an open-source package management and environment management system (developed by
-`Anaconda` <https://www.anaconda.com/>`_), which is best installed through
+`Anaconda <https://www.anaconda.com/>`_), which is best installed through
 `Miniconda <https://docs.conda.io/en/latest/miniconda.html/>`_ or `Miniforge <https://github.com/conda-forge/miniforge/>`_.
 The tool is both cross-platform and language agnostic, and in practice, conda can replace both
 `pip <https://pip.pypa.io/en/latest/>`_ and `virtualenv <https://virtualenv.pypa.io/en/latest/>`_.
@@ -94,7 +94,7 @@ Anaconda itself, the most important channel is `conda-forge <https://conda-forge
 is the community-driven packaging effort that is the most extensive & the most current (and also
 serves as the upstream for the Anaconda channels in most cases).
 
-Generally, it is recommended to use _as few channels as possible_. Conda-forge & Anaconda put a
+Generally, it is recommended to use *as few channels as possible*. Conda-forge & Anaconda put a
 lot of effort in guaranteeing binary compatibility between packages (e.g. by using compatible
 compilers for all packages and tracking which packages are ABI-relevant). Needlessly mixing in
 other channels can end up breaking those guarantees, which is why conda-forge even recommends
