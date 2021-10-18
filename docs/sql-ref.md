@@ -34,7 +34,3 @@ Spark SQL is Apache Spark's module for working with structured data. This guide 
  * [Literals](sql-ref-literals.html)
  * [Null Semantics](sql-ref-null-semantics.html)
  * [SQL Syntax](sql-ref-syntax.html)
-   * [DDL Statements](sql-ref-syntax-ddl.html)
-   * [DML Statements](sql-ref-syntax-dml.html)
-   * [Data Retrieval Statements](sql-ref-syntax-qry.html)
-   * [Auxiliary Statements](sql-ref-syntax-aux.html)
