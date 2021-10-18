@@ -195,13 +195,12 @@ _options: List[Option] = [
         types=bool,
     ),
     Option(
-        key="compute.check_identical_indices",
+        key="compute.eager_check",
         doc=(
-            "'compute.check_identical_indices' sets whether or not to operate dot with identical "
-            "indexes checking. If 'compute.check_identical_indices' is set to True, "
-            "pandas-on-Spark performs identical indexes checking beforehand, but it will cause a "
-            "performance overhead. Otherwise, pandas-on-Spark just proceeds and performs by "
-            "ignoring mismatches with NaN permissively."
+            "'compute.eager_check' sets whether or not to launch some Spark jobs just for the sake "
+            "of validation. If 'compute.eager_check' is set to True, pandas-on-Spark performs the "
+            "validation beforehand, but it will cause a performance overhead. Otherwise, "
+            "pandas-on-Spark skip the validation and will be slightly different from pandas"
         ),
         default=True,
         types=bool,
