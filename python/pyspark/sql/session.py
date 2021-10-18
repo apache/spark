@@ -866,10 +866,15 @@ class SparkSession(SparkConversionMixin):
 
         if isinstance(data, RDD):
             rdd, struct = self._createFromRDD(
-                data if no_need_to_prepare else data.map(prepare), schema, samplingRatio)
+                data if no_need_to_prepare else data.map(prepare),
+                schema,
+                verifySchema,
+                samplingRatio)
         else:
             rdd, struct = self._createFromLocal(
-                data if no_need_to_prepare else map(prepare, data), schema)
+                data if no_need_to_prepare else map(prepare, data),
+                schema,
+                verifySchema)
         jrdd = self._jvm.SerDeUtil.toJavaArray(
             rdd._to_java_object_rdd()  # type: ignore[attr-defined]
         )
