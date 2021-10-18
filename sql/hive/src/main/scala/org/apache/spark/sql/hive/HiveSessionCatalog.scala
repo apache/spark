@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.aggregate.ScalaAggregator
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.types.{DecimalType, DoubleType}
@@ -127,16 +128,10 @@ private[sql] class HiveSessionCatalog(
         // If `super.makeFunctionExpression` throw `InvalidUDFClassException`, we try to construct
         // ScalaAggregator or Hive UDF/UDAF/UDTF with function definition. Otherwise,
         // we just throw it earlier.
-        // Unfortunately we need to use reflection here because Aggregator
-        // and ScalaAggregator are defined in sql/core module.
         case _: InvalidUDFClassException =>
-          val clsForAggregator =
-            Utils.classForName("org.apache.spark.sql.expressions.Aggregator")
+          val clsForAggregator = classOf[Aggregator[_, _, _]]
           if (clsForAggregator.isAssignableFrom(clazz)) {
-            val clsForScalaAggregator =
-              Utils.classForName("org.apache.spark.sql.execution.aggregate.ScalaAggregator")
-            val clsForEncoder =
-              Utils.classForName("org.apache.spark.sql.catalyst.encoders.ExpressionEncoder")
+            val clsForEncoder = classOf[ExpressionEncoder[_]]
             val aggregator = clazz.getConstructor().newInstance().asInstanceOf[Aggregator[_, _, _]]
             // Construct the input encoder
             val mirror = runtimeMirror(clazz.getClassLoader)
@@ -152,8 +147,8 @@ private[sql] class HiveSessionCatalog(
               deserializer,
               ClassTag(cls))
 
-            val e = clsForScalaAggregator.getConstructor(classOf[Seq[Expression]], clsForAggregator,
-              clsForEncoder, clsForEncoder, classOf[Boolean], classOf[Boolean],
+            val e = classOf[ScalaAggregator[_, _, _]].getConstructor(classOf[Seq[Expression]],
+              clsForAggregator, clsForEncoder, clsForEncoder, classOf[Boolean], classOf[Boolean],
               classOf[Int], classOf[Int], classOf[Option[String]])
               .newInstance(
                 input,
