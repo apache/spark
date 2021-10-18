@@ -75,6 +75,42 @@ public final class ByteArray {
     return (IS_LITTLE_ENDIAN ? java.lang.Long.reverseBytes(p) : p) & ~mask;
   }
 
+  public static int compareBinary(byte[] leftBase, byte[] rightBase) {
+    return compareBinary(leftBase, Platform.BYTE_ARRAY_OFFSET, leftBase.length,
+        rightBase, Platform.BYTE_ARRAY_OFFSET, rightBase.length);
+  }
+
+  static int compareBinary(
+      Object leftBase,
+      long leftOffset,
+      int leftNumBytes,
+      Object rightBase,
+      long rightOffset,
+      int rightNumBytes) {
+    int len = Math.min(leftNumBytes, rightNumBytes);
+    int wordMax = (len / 8) * 8;
+    for (int i = 0; i < wordMax; i += 8) {
+      long left = Platform.getLong(leftBase, leftOffset + i);
+      long right = Platform.getLong(rightBase, rightOffset + i);
+      if (left != right) {
+        if (IS_LITTLE_ENDIAN) {
+          return Long.compareUnsigned(Long.reverseBytes(left), Long.reverseBytes(right));
+        } else {
+          return Long.compareUnsigned(left, right);
+        }
+      }
+    }
+    for (int i = wordMax; i < len; i++) {
+      // Both UTF-8 and byte array should be compared as unsigned int.
+      int res = (Platform.getByte(leftBase, leftOffset + i) & 0xFF) -
+          (Platform.getByte(rightBase, rightOffset + i) & 0xFF);
+      if (res != 0) {
+        return res;
+      }
+    }
+    return leftNumBytes - rightNumBytes;
+  }
+
   public static byte[] subStringSQL(byte[] bytes, int pos, int len) {
     // This pos calculation is according to UTF8String#subStringSQL
     if (pos > bytes.length) {
