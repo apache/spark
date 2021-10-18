@@ -92,7 +92,8 @@ public final class ParquetDictionary implements Dictionary {
       if (needTransform) {
         // For unsigned int64, it stores as dictionary encoded signed int64 in Parquet
         // whenever dictionary is available.
-        // Here we lazily decode it to the original signed long value then convert to decimal(20, 0).
+        // Here we lazily decode it to the original signed long value
+        // then convert to decimal(20, 0).
         long signed = dictionary.decodeToLong(id);
         return new BigInteger(Long.toUnsignedString(signed)).toByteArray();
       } else {
