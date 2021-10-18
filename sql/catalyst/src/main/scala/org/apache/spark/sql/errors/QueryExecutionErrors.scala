@@ -1421,17 +1421,21 @@ object QueryExecutionErrors {
   }
 
   def partitionColumnNotFoundInSchemaError(col: String, schema: StructType): Throwable = {
-    new RuntimeException(s"Partition column $col not found in schema $schema")
+    new SparkRuntimeException(
+      errorClass = "MISSING_PARTITION_COLUMN_IN_SCHEMA",
+      messageParameters = Array(col, schema.toString()))
   }
 
   def stateNotDefinedOrAlreadyRemovedError(): Throwable = {
-    new NoSuchElementException("State is either not defined or has already been removed")
+    new SparkNoSuchElementException(
+      errorClass = "STATE_NOT_DEFINED_OR_ALREADY_REMOVED",
+      messageParameters = Array.empty)
   }
 
   def cannotSetTimeoutDurationError(): Throwable = {
-    new UnsupportedOperationException(
-      "Cannot set timeout duration without enabling processing time timeout in " +
-        "[map|flatMap]GroupsWithState")
+    new SparkUnsupportedOperationException(
+      errorClass = "CANNOT_SET_TIMEOUT_DURATION",
+      messageParameters = Array.empty)
   }
 
   def cannotGetEventTimeWatermarkError(): Throwable = {
