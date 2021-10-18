@@ -47,7 +47,7 @@ public interface SupportsIndex extends Table {
   void createIndex(String indexName,
       String indexType,
       NamedReference[] columns,
-      Map<NamedReference, Map<String, String>>[] columnsProperties,
+      Map<NamedReference, Map<String, String>> columnsProperties,
       Map<String, String> properties)
       throws IndexAlreadyExistsException;
 

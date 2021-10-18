@@ -130,7 +130,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     // MySQL doesn't allow property set on individual column, so use empty Array for
     // column properties
     jdbcTable.createIndex("i1", "BTREE", Array(FieldReference("col1")),
-      Array.empty[util.Map[NamedReference, util.Map[String, String]]], properties)
+      new util.HashMap[NamedReference, util.Map[String, String]](), properties)
 
     var index = jdbcTable.listIndexes()
     // The index property size is actually 1. Even though the index is created

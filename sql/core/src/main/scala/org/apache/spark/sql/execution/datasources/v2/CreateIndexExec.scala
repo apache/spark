@@ -40,17 +40,15 @@ case class CreateIndexExec(
   extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     try {
-      val colProperties: Array[util.Map[NamedReference, util.Map[String, String]]] = columns.map {
-        case (column, map) =>
-          val propMap = new util.HashMap[NamedReference, util.Map[String, String]]
-          propMap.put(column, map.asJava)
-          propMap
-      }.toArray
-      val (cols, _) = columns.unzip
-      table.createIndex(indexName, indexType, cols.toArray, colProperties, properties.asJava)
+      val colProperties = new util.HashMap[NamedReference, util.Map[String, String]]
+      columns.foreach {
+        case (column, map) => colProperties.put(column, map.asJava)
+      }
+      table.createIndex(
+        indexName, indexType, columns.unzip._1.toArray, colProperties, properties.asJava)
     } catch {
       case _: IndexAlreadyExistsException if ignoreIfExists =>
-        logWarning(s"Index ${indexName} already exists in table ${table.name}. Ignoring.")
+        logWarning(s"Index $indexName already exists in table ${table.name}. Ignoring.")
     }
     Seq.empty
   }

@@ -306,7 +306,7 @@ abstract class JdbcDialect extends Serializable with Logging{
       indexType: String,
       tableName: String,
       columns: Array[NamedReference],
-      columnsProperties: Array[util.Map[NamedReference, util.Map[String, String]]],
+      columnsProperties: util.Map[NamedReference, util.Map[String, String]],
       properties: util.Map[String, String]): String = {
     throw new UnsupportedOperationException("createIndex is not supported")
   }
