@@ -47,6 +47,11 @@ public class VectorizedDeltaByteArrayReader extends ValuesReader implements Vect
   }
 
   @Override
+  public short readShort() {
+    return 0;
+  }
+
+  @Override
   public Binary readBinary(int len) {
     throw new UnsupportedOperationException();
   }
@@ -62,13 +67,40 @@ public class VectorizedDeltaByteArrayReader extends ValuesReader implements Vect
   }
 
   @Override
+  public void readShorts(int total, WritableColumnVector c, int rowId) {
+
+  }
+
+  @Override
   public void readIntegers(int total, WritableColumnVector c, int rowId) {
     throw new UnsupportedOperationException();
   }
 
   @Override
+  public void readIntegersWithRebase(int total, WritableColumnVector c, int rowId,
+      boolean failIfRebase) {
+
+  }
+
+  @Override
+  public void readUnsignedIntegers(int total, WritableColumnVector c, int rowId) {
+
+  }
+
+  @Override
+  public void readUnsignedLongs(int total, WritableColumnVector c, int rowId) {
+
+  }
+
+  @Override
   public void readLongs(int total, WritableColumnVector c, int rowId) {
     throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public void readLongsWithRebase(int total, WritableColumnVector c, int rowId,
+      boolean failIfRebase) {
+
   }
 
   @Override
@@ -95,5 +127,50 @@ public class VectorizedDeltaByteArrayReader extends ValuesReader implements Vect
         c.putByteArray(rowId + i, bytes);
       }
     }
+  }
+
+  @Override
+  public void skipBooleans(int total) {
+
+  }
+
+  @Override
+  public void skipBytes(int total) {
+
+  }
+
+  @Override
+  public void skipShorts(int total) {
+
+  }
+
+  @Override
+  public void skipIntegers(int total) {
+
+  }
+
+  @Override
+  public void skipLongs(int total) {
+
+  }
+
+  @Override
+  public void skipFloats(int total) {
+
+  }
+
+  @Override
+  public void skipDoubles(int total) {
+
+  }
+
+  @Override
+  public void skipBinary(int total) {
+
+  }
+
+  @Override
+  public void skipFixedLenByteArray(int total, int len) {
+
   }
 }

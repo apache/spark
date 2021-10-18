@@ -283,7 +283,7 @@ public class VectorizedColumnReader {
       throw new IOException("could not read page in col " + descriptor, e);
     }
   }
-    
+
     private ValuesReader getValuesReader(Encoding encoding) {
         switch (encoding) {
             case PLAIN:
