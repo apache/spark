@@ -29,7 +29,7 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
@@ -418,7 +418,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
           purge = true)
         assert(!versionsWithoutPurge.contains(version))
       } catch {
-        case _: SparkUnsupportedOperationException =>
+        case _: UnsupportedOperationException =>
           assert(versionsWithoutPurge.contains(version))
           client.dropTable("default", tableName = "temporary", ignoreIfNotExists = false,
             purge = false)
@@ -429,7 +429,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
           purge = true)
         assert(!versionsWithoutPurge.contains(version))
       } catch {
-        case _: SparkUnsupportedOperationException =>
+        case _: UnsupportedOperationException =>
           client.dropTable("default", tableName = "view1", ignoreIfNotExists = false,
             purge = false)
       }
@@ -584,7 +584,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
           purge = true, retainData = false)
         assert(!versionsWithoutPurge.contains(version))
       } catch {
-        case _: SparkUnsupportedOperationException =>
+        case _: UnsupportedOperationException =>
           assert(versionsWithoutPurge.contains(version))
           client.dropPartitions("default", "src_part", Seq(spec), ignoreIfNotExists = true,
             purge = false, retainData = false)
