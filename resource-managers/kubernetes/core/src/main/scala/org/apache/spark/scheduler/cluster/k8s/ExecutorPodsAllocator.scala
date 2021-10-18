@@ -456,11 +456,11 @@ class ExecutorPodsAllocator(
 
   private def isExecutorIdleTimedOut(state: ExecutorPodState, currentTime: Long): Boolean = {
     try {
-      val startTime = Instant.parse(state.pod.getStatus.getStartTime).toEpochMilli()
+      val startTime = Instant.parse(state.pod.getMetadata.getCreationTimestamp).toEpochMilli()
       currentTime - startTime > executorIdleTimeout
     } catch {
-      case _: Exception =>
-        logDebug(s"Cannot get startTime of pod ${state.pod}")
+      case e: Exception =>
+        logError(s"Cannot get the createTime of the pod $state.pod", e)
         true
     }
   }
