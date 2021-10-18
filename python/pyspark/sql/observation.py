@@ -108,7 +108,8 @@ class Observation:
         observed_df = self._jo.on(  # type: ignore[attr-defined]
             df._jdf,
             exprs[0]._jc,
-            column._to_seq(df._sc, [c._jc for c in exprs[1:]])  # type: ignore[attr-defined]
+            column._to_seq(
+                df._sc, [c._jc for c in exprs[1:]])  # type: ignore[attr-defined]
         )
         return DataFrame(observed_df, df.sql_ctx)
 
