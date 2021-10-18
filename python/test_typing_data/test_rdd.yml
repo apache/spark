@@ -17,7 +17,13 @@
 
 - case: toDF
   main: |
-    from pyspark.sql.types import *
+    from pyspark.sql.types import (
+      IntegerType,
+      Row,
+      StructType,
+      StringType,
+      StructField,
+    )
     from collections import namedtuple
     from pyspark.sql import SparkSession
 
