@@ -92,7 +92,6 @@ private[spark] class TaskContextImpl(
   // hide the exception.  See SPARK-19276
   @volatile private var _fetchFailedException: Option[FetchFailedException] = None
 
-  @GuardedBy("this")
   override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
     val needToCallListener = synchronized {
       // If there is already a thread invoking listeners, adding the new listener to
@@ -110,7 +109,6 @@ private[spark] class TaskContextImpl(
     this
   }
 
-  @GuardedBy("this")
   override def addTaskFailureListener(listener: TaskFailureListener): this.type = {
     synchronized {
       onFailureCallbacks.push(listener)
@@ -123,7 +121,6 @@ private[spark] class TaskContextImpl(
     resources.asJava
   }
 
-  @GuardedBy("this")
   private[spark] override def markTaskFailed(error: Throwable): Unit = {
     synchronized {
       if (failureIfFailed.isDefined) return
@@ -132,7 +129,6 @@ private[spark] class TaskContextImpl(
     invokeTaskFailureListeners(error)
   }
 
-  @GuardedBy("this")
   private[spark] override def markTaskCompleted(error: Option[Throwable]): Unit = {
     synchronized {
       if (completed) return
