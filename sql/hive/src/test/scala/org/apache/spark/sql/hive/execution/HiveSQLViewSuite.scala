@@ -196,7 +196,7 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
         // create a view using a function in 'default' database
         withView("v1") {
           sql(s"CREATE VIEW v1 AS SELECT $functionName(col1) AS func FROM VALUES (1), (2), (3)")
-          checkAnswer(sql(s"SELECT * FROM v1"), Seq(Row(102.0)))
+          checkAnswer(sql("SELECT * FROM v1"), Seq(Row(102.0)))
         }
       }
     }
