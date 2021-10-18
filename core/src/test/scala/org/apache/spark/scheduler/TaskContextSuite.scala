@@ -432,21 +432,21 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val invocationOrder = ArrayBuffer.empty[String]
 
     // Create listeners that log an id to `invocationOrder` when they are invoked.
-    def loggingListener(id: String): TaskCompletionListener = new TaskCompletionListener {
+    def makeLoggingListener(id: String): TaskCompletionListener = new TaskCompletionListener {
       override def onTaskCompletion(context: TaskContext): Unit = {
         invocationOrder += id
       }
     }
-    context.addTaskCompletionListener("A")
-    context.addTaskCompletionListener("B")
-    context.addTaskCompletionListener("C")
+    context.addTaskCompletionListener(makeLoggingListener("A"))
+    context.addTaskCompletionListener(makeLoggingListener("B"))
+    context.addTaskCompletionListener(makeLoggingListener("C"))
 
     // Ensure the listeners are called in reverse order of registration, except when they are called
     // after the task is complete.
     assert(invocationOrder === Seq.empty)
     context.markTaskCompleted(None)
     assert(invocationOrder === Seq("C", "B", "A"))
-    context.addTaskCompletionListener("D")
+    context.addTaskCompletionListener(makeLoggingListener("D"))
     assert(invocationOrder === Seq("C", "B", "A", "D"))
   }
 

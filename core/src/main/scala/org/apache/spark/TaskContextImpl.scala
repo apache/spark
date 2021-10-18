@@ -106,20 +106,18 @@ private[spark] class TaskContextImpl(
       completed
     }
     if (needToCallListener) {
-      invokeTaskCompletionListeners()
+      invokeTaskCompletionListeners(None)
     }
     this
   }
 
   @GuardedBy("this")
   override def addTaskFailureListener(listener: TaskFailureListener): this.type = {
-    val needToCallListener = synchronized {
+    val failureOption: Option[Throwable] = synchronized {
       onFailureCallbacks.push(listener)
-      failed
+      if (failed) Some(failure) else None
     }
-    if (needToCallListener) {
-      invokeTaskFailureListeners()
-    }
+    failureOption.foreach(invokeTaskFailureListeners)
     this
   }
 
@@ -134,7 +132,7 @@ private[spark] class TaskContextImpl(
       failed = true
       failure = error
     }
-    invokeTaskFailureListeners()
+    invokeTaskFailureListeners(error)
   }
 
   @GuardedBy("this")
@@ -143,10 +141,10 @@ private[spark] class TaskContextImpl(
       if (completed) return
       completed = true
     }
-    invokeTaskCompletionListeners()
+    invokeTaskCompletionListeners(error)
   }
 
-  private def invokeTaskCompletionListeners(): Unit = {
+  private def invokeTaskCompletionListeners(error: Option[Throwable]): Unit = {
     // It is safe to access the reference to `onCompleteCallbacks` without holding the TaskContext
     // lock. `invokeListeners()` acquires the lock before accessing the contents.
     invokeListeners(onCompleteCallbacks, "TaskCompletionListener", error) {
@@ -154,7 +152,7 @@ private[spark] class TaskContextImpl(
     }
   }
 
-  private def invokeTaskFailureListeners(): Unit = {
+  private def invokeTaskFailureListeners(error: Throwable): Unit = {
     invokeListeners(onFailureCallbacks, "TaskFailureListener", Option(error)) {
       _.onTaskFailure(this, error)
     }
@@ -183,7 +181,7 @@ private[spark] class TaskContextImpl(
         // If no other thread is invoking listeners, register this thread as the listener invocation
         // thread. This prevents other threads from invoking listeners until this thread is
         // unregistered.
-        listenerInvocationThread = Thread.currentThread()
+        listenerInvocationThread = Some(Thread.currentThread())
       }
     }
 
