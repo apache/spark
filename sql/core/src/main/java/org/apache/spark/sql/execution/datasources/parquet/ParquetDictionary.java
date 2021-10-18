@@ -23,54 +23,84 @@ import java.math.BigInteger;
 
 public final class ParquetDictionary implements Dictionary {
   private org.apache.parquet.column.Dictionary dictionary;
+  private String  file;
   private boolean needTransform = false;
 
-  public ParquetDictionary(org.apache.parquet.column.Dictionary dictionary, boolean needTransform) {
+  public ParquetDictionary(
+      org.apache.parquet.column.Dictionary dictionary,
+      String file,
+      boolean needTransform) {
     this.dictionary = dictionary;
+    this.file = file;
     this.needTransform = needTransform;
   }
 
   @Override
   public int decodeToInt(int id) {
-    if (needTransform) {
-      return (int) dictionary.decodeToLong(id);
-    } else {
-      return dictionary.decodeToInt(id);
+    try {
+      if (needTransform) {
+        return (int) dictionary.decodeToLong(id);
+      } else {
+        return dictionary.decodeToInt(id);
+      }
+    } catch (UnsupportedOperationException e) {
+      throw new UnsupportedOperationException("Decoding to Int failed when reading file " +
+        file + "using " + e.getMessage(), e.getCause());
     }
   }
 
   @Override
   public long decodeToLong(int id) {
-    if (needTransform) {
-      // For unsigned int32, it stores as dictionary encoded signed int32 in Parquet
-      // whenever dictionary is available.
-      // Here we lazily decode it to the original signed int value then convert to long(unit32).
-      return Integer.toUnsignedLong(dictionary.decodeToInt(id));
-    } else {
-      return dictionary.decodeToLong(id);
+    try {
+      if (needTransform) {
+        // For unsigned int32, it stores as dictionary encoded signed int32 in Parquet
+        // whenever dictionary is available.
+        // Here we lazily decode it to the original signed int value then convert to long(unit32).
+        return Integer.toUnsignedLong(dictionary.decodeToInt(id));
+      } else {
+        return dictionary.decodeToLong(id);
+      }
+    } catch (UnsupportedOperationException e) {
+      throw new UnsupportedOperationException("Decoding to Long failed when reading file " +
+        file + "using " + e.getMessage(), e.getCause());
     }
   }
 
   @Override
   public float decodeToFloat(int id) {
-    return dictionary.decodeToFloat(id);
+    try {
+      return dictionary.decodeToFloat(id);
+    } catch (UnsupportedOperationException e) {
+      throw new UnsupportedOperationException("Decoding to Float failed when reading file " +
+        file + "using " + e.getMessage(), e.getCause());
+    }
   }
 
   @Override
   public double decodeToDouble(int id) {
-    return dictionary.decodeToDouble(id);
+    try {
+      return dictionary.decodeToDouble(id);
+    } catch (UnsupportedOperationException e) {
+      throw new UnsupportedOperationException("Decoding to Double failed when reading file " +
+        file + "using " + e.getMessage(), e.getCause());
+    }
   }
 
   @Override
   public byte[] decodeToBinary(int id) {
-    if (needTransform) {
-      // For unsigned int64, it stores as dictionary encoded signed int64 in Parquet
-      // whenever dictionary is available.
-      // Here we lazily decode it to the original signed long value then convert to decimal(20, 0).
-      long signed = dictionary.decodeToLong(id);
-      return new BigInteger(Long.toUnsignedString(signed)).toByteArray();
-    } else {
-      return dictionary.decodeToBinary(id).getBytes();
+    try {
+      if (needTransform) {
+        // For unsigned int64, it stores as dictionary encoded signed int64 in Parquet
+        // whenever dictionary is available.
+        // Here we lazily decode it to the original signed long value then convert to decimal(20, 0).
+        long signed = dictionary.decodeToLong(id);
+        return new BigInteger(Long.toUnsignedString(signed)).toByteArray();
+      } else {
+        return dictionary.decodeToBinary(id).getBytes();
+      }
+    } catch (UnsupportedOperationException e) {
+      throw new UnsupportedOperationException("Decoding to Binary failed when reading file " +
+        file + "using " + e.getMessage(), e.getCause());
     }
   }
 }

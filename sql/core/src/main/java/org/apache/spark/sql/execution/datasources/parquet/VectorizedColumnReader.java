@@ -85,6 +85,7 @@ public class VectorizedColumnReader {
   private final ColumnDescriptor descriptor;
   private final LogicalTypeAnnotation logicalTypeAnnotation;
   private final String datetimeRebaseMode;
+  private final String file;
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
@@ -93,7 +94,8 @@ public class VectorizedColumnReader {
       PrimitiveIterator.OfLong rowIndexes,
       ZoneId convertTz,
       String datetimeRebaseMode,
-      String int96RebaseMode) throws IOException {
+      String int96RebaseMode,
+      String file) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     this.readState = new ParquetReadState(descriptor.getMaxDefinitionLevel(), rowIndexes);
@@ -121,6 +123,7 @@ public class VectorizedColumnReader {
     this.datetimeRebaseMode = datetimeRebaseMode;
     assert "LEGACY".equals(int96RebaseMode) || "EXCEPTION".equals(int96RebaseMode) ||
       "CORRECTED".equals(int96RebaseMode);
+    this.file = file;
   }
 
   private boolean isLazyDecodingSupported(PrimitiveType.PrimitiveTypeName typeName) {
@@ -204,7 +207,7 @@ public class VectorizedColumnReader {
           boolean isUnsignedInt64 = updaterFactory.isUnsignedIntTypeMatched(64);
 
           boolean needTransform = castLongToInt || isUnsignedInt32 || isUnsignedInt64;
-          column.setDictionary(new ParquetDictionary(dictionary, needTransform));
+          column.setDictionary(new ParquetDictionary(dictionary, file, needTransform));
         } else {
           updater.decodeDictionaryIds(readState.offset - startOffset, startOffset, column,
             dictionaryIds, dictionary);
