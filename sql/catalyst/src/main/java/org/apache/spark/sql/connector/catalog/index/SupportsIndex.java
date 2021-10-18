@@ -37,7 +37,7 @@ public interface SupportsIndex extends Table {
    * Creates an index.
    *
    * @param indexName the name of the index to be created
-   * @param indexType the IndexType of the index to be created. If this is not specified, Spark
+   * @param indexType the type of the index to be created. If this is not specified, Spark
    *                  will use empty String.
    * @param columns the columns on which index to be created
    * @param columnsProperties the properties of the columns on which index to be created

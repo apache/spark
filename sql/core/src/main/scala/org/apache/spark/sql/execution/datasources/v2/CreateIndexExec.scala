@@ -50,7 +50,7 @@ case class CreateIndexExec(
       table.createIndex(indexName, indexType, cols.toArray, colProperties, properties.asJava)
     } catch {
       case _: IndexAlreadyExistsException if ignoreIfExists =>
-        logWarning(s"Index ${indexName} already exists. Ignoring.")
+        logWarning(s"Index ${indexName} already exists in table ${table.name}. Ignoring.")
     }
     Seq.empty
   }
