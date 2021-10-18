@@ -2976,7 +2976,7 @@ class DataSourceV2SQLSuite
       val ex = intercept[AnalysisException] {
         sql(s"CREATE index i1 ON $t(col1)")
       }
-      assert(ex.getMessage.contains("CreateIndex not supported in this table."))
+      assert(ex.getMessage.contains("CreateIndex is not supported in this table."))
     }
   }
 
