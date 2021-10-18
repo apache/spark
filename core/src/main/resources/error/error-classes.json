@@ -14,9 +14,6 @@
   "CANNOT_GET_JDBC_TYPE" : {
     "message" : [ "Can't get JDBC type for %s" ]
   },
-  "CANNOT_OPERATE_ON_CANONICALIZATION_PLAN" : {
-    "message" : [ "Operating on canonicalization plan" ]
-  },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"
@@ -92,10 +89,6 @@
   "INDEX_OUT_OF_BOUNDS" : {
     "message" : [ "Index %s must be between 0 and the length of the ArrayData." ],
     "sqlState" : "22023"
-  },
-  "INPUT_FILTER_NOT_FULLY_CONVERTIBLE" : {
-    "message" : [ "The input filter of %s should be fully convertible." ],
-    "sqlState" : "42000"
   },
   "INTERNAL_ERROR" : {
     "message" : [ "%s" ]
@@ -202,10 +195,6 @@
   },
   "UNSUPPORTED_NESTED_ARRAYS" : {
     "message" : [ "Nested arrays unsupported" ],
-    "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_OPERATION_FOR_DATA_TYPE" : {
-    "message" : [ "Unsupported operation for data type: %s" ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID" : {
