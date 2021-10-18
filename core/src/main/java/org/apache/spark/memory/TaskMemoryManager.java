@@ -210,7 +210,8 @@ public class TaskMemoryManager {
    */
   private long trySpillAndAcquire(
       MemoryConsumer requestingConsumer,
-      long requested, List<MemoryConsumer> cList,
+      long requested,
+      List<MemoryConsumer> cList,
       int idx) {
     MemoryMode mode = requestingConsumer.getMode();
     MemoryConsumer consumerToSpill = cList.get(idx);
