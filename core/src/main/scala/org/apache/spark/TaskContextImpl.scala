@@ -62,9 +62,8 @@ private[spark] class TaskContextImpl(
   /**
    * List of callback functions to execute when the task completes.
    *
-   * Using a stack causes us to process listeners in reverse order of registration. To ensure each
-   * listener is invoked exactly once, `invokeListeners()` pops it from the stack before invoking
-   * it.
+   * Using a stack causes us to process listeners in reverse order of registration. As listeners are
+   * invoked, they are popped from the stack.
    */
   @transient private val onCompleteCallbacks = new Stack[TaskCompletionListener]
 
