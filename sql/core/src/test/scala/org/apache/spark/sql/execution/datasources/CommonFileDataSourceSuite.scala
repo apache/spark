@@ -36,7 +36,7 @@ trait CommonFileDataSourceSuite extends SQLHelper { self: AnyFunSuite =>
   protected def inputDataset: Dataset[_] = spark.createDataset(Seq("abc"))(Encoders.STRING)
 
   test(s"SPARK-36349: disallow saving of ANSI intervals to $dataSourceFormat") {
-    if (!Set("parquet", "csv", "json").contains(dataSourceFormat.toLowerCase(Locale.ROOT))) {
+    if (!Set("parquet", "csv", "json", "orc").contains(dataSourceFormat.toLowerCase(Locale.ROOT))) {
       Seq("INTERVAL '1' DAY", "INTERVAL '1' YEAR").foreach { i =>
         withTempPath { dir =>
           val errMsg = intercept[AnalysisException] {

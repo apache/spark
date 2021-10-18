@@ -478,7 +478,7 @@ org.typelevel:spire-util_2.12
 org.typelevel:algebra_2.12:jar
 org.typelevel:cats-kernel_2.12
 org.typelevel:machinist_2.12
-net.razorvine:pyrolite
+net.razorvine:pickle
 org.slf4j:jcl-over-slf4j
 org.slf4j:jul-to-slf4j
 org.slf4j:slf4j-api

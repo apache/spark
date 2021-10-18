@@ -442,6 +442,19 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1.6.0</td>
 </tr>
 <tr>
+  <td><code>spark.yarn.am.clientModeTreatDisconnectAsFailed</code></td>
+  <td>false</td>
+  <td>
+  Treat yarn-client unclean disconnects as failures. In yarn-client mode, normally the application will always finish
+  with a final status of SUCCESS because in some cases, it is not possible to know if the Application was terminated
+  intentionally by the user or if there was a real error. This config changes that behavior such that if the Application
+  Master disconnects from the driver uncleanly (ie without the proper shutdown handshake) the application will
+  terminate with a final status of FAILED. This will allow the caller to decide if it was truly a failure. Note that if
+  this config is set and the user just terminate the client application badly it may show a status of FAILED when it wasn't really FAILED.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
   <td><code>spark.yarn.am.clientModeExitOnError</code></td>
   <td>false</td>
   <td>

@@ -21,6 +21,7 @@ from distutils.version import LooseVersion
 import inspect
 from itertools import product
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -2558,6 +2559,11 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.hasnans, psser.hasnans)
 
+        # DecimalType
+        pser = pd.Series([Decimal("0.1"), Decimal("NaN")])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.hasnans, psser.hasnans)
+
         # empty
         pser = pd.Series([])
         psser = ps.from_pandas(pser)
@@ -3070,6 +3076,56 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pcov = pdf["s1"].cov(pdf["s2"], min_periods=4)
         pscov = psdf["s1"].cov(psdf["s2"], min_periods=4)
         self.assert_eq(pcov, pscov, almost=True)
+
+    def test_eq(self):
+        pser = pd.Series([1, 2, 3, 4, 5, 6], name="x")
+        psser = ps.from_pandas(pser)
+
+        # other = Series
+        self.assert_eq(pser.eq(pser), psser.eq(psser))
+        self.assert_eq(pser == pser, psser == psser)
+
+        # other = dict
+        other = {1: None, 2: None, 3: None, 4: None, np.nan: None, 6: None}
+        self.assert_eq(pser.eq(other), psser.eq(other))
+        self.assert_eq(pser == other, psser == other)
+
+        # other = set
+        other = {1, 2, 3, 4, np.nan, 6}
+        self.assert_eq(pser.eq(other), psser.eq(other))
+        self.assert_eq(pser == other, psser == other)
+
+        # other = list
+        other = [np.nan, 1, 3, 4, np.nan, 6]
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+            self.assert_eq(pser.eq(other), psser.eq(other).sort_index())
+            self.assert_eq(pser == other, (psser == other).sort_index())
+        else:
+            self.assert_eq(pser.eq(other).rename("x"), psser.eq(other).sort_index())
+            self.assert_eq((pser == other).rename("x"), (psser == other).sort_index())
+
+        # other = tuple
+        other = (np.nan, 1, 3, 4, np.nan, 6)
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+            self.assert_eq(pser.eq(other), psser.eq(other).sort_index())
+            self.assert_eq(pser == other, (psser == other).sort_index())
+        else:
+            self.assert_eq(pser.eq(other).rename("x"), psser.eq(other).sort_index())
+            self.assert_eq((pser == other).rename("x"), (psser == other).sort_index())
+
+        # other = list with the different length
+        other = [np.nan, 1, 3, 4, np.nan]
+        with self.assertRaisesRegex(ValueError, "Lengths must be equal"):
+            psser.eq(other)
+        with self.assertRaisesRegex(ValueError, "Lengths must be equal"):
+            psser == other
+
+        # other = tuple with the different length
+        other = (np.nan, 1, 3, 4, np.nan)
+        with self.assertRaisesRegex(ValueError, "Lengths must be equal"):
+            psser.eq(other)
+        with self.assertRaisesRegex(ValueError, "Lengths must be equal"):
+            psser == other
 
 
 if __name__ == "__main__":

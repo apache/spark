@@ -102,8 +102,9 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     from distutils.version import LooseVersion
     import pyarrow as pa
     import pyarrow.types as types
+    spark_type: DataType
     if types.is_boolean(at):
-        spark_type = BooleanType()  # type: DataType
+        spark_type = BooleanType()
     elif types.is_int8(at):
         spark_type = ByteType()
     elif types.is_int16(at):

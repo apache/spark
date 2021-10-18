@@ -2080,11 +2080,6 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.tryLogNonFatalError {
       _ui.foreach(_.stop())
     }
-    if (env != null) {
-      Utils.tryLogNonFatalError {
-        env.metricsSystem.report()
-      }
-    }
     Utils.tryLogNonFatalError {
       _cleaner.foreach(_.stop())
     }
@@ -2101,6 +2096,11 @@ class SparkContext(config: SparkConf) extends Logging {
       Utils.tryLogNonFatalError {
         listenerBus.stop()
         _listenerBusStarted = false
+      }
+    }
+    if (env != null) {
+      Utils.tryLogNonFatalError {
+        env.metricsSystem.report()
       }
     }
     Utils.tryLogNonFatalError {

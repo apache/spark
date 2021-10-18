@@ -66,11 +66,6 @@ case class CreateFunctionCommand(
     throw QueryCompilationErrors.defineTempFuncWithIfNotExistsError()
   }
 
-  // Temporary function names should not contain database prefix like "database.function"
-  if (databaseName.isDefined && isTemp) {
-    throw QueryCompilationErrors.specifyingDBInCreateTempFuncError(databaseName.get)
-  }
-
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val func = CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources)

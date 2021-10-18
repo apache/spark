@@ -186,6 +186,6 @@ Input [3]: [d_date_sk#5, d_year#20, d_qoy#21]
 
 (33) BroadcastExchange
 Input [1]: [d_date_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#22]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#22]
 
 

@@ -17,8 +17,7 @@
 
 import sys
 import warnings
-from collections import namedtuple
-from typing import Any, Callable, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, NamedTuple, List, Optional, TYPE_CHECKING
 
 from pyspark import since
 from pyspark.sql.dataframe import DataFrame
@@ -30,10 +29,34 @@ if TYPE_CHECKING:
     from pyspark.sql.types import DataType
 
 
-Database = namedtuple("Database", "name description locationUri")
-Table = namedtuple("Table", "name database description tableType isTemporary")
-Column = namedtuple("Column", "name description dataType nullable isPartition isBucket")
-Function = namedtuple("Function", "name description className isTemporary")
+class Database(NamedTuple):
+    name: str
+    description: Optional[str]
+    locationUri: str
+
+
+class Table(NamedTuple):
+    name: str
+    database: Optional[str]
+    description: Optional[str]
+    tableType: str
+    isTemporary: bool
+
+
+class Column(NamedTuple):
+    name: str
+    description: Optional[str]
+    dataType: str
+    nullable: bool
+    isPartition: bool
+    isBucket: bool
+
+
+class Function(NamedTuple):
+    name: str
+    description: Optional[str]
+    className: str
+    isTemporary: bool
 
 
 class Catalog(object):
