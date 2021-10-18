@@ -102,14 +102,14 @@ class Observation:
         assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
         assert self._jo is None, "an Observation can be used with a DataFrame only once"
 
-        self._jvm = df._sc._jvm  # type: ignore[assignment, attr-defined, has-type]
+        self._jvm = df._sc._jvm  # type: ignore[assignment, attr-defined]
         cls = self._jvm.org.apache.spark.sql.Observation  # type: ignore[attr-defined]
         self._jo = cls(self._name) if self._name is not None else cls()
         observed_df = self._jo.on(  # type: ignore[attr-defined]
             df._jdf,
             exprs[0]._jc,
             column._to_seq(
-                df._sc, [c._jc for c in exprs[1:]])  # type: ignore[attr-defined, has-type]
+                df._sc, [c._jc for c in exprs[1:]])  # type: ignore[attr-defined]
         )
         return DataFrame(observed_df, df.sql_ctx)
 

@@ -323,7 +323,7 @@ class SQLContext(object):
     @overload
     def createDataFrame(
         self,
-        data: Union["RDD[RowLike]", "Iterable[RowLike]"],
+        data: Iterable["RowLike"],
         samplingRatio: Optional[float] = ...,
     ) -> DataFrame:
         ...
@@ -331,7 +331,7 @@ class SQLContext(object):
     @overload
     def createDataFrame(
         self,
-        data: Union["RDD[RowLike]", "Iterable[RowLike]"],
+        data: Iterable["RowLike"],
         schema: Union[List[str], Tuple[str, ...]] = ...,
         verifySchema: bool = ...,
     ) -> DataFrame:
@@ -340,10 +340,7 @@ class SQLContext(object):
     @overload
     def createDataFrame(
         self,
-        data: Union[
-            "RDD[Union[DateTimeLiteral, LiteralType, DecimalLiteral]]",
-            "Iterable[Union[DateTimeLiteral, LiteralType, DecimalLiteral]]",
-        ],
+        data: Iterable[Union["DateTimeLiteral", "LiteralType", "DecimalLiteral"]],
         schema: Union[AtomicType, str],
         verifySchema: bool = ...,
     ) -> DataFrame:
@@ -352,7 +349,7 @@ class SQLContext(object):
     @overload
     def createDataFrame(
         self,
-        data: Union["RDD[RowLike]", "Iterable[RowLike]"],
+        data: Iterable["RowLike"],
         schema: Union[StructType, str],
         verifySchema: bool = ...,
     ) -> DataFrame:
@@ -375,7 +372,7 @@ class SQLContext(object):
 
     def createDataFrame(  # type: ignore[misc]
         self,
-        data: Union["RDD[RowLike]", "Iterable[RowLike]"],
+        data: Iterable["RowLike"],
         schema: Optional[Union[List[str], Tuple[str, ...]]] = None,
         samplingRatio: Optional[float] = None,
         verifySchema: bool = True
