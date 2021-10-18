@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -40,21 +42,12 @@ case class CreateIndexExec(
     try {
       val colProperties: Array[util.Map[NamedReference, util.Map[String, String]]] = columns.map {
         case (column, map) =>
-          val javaMap = new util.HashMap[String, String]
-          map.foreach { case (key, value) => javaMap.put(key, value) }
           val propMap = new util.HashMap[NamedReference, util.Map[String, String]]
-          propMap.put(column, javaMap)
+          propMap.put(column, map.asJava)
           propMap
       }.toArray
-      val indexProperties = new util.HashMap[String, String]
-      properties.foreach { case (key, value) => indexProperties.put(key, value) }
-      table match {
-        case _: SupportsIndex =>
-          val (cols, _) = columns.unzip
-          table.asInstanceOf[SupportsIndex].createIndex(indexName, indexType, cols.toArray,
-            colProperties, indexProperties)
-        case _ =>
-      }
+      val (cols, _) = columns.unzip
+      table.createIndex(indexName, indexType, cols.toArray, colProperties, properties.asJava)
     } catch {
       case _: IndexAlreadyExistsException if ignoreIfExists =>
         logWarning(s"Index ${indexName} already exists. Ignoring.")
