@@ -874,7 +874,7 @@ class Frame(object, metaclass=ABCMeta):
         builder = sdf.write.mode(mode)
         if partition_cols is not None:
             builder.partitionBy(partition_cols)
-        builder._set_opts(  # type: ignore[attr-defined]
+        builder._set_opts(
             sep=sep,
             nullValue=na_rep,
             header=header,
@@ -1022,7 +1022,7 @@ class Frame(object, metaclass=ABCMeta):
         builder = sdf.write.mode(mode)
         if partition_cols is not None:
             builder.partitionBy(partition_cols)
-        builder._set_opts(compression=compression)  # type: ignore[attr-defined]
+        builder._set_opts(compression=compression)
         builder.options(**options).format("json").save(path)
         return None
 

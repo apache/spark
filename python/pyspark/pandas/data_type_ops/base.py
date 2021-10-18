@@ -395,7 +395,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
             collected_structed_scol = F.collect_list(structed_scol)
             # Sort the array by NATURAL_ORDER_COLUMN so that we can guarantee the order.
             collected_structed_scol = F.array_sort(collected_structed_scol)
-            right_values_scol = F.array([F.lit(x) for x in right])  # type: ignore
+            right_values_scol = F.array(*(F.lit(x) for x in right))
             index_scol_names = left._internal.index_spark_column_names
             scol_name = left._internal.spark_column_name_for(left._internal.column_labels[0])
             # Compare the values of left and right by using zip_with function.

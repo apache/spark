@@ -38,13 +38,12 @@ from pyspark.serializers import BatchedSerializer, PickleSerializer, \
     UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.sql.types import _parse_datatype_json_string  # type: ignore[attr-defined]
-from pyspark.sql.column import (  # type: ignore[attr-defined]
-    Column, _to_seq, _to_list, _to_java_column
-)
+from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.streaming import DataStreamWriter
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType, Row
+from pyspark.sql.types import (
+    StructType, StructField, StringType, IntegerType, Row, _parse_datatype_json_string
+)
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
@@ -90,10 +89,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def __init__(self, jdf: JavaObject, sql_ctx: "SQLContext"):
         self._jdf = jdf
         self.sql_ctx = sql_ctx
-        self._sc: SparkContext = cast(
-            SparkContext,
-            sql_ctx and sql_ctx._sc  # type: ignore[attr-defined]
-        )
+        self._sc: SparkContext = cast(SparkContext, sql_ctx and sql_ctx._sc)
         self.is_cached = False
         # initialized lazily
         self._schema: Optional[StructType] = None

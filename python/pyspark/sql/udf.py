@@ -26,7 +26,7 @@ from py4j.java_gateway import JavaObject
 from pyspark import SparkContext
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType  # type: ignore[attr-defined]
 from pyspark.sql.column import Column, _to_java_column, _to_seq
-from pyspark.sql.types import (  # type: ignore[attr-defined]
+from pyspark.sql.types import (
     StringType,
     DataType,
     StructType,
@@ -273,7 +273,7 @@ class UDFRegistration(object):
     def register(
         self,
         name: str,
-        f: "Union[Callable[..., Any], UserDefinedFunctionLike]",
+        f: Union[Callable[..., Any], "UserDefinedFunctionLike"],
         returnType: Optional["DataTypeOrString"] = None,
     ) -> "UserDefinedFunctionLike":
         """Register a Python function (including lambda function) or a user-defined function

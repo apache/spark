@@ -31,6 +31,7 @@ from typing import (
     overload,
     Any,
     Callable,
+    ClassVar,
     Dict,
     Iterator,
     List,
@@ -112,9 +113,9 @@ class DataType(object):
 class DataTypeSingleton(type):
     """Metaclass for DataType"""
 
-    _instances: Dict[Type["DataTypeSingleton"], "DataTypeSingleton"] = {}
+    _instances: ClassVar[Dict[Type["DataTypeSingleton"], "DataTypeSingleton"]] = {}
 
-    def __call__(cls: Type[T]) -> T:  # type: ignore[override, attr-defined]
+    def __call__(cls: Type[T]) -> T:  # type: ignore[override]
         if cls not in cls._instances:  # type: ignore[attr-defined]
             cls._instances[cls] = super(  # type: ignore[misc, attr-defined]
                 DataTypeSingleton, cls).__call__()
@@ -843,8 +844,13 @@ _atomic_types: List[Type[DataType]] = [
     ByteType, ShortType, IntegerType, LongType, DateType, TimestampType,
     TimestampNTZType, NullType]
 _all_atomic_types: Dict[str, Type[DataType]] = dict((t.typeName(), t) for t in _atomic_types)
-_complex_types: List[Type[DataType]] = [ArrayType, MapType, StructType]
-_all_complex_types: Dict[str, Type[DataType]] = dict((v.typeName(), v) for v in _complex_types)
+
+_complex_types: List[Type[Union[ArrayType, MapType, StructType]]] = [
+    ArrayType, MapType, StructType
+]
+_all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = dict(
+    (v.typeName(), v) for v in _complex_types
+)
 
 
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
@@ -987,7 +993,7 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
     else:
         tpe = json_value["type"]
         if tpe in _all_complex_types:
-            return _all_complex_types[tpe].fromJson(json_value)  # type: ignore[attr-defined]
+            return _all_complex_types[tpe].fromJson(json_value)
         elif tpe == 'udt':
             return UserDefinedType.fromJson(json_value)
         else:
