@@ -378,7 +378,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
             context.addTaskCompletionListener(simpleListener)
           }
         })
-        thread.run()
+        thread.start()
         invocations.getAndIncrement()
         thread.join()
       }
@@ -397,33 +397,38 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val numRunningListeners = new AtomicInteger(0)
 
     // Create a listener that will throw if more than one instance is running at the same time.
-    val exclusiveListener = new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = {
-        if (numRunningListeners.getAndIncrement() != 0) fail()
-        Thread.sleep(100)
-        if (numRunningListeners.decrementAndGet() != 0) fail()
-        invocations.getAndIncrement()
-      }
-    }
     val registerExclusiveListener = new Runnable {
       override def run(): Unit = {
-        context.addTaskCompletionListener(exclusiveListener)
+        context.addTaskCompletionListener(new TaskCompletionListener {
+          override def onTaskCompletion(context: TaskContext): Unit = {
+            if (numRunningListeners.getAndIncrement() != 0) throw new Exception()
+            Thread.sleep(100)
+            if (numRunningListeners.decrementAndGet() != 0) throw new Exception()
+            invocations.getAndIncrement()
+          }
+        })
       }
     }
 
-    // Register it twice from two different threads.
-    val thread1 = new Thread(registerExclusiveListener)
-    val thread2 = new Thread(registerExclusiveListener)
-    thread1.run()
-    thread2.run()
-    thread1.join()
-    thread2.join()
-
-    // Ensure the two instances are called sequentially.
+    // Register it multiple times from different threads before and after the task completes.
     assert(invocations.get() == 0)
     assert(numRunningListeners.get() == 0)
+    val thread1 = new Thread(registerExclusiveListener)
+    val thread2 = new Thread(registerExclusiveListener)
+    thread1.start()
+    thread2.start()
+    thread1.join()
+    thread2.join()
+    assert(invocations.get() == 0)
     context.markTaskCompleted(None)
     assert(invocations.get() == 2)
+    val thread3 = new Thread(registerExclusiveListener)
+    val thread4 = new Thread(registerExclusiveListener)
+    thread3.start()
+    thread4.start()
+    thread3.join()
+    thread4.join()
+    assert(invocations.get() == 4)
     assert(numRunningListeners.get() == 0)
   }
 
