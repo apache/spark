@@ -31,12 +31,10 @@ import org.apache.spark.metrics.source.{Source, StaticSources}
 class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateMethodTester{
   var filePath: String = _
   var conf: SparkConf = null
-  var securityMgr: SecurityManager = null
 
   before {
     filePath = getClass.getClassLoader.getResource("test_metrics_system.properties").getFile
     conf = new SparkConf(false).set(METRICS_CONF, filePath)
-    securityMgr = new SecurityManager(conf)
   }
 
   test("MetricsSystem with default config") {
