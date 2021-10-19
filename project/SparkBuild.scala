@@ -1127,7 +1127,7 @@ object TestSettings {
     // SPARK-29282 This is for consistency between JDK8 and JDK11.
     (Test / javaOptions) ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
-      val extraTestJavaArgs = Set("-XX:+IgnoreUnrecognizedVMOptions",
+      val extraTestJavaArgs = Array("-XX:+IgnoreUnrecognizedVMOptions",
         "--add-opens=java.base/java.lang=ALL-UNNAMED",
         "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
         "--add-opens=java.base/java.io=ALL-UNNAMED",

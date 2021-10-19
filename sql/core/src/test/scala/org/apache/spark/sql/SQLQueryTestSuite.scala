@@ -23,8 +23,6 @@ import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
-
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -478,7 +476,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   }
 
   protected lazy val listTestCases: Seq[TestCase] = {
-    val cases = listFilesRecursively(new File(inputFilePath)).flatMap { file =>
+    listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
@@ -504,20 +502,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }
     }
-
-    // SPARK-36796: `select format_string('%0$s', 'Hello')` in `postgreSQL/text.sql` has different
-    // behavior between Java 8 and Java 17, but it seems that the behavior of Java 17 is expected:
-    // `PostgreSQL throw ERROR:  format specifies argument 0, but arguments are numbered from 1`,
-    // so do independent verification here.
-    if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17)) {
-      val jdk17SpecialCases = Set("postgreSQL/text.sql")
-      cases.map {
-        case PgSQLTestCase(name, inputFile, resultFile) if jdk17SpecialCases.contains(name) =>
-          val replaceFile = resultFile.replace(name, s"$name-jdk17")
-          PgSQLTestCase(name, inputFile, replaceFile)
-        case other => other
-      }
-    } else cases
   }
 
   /** Returns all the files (not directories) in a directory, recursively. */
