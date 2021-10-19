@@ -85,7 +85,7 @@ private[spark] class TaskContextImpl(
 
   // If defined, the task has failed and this option contains the Throwable that caused the task to
   // fail.
-  private var failureIfFailed: Option[Throwable] = None
+  private var failureCauseOpt: Option[Throwable] = None
 
   // If there was a fetch failure in the task, we store it here, to make sure user-code doesn't
   // hide the exception.  See SPARK-19276
@@ -111,7 +111,7 @@ private[spark] class TaskContextImpl(
   override def addTaskFailureListener(listener: TaskFailureListener): this.type = {
     synchronized {
       onFailureCallbacks.push(listener)
-      failureIfFailed
+      failureCauseOpt
     }.foreach(invokeTaskFailureListeners)
     this
   }
@@ -122,8 +122,8 @@ private[spark] class TaskContextImpl(
 
   private[spark] override def markTaskFailed(error: Throwable): Unit = {
     synchronized {
-      if (failureIfFailed.isDefined) return
-      failureIfFailed = Some(error)
+      if (failureCauseOpt.isDefined) return
+      failureCauseOpt = Some(error)
     }
     invokeTaskFailureListeners(error)
   }
@@ -174,7 +174,7 @@ private[spark] class TaskContextImpl(
       } else {
         // If no other thread is invoking listeners, register this thread as the listener invocation
         // thread. This prevents other threads from invoking listeners until this thread is
-        // unregistered.
+        // deregistered.
         listenerInvocationThread = Some(Thread.currentThread())
       }
     }
