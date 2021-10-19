@@ -33,9 +33,10 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.ThreadUtils
 
-class SparkShellSuite  extends SparkFunSuite with BeforeAndAfterAll with Logging{
+class SparkShellSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   /**
    * Run a shell operation and expect all the queries and expected answers to be returned.
+   * This method refers to [[runCliWithin()]] method in [[CliSuite]].
    *
    * @param timeout maximum time for the commands to complete
    * @param extraArgs any extra arguments
@@ -51,12 +52,9 @@ class SparkShellSuite  extends SparkFunSuite with BeforeAndAfterAll with Logging
       errorResponses: Seq[String] = Seq("Error:"))(
       scriptsAndExpectedAnswers: (String, String)*): Unit = {
 
-    // Explicitly adds ENTER for each statement to make sure
-    // they are actually entered into the spark-shell.
     val scripts = scriptsAndExpectedAnswers.map(_._1 + "\n").mkString
     val expectedAnswers = scriptsAndExpectedAnswers.flatMap {
-      case (query, answer) =>
-        // empty query means a command launched with -e
+      case (_, answer) =>
         Seq(answer)
     }
 
