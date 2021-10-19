@@ -68,7 +68,7 @@ case class InsertAdaptiveSparkPlan(
             plan
         }
       } else {
-        logWarning(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is enabled " +
+        logDebug(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is enabled " +
           s"but is not supported for query: $plan.")
         plan
       }

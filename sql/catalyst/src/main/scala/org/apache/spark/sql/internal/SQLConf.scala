@@ -341,18 +341,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO =
-    buildConf("spark.sql.optimizer.dynamicPartitionPruning.pruningSideExtraFilterRatio")
-      .internal()
-      .doc("When filtering side doesn't support broadcast by join type, and doing DPP means " +
-        "running an extra query that may have significant overhead. This config will be used " +
-        "as the extra filter ratio for computing the data size of the pruning side after DPP, " +
-        "in order to evaluate if it is worth adding an extra subquery as the pruning filter.")
-      .version("3.2.0")
-      .doubleConf
-      .checkValue(ratio => ratio > 0.0 && ratio <= 1.0, "The ratio value must be in (0.0, 1.0].")
-      .createWithDefault(0.04)
-
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
@@ -864,6 +852,14 @@ object SQLConf {
       .intConf
       .checkValue(threshold => threshold >= 0, "The threshold must not be negative.")
       .createWithDefault(10)
+
+  val PARQUET_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.aggregatePushdown")
+    .doc("If true, MAX/MIN/COUNT without filter and group by will be pushed" +
+      " down to Parquet for optimization. MAX/MIN/COUNT for complex types and timestamp" +
+      " can't be pushed down")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
     .doc("If true, data will be written in a way of Spark 1.4 and earlier. For example, decimal " +
@@ -1714,6 +1710,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_TWOLEVEL_AGG_MAP_PARTIAL_ONLY =
+    buildConf("spark.sql.codegen.aggregate.map.twolevel.partialOnly")
+      .internal()
+      .doc("Enable two-level aggregate hash map for partial aggregate only, " +
+        "because final aggregate might get more distinct keys compared to partial aggregate. " +
+        "Overhead of looking up 1st-level map might dominate when having a lot of distinct keys.")
+      .version("3.2.1")
+      .booleanConf
+      .createWithDefault(true)
+
   val ENABLE_VECTORIZED_HASH_MAP =
     buildConf("spark.sql.codegen.aggregate.map.vectorized.enable")
       .internal()
@@ -1867,6 +1873,13 @@ object SQLConf {
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
+
+  val COLLAPSE_PROJECT_ALWAYS_INLINE = buildConf("spark.sql.optimizer.collapseProjectAlwaysInline")
+    .doc("Whether to always collapse two adjacent projections and inline expressions even if " +
+      "it causes extra duplication.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
@@ -3361,7 +3374,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.keepCommandOutputSchema")
       .internal()
       .doc("When true, Spark will keep the output schema of commands such as SHOW DATABASES " +
-        "unchanged, for v1 catalog and/or table.")
+        "unchanged.")
       .version("3.0.2")
       .booleanConf
       .createWithDefault(false)
@@ -3390,6 +3403,14 @@ object SQLConf {
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
+
+  val LEGACY_USE_V1_COMMAND =
+    buildConf("spark.sql.legacy.useV1Command")
+      .internal()
+      .doc("When true, Spark will use legacy V1 SQL commands.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -3542,9 +3563,6 @@ class SQLConf extends Serializable with Logging {
   def dynamicPartitionPruningReuseBroadcastOnly: Boolean =
     getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
 
-  def dynamicPartitionPruningPruningSideExtraFilterRatio: Double =
-    getConf(DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO)
-
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
   def isStateSchemaCheckEnabled: Boolean = getConf(STATE_SCHEMA_CHECK_ENABLED)
@@ -3667,6 +3685,8 @@ class SQLConf extends Serializable with Logging {
 
   def parquetFilterPushDownInFilterThreshold: Int =
     getConf(PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD)
+
+  def parquetAggregatePushDown: Boolean = getConf(PARQUET_AGGREGATE_PUSHDOWN_ENABLED)
 
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
 
@@ -4112,6 +4132,8 @@ class SQLConf extends Serializable with Logging {
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
+
+  def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
 
   /** ********************** SQLConf functionality methods ************ */
 

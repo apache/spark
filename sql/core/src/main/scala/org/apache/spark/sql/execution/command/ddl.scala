@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.QueryExecutionErrors.hiveTableWithAnsiIntervalsError
 import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -923,16 +924,19 @@ object DDLUtils extends Logging {
     }
   }
 
-  private[sql] def checkDataColNames(table: CatalogTable): Unit = {
-    checkDataColNames(table, table.dataSchema)
+  private[sql] def checkTableColumns(table: CatalogTable): Unit = {
+    checkTableColumns(table, table.dataSchema)
   }
 
-  private[sql] def checkDataColNames(table: CatalogTable, schema: StructType): Unit = {
+  // Checks correctness of table's column names and types.
+  private[sql] def checkTableColumns(table: CatalogTable, schema: StructType): Unit = {
     table.provider.foreach {
       _.toLowerCase(Locale.ROOT) match {
         case HIVE_PROVIDER =>
           val serde = table.storage.serde
-          if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
+          if (schema.exists(_.dataType.isInstanceOf[AnsiIntervalType])) {
+            throw hiveTableWithAnsiIntervalsError(table.identifier.toString)
+          } else if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
             checkDataColNames("orc", schema)
           } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde ||
             serde == Some("parquet.hive.serde.ParquetHiveSerDe") ||

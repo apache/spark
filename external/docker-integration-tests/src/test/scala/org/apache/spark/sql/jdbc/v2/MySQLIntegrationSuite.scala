@@ -18,11 +18,14 @@
 package org.apache.spark.sql.jdbc.v2
 
 import java.sql.{Connection, SQLFeatureNotSupportedException}
+import java.util
 
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.connector.catalog.index.SupportsIndex
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
 import org.apache.spark.sql.types._
@@ -114,5 +117,24 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     val t = spark.table(tbl)
     val expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
+  }
+
+  override def supportsIndex: Boolean = true
+
+  override def testIndexProperties(jdbcTable: SupportsIndex): Unit = {
+    val properties = new util.Properties();
+    properties.put("KEY_BLOCK_SIZE", "10")
+    properties.put("COMMENT", "'this is a comment'")
+    // MySQL doesn't allow property set on individual column, so use empty Array for
+    // column properties
+    jdbcTable.createIndex("i1", "BTREE", Array(FieldReference("col1")),
+      Array.empty[util.Map[NamedReference, util.Properties]], properties)
+
+    var index = jdbcTable.listIndexes()
+    // The index property size is actually 1. Even though the index is created
+    // with properties "KEY_BLOCK_SIZE", "10" and "COMMENT", "'this is a comment'", when
+    // retrieving index using `SHOW INDEXES`, MySQL only returns `COMMENT`.
+    assert(index(0).properties.size == 1)
+    assert(index(0).properties.get("COMMENT").equals("this is a comment"))
   }
 }
