@@ -5408,40 +5408,95 @@ object functions {
   }
 
   /**
-   * Computes the bitwise AND of two binary strings. If the two binary strings are of
-   * different lengths they are aligned according to their least-significant bit (left-most
-   * bit). The byte length of the result is the maximum of the byte lengths of the two
-   * inputs. The shorter binary string is semantically left-padded with zeros.
+   * Computes the bitwise AND of two equal-length byte sequences. The byte length of the result
+   * is equal to the common byte length of the inputs.
    *
    * @group string_funcs
    * @since 3.3.0
    */
-  def bitand(l: Column, r: Column): Column = withExpr { BitAnd(l.expr, r.expr) }
+  def bitand(l: Column, r: Column): Column = withExpr {
+    BitAnd(l.expr, r.expr, lit("lpad").expr, 2)
+  }
 
   /**
-   * Computes the bitwise OR of two binary strings. If the two binary strings are of
-   * different lengths they are aligned according to their least-significant bit (left-most
-   * bit). The byte length of the result is the maximum of the byte lengths of the two
-   * inputs. The shorter binary string is semantically left-padded with zeros.
+   * Computes the bitwise AND of two byte sequences of potentially unequal byte length.
+   * - In the case of equal byte lengths the third argument is not used.
+   * - In the case of unequal byte lengths the third argument determines how the two byte
+   *   sequences are aligned. The third argument accepts two possible values (case insensitive):
+   *   'lpad' and 'rpad'. If 'lpad' is used, the shorter byte sequence is conceptually left-padded
+   *   with zeros to match the length of the longer byte sequence. If 'rpad' is used, the shorter
+   *   byte sequence is conceptually right-padded with zeros to match the length of the longer
+   *   byte sequence. In both cases, the byte length of the result is the maximum of the byte
+   *   lengths of the two inputs.
    *
    * @group string_funcs
    * @since 3.3.0
    */
-  def bitor(l: Column, r: Column): Column = withExpr { BitOr(l.expr, r.expr) }
+  def bitand(l: Column, r: Column, pad: String): Column = withExpr {
+    BitAnd(l.expr, r.expr, lit(pad).expr, 3)
+  }
 
   /**
-   * Computes the bitwise XOR of two binary strings. If the two binary strings are of
-   * different lengths they are aligned according to their least-significant bit (left-most
-   * bit). The byte length of the result is the maximum of the byte lengths of the two
-   * inputs. The shorter binary string is semantically left-padded with zeros.
+   * Computes the bitwise OR of two equal-length byte sequences. The byte length of the result
+   * is equal to the common byte length of the inputs.
    *
    * @group string_funcs
    * @since 3.3.0
    */
-  def bitxor(l: Column, r: Column): Column = withExpr { BitXor(l.expr, r.expr) }
+  def bitor(l: Column, r: Column): Column = withExpr {
+    BitOr(l.expr, r.expr, lit("lpad").expr, 2)
+  }
 
   /**
-   * Computes the bitwise NOT of a binary string.
+   * Computes the bitwise OR of two byte sequences of potentially unequal byte length.
+   * - In the case of equal byte lengths the third argument is not used.
+   * - In the case of unequal byte lengths the third argument determines how the two byte
+   *   sequences are aligned. The third argument accepts two possible values (case insensitive):
+   *   'lpad' and 'rpad'. If 'lpad' is used, the shorter byte sequence is conceptually left-padded
+   *   with zeros to match the length of the longer byte sequence. If 'rpad' is used, the shorter
+   *   byte sequence is conceptually right-padded with zeros to match the length of the longer
+   *   byte sequence. In both cases, the byte length of the result is the maximum of the byte
+   *   lengths of the two inputs.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def bitor(l: Column, r: Column, pad: String): Column = withExpr {
+    BitOr(l.expr, r.expr, lit(pad).expr, 3)
+  }
+
+  /**
+   * Computes the bitwise XOR of two equal-length byte sequences. The byte length of the result
+   * is equal to the common byte length of the inputs.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def bitxor(l: Column, r: Column): Column = withExpr {
+    BitXor(l.expr, r.expr, lit("lpad").expr, 2)
+  }
+
+  /**
+   * Computes the bitwise XOR of two byte sequences of potentially unequal byte length.
+   * - In the case of equal byte lengths the third argument is not used.
+   * - In the case of unequal byte lengths the third argument determines how the two byte
+   *   sequences are aligned. The third argument accepts two possible values (case insensitive):
+   *   'lpad' and 'rpad'. If 'lpad' is used, the shorter byte sequence is conceptually left-padded
+   *   with zeros to match the length of the longer byte sequence. If 'rpad' is used, the shorter
+   *   byte sequence is conceptually right-padded with zeros to match the length of the longer
+   *   byte sequence. In both cases, the byte length of the result is the maximum of the byte
+   *   lengths of the two inputs.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def bitxor(l: Column, r: Column, pad: String): Column = withExpr {
+    BitXor(l.expr, r.expr, lit(pad).expr, 3)
+  }
+
+  /**
+   * Computes the bitwise NOT of a byte sequence. The byte length of the result is the same as
+   * the byte length of the input byte sequence.
    *
    * @group string_funcs
    * @since 3.3.0

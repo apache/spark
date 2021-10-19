@@ -2651,139 +2651,203 @@ case class Sentences(
 }
 
 /**
- * Expression that returns the bitwise AND of two binary strings.
- * The byte length of the result is the maximum of the byte lengths of the two input binary
- * strings. If the two input binary strings are of different byte length they aligned according
- * to their least significant (right-most) bit.  The shorter binary string is semantically
- * left-padded with zeros.
+ * Expression that returns the bitwise AND of two byte sequences.
+ * - If the byte lengths of the two input byte sequences are the same, the byte length of the
+ *   result if the same as the common byte length of the two inputs.
+ * - If the byte lengths of the two input byte sequences differ, a third argument is required
+ *   to determine whether the shorter input byte sequence should be semantically padded from the
+ *   left or the right with zero bytes. The valid values for the third argument are 'lpad' and
+ *   'rpad' (case insensitive). If 'lpad' is specified, the shorter byte sequence is semantically
+ *   left-padded with zeros to match the length of the longer byte sequence. If 'rpad' is
+ *   specified, the shorter byte sequence is semantically right-padded with zeros to match the
+ *   length of the longer byte sequence. The byte length of the result is the maximum of the
+ *   byte lengths of the two input byte sequences.
+ * Specifying the third argument in the case of equal-length byte sequences has no effect.
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(bytes1, bytes2) - Returns the bitwise AND of two binary strings.
+    _FUNC_(bytes1, bytes2[, padding]) - Returns the bitwise AND of two binary strings.
   """,
   examples = """
     Examples:
-      > SELECT hex(_FUNC_(unhex('AABB'), unhex('11223344')));
-       00002200
+      > SELECT hex(_FUNC_(unhex('AABB'), unhex('7735')));
+       2231
+      > SELECT hex(_FUNC_(unhex('AABB'), unhex('66773355'), 'lpad'));
+       00002211
+      > SELECT hex(_FUNC_(unhex('AABB'), unhex('66773355'), 'rpad'));
+       22330000
   """,
   since = "3.3.0",
   group = "string_funcs")
-case class BitAnd(bytes1: Expression, bytes2: Expression)
-  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
+case class BitAnd(bytes1: Expression, bytes2: Expression, padding: Expression, numArgs: Int)
+  extends TernaryExpression with ExpectsInputTypes with NullIntolerant {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
+  def this(first: Expression, second: Expression, third: Expression) = {
+    this(first, second, third, 3)
+  }
+
+  def this(first: Expression, second: Expression) = {
+    this(first, second, Literal("lpad"), 2)
+  }
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType, StringType)
 
   override def dataType: DataType = BinaryType
 
-  override def left: Expression = bytes1
-  override def right: Expression = bytes2
+  override def first: Expression = bytes1
+  override def second: Expression = bytes2
+  override def third: Expression = padding
+  def fourth: Int = numArgs
 
-  override def nullSafeEval(left: Any, right: Any): Any = {
-    ByteArray.bitwiseAnd(left.asInstanceOf[Array[Byte]], right.asInstanceOf[Array[Byte]])
+  override def nullSafeEval(first: Any, second: Any, third: Any): Any = {
+    ByteArray.bitwiseAnd(first.asInstanceOf[Array[Byte]], second.asInstanceOf[Array[Byte]],
+      third.asInstanceOf[UTF8String], fourth == 2)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (left, right) => {
-      s"${classOf[ByteArray].getName}.bitwiseAnd($left, $right)"
+    defineCodeGen(ctx, ev, (first, second, third) => {
+      s"${classOf[ByteArray].getName}.bitwiseAnd($first, $second, $third, $fourth == 2)"
     })
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): BitAnd =
-    copy(bytes1 = newLeft, bytes2 = newRight)
-
+      newFirst: Expression, newSecond: Expression, newThird: Expression): BitAnd =
+    copy(bytes1 = newFirst, bytes2 = newSecond, padding = newThird, numArgs = fourth)
 }
 
 /**
- * Expression that returns the bitwise OR of two binary strings.
- * The byte length of the result is the maximum of the byte lengths of the two input binary
- * strings. If the two input binary strings are of different byte length they aligned according
- * to their least significant (right-most) bit. The shorter binary string is semantically
- * left-padded with zeros.
+ * Expression that returns the bitwise OR of two byte sequences.
+ * - If the byte lengths of the two input byte sequences are the same, the byte length of the
+ *   result if the same as the common byte length of the two inputs.
+ * - If the byte lengths of the two input byte sequences differ, a third argument is required
+ *   to determine whether the shorter input byte sequence should be semantically padded from the
+ *   left or the right with zero bytes. The valid values for the third argument are 'lpad' and
+ *   'rpad' (case insensitive). If 'lpad' is specified, the shorter byte sequence is semantically
+ *   left-padded with zeros to match the length of the longer byte sequence. If 'rpad' is
+ *   specified, the shorter byte sequence is semantically right-padded with zeros to match the
+ *   length of the longer byte sequence. The byte length of the result is the maximum of the
+ *   byte lengths of the two input byte sequences.
+ * Specifying the third argument in the case of equal-length byte sequences has no effect.
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(bytes1, bytes2) - Returns the bitwise OR of two binary strings.
+    _FUNC_(bytes1, bytes2[, padding]) - Returns the bitwise OR of two binary strings.
   """,
   examples = """
     Examples:
-      > SELECT hex(_FUNC_(unhex('AABB'), unhex('11223344')));
-       1122BBFF
+      > SELECT hex(_FUNC_(unhex('AABB'), unhex('7735')));
+       FFBF
+      > SELECT hex(_FUNC_(unhex('AABB'), unhex('66773355'), 'lpad'));
+       6677BBFF
+      > SELECT hex(_FUNC_(unhex('AABB'), unhex('66773355'), 'rpad'));
+       EEFF3355
   """,
   since = "3.3.0",
   group = "string_funcs")
-case class BitOr(bytes1: Expression, bytes2: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+case class BitOr(bytes1: Expression, bytes2: Expression, padding: Expression, numArgs: Int)
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
+  def this(first: Expression, second: Expression, third: Expression) = {
+    this(first, second, third, 3)
+  }
+
+  def this(first: Expression, second: Expression) = {
+    this(first, second, Literal("lpad"), 2)
+  }
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType, StringType)
 
   override def dataType: DataType = BinaryType
 
-  override def left: Expression = bytes1
-  override def right: Expression = bytes2
+  override def first: Expression = bytes1
+  override def second: Expression = bytes2
+  override def third: Expression = padding
+  def fourth: Int = numArgs
 
-  override def nullSafeEval(left: Any, right: Any): Any = {
-    ByteArray.bitwiseOr(left.asInstanceOf[Array[Byte]], right.asInstanceOf[Array[Byte]])
+  override def nullSafeEval(first: Any, second: Any, third: Any): Any = {
+    ByteArray.bitwiseOr(first.asInstanceOf[Array[Byte]], second.asInstanceOf[Array[Byte]],
+      third.asInstanceOf[UTF8String], fourth == 2)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (left, right) => {
-      s"${classOf[ByteArray].getName}.bitwiseOr($left, $right)"
+    defineCodeGen(ctx, ev, (first, second, third) => {
+      s"${classOf[ByteArray].getName}.bitwiseOr($first, $second, $third, $fourth == 2)"
     })
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): BitOr =
-    copy(bytes1 = newLeft, bytes2 = newRight)
-
+      newFirst: Expression, newSecond: Expression, newThird: Expression): BitOr =
+    copy(bytes1 = newFirst, bytes2 = newSecond, padding = newThird, numArgs = fourth)
 }
 
 /**
- * Expression that returns the bitwise XOR of two binary strings.
- * The byte length of the result is the maximum of the byte lengths of the two input binary
- * strings. If the two input binary strings are of different byte length they aligned according
- * to their least significant (right-most) bit. The shorter binary string is semantically
- * left-padded with zeros.
+ * Expression that returns the bitwise XOR of two byte sequences.
+ * - If the byte lengths of the two input byte sequences are the same, the byte length of the
+ *   result if the same as the common byte length of the two inputs.
+ * - If the byte lengths of the two input byte sequences differ, a third argument is required
+ *   to determine whether the shorter input byte sequence should be semantically padded from the
+ *   left or the right with zero bytes. The valid values for the third argument are 'lpad' and
+ *   'rpad' (case insensitive). If 'lpad' is specified, the shorter byte sequence is semantically
+ *   left-padded with zeros to match the length of the longer byte sequence. If 'rpad' is
+ *   specified, the shorter byte sequence is semantically right-padded with zeros to match the
+ *   length of the longer byte sequence. The byte length of the result is the maximum of the
+ *   byte lengths of the two input byte sequences.
+ * Specifying the third argument in the case of equal-length byte sequences has no effect.
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(bytes1, bytes2) - Returns the bitwise XOR of two binary strings.
+    _FUNC_(bytes1, bytes2[, padding]) - Returns the bitwise XOR of two binary strings.
   """,
   examples = """
     Examples:
-      > SELECT hex(_FUNC_(unhex('AABB'), unhex('11223344')));
-       112299FF
+      > SELECT hex(_FUNC_(unhex('AABB'), unhex('7735')));
+       DD8E
+      > SELECT hex(_FUNC_(unhex('AABB'), unhex('66773355'), 'lpad'));
+       667799EE
+      > SELECT hex(_FUNC_(unhex('AABB'), unhex('66773355'), 'rpad'));
+       CCCC3355
   """,
   since = "3.3.0",
   group = "string_funcs")
-case class BitXor(bytes1: Expression, bytes2: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+case class BitXor(bytes1: Expression, bytes2: Expression, padding: Expression, numArgs: Int)
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
+  def this(first: Expression, second: Expression, third: Expression) = {
+    this(first, second, third, 3)
+  }
+
+  def this(first: Expression, second: Expression) = {
+    this(first, second, Literal("lpad"), 2)
+  }
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType, StringType)
 
   override def dataType: DataType = BinaryType
 
-  override def left: Expression = bytes1
-  override def right: Expression = bytes2
+  override def first: Expression = bytes1
+  override def second: Expression = bytes2
+  override def third: Expression = padding
+  def fourth: Int = numArgs
 
-  override def nullSafeEval(left: Any, right: Any): Any = {
-    ByteArray.bitwiseXor(left.asInstanceOf[Array[Byte]], right.asInstanceOf[Array[Byte]])
+  override def nullSafeEval(first: Any, second: Any, third: Any): Any = {
+    ByteArray.bitwiseXor(first.asInstanceOf[Array[Byte]], second.asInstanceOf[Array[Byte]],
+      third.asInstanceOf[UTF8String], fourth == 2)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (left, right) => {
-      s"${classOf[ByteArray].getName}.bitwiseXor($left, $right)"
+    defineCodeGen(ctx, ev, (first, second, third) => {
+      s"${classOf[ByteArray].getName}.bitwiseXor($first, $second, $third, $fourth == 2)"
     })
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): BitXor =
-    copy(bytes1 = newLeft, bytes2 = newRight)
-
+      newFirst: Expression, newSecond: Expression, newThird: Expression): BitXor =
+    copy(bytes1 = newFirst, bytes2 = newSecond, padding = newThird, numArgs = fourth)
 }
 
 /**
- * Expression that returns the bitwise NOT of a binary string.
+ * Expression that returns the bitwise NOT of a byte sequence. The byte length of the output byte
+ * sequence is equal to that of the input byte sequence.
  */
 @ExpressionDescription(
   usage = """
@@ -2817,5 +2881,4 @@ case class BitNot(bytes: Expression)
 
   override protected def withNewChildInternal(
       newChild: Expression): BitNot = copy(bytes = newChild)
-
 }

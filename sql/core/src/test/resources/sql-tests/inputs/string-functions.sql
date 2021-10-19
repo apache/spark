@@ -72,40 +72,94 @@ select decode(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattl
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
 
--- bitand
-select hex(bitand(null, unhex('11223344')));
-select hex(bitand(unhex('aabb'), null));
-select hex(bitand(unhex(''), unhex('')));
-select hex(bitand(unhex('aabb'), unhex('')));
-select hex(bitand(unhex(''), unhex('11223344')));
-select hex(bitand(unhex('aabb'), unhex('11223344')));
+-- bitand (2 args)
+select bitand(null, null) is null;
+select bitand(null, unhex('11223344')) is null;
+select bitand(unhex('aabb'), null) is null;
+select octet_length(bitand(unhex(''), unhex('')));
 select hex(bitand(unhex('aabbccdd'), unhex('11223344')));
-select bitand(unhex('aabb'), unhex('11223344')) = bitand(unhex('11223344'), unhex('aabb'));
-select bitand(unhex('aabbccdd'), unhex('11223344')) = bitand(unhex('11223344'), unhex('aabbccdd'));
+-- bitand (3 args; lpad)
+select hex(bitand(null, null, 'lpad'));
+select octet_length(bitand(unhex(''), unhex(''), 'lpad'));
+select hex(bitand(unhex('aabb'), unhex(''), 'lpad'));
+select hex(bitand(unhex(''), unhex('11223344'), 'lpad'));
+select hex(bitand(unhex('aabb'), unhex('11223344'), 'lpad'));
+select hex(bitand(unhex('aabbccdd'), unhex('11223344'), 'lpad'));
+select bitand(unhex('aabb'), unhex('11223344'), 'lpad') = bitand(unhex('11223344'), unhex('aabb'), 'lpad');
+select bitand(unhex('aabbccdd'), unhex('11223344'), 'lpad') = bitand(unhex('11223344'), unhex('aabbccdd'), 'lpad');
+-- bitand (3 args; rpad)
+select hex(bitand(null, null, 'lpad'));
+select octet_length(bitand(unhex(''), unhex(''), 'rpad'));
+select hex(bitand(unhex('aabb'), unhex(''), 'rpad'));
+select hex(bitand(unhex(''), unhex('11223344'), 'rpad'));
+select hex(bitand(unhex('aabb'), unhex('11223344'), 'rpad'));
+select hex(bitand(unhex('aabbccdd'), unhex('11223344'), 'rpad'));
+select bitand(unhex('aabb'), unhex('11223344'), 'rpad') = bitand(unhex('11223344'), unhex('aabb'), 'rpad');
+select bitand(unhex('aabbccdd'), unhex('11223344'), 'rpad') = bitand(unhex('11223344'), unhex('aabbccdd'), 'rpad');
+-- bitand (3 args; common)
+select bitand(null, null, null) is null;
+select bitand(unhex('aabbccdd'), unhex('11223344'), 'lpad') = bitand(unhex('11223344'), unhex('aabbccdd'), 'rpad');
+select bitand(unhex('aabb'), unhex('11223344'), 'lpad') <> bitand(unhex('aabb'), unhex('11223344'), 'rpad');
 
 -- bitnot
-select hex(bitnot(null));
-select hex(bitnot(unhex('')));
+select bitnot(null) is null;
+select octet_length(bitnot(unhex('')));
 select hex(bitnot(unhex('aabb')));
 
--- bitor
-select hex(bitor(null, unhex('11223344')));
-select hex(bitor(unhex('aabb'), null));
-select hex(bitor(unhex(''), unhex('')));
-select hex(bitor(unhex('aabb'), unhex('')));
-select hex(bitor(unhex(''), unhex('11223344')));
-select hex(bitor(unhex('aabb'), unhex('11223344')));
+-- bitor (2 args)
+select bitor(null, null) is null;
+select bitor(null, unhex('11223344')) is null;
+select bitor(unhex('aabb'), null) is null;
+select octet_length(bitor(unhex(''), unhex('')));
 select hex(bitor(unhex('aabbccdd'), unhex('11223344')));
-select bitor(unhex('aabb'), unhex('11223344')) = bitor(unhex('11223344'), unhex('aabb'));
-select bitor(unhex('aabbccdd'), unhex('11223344')) = bitor(unhex('11223344'), unhex('aabbccdd'));
+-- bitor (3 args; lpad)
+select hex(bitor(null, null, 'lpad'));
+select octet_length(bitor(unhex(''), unhex(''), 'lpad'));
+select hex(bitor(unhex('aabb'), unhex(''), 'lpad'));
+select hex(bitor(unhex(''), unhex('11223344'), 'lpad'));
+select hex(bitor(unhex('aabb'), unhex('11223344'), 'lpad'));
+select hex(bitor(unhex('aabbccdd'), unhex('11223344'), 'lpad'));
+select bitor(unhex('aabb'), unhex('11223344'), 'lpad') = bitor(unhex('11223344'), unhex('aabb'), 'lpad');
+select bitor(unhex('aabbccdd'), unhex('11223344'), 'lpad') = bitor(unhex('11223344'), unhex('aabbccdd'), 'lpad');
+-- bitor (3 args; rpad)
+select hex(bitor(null, null, 'lpad'));
+select octet_length(bitor(unhex(''), unhex(''), 'rpad'));
+select hex(bitor(unhex('aabb'), unhex(''), 'rpad'));
+select hex(bitor(unhex(''), unhex('11223344'), 'rpad'));
+select hex(bitor(unhex('aabb'), unhex('11223344'), 'rpad'));
+select hex(bitor(unhex('aabbccdd'), unhex('11223344'), 'rpad'));
+select bitor(unhex('aabb'), unhex('11223344'), 'rpad') = bitor(unhex('11223344'), unhex('aabb'), 'rpad');
+select bitor(unhex('aabbccdd'), unhex('11223344'), 'rpad') = bitor(unhex('11223344'), unhex('aabbccdd'), 'rpad');
+-- bitor (3 args; common)
+select bitor(null, null, null) is null;
+select bitor(unhex('aabbccdd'), unhex('11223344'), 'lpad') = bitor(unhex('11223344'), unhex('aabbccdd'), 'rpad');
+select bitor(unhex('aabb'), unhex('11223344'), 'lpad') <> bitor(unhex('aabb'), unhex('11223344'), 'rpad');
 
--- bitxor
-select hex(bitxor(null, unhex('11223344')));
-select hex(bitxor(unhex('aabb'), null));
-select hex(bitxor(unhex(''), unhex('')));
-select hex(bitxor(unhex('aabb'), unhex('')));
-select hex(bitxor(unhex(''), unhex('11223344')));
-select hex(bitxor(unhex('aabb'), unhex('11223344')));
+-- bitxor (2 args)
+select bitxor(null, null) is null;
+select bitxor(null, unhex('11223344')) is null;
+select bitxor(unhex('aabb'), null) is null;
+select octet_length(bitxor(unhex(''), unhex('')));
 select hex(bitxor(unhex('aabbccdd'), unhex('11223344')));
-select bitxor(unhex('aabb'), unhex('11223344')) = bitxor(unhex('11223344'), unhex('aabb'));
-select bitxor(unhex('aabbccdd'), unhex('11223344')) = bitxor(unhex('11223344'), unhex('aabbccdd'));
+-- bitxor (3 args; lpad)
+select hex(bitxor(null, null, 'lpad'));
+select octet_length(bitxor(unhex(''), unhex(''), 'lpad'));
+select hex(bitxor(unhex('aabb'), unhex(''), 'lpad'));
+select hex(bitxor(unhex(''), unhex('11223344'), 'lpad'));
+select hex(bitxor(unhex('aabb'), unhex('11223344'), 'lpad'));
+select hex(bitxor(unhex('aabbccdd'), unhex('11223344'), 'lpad'));
+select bitxor(unhex('aabb'), unhex('11223344'), 'lpad') = bitxor(unhex('11223344'), unhex('aabb'), 'lpad');
+select bitxor(unhex('aabbccdd'), unhex('11223344'), 'lpad') = bitxor(unhex('11223344'), unhex('aabbccdd'), 'lpad');
+-- bitxor (3 args; rpad)
+select hex(bitxor(null, null, 'lpad'));
+select octet_length(bitxor(unhex(''), unhex(''), 'rpad'));
+select hex(bitxor(unhex('aabb'), unhex(''), 'rpad'));
+select hex(bitxor(unhex(''), unhex('11223344'), 'rpad'));
+select hex(bitxor(unhex('aabb'), unhex('11223344'), 'rpad'));
+select hex(bitxor(unhex('aabbccdd'), unhex('11223344'), 'rpad'));
+select bitxor(unhex('aabb'), unhex('11223344'), 'rpad') = bitxor(unhex('11223344'), unhex('aabb'), 'rpad');
+select bitxor(unhex('aabbccdd'), unhex('11223344'), 'rpad') = bitxor(unhex('11223344'), unhex('aabbccdd'), 'rpad');
+-- bitxor (3 args; common)
+select bitxor(null, null, null) is null;
+select bitxor(unhex('aabbccdd'), unhex('11223344'), 'lpad') = bitxor(unhex('11223344'), unhex('aabbccdd'), 'rpad');
+select bitxor(unhex('aabb'), unhex('11223344'), 'lpad') <> bitxor(unhex('aabb'), unhex('11223344'), 'rpad');
