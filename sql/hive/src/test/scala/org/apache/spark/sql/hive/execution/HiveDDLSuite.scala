@@ -3031,13 +3031,11 @@ class HiveDDLSuite
       // Changing view definition should preserve column case
       spark.sql("CREATE VIEW v AS SELECT 1 AS A, 1 AS B")
       val df = spark.table("v")
-      assert("A".equals(df.schema.fields(0).name))
-      assert("B".equals(df.schema.fields(1).name))
+      assert(df.schema.names.toSeq == Seq("A", "B"))
 
       spark.sql("ALTER VIEW v AS SELECT 1 AS C, 1 AS D")
       val df1 = spark.table("v")
-      assert("C".equals(df1.schema.fields(0).name))
-      assert("D".equals(df1.schema.fields(1).name))
+      assert(df1.schema.names.toSeq == Seq("C", "D"))
     }
   }
 
@@ -3046,13 +3044,11 @@ class HiveDDLSuite
       // Renaming view should preserve column case
       spark.sql("CREATE VIEW v AS SELECT 1 AS A, 1 AS B")
       val df = spark.table("v")
-      assert("A".equals(df.schema.fields(0).name))
-      assert("B".equals(df.schema.fields(1).name))
+      assert(df.schema.names.toSeq == Seq("A", "B"))
 
       sql("ALTER VIEW v RENAME TO vRenamed")
       val df1 = spark.table("vRenamed")
-      assert("A".equals(df1.schema.fields(0).name))
-      assert("B".equals(df1.schema.fields(1).name))
+      assert(df1.schema.names.toSeq == Seq("A", "B"))
     }
   }
 
@@ -3061,13 +3057,11 @@ class HiveDDLSuite
       // Setting table properties should preserve column case
       spark.sql("CREATE VIEW v AS SELECT 1 AS A, 1 AS B")
       val df = spark.table("v")
-      assert("A".equals(df.schema.fields(0).name))
-      assert("B".equals(df.schema.fields(1).name))
+      assert(df.schema.names.toSeq == Seq("A", "B"))
 
       sql("ALTER VIEW v SET TBLPROPERTIES('testkey' = 'testval')")
       val df1 = spark.table("v")
-      assert("A".equals(df1.schema.fields(0).name))
-      assert("B".equals(df1.schema.fields(1).name))
+      assert(df1.schema.names.toSeq == Seq("A", "B"))
     }
   }
 }
