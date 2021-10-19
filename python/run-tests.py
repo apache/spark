@@ -48,6 +48,12 @@ def print_red(text):
     print('\033[31m' + text + '\033[0m')
 
 
+def get_valid_filename(s):
+    """Replace whitespaces and special characters in the given string to get a valid file name."""
+    s = s.strip().replace(' ', '_').replace(os.sep, '_')
+    return re.sub(r'(?u)[^-\w.]', '', s)
+
+
 SKIPPED_TESTS = None
 LOG_FILE = os.path.join(SPARK_HOME, "python/unit-tests.log")
 FAILURE_REPORTING_LOCK = Lock()
@@ -98,10 +104,12 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
     ]
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
 
-    LOGGER.info("Starting test(%s): %s", pyspark_python, test_name)
+    output_prefix = get_valid_filename(pyspark_python + "__" + test_name + "__").lstrip("_")
+    per_test_output = tempfile.NamedTemporaryFile(prefix=output_prefix, suffix=".log")
+    LOGGER.info(
+        "Starting test(%s): %s (temp output: %s)", pyspark_python, test_name, per_test_output.name)
     start_time = time.time()
     try:
-        per_test_output = tempfile.TemporaryFile()
         retcode = subprocess.Popen(
             [os.path.join(SPARK_HOME, "bin/pyspark")] + test_name.split(),
             stderr=per_test_output, stdout=per_test_output, env=env).wait()

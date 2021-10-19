@@ -21,7 +21,7 @@ import java.io._
 import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
-import java.time.ZoneId
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId}
 import java.util.Locale
 
 import com.fasterxml.jackson.core.JsonFactory
@@ -33,7 +33,7 @@ import org.apache.spark.{SparkConf, SparkException, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache}
 import org.apache.spark.sql.execution.datasources.v2.json.JsonScanBuilder
@@ -2811,10 +2811,11 @@ abstract class JsonSuite
             val readback = spark.read.schema("aaa integer, BBB integer")
               .json(path.getCanonicalPath)
             checkAnswer(readback, Seq(Row(null, null), Row(0, 1)))
-            val errorMsg = intercept[AnalysisException] {
+            val ex = intercept[AnalysisException] {
               readback.filter($"AAA" === 0 && $"bbb" === 1).collect()
-            }.getMessage
-            assert(errorMsg.contains("cannot resolve 'AAA'"))
+            }
+            assert(ex.getErrorClass == "MISSING_COLUMN")
+            assert(ex.messageParameters.head == "AAA")
             // Schema inferring
             val readback2 = spark.read.json(path.getCanonicalPath)
             checkAnswer(
@@ -2958,6 +2959,58 @@ abstract class JsonSuite
         .json(Seq("""[{"a": "str"}, null, {"a": "str"}]""").toDS),
       Row(null) :: Nil)
   }
+
+  test("SPARK-36536: use casting when datetime pattern is not set") {
+    def isLegacy: Boolean = {
+      spark.conf.get(SQLConf.LEGACY_TIME_PARSER_POLICY).toUpperCase(Locale.ROOT) ==
+        SQLConf.LegacyBehaviorPolicy.LEGACY.toString
+    }
+    withSQLConf(
+      SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> DateTimeTestUtils.UTC.getId) {
+      withTempPath { path =>
+        Seq(
+          """{"d":"2021","ts_ltz":"2021","ts_ntz": "2021"}""",
+          """{"d":"2021-01","ts_ltz":"2021-01 ","ts_ntz":"2021-01"}""",
+          """{"d":" 2021-2-1","ts_ltz":"2021-3-02","ts_ntz": "2021-10-1"}""",
+          """{"d":"2021-8-18 00:00:00","ts_ltz":"2021-8-18 21:44:30Z"""" +
+          ""","ts_ntz":"2021-8-18T21:44:30.123"}"""
+        ).toDF().repartition(1).write.text(path.getCanonicalPath)
+        val readback = spark.read.schema("d date, ts_ltz timestamp_ltz, ts_ntz timestamp_ntz")
+          .json(path.getCanonicalPath)
+        checkAnswer(
+          readback,
+          Seq(
+            Row(LocalDate.of(2021, 1, 1), Instant.parse("2021-01-01T00:00:00Z"),
+              if (isLegacy) null else LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
+            Row(LocalDate.of(2021, 1, 1), Instant.parse("2021-01-01T00:00:00Z"),
+              if (isLegacy) null else LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
+            Row(LocalDate.of(2021, 2, 1), Instant.parse("2021-03-02T00:00:00Z"),
+              if (isLegacy) null else LocalDateTime.of(2021, 10, 1, 0, 0, 0)),
+            Row(LocalDate.of(2021, 8, 18), Instant.parse("2021-08-18T21:44:30Z"),
+              if (isLegacy) null else LocalDateTime.of(2021, 8, 18, 21, 44, 30, 123000000))))
+      }
+    }
+  }
+
+  test("SPARK-36830: Support reading and writing ANSI intervals") {
+    Seq(
+      YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
+      DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
+    ).foreach { case (it, f) =>
+      val data = (1 to 10).map(i => Row(i, f(i)))
+      val schema = StructType(Array(StructField("d", IntegerType, false),
+        StructField("i", it, false)))
+      withTempPath { file =>
+        val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+        df.write.json(file.getCanonicalPath)
+        val df2 = spark.read.json(file.getCanonicalPath)
+        checkAnswer(df2, df.select($"d".cast(LongType), $"i".cast(StringType)).collect().toSeq)
+        val df3 = spark.read.schema(schema).json(file.getCanonicalPath)
+        checkAnswer(df3, df.collect().toSeq)
+      }
+    }
+  }
 }
 
 class JsonV1Suite extends JsonSuite {
@@ -2990,16 +3043,14 @@ class JsonV2Suite extends JsonSuite {
     withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       withTempPath { file =>
         val scanBuilder = getBuilder(file.getCanonicalPath)
-        assert(scanBuilder.pushFilters(filters) === filters)
-        assert(scanBuilder.pushedFilters() === filters)
+        assert(scanBuilder.pushDataFilters(filters) === filters)
       }
     }
 
     withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> "false") {
       withTempPath { file =>
         val scanBuilder = getBuilder(file.getCanonicalPath)
-        assert(scanBuilder.pushFilters(filters) === filters)
-        assert(scanBuilder.pushedFilters() === Array.empty[sources.Filter])
+        assert(scanBuilder.pushDataFilters(filters) === Array.empty[sources.Filter])
       }
     }
   }

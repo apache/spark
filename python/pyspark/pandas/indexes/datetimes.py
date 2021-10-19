@@ -16,7 +16,7 @@
 #
 import datetime
 from functools import partial
-from typing import Any, Callable, Optional, Union, cast, no_type_check
+from typing import Any, Optional, Union, cast, no_type_check
 
 import pandas as pd
 from pandas.api.types import is_hashable
@@ -138,7 +138,7 @@ class DatetimeIndex(Index):
         if hasattr(MissingPandasLikeDatetimeIndex, item):
             property_or_func = getattr(MissingPandasLikeDatetimeIndex, item)
             if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
+                return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
         raise AttributeError("'DatetimeIndex' object has no attribute '{}'".format(item))
@@ -740,13 +740,6 @@ class DatetimeIndex(Index):
             # so we enforce “distributed” default index type
             psdf = psdf.pandas_on_spark.apply_batch(pandas_at_time)
         return ps.Index(first_series(psdf).rename(self.name))
-
-    def map(
-        self,
-        mapper: Union[dict, Callable[[Any], Any], pd.Series] = None,
-        na_action: Optional[str] = None,
-    ) -> "Index":
-        return MissingPandasLikeDatetimeIndex.map(self, mapper, na_action)
 
 
 def disallow_nanoseconds(freq: Union[str, DateOffset]) -> None:

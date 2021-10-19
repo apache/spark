@@ -89,7 +89,7 @@ object ExtractValue {
   }
 }
 
-trait ExtractValue extends Expression {
+trait ExtractValue extends Expression with NullIntolerant {
   final override val nodePatterns: Seq[TreePattern] = Seq(EXTRACT_VALUE)
 }
 
@@ -102,7 +102,7 @@ trait ExtractValue extends Expression {
  * For example, when get field `yEAr` from `<year: int, month: int>`, we should pass in `yEAr`.
  */
 case class GetStructField(child: Expression, ordinal: Int, name: Option[String] = None)
-  extends UnaryExpression with ExtractValue with NullIntolerant {
+  extends UnaryExpression with ExtractValue {
 
   lazy val childSchema = child.dataType.asInstanceOf[StructType]
 
@@ -155,7 +155,7 @@ case class GetArrayStructFields(
     field: StructField,
     ordinal: Int,
     numFields: Int,
-    containsNull: Boolean) extends UnaryExpression with ExtractValue with NullIntolerant {
+    containsNull: Boolean) extends UnaryExpression with ExtractValue {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
   override def toString: String = s"$child.${field.name}"
@@ -230,8 +230,7 @@ case class GetArrayItem(
     child: Expression,
     ordinal: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends BinaryExpression with GetArrayItemUtil with ExpectsInputTypes with ExtractValue
-  with NullIntolerant {
+  extends BinaryExpression with GetArrayItemUtil with ExpectsInputTypes with ExtractValue {
 
   def this(child: Expression, ordinal: Expression) = this(child, ordinal, SQLConf.get.ansiEnabled)
 
@@ -437,7 +436,7 @@ case class GetMapValue(
     child: Expression,
     key: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends GetMapValueUtil with ExtractValue with NullIntolerant {
+  extends GetMapValueUtil with ExtractValue {
 
   def this(child: Expression, key: Expression) = this(child, key, SQLConf.get.ansiEnabled)
 

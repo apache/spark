@@ -246,43 +246,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns a 64-bit integer that can be used as the prefix used in sorting.
    */
   public long getPrefix() {
-    // Since JVMs are either 4-byte aligned or 8-byte aligned, we check the size of the string.
-    // If size is 0, just return 0.
-    // If size is between 0 and 4 (inclusive), assume data is 4-byte aligned under the hood and
-    // use a getInt to fetch the prefix.
-    // If size is greater than 4, assume we have at least 8 bytes of data to fetch.
-    // After getting the data, we use a mask to mask out data that is not part of the string.
-    long p;
-    long mask = 0;
-    if (IS_LITTLE_ENDIAN) {
-      if (numBytes >= 8) {
-        p = Platform.getLong(base, offset);
-      } else if (numBytes > 4) {
-        p = Platform.getLong(base, offset);
-        mask = (1L << (8 - numBytes) * 8) - 1;
-      } else if (numBytes > 0) {
-        p = (long) Platform.getInt(base, offset);
-        mask = (1L << (8 - numBytes) * 8) - 1;
-      } else {
-        p = 0;
-      }
-      p = java.lang.Long.reverseBytes(p);
-    } else {
-      // byteOrder == ByteOrder.BIG_ENDIAN
-      if (numBytes >= 8) {
-        p = Platform.getLong(base, offset);
-      } else if (numBytes > 4) {
-        p = Platform.getLong(base, offset);
-        mask = (1L << (8 - numBytes) * 8) - 1;
-      } else if (numBytes > 0) {
-        p = ((long) Platform.getInt(base, offset)) << 32;
-        mask = (1L << (8 - numBytes) * 8) - 1;
-      } else {
-        p = 0;
-      }
-    }
-    p &= ~mask;
-    return p;
+    return ByteArray.getPrefix(base, offset, numBytes);
   }
 
   /**

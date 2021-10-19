@@ -42,7 +42,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.network.util.{ByteUnit, JavaUtils}
+import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.util.io.ChunkedByteBufferInputStream
 
@@ -245,8 +245,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         assert(mergedStream.read() === -1)
         assert(byteBufferInputStream.chunkedByteBuffer === null)
       } finally {
-        JavaUtils.closeQuietly(mergedStream)
-        JavaUtils.closeQuietly(in)
+        IOUtils.closeQuietly(mergedStream)
+        IOUtils.closeQuietly(in)
       }
     }
   }
@@ -1503,16 +1503,26 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   test("isPushBasedShuffleEnabled when PUSH_BASED_SHUFFLE_ENABLED " +
     "and SHUFFLE_SERVICE_ENABLED are both set to true in YARN mode with maxAttempts set to 1") {
     val conf = new SparkConf()
-    assert(Utils.isPushBasedShuffleEnabled(conf) === false)
+    assert(Utils.isPushBasedShuffleEnabled(conf, isDriver = true) === false)
     conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
     conf.set(IS_TESTING, false)
-    assert(Utils.isPushBasedShuffleEnabled(conf) === false)
+    assert(Utils.isPushBasedShuffleEnabled(
+      conf, isDriver = false, checkSerializer = false) === false)
     conf.set(SHUFFLE_SERVICE_ENABLED, true)
     conf.set(SparkLauncher.SPARK_MASTER, "yarn")
-    conf.set("spark.yarn.maxAttempts", "1")
-    assert(Utils.isPushBasedShuffleEnabled(conf) === true)
-    conf.set("spark.yarn.maxAttempts", "2")
-    assert(Utils.isPushBasedShuffleEnabled(conf) === true)
+    conf.set("spark.yarn.maxAppAttempts", "1")
+    conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
+    assert(Utils.isPushBasedShuffleEnabled(conf, isDriver = true) === true)
+    conf.set("spark.yarn.maxAppAttempts", "2")
+    assert(Utils.isPushBasedShuffleEnabled(
+      conf, isDriver = false, checkSerializer = false) === true)
+    conf.set(IO_ENCRYPTION_ENABLED, true)
+    assert(Utils.isPushBasedShuffleEnabled(conf, isDriver = true) === false)
+    conf.set(IO_ENCRYPTION_ENABLED, false)
+    assert(Utils.isPushBasedShuffleEnabled(
+      conf, isDriver = false, checkSerializer = false) === true)
+    conf.set(SERIALIZER, "org.apache.spark.serializer.JavaSerializer")
+    assert(Utils.isPushBasedShuffleEnabled(conf, isDriver = true) === false)
   }
 }
 

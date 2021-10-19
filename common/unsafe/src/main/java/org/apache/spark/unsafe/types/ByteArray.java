@@ -17,6 +17,7 @@
 
 package org.apache.spark.unsafe.types;
 
+import java.nio.ByteOrder;
 import java.util.Arrays;
 
 import com.google.common.primitives.Ints;
@@ -26,6 +27,8 @@ import org.apache.spark.unsafe.Platform;
 public final class ByteArray {
 
   public static final byte[] EMPTY_BYTE = new byte[0];
+  private static final boolean IS_LITTLE_ENDIAN =
+      ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
 
   /**
    * Writes the content of a byte array into a memory address, identified by an object and an
@@ -42,15 +45,34 @@ public final class ByteArray {
   public static long getPrefix(byte[] bytes) {
     if (bytes == null) {
       return 0L;
-    } else {
-      final int minLen = Math.min(bytes.length, 8);
-      long p = 0;
-      for (int i = 0; i < minLen; ++i) {
-        p |= ((long) Platform.getByte(bytes, Platform.BYTE_ARRAY_OFFSET + i) & 0xff)
-            << (56 - 8 * i);
-      }
-      return p;
     }
+    return getPrefix(bytes, Platform.BYTE_ARRAY_OFFSET, bytes.length);
+  }
+
+  static long getPrefix(Object base, long offset, int numBytes) {
+    // Since JVMs are either 4-byte aligned or 8-byte aligned, we check the size of the bytes.
+    // If size is 0, just return 0.
+    // If size is between 1 and 4 (inclusive), assume data is 4-byte aligned under the hood and
+    // use a getInt to fetch the prefix.
+    // If size is greater than 4, assume we have at least 8 bytes of data to fetch.
+    // After getting the data, we use a mask to mask out data that is not part of the bytes.
+    final long p;
+    final long mask;
+    if (numBytes >= 8) {
+      p = Platform.getLong(base, offset);
+      mask = 0;
+    } else if (numBytes > 4) {
+      p = Platform.getLong(base, offset);
+      mask = (1L << (8 - numBytes) * 8) - 1;
+    } else if (numBytes > 0) {
+      long pRaw = Platform.getInt(base, offset);
+      p = IS_LITTLE_ENDIAN ? pRaw : (pRaw << 32);
+      mask = (1L << (8 - numBytes) * 8) - 1;
+    } else {
+      p = 0;
+      mask = 0;
+    }
+    return (IS_LITTLE_ENDIAN ? java.lang.Long.reverseBytes(p) : p) & ~mask;
   }
 
   public static byte[] subStringSQL(byte[] bytes, int pos, int len) {
