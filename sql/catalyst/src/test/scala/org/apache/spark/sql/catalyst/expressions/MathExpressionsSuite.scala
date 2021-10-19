@@ -740,4 +740,24 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(WidthBucket(Literal(v), Literal(s), Literal(e), Literal(n)), expected)
     }
   }
+
+  test("SPARK-35925: Support DayTimeIntervalType in width-bucket function") {
+    Seq(
+      (Duration.ofDays(-1), Duration.ofDays(0), Duration.ofDays(10), 10L) -> 0L,
+      (Duration.ofHours(0), Duration.ofDays(0), Duration.ofDays(10), 10L) -> 1L,
+      (Duration.ofHours(11), Duration.ofHours(0), Duration.ofHours(10), 10L) -> 11L,
+      (Duration.ofMinutes(1), Duration.ofMinutes(0), Duration.ofMinutes(60), 10L) -> 1L,
+      (Duration.ofSeconds(-30), Duration.ofSeconds(-59), Duration.ofSeconds(60), 10L) -> 3L,
+      (Duration.ofDays(0), Duration.of(Long.MinValue, ChronoUnit.MICROS),
+        Duration.of(Long.MaxValue, ChronoUnit.MICROS), 10L) -> 6L,
+      (Duration.ofDays(0), Duration.of(Long.MinValue, ChronoUnit.MICROS),
+        Duration.ofDays(0), 10L) -> 11L,
+      (Duration.of(Long.MinValue, ChronoUnit.MICROS), Duration.of(Long.MinValue, ChronoUnit.MICROS),
+        Duration.ofDays(0), 10L) -> 1L,
+      (Duration.ofDays(-1), Duration.ofDays(0),
+        Duration.of(Long.MaxValue, ChronoUnit.MICROS), 10L) -> 0L
+    ).foreach { case ((v, s, e, n), expected) =>
+      checkEvaluation(WidthBucket(Literal(v), Literal(s), Literal(e), Literal(n)), expected)
+    }
+  }
 }
