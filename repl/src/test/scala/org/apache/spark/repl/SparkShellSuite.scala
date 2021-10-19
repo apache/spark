@@ -51,9 +51,9 @@ class SparkShellSuite  extends SparkFunSuite with BeforeAndAfterAll with Logging
       errorResponses: Seq[String] = Seq("Error:"))(
       scriptsAndExpectedAnswers: (String, String)*): Unit = {
 
-    // Explicitly adds ENTER for each statement to make sure they are actually entered into the CLI.
+    // Explicitly adds ENTER for each statement to make sure
+    // they are actually entered into the spark-shell.
     val scripts = scriptsAndExpectedAnswers.map(_._1 + "\n").mkString
-    // spark-shell echoes the queries on STDOUT, expect first an echo of the query, then the answer.
     val expectedAnswers = scriptsAndExpectedAnswers.flatMap {
       case (query, answer) =>
         // empty query means a command launched with -e
