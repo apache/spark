@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ImplicitCastInputTypes}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.aggregate.ScalaAggregator
@@ -131,8 +131,8 @@ private[sql] class HiveSessionCatalog(
         case _: InvalidUDFClassException =>
           val clsForAggregator = classOf[Aggregator[_, _, _]]
           if (clsForAggregator.isAssignableFrom(clazz)) {
-            val clsForEncoder = classOf[ExpressionEncoder[_]]
-            val aggregator = clazz.getConstructor().newInstance().asInstanceOf[Aggregator[_, _, _]]
+            val aggregator =
+              clazz.getConstructor().newInstance().asInstanceOf[Aggregator[Any, Any, Any]]
             // Construct the input encoder
             val mirror = runtimeMirror(clazz.getClassLoader)
             val classType = mirror.classSymbol(clazz)
@@ -142,25 +142,14 @@ private[sql] class HiveSessionCatalog(
             val cls = mirror.runtimeClass(tpe)
             val serializer = ScalaReflection.serializerForType(tpe)
             val deserializer = ScalaReflection.deserializerForType(tpe)
-            val inputEncoder = new ExpressionEncoder(
+            val inputEncoder = new ExpressionEncoder[Any](
               serializer,
               deserializer,
               ClassTag(cls))
 
-            val e = classOf[ScalaAggregator[_, _, _]].getConstructor(classOf[Seq[Expression]],
-              clsForAggregator, clsForEncoder, clsForEncoder, classOf[Boolean], classOf[Boolean],
-              classOf[Int], classOf[Int], classOf[Option[String]])
-              .newInstance(
-                input,
-                aggregator,
-                inputEncoder,
-                aggregator.bufferEncoder,
-                Boolean.box(true),
-                Boolean.box(true),
-                Int.box(1),
-                Int.box(1),
-                Some(name))
-              .asInstanceOf[ImplicitCastInputTypes]
+            val e = new ScalaAggregator[Any, Any, Any](input, aggregator, inputEncoder,
+              aggregator.bufferEncoder.asInstanceOf[ExpressionEncoder[Any]],
+              aggregatorName = Some(name))
 
             // Check input argument size
             if (e.inputTypes.size != input.size) {
