@@ -270,11 +270,9 @@
 | org.apache.spark.sql.catalyst.expressions.Stack | stack | SELECT stack(2, 1, 2, 3) | struct<col0:int,col1:int> |
 | org.apache.spark.sql.catalyst.expressions.StringInstr | instr | SELECT instr('SparkSQL', 'SQL') | struct<instr(SparkSQL, SQL):int> |
 | org.apache.spark.sql.catalyst.expressions.StringLPad | lpad | SELECT lpad('hi', 5, '??') | struct<lpad(hi, 5, ??):string> |
-| org.apache.spark.sql.catalyst.expressions.StringLPad | lpad | SELECT hex(lpad(unhex('aabb'), 7, unhex('010203'))) | struct<hex(lpad(unhex('aabb'), 7, unhex('010203'))):string> |
 | org.apache.spark.sql.catalyst.expressions.StringLocate | locate | SELECT locate('bar', 'foobarbar') | struct<locate(bar, foobarbar, 1):int> |
 | org.apache.spark.sql.catalyst.expressions.StringLocate | position | SELECT position('bar', 'foobarbar') | struct<position(bar, foobarbar, 1):int> |
 | org.apache.spark.sql.catalyst.expressions.StringRPad | rpad | SELECT rpad('hi', 5, '??') | struct<rpad(hi, 5, ??):string> |
-| org.apache.spark.sql.catalyst.expressions.StringRPad | rpad | SELECT hex(rpad(unhex('aabb'), 7, unhex('010203'))) | struct<hex(rpad(unhex('aabb'), 7, unhex('010203'))):string> |
 | org.apache.spark.sql.catalyst.expressions.StringRepeat | repeat | SELECT repeat('123', 2) | struct<repeat(123, 2):string> |
 | org.apache.spark.sql.catalyst.expressions.StringReplace | replace | SELECT replace('ABCabc', 'abc', 'DEF') | struct<replace(ABCabc, abc, DEF):string> |
 | org.apache.spark.sql.catalyst.expressions.StringSpace | space | SELECT concat(space(2), '1') | struct<concat(space(2), 1):string> |
