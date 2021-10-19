@@ -596,8 +596,12 @@ class InternalFrame(object):
         [('row_index_a',), ('row_index_b',), ('a', 'x')]
 
         >>> internal.index_fields  # doctest: +NORMALIZE_WHITESPACE
-        [InternalField(dtype=object,struct_field=StructField('__index_level_0__', StringType(), False)),
-         InternalField(dtype=object,struct_field=StructField('__index_level_1__', StringType(), False)),
+        [InternalField(
+             dtype=object,struct_field=StructField('__index_level_0__', StringType(), False)
+         ),
+         InternalField(
+             dtype=object,struct_field=StructField('__index_level_1__', StringType(), False)
+         ),
          InternalField(dtype=int64,struct_field=StructField('(a, x)', LongType(), False))]
 
         >>> internal.column_labels
@@ -1505,8 +1509,10 @@ class InternalFrame(object):
         2                 30      c       1
         >>> index_columns
         ['__index_level_0__']
-        >>> index_fields
-        [InternalField(dtype=int64,struct_field=StructField('__index_level_0__', LongType(), False))]
+        >>> index_fields  # doctest: +NORMALIZE_WHITESPACE
+        [InternalField(
+             dtype=int64,struct_field=StructField('__index_level_0__', LongType(), False)
+         )]
         >>> data_columns
         ['(x, a)', '(y, b)']
         >>> data_fields  # doctest: +NORMALIZE_WHITESPACE
@@ -1521,8 +1527,10 @@ class InternalFrame(object):
         >>> _, _, _, _, data_fields = (
         ...     InternalFrame.prepare_pandas_frame(pdf, prefer_timestamp_ntz=True)
         ... )
-        >>> data_fields
-        [InternalField(dtype=datetime64[ns],struct_field=StructField('dt', TimestampNTZType(), False)),
+        >>> data_fields  # doctest: +NORMALIZE_WHITESPACE
+        [InternalField(
+             dtype=datetime64[ns],struct_field=StructField('dt', TimestampNTZType(), False)
+         ),
          InternalField(dtype=object,struct_field=StructField('dt_obj', TimestampNTZType(), False))]
         """
         pdf = pdf.copy()
