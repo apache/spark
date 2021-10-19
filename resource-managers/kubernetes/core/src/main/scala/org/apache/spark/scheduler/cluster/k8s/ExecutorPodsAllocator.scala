@@ -460,7 +460,7 @@ class ExecutorPodsAllocator(
       currentTime - startTime > executorIdleTimeout
     } catch {
       case e: Exception =>
-        logError(s"Cannot get the createTime of the pod $state.pod", e)
+        logError(s"Cannot get the creationTimestamp of the pod ${state.pod}", e)
         true
     }
   }
