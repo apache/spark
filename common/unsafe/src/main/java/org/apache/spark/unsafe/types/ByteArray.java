@@ -103,9 +103,9 @@ public final class ByteArray {
   }
 
   // Helper method for implementing `lpad` and `rpad`.
-  // If the padding pattern's length is 0, return the first `len` bytes of the input
-  // binary string if it longer than `len` bytes, or a copy of the binary string, otherwise.
-  protected static byte[] padWithEmptyPattern(byte[] bytes, int len) {
+  // If the padding pattern's length is 0, return the first `len` bytes of the input byte
+  // sequence if it is longer than `len` bytes, or a copy of the byte sequence, otherwise.
+  private static byte[] padWithEmptyPattern(byte[] bytes, int len) {
     len = Math.min(bytes.length, len);
     final byte[] result = new byte[len];
     Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET, result, Platform.BYTE_ARRAY_OFFSET, len);
@@ -113,10 +113,10 @@ public final class ByteArray {
   }
 
   // Helper method for implementing `lpad` and `rpad`.
-  // Fills the resulting binary string with the pattern. The resulting binary string
-  // is passed as the first argument and it is filled from position `firstPos` (inclusive)
+  // Fills the resulting byte sequence with the pattern. The resulting byte sequence is
+  // passed as the first argument and it is filled from position `firstPos` (inclusive)
   // to position `beyondPos` (not inclusive).
-  protected static void fillWithPattern(byte[] result, int firstPos, int beyondPos, byte[] pad) {
+  private static void fillWithPattern(byte[] result, int firstPos, int beyondPos, byte[] pad) {
     for (int pos = firstPos; pos < beyondPos; pos += pad.length) {
       final int jMax = Math.min(pad.length, beyondPos - pos);
       for (int j = 0; j < jMax; ++j) {
@@ -125,21 +125,21 @@ public final class ByteArray {
     }
   }
 
-  // Left-pads the input binary string using the provided padding pattern.
-  // In the special case that the padding pattern is empty, the resulting binary string
+  // Left-pads the input byte sequence using the provided padding pattern.
+  // In the special case that the padding pattern is empty, the resulting byte sequence
   // contains the first `len` bytes of the input if they exist, or is a copy of the input
-  // binary stringkm otherwise.
-  // For padding patterns with positive byte length, the resulting binary string's byte length is
-  // equal to `len`. If the input binary string is not less than `len` bytes, its first `len` bytes
+  // byte sequence otherwise.
+  // For padding patterns with positive byte length, the resulting byte sequence's byte length is
+  // equal to `len`. If the input byte sequence is not less than `len` bytes, its first `len` bytes
   // are returned. Otherwise, the remaining missing bytes are filled in with the provided pattern.
   public static byte[] lpad(byte[] bytes, int len, byte[] pad) {
     if (bytes == null || pad == null) return null;
-    // If the input length is 0, return the empty binary string.
+    // If the input length is 0, return the empty byte sequence.
     if (len == 0) return EMPTY_BYTE;
     // The padding pattern is empty.
     if (pad.length == 0) return padWithEmptyPattern(bytes, len);
     // The general case.
-    // 1. Copy the first `len` bytes of the input string into the output if they exist.
+    // 1. Copy the first `len` bytes of the input byte sequence into the output if they exist.
     final byte[] result = new byte[len];
     final int minLen = Math.min(len, bytes.length);
     Platform.copyMemory(
@@ -153,21 +153,21 @@ public final class ByteArray {
     return result;
   }
 
-  // Right-pads the input binary string using the provided padding pattern.
-  // In the special case that the padding pattern is empty, the resulting binary string
+  // Right-pads the input byte sequence using the provided padding pattern.
+  // In the special case that the padding pattern is empty, the resulting byte sequence
   // contains the first `len` bytes of the input if they exist, or is a copy of the input
-  // binary stringkm otherwise.
-  // For padding patterns with positive byte length, the resulting binary string's byte length is
-  // equal to `len`. If the input binary string is not less than `len` bytes, its first `len` bytes
+  // byte sequence otherwise.
+  // For padding patterns with positive byte length, the resulting byte sequence's byte length is
+  // equal to `len`. If the input byte sequence is not less than `len` bytes, its first `len` bytes
   // are returned. Otherwise, the remaining missing bytes are filled in with the provided pattern.
   public static byte[] rpad(byte[] bytes, int len, byte[] pad) {
     if (bytes == null || pad == null) return null;
-    // If the input length is 0, return the empty binary string.
+    // If the input length is 0, return the empty byte sequence.
     if (len == 0) return EMPTY_BYTE;
     // The padding pattern is empty.
     if (pad.length == 0) return padWithEmptyPattern(bytes, len);
     // The general case.
-    // 1. Copy the first `len` bytes of the input string into the output if they exist.
+    // 1. Copy the first `len` bytes of the input sequence into the output if they exist.
     final byte[] result = new byte[len];
     Platform.copyMemory(
             bytes, Platform.BYTE_ARRAY_OFFSET,

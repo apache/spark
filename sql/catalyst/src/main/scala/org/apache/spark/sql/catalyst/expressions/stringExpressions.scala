@@ -1333,7 +1333,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
  * Returns the default expression to be used in StringLPad or StringRPad based on the type of
  * the input expression.
  * For character string expressions the default padding expression is the string literal ' '.
- * For binary string expressions the default padding expression is the byte literal 0x00.
+ * For byte sequence expressions the default padding expression is the byte literal 0x00.
  */
 object StringPadDefaultValue {
   def get(str: Expression): Expression = {
@@ -1352,7 +1352,7 @@ object StringPadDefaultValue {
     _FUNC_(str, len[, pad]) - Returns `str`, left-padded with `pad` to a length of `len`.
       If `str` is longer than `len`, the return value is shortened to `len` characters or bytes.
       If `pad` is not specified, `str` will be padded to the left with space characters if it is
-      a character string, and with zeros if it is a binary string.
+      a character string, and with zeros if it is a byte sequence.
   """,
   examples = """
     Examples:
