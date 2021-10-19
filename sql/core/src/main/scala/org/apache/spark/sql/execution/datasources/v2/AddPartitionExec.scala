@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{PartitionsAlreadyExistException, ResolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsPartitionManagement}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * Physical plan node for adding partitions of table.
@@ -60,8 +61,8 @@ case class AddPartitionExec(
             partProps.map(_.asJava).toArray)
         true
       case _ =>
-        throw new UnsupportedOperationException(
-          s"Nonatomic partition table ${table.name()} can not add multiple partitions.")
+        throw QueryExecutionErrors.cannotAddMultiPartitionsOnNonatomicPartitionTableError(
+          table.name())
     }
     if (isTableAltered) refreshCache()
     Seq.empty

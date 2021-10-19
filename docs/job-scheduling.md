@@ -164,9 +164,12 @@ shuffle state written by an executor may continue to be served beyond the execut
 In addition to writing shuffle files, executors also cache data either on disk or in memory.
 When an executor is removed, however, all cached data will no longer be accessible.  To mitigate this,
 by default executors containing cached data are never removed.  You can configure this behavior with
-`spark.dynamicAllocation.cachedExecutorIdleTimeout`.  In future releases, the cached data may be
-preserved through an off-heap storage similar in spirit to how shuffle files are preserved through
-the external shuffle service.
+`spark.dynamicAllocation.cachedExecutorIdleTimeout`. When set `spark.shuffle.service.fetch.rdd.enabled`
+to `true`, Spark can use ExternalShuffleService for fetching disk persisted RDD blocks. In case of 
+dynamic allocation if this feature is enabled executors having only disk persisted blocks are considered
+idle after `spark.dynamicAllocation.executorIdleTimeout` and will be released accordingly. In future releases,
+the cached data may be preserved through an off-heap storage similar in spirit to how shuffle files are preserved 
+through the external shuffle service.
 
 # Scheduling Within an Application
 
@@ -251,10 +254,13 @@ properties:
 
 The pool properties can be set by creating an XML file, similar to `conf/fairscheduler.xml.template`,
 and either putting a file named `fairscheduler.xml` on the classpath, or setting `spark.scheduler.allocation.file` property in your
-[SparkConf](configuration.html#spark-properties). The file path can either be a local file path or HDFS file path.
+[SparkConf](configuration.html#spark-properties). The file path respects the hadoop configuration and can either be a local file path or HDFS file path.
+
 
 {% highlight scala %}
-conf.set("spark.scheduler.allocation.file", "/path/to/file")
+// scheduler file at local
+conf.set("spark.scheduler.allocation.file", "file:///path/to/file")
+// scheduler file at hdfs
 conf.set("spark.scheduler.allocation.file", "hdfs:///path/to/file")
 {% endhighlight %}
 
@@ -297,10 +303,6 @@ in each corresponding JVM thread. Due to this limitation, it is unable to set a 
 via `sc.setJobGroup` in a separate PVM thread, which also disallows to cancel the job via `sc.cancelJobGroup`
 later.
 
-In order to synchronize PVM threads with JVM threads, you should set `PYSPARK_PIN_THREAD` environment variable
-to `true`. This pinned thread mode allows one PVM thread has one corresponding JVM thread. With this mode,
 `pyspark.InheritableThread` is recommended to use together for a PVM thread to inherit the inheritable attributes
- such as local properties in a JVM thread.
-
-Note that `PYSPARK_PIN_THREAD` is currently experimental and not recommended for use in production.
+ such as local properties in a JVM thread, and to avoid resource leak.
 

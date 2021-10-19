@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.MapOutputStatistics
-import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, Join, JoinStrategyHint, LogicalPlan, NO_BROADCAST_HASH, PREFER_SHUFFLE_HASH, SHUFFLE_HASH}
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, JoinStrategyHint, LogicalPlan, NO_BROADCAST_HASH, PREFER_SHUFFLE_HASH, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 
@@ -45,11 +46,8 @@ object DynamicJoinSelection extends Rule[LogicalPlan] {
     val maxShuffledHashJoinLocalMapThreshold =
       conf.getConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD)
     val advisoryPartitionSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
-    if (advisoryPartitionSize <= maxShuffledHashJoinLocalMapThreshold) {
+    advisoryPartitionSize <= maxShuffledHashJoinLocalMapThreshold &&
       mapStats.bytesByPartitionId.forall(_ <= maxShuffledHashJoinLocalMapThreshold)
-    } else {
-      false
-    }
   }
 
   private def selectJoinStrategy(plan: LogicalPlan): Option[JoinStrategyHint] = plan match {
@@ -71,7 +69,7 @@ object DynamicJoinSelection extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDown {
-    case j @ Join(left, right, _, _, hint) =>
+    case j @ ExtractEquiJoinKeys(_, _, _, _, _, left, right, hint) =>
       var newHint = hint
       if (!hint.leftHint.exists(_.strategy.isDefined)) {
         selectJoinStrategy(left).foreach { strategy =>

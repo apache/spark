@@ -588,7 +588,7 @@ class StreamingTests(ReusedSQLTestCase):
             df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
             q = df.writeStream.toTable("output_table", format='parquet', checkpointLocation=tmpdir)
             self.assertTrue(q.isActive)
-            time.sleep(3)
+            time.sleep(10)
             q.stop()
             result = self.spark.sql("SELECT value FROM output_table").collect()
             self.assertTrue(len(result) > 0)

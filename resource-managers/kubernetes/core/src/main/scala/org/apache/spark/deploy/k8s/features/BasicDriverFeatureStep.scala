@@ -147,9 +147,13 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       .editOrNewSpec()
         .withRestartPolicy("Never")
         .addToNodeSelector(conf.nodeSelector.asJava)
+        .addToNodeSelector(conf.driverNodeSelector.asJava)
         .addToImagePullSecrets(conf.imagePullSecrets: _*)
         .endSpec()
       .build()
+
+    conf.get(KUBERNETES_DRIVER_SCHEDULER_NAME)
+      .foreach(driverPod.getSpec.setSchedulerName)
 
     SparkPod(driverPod, driverContainer)
   }

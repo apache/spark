@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicLong
 import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.AccumulableInfo
+import org.apache.spark.util.AccumulatorContext.internOption
 
 private[spark] case class AccumulatorMetadata(
     id: Long,
@@ -107,7 +108,8 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    */
   private[spark] def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
     val isInternal = name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))
-    new AccumulableInfo(id, name, update, value, isInternal, countFailedValues)
+    AccumulableInfo(id, name, internOption(update), internOption(value), isInternal,
+      countFailedValues)
   }
 
   final private[spark] def isAtDriverSide: Boolean = atDriverSide
@@ -226,6 +228,9 @@ private[spark] object AccumulatorContext extends Logging {
 
   private[this] val nextId = new AtomicLong(0L)
 
+  private[this] val someOfMinusOne = Some(-1L)
+  private[this] val someOfZero = Some(0L)
+
   /**
    * Returns a globally unique ID for a new [[AccumulatorV2]].
    * Note: Once you copy the [[AccumulatorV2]] the ID is no longer unique.
@@ -279,6 +284,18 @@ private[spark] object AccumulatorContext extends Logging {
    */
   def clear(): Unit = {
     originals.clear()
+  }
+
+  /** Naive way to reduce the duplicate Some objects for values 0 and -1
+   *  TODO: Eventually if this spreads out to more values then using
+   *  Guava's weak interner would be a better solution.
+   */
+  def internOption(value: Option[Any]): Option[Any] = {
+    value match {
+      case Some(0L) => someOfZero
+      case Some(-1L) => someOfMinusOne
+      case _ => value
+    }
   }
 
   // Identifier for distinguishing SQL metrics from other accumulators

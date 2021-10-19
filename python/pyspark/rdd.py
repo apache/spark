@@ -1732,7 +1732,7 @@ class RDD(object):
         system, using the "org.apache.hadoop.io.Writable" types that we convert from the
         RDD's key and value types. The mechanism is as follows:
 
-            1. Pyrolite is used to convert pickled Python RDD into RDD of Java objects.
+            1. Pickle is used to convert pickled Python RDD into RDD of Java objects.
             2. Keys and values of this Java RDD are converted to Writables and written out.
 
         Parameters
@@ -2067,7 +2067,7 @@ class RDD(object):
                     avg = int(size / n) >> 20
                     # let 1M < avg < 10M
                     if avg < 1:
-                        batch *= 1.5
+                        batch = min(sys.maxsize, batch * 1.5)
                     elif avg > 10:
                         batch = max(int(batch / 1.5), 1)
                     c = 0
@@ -2613,7 +2613,7 @@ class RDD(object):
     def _to_java_object_rdd(self):
         """ Return a JavaRDD of Object by unpickling
 
-        It will convert each Python object into Java object by Pyrolite, whenever the
+        It will convert each Python object into Java object by Pickle, whenever the
         RDD is serialized in batch or not.
         """
         rdd = self._pickled()

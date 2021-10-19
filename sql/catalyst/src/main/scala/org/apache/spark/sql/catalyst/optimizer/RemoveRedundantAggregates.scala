@@ -53,7 +53,7 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
     val upperHasNoDuplicateSensitiveAgg = upper
       .aggregateExpressions
       .forall(expr => expr.find {
-        case ae: AggregateExpression => !EliminateDistinct.isDuplicateAgnostic(ae.aggregateFunction)
+        case ae: AggregateExpression => isDuplicateSensitive(ae)
         case e => AggregateExpression.isAggregate(e)
       }.isEmpty)
 
@@ -66,5 +66,9 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
     ))
 
     upperHasNoDuplicateSensitiveAgg && upperRefsOnlyDeterministicNonAgg
+  }
+
+  private def isDuplicateSensitive(ae: AggregateExpression): Boolean = {
+    !ae.isDistinct && !EliminateDistinct.isDuplicateAgnostic(ae.aggregateFunction)
   }
 }

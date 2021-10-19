@@ -34,7 +34,13 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                   InputAdapter
                                                                     Scan parquet default.store_sales [ss_store_sk,ss_ext_sales_price,ss_net_profit,ss_sold_date_sk]
                                                                       SubqueryBroadcast [d_date_sk] #1
-                                                                        ReusedExchange [d_date_sk] #4
+                                                                        BroadcastExchange #4
+                                                                          WholeStageCodegen (1)
+                                                                            Project [d_date_sk]
+                                                                              Filter [d_date,d_date_sk]
+                                                                                ColumnarToRow
+                                                                                  InputAdapter
+                                                                                    Scan parquet default.date_dim [d_date_sk,d_date]
                                                           WholeStageCodegen (2)
                                                             Project [sr_store_sk,sr_returned_date_sk,sr_return_amt,sr_net_loss]
                                                               Filter [sr_store_sk]
@@ -43,13 +49,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                     Scan parquet default.store_returns [sr_store_sk,sr_return_amt,sr_net_loss,sr_returned_date_sk]
                                                                       ReusedSubquery [d_date_sk] #1
                                                       InputAdapter
-                                                        BroadcastExchange #4
-                                                          WholeStageCodegen (3)
-                                                            Project [d_date_sk]
-                                                              Filter [d_date,d_date_sk]
-                                                                ColumnarToRow
-                                                                  InputAdapter
-                                                                    Scan parquet default.date_dim [d_date_sk,d_date]
+                                                        ReusedExchange [d_date_sk] #4
                                                   InputAdapter
                                                     BroadcastExchange #5
                                                       WholeStageCodegen (4)
@@ -143,13 +143,13 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                             HashAggregate [channel,sales,returns,profit] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                               HashAggregate [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                                 InputAdapter
-                                  ReusedExchange [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] #12
+                                  ReusedExchange [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] #2
                   WholeStageCodegen (65)
                     HashAggregate [sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),channel,id,sum(sales),sum(returns),sum(profit),sum,isEmpty,sum,isEmpty,sum,isEmpty]
                       InputAdapter
-                        Exchange #13
+                        Exchange #12
                           WholeStageCodegen (64)
                             HashAggregate [sales,returns,profit] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                               HashAggregate [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                                 InputAdapter
-                                  ReusedExchange [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] #12
+                                  ReusedExchange [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] #2

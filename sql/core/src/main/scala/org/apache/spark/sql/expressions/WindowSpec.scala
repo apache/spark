@@ -18,8 +18,9 @@
 package org.apache.spark.sql.expressions
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.{AnalysisException, Column}
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * A window specification that defines the partitioning, ordering, and frame boundaries.
@@ -127,14 +128,14 @@ class WindowSpec private[sql](
       case 0 => CurrentRow
       case Long.MinValue => UnboundedPreceding
       case x if Int.MinValue <= x && x <= Int.MaxValue => Literal(x.toInt)
-      case x => throw new AnalysisException(s"Boundary start is not a valid integer: $x")
+      case x => throw QueryCompilationErrors.invalidBoundaryStartError(x)
     }
 
     val boundaryEnd = end match {
       case 0 => CurrentRow
       case Long.MaxValue => UnboundedFollowing
       case x if Int.MinValue <= x && x <= Int.MaxValue => Literal(x.toInt)
-      case x => throw new AnalysisException(s"Boundary end is not a valid integer: $x")
+      case x => throw QueryCompilationErrors.invalidBoundaryEndError(x)
     }
 
     new WindowSpec(

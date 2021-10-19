@@ -29,8 +29,8 @@ from pyspark.sql.functions import col
 from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.utils import AnalysisException
 from pyspark.sql.types import ByteType, ShortType, IntegerType, FloatType, DateType, \
-    TimestampType, MapType, StringType, StructType, StructField, ArrayType, DoubleType, LongType, \
-    DecimalType, BinaryType, BooleanType, NullType
+    TimestampType, MapType, StringType, StructType, StructField,\
+    ArrayType, DoubleType, LongType, DecimalType, BinaryType, BooleanType, NullType
 from pyspark.sql.types import (  # type: ignore
     _array_signed_int_typecode_ctype_mappings, _array_type_mappings,
     _array_unsigned_int_typecode_ctype_mappings, _infer_type, _make_type_verifier, _merge_type
@@ -175,6 +175,18 @@ class TypesTests(ReusedSQLTestCase):
         ]
         self.assertEqual(actual, expected)
 
+        with self.sql_conf({"spark.sql.timestampType": "TIMESTAMP_NTZ"}):
+            with self.sql_conf({"spark.sql.session.timeZone": "America/Sao_Paulo"}):
+                df = self.spark.createDataFrame([(datetime.datetime(1970, 1, 1, 0, 0),)])
+                self.assertEqual(list(df.schema)[0].dataType.simpleString(), "timestamp_ntz")
+                self.assertEqual(df.first()[0], datetime.datetime(1970, 1, 1, 0, 0))
+
+            df = self.spark.createDataFrame([
+                (datetime.datetime(1970, 1, 1, 0, 0),),
+                (datetime.datetime(1970, 1, 1, 0, 0, tzinfo=datetime.timezone.utc),)
+            ])
+            self.assertEqual(list(df.schema)[0].dataType.simpleString(), "timestamp")
+
     def test_infer_schema_not_enough_names(self):
         df = self.spark.createDataFrame([["a", "b"]], ["col1"])
         self.assertEqual(df.columns, ['col1', '_2'])
@@ -203,6 +215,21 @@ class TypesTests(ReusedSQLTestCase):
                                    CustomRow(field1=3, field2="row3")])
         df = self.spark.createDataFrame(rdd)
         self.assertEqual(Row(field1=1, field2=u'row1'), df.first())
+
+    def test_infer_nested_dict_as_struct(self):
+        # SPARK-35929: Test inferring nested dict as a struct type.
+        NestedRow = Row("f1", "f2")
+
+        with self.sql_conf({"spark.sql.pyspark.inferNestedDictAsStruct.enabled": True}):
+            data = [NestedRow([{"payment": 200.5, "name": "A"}], [1, 2]),
+                    NestedRow([{"payment": 100.5, "name": "B"}], [2, 3])]
+
+            nestedRdd = self.sc.parallelize(data)
+            df = self.spark.createDataFrame(nestedRdd)
+            self.assertEqual(Row(f1=[Row(payment=200.5, name='A')], f2=[1, 2]), df.first())
+
+            df = self.spark.createDataFrame(data)
+            self.assertEqual(Row(f1=[Row(payment=200.5, name='A')], f2=[1, 2]), df.first())
 
     def test_create_dataframe_from_dict_respects_schema(self):
         df = self.spark.createDataFrame([{'a': 1}], ["b"])
@@ -496,8 +523,7 @@ class TypesTests(ReusedSQLTestCase):
     def test_parse_datatype_string(self):
         from pyspark.sql.types import _all_atomic_types, _parse_datatype_string
         for k, t in _all_atomic_types.items():
-            if t != NullType:
-                self.assertEqual(t(), _parse_datatype_string(k))
+            self.assertEqual(t(), _parse_datatype_string(k))
         self.assertEqual(IntegerType(), _parse_datatype_string("int"))
         self.assertEqual(DecimalType(1, 1), _parse_datatype_string("decimal(1  ,1)"))
         self.assertEqual(DecimalType(10, 1), _parse_datatype_string("decimal( 10,1 )"))

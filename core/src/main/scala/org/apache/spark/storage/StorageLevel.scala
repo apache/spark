@@ -59,10 +59,6 @@ class StorageLevel private(
 
   assert(replication < 40, "Replication restricted to be less than 40 for calculating hash codes")
 
-  if (useOffHeap) {
-    require(!deserialized, "Off-heap storage level does not support deserialized storage")
-  }
-
   private[spark] def memoryMode: MemoryMode = {
     if (useOffHeap) MemoryMode.OFF_HEAP
     else MemoryMode.ON_HEAP

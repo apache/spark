@@ -111,7 +111,7 @@ class PandasOnSparkBoxPlot(PandasBoxPlot, BoxPlotBase):
         precision=None,
     ):
         def update_dict(dictionary, rc_name, properties):
-            """ Loads properties in the dictionary from rc file if not already
+            """Loads properties in the dictionary from rc file if not already
             in the dictionary"""
             rc_str = "boxplot.{0}.{1}"
             if dictionary is None:

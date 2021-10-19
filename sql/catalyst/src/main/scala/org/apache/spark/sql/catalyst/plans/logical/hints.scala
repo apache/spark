@@ -30,7 +30,10 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_
 case class UnresolvedHint(name: String, parameters: Seq[Any], child: LogicalPlan)
   extends UnaryNode {
 
-  override lazy val resolved: Boolean = false
+  // we need it to be resolved so that the analyzer can continue to analyze the rest of the query
+  // plan.
+  override lazy val resolved: Boolean = child.resolved
+
   override def output: Seq[Attribute] = child.output
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_HINT)
 
@@ -209,6 +212,12 @@ trait HintErrorHandler {
    * @param hint the [[HintInfo]]
    */
   def joinNotFoundForJoinHint(hint: HintInfo): Unit
+
+  /**
+   * Callback for a join hint specified on a join that doesn't support this build side or
+   * doesn't have equi-join keys for equi-join.
+   */
+  def joinHintNotSupported(hint: HintInfo, reason: String): Unit
 
   /**
    * Callback for a hint being overridden by another conflicting hint of the same kind.

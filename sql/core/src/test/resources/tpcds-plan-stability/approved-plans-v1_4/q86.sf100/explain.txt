@@ -1,29 +1,25 @@
 == Physical Plan ==
-TakeOrderedAndProject (25)
-+- * Project (24)
-   +- Window (23)
-      +- * Sort (22)
-         +- Exchange (21)
-            +- * HashAggregate (20)
-               +- Exchange (19)
-                  +- * HashAggregate (18)
-                     +- * Expand (17)
-                        +- * Project (16)
-                           +- * BroadcastHashJoin Inner BuildRight (15)
-                              :- * Project (10)
-                              :  +- * BroadcastHashJoin Inner BuildRight (9)
+TakeOrderedAndProject (21)
++- * Project (20)
+   +- Window (19)
+      +- * Sort (18)
+         +- Exchange (17)
+            +- * HashAggregate (16)
+               +- Exchange (15)
+                  +- * HashAggregate (14)
+                     +- * Expand (13)
+                        +- * Project (12)
+                           +- * BroadcastHashJoin Inner BuildRight (11)
+                              :- * Project (6)
+                              :  +- * BroadcastHashJoin Inner BuildRight (5)
                               :     :- * Filter (3)
                               :     :  +- * ColumnarToRow (2)
                               :     :     +- Scan parquet default.web_sales (1)
-                              :     +- BroadcastExchange (8)
-                              :        +- * Project (7)
-                              :           +- * Filter (6)
-                              :              +- * ColumnarToRow (5)
-                              :                 +- Scan parquet default.date_dim (4)
-                              +- BroadcastExchange (14)
-                                 +- * Filter (13)
-                                    +- * ColumnarToRow (12)
-                                       +- Scan parquet default.item (11)
+                              :     +- ReusedExchange (4)
+                              +- BroadcastExchange (10)
+                                 +- * Filter (9)
+                                    +- * ColumnarToRow (8)
+                                       +- Scan parquet default.item (7)
 
 
 (1) Scan parquet default.web_sales
@@ -41,113 +37,117 @@ Input [3]: [ws_item_sk#1, ws_net_paid#2, ws_sold_date_sk#3]
 Input [3]: [ws_item_sk#1, ws_net_paid#2, ws_sold_date_sk#3]
 Condition : isnotnull(ws_item_sk#1)
 
-(4) Scan parquet default.date_dim
-Output [2]: [d_date_sk#5, d_month_seq#6]
-Batched: true
-Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1200), LessThanOrEqual(d_month_seq,1211), IsNotNull(d_date_sk)]
-ReadSchema: struct<d_date_sk:int,d_month_seq:int>
-
-(5) ColumnarToRow [codegen id : 1]
-Input [2]: [d_date_sk#5, d_month_seq#6]
-
-(6) Filter [codegen id : 1]
-Input [2]: [d_date_sk#5, d_month_seq#6]
-Condition : (((isnotnull(d_month_seq#6) AND (d_month_seq#6 >= 1200)) AND (d_month_seq#6 <= 1211)) AND isnotnull(d_date_sk#5))
-
-(7) Project [codegen id : 1]
+(4) ReusedExchange [Reuses operator id: 26]
 Output [1]: [d_date_sk#5]
-Input [2]: [d_date_sk#5, d_month_seq#6]
 
-(8) BroadcastExchange
-Input [1]: [d_date_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#7]
-
-(9) BroadcastHashJoin [codegen id : 3]
+(5) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ws_sold_date_sk#3]
 Right keys [1]: [d_date_sk#5]
 Join condition: None
 
-(10) Project [codegen id : 3]
+(6) Project [codegen id : 3]
 Output [2]: [ws_item_sk#1, ws_net_paid#2]
 Input [4]: [ws_item_sk#1, ws_net_paid#2, ws_sold_date_sk#3, d_date_sk#5]
 
-(11) Scan parquet default.item
-Output [3]: [i_item_sk#8, i_class#9, i_category#10]
+(7) Scan parquet default.item
+Output [3]: [i_item_sk#6, i_class#7, i_category#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_class:string,i_category:string>
 
-(12) ColumnarToRow [codegen id : 2]
-Input [3]: [i_item_sk#8, i_class#9, i_category#10]
+(8) ColumnarToRow [codegen id : 2]
+Input [3]: [i_item_sk#6, i_class#7, i_category#8]
 
-(13) Filter [codegen id : 2]
-Input [3]: [i_item_sk#8, i_class#9, i_category#10]
-Condition : isnotnull(i_item_sk#8)
+(9) Filter [codegen id : 2]
+Input [3]: [i_item_sk#6, i_class#7, i_category#8]
+Condition : isnotnull(i_item_sk#6)
 
-(14) BroadcastExchange
-Input [3]: [i_item_sk#8, i_class#9, i_category#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#11]
+(10) BroadcastExchange
+Input [3]: [i_item_sk#6, i_class#7, i_category#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#9]
 
-(15) BroadcastHashJoin [codegen id : 3]
+(11) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ws_item_sk#1]
-Right keys [1]: [i_item_sk#8]
+Right keys [1]: [i_item_sk#6]
 Join condition: None
 
-(16) Project [codegen id : 3]
-Output [3]: [ws_net_paid#2, i_category#10, i_class#9]
-Input [5]: [ws_item_sk#1, ws_net_paid#2, i_item_sk#8, i_class#9, i_category#10]
+(12) Project [codegen id : 3]
+Output [3]: [ws_net_paid#2, i_category#8, i_class#7]
+Input [5]: [ws_item_sk#1, ws_net_paid#2, i_item_sk#6, i_class#7, i_category#8]
 
-(17) Expand [codegen id : 3]
-Input [3]: [ws_net_paid#2, i_category#10, i_class#9]
-Arguments: [[ws_net_paid#2, i_category#10, i_class#9, 0], [ws_net_paid#2, i_category#10, null, 1], [ws_net_paid#2, null, null, 3]], [ws_net_paid#2, i_category#12, i_class#13, spark_grouping_id#14]
+(13) Expand [codegen id : 3]
+Input [3]: [ws_net_paid#2, i_category#8, i_class#7]
+Arguments: [[ws_net_paid#2, i_category#8, i_class#7, 0], [ws_net_paid#2, i_category#8, null, 1], [ws_net_paid#2, null, null, 3]], [ws_net_paid#2, i_category#10, i_class#11, spark_grouping_id#12]
 
-(18) HashAggregate [codegen id : 3]
-Input [4]: [ws_net_paid#2, i_category#12, i_class#13, spark_grouping_id#14]
-Keys [3]: [i_category#12, i_class#13, spark_grouping_id#14]
+(14) HashAggregate [codegen id : 3]
+Input [4]: [ws_net_paid#2, i_category#10, i_class#11, spark_grouping_id#12]
+Keys [3]: [i_category#10, i_class#11, spark_grouping_id#12]
 Functions [1]: [partial_sum(UnscaledValue(ws_net_paid#2))]
-Aggregate Attributes [1]: [sum#15]
-Results [4]: [i_category#12, i_class#13, spark_grouping_id#14, sum#16]
+Aggregate Attributes [1]: [sum#13]
+Results [4]: [i_category#10, i_class#11, spark_grouping_id#12, sum#14]
 
-(19) Exchange
-Input [4]: [i_category#12, i_class#13, spark_grouping_id#14, sum#16]
-Arguments: hashpartitioning(i_category#12, i_class#13, spark_grouping_id#14, 5), ENSURE_REQUIREMENTS, [id=#17]
+(15) Exchange
+Input [4]: [i_category#10, i_class#11, spark_grouping_id#12, sum#14]
+Arguments: hashpartitioning(i_category#10, i_class#11, spark_grouping_id#12, 5), ENSURE_REQUIREMENTS, [id=#15]
 
-(20) HashAggregate [codegen id : 4]
-Input [4]: [i_category#12, i_class#13, spark_grouping_id#14, sum#16]
-Keys [3]: [i_category#12, i_class#13, spark_grouping_id#14]
+(16) HashAggregate [codegen id : 4]
+Input [4]: [i_category#10, i_class#11, spark_grouping_id#12, sum#14]
+Keys [3]: [i_category#10, i_class#11, spark_grouping_id#12]
 Functions [1]: [sum(UnscaledValue(ws_net_paid#2))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#2))#18]
-Results [7]: [MakeDecimal(sum(UnscaledValue(ws_net_paid#2))#18,17,2) AS total_sum#19, i_category#12, i_class#13, (cast((shiftright(spark_grouping_id#14, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#14, 0) & 1) as tinyint)) AS lochierarchy#20, (cast((shiftright(spark_grouping_id#14, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#14, 0) & 1) as tinyint)) AS _w1#21, CASE WHEN (cast((shiftright(spark_grouping_id#14, 0) & 1) as tinyint) = 0) THEN i_category#12 END AS _w2#22, MakeDecimal(sum(UnscaledValue(ws_net_paid#2))#18,17,2) AS _w3#23]
+Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#2))#16]
+Results [7]: [MakeDecimal(sum(UnscaledValue(ws_net_paid#2))#16,17,2) AS total_sum#17, i_category#10, i_class#11, (cast((shiftright(spark_grouping_id#12, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#12, 0) & 1) as tinyint)) AS lochierarchy#18, (cast((shiftright(spark_grouping_id#12, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#12, 0) & 1) as tinyint)) AS _w1#19, CASE WHEN (cast((shiftright(spark_grouping_id#12, 0) & 1) as tinyint) = 0) THEN i_category#10 END AS _w2#20, MakeDecimal(sum(UnscaledValue(ws_net_paid#2))#16,17,2) AS _w3#21]
 
-(21) Exchange
-Input [7]: [total_sum#19, i_category#12, i_class#13, lochierarchy#20, _w1#21, _w2#22, _w3#23]
-Arguments: hashpartitioning(_w1#21, _w2#22, 5), ENSURE_REQUIREMENTS, [id=#24]
+(17) Exchange
+Input [7]: [total_sum#17, i_category#10, i_class#11, lochierarchy#18, _w1#19, _w2#20, _w3#21]
+Arguments: hashpartitioning(_w1#19, _w2#20, 5), ENSURE_REQUIREMENTS, [id=#22]
 
-(22) Sort [codegen id : 5]
-Input [7]: [total_sum#19, i_category#12, i_class#13, lochierarchy#20, _w1#21, _w2#22, _w3#23]
-Arguments: [_w1#21 ASC NULLS FIRST, _w2#22 ASC NULLS FIRST, _w3#23 DESC NULLS LAST], false, 0
+(18) Sort [codegen id : 5]
+Input [7]: [total_sum#17, i_category#10, i_class#11, lochierarchy#18, _w1#19, _w2#20, _w3#21]
+Arguments: [_w1#19 ASC NULLS FIRST, _w2#20 ASC NULLS FIRST, _w3#21 DESC NULLS LAST], false, 0
 
-(23) Window
-Input [7]: [total_sum#19, i_category#12, i_class#13, lochierarchy#20, _w1#21, _w2#22, _w3#23]
-Arguments: [rank(_w3#23) windowspecdefinition(_w1#21, _w2#22, _w3#23 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#25], [_w1#21, _w2#22], [_w3#23 DESC NULLS LAST]
+(19) Window
+Input [7]: [total_sum#17, i_category#10, i_class#11, lochierarchy#18, _w1#19, _w2#20, _w3#21]
+Arguments: [rank(_w3#21) windowspecdefinition(_w1#19, _w2#20, _w3#21 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#23], [_w1#19, _w2#20], [_w3#21 DESC NULLS LAST]
 
-(24) Project [codegen id : 6]
-Output [5]: [total_sum#19, i_category#12, i_class#13, lochierarchy#20, rank_within_parent#25]
-Input [8]: [total_sum#19, i_category#12, i_class#13, lochierarchy#20, _w1#21, _w2#22, _w3#23, rank_within_parent#25]
+(20) Project [codegen id : 6]
+Output [5]: [total_sum#17, i_category#10, i_class#11, lochierarchy#18, rank_within_parent#23]
+Input [8]: [total_sum#17, i_category#10, i_class#11, lochierarchy#18, _w1#19, _w2#20, _w3#21, rank_within_parent#23]
 
-(25) TakeOrderedAndProject
-Input [5]: [total_sum#19, i_category#12, i_class#13, lochierarchy#20, rank_within_parent#25]
-Arguments: 100, [lochierarchy#20 DESC NULLS LAST, CASE WHEN (lochierarchy#20 = 0) THEN i_category#12 END ASC NULLS FIRST, rank_within_parent#25 ASC NULLS FIRST], [total_sum#19, i_category#12, i_class#13, lochierarchy#20, rank_within_parent#25]
+(21) TakeOrderedAndProject
+Input [5]: [total_sum#17, i_category#10, i_class#11, lochierarchy#18, rank_within_parent#23]
+Arguments: 100, [lochierarchy#18 DESC NULLS LAST, CASE WHEN (lochierarchy#18 = 0) THEN i_category#10 END ASC NULLS FIRST, rank_within_parent#23 ASC NULLS FIRST], [total_sum#17, i_category#10, i_class#11, lochierarchy#18, rank_within_parent#23]
 
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 1 Hosting Expression = ws_sold_date_sk#3 IN dynamicpruning#4
-ReusedExchange (26)
+BroadcastExchange (26)
++- * Project (25)
+   +- * Filter (24)
+      +- * ColumnarToRow (23)
+         +- Scan parquet default.date_dim (22)
 
 
-(26) ReusedExchange [Reuses operator id: 8]
+(22) Scan parquet default.date_dim
+Output [2]: [d_date_sk#5, d_month_seq#24]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1200), LessThanOrEqual(d_month_seq,1211), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_month_seq:int>
+
+(23) ColumnarToRow [codegen id : 1]
+Input [2]: [d_date_sk#5, d_month_seq#24]
+
+(24) Filter [codegen id : 1]
+Input [2]: [d_date_sk#5, d_month_seq#24]
+Condition : (((isnotnull(d_month_seq#24) AND (d_month_seq#24 >= 1200)) AND (d_month_seq#24 <= 1211)) AND isnotnull(d_date_sk#5))
+
+(25) Project [codegen id : 1]
 Output [1]: [d_date_sk#5]
+Input [2]: [d_date_sk#5, d_month_seq#24]
+
+(26) BroadcastExchange
+Input [1]: [d_date_sk#5]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#25]
 
 

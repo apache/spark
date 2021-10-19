@@ -990,8 +990,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         """{"name": "gpu","addresses":["0", "1", "2"]}""")
 
       val conf = new SparkConf()
-        .setMaster("local-cluster[3, 1, 1024]")
+        .setMaster("local-cluster[3, 2, 1024]")
         .setAppName("test-cluster")
+        .set(CPUS_PER_TASK, 2)
         .set(WORKER_GPU_ID.amountConf, "3")
         .set(WORKER_GPU_ID.discoveryScriptConf, discoveryScript)
         .set(TASK_GPU_ID.amountConf, "3")
@@ -1002,11 +1003,18 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       // Ensure all executors has started
       TestUtils.waitUntilExecutorsUp(sc, 3, 60000)
 
-      val rdd = sc.makeRDD(1 to 10, 3).mapPartitions { it =>
+      val rdd1 = sc.makeRDD(1 to 10, 3).mapPartitions { it =>
+        val context = TaskContext.get()
+        Iterator(context.cpus())
+      }
+      val cpus = rdd1.collect()
+      assert(cpus === Array(2, 2, 2))
+
+      val rdd2 = sc.makeRDD(1 to 10, 3).mapPartitions { it =>
         val context = TaskContext.get()
         context.resources().get(GPU).get.addresses.iterator
       }
-      val gpus = rdd.collect()
+      val gpus = rdd2.collect()
       assert(gpus.sorted === Seq("0", "0", "0", "1", "1", "1", "2", "2", "2"))
 
       eventually(timeout(10.seconds)) {
@@ -1285,6 +1293,50 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       }
     }
   }
+
+  test("SPARK-35691: addFile/addJar/addDirectory should put CanonicalFile") {
+    withTempDir { dir =>
+      try {
+        sc = new SparkContext(
+          new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+
+        val sep = File.separator
+        val tmpCanonicalDir = Utils.createTempDir(dir.getAbsolutePath + sep + "test space")
+        val tmpAbsoluteDir = new File(tmpCanonicalDir.getAbsolutePath + sep + '.' + sep)
+        val tmpJar = File.createTempFile("test", ".jar", tmpAbsoluteDir)
+        val tmpFile = File.createTempFile("test", ".txt", tmpAbsoluteDir)
+
+        // Check those files and directory are not canonical
+        assert(tmpAbsoluteDir.getAbsolutePath !== tmpAbsoluteDir.getCanonicalPath)
+        assert(tmpJar.getAbsolutePath !== tmpJar.getCanonicalPath)
+        assert(tmpFile.getAbsolutePath !== tmpFile.getCanonicalPath)
+
+        sc.addJar(tmpJar.getAbsolutePath)
+        sc.addFile(tmpFile.getAbsolutePath)
+
+        assert(sc.listJars().size === 1)
+        assert(sc.listFiles().size === 1)
+        assert(sc.listJars().head.contains(tmpJar.getName))
+        assert(sc.listFiles().head.contains(tmpFile.getName))
+        assert(!sc.listJars().head.contains("." + sep))
+        assert(!sc.listFiles().head.contains("." + sep))
+      } finally {
+        sc.stop()
+      }
+    }
+  }
+
+  test("SPARK-36772: Store application attemptId in BlockStoreClient for push based shuffle") {
+    val conf = new SparkConf().setAppName("testAppAttemptId")
+      .setMaster("pushbasedshuffleclustermanager")
+    conf.set(PUSH_BASED_SHUFFLE_ENABLED.key, "true")
+    conf.set(IS_TESTING.key, "true")
+    conf.set(SHUFFLE_SERVICE_ENABLED.key, "true")
+    sc = new SparkContext(conf)
+    val env = SparkEnv.get
+    assert(env.blockManager.blockStoreClient.getAppAttemptId.equals("1"))
+  }
+
 }
 
 object SparkContextSuite {

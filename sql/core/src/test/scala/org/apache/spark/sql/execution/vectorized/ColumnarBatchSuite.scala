@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.vectorized
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
+import java.util
+import java.util.NoSuchElementException
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -36,7 +38,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, DateTimeUtils, 
 import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnarBatchRow, ColumnVector}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -1151,6 +1153,113 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }}
   }
 
+  test("ColumnarBatch customization") {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+      val schema = new StructType()
+        .add("intCol", IntegerType)
+        .add("doubleCol", DoubleType)
+        .add("intCol2", IntegerType)
+        .add("string", BinaryType)
+
+      val capacity = 4 * 1024
+      val columns = schema.fields.map { field =>
+        allocate(capacity, field.dataType, memMode)
+      }
+      val batch = new CustomizedColumnarBatch(columns.toArray)
+      assert(batch.numCols() == 4)
+      assert(batch.numRows() == 0)
+      assert(batch.rowIterator().hasNext == false)
+
+      // Add a row [1, 1.1, NULL, "Hello"]
+      columns(0).putInt(0, 1)
+      columns(1).putDouble(0, 1.1)
+      columns(2).putNull(0)
+      columns(3).putByteArray(0, "Hello".getBytes(StandardCharsets.UTF_8))
+      batch.setNumRows(1)
+
+      // Verify the results of the row.
+      assert(batch.numCols() == 4)
+      assert(batch.numRows() == 1)
+      // rowId 0 is skipped
+      assert(batch.rowIterator().hasNext == false)
+
+      // Reset and add 3 rows
+      columns.foreach(_.reset())
+      // Add rows [NULL, 2.2, 2, "abc"], [3, NULL, 3, ""], [4, 4.4, 4, "world"]
+      columns(0).putNull(0)
+      columns(1).putDouble(0, 2.2)
+      columns(2).putInt(0, 2)
+      columns(3).putByteArray(0, "abc".getBytes(StandardCharsets.UTF_8))
+
+      columns(0).putInt(1, 3)
+      columns(1).putNull(1)
+      columns(2).putInt(1, 3)
+      columns(3).putByteArray(1, "".getBytes(StandardCharsets.UTF_8))
+
+      columns(0).putInt(2, 4)
+      columns(1).putDouble(2, 4.4)
+      columns(2).putInt(2, 4)
+      columns(3).putByteArray(2, "world".getBytes(StandardCharsets.UTF_8))
+      batch.setNumRows(3)
+
+      def rowEquals(x: InternalRow, y: Row): Unit = {
+        assert(x.isNullAt(0) == y.isNullAt(0))
+        if (!x.isNullAt(0)) assert(x.getInt(0) == y.getInt(0))
+
+        assert(x.isNullAt(1) == y.isNullAt(1))
+        if (!x.isNullAt(1)) assert(x.getDouble(1) == y.getDouble(1))
+
+        assert(x.isNullAt(2) == y.isNullAt(2))
+        if (!x.isNullAt(2)) assert(x.getInt(2) == y.getInt(2))
+
+        assert(x.isNullAt(3) == y.isNullAt(3))
+        if (!x.isNullAt(3)) assert(x.getString(3) == y.getString(3))
+      }
+
+      // Verify
+      assert(batch.numRows() == 3)
+      val it2 = batch.rowIterator()
+      // Only second row is valid
+      rowEquals(it2.next(), Row(3, null, 3, ""))
+      assert(!it2.hasNext)
+
+      batch.close()
+    }}
+  }
+
+  class CustomizedColumnarBatch(columns: Array[ColumnVector]) extends ColumnarBatch(columns) {
+    val skipRowIds = List(0, 2)
+    override def rowIterator(): util.Iterator[InternalRow] = {
+      val maxRows: Int = numRows
+      val row = new ColumnarBatchRow(columns)
+      new util.Iterator[InternalRow]() {
+        var rowId = 0
+
+        override def hasNext: Boolean = {
+          while (skipRowIds.contains(rowId)) {
+            rowId += 1
+          }
+          rowId < maxRows
+        }
+
+        override def next: InternalRow = {
+          while (skipRowIds.contains(rowId)) {
+            rowId += 1
+          }
+
+          if (rowId >= maxRows) throw new NoSuchElementException
+          row.rowId = rowId
+          rowId += 1
+          row
+        }
+
+        override def remove(): Unit = {
+          throw new UnsupportedOperationException
+        }
+      }
+    }
+  }
+
   private def doubleEquals(d1: Double, d2: Double): Boolean = {
     if (d1.isNaN && d2.isNaN) {
       true
@@ -1387,6 +1496,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
             Nil
         )) ::
         StructField("int_to_int", MapType(IntegerType, IntegerType)) ::
+        StructField("binary", BinaryType) ::
         Nil)
     var mapBuilder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
     mapBuilder.put(1, 10)
@@ -1406,7 +1516,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       new CalendarInterval(1, 0, 0),
       new GenericArrayData(Array(1, 2, 3, 4, null)),
       new GenericInternalRow(Array[Any](5.asInstanceOf[Any], 10)),
-      mapBuilder.build()
+      mapBuilder.build(),
+      "Spark SQL".getBytes()
     ))
 
     mapBuilder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
@@ -1427,10 +1538,12 @@ class ColumnarBatchSuite extends SparkFunSuite {
       new CalendarInterval(-10, -50, -100),
       new GenericArrayData(Array(5, 10, -100)),
       new GenericInternalRow(Array[Any](20.asInstanceOf[Any], null)),
-      mapBuilder.build()
+      mapBuilder.build(),
+      "Parquet".getBytes()
     ))
 
     val row3 = new GenericInternalRow(Array[Any](
+      null,
       null,
       null,
       null,
@@ -1564,8 +1677,12 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(map2.valueArray().isNullAt(0))
       assert(map2.keyArray().getInt(1) == 40)
       assert(map2.valueArray().getInt(1) == 50)
-
       assert(columns(14).isNullAt(2))
+
+      assert(columns(15).dataType() == BinaryType)
+      assert(new String(columns(15).getBinary(0)) == "Spark SQL")
+      assert(new String(columns(15).getBinary(1)) == "Parquet")
+      assert(columns(15).isNullAt(2))
     } finally {
       batch.close()
     }

@@ -148,14 +148,13 @@ EXPLAIN FORMATTED
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-* Project (8)
-+- * Filter (7)
-   +- * HashAggregate (6)
-      +- Exchange (5)
-         +- * HashAggregate (4)
-            +- * Filter (3)
-               +- * ColumnarToRow (2)
-                  +- Scan parquet default.explain_temp1 (1)
+* Filter (7)
++- * HashAggregate (6)
+   +- Exchange (5)
+      +- * HashAggregate (4)
+         +- * Filter (3)
+            +- * ColumnarToRow (2)
+               +- Scan parquet default.explain_temp1 (1)
 
 
 (1) Scan parquet default.explain_temp1
@@ -188,15 +187,11 @@ Input [2]: [key#x, max#x]
 Keys [1]: [key#x]
 Functions [1]: [max(val#x)]
 Aggregate Attributes [1]: [max(val#x)#x]
-Results [3]: [key#x, max(val#x)#x AS max(val)#x, max(val#x)#x AS max(val#x)#x]
+Results [2]: [key#x, max(val#x)#x AS max(val)#x]
 
 (7) Filter [codegen id : 2]
-Input [3]: [key#x, max(val)#x, max(val#x)#x]
-Condition : (isnotnull(max(val#x)#x) AND (max(val#x)#x > 0))
-
-(8) Project [codegen id : 2]
-Output [2]: [key#x, max(val)#x]
-Input [3]: [key#x, max(val)#x, max(val#x)#x]
+Input [2]: [key#x, max(val)#x]
+Condition : (isnotnull(max(val)#x) AND (max(val)#x > 0))
 
 
 -- !query

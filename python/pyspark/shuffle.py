@@ -28,7 +28,7 @@ import sys
 import heapq
 from pyspark.serializers import BatchedSerializer, PickleSerializer, FlattenedValuesSerializer, \
     CompressedSerializer, AutoBatchedSerializer
-from pyspark.util import fail_on_stopiteration
+from pyspark.util import fail_on_stopiteration  # type: ignore
 
 
 try:

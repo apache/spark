@@ -432,12 +432,15 @@ case class JsonTuple(children: Seq[Expression])
       foldableFieldNames.map(_.orNull)
     } else if (constantFields == 0) {
       // none are foldable so all field names need to be evaluated from the input row
-      fieldExpressions.map(_.eval(input).asInstanceOf[UTF8String].toString)
+      fieldExpressions.map { expr =>
+        Option(expr.eval(input)).map(_.asInstanceOf[UTF8String].toString).orNull
+      }
     } else {
       // if there is a mix of constant and non-constant expressions
       // prefer the cached copy when available
       foldableFieldNames.zip(fieldExpressions).map {
-        case (null, expr) => expr.eval(input).asInstanceOf[UTF8String].toString
+        case (null, expr) =>
+          Option(expr.eval(input)).map(_.asInstanceOf[UTF8String].toString).orNull
         case (fieldName, _) => fieldName.orNull
       }
     }
@@ -561,7 +564,11 @@ case class JsonToStructs(
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
     case _: StructType | _: ArrayType | _: MapType =>
-      super.checkInputDataTypes()
+      ExprUtils.checkJsonSchema(nullableSchema).map { e =>
+        TypeCheckResult.TypeCheckFailure(e.getMessage)
+      } getOrElse {
+        super.checkInputDataTypes()
+      }
     case _ => TypeCheckResult.TypeCheckFailure(
       s"Input schema ${nullableSchema.catalogString} must be a struct, an array or a map.")
   }

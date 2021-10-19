@@ -19,6 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Date, Timestamp}
 import java.time.{Instant, LocalDate}
+import java.util
 
 import scala.collection.mutable.ArrayBuilder
 
@@ -30,7 +31,10 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.connector.catalog.index.TableIndex
+import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -240,7 +244,7 @@ abstract class JdbcDialect extends Serializable with Logging{
           val name = updateNull.fieldNames
           updateClause += getUpdateColumnNullabilityQuery(tableName, name(0), updateNull.nullable())
         case _ =>
-          throw new AnalysisException(s"Unsupported TableChange $change in JDBC catalog.")
+          throw QueryCompilationErrors.unsupportedTableChangeInJDBCCatalogError(change)
       }
     }
     updateClause.result()
@@ -284,6 +288,65 @@ abstract class JdbcDialect extends Serializable with Logging{
 
   def removeSchemaCommentQuery(schema: String): String = {
     s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS NULL"
+  }
+
+  /**
+   * Build a create index SQL statement.
+   *
+   * @param indexName         the name of the index to be created
+   * @param indexType         the type of the index to be created
+   * @param tableName         the table on which index to be created
+   * @param columns           the columns on which index to be created
+   * @param columnsProperties the properties of the columns on which index to be created
+   * @param properties        the properties of the index to be created
+   * @return                  the SQL statement to use for creating the index.
+   */
+  def createIndex(
+      indexName: String,
+      indexType: String,
+      tableName: String,
+      columns: Array[NamedReference],
+      columnsProperties: Array[util.Map[NamedReference, util.Properties]],
+      properties: util.Properties): String = {
+    throw new UnsupportedOperationException("createIndex is not supported")
+  }
+
+  /**
+   * Checks whether an index exists
+   *
+   * @param indexName the name of the index
+   * @param tableName the table name on which index to be checked
+   * @param options JDBCOptions of the table
+   * @return true if the index with `indexName` exists in the table with `tableName`,
+   *         false otherwise
+   */
+  def indexExists(
+      conn: Connection,
+      indexName: String,
+      tableName: String,
+      options: JDBCOptions): Boolean = {
+    throw new UnsupportedOperationException("indexExists is not supported")
+  }
+
+  /**
+   * Build a drop index SQL statement.
+   *
+   * @param indexName the name of the index to be dropped.
+   * @param tableName the table name on which index to be dropped.
+  * @return the SQL statement to use for dropping the index.
+   */
+  def dropIndex(indexName: String, tableName: String): String = {
+    throw new UnsupportedOperationException("dropIndex is not supported")
+  }
+
+  /**
+   * Lists all the indexes in this table.
+   */
+  def listIndexes(
+      conn: Connection,
+      tableName: String,
+      options: JDBCOptions): Array[TableIndex] = {
+    throw new UnsupportedOperationException("listIndexes is not supported")
   }
 
   /**

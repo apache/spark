@@ -83,7 +83,7 @@ case class ObjectHashAggregateExec(
     val aggTime = longMetric("aggTime")
     val spillSize = longMetric("spillSize")
     val numTasksFallBacked = longMetric("numTasksFallBacked")
-    val fallbackCountThreshold = sqlContext.conf.objectAggSortBasedFallbackThreshold
+    val fallbackCountThreshold = conf.objectAggSortBasedFallbackThreshold
 
     child.execute().mapPartitionsWithIndexInternal { (partIndex, iter) =>
       val beforeAgg = System.nanoTime()

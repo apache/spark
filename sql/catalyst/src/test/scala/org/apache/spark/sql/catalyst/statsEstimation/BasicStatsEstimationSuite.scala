@@ -259,11 +259,18 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
       expectedStatsCboOff = Statistics.DUMMY)
   }
 
-  test("SPARK-33954: Some operator missing rowCount when enable CBO") {
-    checkStats(
-      plan.repartition(10),
-      expectedStatsCboOn = Statistics(sizeInBytes = 120, rowCount = Some(10)),
-      expectedStatsCboOff = Statistics(sizeInBytes = 120))
+  test("SPARK-35203: Improve Repartition statistics estimation") {
+    Seq(
+      RepartitionByExpression(plan.output, plan, 10),
+      RepartitionByExpression(Nil, plan, None),
+      plan.repartition(2),
+      plan.coalesce(3)).foreach { rep =>
+      val expectedStats = Statistics(plan.size.get, Some(plan.rowCount), plan.attributeStats)
+      checkStats(
+        rep,
+        expectedStatsCboOn = expectedStats,
+        expectedStatsCboOff = expectedStats)
+    }
   }
 
   test("SPARK-34031: Union operator missing rowCount when enable CBO") {
@@ -284,12 +291,20 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
 
   test("SPARK-34121: Intersect operator missing rowCount when enable CBO") {
     val intersect = Intersect(plan, plan, false)
-    val childrenSize = intersect.children.size
     val sizeInBytes = plan.size.get
     val rowCount = Some(plan.rowCount)
     checkStats(
       intersect,
       expectedStatsCboOn = Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount),
+      expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes))
+  }
+
+  test("SPARK-35185: Improve Distinct statistics estimation") {
+    val distinct = Distinct(plan)
+    val sizeInBytes = plan.size.get
+    checkStats(
+      distinct,
+      expectedStatsCboOn = Statistics(sizeInBytes, Some(plan.rowCount), plan.attributeStats),
       expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes))
   }
 

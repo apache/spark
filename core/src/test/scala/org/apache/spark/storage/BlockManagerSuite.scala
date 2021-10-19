@@ -44,7 +44,7 @@ import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
-import org.apache.spark.memory.UnifiedMemoryManager
+import org.apache.spark.memory.{MemoryMode, UnifiedMemoryManager}
 import org.apache.spark.network.{BlockDataManager, BlockTransferService, TransportContext}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
@@ -52,6 +52,7 @@ import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransport
 import org.apache.spark.network.server.{NoOpRpcHandler, TransportServer, TransportServerBootstrap}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ExecutorDiskUtils, ExternalBlockStoreClient}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, RegisterExecutor}
+import org.apache.spark.network.util.{MapConfigProvider, TransportConf}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv}
 import org.apache.spark.scheduler.{LiveListenerBus, MapStatus, MergeStatus, SparkListenerBlockUpdated}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
@@ -97,6 +98,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .set(IS_TESTING, true)
       .set(MEMORY_FRACTION, 1.0)
       .set(MEMORY_STORAGE_FRACTION, 0.999)
+      .set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
       .set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
       .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
       .set(Network.RPC_ASK_TIMEOUT, "5s")
@@ -184,7 +186,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     liveListenerBus = spy(new LiveListenerBus(conf))
     master = spy(new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        liveListenerBus, None, blockManagerInfo, mapOutputTracker)),
+        liveListenerBus, None, blockManagerInfo, mapOutputTracker, isDriver = true)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true))
   }
@@ -302,6 +304,39 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // locations to BlockManagerMaster)
     master.updateBlockInfo(bm1Id, RDDBlockId(0, 0), StorageLevel.MEMORY_ONLY, 100, 0)
     master.updateBlockInfo(bm2Id, RDDBlockId(0, 1), StorageLevel.MEMORY_ONLY, 100, 0)
+  }
+
+  test("SPARK-36036: make sure temporary download files are deleted") {
+    val store = makeBlockManager(8000, "executor")
+
+    def createAndRegisterTempFileForDeletion(): String = {
+      val transportConf = new TransportConf("test", MapConfigProvider.EMPTY)
+      val tempDownloadFile = store.remoteBlockTempFileManager.createTempFile(transportConf)
+
+      tempDownloadFile.openForWriting().close()
+      assert(new File(tempDownloadFile.path()).exists(), "The file has been created")
+
+      val registered = store.remoteBlockTempFileManager.registerTempFileToClean(tempDownloadFile)
+      assert(registered, "The file has been successfully registered for auto clean up")
+
+      // tempDownloadFile and the channel for writing are local to the function so the references
+      // are going to be eliminated on exit
+      tempDownloadFile.path()
+    }
+
+    val filePath = createAndRegisterTempFileForDeletion()
+
+    val numberOfTries = 100 // try increasing if the test starts to behave flaky
+    val fileHasBeenDeleted = (1 to numberOfTries).exists { tryNo =>
+      // Unless -XX:-DisableExplicitGC is set it works in Hotspot JVM
+      System.gc()
+      Thread.sleep(tryNo)
+      val fileStillExists = new File(filePath).exists()
+      !fileStillExists
+    }
+
+    assert(fileHasBeenDeleted,
+      s"The file was supposed to be auto deleted (GC hinted $numberOfTries times)")
   }
 
   test("SPARK-32091: count failures from active executors when remove rdd/broadcast/shuffle") {
@@ -1526,7 +1561,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // Unroll with not enough space. This should succeed but kick out b1 in the process.
     // Memory store should contain b2 and b3, while disk store should contain only b1
-    val result3 = memoryStore.putIteratorAsValues("b3", smallIterator, ClassTag.Any)
+    val result3 = memoryStore.putIteratorAsValues("b3", smallIterator, MemoryMode.ON_HEAP,
+      ClassTag.Any)
     assert(result3.isRight)
     assert(!memoryStore.contains("b1"))
     assert(memoryStore.contains("b2"))
@@ -1542,7 +1578,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // the block may be stored to disk. During the unrolling process, block "b2" should be kicked
     // out, so the memory store should contain only b3, while the disk store should contain
     // b1, b2 and b4.
-    val result4 = memoryStore.putIteratorAsValues("b4", bigIterator, ClassTag.Any)
+    val result4 = memoryStore.putIteratorAsValues("b4", bigIterator, MemoryMode.ON_HEAP,
+      ClassTag.Any)
     assert(result4.isLeft)
     assert(!memoryStore.contains("b1"))
     assert(!memoryStore.contains("b2"))
@@ -1892,7 +1929,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getPeers(store3.blockManagerId).map(_.executorId).toSet === Set(exec2))
   }
 
-  test("test decommissionRddCacheBlocks should offload all cached blocks") {
+  test("test decommissionRddCacheBlocks should migrate all cached blocks") {
     val store1 = makeBlockManager(1000, "exec1")
     val store2 = makeBlockManager(1000, "exec2")
     val store3 = makeBlockManager(1000, "exec3")
@@ -1910,7 +1947,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       store3.blockManagerId))
   }
 
-  test("test decommissionRddCacheBlocks should keep the block if it is not able to offload") {
+  test("test decommissionRddCacheBlocks should keep the block if it is not able to migrate") {
     val store1 = makeBlockManager(3500, "exec1")
     val store2 = makeBlockManager(1000, "exec2")
 
@@ -1926,9 +1963,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     val decomManager = new BlockManagerDecommissioner(conf, store1)
     decomManager.decommissionRddCacheBlocks()
-    // Smaller block offloaded to store2
+    // Smaller block migrated to store2
     assert(master.getLocations(blockIdSmall) === Seq(store2.blockManagerId))
-    // Larger block still present in store1 as it can't be offloaded
+    // Larger block still present in store1 as it can't be migrated
     assert(master.getLocations(blockIdLarge) === Seq(store1.blockManagerId))
   }
 
@@ -1959,7 +1996,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     Files.write(bm2.diskBlockManager.getFile(shuffleIndex2).toPath(), shuffleIndexBlockContent)
 
     mapOutputTracker.registerShuffle(0, 2, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
-    val decomManager = new BlockManagerDecommissioner(conf, bm1)
+    val decomManager = new BlockManagerDecommissioner(
+      conf.set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true), bm1)
     try {
       mapOutputTracker.registerMapOutput(0, 0, MapStatus(bm1.blockManagerId, Array(blockSize), 0))
       mapOutputTracker.registerMapOutput(0, 1, MapStatus(bm1.blockManagerId, Array(blockSize), 1))
@@ -1970,7 +2008,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       when(env.conf).thenReturn(conf)
       SparkEnv.set(env)
 
-      decomManager.refreshOffloadingShuffleBlocks()
+      decomManager.refreshMigratableShuffleBlocks()
 
       if (willReject) {
         eventually(timeout(1.second), interval(10.milliseconds)) {
@@ -1988,12 +2026,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     } finally {
       mapOutputTracker.unregisterShuffle(0)
       // Avoid thread leak
-      decomManager.stopOffloadingShuffleBlocks()
+      decomManager.stopMigratingShuffleBlocks()
     }
-  }
-
-  test("SPARK-35589: test migration of index-only shuffle blocks during decommissioning") {
-    testShuffleBlockDecommissioning(None, true)
   }
 
   test("test migration of shuffle blocks during decommissioning - no limit") {
@@ -2039,7 +2073,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     makeBlockManager(100, "execE",
       transferService = Some(new MockBlockTransferService(10, "hostA")))
     assert(master.getShufflePushMergerLocations(5, Set.empty).size == 4)
-
+    assert(master.getExecutorEndpointRef(SparkContext.DRIVER_IDENTIFIER).isEmpty)
+    makeBlockManager(100, SparkContext.DRIVER_IDENTIFIER,
+      transferService = Some(new MockBlockTransferService(10, "host-driver")))
+    assert(master.getExecutorEndpointRef(SparkContext.DRIVER_IDENTIFIER).isDefined)
     master.removeExecutor("execA")
     master.removeExecutor("execE")
 
@@ -2048,6 +2085,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       Seq("hostC", "hostB", "hostD").sorted)
     assert(master.getShufflePushMergerLocations(4, Set.empty).map(_.host).sorted ===
       Seq("hostB", "hostA", "hostC", "hostD").sorted)
+    master.removeShufflePushMergerLocation("hostA")
+    assert(master.getShufflePushMergerLocations(4, Set.empty).map(_.host).sorted ===
+      Seq("hostB", "hostC", "hostD").sorted)
   }
 
   test("SPARK-33387 Support ordered shuffle block migration") {
@@ -2066,7 +2106,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     when(bm.getPeers(mc.any())).thenReturn(Seq.empty)
 
     val decomManager = new BlockManagerDecommissioner(conf, bm)
-    decomManager.refreshOffloadingShuffleBlocks()
+    decomManager.refreshMigratableShuffleBlocks()
 
     assert(sortedBlocks.sameElements(decomManager.shufflesToMigrate.asScala.map(_._1)))
   }

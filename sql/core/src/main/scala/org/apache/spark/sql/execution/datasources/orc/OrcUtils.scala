@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -32,7 +33,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CharVarcharUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
 import org.apache.spark.sql.types._
@@ -46,7 +47,10 @@ object OrcUtils extends Logging {
     "SNAPPY" -> ".snappy",
     "ZLIB" -> ".zlib",
     "ZSTD" -> ".zstd",
+    "LZ4" -> ".lz4",
     "LZO" -> ".lzo")
+
+  val CATALYST_TYPE_ATTRIBUTE_NAME = "spark.sql.catalyst.type"
 
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
     val origPath = new Path(pathStr)
@@ -83,6 +87,53 @@ object OrcUtils extends Logging {
     }
   }
 
+  private def toCatalystSchema(schema: TypeDescription): StructType = {
+    import TypeDescription.Category
+
+    def toCatalystType(orcType: TypeDescription): DataType = {
+      orcType.getCategory match {
+        case Category.STRUCT => toStructType(orcType)
+        case Category.LIST => toArrayType(orcType)
+        case Category.MAP => toMapType(orcType)
+        case _ =>
+          val catalystTypeAttrValue = orcType.getAttributeValue(CATALYST_TYPE_ATTRIBUTE_NAME)
+          if (catalystTypeAttrValue != null) {
+            CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+          } else {
+            CatalystSqlParser.parseDataType(orcType.toString)
+          }
+      }
+    }
+
+    def toStructType(orcType: TypeDescription): StructType = {
+      val fieldNames = orcType.getFieldNames.asScala
+      val fieldTypes = orcType.getChildren.asScala
+      val fields = new ArrayBuffer[StructField]()
+      fieldNames.zip(fieldTypes).foreach {
+        case (fieldName, fieldType) =>
+          val catalystType = toCatalystType(fieldType)
+          fields += StructField(fieldName, catalystType)
+      }
+      StructType(fields.toSeq)
+    }
+
+    def toArrayType(orcType: TypeDescription): ArrayType = {
+      val elementType = orcType.getChildren.get(0)
+      ArrayType(toCatalystType(elementType))
+    }
+
+    def toMapType(orcType: TypeDescription): MapType = {
+      val Seq(keyType, valueType) = orcType.getChildren.asScala.toSeq
+      val catalystKeyType = toCatalystType(keyType)
+      val catalystValueType = toCatalystType(valueType)
+      MapType(catalystKeyType, catalystValueType)
+    }
+
+    // The Spark query engine has not completely supported CHAR/VARCHAR type yet, and here we
+    // replace the orc CHAR/VARCHAR with STRING type.
+    CharVarcharUtils.replaceCharVarcharWithStringInSchema(toStructType(schema))
+  }
+
   def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
       : Option[StructType] = {
     val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
@@ -90,7 +141,7 @@ object OrcUtils extends Logging {
     files.toIterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
       case Some(schema) =>
         logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
-        CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType]
+        toCatalystSchema(schema)
     }
   }
 
@@ -99,8 +150,7 @@ object OrcUtils extends Logging {
       conf: Configuration,
       ignoreCorruptFiles: Boolean): Option[StructType] = {
     readSchema(file, conf, ignoreCorruptFiles) match {
-      case Some(schema) =>
-        Some(CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType])
+      case Some(schema) => Some(toCatalystSchema(schema))
 
       case None =>
         // Field names is empty or `FileFormatException` was thrown but ignoreCorruptFiles is true.
@@ -115,8 +165,7 @@ object OrcUtils extends Logging {
   def readOrcSchemasInParallel(
     files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean): Seq[StructType] = {
     ThreadUtils.parmap(files, "readingOrcSchemas", 8) { currentFile =>
-      OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles)
-        .map(s => CatalystSqlParser.parseDataType(s.toString).asInstanceOf[StructType])
+      OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles).map(toCatalystSchema)
     }.flatten
   }
 
@@ -224,7 +273,59 @@ object OrcUtils extends Logging {
       s"array<${orcTypeDescriptionString(a.elementType)}>"
     case m: MapType =>
       s"map<${orcTypeDescriptionString(m.keyType)},${orcTypeDescriptionString(m.valueType)}>"
+    case _: DayTimeIntervalType => LongType.catalogString
+    case _: YearMonthIntervalType => IntegerType.catalogString
     case _ => dt.catalogString
+  }
+
+  def orcTypeDescription(dt: DataType): TypeDescription = {
+    def getInnerTypeDecription(dt: DataType): Option[TypeDescription] = {
+      dt match {
+        case y: YearMonthIntervalType =>
+          val typeDesc = orcTypeDescription(IntegerType)
+          typeDesc.setAttribute(
+            CATALYST_TYPE_ATTRIBUTE_NAME, y.typeName)
+          Some(typeDesc)
+        case d: DayTimeIntervalType =>
+          val typeDesc = orcTypeDescription(LongType)
+          typeDesc.setAttribute(
+            CATALYST_TYPE_ATTRIBUTE_NAME, d.typeName)
+          Some(typeDesc)
+        case _ => None
+      }
+    }
+
+    dt match {
+      case s: StructType =>
+        val result = new TypeDescription(TypeDescription.Category.STRUCT)
+        s.fields.foreach { f =>
+          getInnerTypeDecription(f.dataType) match {
+            case Some(t) => result.addField(f.name, t)
+            case None => result.addField(f.name, orcTypeDescription(f.dataType))
+          }
+        }
+        result
+      case a: ArrayType =>
+        val result = new TypeDescription(TypeDescription.Category.LIST)
+        getInnerTypeDecription(a.elementType) match {
+          case Some(t) => result.addChild(t)
+          case None => result.addChild(orcTypeDescription(a.elementType))
+        }
+        result
+      case m: MapType =>
+        val result = new TypeDescription(TypeDescription.Category.MAP)
+        getInnerTypeDecription(m.keyType) match {
+          case Some(t) => result.addChild(t)
+          case None => result.addChild(orcTypeDescription(m.keyType))
+        }
+        getInnerTypeDecription(m.valueType) match {
+          case Some(t) => result.addChild(t)
+          case None => result.addChild(orcTypeDescription(m.valueType))
+        }
+        result
+      case other =>
+        TypeDescription.fromString(other.catalogString)
+    }
   }
 
   /**
@@ -252,5 +353,28 @@ object OrcUtils extends Logging {
     }
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
     resultSchemaString
+  }
+
+  /**
+   * Checks if `dataType` supports columnar reads.
+   *
+   * @param dataType Data type of the orc files.
+   * @param nestedColumnEnabled True if columnar reads is enabled for nested column types.
+   * @return Returns true if data type supports columnar reads.
+   */
+  def supportColumnarReads(
+      dataType: DataType,
+      nestedColumnEnabled: Boolean): Boolean = {
+    dataType match {
+      case _: AtomicType => true
+      case st: StructType if nestedColumnEnabled =>
+        st.forall(f => supportColumnarReads(f.dataType, nestedColumnEnabled))
+      case ArrayType(elementType, _) if nestedColumnEnabled =>
+        supportColumnarReads(elementType, nestedColumnEnabled)
+      case MapType(keyType, valueType, _) if nestedColumnEnabled =>
+        supportColumnarReads(keyType, nestedColumnEnabled) &&
+          supportColumnarReads(valueType, nestedColumnEnabled)
+      case _ => false
+    }
   }
 }

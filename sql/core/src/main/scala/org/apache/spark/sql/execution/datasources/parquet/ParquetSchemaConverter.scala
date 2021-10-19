@@ -266,7 +266,7 @@ class ParquetToSparkSchemaConverter(
   // Here we implement Parquet LIST backwards-compatibility rules.
   // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules
   // scalastyle:on
-  private def isElementType(repeatedType: Type, parentName: String): Boolean = {
+  private[parquet] def isElementType(repeatedType: Type, parentName: String): Boolean = {
     {
       // For legacy 2-level list types with primitive element type, e.g.:
       //
@@ -374,10 +374,10 @@ class SparkToParquetSchemaConverter(
         Types.primitive(INT32, repetition)
           .as(LogicalTypeAnnotation.intType(16, true)).named(field.name)
 
-      case IntegerType =>
+      case IntegerType | _: YearMonthIntervalType =>
         Types.primitive(INT32, repetition).named(field.name)
 
-      case LongType =>
+      case LongType | _: DayTimeIntervalType =>
         Types.primitive(INT64, repetition).named(field.name)
 
       case FloatType =>
@@ -586,15 +586,19 @@ private[sql] object ParquetSchemaConverter {
 
   def checkFieldName(name: String): Unit = {
     // ,;{}()\n\t= and space are special characters in Parquet schema
-    checkConversionRequirement(
-      !name.matches(".*[ ,;{}()\n\t=].*"),
-      s"""Attribute name "$name" contains invalid character(s) among " ,;{}()\\n\\t=".
-         |Please use alias to rename it.
-       """.stripMargin.split("\n").mkString(" ").trim)
+    if (name.matches(".*[ ,;{}()\n\t=].*")) {
+      throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(name)
+    }
   }
 
-  def checkFieldNames(names: Seq[String]): Unit = {
-    names.foreach(checkFieldName)
+  def checkFieldNames(schema: StructType): Unit = {
+    schema.foreach { field =>
+      checkFieldName(field.name)
+      field.dataType match {
+        case s: StructType => checkFieldNames(s)
+        case _ =>
+      }
+    }
   }
 
   def checkConversionRequirement(f: => Boolean, message: String): Unit = {

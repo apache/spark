@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Duration, Instant, LocalDate, Period}
 
 import scala.language.implicitConversions
 
@@ -102,6 +102,8 @@ package object dsl {
 
     def like(other: Expression, escapeChar: Char = '\\'): Expression =
       Like(expr, other, escapeChar)
+    def ilike(other: Expression, escapeChar: Char = '\\'): Expression =
+      new ILike(expr, other, escapeChar)
     def rlike(other: Expression): Expression = RLike(expr, other)
     def likeAll(others: Expression*): Expression =
       LikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
@@ -165,6 +167,8 @@ package object dsl {
     implicit def timestampToLiteral(t: Timestamp): Literal = Literal(t)
     implicit def instantToLiteral(i: Instant): Literal = Literal(i)
     implicit def binaryToLiteral(a: Array[Byte]): Literal = Literal(a)
+    implicit def periodToLiteral(p: Period): Literal = Literal(p)
+    implicit def durationToLiteral(d: Duration): Literal = Literal(d)
 
     implicit def symbolToUnresolvedAttribute(s: Symbol): analysis.UnresolvedAttribute =
       analysis.UnresolvedAttribute(s.name)
@@ -297,14 +301,24 @@ package object dsl {
       /** Creates a new AttributeReference of type timestamp */
       def timestamp: AttributeReference = AttributeReference(s, TimestampType, nullable = true)()
 
+      /** Creates a new AttributeReference of type timestamp without time zone */
+      def timestampNTZ: AttributeReference =
+        AttributeReference(s, TimestampNTZType, nullable = true)()
+
       /** Creates a new AttributeReference of the day-time interval type */
-      def dayTimeInterval: AttributeReference = {
-        AttributeReference(s, DayTimeIntervalType, nullable = true)()
+      def dayTimeInterval(startField: Byte, endField: Byte): AttributeReference = {
+        AttributeReference(s, DayTimeIntervalType(startField, endField), nullable = true)()
+      }
+      def dayTimeInterval(): AttributeReference = {
+        AttributeReference(s, DayTimeIntervalType(), nullable = true)()
       }
 
       /** Creates a new AttributeReference of the year-month interval type */
-      def yearMonthInterval: AttributeReference = {
-        AttributeReference(s, YearMonthIntervalType, nullable = true)()
+      def yearMonthInterval(startField: Byte, endField: Byte): AttributeReference = {
+        AttributeReference(s, YearMonthIntervalType(startField, endField), nullable = true)()
+      }
+      def yearMonthInterval(): AttributeReference = {
+        AttributeReference(s, YearMonthIntervalType(), nullable = true)()
       }
 
       /** Creates a new AttributeReference of type binary */
@@ -379,6 +393,13 @@ package object dsl {
         joinType: JoinType = Inner,
         condition: Option[Expression] = None): LogicalPlan =
         Join(logicalPlan, otherPlan, joinType, condition, JoinHint.NONE)
+
+      def lateralJoin(
+          otherPlan: LogicalPlan,
+          joinType: JoinType = Inner,
+          condition: Option[Expression] = None): LogicalPlan = {
+        LateralJoin(logicalPlan, LateralSubquery(otherPlan), joinType, condition)
+      }
 
       def cogroup[Key: Encoder, Left: Encoder, Right: Encoder, Result: Encoder](
           otherPlan: LogicalPlan,

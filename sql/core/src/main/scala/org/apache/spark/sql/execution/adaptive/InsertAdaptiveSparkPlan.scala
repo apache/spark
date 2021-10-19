@@ -45,6 +45,7 @@ case class InsertAdaptiveSparkPlan(
   private def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
     case _ if !conf.adaptiveExecutionEnabled => plan
     case _: ExecutedCommandExec => plan
+    case _: CommandResultExec => plan
     case c: DataWritingCommandExec => c.copy(child = apply(c.child))
     case c: V2CommandExec => c.withNewChildren(c.children.map(apply))
     case _ if shouldApplyAQE(plan, isSubquery) =>
@@ -67,7 +68,7 @@ case class InsertAdaptiveSparkPlan(
             plan
         }
       } else {
-        logWarning(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is enabled " +
+        logDebug(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is enabled " +
           s"but is not supported for query: $plan.")
         plan
       }
@@ -139,7 +140,8 @@ case class InsertAdaptiveSparkPlan(
 
         val name = s"dynamicpruning#${exprId.id}"
         val subquery = SubqueryAdaptiveBroadcastExec(
-          name, broadcastKeyIndex, buildKeys, executedPlan)
+          name, broadcastKeyIndex, onlyInBroadcast,
+          buildPlan, buildKeys, executedPlan)
         subqueryMap.put(exprId.id, subquery)
       case _ =>
     }))

@@ -32,7 +32,10 @@ import org.apache.spark.ml.linalg._
  * NOTE: The feature values are expected to already have be scaled (multiplied by bcInverseStd,
  * but NOT centered) before computation.
  *
- * @param bcCoefficients The coefficients corresponding to the features.
+ * @param bcCoefficients The coefficients corresponding to the features, it includes three parts:
+ *                       1, regression coefficients corresponding to the features;
+ *                       2, the intercept;
+ *                       3, the log of scale parameter.
  * @param fitIntercept Whether to fit an intercept term. When true, will perform data centering
  *                     in a virtual way. Then we MUST adjust the intercept of both initial
  *                     coefficients and final solution in the caller.
@@ -51,8 +54,6 @@ private[ml] class AFTBlockAggregator (
     case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector" +
       s" but got type ${bcCoefficients.value.getClass}.")
   }
-
-  @transient private lazy val linear = Vectors.dense(coefficientsArray.take(numFeatures))
 
   // pre-computed margin of an empty vector.
   // with this variable as an offset, for a sparse vector, we only need to
@@ -77,21 +78,16 @@ private[ml] class AFTBlockAggregator (
     require(block.labels.forall(_ > 0.0), "The lifetime or label should be greater than 0.")
 
     val size = block.size
-    val intercept = coefficientsArray(dim - 2)
     // sigma is the scale parameter of the AFT model
     val sigma = math.exp(coefficientsArray(dim - 1))
 
-    // vec/arr here represents margins
-    val vec = new DenseVector(Array.ofDim[Double](size))
-    val arr = vec.values
-    if (fitIntercept) {
-      val offset = if (fitIntercept) marginOffset else intercept
-      java.util.Arrays.fill(arr, offset)
-    }
-    BLAS.gemv(1.0, block.matrix, linear, 1.0, vec)
+    // arr here represents margins
+    val arr = Array.ofDim[Double](size)
+    if (fitIntercept) java.util.Arrays.fill(arr, marginOffset)
+    BLAS.gemv(1.0, block.matrix, coefficientsArray, 1.0, arr)
 
     // in-place convert margins to gradient scales
-    // then, vec represents gradient scales
+    // then, arr represents gradient scales
     var localLossSum = 0.0
     var i = 0
     var sigmaGradSum = 0.0
@@ -113,17 +109,8 @@ private[ml] class AFTBlockAggregator (
     lossSum += localLossSum
     weightSum += size
 
-    block.matrix match {
-      case dm: DenseMatrix =>
-        BLAS.nativeBLAS.dgemv("N", dm.numCols, dm.numRows, 1.0, dm.values, dm.numCols,
-          arr, 1, 1.0, gradientSumArray, 1)
-
-      case sm: SparseMatrix =>
-        val linearGradSumVec = new DenseVector(Array.ofDim[Double](numFeatures))
-        BLAS.gemv(1.0, sm.transpose, vec, 0.0, linearGradSumVec)
-        BLAS.javaBLAS.daxpy(numFeatures, 1.0, linearGradSumVec.values, 1,
-          gradientSumArray, 1)
-    }
+    // update the linear part of gradientSumArray
+    BLAS.gemv(1.0, block.matrix.transpose, arr, 1.0, gradientSumArray)
 
     if (fitIntercept) {
       // above update of the linear part of gradientSumArray does NOT take the centering

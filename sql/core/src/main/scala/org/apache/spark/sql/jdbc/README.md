@@ -6,9 +6,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -45,6 +45,12 @@ There are cases where the built-in CP doesn't provide the exact feature which ne
 so they can be turned off and can be replaced with custom implementation. All CPs must provide a `name`
 which must be unique. One can set the following configuration entry in `SparkConf` to turn off CPs:
 `spark.sql.sources.disabledJdbcConnProviderList=name1,name2`.
+
+## How to enforce a specific JDBC connection provider?
+
+When more than one JDBC connection provider can handle a specific driver and options, it is possible to
+disambiguate and enforce a particular CP for the JDBC data source. One can set the DataFrame
+option `connectionProvider` to specify the name of the CP they want to use.
 
 ## How a JDBC connection provider found when new connection initiated?
 

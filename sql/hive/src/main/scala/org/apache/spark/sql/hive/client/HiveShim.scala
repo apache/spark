@@ -33,19 +33,19 @@ import org.apache.hadoop.hive.metastore.TableType
 import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Function => HiveFunction, FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.io.AcidUtils
-import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
+import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, CatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{DateFormatter, TypeUtils}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AtomicType, DateType, IntegralType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -325,7 +325,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
         // Ignore this partition since it already exists and ignoreIfExists == true
       } else {
         if (location == null && table.isView()) {
-          throw new HiveException("LOCATION clause illegal for view partition");
+          throw QueryExecutionErrors.illegalLocationClauseForViewPartitionError()
         }
 
         createPartitionMethod.invoke(
@@ -378,8 +378,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       dbName: String,
       pattern: String,
       tableType: TableType): Seq[String] = {
-    throw new UnsupportedOperationException("Hive 2.2 and lower versions don't support " +
-      "getTablesByType. Please use Hive 2.3 or higher version.")
+    throw QueryExecutionErrors.getTablesByTypeUnsupportedByHiveVersionError()
   }
 
   override def loadPartition(
@@ -428,7 +427,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       ignoreIfNotExists: Boolean,
       purge: Boolean): Unit = {
     if (purge) {
-      throw new UnsupportedOperationException("DROP TABLE ... PURGE")
+      throw QueryExecutionErrors.dropTableWithPurgeUnsupportedError()
     }
     hive.dropTable(dbName, tableName, deleteData, ignoreIfNotExists)
   }
@@ -449,14 +448,13 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       deleteData: Boolean,
       purge: Boolean): Unit = {
     if (purge) {
-      throw new UnsupportedOperationException("ALTER TABLE ... DROP PARTITION ... PURGE")
+      throw QueryExecutionErrors.alterTableWithDropPartitionAndPurgeUnsupportedError()
     }
     hive.dropPartition(dbName, tableName, part, deleteData)
   }
 
   override def createFunction(hive: Hive, db: String, func: CatalogFunction): Unit = {
-    throw new AnalysisException("Hive 0.12 doesn't support creating permanent functions. " +
-      "Please use Hive 0.13 or higher.")
+    throw QueryCompilationErrors.hiveCreatePermanentFunctionsUnsupportedError()
   }
 
   def dropFunction(hive: Hive, db: String, name: String): Unit = {
@@ -599,7 +597,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         case ResourceType.ARCHIVE => "archive"
         case ResourceType.FILE => "file"
         case ResourceType.JAR => "jar"
-        case r => throw new AnalysisException(s"Unknown resource type: $r")
+        case r => throw QueryCompilationErrors.unknownHiveResourceTypeError(r.toString)
       }
       FunctionResource(FunctionResourceType.fromString(resourceType), uri.getUri())
     }
@@ -762,7 +760,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       def unapply(expr: Expression): Option[Attribute] = {
         expr match {
           case attr: Attribute => Some(attr)
-          case Cast(child @ IntegralType(), dt: IntegralType, _)
+          case Cast(child @ IntegralType(), dt: IntegralType, _, _)
               if Cast.canUpCast(child.dataType.asInstanceOf[AtomicType], dt) => unapply(child)
           case _ => None
         }
@@ -859,8 +857,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     } else if (!str.contains("'")) {
       s"""'$str'"""
     } else {
-      throw new UnsupportedOperationException(
-        """Partition filter cannot have both `"` and `'` characters""")
+      throw QueryExecutionErrors.invalidPartitionFilterError()
     }
   }
 
@@ -879,33 +876,33 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       } else {
         logDebug(s"Hive metastore filter is '$filter'.")
         val tryDirectSqlConfVar = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL
-        // We should get this config value from the metaStore. otherwise hit SPARK-18681.
-        // To be compatible with hive-0.12 and hive-0.13, In the future we can achieve this by:
-        // val tryDirectSql = hive.getMetaConf(tryDirectSqlConfVar.varname).toBoolean
-        val tryDirectSql = hive.getMSC.getConfigValue(tryDirectSqlConfVar.varname,
-          tryDirectSqlConfVar.defaultBoolVal.toString).toBoolean
+        val shouldFallback = SQLConf.get.metastorePartitionPruningFallbackOnException
         try {
           // Hive may throw an exception when calling this method in some circumstances, such as
           // when filtering on a non-string partition column when the hive config key
-          // hive.metastore.try.direct.sql is false
+          // hive.metastore.try.direct.sql is false. In some cases the remote metastore will throw
+          // exceptions even if the config is true, due to various reasons including the
+          // underlying RDBMS, Hive bugs when generating the filter, etc.
+          //
+          // Because of the above we'll fallback to use `Hive.getAllPartitionsOf` when the exception
+          // occurs and the config`spark.sql.hive.metastorePartitionPruningFallbackOnException` is
+          // enabled.
           getPartitionsByFilterMethod.invoke(hive, table, filter)
             .asInstanceOf[JArrayList[Partition]]
         } catch {
           case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] &&
-              !tryDirectSql =>
+              shouldFallback =>
             logWarning("Caught Hive MetaException attempting to get partition metadata by " +
               "filter from Hive. Falling back to fetching all partition metadata, which will " +
               "degrade performance. Modifying your Hive metastore configuration to set " +
-              s"${tryDirectSqlConfVar.varname} to true may resolve this problem.", ex)
+              s"${tryDirectSqlConfVar.varname} to true (if it is not true already) may resolve " +
+              "this problem. Otherwise, to avoid degraded performance you can set " +
+              s"${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key} " +
+              " to false and let the query fail instead.", ex)
             // HiveShim clients are expected to handle a superset of the requested partitions
             getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
-          case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] &&
-              tryDirectSql =>
-            throw new RuntimeException("Caught Hive MetaException attempting to get partition " +
-              "metadata by filter from Hive. You can set the Spark configuration setting " +
-              s"${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key} to false to work around this " +
-              "problem, however this will result in degraded performance. Please report a bug: " +
-              "https://issues.apache.org/jira/browse/SPARK", ex)
+          case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] =>
+            throw QueryExecutionErrors.getPartitionMetadataByFilterError(ex)
         }
       }
 

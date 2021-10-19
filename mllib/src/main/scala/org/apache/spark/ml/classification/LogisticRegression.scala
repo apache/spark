@@ -29,6 +29,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature._
+import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator._
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
@@ -485,7 +486,8 @@ class LogisticRegression @Since("1.2.0") (
 
   private var optInitialModel: Option[LogisticRegressionModel] = None
 
-  private[spark] def setInitialModel(model: LogisticRegressionModel): this.type = {
+  @Since("3.3.0")
+  def setInitialModel(model: LogisticRegressionModel): this.type = {
     this.optInitialModel = Some(model)
     this
   }
@@ -1224,36 +1226,12 @@ class LogisticRegressionModel private[spark] (
       case dv: DenseVector =>
         val values = dv.values
         if (isMultinomial) {
-          // get the maximum margin
-          val maxMarginIndex = rawPrediction.argmax
-          val maxMargin = rawPrediction(maxMarginIndex)
-
-          if (maxMargin == Double.PositiveInfinity) {
-            var k = 0
-            while (k < numClasses) {
-              values(k) = if (k == maxMarginIndex) 1.0 else 0.0
-              k += 1
-            }
-          } else {
-            var sum = 0.0
-            var k = 0
-            while (k < numClasses) {
-              values(k) = if (maxMargin > 0) {
-                math.exp(values(k) - maxMargin)
-              } else {
-                math.exp(values(k))
-              }
-              sum += values(k)
-              k += 1
-            }
-            BLAS.scal(1 / sum, dv)
-          }
-          dv
+          Utils.softmax(values)
         } else {
           values(0) = 1.0 / (1.0 + math.exp(-values(0)))
           values(1) = 1.0 - values(0)
-          dv
         }
+        dv
       case sv: SparseVector =>
         throw new RuntimeException("Unexpected error in LogisticRegressionModel:" +
           " raw2probabilitiesInPlace encountered SparseVector")

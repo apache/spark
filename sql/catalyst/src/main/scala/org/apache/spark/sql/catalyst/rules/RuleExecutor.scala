@@ -156,7 +156,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
    * `Optimizer`, so we can catch rules that return invalid plans. The check function returns
    * `false` if the given plan doesn't pass the structural integrity check.
    */
-  protected def isPlanIntegral(plan: TreeType): Boolean = true
+  protected def isPlanIntegral(previousPlan: TreeType, currentPlan: TreeType): Boolean = true
 
   /**
    * Util method for checking whether a plan remains the same if re-optimized.
@@ -192,7 +192,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     val beforeMetrics = RuleExecutor.getCurrentMetrics()
 
     // Run the structural integrity checker against the initial input
-    if (!isPlanIntegral(plan)) {
+    if (!isPlanIntegral(plan, plan)) {
       throw QueryExecutionErrors.structuralIntegrityOfInputPlanIsBrokenInClassError(
         this.getClass.getName.stripSuffix("$"))
     }
@@ -224,7 +224,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             tracker.foreach(_.recordRuleInvocation(rule.ruleName, runTime, effective))
 
             // Run the structural integrity checker against the plan after each rule.
-            if (effective && !isPlanIntegral(result)) {
+            if (effective && !isPlanIntegral(plan, result)) {
               throw QueryExecutionErrors.structuralIntegrityIsBrokenAfterApplyingRuleError(
                 rule.ruleName, batch.name)
             }

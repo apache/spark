@@ -149,14 +149,13 @@ EXPLAIN FORMATTED
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-AdaptiveSparkPlan (8)
-+- Project (7)
-   +- Filter (6)
-      +- HashAggregate (5)
-         +- Exchange (4)
-            +- HashAggregate (3)
-               +- Filter (2)
-                  +- Scan parquet default.explain_temp1 (1)
+AdaptiveSparkPlan (7)
++- Filter (6)
+   +- HashAggregate (5)
+      +- Exchange (4)
+         +- HashAggregate (3)
+            +- Filter (2)
+               +- Scan parquet default.explain_temp1 (1)
 
 
 (1) Scan parquet default.explain_temp1
@@ -186,17 +185,13 @@ Input [2]: [key#x, max#x]
 Keys [1]: [key#x]
 Functions [1]: [max(val#x)]
 Aggregate Attributes [1]: [max(val#x)#x]
-Results [3]: [key#x, max(val#x)#x AS max(val)#x, max(val#x)#x AS max(val#x)#x]
+Results [2]: [key#x, max(val#x)#x AS max(val)#x]
 
 (6) Filter
-Input [3]: [key#x, max(val)#x, max(val#x)#x]
-Condition : (isnotnull(max(val#x)#x) AND (max(val#x)#x > 0))
+Input [2]: [key#x, max(val)#x]
+Condition : (isnotnull(max(val)#x) AND (max(val)#x > 0))
 
-(7) Project
-Output [2]: [key#x, max(val)#x]
-Input [3]: [key#x, max(val)#x, max(val#x)#x]
-
-(8) AdaptiveSparkPlan
+(7) AdaptiveSparkPlan
 Output [2]: [key#x, max(val)#x]
 Arguments: isFinalPlan=false
 

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import scala.annotation.tailrec
+
 import org.apache.spark.sql.catalyst.expressions._
 
 
@@ -67,9 +69,9 @@ trait ConstraintHelper {
         val candidateConstraints = predicates - eq
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
-      case eq @ EqualTo(l @ Cast(_: Attribute, _, _), r: Attribute) =>
+      case eq @ EqualTo(l @ Cast(_: Attribute, _, _, _), r: Attribute) =>
         inferredConstraints ++= replaceConstraints(predicates - eq, r, l)
-      case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _)) =>
+      case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _, _)) =>
         inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
       case _ => // No inference
     }
@@ -117,11 +119,21 @@ trait ConstraintHelper {
       case _ => scanNullIntolerantAttribute(constraint).map(IsNotNull(_))
     }
 
+  @tailrec
+  private def isExtractOnly(e: Expression): Boolean = e match {
+    case g: GetStructField => isExtractOnly(g.child)
+    case g: GetArrayStructFields => isExtractOnly(g.child)
+    case _: Attribute => true
+    case _ => false
+  }
+
+
   /**
-   * Recursively explores the expressions which are null intolerant and returns all attributes
-   * in these expressions.
+   * Recursively explores the expressions which are null intolerant and returns all
+   * attributes/ExtractValues in these expressions for scalar/nested types respectively.
    */
-  private def scanNullIntolerantAttribute(expr: Expression): Seq[Attribute] = expr match {
+  private def scanNullIntolerantAttribute(expr: Expression): Seq[Expression] = expr match {
+    case e: ExtractValue if isExtractOnly(e) => Seq(e)
     case a: Attribute => Seq(a)
     case _: NullIntolerant => expr.children.flatMap(scanNullIntolerantAttribute)
     case _ => Seq.empty[Attribute]

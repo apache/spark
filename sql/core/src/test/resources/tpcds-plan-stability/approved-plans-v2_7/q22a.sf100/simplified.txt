@@ -25,7 +25,13 @@ TakeOrderedAndProject [qoh,i_product_name,i_brand,i_class,i_category]
                                                 InputAdapter
                                                   Scan parquet default.inventory [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk]
                                                     SubqueryBroadcast [d_date_sk] #1
-                                                      ReusedExchange [d_date_sk] #3
+                                                      BroadcastExchange #3
+                                                        WholeStageCodegen (1)
+                                                          Project [d_date_sk]
+                                                            Filter [d_month_seq,d_date_sk]
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet default.date_dim [d_date_sk,d_month_seq]
                                             InputAdapter
                                               BroadcastExchange #4
                                                 WholeStageCodegen (1)
@@ -34,13 +40,7 @@ TakeOrderedAndProject [qoh,i_product_name,i_brand,i_class,i_category]
                                                       InputAdapter
                                                         Scan parquet default.warehouse [w_warehouse_sk]
                                         InputAdapter
-                                          BroadcastExchange #3
-                                            WholeStageCodegen (2)
-                                              Project [d_date_sk]
-                                                Filter [d_month_seq,d_date_sk]
-                                                  ColumnarToRow
-                                                    InputAdapter
-                                                      Scan parquet default.date_dim [d_date_sk,d_month_seq]
+                                          ReusedExchange [d_date_sk] #3
                         InputAdapter
                           WholeStageCodegen (6)
                             Sort [i_item_sk]
@@ -59,31 +59,31 @@ TakeOrderedAndProject [qoh,i_product_name,i_brand,i_class,i_category]
               HashAggregate [i_product_name,i_brand,i_class,qoh] [sum,count,sum,count]
                 HashAggregate [i_product_name,i_brand,i_class,i_category,sum,count] [avg(inv_quantity_on_hand),qoh,sum,count]
                   InputAdapter
-                    ReusedExchange [i_product_name,i_brand,i_class,i_category,sum,count] #7
+                    ReusedExchange [i_product_name,i_brand,i_class,i_category,sum,count] #1
     WholeStageCodegen (26)
       HashAggregate [i_product_name,i_brand,sum,count] [avg(qoh),i_class,i_category,qoh,sum,count]
         InputAdapter
-          Exchange [i_product_name,i_brand] #8
+          Exchange [i_product_name,i_brand] #7
             WholeStageCodegen (25)
               HashAggregate [i_product_name,i_brand,qoh] [sum,count,sum,count]
                 HashAggregate [i_product_name,i_brand,i_class,i_category,sum,count] [avg(inv_quantity_on_hand),qoh,sum,count]
                   InputAdapter
-                    ReusedExchange [i_product_name,i_brand,i_class,i_category,sum,count] #7
+                    ReusedExchange [i_product_name,i_brand,i_class,i_category,sum,count] #1
     WholeStageCodegen (35)
       HashAggregate [i_product_name,sum,count] [avg(qoh),i_brand,i_class,i_category,qoh,sum,count]
         InputAdapter
-          Exchange [i_product_name] #9
+          Exchange [i_product_name] #8
             WholeStageCodegen (34)
               HashAggregate [i_product_name,qoh] [sum,count,sum,count]
                 HashAggregate [i_product_name,i_brand,i_class,i_category,sum,count] [avg(inv_quantity_on_hand),qoh,sum,count]
                   InputAdapter
-                    ReusedExchange [i_product_name,i_brand,i_class,i_category,sum,count] #7
+                    ReusedExchange [i_product_name,i_brand,i_class,i_category,sum,count] #1
     WholeStageCodegen (44)
       HashAggregate [sum,count] [avg(qoh),i_product_name,i_brand,i_class,i_category,qoh,sum,count]
         InputAdapter
-          Exchange #10
+          Exchange #9
             WholeStageCodegen (43)
               HashAggregate [qoh] [sum,count,sum,count]
                 HashAggregate [i_product_name,i_brand,i_class,i_category,sum,count] [avg(inv_quantity_on_hand),qoh,sum,count]
                   InputAdapter
-                    ReusedExchange [i_product_name,i_brand,i_class,i_category,sum,count] #7
+                    ReusedExchange [i_product_name,i_brand,i_class,i_category,sum,count] #1

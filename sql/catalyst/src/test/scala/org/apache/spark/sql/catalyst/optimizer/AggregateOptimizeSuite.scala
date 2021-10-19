@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.internal.SQLConf.{AUTO_BROADCASTJOIN_THRESHOLD, CASE_SENSITIVE, GROUP_BY_ORDINAL}
+import org.apache.spark.sql.internal.SQLConf.{CASE_SENSITIVE, GROUP_BY_ORDINAL}
 
 class AggregateOptimizeSuite extends AnalysisTest {
   val analyzer = getAnalyzer
@@ -79,34 +79,18 @@ class AggregateOptimizeSuite extends AnalysisTest {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
     val query = Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr)).select("x.b".attr))
+    val correctAnswer = x.select("x.b".attr).groupBy("x.b".attr)("x.b".attr)
 
-    Seq(-1, 10000).foreach { autoBroadcastJoinThreshold =>
-      withSQLConf(AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$autoBroadcastJoinThreshold") {
-        val correctAnswer = if (autoBroadcastJoinThreshold < 0) {
-          x.select("x.b".attr).groupBy("x.b".attr)("x.b".attr)
-        } else {
-          Aggregate(query.child.output, query.child.output, query.child)
-        }
-        comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
-      }
-    }
+    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
   }
 
   test("SPARK-34808: Remove right join if it only has distinct on right side") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
     val query = Distinct(x.join(y, RightOuter, Some("x.a".attr === "y.a".attr)).select("y.b".attr))
+    val correctAnswer = y.select("y.b".attr).groupBy("y.b".attr)("y.b".attr)
 
-    Seq(-1, 10000).foreach { autoBroadcastJoinThreshold =>
-      withSQLConf(AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$autoBroadcastJoinThreshold") {
-        val correctAnswer = if (autoBroadcastJoinThreshold < 0) {
-          y.select("y.b".attr).groupBy("y.b".attr)("y.b".attr)
-        } else {
-          Aggregate(query.child.output, query.child.output, query.child)
-        }
-        comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
-      }
-    }
+    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
   }
 
   test("SPARK-34808: Should not remove left join if select 2 join sides") {
@@ -114,37 +98,31 @@ class AggregateOptimizeSuite extends AnalysisTest {
     val y = testRelation.subquery('y)
     val query = Distinct(x.join(y, RightOuter, Some("x.a".attr === "y.a".attr))
       .select("x.b".attr, "y.c".attr))
+    val correctAnswer = Aggregate(query.child.output, query.child.output, query.child)
 
-    Seq(-1, 10000).foreach { autoBroadcastJoinThreshold =>
-      withSQLConf(AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$autoBroadcastJoinThreshold") {
-        val correctAnswer = Aggregate(query.child.output, query.child.output, query.child)
-        comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
-      }
-    }
+    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
   }
 
   test("SPARK-34808: aggregateExpressions only contains groupingExpressions") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
-    withSQLConf(AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      comparePlans(
-        Optimize.execute(
-          Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
-            .select("x.b".attr, "x.b".attr)).analyze),
-        x.select("x.b".attr, "x.b".attr).groupBy("x.b".attr)("x.b".attr, "x.b".attr).analyze)
+    comparePlans(
+      Optimize.execute(
+        Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+          .select("x.b".attr, "x.b".attr)).analyze),
+      x.select("x.b".attr, "x.b".attr).groupBy("x.b".attr)("x.b".attr, "x.b".attr).analyze)
 
-      comparePlans(
-        Optimize.execute(
-          x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
-            .groupBy("x.a".attr, "x.b".attr)("x.b".attr, "x.a".attr).analyze),
-        x.groupBy("x.a".attr, "x.b".attr)("x.b".attr, "x.a".attr).analyze)
-
-      comparePlans(
-        Optimize.execute(
-          x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
-            .groupBy("x.a".attr)("x.a".attr, Literal(1)).analyze),
+    comparePlans(
+      Optimize.execute(
         x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
-          .groupBy("x.a".attr)("x.a".attr, Literal(1)).analyze)
-    }
+          .groupBy("x.a".attr, "x.b".attr)("x.b".attr, "x.a".attr).analyze),
+      x.groupBy("x.a".attr, "x.b".attr)("x.b".attr, "x.a".attr).analyze)
+
+    comparePlans(
+      Optimize.execute(
+        x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+          .groupBy("x.a".attr)("x.a".attr, Literal(1)).analyze),
+      x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+        .groupBy("x.a".attr)("x.a".attr, Literal(1)).analyze)
   }
 }

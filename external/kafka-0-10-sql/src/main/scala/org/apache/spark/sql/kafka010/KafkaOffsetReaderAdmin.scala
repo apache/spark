@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
-import org.apache.kafka.clients.admin.{Admin, ListOffsetsOptions, OffsetSpec}
+import org.apache.kafka.clients.admin.{Admin, ListOffsetsOptions, ListOffsetsResult, OffsetSpec}
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.{IsolationLevel, TopicPartition}
 import org.apache.kafka.common.requests.OffsetFetchResponse
@@ -33,6 +33,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
 
 /**
  * This class uses Kafka's own [[Admin]] API to read data offsets from Kafka.
@@ -135,12 +136,12 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       }.toMap
       case SpecificOffsetRangeLimit(partitionOffsets) =>
         validateTopicPartitions(partitions, partitionOffsets)
-      case SpecificTimestampRangeLimit(partitionTimestamps) =>
-        fetchSpecificTimestampBasedOffsets(partitionTimestamps,
-          failsOnNoMatchingOffset = isStartingOffsets).partitionToOffsets
-      case GlobalTimestampRangeLimit(timestamp) =>
-        fetchGlobalTimestampBasedOffsets(timestamp,
-          failsOnNoMatchingOffset = isStartingOffsets).partitionToOffsets
+      case SpecificTimestampRangeLimit(partitionTimestamps, strategyOnNoMatchingStartingOffset) =>
+        fetchSpecificTimestampBasedOffsets(partitionTimestamps, isStartingOffsets,
+          strategyOnNoMatchingStartingOffset).partitionToOffsets
+      case GlobalTimestampRangeLimit(timestamp, strategyOnNoMatchingStartingOffset) =>
+        fetchGlobalTimestampBasedOffsets(timestamp, isStartingOffsets,
+          strategyOnNoMatchingStartingOffset).partitionToOffsets
     }
   }
 
@@ -164,7 +165,10 @@ private[kafka010] class KafkaOffsetReaderAdmin(
 
   override def fetchSpecificTimestampBasedOffsets(
       partitionTimestamps: Map[TopicPartition, Long],
-      failsOnNoMatchingOffset: Boolean): KafkaSourceOffset = {
+      isStartingOffsets: Boolean,
+      strategyOnNoMatchStartingOffset: StrategyOnNoMatchStartingOffset.Value)
+    : KafkaSourceOffset = {
+
     val fnAssertParametersWithPartitions: ju.Set[TopicPartition] => Unit = { partitions =>
       assert(partitions.asScala == partitionTimestamps.keySet,
         "If starting/endingOffsetsByTimestamp contains specific offsets, you must specify all " +
@@ -172,34 +176,27 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       logDebug(s"Assigned partitions: $partitions. Seeking to $partitionTimestamps")
     }
 
-    val fnRetrievePartitionOffsets: ju.Set[TopicPartition] => Map[TopicPartition, Long] = { _ => {
-        val listOffsetsParams = partitionTimestamps.map { case (tp, timestamp) =>
-          tp -> OffsetSpec.forTimestamp(timestamp)
-        }.asJava
-        admin.listOffsets(listOffsetsParams, listOffsetsOptions).all().get().asScala.map {
-          case (tp, offsetSpec) =>
-            if (failsOnNoMatchingOffset) {
-              assert(offsetSpec.offset() != OffsetFetchResponse.INVALID_OFFSET, "No offset " +
-                s"matched from request of topic-partition $tp and timestamp " +
-                s"${partitionTimestamps(tp)}.")
-            }
+    val fnRetrievePartitionOffsets: ju.Set[TopicPartition] => Map[TopicPartition, Long] = { _ =>
+      val listOffsetsParams = partitionTimestamps.map { case (tp, timestamp) =>
+        tp -> OffsetSpec.forTimestamp(timestamp)
+      }.asJava
 
-            if (offsetSpec.offset() == OffsetFetchResponse.INVALID_OFFSET) {
-              tp -> KafkaOffsetRangeLimit.LATEST
-            } else {
-              tp -> offsetSpec.offset()
-            }
-        }.toMap
-      }
+      readTimestampOffsets(
+        admin.listOffsets(listOffsetsParams, listOffsetsOptions).all().get().asScala.toMap,
+        isStartingOffsets,
+        strategyOnNoMatchStartingOffset,
+        partitionTimestamps)
     }
 
     fetchSpecificOffsets0(fnAssertParametersWithPartitions, fnRetrievePartitionOffsets)
   }
 
-
   override def fetchGlobalTimestampBasedOffsets(
       timestamp: Long,
-      failsOnNoMatchingOffset: Boolean): KafkaSourceOffset = {
+      isStartingOffsets: Boolean,
+      strategyOnNoMatchStartingOffset: StrategyOnNoMatchStartingOffset.Value)
+    : KafkaSourceOffset = {
+
     val fnAssertParametersWithPartitions: ju.Set[TopicPartition] => Unit = { partitions =>
       logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $timestamp")
     }
@@ -208,23 +205,45 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       val listOffsetsParams = tps.asScala.map { tp =>
         tp -> OffsetSpec.forTimestamp(timestamp)
       }.toMap.asJava
-      admin.listOffsets(listOffsetsParams, listOffsetsOptions).all().get().asScala.map {
-        case (tp, offsetSpec) =>
-          if (failsOnNoMatchingOffset) {
-            assert(offsetSpec.offset() != OffsetFetchResponse.INVALID_OFFSET, "No offset " +
-              s"matched from request of topic-partition $tp and timestamp " +
-              s"$timestamp.")
-          }
 
-          if (offsetSpec.offset() == OffsetFetchResponse.INVALID_OFFSET) {
-            tp -> KafkaOffsetRangeLimit.LATEST
-          } else {
-            tp -> offsetSpec.offset()
-          }
-      }.toMap
+      readTimestampOffsets(
+        admin.listOffsets(listOffsetsParams, listOffsetsOptions).all().get().asScala.toMap,
+        isStartingOffsets,
+        strategyOnNoMatchStartingOffset,
+        _ => timestamp
+      )
     }
 
     fetchSpecificOffsets0(fnAssertParametersWithPartitions, fnRetrievePartitionOffsets)
+  }
+
+  private def readTimestampOffsets(
+      tpToOffsetMap: Map[TopicPartition, ListOffsetsResult.ListOffsetsResultInfo],
+      isStartingOffsets: Boolean,
+      strategyOnNoMatchStartingOffset: StrategyOnNoMatchStartingOffset.Value,
+      partitionTimestampFn: TopicPartition => Long): Map[TopicPartition, Long] = {
+
+    tpToOffsetMap.map { case (tp, offsetSpec) =>
+      val offset = if (offsetSpec.offset() == OffsetFetchResponse.INVALID_OFFSET) {
+        if (isStartingOffsets) {
+          strategyOnNoMatchStartingOffset match {
+            case StrategyOnNoMatchStartingOffset.ERROR =>
+              throw new IllegalArgumentException("No offset " +
+                s"matched from request of topic-partition $tp and timestamp " +
+                s"${partitionTimestampFn(tp)}.")
+
+            case StrategyOnNoMatchStartingOffset.LATEST =>
+              KafkaOffsetRangeLimit.LATEST
+          }
+        } else {
+          KafkaOffsetRangeLimit.LATEST
+        }
+      } else {
+        offsetSpec.offset()
+      }
+
+      tp -> offset
+    }.toMap
   }
 
   private def fetchSpecificOffsets0(

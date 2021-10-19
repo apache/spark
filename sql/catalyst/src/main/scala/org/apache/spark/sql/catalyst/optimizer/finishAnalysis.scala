@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -81,16 +81,19 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     val timestamp = timeExpr.eval(EmptyRow).asInstanceOf[Long]
     val currentTime = Literal.create(timestamp, timeExpr.dataType)
     val timezone = Literal.create(conf.sessionLocalTimeZone, StringType)
+    val localTimestamps = mutable.Map.empty[String, Literal]
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
       case currentDate @ CurrentDate(Some(timeZoneId)) =>
         currentDates.getOrElseUpdate(timeZoneId, {
-          Literal.create(
-            DateTimeUtils.microsToDays(timestamp, currentDate.zoneId),
-            DateType)
+          Literal.create(currentDate.eval().asInstanceOf[Int], DateType)
         })
       case CurrentTimestamp() | Now() => currentTime
       case CurrentTimeZone() => timezone
+      case localTimestamp @ LocalTimestamp(Some(timeZoneId)) =>
+        localTimestamps.getOrElseUpdate(timeZoneId, {
+          Literal.create(localTimestamp.eval().asInstanceOf[Long], TimestampNTZType)
+        })
     }
   }
 }
@@ -114,6 +117,27 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
         Literal.create(currentCatalog, StringType)
       case CurrentUser() =>
         Literal.create(currentUser, StringType)
+    }
+  }
+}
+
+/**
+ * Replaces casts of special datetime strings by its date/timestamp values
+ * if the input strings are foldable.
+ */
+object SpecialDatetimeValues extends Rule[LogicalPlan] {
+  private val conv = Map[DataType, (String, java.time.ZoneId) => Option[Any]](
+    DateType -> convertSpecialDate,
+    TimestampType -> convertSpecialTimestamp,
+    TimestampNTZType -> convertSpecialTimestampNTZ)
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transformAllExpressionsWithPruning(_.containsPattern(CAST)) {
+      case cast @ Cast(e, dt @ (DateType | TimestampType | TimestampNTZType), _, _)
+        if e.foldable && e.dataType == StringType =>
+        Option(e.eval())
+          .flatMap(s => conv(dt)(s.toString, cast.zoneId))
+          .map(Literal(_, dt))
+          .getOrElse(cast)
     }
   }
 }

@@ -899,6 +899,22 @@ class JDBCSuite extends QueryTest
       Option(TimestampType))
   }
 
+  test("MySQLDialect catalyst type mapping") {
+    val mySqlDialect = JdbcDialects.get("jdbc:mysql")
+    val metadata = new MetadataBuilder()
+    assert(mySqlDialect.getCatalystType(java.sql.Types.VARBINARY, "BIT", 2, metadata) ==
+      Some(LongType))
+    assert(metadata.build().contains("binarylong"))
+    assert(mySqlDialect.getCatalystType(java.sql.Types.VARBINARY, "BIT", 1, metadata) == None)
+    assert(mySqlDialect.getCatalystType(java.sql.Types.BIT, "TINYINT", 1, metadata) ==
+      Some(BooleanType))
+  }
+
+  test("SPARK-35446: MySQLDialect type mapping of float") {
+    val mySqlDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    assert(mySqlDialect.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT")
+  }
+
   test("PostgresDialect type mapping") {
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
     val md = new MetadataBuilder().putLong("scale", 0)
@@ -1705,6 +1721,40 @@ class JDBCSuite extends QueryTest
     checkAnswer(
       checkNotPushdown(sql("SELECT name, theid FROM predicateOption WHERE theid = 1")),
       Row("fred", 1) :: Nil)
+  }
+
+  test(
+    "SPARK-36574: pushDownPredicate=false should prevent push down filters to JDBC data source") {
+    val df = spark.read.format("jdbc")
+      .option("Url", urlWithUserAndPass)
+      .option("dbTable", "test.people")
+    val df1 = df
+      .option("pushDownPredicate", false)
+      .load()
+      .filter("theid = 1")
+      .select("name", "theid")
+    val df2 = df
+      .option("pushDownPredicate", true)
+      .load()
+      .filter("theid = 1")
+      .select("name", "theid")
+    val df3 = df
+      .load()
+      .select("name", "theid")
+
+    def getRowCount(df: DataFrame): Long = {
+      val queryExecution = df.queryExecution
+      val rawPlan = queryExecution.executedPlan.collect {
+        case p: DataSourceScanExec => p
+      } match {
+        case Seq(p) => p
+        case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
+      }
+      rawPlan.execute().count()
+    }
+
+    assert(getRowCount(df1) == df3.count)
+    assert(getRowCount(df2) < df3.count)
   }
 
   test("SPARK-26383 throw IllegalArgumentException if wrong kind of driver to the given url") {

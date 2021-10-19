@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog.functions;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.DataType;
 
@@ -38,6 +39,9 @@ import org.apache.spark.sql.types.DataType;
  * instead of a {@link InternalRow}. The magic method approach is generally recommended because it
  * provides better performance over the default {@link #produceResult}, due to optimizations such
  * as whole-stage codegen, elimination of Java boxing, etc.
+ * <p>
+ * The type parameters for the magic method <b>must match</b> those returned from
+ * {@link BoundFunction#inputTypes()}. Otherwise Spark will not be able to find the magic method.
  * <p>
  * In addition, for stateless Java functions, users can optionally define the
  * {@link #MAGIC_METHOD_NAME} as a static method, which further avoids certain runtime costs such
@@ -130,7 +134,10 @@ import org.apache.spark.sql.types.DataType;
  *
  * @param <R> the JVM type of result values, MUST be consistent with the {@link DataType}
  *          returned via {@link #resultType()}, according to the mapping above.
+ *
+ * @since 3.2.0
  */
+@Evolving
 public interface ScalarFunction<R> extends BoundFunction {
   String MAGIC_METHOD_NAME = "invoke";
 

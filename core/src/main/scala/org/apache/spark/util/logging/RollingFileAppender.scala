@@ -36,14 +36,16 @@ import org.apache.spark.internal.config
  * @param rollingPolicy           Policy based on which files will be rolled over.
  * @param conf                    SparkConf that is used to pass on extra configurations
  * @param bufferSize              Optional buffer size. Used mainly for testing.
+ * @param closeStreams            Option flag: whether to close the inputStream at the end.
  */
 private[spark] class RollingFileAppender(
     inputStream: InputStream,
     activeFile: File,
     val rollingPolicy: RollingPolicy,
     conf: SparkConf,
-    bufferSize: Int = RollingFileAppender.DEFAULT_BUFFER_SIZE
-  ) extends FileAppender(inputStream, activeFile, bufferSize) {
+    bufferSize: Int = RollingFileAppender.DEFAULT_BUFFER_SIZE,
+    closeStreams: Boolean = false
+  ) extends FileAppender(inputStream, activeFile, bufferSize, closeStreams) {
 
   private val maxRetainedFiles = conf.get(config.EXECUTOR_LOGS_ROLLING_MAX_RETAINED_FILES)
   private val enableCompression = conf.get(config.EXECUTOR_LOGS_ROLLING_ENABLE_COMPRESSION)

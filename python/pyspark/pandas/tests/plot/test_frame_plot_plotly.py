@@ -169,7 +169,8 @@ class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
             )
 
             self.assertEqual(
-                psdf.plot(kind="pie", values="a"), express.pie(pdf, values="a"),
+                psdf.plot(kind="pie", values="a"),
+                express.pie(pdf, values="a"),
             )
 
         psdf1 = self.psdf1

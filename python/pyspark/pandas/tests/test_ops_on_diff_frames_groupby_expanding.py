@@ -52,10 +52,18 @@ class OpsOnDiffFramesGroupByExpandingTest(PandasOnSparkTestCase, TestUtils):
         psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
-        self.assert_eq(
-            getattr(psdf.groupby(kkey).expanding(2), f)().sort_index(),
-            getattr(pdf.groupby(pkey).expanding(2), f)().sort_index(),
-        )
+        # The behavior of GroupBy.expanding is changed from pandas 1.3.
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            self.assert_eq(
+                getattr(psdf.groupby(kkey).expanding(2), f)().sort_index(),
+                getattr(pdf.groupby(pkey).expanding(2), f)().sort_index(),
+            )
+        else:
+            self.assert_eq(
+                getattr(psdf.groupby(kkey).expanding(2), f)().sort_index(),
+                getattr(pdf.groupby(pkey).expanding(2), f)().drop("a", axis=1).sort_index(),
+            )
+
         self.assert_eq(
             getattr(psdf.groupby(kkey)["b"].expanding(2), f)().sort_index(),
             getattr(pdf.groupby(pkey)["b"].expanding(2), f)().sort_index(),

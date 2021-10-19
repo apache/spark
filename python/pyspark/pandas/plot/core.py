@@ -20,13 +20,14 @@ import importlib
 import pandas as pd
 import numpy as np
 from pyspark.ml.feature import Bucketizer
-from pyspark.mllib.stat import KernelDensity
+from pyspark.mllib.stat import KernelDensity  # type: ignore[no-redef]
 from pyspark.sql import functions as F
 from pandas.core.base import PandasObject
 from pandas.core.dtypes.inference import is_integer
 
 from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.utils import name_like_string
 
 
@@ -97,10 +98,9 @@ class SampledPlotBase:
             )
 
 
-class HistogramPlotBase:
+class NumericPlotBase:
     @staticmethod
-    def prepare_hist_data(data, bins):
-        # TODO: this logic is similar with KdePlotBase. Might have to deduplicate it.
+    def prepare_numeric_data(data):
         from pyspark.pandas.series import Series
 
         if isinstance(data, Series):
@@ -116,6 +116,13 @@ class HistogramPlotBase:
                 "Empty {0!r}: no numeric data to " "plot".format(numeric_data.__class__.__name__)
             )
 
+        return data, numeric_data
+
+
+class HistogramPlotBase(NumericPlotBase):
+    @staticmethod
+    def prepare_hist_data(data, bins):
+        data, numeric_data = NumericPlotBase.prepare_numeric_data(data)
         if is_integer(bins):
             # computes boundaries for the column
             bins = HistogramPlotBase.get_bins(data.to_spark(), bins)
@@ -184,12 +191,12 @@ class HistogramPlotBase:
 
             if output_df is None:
                 output_df = bucket_df.select(
-                    F.lit(group_id).alias("__group_id"), F.col(bucket_name).alias("__bucket")
+                    SF.lit(group_id).alias("__group_id"), F.col(bucket_name).alias("__bucket")
                 )
             else:
                 output_df = output_df.union(
                     bucket_df.select(
-                        F.lit(group_id).alias("__group_id"), F.col(bucket_name).alias("__bucket")
+                        SF.lit(group_id).alias("__group_id"), F.col(bucket_name).alias("__bucket")
                     )
                 )
 
@@ -339,25 +346,10 @@ class BoxPlotBase:
         return fliers
 
 
-class KdePlotBase:
+class KdePlotBase(NumericPlotBase):
     @staticmethod
     def prepare_kde_data(data):
-        # TODO: this logic is similar with HistogramPlotBase. Might have to deduplicate it.
-        from pyspark.pandas.series import Series
-
-        if isinstance(data, Series):
-            data = data.to_frame()
-
-        numeric_data = data.select_dtypes(
-            include=["byte", "decimal", "integer", "float", "long", "double", np.datetime64]
-        )
-
-        # no empty frames or series allowed
-        if len(numeric_data.columns) == 0:
-            raise TypeError(
-                "Empty {0!r}: no numeric data to " "plot".format(numeric_data.__class__.__name__)
-            )
-
+        _, numeric_data = NumericPlotBase.prepare_numeric_data(data)
         return numeric_data
 
     @staticmethod
@@ -374,11 +366,19 @@ class KdePlotBase:
         if ind is None:
             min_val, max_val = calc_min_max()
             sample_range = max_val - min_val
-            ind = np.linspace(min_val - 0.5 * sample_range, max_val + 0.5 * sample_range, 1000,)
+            ind = np.linspace(
+                min_val - 0.5 * sample_range,
+                max_val + 0.5 * sample_range,
+                1000,
+            )
         elif is_integer(ind):
             min_val, max_val = calc_min_max()
             sample_range = max_val - min_val
-            ind = np.linspace(min_val - 0.5 * sample_range, max_val + 0.5 * sample_range, ind,)
+            ind = np.linspace(
+                min_val - 0.5 * sample_range,
+                max_val + 0.5 * sample_range,
+                ind,
+            )
         return ind
 
     @staticmethod
@@ -419,7 +419,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         "area": SampledPlotBase().get_sampled,
         "line": SampledPlotBase().get_sampled,
     }
-    _backends = {}  # type: ignore
+    _backends = {}  # type: ignore[var-annotated]
 
     def __init__(self, data):
         self.data = data

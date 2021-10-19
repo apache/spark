@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -143,7 +145,8 @@ object NestedColumnAliasing {
         attr -> evAliasSeq
       }
 
-    val nestedFieldToAlias = attributeToExtractValuesAndAliases.values.flatten.toMap
+    val nestedFieldToAlias = attributeToExtractValuesAndAliases.values.flatten
+      .map { case (field, alias) => field.canonicalized -> alias }.toMap
 
     // A reference attribute can have multiple aliases for nested fields.
     val attrToAliases =
@@ -166,10 +169,10 @@ object NestedColumnAliasing {
    */
   def getNewProjectList(
       projectList: Seq[NamedExpression],
-      nestedFieldToAlias: Map[ExtractValue, Alias]): Seq[NamedExpression] = {
+      nestedFieldToAlias: Map[Expression, Alias]): Seq[NamedExpression] = {
     projectList.map(_.transform {
-      case f: ExtractValue if nestedFieldToAlias.contains(f) =>
-        nestedFieldToAlias(f).toAttribute
+      case f: ExtractValue if nestedFieldToAlias.contains(f.canonicalized) =>
+        nestedFieldToAlias(f.canonicalized).toAttribute
     }.asInstanceOf[NamedExpression])
   }
 
@@ -179,13 +182,13 @@ object NestedColumnAliasing {
    */
   def replaceWithAliases(
       plan: LogicalPlan,
-      nestedFieldToAlias: Map[ExtractValue, Alias],
+      nestedFieldToAlias: Map[Expression, Alias],
       attrToAliases: AttributeMap[Seq[Alias]]): LogicalPlan = {
     plan.withNewChildren(plan.children.map { plan =>
       Project(plan.output.flatMap(a => attrToAliases.getOrElse(a, Seq(a))), plan)
     }).transformExpressions {
-      case f: ExtractValue if nestedFieldToAlias.contains(f) =>
-        nestedFieldToAlias(f).toAttribute
+      case f: ExtractValue if nestedFieldToAlias.contains(f.canonicalized) =>
+        nestedFieldToAlias(f.canonicalized).toAttribute
     }
   }
 
@@ -255,7 +258,14 @@ object NestedColumnAliasing {
     nestedFieldReferences
       .filter(!_.references.subsetOf(exclusiveAttrSet))
       .groupBy(_.references.head.canonicalized.asInstanceOf[Attribute])
-      .flatMap { case (attr: Attribute, nestedFields: Seq[ExtractValue]) =>
+      .flatMap { case (attr: Attribute, nestedFields: collection.Seq[ExtractValue]) =>
+
+        // Check if `ExtractValue` expressions contain any aggregate functions in their tree. Those
+        // that do should not have an alias generated as it can lead to pushing the aggregate down
+        // into a projection.
+        def containsAggregateFunction(ev: ExtractValue): Boolean =
+          ev.find(_.isInstanceOf[AggregateFunction]).isDefined
+
         // Remove redundant [[ExtractValue]]s if they share the same parent nest field.
         // For example, when `a.b` and `a.b.c` are in project list, we only need to alias `a.b`.
         // Because `a.b` requires all of the inner fields of `b`, we cannot prune `a.b.c`.
@@ -266,7 +276,10 @@ object NestedColumnAliasing {
             val child = e.children.head
             nestedFields.forall(f => child.find(_.semanticEquals(f)).isEmpty)
           case _ => true
-        }.distinct
+        }
+          .distinct
+          // Discard [[ExtractValue]]s that contain aggregate functions.
+          .filterNot(containsAggregateFunction)
 
         // If all nested fields of `attr` are used, we don't need to introduce new aliases.
         // By default, the [[ColumnPruning]] rule uses `attr` already.
@@ -274,7 +287,7 @@ object NestedColumnAliasing {
         // nested field once.
         val numUsedNestedFields = dedupNestedFields.map(_.canonicalized).distinct
           .map { nestedField => totalFieldNum(nestedField.dataType) }.sum
-        if (numUsedNestedFields < totalFieldNum(attr.dataType)) {
+        if (dedupNestedFields.nonEmpty && numUsedNestedFields < totalFieldNum(attr.dataType)) {
           Some((attr, dedupNestedFields.toSeq))
         } else {
           None

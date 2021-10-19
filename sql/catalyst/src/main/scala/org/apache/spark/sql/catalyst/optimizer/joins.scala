@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
@@ -132,7 +133,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  *
  * This rule should be executed before pushing down the Filter
  */
-object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
+object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Returns whether the expression returns null or false when all inputs are nulls.
@@ -171,21 +172,17 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper with Jo
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
 
-    case a @ Aggregate(_, _, join @ Join(left, _, LeftOuter, _, _))
-        if a.isDistinct && a.references.subsetOf(AttributeSet(left.output)) &&
-          !canPlanAsBroadcastHashJoin(join, conf) =>
+    case a @ Aggregate(_, _, Join(left, _, LeftOuter, _, _))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(left.output)) =>
       a.copy(child = left)
-    case a @ Aggregate(_, _, join @ Join(_, right, RightOuter, _, _))
-        if a.isDistinct && a.references.subsetOf(AttributeSet(right.output)) &&
-          !canPlanAsBroadcastHashJoin(join, conf) =>
+    case a @ Aggregate(_, _, Join(_, right, RightOuter, _, _))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(right.output)) =>
       a.copy(child = right)
-    case a @ Aggregate(_, _, p @ Project(_, join @ Join(left, _, LeftOuter, _, _)))
-        if a.isDistinct && a.references.subsetOf(AttributeSet(left.output)) &&
-          !canPlanAsBroadcastHashJoin(join, conf) =>
+    case a @ Aggregate(_, _, p @ Project(_, Join(left, _, LeftOuter, _, _)))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(left.output)) =>
       a.copy(child = p.copy(child = left))
-    case a @ Aggregate(_, _, p @ Project(_, join @ Join(_, right, RightOuter, _, _)))
-        if a.isDistinct && a.references.subsetOf(AttributeSet(right.output)) &&
-          !canPlanAsBroadcastHashJoin(join, conf) =>
+    case a @ Aggregate(_, _, p @ Project(_, Join(_, right, RightOuter, _, _)))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(right.output)) =>
       a.copy(child = p.copy(child = right))
   }
 }
@@ -276,28 +273,18 @@ trait JoinSelectionHelper {
     val buildLeft = if (hintOnly) {
       hintToShuffleHashJoinLeft(hint)
     } else {
-      if (hintToPreferShuffleHashJoinLeft(hint)) {
-        true
-      } else {
-        if (!conf.preferSortMergeJoin) {
-          canBuildLocalHashMapBySize(left, conf) && muchSmaller(left, right)
-        } else {
-          false
-        }
-      }
+      hintToPreferShuffleHashJoinLeft(hint) ||
+        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(left, conf) &&
+          muchSmaller(left, right)) ||
+        forceApplyShuffledHashJoin(conf)
     }
     val buildRight = if (hintOnly) {
       hintToShuffleHashJoinRight(hint)
     } else {
-      if (hintToPreferShuffleHashJoinRight(hint)) {
-        true
-      } else {
-        if (!conf.preferSortMergeJoin) {
-          canBuildLocalHashMapBySize(right, conf) && muchSmaller(right, left)
-        } else {
-          false
-        }
-      }
+      hintToPreferShuffleHashJoinRight(hint) ||
+        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(right, conf) &&
+          muchSmaller(right, left)) ||
+        forceApplyShuffledHashJoin(conf)
     }
     getBuildSide(
       canBuildShuffledHashJoinLeft(joinType) && buildLeft,
@@ -392,6 +379,14 @@ trait JoinSelectionHelper {
     hint.rightHint.exists(_.strategy.contains(PREFER_SHUFFLE_HASH))
   }
 
+  def hintToPreferShuffleHashJoin(hint: JoinHint): Boolean = {
+    hintToPreferShuffleHashJoinLeft(hint) || hintToPreferShuffleHashJoinRight(hint)
+  }
+
+  def hintToShuffleHashJoin(hint: JoinHint): Boolean = {
+    hintToShuffleHashJoinLeft(hint) || hintToShuffleHashJoinRight(hint)
+  }
+
   def hintToSortMergeJoin(hint: JoinHint): Boolean = {
     hint.leftHint.exists(_.strategy.contains(SHUFFLE_MERGE)) ||
       hint.rightHint.exists(_.strategy.contains(SHUFFLE_MERGE))
@@ -439,6 +434,15 @@ trait JoinSelectionHelper {
    */
   private def muchSmaller(a: LogicalPlan, b: LogicalPlan): Boolean = {
     a.stats.sizeInBytes * 3 <= b.stats.sizeInBytes
+  }
+
+  /**
+   * Returns whether a shuffled hash join should be force applied.
+   * The config key is hard-coded because it's testing only and should not be exposed.
+   */
+  private def forceApplyShuffledHashJoin(conf: SQLConf): Boolean = {
+    Utils.isTesting &&
+      conf.getConfString("spark.sql.join.forceApplyShuffledHashJoin", "false") == "true"
   }
 }
 

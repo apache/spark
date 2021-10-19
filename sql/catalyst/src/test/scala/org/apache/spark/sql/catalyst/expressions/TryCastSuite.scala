@@ -30,7 +30,7 @@ class TryCastSuite extends AnsiCastSuiteBase {
     }
   }
 
-  override def isAlwaysNullable: Boolean = true
+  override def isTryCast: Boolean = true
 
   override protected def setConfigurationHint: String = ""
 

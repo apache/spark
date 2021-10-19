@@ -188,7 +188,7 @@ directories called `"_temporary"` on a regular basis.
 1. For AWS S3, set a limit on how long multipart uploads can remain outstanding.
 This avoids incurring bills from incompleted uploads.
 1. For Google cloud, directory rename is file-by-file. Consider using the v2 committer
-and only write code which generates idemportent output -including filenames,
+and only write code which generates idempotent output -including filenames,
 as it is *no more unsafe* than the v1 committer, and faster.
 
 ### Parquet I/O Settings

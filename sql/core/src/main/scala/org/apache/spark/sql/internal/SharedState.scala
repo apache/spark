@@ -28,9 +28,10 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FsUrlStreamHandlerFactory, Path}
 
-import org.apache.spark.{SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab, StreamingQueryStatusStore}
@@ -68,7 +69,7 @@ private[sql] class SharedState(
     initialConfigs.foreach {
       // We have resolved the warehouse path and should not set warehouse conf here.
       case (k, _) if k == WAREHOUSE_PATH.key || k == SharedState.HIVE_WAREHOUSE_CONF_NAME =>
-      case (k, v) if SQLConf.staticConfKeys.contains(k) =>
+      case (k, v) if SQLConf.isStaticConfigKey(k) =>
         logDebug(s"Applying static initial session options to SparkConf: $k -> $v")
         confClone.set(k, v)
       case (k, v) =>
@@ -167,10 +168,7 @@ private[sql] class SharedState(
   lazy val globalTempViewManager: GlobalTempViewManager = {
     val globalTempDB = conf.get(GLOBAL_TEMP_DATABASE)
     if (externalCatalog.databaseExists(globalTempDB)) {
-      throw new SparkException(
-        s"$globalTempDB is a system preserved database, please rename your existing database " +
-          "to resolve the name conflict, or set a different value for " +
-          s"${GLOBAL_TEMP_DATABASE.key}, and launch your Spark application again.")
+      throw QueryExecutionErrors.databaseNameConflictWithSystemPreservedDatabaseError(globalTempDB)
     }
     new GlobalTempViewManager(globalTempDB)
   }

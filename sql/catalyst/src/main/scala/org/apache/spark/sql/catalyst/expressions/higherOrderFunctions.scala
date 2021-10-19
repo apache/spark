@@ -88,6 +88,9 @@ case class NamedLambdaVariable(
     AttributeReference(name, dataType, nullable, Metadata.empty)(exprId, Seq.empty)
   }
 
+  // Check if this lambda variable is referenced outside the lambda function it is bound to
+  override def references: AttributeSet = AttributeSet(toAttribute)
+
   override def eval(input: InternalRow): Any = value.get
 
   override def toString: String = s"lambda $name#${exprId.id}$typeSuffix"
@@ -112,6 +115,13 @@ case class LambdaFunction(
   override def dataType: DataType = function.dataType
   override def nullable: Boolean = function.nullable
   final override val nodePatterns: Seq[TreePattern] = Seq(LAMBDA_FUNCTION)
+
+  // Check if lambda variables bound to this lambda function are referenced in the wrong scope
+  override def references: AttributeSet = if (resolved) {
+    function.references -- AttributeSet(arguments.flatMap(_.references))
+  } else {
+    super.references
+  }
 
   lazy val bound: Boolean = arguments.forall(_.resolved)
 
@@ -196,6 +206,23 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
         case variable: NamedLambdaVariable if argumentMap.contains(variable.exprId) =>
           argumentMap(variable.exprId)
       }
+  }
+
+  override lazy val canonicalized: Expression = {
+    var currExprId = -1
+    val argumentMap = functions.flatMap(_.collect {
+      case l: NamedLambdaVariable =>
+        currExprId += 1
+        l.exprId -> currExprId
+    }).toMap
+
+    val cleaned = this.transformUp {
+      case l: NamedLambdaVariable if argumentMap.contains(l.exprId) =>
+        val newExprId = argumentMap(l.exprId)
+        NamedLambdaVariable("none", l.dataType, l.nullable, exprId = ExprId(newExprId), null)
+    }
+    val canonicalizedChildren = cleaned.children.map(_.canonicalized)
+    Canonicalize.execute(withNewChildren(canonicalizedChildren))
   }
 }
 
@@ -324,10 +351,12 @@ case class ArrayTransform(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """_FUNC_(expr, func) - Sorts the input array. If func is omitted, sort
-    in ascending order. The elements of the input array must be orderable. Null elements
-    will be placed at the end of the returned array. Since 3.0.0 this function also sorts
-    and returns the array based on the given comparator function. The comparator will
-    take two arguments representing two elements of the array.
+    in ascending order. The elements of the input array must be orderable.
+    NaN is greater than any non-NaN elements for double/float type.
+    Null elements will be placed at the end of the returned array.
+    Since 3.0.0 this function also sorts and returns the array based on the
+    given comparator function. The comparator will take two arguments representing
+    two elements of the array.
     It returns -1, 0, or 1 as the first element is less than, equal to, or greater
     than the second element. If the comparator function returns other
     values (including null), the function will fail and raise an error.

@@ -86,10 +86,10 @@ class OrcDeserializer(
       case ShortType => (ordinal, value) =>
         updater.setShort(ordinal, value.asInstanceOf[ShortWritable].get)
 
-      case IntegerType => (ordinal, value) =>
+      case IntegerType | _: YearMonthIntervalType => (ordinal, value) =>
         updater.setInt(ordinal, value.asInstanceOf[IntWritable].get)
 
-      case LongType => (ordinal, value) =>
+      case LongType | _: DayTimeIntervalType => (ordinal, value) =>
         updater.setLong(ordinal, value.asInstanceOf[LongWritable].get)
 
       case FloatType => (ordinal, value) =>
@@ -197,8 +197,10 @@ class OrcDeserializer(
     case BooleanType => UnsafeArrayData.fromPrimitiveArray(new Array[Boolean](length))
     case ByteType => UnsafeArrayData.fromPrimitiveArray(new Array[Byte](length))
     case ShortType => UnsafeArrayData.fromPrimitiveArray(new Array[Short](length))
-    case IntegerType => UnsafeArrayData.fromPrimitiveArray(new Array[Int](length))
-    case LongType => UnsafeArrayData.fromPrimitiveArray(new Array[Long](length))
+    case IntegerType | _: YearMonthIntervalType =>
+      UnsafeArrayData.fromPrimitiveArray(new Array[Int](length))
+    case LongType | _: DayTimeIntervalType =>
+      UnsafeArrayData.fromPrimitiveArray(new Array[Long](length))
     case FloatType => UnsafeArrayData.fromPrimitiveArray(new Array[Float](length))
     case DoubleType => UnsafeArrayData.fromPrimitiveArray(new Array[Double](length))
     case _ => new GenericArrayData(new Array[Any](length))

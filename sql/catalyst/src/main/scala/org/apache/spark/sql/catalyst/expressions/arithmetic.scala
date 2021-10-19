@@ -85,7 +85,7 @@ case class UnaryMinus(
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       val method = if (failOnError) "negateExact" else "negate"
       defineCodeGen(ctx, ev, c => s"$iu.$method($c)")
-    case DayTimeIntervalType | YearMonthIntervalType =>
+    case _: AnsiIntervalType =>
       nullSafeCodeGen(ctx, ev, eval => {
         val mathClass = classOf[Math].getName
         s"${ev.value} = $mathClass.negateExact($eval);"
@@ -96,8 +96,8 @@ case class UnaryMinus(
     case CalendarIntervalType if failOnError =>
       IntervalUtils.negateExact(input.asInstanceOf[CalendarInterval])
     case CalendarIntervalType => IntervalUtils.negate(input.asInstanceOf[CalendarInterval])
-    case DayTimeIntervalType => Math.negateExact(input.asInstanceOf[Long])
-    case YearMonthIntervalType => Math.negateExact(input.asInstanceOf[Int])
+    case _: DayTimeIntervalType => Math.negateExact(input.asInstanceOf[Long])
+    case _: YearMonthIntervalType => Math.negateExact(input.asInstanceOf[Int])
     case _ => numeric.negate(input)
   }
 
@@ -144,14 +144,16 @@ case class UnaryPositive(child: Expression)
 }
 
 /**
- * A function that get the absolute value of the numeric value.
+ * A function that get the absolute value of the numeric or interval value.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the absolute value of the numeric value.",
+  usage = "_FUNC_(expr) - Returns the absolute value of the numeric or interval value.",
   examples = """
     Examples:
       > SELECT _FUNC_(-1);
        1
+      > SELECT _FUNC_(INTERVAL -'1-1' YEAR TO MONTH);
+       1-1
   """,
   since = "1.2.0",
   group = "math_funcs")
@@ -160,11 +162,15 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
 
   def this(child: Expression) = this(child, SQLConf.get.ansiEnabled)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndAnsiInterval)
 
   override def dataType: DataType = child.dataType
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
+  private lazy val numeric = (dataType match {
+    case _: DayTimeIntervalType => LongExactNumeric
+    case _: YearMonthIntervalType => IntegerExactNumeric
+    case _ => TypeUtils.getNumeric(dataType, failOnError)
+  }).asInstanceOf[Numeric[Any]]
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType =>
@@ -187,6 +193,8 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
     case IntegerType | LongType if failOnError =>
       defineCodeGen(ctx, ev, c => s"$c < 0 ? java.lang.Math.negateExact($c) : $c")
 
+    case _: AnsiIntervalType =>
+      defineCodeGen(ctx, ev, c => s"$c < 0 ? java.lang.Math.negateExact($c) : $c")
 
     case dt: NumericType =>
       defineCodeGen(ctx, ev, c => s"(${CodeGenerator.javaType(dt)})(java.lang.Math.abs($c))")
@@ -229,7 +237,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
     case CalendarIntervalType =>
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$iu.$calendarIntervalMethod($eval1, $eval2)")
-    case DayTimeIntervalType | YearMonthIntervalType =>
+    case _: AnsiIntervalType =>
       assert(exactMathMethod.isDefined,
         s"The expression '$nodeName' must override the exactMathMethod() method " +
         "if it is supposed to operate over interval types.")
@@ -317,9 +325,9 @@ case class Add(
     case CalendarIntervalType =>
       IntervalUtils.add(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
-    case DayTimeIntervalType =>
+    case _: DayTimeIntervalType =>
       Math.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
-    case YearMonthIntervalType =>
+    case _: YearMonthIntervalType =>
       Math.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _ => numeric.plus(input1, input2)
   }
@@ -363,9 +371,9 @@ case class Subtract(
     case CalendarIntervalType =>
       IntervalUtils.subtract(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
-    case DayTimeIntervalType =>
+    case _: DayTimeIntervalType =>
       Math.subtractExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
-    case YearMonthIntervalType =>
+    case _: YearMonthIntervalType =>
       Math.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _ => numeric.minus(input1, input2)
   }
@@ -560,6 +568,8 @@ case class Divide(
     Examples:
       > SELECT 3 _FUNC_ 2;
        1
+      > SELECT INTERVAL '1-1' YEAR TO MONTH _FUNC_ INTERVAL '-1' MONTH;
+       -13
   """,
   since = "3.0.0",
   group = "math_funcs")
@@ -576,7 +586,8 @@ case class IntegralDivide(
     case _ => false
   }
 
-  override def inputType: AbstractDataType = TypeCollection(LongType, DecimalType)
+  override def inputType: AbstractDataType = TypeCollection(
+    LongType, DecimalType, YearMonthIntervalType, DayTimeIntervalType)
 
   override def dataType: DataType = LongType
 
@@ -591,13 +602,17 @@ case class IntegralDivide(
         i.integral.asInstanceOf[Integral[Any]]
       case d: DecimalType =>
         d.asIntegral.asInstanceOf[Integral[Any]]
+      case _: YearMonthIntervalType =>
+        IntegerType.integral.asInstanceOf[Integral[Any]]
+      case _: DayTimeIntervalType =>
+        LongType.integral.asInstanceOf[Integral[Any]]
     }
     (x, y) => {
       val res = integral.quot(x, y)
       if (res == null) {
         null
       } else {
-        integral.asInstanceOf[Integral[Any]].toLong(res)
+        integral.toLong(res)
       }
     }
   }

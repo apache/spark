@@ -130,7 +130,7 @@ def launch_gateway(conf=None, popen_kwargs=None):
             atexit.register(killChild)
 
     # Connect to the gateway (or client server to pin the thread between JVM and Python)
-    if os.environ.get("PYSPARK_PIN_THREAD", "false").lower() == "true":
+    if os.environ.get("PYSPARK_PIN_THREAD", "true").lower() == "true":
         gateway = ClientServer(
             java_parameters=JavaParameters(
                 port=gateway_port,

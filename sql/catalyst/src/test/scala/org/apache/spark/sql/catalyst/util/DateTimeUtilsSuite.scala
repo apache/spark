@@ -142,13 +142,32 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(toDate("2015.03.18").isEmpty)
     assert(toDate("20150318").isEmpty)
     assert(toDate("2015-031-8").isEmpty)
-    assert(toDate("02015-03-18").isEmpty)
     assert(toDate("015-03-18").isEmpty)
     assert(toDate("015").isEmpty)
-    assert(toDate("02015").isEmpty)
     assert(toDate("1999 08 01").isEmpty)
     assert(toDate("1999-08 01").isEmpty)
     assert(toDate("1999 08").isEmpty)
+    assert(toDate("1999-08-").isEmpty)
+    assert(toDate("").isEmpty)
+    assert(toDate("   ").isEmpty)
+  }
+
+  test("SPARK-35780: support full range of date string") {
+    assert(toDate("02015-03-18").get === days(2015, 3, 18))
+    assert(toDate("02015").get === days(2015, 1, 1))
+    assert(toDate("-02015").get === days(-2015, 1, 1))
+    assert(toDate("999999-1-28").get === days(999999, 1, 28))
+    assert(toDate("-999999-1-28").get === days(-999999, 1, 28))
+    assert(toDate("0001-1-28").get === days(1, 1, 28))
+    // Int.MaxValue and Int.MaxValue + 1 day
+    assert(toDate("5881580-7-11").get === days(5881580, 7, 11))
+    assert(toDate("5881580-7-12").isEmpty)
+    // Int.MinValue and Int.MinValue - 1 day
+    assert(toDate("-5877641-6-23").get === days(-5877641, 6, 23))
+    assert(toDate("-5877641-6-22").isEmpty)
+    // Check overflow of single segment in date format
+    assert(toDate("4294967297").isEmpty)
+    assert(toDate("2021-4294967297-11").isEmpty)
   }
 
   private def toTimestamp(str: String, zoneId: ZoneId): Option[Long] = {
@@ -164,7 +183,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("1969-12-31 16:00:00", Option(date(1969, 12, 31, 16, zid = zid)))
       checkStringToTimestamp("0001", Option(date(1, 1, 1, 0, zid = zid)))
       checkStringToTimestamp("2015-03", Option(date(2015, 3, 1, zid = zid)))
-      Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18T").foreach { s =>
+      Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ").foreach { s =>
         checkStringToTimestamp(s, Option(date(2015, 3, 18, zid = zid)))
       }
 
@@ -254,7 +273,6 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("2011-05-06 07:08:09.1000", expected)
 
       checkStringToTimestamp("238", None)
-      checkStringToTimestamp("00238", None)
       checkStringToTimestamp("2015-03-18 123142", None)
       checkStringToTimestamp("2015-03-18T123123", None)
       checkStringToTimestamp("2015-03-18X", None)
@@ -262,7 +280,6 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("2015.03.18", None)
       checkStringToTimestamp("20150318", None)
       checkStringToTimestamp("2015-031-8", None)
-      checkStringToTimestamp("02015-01-18", None)
       checkStringToTimestamp("015-01-18", None)
       checkStringToTimestamp("2015-03-18T12:03.17-20:0", None)
       checkStringToTimestamp("2015-03-18T12:03.17-0:70", None)
@@ -270,6 +287,14 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("1999 08 01", None)
       checkStringToTimestamp("1999-08 01", None)
       checkStringToTimestamp("1999 08", None)
+      checkStringToTimestamp("", None)
+      checkStringToTimestamp("    ", None)
+      checkStringToTimestamp("+", None)
+      checkStringToTimestamp("T", None)
+      checkStringToTimestamp("2015-03-18T", None)
+      checkStringToTimestamp("12::", None)
+      checkStringToTimestamp("2015-03-18T12:03:17-8:", None)
+      checkStringToTimestamp("2015-03-18T12:03:17-8:30:", None)
 
       // Truncating the fractional seconds
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123456, zid = UTC))
@@ -281,6 +306,45 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123456, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.123456 Europe/Moscow", expected)
     }
+  }
+
+  test("SPARK-35780: support full range of timestamp string") {
+    def checkStringToTimestamp(str: String, expected: Option[Long]): Unit = {
+      assert(toTimestamp(str, UTC) === expected)
+    }
+
+    checkStringToTimestamp("-1969-12-31 16:00:00", Option(date(-1969, 12, 31, 16, zid = UTC)))
+    checkStringToTimestamp("02015-03-18 16:00:00", Option(date(2015, 3, 18, 16, zid = UTC)))
+    checkStringToTimestamp("000001", Option(date(1, 1, 1, 0, zid = UTC)))
+    checkStringToTimestamp("-000001", Option(date(-1, 1, 1, 0, zid = UTC)))
+    checkStringToTimestamp("00238", Option(date(238, 1, 1, 0, zid = UTC)))
+    checkStringToTimestamp("99999-03-01T12:03:17", Option(date(99999, 3, 1, 12, 3, 17, zid = UTC)))
+    checkStringToTimestamp("+12:12:12", None)
+    checkStringToTimestamp("-12:12:12", None)
+    checkStringToTimestamp("", None)
+    checkStringToTimestamp("    ", None)
+    checkStringToTimestamp("+", None)
+    // Long.MaxValue and Long.MaxValue + 1 micro seconds
+    checkStringToTimestamp(
+      "294247-01-10T04:00:54.775807Z",
+      Option(date(294247, 1, 10, 4, 0, 54, 775807, zid = UTC)))
+    checkStringToTimestamp("294247-01-10T04:00:54.775808Z", None)
+    // Long.MinValue and Long.MinValue - 1 micro seconds
+    checkStringToTimestamp(
+      "-290308-12-21T19:59:05.224192Z",
+      Option(date(-290308, 12, 21, 19, 59, 5, 224192, zid = UTC)))
+    // Check overflow of single segment in timestamp format
+    checkStringToTimestamp("-290308-12-21T19:59:05.224191Z", None)
+    checkStringToTimestamp("4294967297", None)
+    checkStringToTimestamp("2021-4294967297-11", None)
+    checkStringToTimestamp("4294967297:30:00", None)
+    checkStringToTimestamp("2021-11-4294967297T12:30:00", None)
+    checkStringToTimestamp("2021-01-01T12:4294967297:00", None)
+    checkStringToTimestamp("2021-01-01T12:30:4294967297", None)
+    checkStringToTimestamp("2021-01-01T12:30:4294967297.123456", None)
+    checkStringToTimestamp("2021-01-01T12:30:4294967297+07:30", None)
+    checkStringToTimestamp("2021-01-01T12:30:4294967297UTC", None)
+    checkStringToTimestamp("2021-01-01T12:30:4294967297+4294967297:30", None)
   }
 
   test("SPARK-15379: special invalid date string") {
@@ -634,6 +698,39 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("SPARK-35664: microseconds to LocalDateTime") {
+    assert(microsToLocalDateTime(0) ==  LocalDateTime.parse("1970-01-01T00:00:00"))
+    assert(microsToLocalDateTime(100) ==  LocalDateTime.parse("1970-01-01T00:00:00.0001"))
+    assert(microsToLocalDateTime(100000000) ==  LocalDateTime.parse("1970-01-01T00:01:40"))
+    assert(microsToLocalDateTime(100000000000L) ==  LocalDateTime.parse("1970-01-02T03:46:40"))
+    assert(microsToLocalDateTime(253402300799999999L) ==
+      LocalDateTime.parse("9999-12-31T23:59:59.999999"))
+    assert(microsToLocalDateTime(Long.MinValue) ==
+      LocalDateTime.parse("-290308-12-21T19:59:05.224192"))
+    assert(microsToLocalDateTime(Long.MaxValue) ==
+      LocalDateTime.parse("+294247-01-10T04:00:54.775807"))
+  }
+
+  test("SPARK-35664: LocalDateTime to microseconds") {
+    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("1970-01-01T00:00:00")) == 0)
+    assert(
+      DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("1970-01-01T00:00:00.0001")) == 100)
+    assert(
+      DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("1970-01-01T00:01:40")) == 100000000)
+    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("1970-01-02T03:46:40")) ==
+      100000000000L)
+    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("9999-12-31T23:59:59.999999"))
+      == 253402300799999999L)
+    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("-1000-12-31T23:59:59.999999"))
+      == -93692592000000001L)
+    Seq(LocalDateTime.MIN, LocalDateTime.MAX).foreach { dt =>
+      val msg = intercept[ArithmeticException] {
+        DateTimeUtils.localDateTimeToMicros(dt)
+      }.getMessage
+      assert(msg == "long overflow")
+    }
+  }
+
   test("daysToMicros and microsToDays") {
     val input = date(2015, 12, 31, 16, zid = LA)
     assert(microsToDays(input, LA) === 16800)
@@ -690,6 +787,23 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       convertSpecialTimestamp("Today ", zoneId).get should be(today +- tolerance)
       val tomorrow = instantToMicros(localToday.plusDays(1).toInstant)
       convertSpecialTimestamp(" tomorrow CET ", zoneId).get should be(tomorrow +- tolerance)
+    }
+  }
+
+  test("SPARK-35979: special timestamp without time zone values") {
+    val tolerance = TimeUnit.SECONDS.toMicros(30)
+
+    testSpecialDatetimeValues { zoneId =>
+      assert(convertSpecialTimestampNTZ("Epoch", zoneId).get === 0)
+      val now = DateTimeUtils.localDateTimeToMicros(LocalDateTime.now(zoneId))
+      convertSpecialTimestampNTZ("NOW", zoneId).get should be(now +- tolerance)
+      val localToday = LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT)
+      val yesterday = DateTimeUtils.localDateTimeToMicros(localToday.minusDays(1))
+      convertSpecialTimestampNTZ(" Yesterday", zoneId).get should be(yesterday)
+      val today = DateTimeUtils.localDateTimeToMicros(localToday)
+      convertSpecialTimestampNTZ("Today ", zoneId).get should be(today)
+      val tomorrow = DateTimeUtils.localDateTimeToMicros(localToday.plusDays(1))
+      convertSpecialTimestampNTZ(" tomorrow ", zoneId).get should be(tomorrow)
     }
   }
 
@@ -780,11 +894,16 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         (LocalDateTime.of(2021, 3, 14, 1, 0, 0), LocalDateTime.of(2021, 3, 14, 3, 0, 0)) ->
           TimeUnit.HOURS.toMicros(2)
       ).foreach { case ((start, end), expected) =>
-        val startMicros = localDateTimeToMicros(start, zid)
-        val endMicros = localDateTimeToMicros(end, zid)
+        val startMicros = DateTimeTestUtils.localDateTimeToMicros(start, zid)
+        val endMicros = DateTimeTestUtils.localDateTimeToMicros(end, zid)
         val result = subtractTimestamps(endMicros, startMicros, zid)
         assert(result === expected)
       }
     }
+  }
+
+  test("SPARK-35679: instantToMicros should be able to return microseconds of Long.MinValue") {
+    assert(instantToMicros(microsToInstant(Long.MaxValue)) === Long.MaxValue)
+    assert(instantToMicros(microsToInstant(Long.MinValue)) === Long.MinValue)
   }
 }

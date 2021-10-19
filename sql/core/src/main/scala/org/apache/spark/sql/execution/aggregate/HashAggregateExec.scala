@@ -73,7 +73,9 @@ case class HashAggregateExec(
   // This is for testing. We force TungstenAggregationIterator to fall back to the unsafe row hash
   // map and/or the sort-based aggregation once it has processed a given number of input rows.
   private val testFallbackStartsAt: Option[(Int, Int)] = {
-    sqlContext.getConf("spark.sql.TungstenAggregate.testFallbackStartsAt", null) match {
+    Option(session).map { s =>
+      s.conf.get("spark.sql.TungstenAggregate.testFallbackStartsAt", null)
+    }.orNull match {
       case null | "" => None
       case fallbackStartsAt =>
         val splits = fallbackStartsAt.split(",").map(_.trim)
@@ -255,8 +257,10 @@ case class HashAggregateExec(
       aggNames: Seq[String],
       aggBufferUpdatingExprs: Seq[Seq[Expression]],
       aggCodeBlocks: Seq[Block],
-      subExprs: Map[Expression, SubExprEliminationState]): Option[Seq[String]] = {
-    val exprValsInSubExprs = subExprs.flatMap { case (_, s) => s.value :: s.isNull :: Nil }
+      subExprs: Map[ExpressionEquals, SubExprEliminationState]): Option[Seq[String]] = {
+    val exprValsInSubExprs = subExprs.flatMap { case (_, s) =>
+      s.eval.value :: s.eval.isNull :: Nil
+    }
     if (exprValsInSubExprs.exists(_.isInstanceOf[SimpleExprValue])) {
       // `SimpleExprValue`s cannot be used as an input variable for split functions, so
       // we give up splitting functions if it exists in `subExprs`.
@@ -361,7 +365,7 @@ case class HashAggregateExec(
       bindReferences(updateExprsForOneFunc, inputAttrs)
     }
     val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprs.flatten)
-    val effectiveCodes = subExprs.codes.mkString("\n")
+    val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
     val bufferEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
       ctx.withSubExprEliminationExprs(subExprs.states) {
         boundUpdateExprsForOneFunc.map(_.genCode(ctx))
@@ -663,7 +667,14 @@ case class HashAggregateExec(
     val isNotByteArrayDecimalType = bufferSchema.map(_.dataType).filter(_.isInstanceOf[DecimalType])
       .forall(!DecimalType.isByteArrayDecimalType(_))
 
-    isSupported && isNotByteArrayDecimalType
+    val isEnabledForAggModes =
+      if (modes.forall(mode => mode == Partial || mode == PartialMerge)) {
+        true
+      } else {
+        !conf.getConf(SQLConf.ENABLE_TWOLEVEL_AGG_MAP_PARTIAL_ONLY)
+      }
+
+    isSupported && isNotByteArrayDecimalType && isEnabledForAggModes
   }
 
   private def enableTwoLevelHashMap(ctx: CodegenContext): Unit = {
@@ -677,15 +688,15 @@ case class HashAggregateExec(
 
       // This is for testing/benchmarking only.
       // We enforce to first level to be a vectorized hashmap, instead of the default row-based one.
-      isVectorizedHashMapEnabled = sqlContext.conf.enableVectorizedHashMap
+      isVectorizedHashMapEnabled = conf.enableVectorizedHashMap
     }
   }
 
   private def doProduceWithKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initAgg")
-    if (sqlContext.conf.enableTwoLevelAggMap) {
+    if (conf.enableTwoLevelAggMap) {
       enableTwoLevelHashMap(ctx)
-    } else if (sqlContext.conf.enableVectorizedHashMap) {
+    } else if (conf.enableVectorizedHashMap) {
       logWarning("Two level hashmap is disabled but vectorized hashmap is enabled.")
     }
     val bitMaxCapacity = testFallbackStartsAt match {
@@ -698,7 +709,7 @@ case class HashAggregateExec(
         } else {
           (math.log10(fastMapCounter) / math.log10(2)).floor.toInt
         }
-      case _ => sqlContext.conf.fastHashAggregateRowMaxCapacityBit
+      case _ => conf.fastHashAggregateRowMaxCapacityBit
     }
 
     val thisPlan = ctx.addReferenceObj("plan", this)
@@ -987,7 +998,7 @@ case class HashAggregateExec(
         bindReferences(updateExprsForOneFunc, inputAttrs)
       }
       val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprs.flatten)
-      val effectiveCodes = subExprs.codes.mkString("\n")
+      val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
       val unsafeRowBufferEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
         ctx.withSubExprEliminationExprs(subExprs.states) {
           boundUpdateExprsForOneFunc.map(_.genCode(ctx))
@@ -1033,7 +1044,7 @@ case class HashAggregateExec(
             bindReferences(updateExprsForOneFunc, inputAttrs)
           }
           val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprs.flatten)
-          val effectiveCodes = subExprs.codes.mkString("\n")
+          val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
           val fastRowEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
             ctx.withSubExprEliminationExprs(subExprs.states) {
               boundUpdateExprsForOneFunc.map(_.genCode(ctx))

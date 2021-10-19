@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.12</artifactId>
-  <version>3.2.0-SNAPSHOT</version>
+  <version>3.3.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -120,7 +120,7 @@
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.30</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
-    <hadoop.version>3.2.2</hadoop.version>
+    <hadoop.version>3.3.1</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.6.2</zookeeper.version>
@@ -128,75 +128,75 @@
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>2.3.8</hive.version>
-    <hive23.version>2.3.8</hive23.version>
+    <hive.version>2.3.9</hive.version>
+    <hive23.version>2.3.9</hive23.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>2.8.0</kafka.version>
+    <kafka.version>2.8.1</kafka.version>
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
-    <parquet.version>1.12.0</parquet.version>
-    <orc.version>1.6.8</orc.version>
-    <jetty.version>9.4.40.v20210413</jetty.version>
+    <parquet.version>1.12.1</parquet.version>
+    <orc.version>1.7.0</orc.version>
+    <jetty.version>9.4.43.v20210629</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
-    <chill.version>0.9.5</chill.version>
-    <ivy.version>2.4.0</ivy.version>
+    <chill.version>0.10.0</chill.version>
+    <ivy.version>2.5.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <!--
     If you changes codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.0</codahale.metrics.version>
+    <codahale.metrics.version>4.2.2</codahale.metrics.version>
     <avro.version>1.10.2</avro.version>
-    <aws.kinesis.client.version>1.14.0</aws.kinesis.client.version>
+    <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
-    <aws.java.sdk.version>1.11.844</aws.java.sdk.version>
+    <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.13</commons.httpclient.version>
     <commons.httpcore.version>4.4.14</commons.httpcore.version>
-    <!--  commons-httpclient/commons-httpclient-->
-    <httpclient.classic.version>3.1</httpclient.classic.version>
     <commons.math3.version>3.4.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
-    <scala.version>2.12.14</scala.version>
+    <scala.version>2.12.15</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
-    <scalatest-maven-plugin.version>2.0.0</scalatest-maven-plugin.version>
+    <scalatest-maven-plugin.version>2.0.2</scalatest-maven-plugin.version>
     <scalafmt.parameters>--test</scalafmt.parameters>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.12.3</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.12.5</fasterxml.jackson.version>
     <snappy.version>1.1.8.4</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <netlib.ludovic.dev.version>2.2.0</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
-    <commons-compress.version>1.20</commons-compress.version>
-    <commons-io.version>2.8.0</commons-io.version>
+    <commons-compress.version>1.21</commons-compress.version>
+    <commons-io.version>2.11.0</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.12.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
-    <commons-pool2.version>2.6.2</commons-pool2.version>
+    <commons-pool2.version>2.11.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
-    <janino.version>3.1.4</janino.version>
+    <janino.version>3.0.16</janino.version>
     <jersey.version>2.34</jersey.version>
-    <joda.version>2.10.10</joda.version>
+    <joda.version>2.10.12</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
     <antlr4.version>4.8</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>3.141.59</selenium.version>
-    <htmlunit.version>2.40.0</htmlunit.version>
+    <htmlunit.version>2.50.0</htmlunit.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.2</commons-cli.version>
+    <bouncycastle.version>1.60</bouncycastle.version>
+    <tink.version>1.6.0</tink.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -204,7 +204,7 @@
     <arrow.version>2.0.0</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>5.4.0</kubernetes-client.version>
+    <kubernetes-client.version>5.8.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -249,13 +249,27 @@
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
 
     <!--
-      These default to Hadoop 3.x shaded client/minicluster jars, but are switched to hadoop-client
-      when the Hadoop profile is hadoop-2.7, because these are only available in 3.x. Note that,
-      as result we have to include the same hadoop-client dependency multiple times in hadoop-2.7.
+      These default to Hadoop 3.x shaded client/minicluster jars, but since the shaded jars are
+      only available in 3.x, we have to switch to non-shaded Hadoop client jars when the active
+      profile is hadoop-2.7.
+
+      To make the above work, in the hadoop-2.7 profile section we bind hadoop-client-api to
+      hadoop-client and hadoop-client-runtime to hadoop-yarn-api, which is a dependency of the
+      former. This effectively moves the hadoop-yarn-api to the same level as hadoop-client, but
+      should be fine since both dependencies are required. We cannot use hadoop-client for both
+      of these because the maven enforcer plugin bans duplicate dependencies.
+
+      We still leave hadoop-client-minicluster to use hadoop-client because it is of test scope,
+      and is only used by spark-yarn module. To avoid the duplicate dependency issue we only
+      declare the dependency when we're using hadoop-3.2 profile, in
+      resource-managers/yarn/pom.xml.
+
+      Please check SPARK-36835 for more details.
     -->
     <hadoop-client-api.artifact>hadoop-client-api</hadoop-client-api.artifact>
     <hadoop-client-runtime.artifact>hadoop-client-runtime</hadoop-client-runtime.artifact>
     <hadoop-client-minicluster.artifact>hadoop-client-minicluster</hadoop-client-minicluster.artifact>
+    <spark.yarn.isHadoopProvided>false</spark.yarn.isHadoopProvided>
 
     <!--
       Overridable test home. So that you can call individual pom files directly without
@@ -266,7 +280,7 @@
     <spark.test.docker.keepContainer>false</spark.test.docker.keepContainer>
     <spark.test.docker.removePulledImage>true</spark.test.docker.removePulledImage>
 
-    <CodeCacheSize>1g</CodeCacheSize>
+    <CodeCacheSize>128m</CodeCacheSize>
     <!-- Needed for consistent times -->
     <maven.build.timestamp.format>yyyy-MM-dd HH:mm:ss z</maven.build.timestamp.format>
   </properties>
@@ -393,23 +407,36 @@
         <version>${project.version}</version>
         <type>test-jar</type>
       </dependency>
+      <!-- #if scala-2.13 --><!--
+      <dependency>
+        <groupId>org.scala-lang.modules</groupId>
+        <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+        <version>1.0.3</version>
+      </dependency>
+      --><!-- #endif scala-2.13 -->
       <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill_${scala.binary.version}</artifactId>
         <version>${chill.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.xbean</groupId>
+            <artifactId>xbean-asm7-shaded</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill-java</artifactId>
         <version>${chill.version}</version>
       </dependency>
-      <!-- This artifact is a shaded version of ASM 7.x. The POM that was used to produce this
-           is at https://github.com/apache/geronimo-xbean/tree/trunk/xbean-asm7-shaded
+      <!-- This artifact is a shaded version of ASM 9.x. The POM that was used to produce this
+           is at https://github.com/apache/geronimo-xbean/tree/trunk/xbean-asm9-shaded
            For context on why we shade ASM, see SPARK-782 and SPARK-6152. -->
       <dependency>
         <groupId>org.apache.xbean</groupId>
-        <artifactId>xbean-asm7-shaded</artifactId>
-        <version>4.16</version>
+        <artifactId>xbean-asm9-shaded</artifactId>
+        <version>4.20</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -593,11 +620,6 @@
         <version>${jsr305.version}</version>
       </dependency>
       <dependency>
-        <groupId>commons-httpclient</groupId>
-        <artifactId>commons-httpclient</artifactId>
-        <version>${httpclient.classic.version}</version>
-      </dependency>
-      <dependency>
         <groupId>org.apache.httpcomponents</groupId>
         <artifactId>httpclient</artifactId>
         <version>${commons.httpclient.version}</version>
@@ -704,12 +726,12 @@
       <dependency>
         <groupId>org.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.7.1</version>
+        <version>1.8.0</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.4.9-1</version>
+        <version>1.5.0-4</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -747,7 +769,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.1.63.Final</version>
+        <version>4.1.68.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
@@ -880,7 +902,7 @@
       <dependency>
         <groupId>org.scalanlp</groupId>
         <artifactId>breeze_${scala.binary.version}</artifactId>
-        <version>1.0</version>
+        <version>1.2</version>
         <exclusions>
           <exclusion>
             <groupId>org.apache.commons</groupId>
@@ -937,7 +959,7 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.2.3</version>
+        <version>3.2.9</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1198,6 +1220,18 @@
             <artifactId>api-ldap-schema-data</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcprov-jdk15on</artifactId>
+        <version>${bouncycastle.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcpkix-jdk15on</artifactId>
+        <version>${bouncycastle.version}</version>
+        <scope>test</scope>
       </dependency>
       <!-- Managed up to match Hadoop in HADOOP-16530 -->
       <dependency>
@@ -1811,10 +1845,6 @@
             <artifactId>commons-codec</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>commons-httpclient</groupId>
-            <artifactId>commons-httpclient</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.apache.avro</groupId>
             <artifactId>avro-mapred</artifactId>
           </exclusion>
@@ -2266,10 +2296,6 @@
         <scope>${orc.deps.scope}</scope>
         <exclusions>
           <exclusion>
-            <groupId>javax.xml.bind</groupId>
-            <artifactId>jaxb-api</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
           </exclusion>
@@ -2316,6 +2342,27 @@
         <artifactId>parquet-column</artifactId>
         <version>${parquet.version}</version>
         <scope>${parquet.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.parquet</groupId>
+        <artifactId>parquet-encoding</artifactId>
+        <version>${parquet.version}</version>
+        <scope>${parquet.test.deps.scope}</scope>
+        <classifier>tests</classifier>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.parquet</groupId>
+        <artifactId>parquet-common</artifactId>
+        <version>${parquet.version}</version>
+        <scope>${parquet.test.deps.scope}</scope>
+        <classifier>tests</classifier>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.parquet</groupId>
+        <artifactId>parquet-column</artifactId>
+        <version>${parquet.version}</version>
+        <scope>${parquet.test.deps.scope}</scope>
+        <classifier>tests</classifier>
       </dependency>
       <dependency>
         <groupId>org.apache.parquet</groupId>
@@ -2401,6 +2448,11 @@
             <artifactId>jna</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>com.google.crypto.tink</groupId>
+        <artifactId>tink</artifactId>
+        <version>${tink.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.arrow</groupId>
@@ -2558,6 +2610,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
+          <!-- SPARK-36547: Please don't upgrade the version below, otherwise there will be an error on building Hadoop 2.7 package -->
           <version>4.3.0</version>
           <executions>
             <execution>
@@ -2602,9 +2655,10 @@
               <arg>-P:silencer:globalFilters=.*deprecated.*</arg>
             </args>
             <jvmArgs>
-              <jvmArg>-Xss4m</jvmArg>
-              <jvmArg>-Xms1024m</jvmArg>
-              <jvmArg>-Xmx1024m</jvmArg>
+              <jvmArg>-Xss128m</jvmArg>
+              <jvmArg>-Xms4g</jvmArg>
+              <jvmArg>-Xmx4g</jvmArg>
+              <jvmArg>-XX:MaxMetaspaceSize=2g</jvmArg>
               <jvmArg>-XX:ReservedCodeCacheSize=${CodeCacheSize}</jvmArg>
             </jvmArgs>
             <javacArgs>
@@ -2618,7 +2672,7 @@
               <compilerPlugin>
                 <groupId>com.github.ghik</groupId>
                 <artifactId>silencer-plugin_${scala.version}</artifactId>
-                <version>1.7.5</version>
+                <version>1.7.6</version>
               </compilerPlugin>
             </compilerPlugins>
           </configuration>
@@ -2653,7 +2707,7 @@
               <include>**/*Suite.java</include>
             </includes>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
-            <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
+            <argLine>-ea -Xmx4g -Xss4m -XX:MaxMetaspaceSize=2g -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
             <environmentVariables>
               <!--
                 Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
@@ -2704,7 +2758,7 @@
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
-            <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
+            <argLine>-ea -Xmx4g -Xss4m -XX:MaxMetaspaceSize=2g -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
             <stderr/>
             <environmentVariables>
               <!--
@@ -2855,17 +2909,17 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
-          <version>3.2.1</version>
+          <version>3.2.4</version>
           <dependencies>
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm</artifactId>
-              <version>7.3.1</version>
+              <version>9.1</version>
             </dependency>
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm-commons</artifactId>
-              <version>7.3.1</version>
+              <version>9.1</version>
             </dependency>
           </dependencies>
         </plugin>
@@ -2992,7 +3046,6 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <createDependencyReducedPom>false</createDependencyReducedPom>
           <artifactSet>
             <includes>
               <include>org.spark-project.spark:unused</include>
@@ -3081,7 +3134,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>3.1.1</version>
+        <version>3.1.2</version>
         <configuration>
           <failOnViolation>false</failOnViolation>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>
@@ -3099,9 +3152,13 @@
         </configuration>
         <dependencies>
           <dependency>
+            <!--
+              If you are changing the dependency setting for checkstyle plugin,
+              please check project/plugins.sbt too.
+            -->
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>8.39</version>
+            <version>8.43</version>
           </dependency>
         </dependencies>
         <executions>
@@ -3254,8 +3311,11 @@
         <hadoop.version>2.7.4</hadoop.version>
         <curator.version>2.7.1</curator.version>
         <commons-io.version>2.4</commons-io.version>
+        <!--
+          the declaration site above of these variables explains why we need to re-assign them here
+        -->
         <hadoop-client-api.artifact>hadoop-client</hadoop-client-api.artifact>
-        <hadoop-client-runtime.artifact>hadoop-client</hadoop-client-runtime.artifact>
+        <hadoop-client-runtime.artifact>hadoop-yarn-api</hadoop-client-runtime.artifact>
         <hadoop-client-minicluster.artifact>hadoop-client</hadoop-client-minicluster.artifact>
       </properties>
     </profile>
@@ -3331,7 +3391,7 @@
          SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
          property correctly. 
         -->
-        <scala.version>2.12.14</scala.version>
+        <scala.version>2.12.15</scala.version>
       </properties>
       <build>
         <pluginManagement>
@@ -3347,15 +3407,6 @@
         <scala.version>2.13.5</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
       </properties>
-      <dependencyManagement>
-        <dependencies>
-          <dependency>
-            <groupId>org.scala-lang.modules</groupId>
-            <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
-            <version>0.2.0</version>
-          </dependency>
-        </dependencies>
-      </dependencyManagement>
       <build>
         <pluginManagement>
           <plugins>
@@ -3389,6 +3440,11 @@
                   <arg>-Wconf:msg=Auto-application to \`\(\)\` is deprecated:s</arg>
                   <arg>-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s</arg>
                   <arg>-Wconf:msg=method without a parameter list overrides a method with a single empty one:s</arg>
+                  <!--
+                    SPARK-35574 Prevent the recurrence of compilation warnings related to
+                    `procedure syntax is deprecated`
+                  -->
+                  <arg>-Wconf:cat=deprecation&amp;msg=procedure syntax is deprecated:e</arg>
                 </args>
                 <compilerPlugins combine.self="override">
                 </compilerPlugins>
@@ -3455,6 +3511,9 @@
     -->
     <profile>
       <id>hadoop-provided</id>
+      <properties>
+        <spark.yarn.isHadoopProvided>true</spark.yarn.isHadoopProvided>
+      </properties>
     </profile>
     <profile>
       <id>hive-provided</id>

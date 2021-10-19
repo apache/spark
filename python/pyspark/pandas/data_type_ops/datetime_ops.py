@@ -17,18 +17,34 @@
 
 import datetime
 import warnings
-from typing import TYPE_CHECKING, Union
+from typing import Any, Union, cast
 
-from pyspark.sql import functions as F
-from pyspark.sql.types import TimestampType
+import numpy as np
+import pandas as pd
+from pandas.api.types import CategoricalDtype
 
+from pyspark import SparkContext
+from pyspark.sql import Column
+from pyspark.sql.types import (
+    BooleanType,
+    LongType,
+    StringType,
+    TimestampType,
+    TimestampNTZType,
+    NumericType,
+)
+
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import IndexOpsMixin
-from pyspark.pandas.data_type_ops.base import DataTypeOps
-from pyspark.pandas.typedef import as_spark_type
-
-if TYPE_CHECKING:
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+from pyspark.pandas.data_type_ops.base import (
+    DataTypeOps,
+    _as_categorical_type,
+    _as_other_type,
+    _as_string_type,
+    _sanitize_list_like,
+)
+from pyspark.pandas.spark import functions as SF
+from pyspark.pandas.typedef import pandas_on_spark_type
 
 
 class DatetimeOps(DataTypeOps):
@@ -38,9 +54,10 @@ class DatetimeOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'datetimes'
+        return "datetimes"
 
-    def sub(self, left, right) -> Union["Series", "Index"]:
+    def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         # Note that timestamp subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' from 'datetime64[ns]'s subtraction.
         msg = (
@@ -48,18 +65,28 @@ class DatetimeOps(DataTypeOps):
             "The timestamp subtraction returns an integer in seconds, "
             "whereas pandas returns 'timedelta64[ns]'."
         )
-        if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, TimestampType):
+        if isinstance(right, IndexOpsMixin) and isinstance(
+            right.spark.data_type, (TimestampType, TimestampNTZType)
+        ):
             warnings.warn(msg, UserWarning)
             return left.astype("long") - right.astype("long")
         elif isinstance(right, datetime.datetime):
             warnings.warn(msg, UserWarning)
-            return left.astype("long").spark.transform(
-                lambda scol: scol - F.lit(right).cast(as_spark_type("long"))
+            return cast(
+                SeriesOrIndex,
+                left._with_new_scol(
+                    left.astype("long").spark.column
+                    - self._cast_spark_column_timestamp_to_long(SF.lit(right)),
+                    field=left._internal.data_fields[0].copy(
+                        dtype=np.dtype("int64"), spark_type=LongType()
+                    ),
+                ),
             )
         else:
-            raise TypeError("datetime subtraction can only be applied to datetime series.")
+            raise TypeError("Datetime subtraction can only be applied to datetime series.")
 
-    def rsub(self, left, right) -> Union["Series", "Index"]:
+    def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         # Note that timestamp subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' from 'datetime64[ns]'s subtraction.
         msg = (
@@ -69,8 +96,84 @@ class DatetimeOps(DataTypeOps):
         )
         if isinstance(right, datetime.datetime):
             warnings.warn(msg, UserWarning)
-            return -(left.astype("long")).spark.transform(
-                lambda scol: scol - F.lit(right).cast(as_spark_type("long"))
+            return cast(
+                SeriesOrIndex,
+                left._with_new_scol(
+                    self._cast_spark_column_timestamp_to_long(SF.lit(right))
+                    - left.astype("long").spark.column,
+                    field=left._internal.data_fields[0].copy(
+                        dtype=np.dtype("int64"), spark_type=LongType()
+                    ),
+                ),
             )
         else:
-            raise TypeError("datetime subtraction can only be applied to datetime series.")
+            raise TypeError("Datetime subtraction can only be applied to datetime series.")
+
+    def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        _sanitize_list_like(right)
+        return column_op(Column.__lt__)(left, right)
+
+    def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        _sanitize_list_like(right)
+        return column_op(Column.__le__)(left, right)
+
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        _sanitize_list_like(right)
+        return column_op(Column.__ge__)(left, right)
+
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        _sanitize_list_like(right)
+        return column_op(Column.__gt__)(left, right)
+
+    def prepare(self, col: pd.Series) -> pd.Series:
+        """Prepare column when from_pandas."""
+        return col
+
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
+        dtype, spark_type = pandas_on_spark_type(dtype)
+
+        if isinstance(dtype, CategoricalDtype):
+            return _as_categorical_type(index_ops, dtype, spark_type)
+        elif isinstance(spark_type, BooleanType):
+            raise TypeError("cannot astype a datetimelike from [datetime64[ns]] to [bool]")
+        elif isinstance(spark_type, StringType):
+            return _as_string_type(index_ops, dtype, null_str=str(pd.NaT))
+        else:
+            return _as_other_type(index_ops, dtype, spark_type)
+
+    def _cast_spark_column_timestamp_to_long(self, scol: Column) -> Column:
+        return scol.cast(LongType())
+
+
+class DatetimeNTZOps(DatetimeOps):
+    """
+    The class for binary operations of pandas-on-Spark objects with spark type:
+    TimestampNTZType.
+    """
+
+    def _cast_spark_column_timestamp_to_long(self, scol: Column) -> Column:
+        jvm = SparkContext._active_spark_context._jvm  # type: ignore[attr-defined]
+        return Column(jvm.PythonSQLUtils.castTimestampNTZToLong(scol._jc))
+
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
+        dtype, spark_type = pandas_on_spark_type(dtype)
+
+        if isinstance(dtype, CategoricalDtype):
+            return _as_categorical_type(index_ops, dtype, spark_type)
+        elif isinstance(spark_type, NumericType):
+            from pyspark.pandas.internal import InternalField
+
+            scol = self._cast_spark_column_timestamp_to_long(index_ops.spark.column).cast(
+                spark_type
+            )
+            return index_ops._with_new_scol(scol, field=InternalField(dtype=dtype))
+        else:
+            return super(DatetimeNTZOps, self).astype(index_ops, dtype)

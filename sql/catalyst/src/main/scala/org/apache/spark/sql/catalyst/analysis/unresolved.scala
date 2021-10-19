@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -41,7 +40,7 @@ class UnresolvedException(function: String)
  * Holds the name of a relation that has yet to be looked up in a catalog.
  *
  * @param multipartIdentifier table name
- * @param options options to scan this relation. Only applicable to v2 table scan.
+ * @param options options to scan this relation.
  */
 case class UnresolvedRelation(
     multipartIdentifier: Seq[String],
@@ -73,28 +72,6 @@ object UnresolvedRelation {
 
   def apply(tableIdentifier: TableIdentifier): UnresolvedRelation =
     UnresolvedRelation(tableIdentifier.database.toSeq :+ tableIdentifier.table)
-}
-
-/**
- * A variant of [[UnresolvedRelation]] which can only be resolved to a v2 relation
- * (`DataSourceV2Relation`), not v1 relation or temp view.
- *
- * @param originalNameParts the original table identifier name parts before catalog is resolved.
- * @param catalog The catalog which the table should be looked up from.
- * @param tableName The name of the table to look up.
- */
-case class UnresolvedV2Relation(
-    originalNameParts: Seq[String],
-    catalog: TableCatalog,
-    tableName: Identifier)
-  extends LeafNode with NamedRelation {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
-  override def name: String = originalNameParts.quoted
-
-  override def output: Seq[Attribute] = Nil
-
-  override lazy val resolved = false
 }
 
 /**
@@ -168,6 +145,7 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   override def withName(newName: String): UnresolvedAttribute = UnresolvedAttribute.quoted(newName)
   override def withMetadata(newMetadata: Metadata): Attribute = this
   override def withExprId(newExprId: ExprId): UnresolvedAttribute = this
+  override def withDataType(newType: DataType): Attribute = this
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_ATTRIBUTE)
 
   override def toString: String = s"'$name"
@@ -605,11 +583,15 @@ case class GetViewColumnByNameAndOrdinal(
     viewName: String,
     colName: String,
     ordinal: Int,
-    expectedNumCandidates: Int)
+    expectedNumCandidates: Int,
+    // viewDDL is used to help user fix incompatible schema issue for permanent views
+    // it will be None for temp views.
+    viewDDL: Option[String])
   extends LeafExpression with Unevaluable with NonSQLExpression {
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
+  override def stringArgs: Iterator[Any] = super.stringArgs.toSeq.dropRight(1).toIterator
 }
 
 /**
@@ -651,4 +633,16 @@ case object UnresolvedSeed extends LeafExpression with Unevaluable {
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override lazy val resolved = false
+}
+
+/**
+ * An intermediate expression to hold a resolved (nested) column. Some rules may need to undo the
+ * column resolution and use this expression to keep the original column name.
+ */
+case class TempResolvedColumn(child: Expression, nameParts: Seq[String]) extends UnaryExpression
+  with Unevaluable {
+  override lazy val canonicalized = child.canonicalized
+  override def dataType: DataType = child.dataType
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
 }

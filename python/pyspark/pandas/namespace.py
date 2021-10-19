@@ -18,32 +18,37 @@
 """
 Wrappers around spark that correspond to common pandas functions.
 """
-from typing import (  # noqa: F401 (SPARK-34943)
+from typing import (
     Any,
+    Callable,
     Dict,
     List,
     Optional,
+    Set,
     Sized,
     Tuple,
     Type,
     Union,
     cast,
+    no_type_check,
 )
 from collections import OrderedDict
 from collections.abc import Iterable
+from datetime import tzinfo
 from distutils.version import LooseVersion
 from functools import reduce
 from io import BytesIO
 import json
+import warnings
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype, is_list_like
+from pandas.tseries.offsets import DateOffset
 import pyarrow as pa
 import pyarrow.parquet as pq
-from pyspark import sql as spark
-from pyspark.sql import functions as F
-from pyspark.sql.functions import pandas_udf, PandasUDFType
+from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
+from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     ByteType,
     ShortType,
@@ -53,6 +58,7 @@ from pyspark.sql.types import (
     DoubleType,
     BooleanType,
     TimestampType,
+    TimestampNTZType,
     DecimalType,
     StringType,
     DateType,
@@ -60,12 +66,14 @@ from pyspark.sql.types import (
     DataType,
 )
 
-from pyspark import pandas as ps  # noqa: F401
+from pyspark import pandas as ps
+from pyspark.pandas._typing import Axis, Dtype, Label, Name
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.utils import (
     align_diff_frames,
     default_session,
     is_name_like_tuple,
+    is_name_like_value,
     name_like_string,
     same_anchor,
     scol_for,
@@ -76,10 +84,13 @@ from pyspark.pandas.internal import (
     InternalFrame,
     DEFAULT_SERIES_NAME,
     HIDDEN_COLUMNS,
+    SPARK_INDEX_NAME_FORMAT,
 )
 from pyspark.pandas.series import Series, first_series
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.indexes import Index, DatetimeIndex
+from pyspark.pandas.indexes.multi import MultiIndex
 
 
 __all__ = [
@@ -107,6 +118,7 @@ __all__ = [
     "read_sql",
     "read_json",
     "merge",
+    "merge_asof",
     "to_numeric",
     "broadcast",
     "read_orc",
@@ -197,21 +209,21 @@ def range(
 
 
 def read_csv(
-    path,
-    sep=",",
-    header="infer",
-    names=None,
-    index_col=None,
-    usecols=None,
-    squeeze=False,
-    mangle_dupe_cols=True,
-    dtype=None,
-    nrows=None,
-    parse_dates=False,
-    quotechar=None,
-    escapechar=None,
-    comment=None,
-    **options
+    path: str,
+    sep: str = ",",
+    header: Union[str, int, None] = "infer",
+    names: Optional[Union[str, List[str]]] = None,
+    index_col: Optional[Union[str, List[str]]] = None,
+    usecols: Optional[Union[List[int], List[str], Callable[[str], bool]]] = None,
+    squeeze: bool = False,
+    mangle_dupe_cols: bool = True,
+    dtype: Optional[Union[str, Dtype, Dict[str, Union[str, Dtype]]]] = None,
+    nrows: Optional[int] = None,
+    parse_dates: bool = False,
+    quotechar: Optional[str] = None,
+    escapechar: Optional[str] = None,
+    comment: Optional[str] = None,
+    **options: Any
 ) -> Union[DataFrame, Series]:
     """Read CSV (comma-separated) file into DataFrame or Series.
 
@@ -221,7 +233,7 @@ def read_csv(
         The path string storing the CSV file to be read.
     sep : str, default ‘,’
         Delimiter to use. Must be a single character.
-    header : int, list of int, default ‘infer’
+    header : int, default ‘infer’
         Whether to to use as the column names, and the start of the data.
         Default behavior is to infer the column names: if no names are passed
         the behavior is identical to `header=0` and column names are inferred from
@@ -279,7 +291,7 @@ def read_csv(
     >>> ps.read_csv('data.csv')  # doctest: +SKIP
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     if mangle_dupe_cols is not True:
         raise ValueError("mangle_dupe_cols can only be `True`: %s" % mangle_dupe_cols)
@@ -287,7 +299,7 @@ def read_csv(
         raise ValueError("parse_dates can only be `False`: %s" % parse_dates)
 
     if usecols is not None and not callable(usecols):
-        usecols = list(usecols)
+        usecols = list(usecols)  # type: ignore[assignment]
 
     if usecols is None or callable(usecols) or len(usecols) > 0:
         reader = default_session().read
@@ -315,9 +327,10 @@ def read_csv(
 
         reader.options(**options)
 
+        column_labels: Dict[Any, str]
         if isinstance(names, str):
             sdf = reader.schema(names).csv(path)
-            column_labels = OrderedDict((col, col) for col in sdf.columns)  # type: Dict[Any, str]
+            column_labels = OrderedDict((col, col) for col in sdf.columns)
         else:
             sdf = reader.csv(path)
             if is_list_like(names):
@@ -337,22 +350,26 @@ def read_csv(
                 column_labels = OrderedDict((col, col) for col in sdf.columns)
 
         if usecols is not None:
+            missing: List[Union[int, str]]
             if callable(usecols):
                 column_labels = OrderedDict(
                     (label, col) for label, col in column_labels.items() if usecols(label)
                 )
                 missing = []
             elif all(isinstance(col, int) for col in usecols):
+                usecols_ints = cast(List[int], usecols)
                 new_column_labels = OrderedDict(
                     (label, col)
                     for i, (label, col) in enumerate(column_labels.items())
-                    if i in usecols
+                    if i in usecols_ints
                 )
                 missing = [
                     col
-                    for col in usecols
-                    if col >= len(column_labels)
-                    or list(column_labels)[col] not in new_column_labels
+                    for col in usecols_ints
+                    if (
+                        col >= len(column_labels)
+                        or list(column_labels)[col] not in new_column_labels
+                    )
                 ]
                 column_labels = new_column_labels
             elif all(isinstance(col, str) for col in usecols):
@@ -382,6 +399,8 @@ def read_csv(
     if nrows is not None:
         sdf = sdf.limit(nrows)
 
+    index_spark_column_names: List[str]
+    index_names: List[Label]
     if index_col is not None:
         if isinstance(index_col, (str, int)):
             index_col = [index_col]
@@ -389,7 +408,7 @@ def read_csv(
             if col not in column_labels:
                 raise KeyError(col)
         index_spark_column_names = [column_labels[col] for col in index_col]
-        index_names = [(col,) for col in index_col]  # type: List[Tuple]
+        index_names = [(col,) for col in index_col]
         column_labels = OrderedDict(
             (label, col) for label, col in column_labels.items() if label not in index_col
         )
@@ -397,7 +416,7 @@ def read_csv(
         index_spark_column_names = []
         index_names = []
 
-    psdf = DataFrame(
+    psdf: DataFrame = DataFrame(
         InternalFrame(
             spark_frame=sdf,
             index_spark_columns=[scol_for(sdf, col) for col in index_spark_column_names],
@@ -407,7 +426,7 @@ def read_csv(
             ],
             data_spark_columns=[scol_for(sdf, col) for col in column_labels.values()],
         )
-    )  # type: DataFrame
+    )
 
     if dtype is not None:
         if isinstance(dtype, dict):
@@ -424,7 +443,7 @@ def read_csv(
 
 
 def read_json(
-    path: str, lines: bool = True, index_col: Optional[Union[str, List[str]]] = None, **options
+    path: str, lines: bool = True, index_col: Optional[Union[str, List[str]]] = None, **options: Any
 ) -> DataFrame:
     """
     Convert a JSON string to DataFrame.
@@ -473,7 +492,7 @@ def read_json(
     1         c     d
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     if not lines:
         raise NotImplementedError("lines=False is not implemented yet.")
@@ -486,7 +505,7 @@ def read_delta(
     version: Optional[str] = None,
     timestamp: Optional[str] = None,
     index_col: Optional[Union[str, List[str]]] = None,
-    **options
+    **options: Any
 ) -> DataFrame:
     """
     Read a Delta Lake table on some file system and return a DataFrame.
@@ -499,11 +518,14 @@ def read_delta(
         Path to the Delta Lake table.
     version : string, optional
         Specifies the table version (based on Delta's internal transaction version) to read from,
-        using Delta's time travel feature. This sets Delta's 'versionAsOf' option.
+        using Delta's time travel feature. This sets Delta's 'versionAsOf' option. Note that
+        this paramter and `timestamp` paramter cannot be used together, otherwise it will raise a
+        `ValueError`.
     timestamp : string, optional
         Specifies the table version (based on timestamp) to read from,
         using Delta's time travel feature. This must be a valid date or timestamp string in Spark,
-        and sets Delta's 'timestampAsOf' option.
+        and sets Delta's 'timestampAsOf' option. Note that this paramter and `version` paramter
+        cannot be used together, otherwise it will raise a `ValueError`.
     index_col : str or list of str, optional, default: None
         Index column of table in Spark.
     options
@@ -554,8 +576,10 @@ def read_delta(
     3      13
     4      14
     """
+    if version is not None and timestamp is not None:
+        raise ValueError("version and timestamp cannot be used together.")
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     if version is not None:
         options["versionAsOf"] = version
@@ -615,7 +639,7 @@ def read_spark_io(
     format: Optional[str] = None,
     schema: Union[str, "StructType"] = None,
     index_col: Optional[Union[str, List[str]]] = None,
-    **options
+    **options: Any
 ) -> DataFrame:
     """Load a DataFrame from a Spark data source.
 
@@ -682,7 +706,7 @@ def read_spark_io(
     4      14
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     sdf = default_session().read.load(path=path, format=format, schema=schema, **options)
     index_spark_columns, index_names = _get_index_map(sdf, index_col)
@@ -694,7 +718,13 @@ def read_spark_io(
     )
 
 
-def read_parquet(path, columns=None, index_col=None, pandas_metadata=False, **options) -> DataFrame:
+def read_parquet(
+    path: str,
+    columns: Optional[List[str]] = None,
+    index_col: Optional[List[str]] = None,
+    pandas_metadata: bool = False,
+    **options: Any
+) -> DataFrame:
     """Load a parquet object from the file path, returning a DataFrame.
 
     Parameters
@@ -738,7 +768,7 @@ def read_parquet(path, columns=None, index_col=None, pandas_metadata=False, **op
     0       0
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     if columns is not None:
         columns = list(columns)
@@ -748,8 +778,9 @@ def read_parquet(path, columns=None, index_col=None, pandas_metadata=False, **op
     if index_col is None and pandas_metadata:
         # Try to read pandas metadata
 
-        @pandas_udf("index_col array<string>, index_names array<string>", PandasUDFType.SCALAR)
-        def read_index_metadata(pser):
+        @no_type_check
+        @pandas_udf("index_col array<string>, index_names array<string>")
+        def read_index_metadata(pser: pd.Series) -> pd.DataFrame:
             binary = pser.iloc[0]
             metadata = pq.ParquetFile(pa.BufferReader(binary)).metadata.metadata
             if b"pandas" in metadata:
@@ -801,7 +832,7 @@ def read_parquet(path, columns=None, index_col=None, pandas_metadata=False, **op
     return psdf
 
 
-def read_clipboard(sep=r"\s+", **kwargs) -> DataFrame:
+def read_clipboard(sep: str = r"\s+", **kwargs: Any) -> DataFrame:
     r"""
     Read text from clipboard and pass to read_csv. See read_csv for the
     full argument list
@@ -824,31 +855,31 @@ def read_clipboard(sep=r"\s+", **kwargs) -> DataFrame:
 
 
 def read_excel(
-    io,
-    sheet_name=0,
-    header=0,
-    names=None,
-    index_col=None,
-    usecols=None,
-    squeeze=False,
-    dtype=None,
-    engine=None,
-    converters=None,
-    true_values=None,
-    false_values=None,
-    skiprows=None,
-    nrows=None,
-    na_values=None,
-    keep_default_na=True,
-    verbose=False,
-    parse_dates=False,
-    date_parser=None,
-    thousands=None,
-    comment=None,
-    skipfooter=0,
-    convert_float=True,
-    mangle_dupe_cols=True,
-    **kwds
+    io: Union[str, Any],
+    sheet_name: Union[str, int, List[Union[str, int]], None] = 0,
+    header: Union[int, List[int]] = 0,
+    names: Optional[List] = None,
+    index_col: Optional[List[int]] = None,
+    usecols: Optional[Union[int, str, List[Union[int, str]], Callable[[str], bool]]] = None,
+    squeeze: bool = False,
+    dtype: Optional[Dict[str, Union[str, Dtype]]] = None,
+    engine: Optional[str] = None,
+    converters: Optional[Dict] = None,
+    true_values: Optional[Any] = None,
+    false_values: Optional[Any] = None,
+    skiprows: Optional[Union[int, List[int]]] = None,
+    nrows: Optional[int] = None,
+    na_values: Optional[Any] = None,
+    keep_default_na: bool = True,
+    verbose: bool = False,
+    parse_dates: Union[bool, List, Dict] = False,
+    date_parser: Optional[Callable] = None,
+    thousands: Optional[str] = None,
+    comment: Optional[str] = None,
+    skipfooter: int = 0,
+    convert_float: bool = True,
+    mangle_dupe_cols: bool = True,
+    **kwds: Any
 ) -> Union[DataFrame, Series, OrderedDict]:
     """
     Read an Excel file into a pandas-on-Spark DataFrame or Series.
@@ -1050,7 +1081,9 @@ def read_excel(
     2     None    NaN
     """
 
-    def pd_read_excel(io_or_bin, sn, sq):
+    def pd_read_excel(
+        io_or_bin: Any, sn: Union[str, int, List[Union[str, int]], None], sq: bool
+    ) -> pd.DataFrame:
         return pd.read_excel(
             io=BytesIO(io_or_bin) if isinstance(io_or_bin, (bytes, bytearray)) else io_or_bin,
             sheet_name=sn,
@@ -1099,19 +1132,21 @@ def read_excel(
             return cast(Union[DataFrame, Series], from_pandas(pdf_or_psers))
     else:
 
-        def read_excel_on_spark(pdf_or_pser, sn):
-
+        def read_excel_on_spark(
+            pdf_or_pser: Union[pd.DataFrame, pd.Series],
+            sn: Union[str, int, List[Union[str, int]], None],
+        ) -> Union[DataFrame, Series]:
             if isinstance(pdf_or_pser, pd.Series):
                 pdf = pdf_or_pser.to_frame()
             else:
                 pdf = pdf_or_pser
 
-            psdf = from_pandas(pdf)
+            psdf = cast(DataFrame, from_pandas(pdf))
             return_schema = force_decimal_precision_scale(
                 as_nullable_spark_type(psdf._internal.spark_frame.drop(*HIDDEN_COLUMNS).schema)
             )
 
-            def output_func(pdf):
+            def output_func(pdf: pd.DataFrame) -> pd.DataFrame:
                 pdf = pd.concat(
                     [pd_read_excel(bin, sn=sn, sq=False) for bin in pdf[pdf.columns[0]]]
                 )
@@ -1153,21 +1188,21 @@ def read_excel(
 
 
 def read_html(
-    io,
-    match=".+",
-    flavor=None,
-    header=None,
-    index_col=None,
-    skiprows=None,
-    attrs=None,
-    parse_dates=False,
-    thousands=",",
-    encoding=None,
-    decimal=".",
-    converters=None,
-    na_values=None,
-    keep_default_na=True,
-    displayed_only=True,
+    io: Union[str, Any],
+    match: str = ".+",
+    flavor: Optional[str] = None,
+    header: Optional[Union[int, List[int]]] = None,
+    index_col: Optional[Union[int, List[int]]] = None,
+    skiprows: Optional[Union[int, List[int], slice]] = None,
+    attrs: Optional[Dict[str, str]] = None,
+    parse_dates: bool = False,
+    thousands: str = ",",
+    encoding: Optional[str] = None,
+    decimal: str = ".",
+    converters: Optional[Dict] = None,
+    na_values: Optional[Any] = None,
+    keep_default_na: bool = True,
+    displayed_only: bool = True,
 ) -> List[DataFrame]:
     r"""Read HTML tables into a ``list`` of ``DataFrame`` objects.
 
@@ -1290,7 +1325,12 @@ def read_html(
 
 # TODO: add `coerce_float` and 'parse_dates' parameters
 def read_sql_table(
-    table_name, con, schema=None, index_col=None, columns=None, **options
+    table_name: str,
+    con: str,
+    schema: Optional[str] = None,
+    index_col: Optional[Union[str, List[str]]] = None,
+    columns: Optional[Union[str, List[str]]] = None,
+    **options: Any
 ) -> DataFrame:
     """
     Read SQL database table into a DataFrame.
@@ -1332,7 +1372,7 @@ def read_sql_table(
     >>> ps.read_sql_table('table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     reader = default_session().read
     reader.option("dbtable", table_name)
@@ -1342,11 +1382,11 @@ def read_sql_table(
     reader.options(**options)
     sdf = reader.format("jdbc").load()
     index_spark_columns, index_names = _get_index_map(sdf, index_col)
-    psdf = DataFrame(
+    psdf: DataFrame = DataFrame(
         InternalFrame(
             spark_frame=sdf, index_spark_columns=index_spark_columns, index_names=index_names
         )
-    )  # type: DataFrame
+    )
     if columns is not None:
         if isinstance(columns, str):
             columns = [columns]
@@ -1355,7 +1395,9 @@ def read_sql_table(
 
 
 # TODO: add `coerce_float`, `params`, and 'parse_dates' parameters
-def read_sql_query(sql, con, index_col=None, **options) -> DataFrame:
+def read_sql_query(
+    sql: str, con: str, index_col: Optional[Union[str, List[str]]] = None, **options: Any
+) -> DataFrame:
     """Read SQL query into a DataFrame.
 
     Returns a DataFrame corresponding to the result set of the query
@@ -1392,7 +1434,7 @@ def read_sql_query(sql, con, index_col=None, **options) -> DataFrame:
     >>> ps.read_sql_query('SELECT * FROM table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     reader = default_session().read
     reader.option("query", sql)
@@ -1408,7 +1450,13 @@ def read_sql_query(sql, con, index_col=None, **options) -> DataFrame:
 
 
 # TODO: add `coerce_float`, `params`, and 'parse_dates' parameters
-def read_sql(sql, con, index_col=None, columns=None, **options) -> DataFrame:
+def read_sql(
+    sql: str,
+    con: str,
+    index_col: Optional[Union[str, List[str]]] = None,
+    columns: Optional[Union[str, List[str]]] = None,
+    **options: Any
+) -> DataFrame:
     """
     Read SQL query or database table into a DataFrame.
 
@@ -1453,7 +1501,7 @@ def read_sql(sql, con, index_col=None, columns=None, **options) -> DataFrame:
     >>> ps.read_sql('SELECT * FROM table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     striped = sql.strip()
     if " " not in striped:  # TODO: identify the table name or not more precisely.
@@ -1462,8 +1510,14 @@ def read_sql(sql, con, index_col=None, columns=None, **options) -> DataFrame:
         return read_sql_query(sql, con, index_col=index_col, **options)
 
 
+@no_type_check
 def to_datetime(
-    arg, errors="raise", format=None, unit=None, infer_datetime_format=False, origin="unix"
+    arg,
+    errors: str = "raise",
+    format: Optional[str] = None,
+    unit: Optional[str] = None,
+    infer_datetime_format: bool = False,
+    origin: str = "unix",
 ):
     """
     Convert argument to datetime.
@@ -1579,9 +1633,34 @@ def to_datetime(
     DatetimeIndex(['1960-01-02', '1960-01-03', '1960-01-04'], dtype='datetime64[ns]', freq=None)
     """
 
-    def pandas_to_datetime(pser_or_pdf) -> Series[np.datetime64]:
+    # mappings for assembling units
+    # From pandas: pandas.core.tools.datetimes
+    _unit_map = {
+        "year": "year",
+        "years": "year",
+        "month": "month",
+        "months": "month",
+        "day": "day",
+        "days": "day",
+        "hour": "h",
+        "hours": "h",
+        "minute": "m",
+        "minutes": "m",
+        "second": "s",
+        "seconds": "s",
+        "ms": "ms",
+        "millisecond": "ms",
+        "milliseconds": "ms",
+        "us": "us",
+        "microsecond": "us",
+        "microseconds": "us",
+    }
+
+    def pandas_to_datetime(
+        pser_or_pdf: Union[pd.DataFrame, pd.Series], cols: Optional[List[str]] = None
+    ) -> Series[np.datetime64]:
         if isinstance(pser_or_pdf, pd.DataFrame):
-            pser_or_pdf = pser_or_pdf[["year", "month", "day"]]
+            pser_or_pdf = pser_or_pdf[cols]
         return pd.to_datetime(
             pser_or_pdf,
             errors=errors,
@@ -1594,8 +1673,16 @@ def to_datetime(
     if isinstance(arg, Series):
         return arg.pandas_on_spark.transform_batch(pandas_to_datetime)
     if isinstance(arg, DataFrame):
-        psdf = arg[["year", "month", "day"]]
-        return psdf.pandas_on_spark.transform_batch(pandas_to_datetime)
+        unit = {k: _unit_map[k.lower()] for k in arg.keys() if k.lower() in _unit_map}
+        unit_rev = {v: k for k, v in unit.items()}
+        list_cols = [unit_rev["year"], unit_rev["month"], unit_rev["day"]]
+        for u in ["h", "m", "s", "ms", "us"]:
+            value = unit_rev.get(u)
+            if value is not None and value in arg:
+                list_cols.append(value)
+
+        psdf = arg[list_cols]
+        return psdf.pandas_on_spark.transform_batch(pandas_to_datetime, list_cols)
     return pd.to_datetime(
         arg,
         errors=errors,
@@ -1607,15 +1694,15 @@ def to_datetime(
 
 
 def date_range(
-    start=None,
-    end=None,
-    periods=None,
-    freq=None,
-    tz=None,
-    normalize=False,
-    name=None,
-    closed=None,
-    **kwargs
+    start: Union[str, Any] = None,
+    end: Union[str, Any] = None,
+    periods: Optional[int] = None,
+    freq: Optional[Union[str, DateOffset]] = None,
+    tz: Optional[Union[str, tzinfo]] = None,
+    normalize: bool = False,
+    name: Optional[str] = None,
+    closed: Optional[str] = None,
+    **kwargs: Any
 ) -> DatetimeIndex:
     """
     Return a fixed frequency DatetimeIndex.
@@ -1770,14 +1857,14 @@ def date_range(
 
 
 def get_dummies(
-    data,
-    prefix=None,
-    prefix_sep="_",
-    dummy_na=False,
-    columns=None,
-    sparse=False,
-    drop_first=False,
-    dtype=None,
+    data: Union[DataFrame, Series],
+    prefix: Optional[Union[str, List[str], Dict[str, str]]] = None,
+    prefix_sep: str = "_",
+    dummy_na: bool = False,
+    columns: Optional[Union[Name, List[Name]]] = None,
+    sparse: bool = False,
+    drop_first: bool = False,
+    dtype: Optional[Union[str, Dtype]] = None,
 ) -> DataFrame:
     """
     Convert categorical variable into dummy/indicator variables, also
@@ -1903,7 +1990,7 @@ def get_dummies(
                     raise KeyError(name_like_string(columns))
                 if prefix is None:
                     prefix = [
-                        str(label[len(columns):])
+                        str(label[len(columns) :])
                         if len(label) > len(columns) + 1
                         else label[len(columns)]
                         if len(label) == len(columns) + 1
@@ -1976,11 +2063,11 @@ def get_dummies(
         if drop_first:
             values = values[1:]
 
-        def column_name(value):
-            if prefix is None or prefix[i] == "":
-                return value
+        def column_name(v: Any) -> Name:
+            if prefix is None or cast(List[str], prefix)[i] == "":
+                return v
             else:
-                return "{}{}{}".format(prefix[i], prefix_sep, value)
+                return "{}{}{}".format(cast(List[str], prefix)[i], prefix_sep, v)
 
         for value in values:
             remaining_columns.append(
@@ -1995,7 +2082,13 @@ def get_dummies(
 
 
 # TODO: there are many parameters to implement and support. See pandas's pd.concat.
-def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[Series, DataFrame]:
+def concat(
+    objs: List[Union[DataFrame, Series]],
+    axis: Axis = 0,
+    join: str = "outer",
+    ignore_index: bool = False,
+    sort: bool = False,
+) -> Union[Series, DataFrame]:
     """
     Concatenate pandas-on-Spark objects along a particular axis with optional set logic
     along the other axes.
@@ -2167,10 +2260,13 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
         raise ValueError("Only can inner (intersect) or outer (union) join the other axis.")
 
     axis = validate_axis(axis)
+    psdf: DataFrame
     if axis == 1:
-        psdfs = [obj.to_frame() if isinstance(obj, Series) else obj for obj in objs]
+        psdfs: List[DataFrame] = [
+            obj.to_frame() if isinstance(obj, Series) else obj for obj in objs
+        ]
 
-        level = min(psdf._internal.column_labels_level for psdf in psdfs)
+        level: int = min(psdf._internal.column_labels_level for psdf in psdfs)
         psdfs = [
             DataFrame._index_normalized_frame(level, psdf)
             if psdf._internal.column_labels_level > level
@@ -2179,7 +2275,7 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
         ]
 
         concat_psdf = psdfs[0]
-        column_labels = concat_psdf._internal.column_labels.copy()
+        column_labels: List[Label] = concat_psdf._internal.column_labels.copy()
 
         psdfs_not_same_anchor = []
         for psdf in psdfs[1:]:
@@ -2206,17 +2302,26 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
 
         if len(psdfs_not_same_anchor) > 0:
 
+            @no_type_check
             def resolve_func(psdf, this_column_labels, that_column_labels):
                 raise AssertionError("This should not happen.")
 
             for psdf in psdfs_not_same_anchor:
                 if join == "inner":
                     concat_psdf = align_diff_frames(
-                        resolve_func, concat_psdf, psdf, fillna=False, how="inner",
+                        resolve_func,
+                        concat_psdf,
+                        psdf,
+                        fillna=False,
+                        how="inner",
                     )
                 elif join == "outer":
                     concat_psdf = align_diff_frames(
-                        resolve_func, concat_psdf, psdf, fillna=False, how="full",
+                        resolve_func,
+                        concat_psdf,
+                        psdf,
+                        fillna=False,
+                        how="full",
                     )
 
             concat_psdf = concat_psdf[column_labels]
@@ -2235,25 +2340,26 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
 
     # DataFrame, Series ... & Series, Series ...
     # In this case, we should return DataFrame.
-    new_objs = []
+    new_objs: List[DataFrame] = []
     num_series = 0
     series_names = set()
     for obj in objs:
         if isinstance(obj, Series):
             num_series += 1
             series_names.add(obj.name)
-            obj = obj.to_frame(DEFAULT_SERIES_NAME)
-        new_objs.append(obj)
-    objs = new_objs
+            new_objs.append(obj.to_frame(DEFAULT_SERIES_NAME))
+        else:
+            assert isinstance(obj, DataFrame)
+            new_objs.append(obj)
 
-    column_labels_levels = set(obj._internal.column_labels_level for obj in objs)
+    column_labels_levels: Set[int] = set(obj._internal.column_labels_level for obj in new_objs)
     if len(column_labels_levels) != 1:
         raise ValueError("MultiIndex columns should have the same levels")
 
     # DataFrame, DataFrame, ...
     # All Series are converted into DataFrame and then compute concat.
     if not ignore_index:
-        indices_of_psdfs = [psdf.index for psdf in objs]
+        indices_of_psdfs = [psdf.index for psdf in new_objs]
         index_of_first_psdf = indices_of_psdfs[0]
         for index_of_psdf in indices_of_psdfs:
             if index_of_first_psdf.names != index_of_psdf.names:
@@ -2266,20 +2372,21 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
                     )
                 )
 
-    column_labels_of_psdfs = [psdf._internal.column_labels for psdf in objs]
+    column_labels_of_psdfs = [psdf._internal.column_labels for psdf in new_objs]
+    index_names_of_psdfs: List[List[Optional[Label]]]
     if ignore_index:
-        index_names_of_psdfs = [[] for _ in objs]  # type: List
+        index_names_of_psdfs = [[] for _ in new_objs]
     else:
-        index_names_of_psdfs = [psdf._internal.index_names for psdf in objs]
+        index_names_of_psdfs = [psdf._internal.index_names for psdf in new_objs]
 
     if all(name == index_names_of_psdfs[0] for name in index_names_of_psdfs) and all(
         idx == column_labels_of_psdfs[0] for idx in column_labels_of_psdfs
     ):
         # If all columns are in the same order and values, use it.
-        psdfs = objs
+        psdfs = new_objs
     else:
         if join == "inner":
-            interested_columns = set.intersection(*map(set, column_labels_of_psdfs))
+            interested_columns = set.intersection(*map(lambda x: set(x), column_labels_of_psdfs))
             # Keep the column order with its firsts DataFrame.
             merged_columns = [
                 label for label in column_labels_of_psdfs[0] if label in interested_columns
@@ -2291,7 +2398,7 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
                 # FIXME: better ordering
                 merged_columns = sorted(merged_columns, key=name_like_string)
 
-            psdfs = [psdf[merged_columns] for psdf in objs]
+            psdfs = [psdf[merged_columns] for psdf in new_objs]
         elif join == "outer":
             merged_columns = []
             for labels in column_labels_of_psdfs:
@@ -2312,13 +2419,13 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
                 merged_columns = sorted(merged_columns, key=name_like_string)
 
             psdfs = []
-            for psdf in objs:
+            for psdf in new_objs:
                 columns_to_add = list(set(merged_columns) - set(psdf._internal.column_labels))
 
                 # TODO: NaN and None difference for missing values. pandas seems filling NaN.
                 sdf = psdf._internal.resolved_copy.spark_frame
                 for label in columns_to_add:
-                    sdf = sdf.withColumn(name_like_string(label), F.lit(None))
+                    sdf = sdf.withColumn(name_like_string(label), SF.lit(None))
 
                 data_columns = psdf._internal.data_spark_column_names + [
                     name_like_string(label) for label in columns_to_add
@@ -2331,7 +2438,7 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
                         ],
                         column_labels=(psdf._internal.column_labels + columns_to_add),
                         data_spark_columns=[scol_for(sdf, col) for col in data_columns],
-                        data_dtypes=(psdf._internal.data_dtypes + ([None] * len(columns_to_add))),
+                        data_fields=(psdf._internal.data_fields + ([None] * len(columns_to_add))),
                     )
                 )
 
@@ -2353,24 +2460,24 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
     if ignore_index:
         index_spark_column_names = []
         index_names = []
-        index_dtypes = []
+        index_fields = []
     else:
         index_spark_column_names = psdfs[0]._internal.index_spark_column_names
         index_names = psdfs[0]._internal.index_names
-        index_dtypes = psdfs[0]._internal.index_dtypes
+        index_fields = psdfs[0]._internal.index_fields
 
-    result_psdf = DataFrame(
+    result_psdf: DataFrame = DataFrame(
         psdfs[0]._internal.copy(
             spark_frame=concatenated,
             index_spark_columns=[scol_for(concatenated, col) for col in index_spark_column_names],
             index_names=index_names,
-            index_dtypes=index_dtypes,
+            index_fields=index_fields,
             data_spark_columns=[
                 scol_for(concatenated, col) for col in psdfs[0]._internal.data_spark_column_names
             ],
-            data_dtypes=None,  # TODO: dtypes?
+            data_fields=None,  # TODO: dtypes?
         )
-    )  # type: DataFrame
+    )
 
     if should_return_series:
         # If all input were Series, we should return Series.
@@ -2383,13 +2490,20 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
         return result_psdf
 
 
-def melt(frame, id_vars=None, value_vars=None, var_name=None, value_name="value") -> DataFrame:
+def melt(
+    frame: DataFrame,
+    id_vars: Optional[Union[Name, List[Name]]] = None,
+    value_vars: Optional[Union[Name, List[Name]]] = None,
+    var_name: Optional[Union[str, List[str]]] = None,
+    value_name: str = "value",
+) -> DataFrame:
     return DataFrame.melt(frame, id_vars, value_vars, var_name, value_name)
 
 
 melt.__doc__ = DataFrame.melt.__doc__
 
 
+@no_type_check
 def isna(obj):
     """
     Detect missing values for an array-like object.
@@ -2472,6 +2586,7 @@ def isna(obj):
 isnull = isna
 
 
+@no_type_check
 def notna(obj):
     """
     Detect existing (non-missing) values.
@@ -2547,12 +2662,12 @@ notnull = notna
 
 
 def merge(
-    obj,
-    right: "DataFrame",
+    obj: DataFrame,
+    right: DataFrame,
     how: str = "inner",
-    on: Union[Any, List[Any], Tuple, List[Tuple]] = None,
-    left_on: Union[Any, List[Any], Tuple, List[Tuple]] = None,
-    right_on: Union[Any, List[Any], Tuple, List[Tuple]] = None,
+    on: Optional[Union[Name, List[Name]]] = None,
+    left_on: Optional[Union[Name, List[Name]]] = None,
+    right_on: Optional[Union[Name, List[Name]]] = None,
     left_index: bool = False,
     right_index: bool = False,
     suffixes: Tuple[str, str] = ("_x", "_y"),
@@ -2679,13 +2794,514 @@ def merge(
     )
 
 
-def to_numeric(arg):
+def merge_asof(
+    left: Union[DataFrame, Series],
+    right: Union[DataFrame, Series],
+    on: Optional[Name] = None,
+    left_on: Optional[Name] = None,
+    right_on: Optional[Name] = None,
+    left_index: bool = False,
+    right_index: bool = False,
+    by: Optional[Union[Name, List[Name]]] = None,
+    left_by: Optional[Union[Name, List[Name]]] = None,
+    right_by: Optional[Union[Name, List[Name]]] = None,
+    suffixes: Tuple[str, str] = ("_x", "_y"),
+    tolerance: Optional[Any] = None,
+    allow_exact_matches: bool = True,
+    direction: str = "backward",
+) -> DataFrame:
+    """
+    Perform an asof merge.
+
+    This is similar to a left-join except that we match on nearest
+    key rather than equal keys.
+
+    For each row in the left DataFrame:
+
+      - A "backward" search selects the last row in the right DataFrame whose
+        'on' key is less than or equal to the left's key.
+
+      - A "forward" search selects the first row in the right DataFrame whose
+        'on' key is greater than or equal to the left's key.
+
+      - A "nearest" search selects the row in the right DataFrame whose 'on'
+        key is closest in absolute distance to the left's key.
+
+    Optionally match on equivalent keys with 'by' before searching with 'on'.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    left : DataFrame or named Series
+    right : DataFrame or named Series
+    on : label
+        Field name to join on. Must be found in both DataFrames.
+        The data MUST be ordered. Furthermore this must be a numeric column,
+        such as datetimelike, integer, or float. On or left_on/right_on
+        must be given.
+    left_on : label
+        Field name to join on in left DataFrame.
+    right_on : label
+        Field name to join on in right DataFrame.
+    left_index : bool
+        Use the index of the left DataFrame as the join key.
+    right_index : bool
+        Use the index of the right DataFrame as the join key.
+    by : column name or list of column names
+        Match on these columns before performing merge operation.
+    left_by : column name
+        Field names to match on in the left DataFrame.
+    right_by : column name
+        Field names to match on in the right DataFrame.
+    suffixes : 2-length sequence (tuple, list, ...)
+        Suffix to apply to overlapping column names in the left and right
+        side, respectively.
+    tolerance : int or Timedelta, optional, default None
+        Select asof tolerance within this range; must be compatible
+        with the merge index.
+    allow_exact_matches : bool, default True
+
+        - If True, allow matching with the same 'on' value
+          (i.e. less-than-or-equal-to / greater-than-or-equal-to)
+        - If False, don't match the same 'on' value
+          (i.e., strictly less-than / strictly greater-than).
+
+    direction : 'backward' (default), 'forward', or 'nearest'
+        Whether to search for prior, subsequent, or closest matches.
+
+    Returns
+    -------
+    merged : DataFrame
+
+    See Also
+    --------
+    merge : Merge with a database-style join.
+    merge_ordered : Merge with optional filling/interpolation.
+
+    Examples
+    --------
+    >>> left = ps.DataFrame({"a": [1, 5, 10], "left_val": ["a", "b", "c"]})
+    >>> left
+        a left_val
+    0   1        a
+    1   5        b
+    2  10        c
+
+    >>> right = ps.DataFrame({"a": [1, 2, 3, 6, 7], "right_val": [1, 2, 3, 6, 7]})
+    >>> right
+       a  right_val
+    0  1          1
+    1  2          2
+    2  3          3
+    3  6          6
+    4  7          7
+
+    >>> ps.merge_asof(left, right, on="a").sort_values("a").reset_index(drop=True)
+        a left_val  right_val
+    0   1        a          1
+    1   5        b          3
+    2  10        c          7
+
+    >>> ps.merge_asof(
+    ...     left,
+    ...     right,
+    ...     on="a",
+    ...     allow_exact_matches=False
+    ... ).sort_values("a").reset_index(drop=True)
+        a left_val  right_val
+    0   1        a        NaN
+    1   5        b        3.0
+    2  10        c        7.0
+
+    >>> ps.merge_asof(
+    ...     left,
+    ...     right,
+    ...     on="a",
+    ...     direction="forward"
+    ... ).sort_values("a").reset_index(drop=True)
+        a left_val  right_val
+    0   1        a        1.0
+    1   5        b        6.0
+    2  10        c        NaN
+
+    >>> ps.merge_asof(
+    ...     left,
+    ...     right,
+    ...     on="a",
+    ...     direction="nearest"
+    ... ).sort_values("a").reset_index(drop=True)
+        a left_val  right_val
+    0   1        a          1
+    1   5        b          6
+    2  10        c          7
+
+    We can use indexed DataFrames as well.
+
+    >>> left = ps.DataFrame({"left_val": ["a", "b", "c"]}, index=[1, 5, 10])
+    >>> left
+       left_val
+    1         a
+    5         b
+    10        c
+
+    >>> right = ps.DataFrame({"right_val": [1, 2, 3, 6, 7]}, index=[1, 2, 3, 6, 7])
+    >>> right
+       right_val
+    1          1
+    2          2
+    3          3
+    6          6
+    7          7
+
+    >>> ps.merge_asof(left, right, left_index=True, right_index=True).sort_index()
+       left_val  right_val
+    1         a          1
+    5         b          3
+    10        c          7
+
+    Here is a real-world times-series example
+
+    >>> quotes = ps.DataFrame(
+    ...     {
+    ...         "time": [
+    ...             pd.Timestamp("2016-05-25 13:30:00.023"),
+    ...             pd.Timestamp("2016-05-25 13:30:00.023"),
+    ...             pd.Timestamp("2016-05-25 13:30:00.030"),
+    ...             pd.Timestamp("2016-05-25 13:30:00.041"),
+    ...             pd.Timestamp("2016-05-25 13:30:00.048"),
+    ...             pd.Timestamp("2016-05-25 13:30:00.049"),
+    ...             pd.Timestamp("2016-05-25 13:30:00.072"),
+    ...             pd.Timestamp("2016-05-25 13:30:00.075")
+    ...         ],
+    ...         "ticker": [
+    ...                "GOOG",
+    ...                "MSFT",
+    ...                "MSFT",
+    ...                "MSFT",
+    ...                "GOOG",
+    ...                "AAPL",
+    ...                "GOOG",
+    ...                "MSFT"
+    ...            ],
+    ...            "bid": [720.50, 51.95, 51.97, 51.99, 720.50, 97.99, 720.50, 52.01],
+    ...            "ask": [720.93, 51.96, 51.98, 52.00, 720.93, 98.01, 720.88, 52.03]
+    ...     }
+    ... )
+    >>> quotes
+                         time ticker     bid     ask
+    0 2016-05-25 13:30:00.023   GOOG  720.50  720.93
+    1 2016-05-25 13:30:00.023   MSFT   51.95   51.96
+    2 2016-05-25 13:30:00.030   MSFT   51.97   51.98
+    3 2016-05-25 13:30:00.041   MSFT   51.99   52.00
+    4 2016-05-25 13:30:00.048   GOOG  720.50  720.93
+    5 2016-05-25 13:30:00.049   AAPL   97.99   98.01
+    6 2016-05-25 13:30:00.072   GOOG  720.50  720.88
+    7 2016-05-25 13:30:00.075   MSFT   52.01   52.03
+
+    >>> trades = ps.DataFrame(
+    ...        {
+    ...            "time": [
+    ...                pd.Timestamp("2016-05-25 13:30:00.023"),
+    ...                pd.Timestamp("2016-05-25 13:30:00.038"),
+    ...                pd.Timestamp("2016-05-25 13:30:00.048"),
+    ...                pd.Timestamp("2016-05-25 13:30:00.048"),
+    ...                pd.Timestamp("2016-05-25 13:30:00.048")
+    ...            ],
+    ...            "ticker": ["MSFT", "MSFT", "GOOG", "GOOG", "AAPL"],
+    ...            "price": [51.95, 51.95, 720.77, 720.92, 98.0],
+    ...            "quantity": [75, 155, 100, 100, 100]
+    ...        }
+    ...    )
+    >>> trades
+                         time ticker   price  quantity
+    0 2016-05-25 13:30:00.023   MSFT   51.95        75
+    1 2016-05-25 13:30:00.038   MSFT   51.95       155
+    2 2016-05-25 13:30:00.048   GOOG  720.77       100
+    3 2016-05-25 13:30:00.048   GOOG  720.92       100
+    4 2016-05-25 13:30:00.048   AAPL   98.00       100
+
+    By default we are taking the asof of the quotes
+
+    >>> ps.merge_asof(
+    ...    trades, quotes, on="time", by="ticker"
+    ... ).sort_values(["time", "ticker", "price"]).reset_index(drop=True)
+                         time ticker   price  quantity     bid     ask
+    0 2016-05-25 13:30:00.023   MSFT   51.95        75   51.95   51.96
+    1 2016-05-25 13:30:00.038   MSFT   51.95       155   51.97   51.98
+    2 2016-05-25 13:30:00.048   AAPL   98.00       100     NaN     NaN
+    3 2016-05-25 13:30:00.048   GOOG  720.77       100  720.50  720.93
+    4 2016-05-25 13:30:00.048   GOOG  720.92       100  720.50  720.93
+
+    We only asof within 2ms between the quote time and the trade time
+
+    >>> ps.merge_asof(
+    ...     trades,
+    ...     quotes,
+    ...     on="time",
+    ...     by="ticker",
+    ...     tolerance=F.expr("INTERVAL 2 MILLISECONDS")  # pd.Timedelta("2ms")
+    ... ).sort_values(["time", "ticker", "price"]).reset_index(drop=True)
+                         time ticker   price  quantity     bid     ask
+    0 2016-05-25 13:30:00.023   MSFT   51.95        75   51.95   51.96
+    1 2016-05-25 13:30:00.038   MSFT   51.95       155     NaN     NaN
+    2 2016-05-25 13:30:00.048   AAPL   98.00       100     NaN     NaN
+    3 2016-05-25 13:30:00.048   GOOG  720.77       100  720.50  720.93
+    4 2016-05-25 13:30:00.048   GOOG  720.92       100  720.50  720.93
+
+    We only asof within 10ms between the quote time and the trade time
+    and we exclude exact matches on time. However *prior* data will
+    propagate forward
+
+    >>> ps.merge_asof(
+    ...     trades,
+    ...     quotes,
+    ...     on="time",
+    ...     by="ticker",
+    ...     tolerance=F.expr("INTERVAL 10 MILLISECONDS"),  # pd.Timedelta("10ms")
+    ...     allow_exact_matches=False
+    ... ).sort_values(["time", "ticker", "price"]).reset_index(drop=True)
+                         time ticker   price  quantity     bid     ask
+    0 2016-05-25 13:30:00.023   MSFT   51.95        75     NaN     NaN
+    1 2016-05-25 13:30:00.038   MSFT   51.95       155   51.97   51.98
+    2 2016-05-25 13:30:00.048   AAPL   98.00       100     NaN     NaN
+    3 2016-05-25 13:30:00.048   GOOG  720.77       100     NaN     NaN
+    4 2016-05-25 13:30:00.048   GOOG  720.92       100     NaN     NaN
+    """
+
+    def to_list(os: Optional[Union[Name, List[Name]]]) -> List[Label]:
+        if os is None:
+            return []
+        elif is_name_like_tuple(os):
+            return [cast(Label, os)]
+        elif is_name_like_value(os):
+            return [(os,)]
+        else:
+            return [o if is_name_like_tuple(o) else (o,) for o in os]
+
+    if isinstance(left, Series):
+        left = left.to_frame()
+    if isinstance(right, Series):
+        right = right.to_frame()
+
+    if on:
+        if left_on or right_on:
+            raise ValueError(
+                'Can only pass argument "on" OR "left_on" and "right_on", '
+                "not a combination of both."
+            )
+        left_as_of_names = list(map(left._internal.spark_column_name_for, to_list(on)))
+        right_as_of_names = list(map(right._internal.spark_column_name_for, to_list(on)))
+    else:
+        if left_index:
+            if isinstance(left.index, MultiIndex):
+                raise ValueError("left can only have one index")
+            left_as_of_names = left._internal.index_spark_column_names
+        else:
+            left_as_of_names = list(map(left._internal.spark_column_name_for, to_list(left_on)))
+        if right_index:
+            if isinstance(right.index, MultiIndex):
+                raise ValueError("right can only have one index")
+            right_as_of_names = right._internal.index_spark_column_names
+        else:
+            right_as_of_names = list(map(right._internal.spark_column_name_for, to_list(right_on)))
+
+        if left_as_of_names and not right_as_of_names:
+            raise ValueError("Must pass right_on or right_index=True")
+        if right_as_of_names and not left_as_of_names:
+            raise ValueError("Must pass left_on or left_index=True")
+        if not left_as_of_names and not right_as_of_names:
+            common = list(left.columns.intersection(right.columns))
+            if len(common) == 0:
+                raise ValueError(
+                    "No common columns to perform merge on. Merge options: "
+                    "left_on=None, right_on=None, left_index=False, right_index=False"
+                )
+            left_as_of_names = list(map(left._internal.spark_column_name_for, to_list(common)))
+            right_as_of_names = list(map(right._internal.spark_column_name_for, to_list(common)))
+
+    if len(left_as_of_names) != 1:
+        raise ValueError("can only asof on a key for left")
+    if len(right_as_of_names) != 1:
+        raise ValueError("can only asof on a key for right")
+
+    if by:
+        if left_by or right_by:
+            raise ValueError('Can only pass argument "on" OR "left_by" and "right_by".')
+        left_join_on_names = list(map(left._internal.spark_column_name_for, to_list(by)))
+        right_join_on_names = list(map(right._internal.spark_column_name_for, to_list(by)))
+    else:
+        left_join_on_names = list(map(left._internal.spark_column_name_for, to_list(left_by)))
+        right_join_on_names = list(map(right._internal.spark_column_name_for, to_list(right_by)))
+
+        if left_join_on_names and not right_join_on_names:
+            raise ValueError("missing right_by")
+        if right_join_on_names and not left_join_on_names:
+            raise ValueError("missing left_by")
+        if len(left_join_on_names) != len(right_join_on_names):
+            raise ValueError("left_by and right_by must be same length")
+
+    # We should distinguish the name to avoid ambiguous column name after merging.
+    right_prefix = "__right_"
+    right_as_of_names = [right_prefix + right_as_of_name for right_as_of_name in right_as_of_names]
+    right_join_on_names = [
+        right_prefix + right_join_on_name for right_join_on_name in right_join_on_names
+    ]
+
+    left_as_of_name = left_as_of_names[0]
+    right_as_of_name = right_as_of_names[0]
+
+    def resolve(internal: InternalFrame, side: str) -> InternalFrame:
+        rename = lambda col: "__{}_{}".format(side, col)
+        internal = internal.resolved_copy
+        sdf = internal.spark_frame
+        sdf = sdf.select(
+            *[
+                scol_for(sdf, col).alias(rename(col))
+                for col in sdf.columns
+                if col not in HIDDEN_COLUMNS
+            ],
+            *HIDDEN_COLUMNS
+        )
+        return internal.copy(
+            spark_frame=sdf,
+            index_spark_columns=[
+                scol_for(sdf, rename(col)) for col in internal.index_spark_column_names
+            ],
+            index_fields=[field.copy(name=rename(field.name)) for field in internal.index_fields],
+            data_spark_columns=[
+                scol_for(sdf, rename(col)) for col in internal.data_spark_column_names
+            ],
+            data_fields=[field.copy(name=rename(field.name)) for field in internal.data_fields],
+        )
+
+    left_internal = left._internal.resolved_copy
+    right_internal = resolve(right._internal, "right")
+
+    left_table = left_internal.spark_frame.alias("left_table")
+    right_table = right_internal.spark_frame.alias("right_table")
+
+    left_as_of_column = scol_for(left_table, left_as_of_name)
+    right_as_of_column = scol_for(right_table, right_as_of_name)
+
+    if left_join_on_names:
+        left_join_on_columns = [scol_for(left_table, label) for label in left_join_on_names]
+        right_join_on_columns = [scol_for(right_table, label) for label in right_join_on_names]
+        on = reduce(
+            lambda l, r: l & r,
+            [l == r for l, r in zip(left_join_on_columns, right_join_on_columns)],
+        )
+    else:
+        on = None
+
+    if tolerance is not None and not isinstance(tolerance, Column):
+        tolerance = SF.lit(tolerance)
+
+    as_of_joined_table = left_table._joinAsOf(
+        right_table,
+        leftAsOfColumn=left_as_of_column,
+        rightAsOfColumn=right_as_of_column,
+        on=on,
+        how="left",
+        tolerance=tolerance,
+        allowExactMatches=allow_exact_matches,
+        direction=direction,
+    )
+
+    # Unpack suffixes tuple for convenience
+    left_suffix = suffixes[0]
+    right_suffix = suffixes[1]
+
+    # Append suffixes to columns with the same name to avoid conflicts later
+    duplicate_columns = set(left_internal.column_labels) & set(right_internal.column_labels)
+
+    exprs = []
+    data_columns = []
+    column_labels = []
+
+    left_scol_for = lambda label: scol_for(
+        as_of_joined_table, left_internal.spark_column_name_for(label)
+    )
+    right_scol_for = lambda label: scol_for(
+        as_of_joined_table, right_internal.spark_column_name_for(label)
+    )
+
+    for label in left_internal.column_labels:
+        col = left_internal.spark_column_name_for(label)
+        scol = left_scol_for(label)
+        if label in duplicate_columns:
+            spark_column_name = left_internal.spark_column_name_for(label)
+            if spark_column_name in (left_as_of_names + left_join_on_names) and (
+                (right_prefix + spark_column_name) in (right_as_of_names + right_join_on_names)
+            ):
+                pass
+            else:
+                col = col + left_suffix
+                scol = scol.alias(col)
+                label = tuple([str(label[0]) + left_suffix] + list(label[1:]))
+        exprs.append(scol)
+        data_columns.append(col)
+        column_labels.append(label)
+    for label in right_internal.column_labels:
+        # recover `right_prefix` here.
+        col = right_internal.spark_column_name_for(label)[len(right_prefix) :]
+        scol = right_scol_for(label).alias(col)
+        if label in duplicate_columns:
+            spark_column_name = left_internal.spark_column_name_for(label)
+            if spark_column_name in left_as_of_names + left_join_on_names and (
+                (right_prefix + spark_column_name) in right_as_of_names + right_join_on_names
+            ):
+                continue
+            else:
+                col = col + right_suffix
+                scol = scol.alias(col)
+                label = tuple([str(label[0]) + right_suffix] + list(label[1:]))
+        exprs.append(scol)
+        data_columns.append(col)
+        column_labels.append(label)
+
+    # Retain indices if they are used for joining
+    if left_index or right_index:
+        index_spark_column_names = [
+            SPARK_INDEX_NAME_FORMAT(i) for i in range(len(left_internal.index_spark_column_names))
+        ]
+        left_index_scols = [
+            scol.alias(name)
+            for scol, name in zip(left_internal.index_spark_columns, index_spark_column_names)
+        ]
+        exprs.extend(left_index_scols)
+        index_names = left_internal.index_names
+    else:
+        index_spark_column_names = []
+        index_names = []
+
+    selected_columns = as_of_joined_table.select(*exprs)
+
+    internal = InternalFrame(
+        spark_frame=selected_columns,
+        index_spark_columns=[scol_for(selected_columns, col) for col in index_spark_column_names],
+        index_names=index_names,
+        column_labels=column_labels,
+        data_spark_columns=[scol_for(selected_columns, col) for col in data_columns],
+    )
+    return DataFrame(internal)
+
+
+@no_type_check
+def to_numeric(arg, errors="raise"):
     """
     Convert argument to a numeric type.
 
     Parameters
     ----------
     arg : scalar, list, tuple, 1-d array, or Series
+        Argument to be converted.
+    errors : {'raise', 'coerce'}, default 'raise'
+        * If 'coerce', then invalid parsing will be set as NaN.
+        * If 'raise', then invalid parsing will raise an exception.
+        * If 'ignore', then invalid parsing will return the input.
+
+        .. note:: 'ignore' doesn't work yet when `arg` is pandas-on-Spark Series.
 
     Returns
     -------
@@ -2715,6 +3331,7 @@ def to_numeric(arg):
     dtype: float32
 
     If given Series contains invalid value to cast float, just cast it to `np.nan`
+    when `errors` is set to "coerce".
 
     >>> psser = ps.Series(['apple', '1.0', '2', '-3'])
     >>> psser
@@ -2724,7 +3341,7 @@ def to_numeric(arg):
     3       -3
     dtype: object
 
-    >>> ps.to_numeric(psser)
+    >>> ps.to_numeric(psser, errors="coerce")
     0    NaN
     1    1.0
     2    2.0
@@ -2746,14 +3363,29 @@ def to_numeric(arg):
     1.0
     """
     if isinstance(arg, Series):
-        return arg._with_new_scol(arg.spark.column.cast("float"))
+        if errors == "coerce":
+            return arg._with_new_scol(arg.spark.column.cast("float"))
+        elif errors == "raise":
+            scol = arg.spark.column
+            scol_casted = scol.cast("float")
+            cond = F.when(
+                F.assert_true(scol.isNull() | scol_casted.isNotNull()).isNull(), scol_casted
+            )
+            return arg._with_new_scol(cond)
+        elif errors == "ignore":
+            raise NotImplementedError("'ignore' is not implemented yet, when the `arg` is Series.")
+        else:
+            raise ValueError("invalid error value specified")
     else:
-        return pd.to_numeric(arg)
+        return pd.to_numeric(arg, errors=errors)
 
 
-def broadcast(obj) -> DataFrame:
+def broadcast(obj: DataFrame) -> DataFrame:
     """
     Marks a DataFrame as small enough for use in broadcast joins.
+
+    .. deprecated:: 3.2.0
+        Use :func:`DataFrame.spark.hint` instead.
 
     Parameters
     ----------
@@ -2785,6 +3417,11 @@ def broadcast(obj) -> DataFrame:
     ...BroadcastHashJoin...
     ...
     """
+    warnings.warn(
+        "`broadcast` has been deprecated and might be removed in a future version. "
+        "Use `DataFrame.spark.hint` with 'broadcast' for `name` parameter instead.",
+        FutureWarning,
+    )
     if not isinstance(obj, DataFrame):
         raise TypeError("Invalid type : expected DataFrame got {}".format(type(obj).__name__))
     return DataFrame(
@@ -2793,10 +3430,10 @@ def broadcast(obj) -> DataFrame:
 
 
 def read_orc(
-    path,
+    path: str,
     columns: Optional[List[str]] = None,
     index_col: Optional[Union[str, List[str]]] = None,
-    **options
+    **options: Any
 ) -> "DataFrame":
     """
     Load an ORC object from the file path, returning a DataFrame.
@@ -2833,7 +3470,7 @@ def read_orc(
     0       0
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-        options = options.get("options")  # type: ignore
+        options = options.get("options")
 
     psdf = read_spark_io(path, format="orc", index_col=index_col, **options)
 
@@ -2851,8 +3488,10 @@ def read_orc(
 
 
 def _get_index_map(
-    sdf: spark.DataFrame, index_col: Optional[Union[str, List[str]]] = None
-) -> Tuple[Optional[List[spark.Column]], Optional[List[Tuple]]]:
+    sdf: SparkDataFrame, index_col: Optional[Union[str, List[str]]] = None
+) -> Tuple[Optional[List[Column]], Optional[List[Label]]]:
+    index_spark_columns: Optional[List[Column]]
+    index_names: Optional[List[Label]]
     if index_col is not None:
         if isinstance(index_col, str):
             index_col = [index_col]
@@ -2860,10 +3499,8 @@ def _get_index_map(
         for col in index_col:
             if col not in sdf_columns:
                 raise KeyError(col)
-        index_spark_columns = [
-            scol_for(sdf, col) for col in index_col
-        ]  # type: Optional[List[spark.Column]]
-        index_names = [(col,) for col in index_col]  # type: Optional[List[Tuple]]
+        index_spark_columns = [scol_for(sdf, col) for col in index_col]
+        index_names = [(col,) for col in index_col]
     else:
         index_spark_columns = None
         index_names = None
@@ -2881,10 +3518,11 @@ _get_dummies_acceptable_types = _get_dummies_default_accept_types + (
     DoubleType,
     BooleanType,
     TimestampType,
+    TimestampNTZType,
 )
 
 
-def _test():
+def _test() -> None:
     import os
     import doctest
     import shutil

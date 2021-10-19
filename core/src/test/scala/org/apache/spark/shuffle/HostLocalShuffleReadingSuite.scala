@@ -133,4 +133,14 @@ class HostLocalShuffleReadingSuite extends SparkFunSuite with Matchers with Loca
       assert(remoteBytesRead.sum === 0 && remoteBlocksFetched.sum === 0)
     }
   }
+
+  test("Enable host local shuffle reading when push based shuffle is enabled") {
+    val conf = new SparkConf()
+      .set(SHUFFLE_SERVICE_ENABLED, true)
+      .set("spark.yarn.maxAttempts", "1")
+      .set(PUSH_BASED_SHUFFLE_ENABLED, true)
+      .set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
+    sc = new SparkContext("local-cluster[2, 1, 1024]", "test-host-local-shuffle-reading", conf)
+    sc.env.blockManager.hostLocalDirManager.isDefined should equal(true)
+  }
 }

@@ -94,4 +94,21 @@ object ExprUtils {
       }
     }
   }
+
+  /**
+   * Check if the schema is valid for Json
+   * @param schema
+   * @return
+   *  None if the schema is valid
+   *  Some(msg) with the error message if the schema is not valid
+   */
+  def checkJsonSchema(schema: DataType): Option[Throwable] =
+    if (schema.existsRecursively {
+      case MapType(keyType, _, _) if keyType != StringType => true
+      case _ => false
+    }) {
+      Some(QueryCompilationErrors.invalidJsonSchema(schema))
+    } else {
+      None
+    }
 }
