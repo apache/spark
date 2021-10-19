@@ -337,7 +337,7 @@ class ArrayType(DataType):
 
     def __repr__(self) -> str:
         return "ArrayType(%s, %s)" % (self.elementType,
-                                     str(self.containsNull))
+                                      str(self.containsNull))
 
     def jsonValue(self) -> Dict[str, Any]:
         return {"type": self.typeName(),
@@ -405,7 +405,7 @@ class MapType(DataType):
 
     def __repr__(self) -> str:
         return "MapType(%s, %s, %s)" % (self.keyType, self.valueType,
-                                      str(self.valueContainsNull))
+                                        str(self.valueContainsNull))
 
     def jsonValue(self) -> Dict[str, Any]:
         return {"type": self.typeName(),
@@ -479,7 +479,7 @@ class StructField(DataType):
 
     def __repr__(self) -> str:
         return "StructField('%s', %s, %s)" % (self.name, self.dataType,
-                                          str(self.nullable))
+                                              str(self.nullable))
 
     def jsonValue(self) -> Dict[str, Any]:
         return {"name": self.name,
