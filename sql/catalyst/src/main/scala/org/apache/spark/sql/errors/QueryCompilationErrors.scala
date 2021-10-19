@@ -1849,19 +1849,6 @@ object QueryCompilationErrors {
     new AnalysisException("Cannot overwrite a path that is also being read from.")
   }
 
-  def createFuncWithBothIfNotExistsAndReplaceError(): Throwable = {
-    new AnalysisException("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed.")
-  }
-
-  def defineTempFuncWithIfNotExistsError(): Throwable = {
-    new AnalysisException("It is not allowed to define a TEMPORARY function with IF NOT EXISTS.")
-  }
-
-  def specifyingDBInCreateTempFuncError(databaseName: String): Throwable = {
-    new AnalysisException(
-      s"Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: '$databaseName'")
-  }
-
   def specifyingDBInDropTempFuncError(databaseName: String): Throwable = {
     new AnalysisException(
       s"Specifying a database in DROP TEMPORARY FUNCTION is not allowed: '$databaseName'")
@@ -2009,19 +1996,6 @@ object QueryCompilationErrors {
       s"Failed to execute SHOW CREATE TABLE against table/view ${table.identifier}, " +
         "which is created by Hive and uses the following unsupported feature(s)\n" +
         features.map(" - " + _).mkString("\n"))
-  }
-
-  def createViewWithBothIfNotExistsAndReplaceError(): Throwable = {
-    new AnalysisException("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.")
-  }
-
-  def defineTempViewWithIfNotExistsError(): Throwable = {
-    new AnalysisException("It is not allowed to define a TEMPORARY view with IF NOT EXISTS.")
-  }
-
-  def notAllowedToAddDBPrefixForTempViewError(database: String): Throwable = {
-    new AnalysisException(
-      s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.")
   }
 
   def logicalPlanForViewNotAnalyzedError(): Throwable = {

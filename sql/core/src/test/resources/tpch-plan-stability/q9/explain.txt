@@ -74,7 +74,7 @@ Condition : ((isnotnull(l_partkey#4) AND isnotnull(l_suppkey#5)) AND isnotnull(l
 
 (8) BroadcastExchange
 Input [6]: [l_orderkey#3, l_partkey#4, l_suppkey#5, l_quantity#6, l_extendedprice#7, l_discount#8]
-Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false]),false,false), [id=#9]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false]),false), [id=#9]
 
 (9) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [p_partkey#1]
@@ -101,7 +101,7 @@ Condition : (isnotnull(s_suppkey#10) AND isnotnull(s_nationkey#11))
 
 (14) BroadcastExchange
 Input [2]: [s_suppkey#10, s_nationkey#11]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false,false), [id=#12]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#12]
 
 (15) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [l_suppkey#5]
@@ -128,7 +128,7 @@ Condition : (isnotnull(ps_suppkey#14) AND isnotnull(ps_partkey#13))
 
 (20) BroadcastExchange
 Input [3]: [ps_partkey#13, ps_suppkey#14, ps_supplycost#15]
-Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false], input[0, bigint, false]),false,false), [id=#16]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false], input[0, bigint, false]),false), [id=#16]
 
 (21) BroadcastHashJoin [codegen id : 6]
 Left keys [2]: [l_suppkey#5, l_partkey#4]
@@ -155,7 +155,7 @@ Condition : isnotnull(o_orderkey#17)
 
 (26) BroadcastExchange
 Input [2]: [o_orderkey#17, o_orderdate#18]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false,false), [id=#19]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#19]
 
 (27) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [l_orderkey#3]
@@ -182,7 +182,7 @@ Condition : isnotnull(n_nationkey#20)
 
 (32) BroadcastExchange
 Input [2]: [n_nationkey#20, n_name#21]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false,false), [id=#22]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#22]
 
 (33) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [s_nationkey#11]

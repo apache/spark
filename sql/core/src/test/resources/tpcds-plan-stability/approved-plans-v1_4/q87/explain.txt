@@ -94,7 +94,7 @@ Condition : isnotnull(c_customer_sk#6)
 
 (10) BroadcastExchange
 Input [3]: [c_customer_sk#6, c_first_name#7, c_last_name#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#9]
 
 (11) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_customer_sk#1]
@@ -182,7 +182,7 @@ Results [3]: [c_last_name#17, c_first_name#16, d_date#14]
 
 (28) BroadcastExchange
 Input [3]: [c_last_name#17, c_first_name#16, d_date#14]
-Arguments: HashedRelationBroadcastMode(List(coalesce(input[0, string, true], ), isnull(input[0, string, true]), coalesce(input[1, string, true], ), isnull(input[1, string, true]), coalesce(input[2, date, true], 1970-01-01), isnull(input[2, date, true])),false,true), [id=#19]
+Arguments: HashedRelationBroadcastMode(List(coalesce(input[0, string, true], ), isnull(input[0, string, true]), coalesce(input[1, string, true], ), isnull(input[1, string, true]), coalesce(input[2, date, true], 1970-01-01), isnull(input[2, date, true])),false), [id=#19]
 
 (29) BroadcastHashJoin [codegen id : 12]
 Left keys [6]: [coalesce(c_last_name#8, ), isnull(c_last_name#8), coalesce(c_first_name#7, ), isnull(c_first_name#7), coalesce(d_date#5, 1970-01-01), isnull(d_date#5)]
@@ -262,7 +262,7 @@ Results [3]: [c_last_name#26, c_first_name#25, d_date#23]
 
 (44) BroadcastExchange
 Input [3]: [c_last_name#26, c_first_name#25, d_date#23]
-Arguments: HashedRelationBroadcastMode(List(coalesce(input[0, string, true], ), isnull(input[0, string, true]), coalesce(input[1, string, true], ), isnull(input[1, string, true]), coalesce(input[2, date, true], 1970-01-01), isnull(input[2, date, true])),false,true), [id=#28]
+Arguments: HashedRelationBroadcastMode(List(coalesce(input[0, string, true], ), isnull(input[0, string, true]), coalesce(input[1, string, true], ), isnull(input[1, string, true]), coalesce(input[2, date, true], 1970-01-01), isnull(input[2, date, true])),false), [id=#28]
 
 (45) BroadcastHashJoin [codegen id : 12]
 Left keys [6]: [coalesce(c_last_name#8, ), isnull(c_last_name#8), coalesce(c_first_name#7, ), isnull(c_first_name#7), coalesce(d_date#5, 1970-01-01), isnull(d_date#5)]
@@ -331,7 +331,7 @@ Input [3]: [d_date_sk#4, d_date#5, d_month_seq#34]
 
 (55) BroadcastExchange
 Input [2]: [d_date_sk#4, d_date#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#35]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#35]
 
 Subquery:2 Hosting operator id = 16 Hosting Expression = cs_sold_date_sk#12 IN dynamicpruning#3
 

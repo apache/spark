@@ -45,7 +45,6 @@ class SparkException(
       messageParameters = messageParameters)
 
   override def getErrorClass: String = errorClass.orNull
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass.orNull)
 }
 
 /**
@@ -84,7 +83,6 @@ private[spark] class SparkArithmeticException(errorClass: String, messageParamet
     with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
 /**
@@ -97,7 +95,6 @@ private[spark] class SparkUnsupportedOperationException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
 /**
@@ -111,7 +108,6 @@ private[spark] class SparkClassNotFoundException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters), cause) with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
 /**
@@ -125,7 +121,6 @@ private[spark] class SparkConcurrentModificationException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters), cause) with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
 /**
@@ -136,7 +131,6 @@ private[spark] class SparkDateTimeException(errorClass: String, messageParameter
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
 /**
@@ -149,7 +143,6 @@ private[spark] class SparkFileAlreadyExistsException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
 /**
@@ -162,7 +155,6 @@ private[spark] class SparkIllegalStateException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
 /**
@@ -175,7 +167,6 @@ private[spark] class SparkFileNotFoundException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
 /**
@@ -188,7 +179,6 @@ private[spark] class SparkNumberFormatException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
 /**
@@ -201,7 +191,6 @@ private[spark] class SparkNoSuchMethodException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
 /**
@@ -214,7 +203,6 @@ private[spark] class SparkIllegalArgumentException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
 /**
@@ -227,7 +215,6 @@ private[spark] class SparkIndexOutOfBoundsException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
 /**
@@ -240,7 +227,6 @@ private[spark] class SparkIOException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
 private[spark] class SparkRuntimeException(
@@ -251,7 +237,6 @@ private[spark] class SparkRuntimeException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters), cause) with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
 /**
@@ -264,7 +249,6 @@ private[spark] class SparkSecurityException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
 /**
@@ -277,7 +261,6 @@ private[spark] class SparkArrayIndexOutOfBoundsException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
 /**
@@ -290,7 +273,6 @@ private[spark] class SparkSQLException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
 /**
@@ -303,7 +285,6 @@ private[spark] class SparkNoSuchElementException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
 
 /**
@@ -316,5 +297,4 @@ private[spark] class SparkSQLFeatureNotSupportedException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }

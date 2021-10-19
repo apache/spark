@@ -66,7 +66,7 @@ Condition : ((((isnotnull(l_shipdate#7) AND (l_shipdate#7 >= 1995-01-01)) AND (l
 
 (7) BroadcastExchange
 Input [5]: [l_orderkey#3, l_suppkey#4, l_extendedprice#5, l_discount#6, l_shipdate#7]
-Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false]),false,false), [id=#8]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false]),false), [id=#8]
 
 (8) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [s_suppkey#1]
@@ -93,7 +93,7 @@ Condition : (isnotnull(o_orderkey#9) AND isnotnull(o_custkey#10))
 
 (13) BroadcastExchange
 Input [2]: [o_orderkey#9, o_custkey#10]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false,false), [id=#11]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#11]
 
 (14) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [l_orderkey#3]
@@ -120,7 +120,7 @@ Condition : (isnotnull(c_custkey#12) AND isnotnull(c_nationkey#13))
 
 (19) BroadcastExchange
 Input [2]: [c_custkey#12, c_nationkey#13]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false,false), [id=#14]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#14]
 
 (20) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [o_custkey#10]
@@ -147,7 +147,7 @@ Condition : (isnotnull(n_nationkey#15) AND ((n_name#16 = FRANCE) OR (n_name#16 =
 
 (25) BroadcastExchange
 Input [2]: [n_nationkey#15, n_name#16]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false,false), [id=#17]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#17]
 
 (26) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [s_nationkey#2]

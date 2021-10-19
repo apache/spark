@@ -42,6 +42,7 @@ from typing import (
     cast,
     TYPE_CHECKING,
 )
+import warnings
 
 import pandas as pd
 from pandas.api.types import is_hashable, is_list_like
@@ -54,10 +55,7 @@ else:
     _builtin_table = SelectionMixin._builtin_table
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
-from pyspark.sql.types import (  # noqa: F401
-    DataType,
-    FloatType,
-    DoubleType,
+from pyspark.sql.types import (
     NumericType,
     StructField,
     StructType,
@@ -75,7 +73,7 @@ from pyspark.pandas.internal import (
     NATURAL_ORDER_COLUMN_NAME,
     SPARK_INDEX_NAME_FORMAT,
     SPARK_DEFAULT_SERIES_NAME,
-    SPARK_DEFAULT_INDEX_NAME,
+    SPARK_INDEX_NAME_PATTERN,
 )
 from pyspark.pandas.missing.groupby import (
     MissingPandasLikeDataFrameGroupBy,
@@ -97,7 +95,7 @@ from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_pre
 from pyspark.pandas.exceptions import DataError
 
 if TYPE_CHECKING:
-    from pyspark.pandas.window import RollingGroupby, ExpandingGroupby  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.window import RollingGroupby, ExpandingGroupby
 
 
 # to keep it the same as pandas
@@ -292,9 +290,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             agg_cols = [col.name for col in self._agg_columns]
             func_or_funcs = OrderedDict([(col, func_or_funcs) for col in agg_cols])
 
-        psdf = DataFrame(
+        psdf: DataFrame = DataFrame(
             GroupBy._spark_groupby(self._psdf, func_or_funcs, self._groupkeys)
-        )  # type: DataFrame
+        )
 
         if self._dropna:
             psdf = DataFrame(
@@ -1207,16 +1205,25 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 pdf[groupkey_name].rename(psser.name)
                 for groupkey_name, psser in zip(groupkey_names, self._groupkeys)
             ]
+            grouped = pdf.groupby(groupkeys)
             if is_series_groupby:
-                pser_or_pdf = pdf.groupby(groupkeys)[name].apply(pandas_apply, *args, **kwargs)
+                pser_or_pdf = grouped[name].apply(pandas_apply, *args, **kwargs)
             else:
-                pser_or_pdf = pdf.groupby(groupkeys).apply(pandas_apply, *args, **kwargs)
+                pser_or_pdf = grouped.apply(pandas_apply, *args, **kwargs)
             psser_or_psdf = ps.from_pandas(pser_or_pdf)
 
             if len(pdf) <= limit:
                 if isinstance(psser_or_psdf, ps.Series) and is_series_groupby:
                     psser_or_psdf = psser_or_psdf.rename(cast(SeriesGroupBy, self)._psser.name)
                 return cast(Union[Series, DataFrame], psser_or_psdf)
+
+            if len(grouped) <= 1:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("always")
+                    warnings.warn(
+                        "The amount of data for return type inference might not be large enough. "
+                        "Consider increasing an option `compute.shortcut_limit`."
+                    )
 
             if isinstance(psser_or_psdf, Series):
                 should_return_series = True
@@ -1242,9 +1249,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             if isinstance(return_type, DataFrameType):
                 data_fields = cast(DataFrameType, return_type).data_fields
                 return_schema = cast(DataFrameType, return_type).spark_type
-                index_field = cast(DataFrameType, return_type).index_field
-                should_retain_index = index_field is not None
-                index_fields = [index_field]
+                index_fields = cast(DataFrameType, return_type).index_fields
+                should_retain_index = len(index_fields) > 0
                 psdf_from_pandas = None
             else:
                 should_return_series = True
@@ -1295,6 +1301,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 pdf_or_ser = pdf.groupby(groupkey_names)[name].apply(wrapped_func, *args, **kwargs)
             else:
                 pdf_or_ser = pdf.groupby(groupkey_names).apply(wrapped_func, *args, **kwargs)
+                if should_return_series and isinstance(pdf_or_ser, pd.DataFrame):
+                    pdf_or_ser = pdf_or_ser.stack()
 
             if not isinstance(pdf_or_ser, pd.DataFrame):
                 return pd.DataFrame(pdf_or_ser)
@@ -1317,10 +1325,18 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 )
             else:
                 index_names: Optional[List[Optional[Tuple[Any, ...]]]] = None
-                index_field = index_fields[0]
-                index_spark_columns = [scol_for(sdf, index_field.struct_field.name)]
-                if index_field.struct_field.name != SPARK_DEFAULT_INDEX_NAME:
-                    index_names = [(index_field.struct_field.name,)]
+
+                index_spark_columns = [
+                    scol_for(sdf, index_field.struct_field.name) for index_field in index_fields
+                ]
+
+                if not any(
+                    [
+                        SPARK_INDEX_NAME_PATTERN.match(index_field.struct_field.name)
+                        for index_field in index_fields
+                    ]
+                ):
+                    index_names = [(index_field.struct_field.name,) for index_field in index_fields]
                 internal = InternalFrame(
                     spark_frame=sdf,
                     index_names=index_names,
@@ -1439,10 +1455,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
     def _prepare_group_map_apply(
         psdf: DataFrame, groupkeys: List[Series], agg_columns: List[Series]
     ) -> Tuple[DataFrame, List[Label], List[str]]:
-        groupkey_labels = [
+        groupkey_labels: List[Label] = [
             verify_temp_column_name(psdf, "__groupkey_{}__".format(i))
             for i in range(len(groupkeys))
-        ]  # type: List[Label]
+        ]
         psdf = psdf[[s.rename(label) for s, label in zip(groupkeys, groupkey_labels)] + agg_columns]
         groupkey_names = [label if len(label) > 1 else label[0] for label in groupkey_labels]
         return DataFrame(psdf._internal.resolved_copy), groupkey_labels, groupkey_names
@@ -2251,7 +2267,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             limit = get_option("compute.shortcut_limit")
             pdf = psdf.head(limit + 1)._to_internal_pandas()
             pdf = pdf.groupby(groupkey_names).transform(func, *args, **kwargs)
-            psdf_from_pandas = DataFrame(pdf)  # type: DataFrame
+            psdf_from_pandas: DataFrame = DataFrame(pdf)
             return_schema = force_decimal_precision_scale(
                 as_nullable_spark_type(
                     psdf_from_pandas._internal.spark_frame.drop(*HIDDEN_COLUMNS).schema
@@ -2595,7 +2611,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             data_fields=[psser._internal.data_fields[0] for psser in agg_columns],
             column_label_names=self._psdf._internal.column_label_names,
         )
-        psdf = DataFrame(internal)  # type: DataFrame
+        psdf: DataFrame = DataFrame(internal)
 
         if len(psdf._internal.column_labels) > 0:
             stat_exprs = []
@@ -3332,8 +3348,8 @@ def normalize_keyword_aggregation(
         kwargs = OrderedDict(sorted(kwargs.items()))
 
     # TODO(Py35): When we drop python 3.5, change this to defaultdict(list)
-    aggspec = OrderedDict()  # type: Dict[Union[Any, Tuple], List[str]]
-    order = []  # type: List[Tuple]
+    aggspec: Dict[Union[Any, Tuple], List[str]] = OrderedDict()
+    order: List[Tuple] = []
     columns, pairs = zip(*kwargs.items())
 
     for column, aggfunc in pairs:

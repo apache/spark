@@ -667,7 +667,14 @@ case class HashAggregateExec(
     val isNotByteArrayDecimalType = bufferSchema.map(_.dataType).filter(_.isInstanceOf[DecimalType])
       .forall(!DecimalType.isByteArrayDecimalType(_))
 
-    isSupported && isNotByteArrayDecimalType
+    val isEnabledForAggModes =
+      if (modes.forall(mode => mode == Partial || mode == PartialMerge)) {
+        true
+      } else {
+        !conf.getConf(SQLConf.ENABLE_TWOLEVEL_AGG_MAP_PARTIAL_ONLY)
+      }
+
+    isSupported && isNotByteArrayDecimalType && isEnabledForAggModes
   }
 
   private def enableTwoLevelHashMap(ctx: CodegenContext): Unit = {

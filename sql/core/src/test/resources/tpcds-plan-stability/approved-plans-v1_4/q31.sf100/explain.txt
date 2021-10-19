@@ -266,7 +266,7 @@ Results [2]: [ca_county#26, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#18)
 
 (34) BroadcastExchange
 Input [2]: [ca_county#26, store_sales#30]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false,false), [id=#31]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#31]
 
 (35) BroadcastHashJoin [codegen id : 42]
 Left keys [1]: [ca_county#10]
@@ -348,7 +348,7 @@ Results [3]: [ca_county#41, d_year#37, MakeDecimal(sum(UnscaledValue(ss_ext_sale
 
 (52) BroadcastExchange
 Input [3]: [ca_county#41, d_year#37, store_sales#45]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false,false), [id=#46]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#46]
 
 (53) BroadcastHashJoin [codegen id : 42]
 Left keys [1]: [ca_county#10]
@@ -499,7 +499,7 @@ Results [2]: [ca_county#69, MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#62)
 
 (85) BroadcastExchange
 Input [2]: [ca_county#69, web_sales#73]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false,false), [id=#74]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#74]
 
 (86) BroadcastHashJoin [codegen id : 41]
 Left keys [1]: [ca_county#55]
@@ -581,7 +581,7 @@ Results [2]: [ca_county#83, MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#76)
 
 (103) BroadcastExchange
 Input [2]: [ca_county#83, web_sales#87]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false,false), [id=#88]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#88]
 
 (104) BroadcastHashJoin [codegen id : 41]
 Left keys [1]: [ca_county#55]
@@ -594,7 +594,7 @@ Input [5]: [ca_county#55, web_sales#60, web_sales#73, ca_county#83, web_sales#87
 
 (106) BroadcastExchange
 Input [4]: [ca_county#55, web_sales#60, web_sales#73, web_sales#87]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false,false), [id=#89]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#89]
 
 (107) BroadcastHashJoin [codegen id : 42]
 Left keys [1]: [ca_county#41]
@@ -638,7 +638,7 @@ Condition : ((((isnotnull(d_qoy#7) AND isnotnull(d_year#6)) AND (d_qoy#7 = 2)) A
 
 (114) BroadcastExchange
 Input [3]: [d_date_sk#5, d_year#6, d_qoy#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#95]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#95]
 
 Subquery:2 Hosting operator id = 19 Hosting Expression = ss_sold_date_sk#19 IN dynamicpruning#20
 BroadcastExchange (118)
@@ -663,7 +663,7 @@ Condition : ((((isnotnull(d_qoy#23) AND isnotnull(d_year#22)) AND (d_qoy#23 = 3)
 
 (118) BroadcastExchange
 Input [3]: [d_date_sk#21, d_year#22, d_qoy#23]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#96]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#96]
 
 Subquery:3 Hosting operator id = 37 Hosting Expression = ss_sold_date_sk#34 IN dynamicpruning#35
 BroadcastExchange (122)
@@ -688,7 +688,7 @@ Condition : ((((isnotnull(d_qoy#38) AND isnotnull(d_year#37)) AND (d_qoy#38 = 1)
 
 (122) BroadcastExchange
 Input [3]: [d_date_sk#36, d_year#37, d_qoy#38]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#97]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#97]
 
 Subquery:4 Hosting operator id = 55 Hosting Expression = ws_sold_date_sk#49 IN dynamicpruning#35
 
