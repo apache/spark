@@ -521,9 +521,9 @@ class StructType(DataType):
     --------
     >>> struct1 = StructType([StructField("f1", StringType(), True)])
     >>> struct1["f1"]
-    StructField(f1,StringType,true)
+    StructField('f1', StringType(), True)
     >>> struct1[0]
-    StructField(f1,StringType,true)
+    StructField('f1', StringType(), True)
 
     >>> struct1 = StructType([StructField("f1", StringType(), True)])
     >>> struct2 = StructType([StructField("f1", StringType(), True)])
@@ -862,17 +862,17 @@ def _parse_datatype_string(s: str) -> DataType:
     Examples
     --------
     >>> _parse_datatype_string("int ")
-    IntegerType
+    IntegerType()
     >>> _parse_datatype_string("INT ")
-    IntegerType
+    IntegerType()
     >>> _parse_datatype_string("a: byte, b: decimal(  16 , 8   ) ")
-    StructType(List(StructField(a,ByteType,true),StructField(b,DecimalType(16,8),true)))
+    StructType([StructField('a', ByteType(), True), StructField('b', DecimalType(16,8), True)])
     >>> _parse_datatype_string("a DOUBLE, b STRING")
-    StructType(List(StructField(a,DoubleType,true),StructField(b,StringType,true)))
+    StructType([StructField('a', DoubleType(), True), StructField('b', StringType(), True)])
     >>> _parse_datatype_string("a: array< short>")
-    StructType(List(StructField(a,ArrayType(ShortType,true),true)))
+    StructType([StructField('a', ArrayType(ShortType(), True), True)])
     >>> _parse_datatype_string(" map<string , string > ")
-    MapType(StringType,StringType,true)
+    MapType(StringType(), StringType(), True)
 
     >>> # Error cases
     >>> _parse_datatype_string("blabla") # doctest: +IGNORE_EXCEPTION_DETAIL
