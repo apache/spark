@@ -647,7 +647,7 @@ object DataSourceStrategy
    * If the underlying subquery hasn't completed yet, this method will throw an exception.
    */
   protected[sql] def translateRuntimeFilter(expr: Expression): Option[Filter] = expr match {
-    case in @ InSubqueryExec(e @ PushableColumnAndNestedColumn(name), _, _, _) =>
+    case in @ InSubqueryExec(e @ PushableColumnAndNestedColumn(name), _, _, _, _, _) =>
       val values = in.values().getOrElse {
         throw new IllegalStateException(s"Can't translate $in to source filter, no subquery result")
       }

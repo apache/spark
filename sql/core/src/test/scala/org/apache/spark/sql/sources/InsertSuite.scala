@@ -919,7 +919,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-33294: Add query resolved check before analyze InsertIntoDir") {
     withTempPath { path =>
-      val msg = intercept[AnalysisException] {
+      val ex = intercept[AnalysisException] {
         sql(
           s"""
             |INSERT OVERWRITE DIRECTORY '${path.getAbsolutePath}' USING PARQUET
@@ -929,8 +929,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             |  )
             |)
           """.stripMargin)
-      }.getMessage
-      assert(msg.contains("cannot resolve 'c3' given input columns"))
+      }
+      assert(ex.getErrorClass == "MISSING_COLUMN")
+      assert(ex.messageParameters.head == "c3")
     }
   }
 
@@ -1052,6 +1053,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         assert(e.getMessage.contains(
           "when committing files staged for overwriting dynamic partitions"))
       }
+    }
+  }
+
+  test("SPARK-36980: Insert support query with CTE") {
+    withTable("t") {
+      sql("CREATE TABLE t(i int, part1 int, part2 int) using parquet")
+      sql("INSERT INTO t WITH v1(c1) as (values (1)) select 1, 2, 3 from v1")
+      checkAnswer(spark.table("t"), Row(1, 2, 3))
     }
   }
 }

@@ -24,7 +24,7 @@ import java.util.concurrent.ExecutorService
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 
-import org.apache.spark.{ShuffleDependency, SparkConf, SparkEnv}
+import org.apache.spark.{ShuffleDependency, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -463,7 +463,8 @@ private[spark] object ShuffleBlockPusher {
 
   private val BLOCK_PUSHER_POOL: ExecutorService = {
     val conf = SparkEnv.get.conf
-    if (Utils.isPushBasedShuffleEnabled(conf)) {
+    if (Utils.isPushBasedShuffleEnabled(conf,
+        isDriver = SparkContext.DRIVER_IDENTIFIER == SparkEnv.get.executorId)) {
       val numThreads = conf.get(SHUFFLE_NUM_PUSH_THREADS)
         .getOrElse(conf.getInt(SparkLauncher.EXECUTOR_CORES, 1))
       ThreadUtils.newDaemonFixedThreadPool(numThreads, "shuffle-block-push-thread")

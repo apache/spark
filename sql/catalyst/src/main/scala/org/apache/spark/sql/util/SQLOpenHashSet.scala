@@ -20,6 +20,7 @@ package org.apache.spark.sql.util
 import scala.reflect._
 
 import org.apache.spark.annotation.Private
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -60,6 +61,55 @@ class SQLOpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
 }
 
 object SQLOpenHashSet {
+  def withNullCheckFunc(
+      dataType: DataType,
+      hashSet: SQLOpenHashSet[Any],
+      handleNotNull: Any => Unit,
+      handleNull: () => Unit): (ArrayData, Int) => Unit = {
+    (array: ArrayData, index: Int) =>
+      if (array.isNullAt(index)) {
+        if (!hashSet.containsNull) {
+          hashSet.addNull()
+          handleNull()
+        }
+      } else {
+        val elem = array.get(index, dataType)
+        handleNotNull(elem)
+      }
+  }
+
+  def withNullCheckCode(
+      arrayContainsNull: Boolean,
+      setContainsNull: Boolean,
+      array: String,
+      index: String,
+      hashSet: String,
+      handleNotNull: (String, String) => String,
+      handleNull: String): String = {
+    if (arrayContainsNull) {
+      if (setContainsNull) {
+        s"""
+           |if ($array.isNullAt($index)) {
+           |  if (!$hashSet.containsNull()) {
+           |    $hashSet.addNull();
+           |    $handleNull
+           |  }
+           |} else {
+           |  ${handleNotNull(array, index)}
+           |}
+         """.stripMargin
+      } else {
+        s"""
+           |if (!$array.isNullAt($index)) {
+           | ${handleNotNull(array, index)}
+           |}
+         """.stripMargin
+      }
+    } else {
+      handleNotNull(array, index)
+    }
+  }
+
   def withNaNCheckFunc(
       dataType: DataType,
       hashSet: SQLOpenHashSet[Any],
@@ -77,7 +127,7 @@ object SQLOpenHashSet {
     (value: Any) =>
       if (isNaN(value)) {
         if (!hashSet.containsNaN) {
-          hashSet.addNaN
+          hashSet.addNaN()
           handleNaN(valueNaN)
         }
       } else {

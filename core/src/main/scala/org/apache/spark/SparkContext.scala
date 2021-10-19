@@ -51,6 +51,7 @@ import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.launcher.JavaModuleOptions
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
@@ -399,6 +400,8 @@ class SparkContext(config: SparkConf) extends Logging {
     // This should be set as early as possible.
     SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
 
+    SparkContext.supplementJavaModuleOptions(_conf)
+
     _driverLogger = DriverLogger(_conf)
 
     val resourcesFileOpt = conf.get(DRIVER_RESOURCES_FILE)
@@ -645,20 +648,6 @@ class SparkContext(config: SparkConf) extends Logging {
     // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
     _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
-    // Post init
-    _taskScheduler.postStartHook()
-    if (isLocal) {
-      _env.metricsSystem.registerSource(Executor.executorSourceLocalModeOnly)
-    }
-    _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
-    _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
-    _env.metricsSystem.registerSource(new JVMCPUSource())
-    _executorMetricsSource.foreach(_.register(_env.metricsSystem))
-    _executorAllocationManager.foreach { e =>
-      _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
-    }
-    appStatusSource.foreach(_env.metricsSystem.registerSource(_))
-    _plugins.foreach(_.registerMetrics(applicationId))
     // Make sure the context is stopped if the user forgets about it. This avoids leaving
     // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
     // is killed, though.
@@ -673,6 +662,21 @@ class SparkContext(config: SparkConf) extends Logging {
           logWarning("Ignoring Exception while stopping SparkContext from shutdown hook", e)
       }
     }
+
+    // Post init
+    _taskScheduler.postStartHook()
+    if (isLocal) {
+      _env.metricsSystem.registerSource(Executor.executorSourceLocalModeOnly)
+    }
+    _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
+    _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
+    _env.metricsSystem.registerSource(new JVMCPUSource())
+    _executorMetricsSource.foreach(_.register(_env.metricsSystem))
+    _executorAllocationManager.foreach { e =>
+      _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
+    }
+    appStatusSource.foreach(_env.metricsSystem.registerSource(_))
+    _plugins.foreach(_.registerMetrics(applicationId))
   } catch {
     case NonFatal(e) =>
       logError("Error initializing SparkContext.", e)
@@ -2079,11 +2083,6 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.tryLogNonFatalError {
       _ui.foreach(_.stop())
     }
-    if (env != null) {
-      Utils.tryLogNonFatalError {
-        env.metricsSystem.report()
-      }
-    }
     Utils.tryLogNonFatalError {
       _cleaner.foreach(_.stop())
     }
@@ -2100,6 +2099,11 @@ class SparkContext(config: SparkConf) extends Logging {
       Utils.tryLogNonFatalError {
         listenerBus.stop()
         _listenerBusStarted = false
+      }
+    }
+    if (env != null) {
+      Utils.tryLogNonFatalError {
+        env.metricsSystem.report()
       }
     }
     Utils.tryLogNonFatalError {
@@ -3023,6 +3027,22 @@ object SparkContext extends Logging {
           "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol")
       }
     }
+  }
+
+  /**
+   * SPARK-36796: This is a helper function to supplement `--add-opens` options to
+   * `spark.driver.extraJavaOptions` and `spark.executor.extraJavaOptions`.
+   */
+  private def supplementJavaModuleOptions(conf: SparkConf): Unit = {
+    def supplement(key: OptionalConfigEntry[String]): Unit = {
+      val v = conf.get(key) match {
+        case Some(opts) => s"${JavaModuleOptions.defaultModuleOptions()} $opts"
+        case None => JavaModuleOptions.defaultModuleOptions()
+      }
+      conf.set(key.key, v)
+    }
+    supplement(DRIVER_JAVA_OPTIONS)
+    supplement(EXECUTOR_JAVA_OPTIONS)
   }
 }
 

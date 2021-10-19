@@ -96,6 +96,6 @@ abstract class FileScanBuilder(
   private def createRequiredNameSet(): Set[String] =
     requiredSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
 
-  private val partitionNameSet: Set[String] =
+  val partitionNameSet: Set[String] =
     partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
 }

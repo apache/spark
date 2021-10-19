@@ -47,7 +47,7 @@ import numpy as np
 import pandas as pd
 from pandas.core.accessor import CachedAccessor
 from pandas.io.formats.printing import pprint_thing
-from pandas.api.types import is_list_like, is_hashable
+from pandas.api.types import is_list_like, is_hashable, CategoricalDtype
 from pandas.tseries.frequencies import DateOffset
 from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
@@ -112,10 +112,10 @@ from pyspark.pandas.typedef import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import ColumnOrName  # noqa: F401 (SPARK-34943)
+    from pyspark.sql._typing import ColumnOrName
 
-    from pyspark.pandas.groupby import SeriesGroupBy  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.groupby import SeriesGroupBy
+    from pyspark.pandas.indexes import Index
 
 # This regular expression pattern is complied and defined here to avoid to compile the same
 # pattern every time it is used in _repr_ in Series.
@@ -344,9 +344,9 @@ str_type = str
 
 
 if (3, 5) <= sys.version_info < (3, 7) and __name__ != "__main__":
-    from typing import GenericMeta  # type: ignore
+    from typing import GenericMeta  # type: ignore[attr-defined]
 
-    old_getitem = GenericMeta.__getitem__  # type: ignore
+    old_getitem = GenericMeta.__getitem__
 
     @no_type_check
     def new_getitem(self, params):
@@ -355,7 +355,7 @@ if (3, 5) <= sys.version_info < (3, 7) and __name__ != "__main__":
         else:
             return old_getitem(self, params)
 
-    GenericMeta.__getitem__ = new_getitem  # type: ignore
+    GenericMeta.__getitem__ = new_getitem
 
 
 class Series(Frame, IndexOpsMixin, Generic[T]):
@@ -387,18 +387,21 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Copy input data
     """
 
-    @no_type_check
-    def __init__(self, data=None, index=None, dtype=None, name=None, copy=False, fastpath=False):
+    def __init__(  # type: ignore[no-untyped-def]
+        self, data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
+    ):
         assert data is not None
 
+        self._anchor: DataFrame
+        self._col_label: Label
         if isinstance(data, DataFrame):
             assert dtype is None
             assert name is None
             assert not copy
             assert not fastpath
 
-            self._anchor = data  # type: DataFrame
-            self._col_label = index  # type: Label
+            self._anchor = data
+            self._col_label = index
         else:
             if isinstance(data, pd.Series):
                 assert index is None
@@ -672,7 +675,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     koalas = CachedAccessor("koalas", PandasOnSparkSeriesMethods)
 
     # Comparison Operators
-    def eq(self, other: Any) -> bool:
+    def eq(self, other: Any) -> "Series":
         """
         Compare if the current value is equal to the other.
 
@@ -1065,9 +1068,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     current = current.when(self.spark.column == SF.lit(to_replace), value)
 
             if hasattr(arg, "__missing__"):
-                tmp_val = arg[np._NoValue]  # type: ignore
+                tmp_val = arg[np._NoValue]  # type: ignore[attr-defined]
                 # Remove in case it's set in defaultdict.
-                del arg[np._NoValue]  # type: ignore
+                del arg[np._NoValue]  # type: ignore[attr-defined]
                 current = current.otherwise(SF.lit(tmp_val))
             else:
                 current = current.otherwise(SF.lit(None).cast(self.spark.data_type))
@@ -1145,7 +1148,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             data_fields=[field],
             column_label_names=None,
         )
-        psdf = DataFrame(internal)  # type: DataFrame
+        psdf: DataFrame = DataFrame(internal)
 
         if kwargs.get("inplace", False):
             self._col_label = index
@@ -1963,7 +1966,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             if not isinstance(value, (float, int, str, bool)):
                 raise TypeError("Unsupported type %s" % type(value).__name__)
             if limit is not None:
-                raise ValueError("limit parameter for value is not support now")
+                raise NotImplementedError("limit parameter for value is not support now")
             scol = F.when(cond, value).otherwise(scol)
         else:
             if method in ["ffill", "pad"]:
@@ -2231,7 +2234,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             if level >= internal.index_level:
                 raise ValueError("'level' should be less than the number of indexes")
 
-            if is_name_like_tuple(index):  # type: ignore
+            if is_name_like_tuple(index):
                 index_list = [cast(Label, index)]
             elif is_name_like_value(index):
                 index_list = [(index,)]
@@ -3597,7 +3600,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise ValueError(msg)
 
         if self._internal.index_level > 1:
-            raise ValueError("rank do not support index now")
+            raise NotImplementedError("rank do not support MultiIndex now")
 
         if ascending:
             asc_func = lambda scol: scol.asc()
@@ -4098,7 +4101,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             pdf = sdf.limit(2).toPandas()
             length = len(pdf)
             if length == 1:
-                return pdf[internal.data_spark_column_names[0]].iloc[0]
+                val = pdf[internal.data_spark_column_names[0]].iloc[0]
+                if isinstance(self.dtype, CategoricalDtype):
+                    return self.dtype.categories[val]
+                else:
+                    return val
 
             item_string = name_like_string(item)
             sdf = sdf.withColumn(SPARK_DEFAULT_INDEX_NAME, SF.lit(str(item_string)))
@@ -5015,7 +5022,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 if not self.index.sort_values().equals(other.index.sort_values()):
                     raise ValueError("matrices are not aligned")
 
-            other_copy = other.copy()  # type: DataFrame
+            other_copy: DataFrame = other.copy()
             column_labels = other_copy._internal.column_labels
 
             self_column_label = verify_temp_column_name(other_copy, "__self_column__")
@@ -5211,7 +5218,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         # The data is expected to be small so it's fine to transpose/use default index.
         with ps.option_context("compute.default_index_type", "distributed", "compute.max_rows", 1):
-            psdf = ps.DataFrame(sdf)  # type: DataFrame
+            psdf: DataFrame = DataFrame(sdf)
             psdf.columns = pd.Index(where)
             return first_series(psdf.transpose()).rename(self.name)
 
@@ -5804,6 +5811,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> reset_option("compute.ops_on_diff_frames")
         """
+        combined: DataFrame
         if same_anchor(self, other):
             self_column_label = verify_temp_column_name(other.to_frame(), "__self_column__")
             other_column_label = verify_temp_column_name(self.to_frame(), "__other_column__")
@@ -5811,7 +5819,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 self._internal.with_new_columns(
                     [self.rename(self_column_label), other.rename(other_column_label)]
                 )
-            )  # type: DataFrame
+            )
         else:
             if not self.index.equals(other.index):
                 raise ValueError("Can only compare identically-labeled Series objects")
@@ -6254,7 +6262,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         axis = validate_axis(axis)
         if axis == 1:
-            raise ValueError("Series does not support columns axis.")
+            raise NotImplementedError("Series does not support columns axis.")
 
         scol = sfun(self)
 
@@ -6309,7 +6317,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if hasattr(MissingPandasLikeSeries, item):
             property_or_func = getattr(MissingPandasLikeSeries, item)
             if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
+                return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
         raise AttributeError("'Series' object has no attribute '{}'".format(item))

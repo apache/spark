@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive
 
+import java.lang.reflect.InvocationTargetException
 import java.util.Locale
 
 import scala.util.{Failure, Success, Try}
@@ -87,7 +88,11 @@ private[sql] class HiveSessionCatalog(
         udfExpr.get.asInstanceOf[HiveGenericUDTF].elementSchema
       }
     } catch {
-      case NonFatal(e) =>
+      case NonFatal(exception) =>
+        val e = exception match {
+          case i: InvocationTargetException => i.getCause
+          case o => o
+        }
         val errorMsg = s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e"
         val analysisException = new AnalysisException(errorMsg)
         analysisException.setStackTrace(e.getStackTrace)

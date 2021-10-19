@@ -634,6 +634,8 @@ object FunctionRegistry {
     expression[Sha1]("sha", true),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
+    expression[AesEncrypt]("aes_encrypt"),
+    expression[AesDecrypt]("aes_decrypt"),
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
     expression[InputFileBlockStart]("input_file_block_start"),
