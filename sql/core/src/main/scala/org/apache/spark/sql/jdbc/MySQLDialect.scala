@@ -177,7 +177,6 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       tableName: String,
       options: JDBCOptions): Array[TableIndex] = {
     val sql = s"SHOW INDEXES FROM $tableName"
-    Array.empty[util.Map[NamedReference, util.HashMap[String, String]]]
     var indexMap: Map[String, TableIndex] = Map()
     try {
       val rs = JdbcUtils.executeQuery(conn, options, sql)

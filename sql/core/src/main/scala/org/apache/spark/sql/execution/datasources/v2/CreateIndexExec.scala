@@ -39,11 +39,11 @@ case class CreateIndexExec(
     properties: Map[String, String])
   extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
+    val colProperties = new util.HashMap[NamedReference, util.Map[String, String]]
+    columns.foreach {
+      case (column, map) => colProperties.put(column, map.asJava)
+    }
     try {
-      val colProperties = new util.HashMap[NamedReference, util.Map[String, String]]
-      columns.foreach {
-        case (column, map) => colProperties.put(column, map.asJava)
-      }
       table.createIndex(
         indexName, indexType, columns.unzip._1.toArray, colProperties, properties.asJava)
     } catch {
