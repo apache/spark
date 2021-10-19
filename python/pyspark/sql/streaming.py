@@ -319,7 +319,7 @@ class DataStreamReader(OptionUtils):
     """
 
     def __init__(self, spark: "SQLContext") -> None:
-        self._jreader = spark._ssql_ctx.readStream()  # type: ignore[attr-defined]
+        self._jreader = spark._ssql_ctx.readStream()
         self._spark = spark
 
     def _df(self, jdf: JavaObject) -> "DataFrame":

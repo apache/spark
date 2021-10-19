@@ -105,10 +105,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if self._lazy_rdd is None:
             jrdd = self._jdf.javaToPython()
-            self._lazy_rdd = RDD(
-                jrdd, self.sql_ctx._sc,  # type: ignore[attr-defined]
-                BatchedSerializer(PickleSerializer())
-            )
+            self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
         return self._lazy_rdd
 
     @property  # type: ignore[misc]
@@ -1276,10 +1273,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 raise ValueError("Weights must be positive. Found weight value: %s" % w)
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
         rdd_array = self._jdf.randomSplit(
-            _to_list(
-                self.sql_ctx._sc,  # type: ignore[attr-defined]
-                cast(List["ColumnOrName"], weights)
-            ),
+            _to_list(self.sql_ctx._sc, cast(List["ColumnOrName"], weights)),
             int(seed)
         )
         return [DataFrame(rdd, self.sql_ctx) for rdd in rdd_array]
@@ -1651,11 +1645,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         converter: Optional[Callable[..., Union["PrimitiveType", JavaObject]]] = None
     ) -> JavaObject:
         """Return a JVM Seq of Columns from a list of Column or names"""
-        return _to_seq(self.sql_ctx._sc, cols, converter)  # type: ignore[attr-defined]
+        return _to_seq(self.sql_ctx._sc, cols, converter)
 
     def _jmap(self, jm: Dict) -> JavaObject:
         """Return a JVM Scala Map from a dict"""
-        return _to_scala_map(self.sql_ctx._sc, jm)  # type: ignore[attr-defined]
+        return _to_scala_map(self.sql_ctx._sc, jm)
 
     def _jcols(self, *cols: "ColumnOrName") -> JavaObject:
         """Return a JVM Seq of Columns from a list of Column or column names
