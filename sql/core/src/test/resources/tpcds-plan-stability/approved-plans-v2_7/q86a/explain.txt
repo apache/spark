@@ -196,12 +196,12 @@ Input [5]: [total_sum#14, i_category#8, i_class#7, lochierarchy#17, _w0#45]
 Arguments: [rank(total_sum#14) windowspecdefinition(lochierarchy#17, _w0#45, total_sum#14 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#47], [lochierarchy#17, _w0#45], [total_sum#14 DESC NULLS LAST]
 
 (33) Project [codegen id : 18]
-Output [5]: [total_sum#14, i_category#8, i_class#7, lochierarchy#17, rank_within_parent#47]
+Output [6]: [total_sum#14, i_category#8, i_class#7, lochierarchy#17, rank_within_parent#47, CASE WHEN (lochierarchy#17 = 0) THEN i_category#8 END AS _sortingexpression#48]
 Input [6]: [total_sum#14, i_category#8, i_class#7, lochierarchy#17, _w0#45, rank_within_parent#47]
 
 (34) TakeOrderedAndProject
-Input [5]: [total_sum#14, i_category#8, i_class#7, lochierarchy#17, rank_within_parent#47]
-Arguments: 100, [lochierarchy#17 DESC NULLS LAST, CASE WHEN (lochierarchy#17 = 0) THEN i_category#8 END ASC NULLS FIRST, rank_within_parent#47 ASC NULLS FIRST], [total_sum#14, i_category#8, i_class#7, lochierarchy#17, rank_within_parent#47]
+Input [6]: [total_sum#14, i_category#8, i_class#7, lochierarchy#17, rank_within_parent#47, _sortingexpression#48]
+Arguments: 100, [lochierarchy#17 DESC NULLS LAST, _sortingexpression#48 ASC NULLS FIRST, rank_within_parent#47 ASC NULLS FIRST], [total_sum#14, i_category#8, i_class#7, lochierarchy#17, rank_within_parent#47]
 
 ===== Subqueries =====
 
@@ -214,25 +214,25 @@ BroadcastExchange (39)
 
 
 (35) Scan parquet default.date_dim
-Output [2]: [d_date_sk#5, d_month_seq#48]
+Output [2]: [d_date_sk#5, d_month_seq#49]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1212), LessThanOrEqual(d_month_seq,1223), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_month_seq:int>
 
 (36) ColumnarToRow [codegen id : 1]
-Input [2]: [d_date_sk#5, d_month_seq#48]
+Input [2]: [d_date_sk#5, d_month_seq#49]
 
 (37) Filter [codegen id : 1]
-Input [2]: [d_date_sk#5, d_month_seq#48]
-Condition : (((isnotnull(d_month_seq#48) AND (d_month_seq#48 >= 1212)) AND (d_month_seq#48 <= 1223)) AND isnotnull(d_date_sk#5))
+Input [2]: [d_date_sk#5, d_month_seq#49]
+Condition : (((isnotnull(d_month_seq#49) AND (d_month_seq#49 >= 1212)) AND (d_month_seq#49 <= 1223)) AND isnotnull(d_date_sk#5))
 
 (38) Project [codegen id : 1]
 Output [1]: [d_date_sk#5]
-Input [2]: [d_date_sk#5, d_month_seq#48]
+Input [2]: [d_date_sk#5, d_month_seq#49]
 
 (39) BroadcastExchange
 Input [1]: [d_date_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#49]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#50]
 
 

@@ -1,4 +1,4 @@
-TakeOrderedAndProject [c_last_name,c_first_name,s_city,profit,substr(s_city, 1, 30),ss_ticket_number,amt]
+TakeOrderedAndProject [c_last_name,c_first_name,_sortingexpression,profit,substr(s_city, 1, 30),ss_ticket_number,amt]
   WholeStageCodegen (9)
     Project [c_last_name,c_first_name,s_city,ss_ticket_number,amt,profit]
       SortMergeJoin [ss_customer_sk,c_customer_sk]

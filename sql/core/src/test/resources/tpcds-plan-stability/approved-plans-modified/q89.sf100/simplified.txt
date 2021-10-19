@@ -1,4 +1,4 @@
-TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_class,i_brand,s_company_name,d_moy]
+TakeOrderedAndProject [_sortingexpression,s_store_name,i_category,i_class,i_brand,s_company_name,d_moy,sum_sales,avg_monthly_sales]
   WholeStageCodegen (7)
     Project [i_category,i_class,i_brand,s_store_name,s_company_name,d_moy,sum_sales,avg_monthly_sales]
       Filter [avg_monthly_sales,sum_sales]

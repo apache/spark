@@ -144,12 +144,12 @@ Input [9]: [i_category#4, i_class#3, i_brand#2, s_store_name#14, s_company_name#
 Condition : (isnotnull(avg_monthly_sales#24) AND (NOT (avg_monthly_sales#24 = 0.000000) AND (CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#21 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#24 as decimal(22,6)))), DecimalType(22,6), true), false)) / promote_precision(cast(avg_monthly_sales#24 as decimal(22,6)))), DecimalType(38,16), true) > 0.1000000000000000)))
 
 (26) Project [codegen id : 7]
-Output [8]: [i_category#4, i_class#3, i_brand#2, s_store_name#14, s_company_name#15, d_moy#12, sum_sales#21, avg_monthly_sales#24]
+Output [9]: [i_category#4, i_class#3, i_brand#2, s_store_name#14, s_company_name#15, d_moy#12, sum_sales#21, avg_monthly_sales#24, CheckOverflow((promote_precision(cast(sum_sales#21 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#24 as decimal(22,6)))), DecimalType(22,6), true) AS _sortingexpression#25]
 Input [9]: [i_category#4, i_class#3, i_brand#2, s_store_name#14, s_company_name#15, d_moy#12, sum_sales#21, _w0#22, avg_monthly_sales#24]
 
 (27) TakeOrderedAndProject
-Input [8]: [i_category#4, i_class#3, i_brand#2, s_store_name#14, s_company_name#15, d_moy#12, sum_sales#21, avg_monthly_sales#24]
-Arguments: 100, [CheckOverflow((promote_precision(cast(sum_sales#21 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#24 as decimal(22,6)))), DecimalType(22,6), true) ASC NULLS FIRST, s_store_name#14 ASC NULLS FIRST], [i_category#4, i_class#3, i_brand#2, s_store_name#14, s_company_name#15, d_moy#12, sum_sales#21, avg_monthly_sales#24]
+Input [9]: [i_category#4, i_class#3, i_brand#2, s_store_name#14, s_company_name#15, d_moy#12, sum_sales#21, avg_monthly_sales#24, _sortingexpression#25]
+Arguments: 100, [_sortingexpression#25 ASC NULLS FIRST, s_store_name#14 ASC NULLS FIRST], [i_category#4, i_class#3, i_brand#2, s_store_name#14, s_company_name#15, d_moy#12, sum_sales#21, avg_monthly_sales#24]
 
 ===== Subqueries =====
 
@@ -162,25 +162,25 @@ BroadcastExchange (32)
 
 
 (28) Scan parquet default.date_dim
-Output [3]: [d_date_sk#11, d_year#25, d_moy#12]
+Output [3]: [d_date_sk#11, d_year#26, d_moy#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,1999), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (29) ColumnarToRow [codegen id : 1]
-Input [3]: [d_date_sk#11, d_year#25, d_moy#12]
+Input [3]: [d_date_sk#11, d_year#26, d_moy#12]
 
 (30) Filter [codegen id : 1]
-Input [3]: [d_date_sk#11, d_year#25, d_moy#12]
-Condition : ((isnotnull(d_year#25) AND (d_year#25 = 1999)) AND isnotnull(d_date_sk#11))
+Input [3]: [d_date_sk#11, d_year#26, d_moy#12]
+Condition : ((isnotnull(d_year#26) AND (d_year#26 = 1999)) AND isnotnull(d_date_sk#11))
 
 (31) Project [codegen id : 1]
 Output [2]: [d_date_sk#11, d_moy#12]
-Input [3]: [d_date_sk#11, d_year#25, d_moy#12]
+Input [3]: [d_date_sk#11, d_year#26, d_moy#12]
 
 (32) BroadcastExchange
 Input [2]: [d_date_sk#11, d_moy#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#26]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#27]
 
 

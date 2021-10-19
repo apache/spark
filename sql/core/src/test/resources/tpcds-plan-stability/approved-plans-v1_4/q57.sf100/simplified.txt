@@ -1,4 +1,4 @@
-TakeOrderedAndProject [sum_sales,avg_monthly_sales,cc_name,i_category,i_brand,d_year,d_moy,psum,nsum]
+TakeOrderedAndProject [_sortingexpression,cc_name,i_category,i_brand,d_year,d_moy,avg_monthly_sales,sum_sales,psum,nsum]
   WholeStageCodegen (36)
     Project [i_category,i_brand,cc_name,d_year,d_moy,avg_monthly_sales,sum_sales,sum_sales,sum_sales]
       SortMergeJoin [i_category,i_brand,cc_name,rn,i_category,i_brand,cc_name,rn]

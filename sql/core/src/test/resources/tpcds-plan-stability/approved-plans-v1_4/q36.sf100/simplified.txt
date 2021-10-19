@@ -1,4 +1,4 @@
-TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,gross_margin,i_class]
+TakeOrderedAndProject [lochierarchy,_sortingexpression,rank_within_parent,gross_margin,i_category,i_class]
   WholeStageCodegen (7)
     Project [gross_margin,i_category,i_class,lochierarchy,rank_within_parent]
       InputAdapter

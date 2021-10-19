@@ -156,7 +156,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       InlineCTE,
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
-      PullOutGroupingExpressions,
+      PullOutComplexExpressions,
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager),
       SpecialDatetimeValues,
@@ -283,7 +283,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewritePredicateSubquery.ruleName ::
       NormalizeFloatingNumbers.ruleName ::
       ReplaceUpdateFieldsExpression.ruleName ::
-      PullOutGroupingExpressions.ruleName ::
+      PullOutComplexExpressions.ruleName ::
       RewriteAsOfJoin.ruleName ::
       RewriteLateralSubquery.ruleName :: Nil
 

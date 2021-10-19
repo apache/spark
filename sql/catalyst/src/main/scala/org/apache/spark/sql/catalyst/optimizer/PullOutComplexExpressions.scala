@@ -19,14 +19,14 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression, SortOrder}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, SORT}
 
 /**
- * This rule ensures that [[Aggregate]] nodes doesn't contain complex grouping expressions in the
+ * 1. This rule ensures that [[Aggregate]] nodes doesn't contain complex grouping expressions in the
  * optimization phase.
  *
  * Complex grouping expressions are pulled out to a [[Project]] node under [[Aggregate]] and are
@@ -44,10 +44,18 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
  * Aggregate [_groupingexpression#233], [NOT _groupingexpression#233 AS (NOT (c IS NULL))#230]
  * +- Project [isnull(c#219) AS _groupingexpression#233]
  *    +- LocalRelation [c#219]
+ *
+ * 2. This rule pulls out the complex sorting expressions to the [[Project]] node under [[Sort]]
+ * if it is global sorting.
+ * For example:
+ * {{{
+ *    SELECT f1, f2 FROM t ORDER BY f1 - f2  ==>
+ *    SELECT f1, f2 FROM (SELECT *, f1 - f2 AS _sortingexp FROM t) tmp ORDER BY _sortingexp
+ * }}}
  */
-object PullOutGroupingExpressions extends Rule[LogicalPlan] {
+object PullOutComplexExpressions extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.transformWithPruning(_.containsPattern(AGGREGATE)) {
+    plan.transformWithPruning(_.containsAnyPattern(AGGREGATE, SORT)) {
       case a: Aggregate if a.resolved =>
         val complexGroupingExpressionMap = mutable.LinkedHashMap.empty[Expression, NamedExpression]
         val newGroupingExpressions = a.groupingExpressions.map {
@@ -75,6 +83,26 @@ object PullOutGroupingExpressions extends Rule[LogicalPlan] {
         } else {
           a
         }
+
+      case s: Sort if s.resolved && s.global =>
+        val complexSortingExpressionMap = mutable.LinkedHashMap.empty[Expression, NamedExpression]
+        s.order.map(_.child).foreach {
+          case e if !e.foldable && e.children.nonEmpty =>
+            complexSortingExpressionMap.put(e.canonicalized, Alias(e, "_sortingexpression")())
+          case o => o
+        }
+        if (complexSortingExpressionMap.nonEmpty) {
+          val newSortExpressions: Seq[SortOrder] = s.order.map { s =>
+            val newChild = complexSortingExpressionMap.get(s.child.canonicalized).map(_.toAttribute)
+              .getOrElse(s.child)
+            s.copy(child = newChild)
+          }
+          val newChild = Project(s.child.output ++ complexSortingExpressionMap.values, s.child)
+          Project(s.output, s.copy(order = newSortExpressions, child = newChild))
+        } else {
+          s
+        }
     }
   }
 }
+

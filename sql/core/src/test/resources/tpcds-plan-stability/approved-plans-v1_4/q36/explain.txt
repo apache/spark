@@ -149,12 +149,12 @@ Input [7]: [gross_margin#25, i_category#15, i_class#16, lochierarchy#26, _w1#27,
 Arguments: [rank(_w3#29) windowspecdefinition(_w1#27, _w2#28, _w3#29 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#31], [_w1#27, _w2#28], [_w3#29 ASC NULLS FIRST]
 
 (27) Project [codegen id : 7]
-Output [5]: [gross_margin#25, i_category#15, i_class#16, lochierarchy#26, rank_within_parent#31]
+Output [6]: [gross_margin#25, i_category#15, i_class#16, lochierarchy#26, rank_within_parent#31, CASE WHEN (lochierarchy#26 = 0) THEN i_category#15 END AS _sortingexpression#32]
 Input [8]: [gross_margin#25, i_category#15, i_class#16, lochierarchy#26, _w1#27, _w2#28, _w3#29, rank_within_parent#31]
 
 (28) TakeOrderedAndProject
-Input [5]: [gross_margin#25, i_category#15, i_class#16, lochierarchy#26, rank_within_parent#31]
-Arguments: 100, [lochierarchy#26 DESC NULLS LAST, CASE WHEN (lochierarchy#26 = 0) THEN i_category#15 END ASC NULLS FIRST, rank_within_parent#31 ASC NULLS FIRST], [gross_margin#25, i_category#15, i_class#16, lochierarchy#26, rank_within_parent#31]
+Input [6]: [gross_margin#25, i_category#15, i_class#16, lochierarchy#26, rank_within_parent#31, _sortingexpression#32]
+Arguments: 100, [lochierarchy#26 DESC NULLS LAST, _sortingexpression#32 ASC NULLS FIRST, rank_within_parent#31 ASC NULLS FIRST], [gross_margin#25, i_category#15, i_class#16, lochierarchy#26, rank_within_parent#31]
 
 ===== Subqueries =====
 
@@ -167,25 +167,25 @@ BroadcastExchange (33)
 
 
 (29) Scan parquet default.date_dim
-Output [2]: [d_date_sk#7, d_year#32]
+Output [2]: [d_date_sk#7, d_year#33]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
 (30) ColumnarToRow [codegen id : 1]
-Input [2]: [d_date_sk#7, d_year#32]
+Input [2]: [d_date_sk#7, d_year#33]
 
 (31) Filter [codegen id : 1]
-Input [2]: [d_date_sk#7, d_year#32]
-Condition : ((isnotnull(d_year#32) AND (d_year#32 = 2001)) AND isnotnull(d_date_sk#7))
+Input [2]: [d_date_sk#7, d_year#33]
+Condition : ((isnotnull(d_year#33) AND (d_year#33 = 2001)) AND isnotnull(d_date_sk#7))
 
 (32) Project [codegen id : 1]
 Output [1]: [d_date_sk#7]
-Input [2]: [d_date_sk#7, d_year#32]
+Input [2]: [d_date_sk#7, d_year#33]
 
 (33) BroadcastExchange
 Input [1]: [d_date_sk#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#33]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#34]
 
 

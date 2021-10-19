@@ -229,12 +229,12 @@ Input [7]: [total_sum#31, s_state#24, s_county#25, lochierarchy#32, _w1#33, _w2#
 Arguments: [rank(_w3#35) windowspecdefinition(_w1#33, _w2#34, _w3#35 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#37], [_w1#33, _w2#34], [_w3#35 DESC NULLS LAST]
 
 (41) Project [codegen id : 11]
-Output [5]: [total_sum#31, s_state#24, s_county#25, lochierarchy#32, rank_within_parent#37]
+Output [6]: [total_sum#31, s_state#24, s_county#25, lochierarchy#32, rank_within_parent#37, CASE WHEN (lochierarchy#32 = 0) THEN s_state#24 END AS _sortingexpression#38]
 Input [8]: [total_sum#31, s_state#24, s_county#25, lochierarchy#32, _w1#33, _w2#34, _w3#35, rank_within_parent#37]
 
 (42) TakeOrderedAndProject
-Input [5]: [total_sum#31, s_state#24, s_county#25, lochierarchy#32, rank_within_parent#37]
-Arguments: 100, [lochierarchy#32 DESC NULLS LAST, CASE WHEN (lochierarchy#32 = 0) THEN s_state#24 END ASC NULLS FIRST, rank_within_parent#37 ASC NULLS FIRST], [total_sum#31, s_state#24, s_county#25, lochierarchy#32, rank_within_parent#37]
+Input [6]: [total_sum#31, s_state#24, s_county#25, lochierarchy#32, rank_within_parent#37, _sortingexpression#38]
+Arguments: 100, [lochierarchy#32 DESC NULLS LAST, _sortingexpression#38 ASC NULLS FIRST, rank_within_parent#37 ASC NULLS FIRST], [total_sum#31, s_state#24, s_county#25, lochierarchy#32, rank_within_parent#37]
 
 ===== Subqueries =====
 
@@ -247,26 +247,26 @@ BroadcastExchange (47)
 
 
 (43) Scan parquet default.date_dim
-Output [2]: [d_date_sk#5, d_month_seq#38]
+Output [2]: [d_date_sk#5, d_month_seq#39]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1200), LessThanOrEqual(d_month_seq,1211), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_month_seq:int>
 
 (44) ColumnarToRow [codegen id : 1]
-Input [2]: [d_date_sk#5, d_month_seq#38]
+Input [2]: [d_date_sk#5, d_month_seq#39]
 
 (45) Filter [codegen id : 1]
-Input [2]: [d_date_sk#5, d_month_seq#38]
-Condition : (((isnotnull(d_month_seq#38) AND (d_month_seq#38 >= 1200)) AND (d_month_seq#38 <= 1211)) AND isnotnull(d_date_sk#5))
+Input [2]: [d_date_sk#5, d_month_seq#39]
+Condition : (((isnotnull(d_month_seq#39) AND (d_month_seq#39 >= 1200)) AND (d_month_seq#39 <= 1211)) AND isnotnull(d_date_sk#5))
 
 (46) Project [codegen id : 1]
 Output [1]: [d_date_sk#5]
-Input [2]: [d_date_sk#5, d_month_seq#38]
+Input [2]: [d_date_sk#5, d_month_seq#39]
 
 (47) BroadcastExchange
 Input [1]: [d_date_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#39]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#40]
 
 Subquery:2 Hosting operator id = 10 Hosting Expression = ss_sold_date_sk#11 IN dynamicpruning#4
 

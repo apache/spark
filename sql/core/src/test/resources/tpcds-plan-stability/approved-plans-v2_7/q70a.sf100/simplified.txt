@@ -1,4 +1,4 @@
-TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_county]
+TakeOrderedAndProject [lochierarchy,_sortingexpression,rank_within_parent,total_sum,s_state,s_county]
   WholeStageCodegen (33)
     Project [total_sum,s_state,s_county,lochierarchy,rank_within_parent]
       InputAdapter
