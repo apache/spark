@@ -306,7 +306,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         >>> df.schema
-        StructType([StructField('age', IntegerType(), True), StructField('name', StringType(), True)])
+        StructType([StructField('age', IntegerType(), True),
+                    StructField('name', StringType(), True)])
         """
         if self._schema is None:
             try:
