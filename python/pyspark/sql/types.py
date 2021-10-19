@@ -60,7 +60,7 @@ class DataType(object):
     """Base class for data types."""
 
     def __repr__(self) -> str:
-        return self.__class__.__name__
+        return self.__class__.__name__ + "()"
 
     def __hash__(self) -> int:
         return hash(str(self))
@@ -336,8 +336,8 @@ class ArrayType(DataType):
         return 'array<%s>' % self.elementType.simpleString()
 
     def __repr__(self) -> str:
-        return "ArrayType(%s,%s)" % (self.elementType,
-                                     str(self.containsNull).lower())
+        return "ArrayType(%s, %s)" % (self.elementType,
+                                     str(self.containsNull))
 
     def jsonValue(self) -> Dict[str, Any]:
         return {"type": self.typeName(),
@@ -404,8 +404,8 @@ class MapType(DataType):
         return 'map<%s,%s>' % (self.keyType.simpleString(), self.valueType.simpleString())
 
     def __repr__(self) -> str:
-        return "MapType(%s,%s,%s)" % (self.keyType, self.valueType,
-                                      str(self.valueContainsNull).lower())
+        return "MapType(%s, %s, %s)" % (self.keyType, self.valueType,
+                                      str(self.valueContainsNull))
 
     def jsonValue(self) -> Dict[str, Any]:
         return {"type": self.typeName(),
@@ -478,8 +478,8 @@ class StructField(DataType):
         return '%s:%s' % (self.name, self.dataType.simpleString())
 
     def __repr__(self) -> str:
-        return "StructField(%s,%s,%s)" % (self.name, self.dataType,
-                                          str(self.nullable).lower())
+        return "StructField('%s', %s, %s)" % (self.name, self.dataType,
+                                          str(self.nullable))
 
     def jsonValue(self) -> Dict[str, Any]:
         return {"name": self.name,
@@ -656,8 +656,8 @@ class StructType(DataType):
         return 'struct<%s>' % (','.join(f.simpleString() for f in self))
 
     def __repr__(self) -> str:
-        return ("StructType(List(%s))" %
-                ",".join(str(field) for field in self))
+        return ("StructType([%s])" %
+                ", ".join(str(field) for field in self))
 
     def jsonValue(self) -> Dict[str, Any]:
         return {"type": self.typeName(),

@@ -764,6 +764,29 @@ class TypesTests(ReusedSQLTestCase):
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
 
+    def test_repr(self):
+        instances = [
+            NullType(),
+            StringType(),
+            BinaryType(),
+            BooleanType(),
+            DateType(),
+            TimestampType(),
+            DecimalType(),
+            DoubleType(),
+            FloatType(),
+            ByteType(),
+            IntegerType(),
+            LongType(),
+            ShortType(),
+            ArrayType(StringType()),
+            MapType(StringType(), IntegerType()),
+            StructField("f1", StringType(), True),
+            StructType([StructField("f1", StringType(), True)]),
+        ]
+        for instance in instances:
+            self.assertEqual(eval(repr(instance)), instance)
+
 
 class DataTypeTests(unittest.TestCase):
     # regression test for SPARK-6055
