@@ -17,11 +17,13 @@
 
 package org.apache.spark.launcher;
 
-import java.util.Arrays;
-import java.util.HashSet;
-
+/**
+ * This helper class is used to place the all `--add-opens` options
+ * required by Spark when using Java 17. `DEFAULT_MODULE_OPTIONS` has added
+ * `-XX:+IgnoreUnrecognizedVMOptions` to be compatible with Java 8 and Java 11.
+ */
 public class JavaModuleOptions {
-    private static final String[] DEFAULT_MODULE_OPTIONS = new String[] {
+    private static final String[] DEFAULT_MODULE_OPTIONS = {
       "-XX:+IgnoreUnrecognizedVMOptions",
       "--add-opens=java.base/java.lang=ALL-UNNAMED",
       "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
@@ -35,7 +37,11 @@ public class JavaModuleOptions {
       "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
       "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED"};
 
+    /**
+     * Returns the default Java options related to `--add-opens' and
+     * `-XX:+IgnoreUnrecognizedVMOptions` used by Spark.
+     */
     public static String defaultModuleOptions() {
-      return String.join(" ", new HashSet<>(Arrays.asList(DEFAULT_MODULE_OPTIONS)));
+      return String.join(" ", DEFAULT_MODULE_OPTIONS);
     }
 }
