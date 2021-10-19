@@ -165,16 +165,7 @@ private object PostgresDialect extends JdbcDialect {
       } else {
         sample.get.methodName
       }
-
-      val repeatable = if (sample.get.withReplacement()) {
-        if (sample.get.seed() != 0) {
-          "REPEATABLE (" + sample.get.seed() + ")"
-        } else {
-          "REPEATABLE"
-        }
-      } else {
-        ""
-      }
+      val repeatable = "REPEATABLE (" + sample.get.seed() + ")"
       s"TABLESAMPLE $method" +
         s" ( ${(sample.get.upperBound - sample.get.lowerBound) * 100} ) $repeatable"
     } else {
