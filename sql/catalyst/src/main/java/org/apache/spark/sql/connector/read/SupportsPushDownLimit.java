@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Limit;
 
 /**
  * A mix-in interface for {@link Scan}. Data sources can implement this interface to
@@ -33,10 +32,11 @@ public interface SupportsPushDownLimit extends Scan {
   /**
    * Pushes down LIMIT to the data source.
    */
-  void pushLimit(Limit limit);
+  void pushLimit(Integer limit);
 
   /**
-   * Returns the LIMIT that is pushed to the data source via {@link #pushLimit(Limit)}.
+   * Returns true if the LIMIT is pushed to the data source via {@link #pushLimit(Integer)},
+   * false otherwise.
    */
-  Limit pushedLimit();
+  boolean limitPushed();
 }

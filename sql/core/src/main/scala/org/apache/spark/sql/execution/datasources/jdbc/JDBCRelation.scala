@@ -27,7 +27,6 @@ import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
-import org.apache.spark.sql.connector.expressions.Limit
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
@@ -300,10 +299,10 @@ private[sql] case class JDBCRelation(
       finalSchema: StructType,
       filters: Array[Filter],
       groupByColumns: Option[Array[String]],
-      limit: Option[Limit]): RDD[Row] = {
+      limit: Integer): RDD[Row] = {
     // If limit is pushed down, only a limited number of rows will be returned. PartitionInfo will
     // be ignored and the query will be done in one task.
-    val partition = if (limit.nonEmpty) { Array[Partition](JDBCPartition(null, 0)) } else parts
+    val partition = if (limit > 0 ) { Array[Partition](JDBCPartition(null, 0)) } else parts
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sparkSession.sparkContext,

@@ -25,7 +25,6 @@ import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskCon
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.expressions.Limit
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
@@ -193,7 +192,7 @@ object JDBCRDD extends Logging {
       options: JDBCOptions,
       outputSchema: Option[StructType] = None,
       groupByColumns: Option[Array[String]] = None,
-      limit: Option[Limit] = None): RDD[InternalRow] = {
+      limit: Integer = 0): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = if (groupByColumns.isEmpty) {
@@ -231,7 +230,7 @@ private[jdbc] class JDBCRDD(
     url: String,
     options: JDBCOptions,
     groupByColumns: Option[Array[String]],
-    limit: Option[Limit])
+    limit: Integer)
   extends RDD[InternalRow](sc, Nil) {
 
   /**
@@ -282,7 +281,7 @@ private[jdbc] class JDBCRDD(
   /**
    * A LIMIT clause representing pushed-down limit.
    */
-  private def getLimitClause: String = limit.map(l => s"LIMIT ${l.number.value}").getOrElse("")
+  private def getLimitClause: String = if (limit > 0 ) s"LIMIT $limit" else ""
 
   /**
    * Runs the SQL query against the JDBC driver.

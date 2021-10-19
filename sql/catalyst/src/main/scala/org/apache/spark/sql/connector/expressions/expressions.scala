@@ -61,10 +61,6 @@ private[sql] object LogicalExpressions {
       nullOrdering: NullOrdering): SortOrder = {
     SortValue(reference, direction, nullOrdering)
   }
-
-  def limit(number: Literal[_]): Limit = {
-    LimitValue(number)
-  }
 }
 
 /**
@@ -360,10 +356,4 @@ private[sql] object SortValue {
     case _ =>
       None
   }
-}
-
-private[sql] final case class LimitValue(number: Literal[_]) extends Limit {
-  require(number.value.isInstanceOf[Integer], s"LimitValue has to be an Integer," +
-    s" got ${number.dataType} instead")
-  override def describe(): String = s"$number"
 }

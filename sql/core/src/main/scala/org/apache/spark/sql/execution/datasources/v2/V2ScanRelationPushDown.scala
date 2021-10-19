@@ -25,12 +25,11 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LeafNode, LocalLimit, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.expressions.{LiteralValue, LogicalExpressions}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.SchemaUtils._
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
@@ -243,8 +242,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           limitExpr.asInstanceOf[Literal].value.isInstanceOf[Integer],
           "Limit has to be an Integer")
         val value = limitExpr.asInstanceOf[Literal].value.asInstanceOf[Integer]
-        val limit = LogicalExpressions.limit(LiteralValue(value, IntegerType))
-        PushDownUtils.pushLimit(scan, limit)
+        PushDownUtils.pushLimit(scan, value)
         globalLimit
       } else {
         globalLimit

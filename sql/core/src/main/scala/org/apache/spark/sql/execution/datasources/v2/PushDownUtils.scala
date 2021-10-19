@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.expressions.{FieldReference, Limit}
+import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
@@ -141,7 +141,7 @@ object PushDownUtils extends PredicateHelper {
   /**
    * Pushes down LIMIT to the data source Scan
    */
-  def pushLimit(scan: Scan, limit: Limit): Unit = {
+  def pushLimit(scan: Scan, limit: Integer): Unit = {
     scan match {
       case s: SupportsPushDownLimit => s.pushLimit(limit)
       case v1: V1ScanWrapper =>

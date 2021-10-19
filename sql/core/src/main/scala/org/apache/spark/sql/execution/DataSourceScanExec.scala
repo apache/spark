@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.expressions.Limit
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
@@ -105,7 +104,7 @@ case class RowDataSourceScanExec(
     filters: Set[Filter],
     handledFilters: Set[Filter],
     aggregation: Option[Aggregation],
-    limit: Limit,
+    limitPushed: Boolean,
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     tableIdentifier: Option[TableIdentifier])
@@ -151,7 +150,7 @@ case class RowDataSourceScanExec(
       handledFilters
     }
 
-    val limitStr = if (limit != null) s"LIMIT ${limit.number}" else "[]"
+    val limitStr = if (limitPushed) s"TRUE" else "FALSE"
 
     Map(
       "ReadSchema" -> requiredSchema.catalogString,

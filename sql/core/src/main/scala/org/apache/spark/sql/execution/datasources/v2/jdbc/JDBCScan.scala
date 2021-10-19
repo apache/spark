@@ -18,7 +18,6 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.connector.expressions.Limit
 import org.apache.spark.sql.connector.read.{SupportsPushDownLimit, V1Scan}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation
 import org.apache.spark.sql.sources.{BaseRelation, Filter, TableScan}
@@ -33,15 +32,15 @@ case class JDBCScan(
 
   override def readSchema(): StructType = prunedSchema
 
-  private var limit: Option[Limit] = None
+  private var pushedLimit = 0
 
-  override def pushLimit(limit: Limit): Unit = {
+  override def pushLimit(limit: Integer): Unit = {
     if (relation.jdbcOptions.pushDownLimit) {
-      this.limit = Some(limit)
+      pushedLimit = limit
     }
   }
 
-  override def pushedLimit: Limit = if (limit.nonEmpty) limit.get else null
+  override def limitPushed(): Boolean = pushedLimit > 0
 
   override def toV1TableScan[T <: BaseRelation with TableScan](context: SQLContext): T = {
     new BaseRelation with TableScan {
@@ -54,7 +53,7 @@ case class JDBCScan(
         } else {
           pushedAggregateColumn
         }
-        relation.buildScan(columnList, prunedSchema, pushedFilters, groupByColumns, limit)
+        relation.buildScan(columnList, prunedSchema, pushedFilters, groupByColumns, pushedLimit)
       }
     }.asInstanceOf[T]
   }
