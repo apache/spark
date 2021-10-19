@@ -29,9 +29,9 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class RatePerEpochMicroBatchStream(
     rowsPerEpoch: Long,
-    numPartitions: Int = 1,
-    startTimestamp: Long = 0,
-    advanceMsPerEpoch: Int = 0,
+    numPartitions: Int,
+    startTimestamp: Long,
+    advanceMsPerEpoch: Int,
     options: CaseInsensitiveStringMap)
   extends SupportsAdmissionControl with MicroBatchStream with Logging {
 
