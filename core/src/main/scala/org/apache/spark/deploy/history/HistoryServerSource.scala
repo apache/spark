@@ -26,7 +26,9 @@ private[spark] class HistoryServerSource(val history: ApplicationHistoryProvider
   override val metricRegistry: MetricRegistry = new MetricRegistry()
 
   metricRegistry.register(MetricRegistry.name("uncompleted"), new Gauge[Int] {
-    override def getValue: Int = history.getUncompleted()
+    override def getValue: Int = history.getListing().count { app =>
+      !(app.attempts.nonEmpty && app.attempts.head.completed)
+    }
   })
 
   metricRegistry.register(MetricRegistry.name("applications"), new Gauge[Int] {

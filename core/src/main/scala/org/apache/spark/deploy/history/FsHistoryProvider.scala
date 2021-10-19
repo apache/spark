@@ -132,7 +132,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val hybridStoreEnabled = conf.get(History.HYBRID_STORE_ENABLED)
 
   private val historySource = new HistoryServerSource(this)
-  private var uncompleted = 0
 
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
@@ -1415,8 +1414,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   override def getHistoryServerSource(): HistoryServerSource = historySource
-
-  override def getUncompleted(): Int = uncompleted
 }
 
 private[history] object FsHistoryProvider {
