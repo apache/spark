@@ -498,7 +498,7 @@ class DataFrameTests(ReusedSQLTestCase):
                                lambda: rdd.toDF("key: int").collect())
 
         # field types mismatch will cause exception at runtime.
-        self.assertRaisesRegex(Exception, r"FloatType\(\) can not accept",
+        self.assertRaisesRegex(Exception, "FloatType\\(\\) can not accept",
                                lambda: rdd.toDF("key: float, value: string").collect())
 
         # flat schema values will be wrapped into row.

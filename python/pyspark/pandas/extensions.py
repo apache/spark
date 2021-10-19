@@ -109,7 +109,7 @@ def _register_accessor(
     ...
     Traceback (most recent call last):
         ...
-    ValueError: Cannot call DatetimeMethods on type StringType
+    ValueError: Cannot call DatetimeMethods on type StringType()
 
     Note: This function is not meant to be used directly - instead, use register_dataframe_accessor,
     register_series_accessor, or register_index_accessor.
@@ -169,7 +169,7 @@ def register_dataframe_accessor(name: str) -> Callable[[Type[T]], Type[T]]:
     ...
     Traceback (most recent call last):
         ...
-    ValueError: Cannot call DatetimeMethods on type StringType
+    ValueError: Cannot call DatetimeMethods on type StringType()
 
     Examples
     --------
@@ -250,7 +250,7 @@ def register_series_accessor(name: str) -> Callable[[Type[T]], Type[T]]:
     ...
     Traceback (most recent call last):
         ...
-    ValueError: Cannot call DatetimeMethods on type StringType
+    ValueError: Cannot call DatetimeMethods on type StringType()
 
     Examples
     --------
@@ -322,7 +322,7 @@ def register_index_accessor(name: str) -> Callable[[Type[T]], Type[T]]:
     ...
     Traceback (most recent call last):
         ...
-    ValueError: Cannot call DatetimeMethods on type StringType
+    ValueError: Cannot call DatetimeMethods on type StringType()
 
     Examples
     --------
