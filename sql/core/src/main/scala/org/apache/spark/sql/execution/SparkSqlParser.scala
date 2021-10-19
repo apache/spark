@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
+import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
@@ -460,6 +460,10 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
     }
 
+    if (ctx.EXISTS != null && ctx.REPLACE != null) {
+      throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(ctx)
+    }
+
     val properties = ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues)
       .getOrElse(Map.empty)
     if (ctx.TEMPORARY != null && !properties.isEmpty) {
@@ -474,6 +478,9 @@ class SparkSqlAstBuilder extends AstBuilder {
       LocalTempView
     }
     if (viewType == PersistedView) {
+      val originalText = source(ctx.query)
+      assert(Option(originalText).isDefined,
+        "'originalText' must be provided to create permanent view")
       CreateView(
         UnresolvedDBObjectName(
           visitMultipartIdentifier(ctx.multipartIdentifier),
@@ -481,13 +488,26 @@ class SparkSqlAstBuilder extends AstBuilder {
         userSpecifiedColumns,
         visitCommentSpecList(ctx.commentSpec()),
         properties,
-        Option(source(ctx.query)),
+        Some(originalText),
         plan(ctx.query),
         ctx.EXISTS != null,
         ctx.REPLACE != null)
     } else {
+      // Disallows 'CREATE TEMPORARY VIEW IF NOT EXISTS' to be consistent with
+      // 'CREATE TEMPORARY TABLE'
+      if (ctx.EXISTS != null) {
+        throw QueryParsingErrors.defineTempViewWithIfNotExistsError(ctx)
+      }
+
+      val tableIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier).asTableIdentifier
+      if (tableIdentifier.database.isDefined) {
+        // Temporary view names should NOT contain database prefix like "database.table"
+        throw QueryParsingErrors
+          .notAllowedToAddDBPrefixForTempViewError(tableIdentifier.database.get, ctx)
+      }
+
       CreateViewCommand(
-        visitMultipartIdentifier(ctx.multipartIdentifier).asTableIdentifier,
+        tableIdentifier,
         userSpecifiedColumns,
         visitCommentSpecList(ctx.commentSpec()),
         properties,
@@ -519,6 +539,10 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
     }
 
+    if (ctx.EXISTS != null && ctx.REPLACE != null) {
+      throw QueryParsingErrors.createFuncWithBothIfNotExistsAndReplaceError(ctx)
+    }
+
     val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
     if (ctx.TEMPORARY == null) {
       CreateFunction(
@@ -530,11 +554,16 @@ class SparkSqlAstBuilder extends AstBuilder {
         ctx.EXISTS != null,
         ctx.REPLACE != null)
     } else {
+      // Disallow to define a temporary function with `IF NOT EXISTS`
+      if (ctx.EXISTS != null) {
+        throw QueryParsingErrors.defineTempFuncWithIfNotExistsError(ctx)
+      }
+
       if (functionIdentifier.length > 2) {
-        throw QueryCompilationErrors.unsupportedFunctionNameError(functionIdentifier.quoted)
+        throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier.quoted, ctx)
       } else if (functionIdentifier.length == 2) {
         // Temporary function names should not contain database prefix like "database.function"
-        throw QueryCompilationErrors.specifyingDBInCreateTempFuncError(functionIdentifier.head)
+        throw QueryParsingErrors.specifyingDBInCreateTempFuncError(functionIdentifier.head, ctx)
       }
       CreateFunctionCommand(
         None,
