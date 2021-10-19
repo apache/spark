@@ -43,6 +43,7 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
     prop.setProperty("*.sink.servlet.path", "/metrics/json")
     prop.setProperty("master.sink.servlet.path", "/metrics/master/json")
     prop.setProperty("applications.sink.servlet.path", "/metrics/applications/json")
+    prop.setProperty("historyServer.sink.servlet.path", "/metrics/historyServer/json")
   }
 
   /**

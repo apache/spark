@@ -293,7 +293,7 @@ private[history] class CacheMetrics(prefix: String) extends Source {
    * Startup actions.
    * This includes registering metrics with [[metricRegistry]]
    */
-  private def init(): Unit = {
+  def init(): Unit = {
     allMetrics.foreach { case (name, metric) =>
       metricRegistry.register(MetricRegistry.name(prefix, name), metric)
     }

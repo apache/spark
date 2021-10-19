@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.UI._
+import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.util.{ShutdownHookManager, SystemClock, Utils}
@@ -71,6 +72,9 @@ class HistoryServer(
 
   // and its metrics, for testing as well as monitoring
   val cacheMetrics = appCache.metrics
+
+  private val metricsSystem =
+    MetricsSystem.createMetricsSystem(MetricsSystemInstances.HISTORY_SERVER, conf)
 
   private val loaderServlet = new HttpServlet {
     protected override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
@@ -157,6 +161,14 @@ class HistoryServer(
     contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
     contextHandler.addServlet(new ServletHolder(loaderServlet), "/*")
     attachHandler(contextHandler)
+
+    // Register source to history metrics system.
+    cacheMetrics.init()
+    metricsSystem.registerSource(provider.getHistoryServerSource())
+    metricsSystem.registerSource(cacheMetrics)
+    metricsSystem.start()
+    // Attach the history metrics servlet handler to the history server.
+    metricsSystem.getServletHandlers.foreach(attachHandler)
   }
 
   /** Bind to the HTTP server behind this web interface. */
@@ -168,6 +180,7 @@ class HistoryServer(
   override def stop(): Unit = {
     super.stop()
     provider.stop()
+    metricsSystem.stop()
   }
 
   /** Attach a reconstructed UI to this server. Only valid after bind(). */

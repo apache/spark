@@ -36,7 +36,7 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
     val conf = new MetricsConfig(sparkConf)
     conf.initialize()
 
-    assert(conf.properties.size() === 4)
+    assert(conf.properties.size() === 5)
     assert(conf.properties.getProperty("test-for-dummy") === null)
 
     val property = conf.getInstance("random")
@@ -71,6 +71,16 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
     assert(workerProp.getProperty("sink.servlet.class") ===
       "org.apache.spark.metrics.sink.MetricsServlet")
     assert(workerProp.getProperty("sink.servlet.path") === "/metrics/json")
+
+    val historyProp = conf.getInstance("historyServer")
+    assert(historyProp.size() === 5)
+    assert(historyProp.getProperty("sink.console.period") === "10")
+    assert(historyProp.getProperty("sink.console.unit") === "seconds")
+    assert(historyProp.getProperty("source.jvm.class") ===
+      "org.apache.spark.metrics.source.JvmSource")
+    assert(historyProp.getProperty("sink.servlet.class") ===
+      "org.apache.spark.metrics.sink.MetricsServlet")
+    assert(historyProp.getProperty("sink.servlet.path") === "/metrics/historyServer/json")
   }
 
   test("MetricsConfig with properties set from a Spark configuration") {
@@ -102,6 +112,16 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
     assert(workerProp.getProperty("sink.servlet.class") ===
       "org.apache.spark.metrics.sink.MetricsServlet")
     assert(workerProp.getProperty("sink.servlet.path") === "/metrics/json")
+
+    val historyProp = conf.getInstance("historyServer")
+    assert(historyProp.size() === 5)
+    assert(historyProp.getProperty("sink.console.period") === "10")
+    assert(historyProp.getProperty("sink.console.unit") === "seconds")
+    assert(historyProp.getProperty("source.jvm.class") ===
+      "org.apache.spark.metrics.source.JvmSource")
+    assert(historyProp.getProperty("sink.servlet.class") ===
+      "org.apache.spark.metrics.sink.MetricsServlet")
+    assert(historyProp.getProperty("sink.servlet.path") === "/metrics/historyServer/json")
   }
 
   test("MetricsConfig with properties set from a file and a Spark configuration") {
@@ -132,6 +152,15 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
     assert(workerProp.getProperty("sink.servlet.class") ===
       "org.apache.spark.metrics.sink.MetricsServlet")
     assert(workerProp.getProperty("sink.servlet.path") === "/metrics/json")
+
+    val historyProp = conf.getInstance("historyServer")
+    assert(historyProp.size() === 5)
+    assert(historyProp.getProperty("sink.console.period") === "10")
+    assert(historyProp.getProperty("sink.console.unit") === "seconds")
+    assert(workerProp.getProperty("source.jvm.class") === "org.apache.spark.SomeOtherSource")
+    assert(historyProp.getProperty("sink.servlet.class") ===
+      "org.apache.spark.metrics.sink.MetricsServlet")
+    assert(historyProp.getProperty("sink.servlet.path") === "/metrics/historyServer/json")
   }
 
   test("MetricsConfig with subProperties") {
@@ -141,7 +170,7 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
     conf.initialize()
 
     val propCategories = conf.perInstanceSubProperties
-    assert(propCategories.size === 3)
+    assert(propCategories.size === 4)
 
     val masterProp = conf.getInstance("master")
     val sourceProps = conf.subProperties(masterProp, MetricsSystem.SOURCE_REGEX)

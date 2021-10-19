@@ -131,6 +131,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val hybridStoreEnabled = conf.get(History.HYBRID_STORE_ENABLED)
 
+  private val historySource = new HistoryServerSource(this)
+  private var uncompleted = 0
+
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
     val dbPath = Files.createDirectories(new File(path, "listing.ldb").toPath()).toFile()
@@ -362,12 +365,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val secManager = createSecurityManager(conf, attempt)
 
     val kvstore = try {
-      diskManager match {
-        case Some(sm) =>
-          loadDiskStore(sm, appId, attempt)
+      historySource.timeOfLoadStore {
+        diskManager match {
+          case Some(sm) =>
+            loadDiskStore(sm, appId, attempt)
 
-        case _ =>
-          createInMemoryStore(attempt)
+          case _ =>
+            createInMemoryStore(attempt)
+        }
       }
     } catch {
       case _: FileNotFoundException =>
@@ -469,7 +474,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Tries to reuse as much of the data already in memory as possible, by not reading
    * applications that haven't been updated since last time the logs were checked.
    */
-  private[history] def checkForLogs(): Unit = {
+  private[history] def checkForLogs(): Unit = historySource.timeOfCheckForLogs {
     try {
       val newLastScanTime = clock.getTimeMillis()
       logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
@@ -869,7 +874,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             if (info.lastEvaluatedForCompaction.isEmpty ||
                 info.lastEvaluatedForCompaction.get < lastIndex) {
               // haven't tried compaction for this index, do compaction
-              fileCompactor.compact(reader.listEventLogFiles)
+              historySource.timeOfCompact {
+                fileCompactor.compact(reader.listEventLogFiles)
+              }
               listing.write(info.copy(lastEvaluatedForCompaction = Some(lastIndex)))
             }
           } catch {
@@ -931,7 +938,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   /**
    * Delete event logs from the log directory according to the clean policy defined by the user.
    */
-  private[history] def cleanLogs(): Unit = Utils.tryLog {
+  private[history] def cleanLogs(): Unit = Utils.tryLog(historySource.timeOfCleanLogs {
     val maxTime = clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000
     val maxNum = conf.get(MAX_LOG_NUM)
 
@@ -988,7 +995,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     // Clean the inaccessibleList from the expired entries.
     clearInaccessibleList(CLEAN_INTERVAL_S)
-  }
+  })
 
   private def deleteAttemptLogs(
       app: ApplicationInfoWrapper,
@@ -1020,7 +1027,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   /**
    * Delete driver logs from the configured spark dfs dir that exceed the configured max age
    */
-  private[history] def cleanDriverLogs(): Unit = Utils.tryLog {
+  private[history] def cleanDriverLogs(): Unit = Utils.tryLog(historySource.timeOfCleanDriverLogs {
     val driverLogDir = conf.get(DRIVER_LOG_DFS_DIR).get
     val driverLogFs = new Path(driverLogDir).getFileSystem(hadoopConf)
     val currentTime = clock.getTimeMillis()
@@ -1070,7 +1077,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       listing.delete(classOf[LogInfo], log.logPath)
       deleteLog(driverLogFs, new Path(log.logPath))
     }
-  }
+  })
 
   /**
    * Rebuilds the application state store from its event log. Exposed for testing.
@@ -1406,6 +1413,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     secManager.setViewAclsGroups(stringToSeq(attempt.viewAclsGroups.getOrElse("")))
     secManager
   }
+
+  override def getHistoryServerSource(): HistoryServerSource = historySource
+
+  override def getUncompleted(): Int = uncompleted
 }
 
 private[history] object FsHistoryProvider {

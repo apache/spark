@@ -31,12 +31,10 @@ import org.apache.spark.metrics.source.{Source, StaticSources}
 class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateMethodTester{
   var filePath: String = _
   var conf: SparkConf = null
-  var securityMgr: SecurityManager = null
 
   before {
     filePath = getClass.getClassLoader.getResource("test_metrics_system.properties").getFile
     conf = new SparkConf(false).set(METRICS_CONF, filePath)
-    securityMgr = new SecurityManager(conf)
   }
 
   test("MetricsSystem with default config") {
@@ -269,4 +267,16 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     assert(metricName === source.sourceName)
   }
 
+  test("SPARK-37032: MetricsSystem with History Server instance") {
+    val source = new Source {
+      override val sourceName = "dummySource"
+      override val metricRegistry = new MetricRegistry()
+    }
+
+    val instanceName = MetricsSystemInstances.HISTORY_SERVER
+    val executorMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf)
+
+    val metricName = executorMetricsSystem.buildRegistryName(source)
+    assert(metricName === source.sourceName)
+  }
 }

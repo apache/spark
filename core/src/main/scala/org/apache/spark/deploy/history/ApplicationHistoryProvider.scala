@@ -84,6 +84,15 @@ private[history] abstract class ApplicationHistoryProvider {
   }
 
   /**
+   * Returns the count of application uncompleted.
+   *
+   * @return Count of uncompleted application
+   */
+  def getUncompleted(): Int = {
+    0
+  }
+
+  /**
    * Returns the time the history provider last updated the application history information
    *
    * @return 0 if this is undefined or unsupported, otherwise the last updated time in millis
@@ -157,4 +166,10 @@ private[history] abstract class ApplicationHistoryProvider {
    */
   def checkUIViewPermissions(appId: String, attemptId: Option[String], user: String): Boolean
 
+  /**
+   * Return history server source.
+   *
+   * @return History source for monitor history server
+   */
+  def getHistoryServerSource(): HistoryServerSource
 }
