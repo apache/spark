@@ -41,11 +41,11 @@
 | org.apache.spark.sql.catalyst.expressions.BRound | bround | SELECT bround(2.5, 0) | struct<bround(2.5, 0):decimal(2,0)> |
 | org.apache.spark.sql.catalyst.expressions.Base64 | base64 | SELECT base64('Spark SQL') | struct<base64(Spark SQL):string> |
 | org.apache.spark.sql.catalyst.expressions.Bin | bin | SELECT bin(13) | struct<bin(13):string> |
-| org.apache.spark.sql.catalyst.expressions.BitAnd | bitand | SELECT hex(bitand(unhex('AABB'), unhex('11223344'))) | struct<hex(bitand(unhex(AABB), unhex(11223344))):string> |
+| org.apache.spark.sql.catalyst.expressions.BitAnd | bitand | SELECT hex(bitand(unhex('AABB'), unhex('7735'))) | struct<hex(bitand(unhex(AABB), unhex(7735), lpad)):string> |
 | org.apache.spark.sql.catalyst.expressions.BitLength | bit_length | SELECT bit_length('Spark SQL') | struct<bit_length(Spark SQL):int> |
 | org.apache.spark.sql.catalyst.expressions.BitNot | bitnot | SELECT hex(bitnot(unhex('AABB'))) | struct<hex(bitnot(unhex(AABB))):string> |
-| org.apache.spark.sql.catalyst.expressions.BitOr | bitor | SELECT hex(bitor(unhex('AABB'), unhex('11223344'))) | struct<hex(bitor(unhex(AABB), unhex(11223344))):string> |
-| org.apache.spark.sql.catalyst.expressions.BitXor | bitxor | SELECT hex(bitxor(unhex('AABB'), unhex('11223344'))) | struct<hex(bitxor(unhex(AABB), unhex(11223344))):string> |
+| org.apache.spark.sql.catalyst.expressions.BitOr | bitor | SELECT hex(bitor(unhex('AABB'), unhex('7735'))) | struct<hex(bitor(unhex(AABB), unhex(7735), lpad)):string> |
+| org.apache.spark.sql.catalyst.expressions.BitXor | bitxor | SELECT hex(bitxor(unhex('AABB'), unhex('7735'))) | struct<hex(bitxor(unhex(AABB), unhex(7735), lpad)):string> |
 | org.apache.spark.sql.catalyst.expressions.BitwiseAnd | & | SELECT 3 & 5 | struct<(3 & 5):int> |
 | org.apache.spark.sql.catalyst.expressions.BitwiseCount | bit_count | SELECT bit_count(0) | struct<bit_count(0):int> |
 | org.apache.spark.sql.catalyst.expressions.BitwiseGet | bit_get | SELECT bit_get(11, 0) | struct<bit_get(11, 0):tinyint> |
