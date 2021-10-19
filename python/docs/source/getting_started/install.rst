@@ -94,17 +94,6 @@ Anaconda itself, the most important channel is `conda-forge <https://conda-forge
 is the community-driven packaging effort that is the most extensive & the most current (and also
 serves as the upstream for the Anaconda channels in most cases).
 
-Generally, it is recommended to use *as few channels as possible*. Conda-forge & Anaconda put a
-lot of effort in guaranteeing binary compatibility between packages (e.g. by using compatible
-compilers for all packages and tracking which packages are ABI-relevant). Needlessly mixing in
-other channels can end up breaking those guarantees, which is why conda-forge even recommends
-so-called "strict channel priority":
-
-.. code-block:: bash
-
-    conda config --add channels conda-forge
-    conda config --set channel_priority strict
-
 To create a new conda environment from your terminal and activate it, proceed as shown below:
 
 .. code-block:: bash
@@ -120,12 +109,7 @@ the same session as pyspark (you can install in several steps too).
 
     conda install -c conda-forge pyspark python [other packages]  # can also use python=3.8, etc.
 
-Whenever possible, avoid using ``pip`` within conda-environments. Conda and pip "do not speak
-the same language" - while conda will detect and try to respect packages installed by pip,
-pip might install over existing packages installed by conda and consequently break the
-functionality of the environment.
-
-Note that `PySpark at Conda <https://anaconda.org/conda-forge/pyspark>`_ is maintained
+Note that `PySpark for conda <https://anaconda.org/conda-forge/pyspark>`_ is maintained
 separately by the community; while new versions generally get packaged quickly, the
 availability through conda(-forge) is not directly in sync with the PySpark release cycle.
 
