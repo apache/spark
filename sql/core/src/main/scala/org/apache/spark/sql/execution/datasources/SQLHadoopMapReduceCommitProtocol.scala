@@ -21,9 +21,10 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{OutputCommitter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.FileCommitProtocol.getStagingDir
-import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
+import org.apache.spark.internal.config.EXEC_STAGING_DIR
+import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -33,16 +34,13 @@ import org.apache.spark.sql.internal.SQLConf
 class SQLHadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
-    stagingDir: Path,
     dynamicPartitionOverwrite: Boolean = false)
-  extends HadoopMapReduceCommitProtocol(jobId, path, stagingDir, dynamicPartitionOverwrite)
+  extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
     with Serializable with Logging {
 
-  def this(jobId: String, path: String) =
-    this(jobId, path, getStagingDir(path, jobId), false)
-
-  def this(jobId: String, path: String, dynamicPartitionOverwrite: Boolean) =
-    this(jobId, path, getStagingDir(path, jobId), dynamicPartitionOverwrite)
+  override val stagingDir: Path =
+    FileCommitProtocol.externalTempPath(new Path(path), SparkHadoopUtil.get.conf,
+      SQLConf.get.getConfString(EXEC_STAGING_DIR.key), "spark", jobId)
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     var committer = super.setupCommitter(context)

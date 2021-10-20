@@ -30,7 +30,6 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.FileCommitProtocol.getStagingDir
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 
 /**
@@ -41,9 +40,6 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
  *
  * @param jobId the job's or stage's id
  * @param path the job's output path, or null if committer acts as a noop
- * @param stagingDir The staging directory of this write job. Spark uses it to deal with
- *                   files with absolute output path, or writing data into partitioned directory
- *                   with dynamicPartitionOverwrite=true
  * @param dynamicPartitionOverwrite If true, Spark will overwrite partition directories at runtime
  *                                  dynamically. Suppose final path is /path/to/outputPath, output
  *                                  path of [[FileOutputCommitter]] is an intermediate path, e.g.
@@ -71,15 +67,8 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
 class HadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
-    stagingDir: Path,
     dynamicPartitionOverwrite: Boolean = false)
   extends FileCommitProtocol with Serializable with Logging {
-
-  def this(jobId: String, path: String) =
-    this(jobId, path, getStagingDir(path, jobId))
-
-  def this(jobId: String, path: String, dynamicPartitionOverwrite: Boolean) =
-    this(jobId, path, getStagingDir(path, jobId), dynamicPartitionOverwrite)
 
   import FileCommitProtocol._
 
@@ -111,6 +100,12 @@ class HadoopMapReduceCommitProtocol(
    */
   @transient private var partitionPaths: mutable.Set[String] = null
 
+  /**
+   * The staging directory of this write job. Spark uses it to deal with files with absolute output
+   * path, or writing data into partitioned directory with dynamicPartitionOverwrite=true.
+   */
+  protected val stagingDir = getStagingDir(path, jobId)
+
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.getConstructor().newInstance()
     // If OutputFormat is Configurable, we should set conf to it.
@@ -120,6 +115,16 @@ class HadoopMapReduceCommitProtocol(
     }
     format.getOutputCommitter(context)
   }
+
+  override def getOutputPath: Path = {
+    if (dynamicPartitionOverwrite) {
+      stagingDir
+    } else {
+      new Path(path)
+    }
+  }
+
+  override def getWorkPath: Path = getOutputPath
 
   override def newTaskTempFile(
       taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
