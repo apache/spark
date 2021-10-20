@@ -52,7 +52,7 @@ U = TypeVar("U")
 __all__ = [
     "DataType", "NullType", "StringType", "BinaryType", "BooleanType", "DateType",
     "TimestampType", "TimestampNTZType", "DecimalType", "DoubleType", "FloatType",
-    "ByteType", "IntegerType", "LongType", "ShortType", "ArrayType", "MapType",
+    "ByteType", "IntegerType", "LongType", "Row", "ShortType", "ArrayType", "MapType",
     "StructField", "StructType"]
 
 
