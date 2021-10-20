@@ -187,7 +187,6 @@ class CombiningLimitsSuite extends PlanTest {
         testRelation.join(testRelation2, joinType),
         20
       )
-
       checkPlanAndMaxRow(
         testRelation.join(testRelation2, joinType).limit(10),
         testRelation.join(testRelation2, joinType).limit(10),
