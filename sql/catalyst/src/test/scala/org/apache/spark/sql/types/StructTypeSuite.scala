@@ -405,4 +405,9 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       assert(st2.merge(st1) === expectedStruct)
     }
   }
+
+  test("SPARK-XXXXX: Implement toString explicitly in StructType for Scala 2.13") {
+    val struct = StructType(StructField("a", IntegerType) :: Nil)
+    assert(struct.toString() === "StructType(StructField(a,IntegerType,true)")
+  }
 }
