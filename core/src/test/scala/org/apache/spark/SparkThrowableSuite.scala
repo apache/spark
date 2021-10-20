@@ -203,6 +203,6 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
     val untestedErrorClasses = errorClassTestedMap.filter(!_._2).keys
     assert(untestedErrorClasses.isEmpty,
-      s"${untestedErrorClasses.size} out of ${errorClassTestedMap.size} error classes are untested")
+      s"${untestedErrorClasses.size}/${errorClassTestedMap.size} error classes are untested")
   }
 }
