@@ -325,6 +325,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     e = intercept[AnalysisException] {
       check(Seq("S2", "x"), None)
     }
+    assert(e.getErrorClass == "AMBIGUOUS_FIELD_NAME")
     assert(e.getMessage.contains(
       "Field name S2.x is ambiguous and has 2 matching fields in the struct"))
     caseSensitiveCheck(Seq("s2", "x"), Some(Seq("s2") -> StructField("x", IntegerType)))

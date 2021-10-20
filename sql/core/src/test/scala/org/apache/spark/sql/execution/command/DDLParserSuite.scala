@@ -210,7 +210,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val e = intercept[ParseException] {
       parser.parsePlan("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')")
     }.getMessage
-    assert(e.contains("Found duplicate keys 'key1'"))
+    assert(e.getErrorClass == "DUPLICATE_KEY")
+    assert(e.messageParameters.sameElements(Array("key1"))
   }
 
   test("duplicate columns in partition specs") {
@@ -218,7 +219,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       parser.parsePlan(
         "ALTER TABLE dbx.tab1 PARTITION (a='1', a='2') RENAME TO PARTITION (a='100', a='200')")
     }.getMessage
-    assert(e.contains("Found duplicate keys 'a'"))
+    assert(e.getErrorClass == "DUPLICATE_KEY")
+    assert(e.messageParameters.sameElements(Array("a"))
   }
 
   test("unsupported operations") {

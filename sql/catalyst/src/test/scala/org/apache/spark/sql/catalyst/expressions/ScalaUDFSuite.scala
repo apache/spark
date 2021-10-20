@@ -51,12 +51,12 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
       Option(resolvedEncoder[String]()) :: Nil)
 
     val e1 = intercept[SparkException](udf.eval())
-    assert(e1.getMessage.contains("Failed to execute user defined function"))
+    assert(e1.getErrorClass == "FAILED_EXECUTE_UDF")
 
     val e2 = intercept[SparkException] {
       checkEvaluationWithUnsafeProjection(udf, null)
     }
-    assert(e2.getMessage.contains("Failed to execute user defined function"))
+    assert(e1.getErrorClass == "FAILED_EXECUTE_UDF")
   }
 
   test("SPARK-22695: ScalaUDF should not use global variables") {

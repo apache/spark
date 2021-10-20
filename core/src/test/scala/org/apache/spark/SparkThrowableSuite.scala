@@ -18,7 +18,11 @@
 package org.apache.spark
 
 import java.io.File
+import java.nio.file.Paths
 import java.util.IllegalFormatException
+
+import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION
@@ -26,6 +30,7 @@ import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import org.apache.commons.io.FileUtils
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark.SparkThrowableHelper._
@@ -124,15 +129,16 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
 
     // Does not fail with too many args (expects 0 args)
-    assert(getMessage("DIVIDE_BY_ZERO", Array("foo", "bar")) == "divide by zero")
+    assert(getMessage("DIVIDE_BY_ZERO", Array("foo", "bar")) ==
+      "[DIVIDE_BY_ZERO] divide by zero")
   }
 
   test("Error message is formatted") {
     assert(getMessage("MISSING_COLUMN", Array("foo", "bar, baz")) ==
-      "Column 'foo' does not exist. Did you mean one of the following? [bar, baz]")
+      "[MISSING_COLUMN] Column 'foo' does not exist. Did you mean one of the following? [bar, baz]")
   }
 
-  test("Try catching legacy SparkError") {
+  test("Try catching legacy SparkThrowable") {
     try {
       throw new SparkException("Arbitrary legacy message")
     } catch {
@@ -145,7 +151,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
   }
 
-  test("Try catching SparkError with error class") {
+  test("Try catching SparkThrowable with error class") {
     try {
       throw new SparkException(
         errorClass = "WRITING_JOB_ABORTED",
@@ -161,7 +167,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
   }
 
-  test("Try catching internal SparkError") {
+  test("Try catching internal SparkThrowable") {
     try {
       throw new SparkException(
         errorClass = "INTERNAL_ERROR",
@@ -176,5 +182,27 @@ class SparkThrowableSuite extends SparkFunSuite {
         // Should not end up here
         assert(false)
     }
+  }
+
+  test("Check if error class is tested") {
+    val errorClassTestedMap = new mutable.HashMap[String, Boolean]()
+    errorClassToInfoMap.foreach { case (errorClass, _) =>
+      errorClassTestedMap.put(errorClass, false)
+    }
+    val baseDir = new File(Paths.get("..").toAbsolutePath().normalize().toString())
+    // Also test .sql.out
+    val testFiles = FileUtils.listFiles(baseDir, Array("scala", "sql.out"), true).asScala
+      .filter(_.getAbsolutePath.contains("/test/"))
+    testFiles.foreach { file =>
+      val filesContent = FileUtils.readFileToString(file)
+      errorClassToInfoMap.foreach { case (errorClass, tested) =>
+        if (filesContent.contains(errorClass)) {
+          errorClassTestedMap.put(errorClass, true)
+        }
+      }
+    }
+    val untestedErrorClasses = errorClassTestedMap.filter(!_._2).keys
+    assert(untestedErrorClasses.isEmpty,
+      s"${untestedErrorClasses.size} out of ${errorClassTestedMap.size} error classes are untested")
   }
 }

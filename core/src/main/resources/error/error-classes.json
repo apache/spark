@@ -61,15 +61,12 @@
   "INCOMPATIBLE_DATASOURCE_REGISTER" : {
     "message" : [ "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: %s" ]
   },
-  "INDEX_OUT_OF_BOUNDS" : {
-    "message" : [ "Index %s must be between 0 and the length of the ArrayData." ],
-    "sqlState" : "22023"
-  },
   "INTERNAL_ERROR" : {
     "message" : [ "%s" ]
   },
   "INVALID_ARRAY_INDEX" : {
-    "message" : [ "Invalid index: %s, numElements: %s" ]
+    "message" : [ "Invalid index: %s, numElements: %s" ],
+    "sqlState" : "22023"
   },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name %s is invalid: %s is not a struct." ],

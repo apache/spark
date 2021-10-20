@@ -200,7 +200,7 @@ class ArrayDataIndexedSeq[T](arrayData: ArrayData, dataType: DataType) extends I
     if (0 <= idx && idx < arrayData.numElements()) {
       accessor(arrayData, idx).asInstanceOf[T]
     } else {
-      throw QueryExecutionErrors.indexOutOfBoundsOfArrayDataError(idx)
+      throw QueryExecutionErrors.invalidArrayIndexError(idx, arrayData.numElements())
     }
 
   override def length: Int = arrayData.numElements()

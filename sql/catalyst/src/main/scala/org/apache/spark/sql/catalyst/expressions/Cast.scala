@@ -21,6 +21,7 @@ import java.time.{ZoneId, ZoneOffset}
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
+import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.Cast.{forceNullable, resolvableNullability}
@@ -1970,7 +1971,8 @@ case class Cast(
     AnsiCast.typeCheckFailureMessage(child.dataType, dataType,
       Some(SQLConf.ANSI_ENABLED.key), Some("false"))
   } else {
-    s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
+    SparkThrowableHelper.getMessage(
+      "CANNOT_CAST_DATATYPE", Array(child.dataType.catalogString, dataType.catalogString))
   }
 
   override protected def withNewChildInternal(newChild: Expression): Cast = copy(child = newChild)

@@ -53,13 +53,15 @@ class ArrayDataIndexedSeqSuite extends SparkFunSuite {
       }
     }
 
-    intercept[IndexOutOfBoundsException] {
+    val e1 = intercept[SparkIndexOutOfBoundsException] {
       seq(-1)
-    }.getMessage().contains("must be between 0 and the length of the ArrayData.")
+    }
+    assert(e1.getErrorClass == "INVALID_ARRAY_INDEX")
 
-    intercept[IndexOutOfBoundsException] {
+    val e2 = intercept[SparkIndexOutOfBoundsException] {
       seq(seq.length)
-    }.getMessage().contains("must be between 0 and the length of the ArrayData.")
+    }
+    assert(e2.getErrorClass == "INVALID_ARRAY_INDEX")
   }
 
   private def testArrayData(): Unit = {
