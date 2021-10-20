@@ -1632,12 +1632,11 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     if (pattern == null) {
       null
     } else {
-      val patternString = pattern.asInstanceOf[UTF8String].toString
       val sb = new StringBuffer()
       val formatter = new java.util.Formatter(sb, Locale.US)
 
       val arglist = children.tail.map(_.eval(input).asInstanceOf[AnyRef])
-      formatter.format(patternString, arglist: _*)
+      formatter.format(pattern.asInstanceOf[UTF8String].toString, arglist: _*)
 
       UTF8String.fromString(sb.toString)
     }
