@@ -757,7 +757,7 @@ select hex(bitor(unhex('aabb'), unhex(''), 'rpad'))
 -- !query schema
 struct<hex(bitor(unhex(aabb), unhex(), rpad)):string>
 -- !query output
-0000
+AABB
 
 
 -- !query
@@ -765,7 +765,7 @@ select hex(bitor(unhex(''), unhex('11223344'), 'rpad'))
 -- !query schema
 struct<hex(bitor(unhex(), unhex(11223344), rpad)):string>
 -- !query output
-00000000
+11223344
 
 
 -- !query
@@ -949,7 +949,7 @@ select hex(bitxor(unhex('aabb'), unhex(''), 'rpad'))
 -- !query schema
 struct<hex(bitxor(unhex(aabb), unhex(), rpad)):string>
 -- !query output
-0000
+AABB
 
 
 -- !query
@@ -957,7 +957,7 @@ select hex(bitxor(unhex(''), unhex('11223344'), 'rpad'))
 -- !query schema
 struct<hex(bitxor(unhex(), unhex(11223344), rpad)):string>
 -- !query output
-00000000
+11223344
 
 
 -- !query

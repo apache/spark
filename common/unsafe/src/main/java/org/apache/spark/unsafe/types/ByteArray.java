@@ -178,10 +178,7 @@ public final class ByteArray {
       }
     } else {
       // Initialize the last `maxLen - minLen` bytes to 0.
-      Platform.setMemory(result,
-              Platform.BYTE_ARRAY_OFFSET + maxLen - minLen,
-              maxLen - minLen,
-              (byte) 0);
+      Platform.setMemory(result, Platform.BYTE_ARRAY_OFFSET + minLen, maxLen - minLen, (byte) 0);
       // Compute the left-most minLen bytes of the result.
       for (int j = 0; j < minLen; ++j) {
         result[j] = (byte) (bytes1[j] & bytes2[j]);
@@ -246,8 +243,8 @@ public final class ByteArray {
       // Copy the last `maxLen - minLen` bytes of the longer byte sequence into the
       // `maxLen - minLen` right-most bytes of the result buffer.
       Platform.copyMemory(
-              maxLenBytes, Platform.BYTE_ARRAY_OFFSET + maxLen - minLen,
-              result, Platform.BYTE_ARRAY_OFFSET + maxLen - minLen,
+              maxLenBytes, Platform.BYTE_ARRAY_OFFSET + minLen,
+              result, Platform.BYTE_ARRAY_OFFSET + minLen,
               maxLen - minLen);
       // Compute the left-most minLen bytes of the result.
       for (int j = 0; j < minLen; ++j) {
@@ -313,8 +310,8 @@ public final class ByteArray {
       // Copy the last `maxLen - minLen` bytes of the longer byte sequence into the
       // `maxLen - minLen` right-most bytes of the result buffer.
       Platform.copyMemory(
-              maxLenBytes, Platform.BYTE_ARRAY_OFFSET + maxLen - minLen,
-              result, Platform.BYTE_ARRAY_OFFSET + maxLen - minLen,
+              maxLenBytes, Platform.BYTE_ARRAY_OFFSET + minLen,
+              result, Platform.BYTE_ARRAY_OFFSET + minLen,
               maxLen - minLen);
       // Compute the left-most minLen bytes of the result.
       for (int j = 0; j < minLen; ++j) {
