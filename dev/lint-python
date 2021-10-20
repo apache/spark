@@ -131,7 +131,10 @@ function mypy_annotation_test {
     local PYTEST_STATUS=
 
     echo "starting mypy annotations test..."
-    PYTEST_REPORT=$( ($MYPY_BUILD --config-file python/mypy.ini python/pyspark) 2>&1)
+    PYTEST_REPORT=$( ($MYPY_BUILD \
+      --config-file python/mypy.ini \
+      --cache-dir /tmp/.mypy_cache/ \
+      python/pyspark) 2>&1)
     PYTEST_STATUS=$?
 
     if [ "$PYTEST_STATUS" -ne 0 ]; then
