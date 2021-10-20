@@ -20,6 +20,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.connector.read.{SupportsPushDownLimit, V1Scan}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation
+import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources.{BaseRelation, Filter, TableScan}
 import org.apache.spark.sql.types.StructType
 
@@ -35,7 +36,8 @@ case class JDBCScan(
   private var pushedLimit = 0
 
   override def pushLimit(limit: Integer): Unit = {
-    if (relation.jdbcOptions.pushDownLimit) {
+    if (relation.jdbcOptions.pushDownLimit &&
+      JdbcDialects.get(relation.jdbcOptions.url).supportsLimit) {
       pushedLimit = limit
     }
   }

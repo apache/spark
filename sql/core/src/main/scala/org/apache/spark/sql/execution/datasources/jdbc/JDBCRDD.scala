@@ -281,7 +281,7 @@ private[jdbc] class JDBCRDD(
   /**
    * A LIMIT clause representing pushed-down limit.
    */
-  private def getLimitClause: String = if (limit > 0 ) s"LIMIT $limit" else ""
+  private def getLimitClause: String = JdbcDialects.get(url).getLimitClause(limit)
 
   /**
    * Runs the SQL query against the JDBC driver.
