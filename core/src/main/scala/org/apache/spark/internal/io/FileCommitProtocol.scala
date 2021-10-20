@@ -56,9 +56,9 @@ abstract class FileCommitProtocol extends Logging {
   import FileCommitProtocol._
 
   /**
-   * Get the final directory where work will be placed once the job
-   * is org.apache.hadoop.shaded.com.itted. This may be null, in which case, there is no output
-   * path to write data to.
+   * Get the final directory where the result data will be placed once the job
+   * is committed. This may be null, in which case, there is no output
+   * path to write data to and won't write any data.
    */
   def getOutputPath: Path = null
 
@@ -66,7 +66,8 @@ abstract class FileCommitProtocol extends Logging {
    * Get the directory that the task should write results into.
    * Warning: there's no guarantee that this work path is on the same
    * FS as the final output, or that it's visible across machines.
-   * May be null.
+   * May be null, in which case, there is no output path to write data to
+   * and won't write any data.
    */
   def getWorkPath: Path = null
 
