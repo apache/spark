@@ -543,28 +543,23 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     val inputPath = new Path("/tmp/b/c")
     var stagingDir = "tmp/b"
     val id = TaskRunner.getTaskRunnerID
-    var path = FileCommitProtocol.
-      getStagingDir(inputPath, conf, stagingDir, "hive", id.toString)
+    var path = FileCommitProtocol.getStagingDir(inputPath, conf, stagingDir, "hive", id.toString)
     assert(path.toString.indexOf("/tmp/b_hive_") != -1)
 
     stagingDir = "tmp/b/c"
-    path = FileCommitProtocol.getStagingDir(
-      inputPath, conf, stagingDir, "hive", id.toString)
+    path = FileCommitProtocol.getStagingDir(inputPath, conf, stagingDir, "hive", id.toString)
     assert(path.toString.indexOf("/tmp/b/c/.hive-staging_hive_") != -1)
 
     stagingDir = "d/e"
-    path = FileCommitProtocol.getStagingDir(
-      inputPath, conf, stagingDir, "hive", id.toString)
+    path = FileCommitProtocol.getStagingDir(inputPath, conf, stagingDir, "hive", id.toString)
     assert(path.toString.indexOf("/tmp/b/c/.hive-staging_hive_") != -1)
 
     stagingDir = ".d/e"
-    path = FileCommitProtocol.getStagingDir(
-      inputPath, conf, stagingDir, "hive", id.toString)
+    path = FileCommitProtocol.getStagingDir(inputPath, conf, stagingDir, "hive", id.toString)
     assert(path.toString.indexOf("/tmp/b/c/.d/e_hive_") != -1)
 
     stagingDir = "/tmp/c/"
-    path = FileCommitProtocol.getStagingDir(
-      inputPath, conf, stagingDir, "hive", id.toString)
+    path = FileCommitProtocol.getStagingDir(inputPath, conf, stagingDir, "hive", id.toString)
     assert(path.toString.indexOf("/tmp/c_hive_") != -1)
   }
 
