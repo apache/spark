@@ -125,7 +125,7 @@ SELECT udf(count(*)) FROM test_missing_target GROUP BY udf(a) ORDER BY udf(b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Column 'b' does not exist. Did you mean one of the following? [udf(count(1))]; line 1 pos 75
+[MISSING_COLUMN] Column 'b' does not exist. Did you mean one of the following? [udf(count(1))]; line 1 pos 75
 
 
 -- !query
@@ -330,7 +330,7 @@ SELECT udf(count(udf(a))) FROM test_missing_target GROUP BY udf(a) ORDER BY udf(
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Column 'b' does not exist. Did you mean one of the following? [udf(count(udf(a)))]; line 1 pos 80
+[MISSING_COLUMN] Column 'b' does not exist. Did you mean one of the following? [udf(count(udf(a)))]; line 1 pos 80
 
 
 -- !query

@@ -96,7 +96,7 @@ SELECT float('N A N')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: N A N
+[INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE] invalid input syntax for type numeric: N A N
 
 
 -- !query
@@ -105,7 +105,7 @@ SELECT float('NaN x')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: NaN x
+[INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE] invalid input syntax for type numeric: NaN x
 
 
 -- !query
@@ -114,7 +114,7 @@ SELECT float(' INFINITY    x')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric:  INFINITY    x
+[INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE] invalid input syntax for type numeric:  INFINITY    x
 
 
 -- !query
@@ -147,7 +147,7 @@ SELECT float(decimal('nan'))
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: nan
+[INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE] invalid input syntax for type numeric: nan
 
 
 -- !query
@@ -325,7 +325,7 @@ SELECT int(float('2147483647'))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting 2.14748365E9 to int causes overflow
+[CAST_CAUSES_OVERFLOW] Casting 2.14748365E9 to int causes overflow
 
 
 -- !query
@@ -342,7 +342,7 @@ SELECT int(float('-2147483900'))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting -2.1474839E9 to int causes overflow
+[CAST_CAUSES_OVERFLOW] Casting -2.1474839E9 to int causes overflow
 
 
 -- !query
@@ -375,7 +375,7 @@ SELECT bigint(float('-9223380000000000000'))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting -9.22338E18 to int causes overflow
+[CAST_CAUSES_OVERFLOW] Casting -9.22338E18 to int causes overflow
 
 
 -- !query

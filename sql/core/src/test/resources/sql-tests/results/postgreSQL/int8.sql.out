@@ -572,7 +572,7 @@ select bigint('9223372036854775800') / bigint('0')
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-divide by zero
+[DIVIDE_BY_ZERO] divide by zero
 
 
 -- !query
@@ -581,7 +581,7 @@ select bigint('-9223372036854775808') / smallint('0')
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-divide by zero
+[DIVIDE_BY_ZERO] divide by zero
 
 
 -- !query
@@ -590,7 +590,7 @@ select smallint('100') / bigint('0')
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-divide by zero
+[DIVIDE_BY_ZERO] divide by zero
 
 
 -- !query
@@ -607,7 +607,7 @@ SELECT CAST(q1 AS int) FROM int8_tbl WHERE q2 <> 456
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting 4567890123456789 to int causes overflow
+[CAST_CAUSES_OVERFLOW] Casting 4567890123456789 to int causes overflow
 
 
 -- !query
@@ -624,7 +624,7 @@ SELECT CAST(q1 AS smallint) FROM int8_tbl WHERE q2 <> 456
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting 4567890123456789 to smallint causes overflow
+[CAST_CAUSES_OVERFLOW] Casting 4567890123456789 to smallint causes overflow
 
 
 -- !query
@@ -661,7 +661,7 @@ SELECT CAST(double('922337203685477580700.0') AS bigint)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting 9.223372036854776E20 to long causes overflow
+[CAST_CAUSES_OVERFLOW] Casting 9.223372036854776E20 to long causes overflow
 
 
 -- !query
@@ -733,7 +733,7 @@ SELECT string(int(shiftleft(bigint(-1), 63))+1)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting -9223372036854775808 to int causes overflow
+[CAST_CAUSES_OVERFLOW] Casting -9223372036854775808 to int causes overflow
 
 
 -- !query

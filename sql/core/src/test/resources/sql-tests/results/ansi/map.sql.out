@@ -8,7 +8,7 @@ select element_at(map(1, 'a', 2, 'b'), 5)
 struct<>
 -- !query output
 org.apache.spark.SparkNoSuchElementException
-Key 5 does not exist.
+[MAP_KEY_DOES_NOT_EXIST] Key 5 does not exist.
 
 
 -- !query
@@ -17,4 +17,4 @@ select map(1, 'a', 2, 'b')[5]
 struct<>
 -- !query output
 org.apache.spark.SparkNoSuchElementException
-Key 5 does not exist.
+[MAP_KEY_DOES_NOT_EXIST] Key 5 does not exist.

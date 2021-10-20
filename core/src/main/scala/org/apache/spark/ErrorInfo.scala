@@ -58,7 +58,8 @@ private[spark] object SparkThrowableHelper {
   def getMessage(errorClass: String, messageParameters: Array[String]): String = {
     val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
       throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
-    String.format(errorInfo.messageFormat, messageParameters: _*)
+    val baseMessage = String.format(errorInfo.messageFormat, messageParameters: _*)
+    s"[$errorClass] $baseMessage"
   }
 
   def getSqlState(errorClass: String): String = {

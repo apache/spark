@@ -122,7 +122,7 @@ select interval 2 second * 'a'
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: a
+[INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE] invalid input syntax for type numeric: a
 
 
 -- !query
@@ -131,7 +131,7 @@ select interval 2 second / 'a'
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: a
+[INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE] invalid input syntax for type numeric: a
 
 
 -- !query
@@ -140,7 +140,7 @@ select interval 2 year * 'a'
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: a
+[INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE] invalid input syntax for type numeric: a
 
 
 -- !query
@@ -149,7 +149,7 @@ select interval 2 year / 'a'
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: a
+[INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE] invalid input syntax for type numeric: a
 
 
 -- !query
@@ -174,7 +174,7 @@ select 'a' * interval 2 second
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: a
+[INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE] invalid input syntax for type numeric: a
 
 
 -- !query
@@ -183,7 +183,7 @@ select 'a' * interval 2 year
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: a
+[INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE] invalid input syntax for type numeric: a
 
 
 -- !query
@@ -210,7 +210,7 @@ select interval '2 seconds' / 0
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-divide by zero
+[DIVIDE_BY_ZERO] divide by zero
 
 
 -- !query
@@ -243,7 +243,7 @@ select interval '2' year / 0
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-divide by zero
+[DIVIDE_BY_ZERO] divide by zero
 
 
 -- !query
