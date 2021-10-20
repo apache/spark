@@ -90,7 +90,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def __init__(self, jdf: JavaObject, sql_ctx: "SQLContext"):
         self._jdf = jdf
         self.sql_ctx = sql_ctx
-        self._sc = cast(
+        self._sc: SparkContext = cast(
             SparkContext,
             sql_ctx and sql_ctx._sc  # type: ignore[attr-defined]
         )
