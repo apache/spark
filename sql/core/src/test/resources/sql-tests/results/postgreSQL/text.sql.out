@@ -174,46 +174,41 @@ cannot resolve 'substring('ahoj', 1, t.i)' due to data type mismatch: argument 3
  */
 select format_string(NULL)
 -- !query schema
-struct<>
+struct<format_string(NULL):string>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: NULL
+NULL
 
 
 -- !query
 select format_string('Hello')
 -- !query schema
-struct<>
+struct<format_string(Hello):string>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: Hello
+Hello
 
 
 -- !query
 select format_string('Hello %s', 'World')
 -- !query schema
-struct<>
+struct<format_string(Hello %s, World):string>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: Hello %s
+Hello World
 
 
 -- !query
 select format_string('Hello %%')
 -- !query schema
-struct<>
+struct<format_string(Hello %%):string>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: Hello %%
+Hello %
 
 
 -- !query
 select format_string('Hello %%%%')
 -- !query schema
-struct<>
+struct<format_string(Hello %%%%):string>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: Hello %%%%
+Hello %%
 
 
 -- !query
@@ -221,8 +216,8 @@ select format_string('Hello %s %s', 'World')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: Hello %s %s
+java.util.MissingFormatArgumentException
+Format specifier '%s'
 
 
 -- !query
@@ -230,35 +225,32 @@ select format_string('Hello %s')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: Hello %s
+java.util.MissingFormatArgumentException
+Format specifier '%s'
 
 
 -- !query
 select format_string('Hello %x', 20)
 -- !query schema
-struct<>
+struct<format_string(Hello %x, 20):string>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: Hello %x
+Hello 14
 
 
 -- !query
 select format_string('%1$s %3$s', 1, 2, 3)
 -- !query schema
-struct<>
+struct<format_string(%1$s %3$s, 1, 2, 3):string>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: %1$s %3$s
+1 3
 
 
 -- !query
 select format_string('%1$s %12$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
 -- !query schema
-struct<>
+struct<format_string(%1$s %12$s, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12):string>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: %1$s %12$s
+1 12
 
 
 -- !query
@@ -266,8 +258,8 @@ select format_string('%1$s %4$s', 1, 2, 3)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: %1$s %4$s
+java.util.MissingFormatArgumentException
+Format specifier '%4$s'
 
 
 -- !query
@@ -275,98 +267,88 @@ select format_string('%1$s %13$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: %1$s %13$s
+java.util.MissingFormatArgumentException
+Format specifier '%13$s'
 
 
 -- !query
 select format_string('%0$s', 'Hello')
 -- !query schema
-struct<>
+struct<format_string(%0$s, Hello):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-requirement failed: Illegal format argument index = 0; line 1 pos 7
+Hello
 
 
 -- !query
 select format_string('Hello %s %1$s %s', 'World', 'Hello again')
 -- !query schema
-struct<>
+struct<format_string(Hello %s %1$s %s, World, Hello again):string>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: Hello %s %1$s %s
+Hello World World Hello again
 
 
 -- !query
 select format_string('Hello %s %s, %2$s %2$s', 'World', 'Hello again')
 -- !query schema
-struct<>
+struct<format_string(Hello %s %s, %2$s %2$s, World, Hello again):string>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: Hello %s %s, %2$s %2$s
+Hello World Hello again, Hello again Hello again
 
 
 -- !query
 select format_string('>>%10s<<', 'Hello')
 -- !query schema
-struct<>
+struct<format_string(>>%10s<<, Hello):string>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: >>%10s<<
+>>     Hello<<
 
 
 -- !query
 select format_string('>>%10s<<', NULL)
 -- !query schema
-struct<>
+struct<format_string(>>%10s<<, NULL):string>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: >>%10s<<
+>>      null<<
 
 
 -- !query
 select format_string('>>%10s<<', '')
 -- !query schema
-struct<>
+struct<format_string(>>%10s<<, ):string>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: >>%10s<<
+>>          <<
 
 
 -- !query
 select format_string('>>%-10s<<', '')
 -- !query schema
-struct<>
+struct<format_string(>>%-10s<<, ):string>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: >>%-10s<<
+>>          <<
 
 
 -- !query
 select format_string('>>%-10s<<', 'Hello')
 -- !query schema
-struct<>
+struct<format_string(>>%-10s<<, Hello):string>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: >>%-10s<<
+>>Hello     <<
 
 
 -- !query
 select format_string('>>%-10s<<', NULL)
 -- !query schema
-struct<>
+struct<format_string(>>%-10s<<, NULL):string>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: >>%-10s<<
+>>null      <<
 
 
 -- !query
 select format_string('>>%1$10s<<', 'Hello')
 -- !query schema
-struct<>
+struct<format_string(>>%1$10s<<, Hello):string>
 -- !query output
-org.apache.spark.SparkUnsupportedOperationException
-Cannot evaluate expression: >>%1$10s<<
+>>     Hello<<
 
 
 -- !query
