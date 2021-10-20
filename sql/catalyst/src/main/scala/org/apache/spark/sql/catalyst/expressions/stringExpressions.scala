@@ -1617,7 +1617,7 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
   require(children.nonEmpty, s"$prettyName() should take at least 1 argument")
-  require(checkArgumentIndexNotZero(children.head), "Illegal format argument index = 0")
+  // require(checkArgumentIndexNotZero(children.head), "Illegal format argument index = 0")
 
 
   override def foldable: Boolean = children.forall(_.foldable)
@@ -1644,6 +1644,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val pattern = children.head.genCode(ctx)
+
     val argListGen = children.tail.map(x => (x.dataType, x.genCode(ctx)))
     val argList = ctx.freshName("argLists")
     val numArgLists = argListGen.length
