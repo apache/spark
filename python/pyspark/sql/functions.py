@@ -874,8 +874,8 @@ def collect_set(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df2 = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
-    >>> df2.agg(collect_set('age')).collect()
-    [Row(collect_set(age)=[5, 2])]
+    >>> df2.agg(array_sort(collect_set('age')).alias('c')).collect()
+    [Row(c=[2, 5])]
     """
     return _invoke_function_over_column("collect_set", col)
 
