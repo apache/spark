@@ -1339,7 +1339,7 @@ object StringPadDefaultValue {
   def get(str: Expression): Expression = {
     str.dataType match {
       case StringType => Literal(" ")
-      case BinaryType => Literal(Array[Byte](0x00))
+      case BinaryType => Literal(Array[Byte](0))
     }
   }
 }

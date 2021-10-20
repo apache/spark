@@ -143,9 +143,9 @@ public final class ByteArray {
     final byte[] result = new byte[len];
     final int minLen = Math.min(len, bytes.length);
     Platform.copyMemory(
-            bytes, Platform.BYTE_ARRAY_OFFSET,
-            result, Platform.BYTE_ARRAY_OFFSET + len - minLen,
-            minLen);
+      bytes, Platform.BYTE_ARRAY_OFFSET,
+      result, Platform.BYTE_ARRAY_OFFSET + len - minLen,
+      minLen);
     // 2. If the input has less than `len` bytes, fill in the rest using the provided pattern.
     if (bytes.length < len) {
       fillWithPattern(result, 0, len - bytes.length, pad);
@@ -170,9 +170,9 @@ public final class ByteArray {
     // 1. Copy the first `len` bytes of the input sequence into the output if they exist.
     final byte[] result = new byte[len];
     Platform.copyMemory(
-            bytes, Platform.BYTE_ARRAY_OFFSET,
-            result, Platform.BYTE_ARRAY_OFFSET,
-            Math.min(len, bytes.length));
+      bytes, Platform.BYTE_ARRAY_OFFSET,
+      result, Platform.BYTE_ARRAY_OFFSET,
+      Math.min(len, bytes.length));
     // 2. If the input has less than `len` bytes, fill in the rest using the provided pattern.
     if (bytes.length < len) {
       fillWithPattern(result, bytes.length, len, pad);
