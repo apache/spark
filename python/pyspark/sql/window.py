@@ -16,7 +16,7 @@
 #
 
 import sys
-from typing import List, Tuple, TYPE_CHECKING, Union
+from typing import cast, Iterable, List, Tuple, TYPE_CHECKING, Union
 
 from pyspark import since, SparkContext
 from pyspark.sql.column import _to_seq, _to_java_column  # type: ignore[attr-defined]
@@ -35,7 +35,7 @@ def _to_java_cols(
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if len(cols) == 1 and isinstance(cols[0], list):
         cols = cols[0]  # type: ignore[assignment]
-    return _to_seq(sc, cols, _to_java_column)
+    return _to_seq(sc, cast(Iterable["ColumnOrName"], cols), _to_java_column)
 
 
 class Window(object):

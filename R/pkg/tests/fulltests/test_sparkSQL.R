@@ -2292,6 +2292,22 @@ test_that("group by, agg functions", {
   unlink(jsonPath3)
 })
 
+test_that("SPARK-36976: Add max_by/min_by API to SparkR", {
+  df <- createDataFrame(
+    list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
+         list("dotNET", 2013, 48000), list("Java", 2013, 30000))
+  )
+  gd <- groupBy(df, df$"_1")
+
+  actual1 <- agg(gd, "_2" = max_by(df$"_2", df$"_3"))
+  expect1 <- createDataFrame(list(list("dotNET", 2013), list("Java", 2013)))
+  expect_equal(collect(actual1), collect(expect1))
+
+  actual2 <- agg(gd, "_2" = min_by(df$"_2", df$"_3"))
+  expect2 <- createDataFrame(list(list("dotNET", 2012), list("Java", 2012)))
+  expect_equal(collect(actual2), collect(expect2))
+})
+
 test_that("pivot GroupedData column", {
   df <- createDataFrame(data.frame(
     earnings = c(10000, 10000, 11000, 15000, 12000, 20000, 21000, 22000),

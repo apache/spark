@@ -18,19 +18,19 @@
 """
 Wrappers around spark that correspond to common pandas functions.
 """
-from typing import (  # noqa: F401 (SPARK-34943)
+from typing import (
     Any,
     Callable,
     Dict,
     List,
     Optional,
+    Set,
     Sized,
     Tuple,
     Type,
     Union,
     cast,
     no_type_check,
-    overload,
 )
 from collections import OrderedDict
 from collections.abc import Iterable
@@ -66,7 +66,7 @@ from pyspark.sql.types import (
     DataType,
 )
 
-from pyspark import pandas as ps  # noqa: F401
+from pyspark import pandas as ps
 from pyspark.pandas._typing import Axis, Dtype, Label, Name
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.utils import (
@@ -327,9 +327,10 @@ def read_csv(
 
         reader.options(**options)
 
+        column_labels: Dict[Any, str]
         if isinstance(names, str):
             sdf = reader.schema(names).csv(path)
-            column_labels = OrderedDict((col, col) for col in sdf.columns)  # type: Dict[Any, str]
+            column_labels = OrderedDict((col, col) for col in sdf.columns)
         else:
             sdf = reader.csv(path)
             if is_list_like(names):
@@ -349,11 +350,12 @@ def read_csv(
                 column_labels = OrderedDict((col, col) for col in sdf.columns)
 
         if usecols is not None:
+            missing: List[Union[int, str]]
             if callable(usecols):
                 column_labels = OrderedDict(
                     (label, col) for label, col in column_labels.items() if usecols(label)
                 )
-                missing = []  # type: List[Union[int, str]]
+                missing = []
             elif all(isinstance(col, int) for col in usecols):
                 usecols_ints = cast(List[int], usecols)
                 new_column_labels = OrderedDict(
@@ -397,6 +399,8 @@ def read_csv(
     if nrows is not None:
         sdf = sdf.limit(nrows)
 
+    index_spark_column_names: List[str]
+    index_names: List[Label]
     if index_col is not None:
         if isinstance(index_col, (str, int)):
             index_col = [index_col]
@@ -404,7 +408,7 @@ def read_csv(
             if col not in column_labels:
                 raise KeyError(col)
         index_spark_column_names = [column_labels[col] for col in index_col]
-        index_names = [(col,) for col in index_col]  # type: List[Label]
+        index_names = [(col,) for col in index_col]
         column_labels = OrderedDict(
             (label, col) for label, col in column_labels.items() if label not in index_col
         )
@@ -412,7 +416,7 @@ def read_csv(
         index_spark_column_names = []
         index_names = []
 
-    psdf = DataFrame(
+    psdf: DataFrame = DataFrame(
         InternalFrame(
             spark_frame=sdf,
             index_spark_columns=[scol_for(sdf, col) for col in index_spark_column_names],
@@ -422,7 +426,7 @@ def read_csv(
             ],
             data_spark_columns=[scol_for(sdf, col) for col in column_labels.values()],
         )
-    )  # type: DataFrame
+    )
 
     if dtype is not None:
         if isinstance(dtype, dict):
@@ -1378,11 +1382,11 @@ def read_sql_table(
     reader.options(**options)
     sdf = reader.format("jdbc").load()
     index_spark_columns, index_names = _get_index_map(sdf, index_col)
-    psdf = DataFrame(
+    psdf: DataFrame = DataFrame(
         InternalFrame(
             spark_frame=sdf, index_spark_columns=index_spark_columns, index_names=index_names
         )
-    )  # type: DataFrame
+    )
     if columns is not None:
         if isinstance(columns, str):
             columns = [columns]
@@ -1638,21 +1642,25 @@ def to_datetime(
         "months": "month",
         "day": "day",
         "days": "day",
+        "hour": "h",
+        "hours": "h",
+        "minute": "m",
+        "minutes": "m",
+        "second": "s",
+        "seconds": "s",
+        "ms": "ms",
+        "millisecond": "ms",
+        "milliseconds": "ms",
+        "us": "us",
+        "microsecond": "us",
+        "microseconds": "us",
     }
 
-    # replace passed unit with _unit_map
-    def f(value):
-        if value in _unit_map:
-            return _unit_map[value]
-
-        if value.lower() in _unit_map:
-            return _unit_map[value.lower()]
-
-        return value
-
-    def pandas_to_datetime(pser_or_pdf: Union[pd.DataFrame, pd.Series]) -> Series[np.datetime64]:
+    def pandas_to_datetime(
+        pser_or_pdf: Union[pd.DataFrame, pd.Series], cols: Optional[List[str]] = None
+    ) -> Series[np.datetime64]:
         if isinstance(pser_or_pdf, pd.DataFrame):
-            pser_or_pdf = pser_or_pdf[[unit_rev["year"], unit_rev["month"], unit_rev["day"]]]
+            pser_or_pdf = pser_or_pdf[cols]
         return pd.to_datetime(
             pser_or_pdf,
             errors=errors,
@@ -1665,10 +1673,16 @@ def to_datetime(
     if isinstance(arg, Series):
         return arg.pandas_on_spark.transform_batch(pandas_to_datetime)
     if isinstance(arg, DataFrame):
-        unit = {k: f(k) for k in arg.keys()}
+        unit = {k: _unit_map[k.lower()] for k in arg.keys() if k.lower() in _unit_map}
         unit_rev = {v: k for k, v in unit.items()}
-        psdf = arg[[unit_rev["year"], unit_rev["month"], unit_rev["day"]]]
-        return psdf.pandas_on_spark.transform_batch(pandas_to_datetime)
+        list_cols = [unit_rev["year"], unit_rev["month"], unit_rev["day"]]
+        for u in ["h", "m", "s", "ms", "us"]:
+            value = unit_rev.get(u)
+            if value is not None and value in arg:
+                list_cols.append(value)
+
+        psdf = arg[list_cols]
+        return psdf.pandas_on_spark.transform_batch(pandas_to_datetime, list_cols)
     return pd.to_datetime(
         arg,
         errors=errors,
@@ -2246,10 +2260,13 @@ def concat(
         raise ValueError("Only can inner (intersect) or outer (union) join the other axis.")
 
     axis = validate_axis(axis)
+    psdf: DataFrame
     if axis == 1:
-        psdfs = [obj.to_frame() if isinstance(obj, Series) else obj for obj in objs]
+        psdfs: List[DataFrame] = [
+            obj.to_frame() if isinstance(obj, Series) else obj for obj in objs
+        ]
 
-        level = min(psdf._internal.column_labels_level for psdf in psdfs)
+        level: int = min(psdf._internal.column_labels_level for psdf in psdfs)
         psdfs = [
             DataFrame._index_normalized_frame(level, psdf)
             if psdf._internal.column_labels_level > level
@@ -2258,7 +2275,7 @@ def concat(
         ]
 
         concat_psdf = psdfs[0]
-        column_labels = concat_psdf._internal.column_labels.copy()
+        column_labels: List[Label] = concat_psdf._internal.column_labels.copy()
 
         psdfs_not_same_anchor = []
         for psdf in psdfs[1:]:
@@ -2323,17 +2340,19 @@ def concat(
 
     # DataFrame, Series ... & Series, Series ...
     # In this case, we should return DataFrame.
-    new_objs = []
+    new_objs: List[DataFrame] = []
     num_series = 0
     series_names = set()
     for obj in objs:
         if isinstance(obj, Series):
             num_series += 1
             series_names.add(obj.name)
-            obj = obj.to_frame(DEFAULT_SERIES_NAME)
-        new_objs.append(obj)
+            new_objs.append(obj.to_frame(DEFAULT_SERIES_NAME))
+        else:
+            assert isinstance(obj, DataFrame)
+            new_objs.append(obj)
 
-    column_labels_levels = set(obj._internal.column_labels_level for obj in new_objs)
+    column_labels_levels: Set[int] = set(obj._internal.column_labels_level for obj in new_objs)
     if len(column_labels_levels) != 1:
         raise ValueError("MultiIndex columns should have the same levels")
 
@@ -2354,8 +2373,9 @@ def concat(
                 )
 
     column_labels_of_psdfs = [psdf._internal.column_labels for psdf in new_objs]
+    index_names_of_psdfs: List[List[Optional[Label]]]
     if ignore_index:
-        index_names_of_psdfs = [[] for _ in new_objs]  # type: List
+        index_names_of_psdfs = [[] for _ in new_objs]
     else:
         index_names_of_psdfs = [psdf._internal.index_names for psdf in new_objs]
 
@@ -2446,7 +2466,7 @@ def concat(
         index_names = psdfs[0]._internal.index_names
         index_fields = psdfs[0]._internal.index_fields
 
-    result_psdf = DataFrame(
+    result_psdf: DataFrame = DataFrame(
         psdfs[0]._internal.copy(
             spark_frame=concatenated,
             index_spark_columns=[scol_for(concatenated, col) for col in index_spark_column_names],
@@ -2457,7 +2477,7 @@ def concat(
             ],
             data_fields=None,  # TODO: dtypes?
         )
-    )  # type: DataFrame
+    )
 
     if should_return_series:
         # If all input were Series, we should return Series.
@@ -3053,7 +3073,7 @@ def merge_asof(
         if os is None:
             return []
         elif is_name_like_tuple(os):
-            return [os]  # type: ignore
+            return [cast(Label, os)]
         elif is_name_like_value(os):
             return [(os,)]
         else:
@@ -3470,6 +3490,8 @@ def read_orc(
 def _get_index_map(
     sdf: SparkDataFrame, index_col: Optional[Union[str, List[str]]] = None
 ) -> Tuple[Optional[List[Column]], Optional[List[Label]]]:
+    index_spark_columns: Optional[List[Column]]
+    index_names: Optional[List[Label]]
     if index_col is not None:
         if isinstance(index_col, str):
             index_col = [index_col]
@@ -3477,10 +3499,8 @@ def _get_index_map(
         for col in index_col:
             if col not in sdf_columns:
                 raise KeyError(col)
-        index_spark_columns = [
-            scol_for(sdf, col) for col in index_col
-        ]  # type: Optional[List[Column]]
-        index_names = [(col,) for col in index_col]  # type: Optional[List[Label]]
+        index_spark_columns = [scol_for(sdf, col) for col in index_col]
+        index_names = [(col,) for col in index_col]
     else:
         index_spark_columns = None
         index_names = None

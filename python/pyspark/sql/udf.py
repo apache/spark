@@ -19,24 +19,53 @@ User-defined function related classes and functions
 """
 import functools
 import sys
+from typing import Callable, Any, TYPE_CHECKING, Optional, cast, Union
+
+from py4j.java_gateway import JavaObject
 
 from pyspark import SparkContext
-from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
+from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType  # type: ignore[attr-defined]
 from pyspark.sql.column import Column, _to_java_column, _to_seq
-from pyspark.sql.types import StringType, DataType, StructType, _parse_datatype_string
+from pyspark.sql.types import (  # type: ignore[attr-defined]
+    StringType,
+    DataType,
+    StructType,
+    _parse_datatype_string
+)
 from pyspark.sql.pandas.types import to_arrow_type
+
+if TYPE_CHECKING:
+    from pyspark.sql._typing import DataTypeOrString, ColumnOrName, UserDefinedFunctionLike
+    from pyspark.sql.session import SparkSession
 
 __all__ = ["UDFRegistration"]
 
 
-def _wrap_function(sc, func, returnType):
+def _wrap_function(
+    sc: SparkContext,
+    func: Callable[..., Any],
+    returnType: "DataTypeOrString"
+) -> JavaObject:
     command = (func, returnType)
     pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
-    return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
-                                  sc.pythonVer, broadcast_vars, sc._javaAccumulator)
+    return sc._jvm.PythonFunction(  # type: ignore[attr-defined]
+        bytearray(pickled_command),
+        env,
+        includes,
+        sc.pythonExec,  # type: ignore[attr-defined]
+        sc.pythonVer,  # type: ignore[attr-defined]
+        broadcast_vars,
+        sc._javaAccumulator  # type: ignore[attr-defined]
+    )
 
 
-def _create_udf(f, returnType, evalType, name=None, deterministic=True):
+def _create_udf(
+    f: Callable[..., Any],
+    returnType: "DataTypeOrString",
+    evalType: int,
+    name: Optional[str] = None,
+    deterministic: bool = True
+) -> "UserDefinedFunctionLike":
     # Set the name of the UserDefinedFunction object to be the name of function f
     udf_obj = UserDefinedFunction(
         f, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic)
@@ -55,11 +84,14 @@ class UserDefinedFunction(object):
     Use :meth:`pyspark.sql.functions.udf` or :meth:`pyspark.sql.functions.pandas_udf`
     to create this instance.
     """
-    def __init__(self, func,
-                 returnType=StringType(),
-                 name=None,
-                 evalType=PythonEvalType.SQL_BATCHED_UDF,
-                 deterministic=True):
+    def __init__(
+        self,
+        func: Callable[..., Any],
+        returnType: "DataTypeOrString" = StringType(),
+        name: Optional[str] = None,
+        evalType: int = PythonEvalType.SQL_BATCHED_UDF,
+        deterministic: bool = True,
+    ):
         if not callable(func):
             raise TypeError(
                 "Invalid function: not a function or callable (__call__ is not defined): "
@@ -77,7 +109,7 @@ class UserDefinedFunction(object):
         self.func = func
         self._returnType = returnType
         # Stores UserDefinedPythonFunctions jobj, once initialized
-        self._returnType_placeholder = None
+        self._returnType_placeholder: Optional[DataType] = None
         self._judf_placeholder = None
         self._name = name or (
             func.__name__ if hasattr(func, '__name__')
@@ -86,7 +118,7 @@ class UserDefinedFunction(object):
         self.deterministic = deterministic
 
     @property
-    def returnType(self):
+    def returnType(self) -> DataType:
         # This makes sure this is called after SparkContext is initialized.
         # ``_parse_datatype_string`` accesses to JVM for parsing a DDL formatted string.
         if self._returnType_placeholder is None:
@@ -152,7 +184,7 @@ class UserDefinedFunction(object):
         return self._returnType_placeholder
 
     @property
-    def _judf(self):
+    def _judf(self) -> JavaObject:
         # It is possible that concurrent access, to newly created UDF,
         # will initialize multiple UserDefinedPythonFunctions.
         # This is unlikely, doesn't affect correctness,
@@ -161,7 +193,7 @@ class UserDefinedFunction(object):
             self._judf_placeholder = self._create_judf()
         return self._judf_placeholder
 
-    def _create_judf(self):
+    def _create_judf(self) -> JavaObject:
         from pyspark.sql import SparkSession
 
         spark = SparkSession.builder.getOrCreate()
@@ -169,19 +201,22 @@ class UserDefinedFunction(object):
 
         wrapped_func = _wrap_function(sc, self.func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
-        judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            self._name, wrapped_func, jdt, self.evalType, self.deterministic)
+        judf = (
+            sc._jvm.org.apache.spark.sql.execution.python  # type: ignore[attr-defined]
+            .UserDefinedPythonFunction(
+                self._name, wrapped_func, jdt, self.evalType, self.deterministic)
+        )
         return judf
 
-    def __call__(self, *cols):
+    def __call__(self, *cols: "ColumnOrName") -> Column:
         judf = self._judf
-        sc = SparkContext._active_spark_context
+        sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
         return Column(judf.apply(_to_seq(sc, cols, _to_java_column)))
 
     # This function is for improving the online help system in the interactive interpreter.
     # For example, the built-in help / pydoc.help. It wraps the UDF with the docstring and
     # argument annotation. (See: SPARK-19161)
-    def _wrapped(self):
+    def _wrapped(self) -> "UserDefinedFunctionLike":
         """
         Wrap this udf with a function and attach docstring from func
         """
@@ -195,23 +230,23 @@ class UserDefinedFunction(object):
             a for a in functools.WRAPPER_ASSIGNMENTS if a != '__name__' and a != '__module__')
 
         @functools.wraps(self.func, assigned=assignments)
-        def wrapper(*args):
+        def wrapper(*args: "ColumnOrName") -> Column:
             return self(*args)
 
         wrapper.__name__ = self._name
         wrapper.__module__ = (self.func.__module__ if hasattr(self.func, '__module__')
                               else self.func.__class__.__module__)
 
-        wrapper.func = self.func
-        wrapper.returnType = self.returnType
-        wrapper.evalType = self.evalType
-        wrapper.deterministic = self.deterministic
-        wrapper.asNondeterministic = functools.wraps(
+        wrapper.func = self.func  # type: ignore[attr-defined]
+        wrapper.returnType = self.returnType  # type: ignore[attr-defined]
+        wrapper.evalType = self.evalType  # type: ignore[attr-defined]
+        wrapper.deterministic = self.deterministic  # type: ignore[attr-defined]
+        wrapper.asNondeterministic = functools.wraps(  # type: ignore[attr-defined]
             self.asNondeterministic)(lambda: self.asNondeterministic()._wrapped())
-        wrapper._unwrapped = self
-        return wrapper
+        wrapper._unwrapped = self  # type: ignore[attr-defined]
+        return wrapper  # type: ignore[return-value]
 
-    def asNondeterministic(self):
+    def asNondeterministic(self) -> "UserDefinedFunction":
         """
         Updates UserDefinedFunction to nondeterministic.
 
@@ -232,10 +267,15 @@ class UDFRegistration(object):
     .. versionadded:: 1.3.1
     """
 
-    def __init__(self, sparkSession):
+    def __init__(self, sparkSession: "SparkSession"):
         self.sparkSession = sparkSession
 
-    def register(self, name, f, returnType=None):
+    def register(
+        self,
+        name: str,
+        f: "Union[Callable[..., Any], UserDefinedFunctionLike]",
+        returnType: Optional["DataTypeOrString"] = None,
+    ) -> "UserDefinedFunctionLike":
         """Register a Python function (including lambda function) or a user-defined function
         as a SQL function.
 
@@ -340,6 +380,7 @@ class UDFRegistration(object):
                 raise TypeError(
                     "Invalid return type: data type can not be specified when f is"
                     "a user-defined function, but got %s." % returnType)
+            f = cast("UserDefinedFunctionLike", f)
             if f.evalType not in [PythonEvalType.SQL_BATCHED_UDF,
                                   PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                                   PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
@@ -350,19 +391,28 @@ class UDFRegistration(object):
                     "SQL_SCALAR_PANDAS_ITER_UDF, SQL_GROUPED_AGG_PANDAS_UDF or "
                     "SQL_MAP_PANDAS_ITER_UDF.")
             register_udf = _create_udf(
-                f.func, returnType=f.returnType, name=name,
-                evalType=f.evalType, deterministic=f.deterministic)._unwrapped
+                f.func,
+                returnType=f.returnType,
+                name=name,
+                evalType=f.evalType,
+                deterministic=f.deterministic
+            )._unwrapped  # type: ignore[attr-defined]
             return_udf = f
         else:
             if returnType is None:
                 returnType = StringType()
             return_udf = _create_udf(
                 f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF, name=name)
-            register_udf = return_udf._unwrapped
+            register_udf = return_udf._unwrapped  # type: ignore[attr-defined]
         self.sparkSession._jsparkSession.udf().registerPython(name, register_udf._judf)
         return return_udf
 
-    def registerJavaFunction(self, name, javaClassName, returnType=None):
+    def registerJavaFunction(
+        self,
+        name: str,
+        javaClassName: str,
+        returnType: Optional["DataTypeOrString"] = None,
+    ) -> None:
         """Register a Java user-defined function as a SQL function.
 
         In addition to a name and the function itself, the return type can be optionally specified.
@@ -406,10 +456,11 @@ class UDFRegistration(object):
         if returnType is not None:
             if not isinstance(returnType, DataType):
                 returnType = _parse_datatype_string(returnType)
+            returnType = cast(DataType, returnType)
             jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
         self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
 
-    def registerJavaUDAF(self, name, javaClassName):
+    def registerJavaUDAF(self, name: str, javaClassName: str) -> None:
         """Register a Java user-defined aggregate function as a SQL function.
 
         .. versionadded:: 2.3.0
@@ -433,7 +484,7 @@ class UDFRegistration(object):
         self.sparkSession._jsparkSession.udf().registerJavaUDAF(name, javaClassName)
 
 
-def _test():
+def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.udf
