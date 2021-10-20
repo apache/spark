@@ -214,6 +214,7 @@ statement
         (LIKE? (multipartIdentifier | pattern=STRING))?                #showFunctions
     | SHOW CREATE TABLE multipartIdentifier (AS SERDE)?                #showCreateTable
     | SHOW CURRENT NAMESPACE                                           #showCurrentNamespace
+    | SHOW CATALOGS (LIKE? pattern=STRING)?                            #showCatalogs
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) namespace EXTENDED?
         multipartIdentifier                                            #describeNamespace
@@ -444,7 +445,7 @@ resource
     ;
 
 dmlStatementNoWith
-    : insertInto queryTerm queryOrganization                                       #singleInsertQuery
+    : insertInto query                                                             #singleInsertQuery
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
     | DELETE FROM multipartIdentifier tableAlias whereClause?                      #deleteFromTable
     | UPDATE multipartIdentifier tableAlias setClause whereClause?                 #updateTable
@@ -1066,6 +1067,7 @@ ansiNonReserved
     | CACHE
     | CASCADE
     | CATALOG
+    | CATALOGS
     | CHANGE
     | CLEAR
     | CLUSTER
@@ -1296,6 +1298,7 @@ nonReserved
     | CASE
     | CAST
     | CATALOG
+    | CATALOGS
     | CHANGE
     | CHECK
     | CLEAR
@@ -1551,6 +1554,7 @@ CASCADE: 'CASCADE';
 CASE: 'CASE';
 CAST: 'CAST';
 CATALOG: 'CATALOG';
+CATALOGS: 'CATALOGS';
 CHANGE: 'CHANGE';
 CHECK: 'CHECK';
 CLEAR: 'CLEAR';

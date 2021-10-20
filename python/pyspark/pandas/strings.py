@@ -40,7 +40,7 @@ from pyspark.sql.functions import pandas_udf
 from pyspark.pandas.spark import functions as SF
 
 if TYPE_CHECKING:
-    import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
+    import pyspark.pandas as ps
 
 
 class StringMethods(object):
