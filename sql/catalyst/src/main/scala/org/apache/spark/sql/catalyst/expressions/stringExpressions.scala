@@ -1617,6 +1617,8 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
   require(children.nonEmpty, s"$prettyName() should take at least 1 argument")
+  require(checkArgumentIndexNotZero(children.head), "Illegal format argument index = 0")
+
 
   override def foldable: Boolean = children.forall(_.foldable)
   override def nullable: Boolean = children(0).nullable
@@ -1630,13 +1632,12 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     if (pattern == null) {
       null
     } else {
+      val patternString = pattern.asInstanceOf[UTF8String].toString
       val sb = new StringBuffer()
       val formatter = new java.util.Formatter(sb, Locale.US)
 
       val arglist = children.tail.map(_.eval(input).asInstanceOf[AnyRef])
-      formatter.format(
-        pattern.asInstanceOf[UTF8String].toString.replace("%0$", "%1$"),
-        arglist: _*)
+      formatter.format(patternString, arglist: _*)
 
       UTF8String.fromString(sb.toString)
     }
@@ -1644,7 +1645,6 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val pattern = children.head.genCode(ctx)
-
     val argListGen = children.tail.map(x => (x.dataType, x.genCode(ctx)))
     val argList = ctx.freshName("argLists")
     val numArgLists = argListGen.length
@@ -1671,7 +1671,6 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     val formatter = classOf[java.util.Formatter].getName
     val sb = ctx.freshName("sb")
     val stringBuffer = classOf[StringBuffer].getName
-    val replaceMethod = ".replace(\"%0$\", \"%1$\")"
     ev.copy(code = code"""
       ${pattern.code}
       boolean ${ev.isNull} = ${pattern.isNull};
@@ -1681,7 +1680,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
         $formatter $form = new $formatter($sb, ${classOf[Locale].getName}.US);
         Object[] $argList = new Object[$numArgLists];
         $argListCodes
-        $form.format(${pattern.value}.toString()$replaceMethod, $argList);
+        $form.format(${pattern.value}.toString(), $argList);
         ${ev.value} = UTF8String.fromString($sb.toString());
       }""")
   }
@@ -1691,6 +1690,25 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): FormatString = FormatString(newChildren: _*)
+
+  /**
+   * SPARK-37013: The `formatSpecifier` defined in `j.u.Formatter` as follows:
+   *  "%[argument_index$][flags][width][.precision][t]conversion"
+   * The optional `argument_index` is a decimal integer indicating the position of the argument
+   * in the argument list. The first argument is referenced by "1$", the second by "2$", etc.
+   * However, for the illegal definition of "%0$", Java 8 and Java 11 uses it as "%1$",
+   * and Java 17 throws IllegalFormatArgumentIndexException(Illegal format argument index = 0).
+   * Therefore, manually check that the pattern string not contains "%0$" to ensure consistent
+   * behavior of Java 8, Java 11 and Java 17.
+   */
+  private def checkArgumentIndexNotZero(expression: Expression): Boolean = {
+    val pattern = expression.eval(null)
+    if (pattern == null) {
+      true
+    } else {
+      !pattern.asInstanceOf[UTF8String].toString.contains("%0$")
+    }
+  }
 }
 
 /**
