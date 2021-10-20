@@ -177,6 +177,9 @@ class FileScanRDD(
                 throw QueryExecutionErrors.cannotReadParquetFilesError(e)
               }
               throw e
+            case e: ArrayIndexOutOfBoundsException =>
+              throw QueryExecutionErrors.readArrayIndexOutOfBoundExceptionError(
+                e, currentFile.filePath)
           }
         } else {
           currentFile = null
