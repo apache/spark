@@ -73,6 +73,10 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
           throw QueryExecutionErrors.cannotReadParquetFilesError(e)
         }
         throw e
+      case e: ArrayIndexOutOfBoundsException =>
+        logError(s"Throw ArrayIndexOutOfBoundsException: ${e.getMessage} " +
+          s"while reading file ${currentReader.file.filePath}")
+        throw e
       case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
         logWarning(
           s"Skipped the rest of the content in the corrupted file: $currentReader", e)
