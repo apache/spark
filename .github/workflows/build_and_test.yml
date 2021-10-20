@@ -443,7 +443,7 @@ jobs:
         #   See also https://issues.apache.org/jira/browse/SPARK-35375.
         python3.9 -m pip install flake8 pydata_sphinx_theme 'mypy==0.910' numpydoc 'jinja2<3.0.0' 'black==21.5b2'
         # TODO Update to PyPI
-        python3.9 -m pip install git+https://github.com/typeddjango/pytest-mypy-plugins.git@0d790e7a92292da20dcafded1c5b1d637a22b0da
+        python3.9 -m pip install git+https://github.com/typeddjango/pytest-mypy-plugins.git@1ad40a97b70c4e15410adf72eed41fbeef69ff45
     - name: Install R linter dependencies and SparkR
       run: |
         apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev
