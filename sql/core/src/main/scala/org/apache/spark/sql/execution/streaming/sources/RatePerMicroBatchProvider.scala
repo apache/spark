@@ -34,27 +34,28 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  *  with 0L.
  *
  *  This source supports the following options:
- *  - `rowsPerEpoch` (e.g. 100): How many rows should be generated per epoch.
+ *  - `rowsPerMicroBatch` (e.g. 100): How many rows should be generated per micro-batch.
  *  - `numPartitions` (e.g. 10, default: Spark's default parallelism): The partition number for the
  *    generated rows.
  *  - `startTimestamp` (e.g. 1000, default: 0): starting value of generated time
- *  - `advanceMillisPerEpoch` (e.g. 1000, default: 1000): the amount of time being advanced in
- *    generated time on each epoch.
+ *  - `advanceMillisPerMicroBatch` (e.g. 1000, default: 1000): the amount of time being advanced in
+ *    generated time on each micro-batch.
  *
- *  Unlike `rate` data source, this data source provides a consistent set of input rows per epoch
- *  regardless of query execution (configuration of trigger, query being lagging, etc.), say,
- *  batch 0 will produce 0~999 and batch 1 will produce 1000~1999, and so on. Same applies to the
- *  generated time.
- *  (Here `epoch` represents a micro-batch for micro-batch mode.)
+ *  Unlike `rate` data source, this data source provides a consistent set of input rows per
+ *  micro-batch regardless of query execution (configuration of trigger, query being lagging, etc.),
+ *  say, batch 0 will produce 0~999 and batch 1 will produce 1000~1999, and so on. Same applies to
+ *  the generated time.
+ *
+ *  As the name represents, this data source only supports micro-batch read.
  */
-class RatePerEpochProvider extends SimpleTableProvider with DataSourceRegister {
-  import RatePerEpochProvider._
+class RatePerMicroBatchProvider extends SimpleTableProvider with DataSourceRegister {
+  import RatePerMicroBatchProvider._
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
-    val rowsPerEpoch = options.getLong(ROWS_PER_EPOCH, 0)
-    if (rowsPerEpoch <= 0) {
+    val rowsPerBatch = options.getLong(ROWS_PER_BATCH, 0)
+    if (rowsPerBatch <= 0) {
       throw new IllegalArgumentException(
-        s"Invalid value '$rowsPerEpoch'. The option 'rowsPerEpoch' must be positive")
+        s"Invalid value '$rowsPerBatch'. The option 'rowsPerBatch' must be positive")
     }
 
     val numPartitions = options.getInt(
@@ -70,56 +71,57 @@ class RatePerEpochProvider extends SimpleTableProvider with DataSourceRegister {
         s"Invalid value '$startTimestamp'. The option 'startTimestamp' must be non-negative")
     }
 
-    val advanceMillisPerEpoch = options.getInt(ADVANCE_MILLIS_PER_EPOCH, 1000)
-    if (advanceMillisPerEpoch < 0) {
+    val advanceMillisPerBatch = options.getInt(ADVANCE_MILLIS_PER_BATCH, 1000)
+    if (advanceMillisPerBatch < 0) {
       throw new IllegalArgumentException(
-        s"Invalid value '$advanceMillisPerEpoch'. The option 'advanceMillisPerEpoch' " +
+        s"Invalid value '$advanceMillisPerBatch'. The option 'advanceMillisPerBatch' " +
           "must be non-negative")
     }
 
-    new RatePerEpochTable(rowsPerEpoch, numPartitions, startTimestamp, advanceMillisPerEpoch)
+    new RatePerMicroBatchTable(rowsPerBatch, numPartitions, startTimestamp,
+      advanceMillisPerBatch)
   }
 
-  override def shortName(): String = "rate-epoch"
+  override def shortName(): String = "rate-micro-batch"
 }
 
-class RatePerEpochTable(
-    rowsPerEpoch: Long,
+class RatePerMicroBatchTable(
+    rowsPerBatch: Long,
     numPartitions: Int,
     startTimestamp: Long,
-    advanceMillisPerEpoch: Int) extends Table with SupportsRead {
+    advanceMillisPerBatch: Int) extends Table with SupportsRead {
   override def name(): String = {
-    s"RatePerEpoch(rowsPerEpoch=$rowsPerEpoch, numPartitions=$numPartitions," +
-      s"startTimestamp=$startTimestamp, advanceMillisPerEpoch=$advanceMillisPerEpoch)"
+    s"RatePerEpoch(rowsPerBatch=$rowsPerBatch, numPartitions=$numPartitions," +
+      s"startTimestamp=$startTimestamp, advanceMillisPerBatch=$advanceMillisPerBatch)"
   }
 
-  override def schema(): StructType = RatePerEpochProvider.SCHEMA
+  override def schema(): StructType = RatePerMicroBatchProvider.SCHEMA
 
   override def capabilities(): util.Set[TableCapability] = {
     util.EnumSet.of(TableCapability.MICRO_BATCH_READ)
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
-    override def readSchema(): StructType = RatePerEpochProvider.SCHEMA
+    override def readSchema(): StructType = RatePerMicroBatchProvider.SCHEMA
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
-      new RatePerEpochMicroBatchStream(rowsPerEpoch, numPartitions, startTimestamp,
-        advanceMillisPerEpoch, options)
+      new RatePerMicroBatchStream(rowsPerBatch, numPartitions, startTimestamp,
+        advanceMillisPerBatch, options)
 
     override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
-      throw new UnsupportedOperationException("continuous mode is not supported yet!")
+      throw new UnsupportedOperationException("continuous mode is not supported!")
     }
   }
 }
 
-object RatePerEpochProvider {
+object RatePerMicroBatchProvider {
   val SCHEMA =
     StructType(StructField("timestamp", TimestampType) :: StructField("value", LongType) :: Nil)
 
   val VERSION = 1
 
   val NUM_PARTITIONS = "numPartitions"
-  val ROWS_PER_EPOCH = "rowsPerEpoch"
+  val ROWS_PER_BATCH = "rowsPerBatch"
   val START_TIMESTAMP = "startTimestamp"
-  val ADVANCE_MILLIS_PER_EPOCH = "advanceMillisPerEpoch"
+  val ADVANCE_MILLIS_PER_BATCH = "advanceMillisPerBatch"
 }

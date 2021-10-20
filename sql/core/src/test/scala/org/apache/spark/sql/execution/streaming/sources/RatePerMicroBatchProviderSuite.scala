@@ -22,21 +22,21 @@ import org.apache.spark.sql.functions.spark_partition_id
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
-class RatePerEpochProviderSuite extends StreamTest {
+class RatePerMicroBatchProviderSuite extends StreamTest {
 
   import testImplicits._
 
-  test("RatePerEpochProvider in registry") {
+  test("RatePerMicroBatchProvider in registry") {
     val ds = DataSource.lookupDataSource("rate-epoch", spark.sqlContext.conf).newInstance()
-    assert(ds.isInstanceOf[RatePerEpochProvider], "Could not find rate-epoch source")
+    assert(ds.isInstanceOf[RatePerMicroBatchProvider], "Could not find rate-micro-batch source")
   }
 
-  test("microbatch - basic") {
+  test("basic") {
     val input = spark.readStream
-      .format("rate-epoch")
-      .option("rowsPerEpoch", "10")
+      .format("rate-micro-batch")
+      .option("rowsPerBatch", "10")
       .option("startTimestamp", "1000")
-      .option("advanceMillisPerEpoch", "50")
+      .option("advanceMillisPerBatch", "50")
       .load()
     val clock = new StreamManualClock
     testStream(input)(
@@ -50,24 +50,26 @@ class RatePerEpochProviderSuite extends StreamTest {
     )
   }
 
-  test("microbatch - restart") {
+  test("restart") {
     withTempDir { dir =>
       val input = spark.readStream
-        .format("rate-epoch")
-        .option("rowsPerEpoch", "10")
+        .format("rate-micro-batch")
+        .option("rowsPerBatch", "10")
         .load()
         .select('value)
 
       testStream(input)(
         StartStream(checkpointLocation = dir.getAbsolutePath),
-        Execute(_.awaitOffset(0, RatePerEpochStreamOffset(20, 2000), streamingTimeout.toMillis)),
+        Execute(_.awaitOffset(0, RatePerMicroBatchStreamOffset(20, 2000),
+          streamingTimeout.toMillis)),
         CheckAnswer(0 until 20: _*),
         StopStream
       )
 
       testStream(input)(
         StartStream(checkpointLocation = dir.getAbsolutePath),
-        Execute(_.awaitOffset(0, RatePerEpochStreamOffset(40, 4000), streamingTimeout.toMillis)),
+        Execute(_.awaitOffset(0, RatePerMicroBatchStreamOffset(40, 4000),
+          streamingTimeout.toMillis)),
         CheckAnswer(20 until 40: _*)
       )
     }
@@ -75,8 +77,8 @@ class RatePerEpochProviderSuite extends StreamTest {
 
   test("numPartitions") {
     val input = spark.readStream
-      .format("rate-epoch")
-      .option("rowsPerEpoch", "10")
+      .format("rate-micro-batch")
+      .option("rowsPerBatch", "10")
       .option("numPartitions", "6")
       .load()
       .select(spark_partition_id())
@@ -96,11 +98,11 @@ class RatePerEpochProviderSuite extends StreamTest {
         expectedMessages: Seq[String]): Unit = {
       val e = intercept[IllegalArgumentException] {
         var stream = spark.readStream
-          .format("rate-epoch")
+          .format("rate-micro-batch")
           .option(option, value)
 
-        if (option != "rowsPerEpoch") {
-          stream = stream.option("rowsPerEpoch", "1")
+        if (option != "rowsPerBatch") {
+          stream = stream.option("rowsPerBatch", "1")
         }
 
         stream.load()
@@ -114,26 +116,26 @@ class RatePerEpochProviderSuite extends StreamTest {
       }
     }
 
-    testIllegalOptionValue("rowsPerEpoch", "-1", Seq("-1", "rowsPerEpoch", "positive"))
-    testIllegalOptionValue("rowsPerEpoch", "0", Seq("0", "rowsPerEpoch", "positive"))
+    testIllegalOptionValue("rowsPerBatch", "-1", Seq("-1", "rowsPerEpoch", "positive"))
+    testIllegalOptionValue("rowsPerBatch", "0", Seq("0", "rowsPerEpoch", "positive"))
     testIllegalOptionValue("numPartitions", "-1", Seq("-1", "numPartitions", "positive"))
     testIllegalOptionValue("numPartitions", "0", Seq("0", "numPartitions", "positive"))
 
     // RatePerEpochProvider allows setting below options to 0
-    testIllegalOptionValue("advanceMillisPerEpoch", "-1",
-      Seq("-1", "advanceMillisPerEpoch", "non-negative"))
+    testIllegalOptionValue("advanceMillisPerBatch", "-1",
+      Seq("-1", "advanceMillisPerBatch", "non-negative"))
     testIllegalOptionValue("startTimestamp", "-1", Seq("-1", "startTimestamp", "non-negative"))
   }
 
   test("user-specified schema given") {
     val exception = intercept[UnsupportedOperationException] {
       spark.readStream
-        .format("rate-epoch")
-        .option("rowsPerEpoch", "10")
+        .format("rate-micro-batch")
+        .option("rowsPerBatch", "10")
         .schema(spark.range(1).schema)
         .load()
     }
     assert(exception.getMessage.contains(
-      "RatePerEpochProvider source does not support user-specified schema"))
+      "RatePerMicroBatchProvider source does not support user-specified schema"))
   }
 }

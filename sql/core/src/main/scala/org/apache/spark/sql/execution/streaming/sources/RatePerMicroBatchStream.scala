@@ -27,15 +27,15 @@ import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, Par
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadLimit, ReadMaxRows, SupportsAdmissionControl}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class RatePerEpochMicroBatchStream(
-    rowsPerEpoch: Long,
+class RatePerMicroBatchStream(
+    rowsPerBatch: Long,
     numPartitions: Int,
     startTimestamp: Long,
-    advanceMsPerEpoch: Int,
+    advanceMsPerBatch: Int,
     options: CaseInsensitiveStringMap)
   extends SupportsAdmissionControl with MicroBatchStream with Logging {
 
-  override def initialOffset(): Offset = RatePerEpochStreamOffset(0L, startTimestamp)
+  override def initialOffset(): Offset = RatePerMicroBatchStreamOffset(0L, startTimestamp)
 
   override def latestOffset(): Offset = {
     throw new UnsupportedOperationException(
@@ -43,14 +43,14 @@ class RatePerEpochMicroBatchStream(
   }
 
   override def getDefaultReadLimit: ReadLimit = {
-    ReadLimit.maxRows(rowsPerEpoch)
+    ReadLimit.maxRows(rowsPerBatch)
   }
 
   private def extractOffsetAndTimestamp(offset: Offset): (Long, Long) = {
     offset match {
-      case o: RatePerEpochStreamOffset => (o.offset, o.timestamp)
+      case o: RatePerMicroBatchStreamOffset => (o.offset, o.timestamp)
       case _ => throw new IllegalStateException("The type of Offset should be " +
-        "RatePerEpochStreamOffset")
+        "RatePerMicroBatchStreamOffset")
     }
   }
 
@@ -59,14 +59,14 @@ class RatePerEpochMicroBatchStream(
     val numRows = limit.asInstanceOf[ReadMaxRows].maxRows()
 
     val endOffsetLong = Math.min(startOffsetLong + numRows, Long.MaxValue)
-    val endOffset = RatePerEpochStreamOffset(endOffsetLong,
-      timestampAtStartOffset + advanceMsPerEpoch)
+    val endOffset = RatePerMicroBatchStreamOffset(endOffsetLong,
+      timestampAtStartOffset + advanceMsPerBatch)
 
     endOffset
   }
 
   override def deserializeOffset(json: String): Offset = {
-    RatePerEpochStreamOffset.apply(json)
+    RatePerMicroBatchStreamOffset.apply(json)
   }
 
   override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
@@ -83,56 +83,55 @@ class RatePerEpochMicroBatchStream(
       Array.empty
     } else {
       (0 until numPartitions).map { p =>
-        RatePerEpochStreamMicroBatchInputPartition(p, numPartitions, startOffset,
+        RatePerMicroBatchStreamInputPartition(p, numPartitions, startOffset,
           startTimestamp, endOffset, endTimestamp)
       }.toArray
     }
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    RatePerEpochStreamMicroBatchReaderFactory
+    RatePerMicroBatchStreamReaderFactory
   }
 
   override def commit(end: Offset): Unit = {}
 
   override def stop(): Unit = {}
 
-  override def toString: String = s"RatePerEpochStream[rowsPerEpoch=$rowsPerEpoch, " +
+  override def toString: String = s"RatePerMicroBatchStream[rowsPerBatch=$rowsPerBatch, " +
     s"numPartitions=$numPartitions, startTimestamp=$startTimestamp, " +
-    s"advanceMsPerEpoch=$advanceMsPerEpoch]"
+    s"advanceMsPerBatch=$advanceMsPerBatch]"
 }
 
-case class RatePerEpochStreamOffset(offset: Long, timestamp: Long) extends Offset {
+case class RatePerMicroBatchStreamOffset(offset: Long, timestamp: Long) extends Offset {
   override def json(): String = {
-    Serialization.write(this)(RatePerEpochStreamOffset.formats)
+    Serialization.write(this)(RatePerMicroBatchStreamOffset.formats)
   }
 }
 
-object RatePerEpochStreamOffset {
+object RatePerMicroBatchStreamOffset {
   implicit val formats = Serialization.formats(NoTypeHints)
 
-  def apply(json: String): RatePerEpochStreamOffset =
-    Serialization.read[RatePerEpochStreamOffset](json)
+  def apply(json: String): RatePerMicroBatchStreamOffset =
+    Serialization.read[RatePerMicroBatchStreamOffset](json)
 }
 
-case class RatePerEpochStreamMicroBatchInputPartition(
+case class RatePerMicroBatchStreamInputPartition(
     partitionId: Int,
     numPartitions: Int,
     startOffset: Long,
     startTimestamp: Long,
     endOffset: Long,
-    endTimestamp: Long
-) extends InputPartition
+    endTimestamp: Long) extends InputPartition
 
-object RatePerEpochStreamMicroBatchReaderFactory extends PartitionReaderFactory {
+object RatePerMicroBatchStreamReaderFactory extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
-    val p = partition.asInstanceOf[RatePerEpochStreamMicroBatchInputPartition]
-    new RatePerEpochStreamMicroBatchPartitionReader(p.partitionId, p.numPartitions,
+    val p = partition.asInstanceOf[RatePerMicroBatchStreamInputPartition]
+    new RatePerMicroBatchStreamPartitionReader(p.partitionId, p.numPartitions,
       p.startOffset, p.startTimestamp, p.endOffset, p.endTimestamp)
   }
 }
 
-class RatePerEpochStreamMicroBatchPartitionReader(
+class RatePerMicroBatchStreamPartitionReader(
     partitionId: Int,
     numPartitions: Int,
     startOffset: Long,
