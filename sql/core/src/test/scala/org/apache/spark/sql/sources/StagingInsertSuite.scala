@@ -18,7 +18,6 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.config.EXEC_STAGING_DIR
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -30,7 +29,7 @@ class StagingInsertSuite extends QueryTest with SharedSparkSession {
   val stagingDir = Utils.createTempDir()
 
   override def sparkConf: SparkConf =
-    super.sparkConf.set(EXEC_STAGING_DIR, stagingDir.getAbsolutePath)
+    super.sparkConf.set(SQLConf.EXEC_STAGING_DIR, stagingDir.getAbsolutePath)
 
   override def beforeAll(): Unit = {
     super.beforeAll()

@@ -23,9 +23,9 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.EXEC_STAGING_DIR
 import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.EXEC_STAGING_DIR
 
 /**
  * A variant of [[HadoopMapReduceCommitProtocol]] that allows specifying the actual
@@ -40,7 +40,7 @@ class SQLHadoopMapReduceCommitProtocol(
 
   override val stagingDir: Path =
     FileCommitProtocol.externalTempPath(new Path(path), SparkHadoopUtil.get.conf,
-      SQLConf.get.getConfString(EXEC_STAGING_DIR.key), "spark", jobId)
+      SQLConf.get.stagingDir, "spark", jobId)
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     var committer = super.setupCommitter(context)

@@ -3394,6 +3394,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val EXEC_STAGING_DIR =
+    ConfigBuilder("spark.sql.exec.stagingDir")
+      .doc("The staging directory of Spark job. Spark uses it to deal with files with " +
+        "absolute output path, or writing data into partitioned directory when " +
+        "dynamic partition overwrite mode. " +
+        "Default value means staging dir is under table path.")
+      .version("3.3.0")
+      .internal()
+      .stringConf
+      .createWithDefault(".spark-staging")
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4114,6 +4125,8 @@ class SQLConf extends Serializable with Logging {
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
+
+  def stagingDir: String = getConf(SQLConf.EXEC_STAGING_DIR)
 
   /** ********************** SQLConf functionality methods ************ */
 
