@@ -178,8 +178,9 @@ class FileScanRDD(
               }
               throw e
             case e: ArrayIndexOutOfBoundsException =>
-              throw QueryExecutionErrors.readArrayIndexOutOfBoundExceptionError(
-                e, currentFile.filePath)
+              logError(s"Throw ArrayIndexOutOfBoundsException: ${e.getMessage} " +
+                s"while reading file ${currentFile.filePath}")
+              throw e
           }
         } else {
           currentFile = null

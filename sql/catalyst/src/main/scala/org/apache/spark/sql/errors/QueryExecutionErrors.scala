@@ -526,13 +526,6 @@ object QueryExecutionErrors {
        """.stripMargin)
   }
 
-  def readArrayIndexOutOfBoundExceptionError(
-      e: ArrayIndexOutOfBoundsException,
-      path: String): Throwable = {
-    new QueryExecutionException(s"Throw ${e.getClass.getSimpleName}: ${e.getMessage} " +
-      s"while reading file $path", e.getCause());
-  }
-
   def unsupportedSaveModeError(saveMode: String, pathExists: Boolean): Throwable = {
     new IllegalStateException(s"unsupported save mode $saveMode ($pathExists)")
   }
