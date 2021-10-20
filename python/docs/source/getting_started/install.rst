@@ -113,6 +113,11 @@ Note that `PySpark for conda <https://anaconda.org/conda-forge/pyspark>`_ is mai
 separately by the community; while new versions generally get packaged quickly, the
 availability through conda(-forge) is not directly in sync with the PySpark release cycle.
 
+While using pip in a conda environment is technically feasible (with the same command as
+`above <#using-pypi>`_), this approach is `discouraged <https://www.anaconda.com/blog/using-pip-in-a-conda-environment/>`_,
+because pip does not interoperate with conda. In particular, pip might install over existing
+(conda-installed) packages and consequently break the functionality of the environment.
+
 For a short summary about useful conda commands, see their
 `cheat sheet <https://docs.conda.io/projects/conda/en/latest/user-guide/cheatsheet.html/>`_.
 
