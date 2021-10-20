@@ -23,7 +23,6 @@ import java.util.Arrays;
 import com.google.common.primitives.Ints;
 
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.types.UTF8String;
 
 public final class ByteArray {
 
@@ -179,7 +178,10 @@ public final class ByteArray {
       }
     } else {
       // Initialize the last `maxLen - minLen` bytes to 0.
-      Platform.setMemory(result, Platform.BYTE_ARRAY_OFFSET + maxLen - minLen, maxLen - minLen, (byte) 0);
+      Platform.setMemory(result,
+              Platform.BYTE_ARRAY_OFFSET + maxLen - minLen,
+              maxLen - minLen,
+              (byte) 0);
       // Compute the left-most minLen bytes of the result.
       for (int j = 0; j < minLen; ++j) {
         result[j] = (byte) (bytes1[j] & bytes2[j]);
