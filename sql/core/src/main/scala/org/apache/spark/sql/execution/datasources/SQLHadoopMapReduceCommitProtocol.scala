@@ -25,7 +25,6 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.EXEC_STAGING_DIR
 
 /**
  * A variant of [[HadoopMapReduceCommitProtocol]] that allows specifying the actual
