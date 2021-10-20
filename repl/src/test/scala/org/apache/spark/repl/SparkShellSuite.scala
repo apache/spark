@@ -35,7 +35,7 @@ import org.apache.spark.util.ThreadUtils
 
 class SparkShellSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   /**
-   * Run a shell operation and expect all the queries and expected answers to be returned.
+   * Run a spark-shell operation and expect all the script and expected answers to be returned.
    * This method refers to [[runCliWithin()]] method in [[CliSuite]].
    *
    * @param timeout maximum time for the commands to complete
@@ -113,10 +113,10 @@ class SparkShellSuite extends SparkFunSuite with BeforeAndAfterAll with Logging 
 
     try {
       val timeoutForQuery = if (!extraArgs.contains("-e")) {
-        // Wait for for cli driver to boot, up to two minutes
+        // Wait for spark-shell driver to boot, up to two minutes
         ThreadUtils.awaitResult(foundMasterAndApplicationIdMessage.future, 2.minutes)
-        log.info("Cli driver is booted. Waiting for expected answers.")
-        // Given timeout is applied after the cli driver is ready
+        log.info("spark-shell driver is booted. Waiting for expected answers.")
+        // Given timeout is applied after the spark-shell driver is ready
         timeout
       } else {
         // There's no boot message if -e option is provided, just extend timeout long enough
@@ -145,7 +145,7 @@ class SparkShellSuite extends SparkFunSuite with BeforeAndAfterAll with Logging 
     } finally {
       if (!process.waitFor(1, MINUTES)) {
         try {
-          log.warn("spark-sql did not exit gracefully.")
+          log.warn("spark-shell did not exit gracefully.")
         } finally {
           process.destroy()
         }
@@ -162,8 +162,6 @@ class SparkShellSuite extends SparkFunSuite with BeforeAndAfterAll with Logging 
 
   test("SPARK-37058: Add command line unit test for spark-shell with --verbose") {
     runInterpreter(2.minute, Seq("--verbose"))(
-      """
-        |1 + 1
-      """.stripMargin -> "org.apache.spark.repl.Main")
+      "".stripMargin -> "org.apache.spark.repl.Main")
   }
 }
