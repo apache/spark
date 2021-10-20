@@ -42,8 +42,8 @@ from typing import (
     TypeVar,
 )
 
-from py4j.protocol import register_input_converter
-from py4j.java_gateway import JavaClass, JavaGateway, JavaObject
+from py4j.protocol import register_input_converter  # type: ignore[import]
+from py4j.java_gateway import JavaClass, JavaGateway, JavaObject  # type: ignore[import]
 
 from pyspark.serializers import CloudPickleSerializer
 

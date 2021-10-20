@@ -27,7 +27,7 @@ from typing import (
     Union
 )
 
-from py4j.java_gateway import JavaClass, JavaObject
+from py4j.java_gateway import JavaClass, JavaObject  # type: ignore[import]
 
 from pyspark import RDD, since
 from pyspark.sql.column import _to_seq, _to_java_column, Column

@@ -17,9 +17,11 @@
 from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast
 
 import py4j
-from py4j.java_collections import JavaArray
-from py4j.java_gateway import JavaClass, JavaGateway, JavaObject, is_instance_of
-from py4j.protocol import Py4JJavaError
+from py4j.java_collections import JavaArray  # type: ignore[import]
+from py4j.java_gateway import (  # type: ignore[import]
+    JavaClass, JavaGateway, JavaObject, is_instance_of
+)
+from py4j.protocol import Py4JJavaError  # type: ignore[import]
 
 from pyspark import SparkContext
 

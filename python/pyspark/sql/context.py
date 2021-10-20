@@ -31,7 +31,7 @@ from typing import (
     TYPE_CHECKING, cast
 )
 
-from py4j.java_gateway import JavaObject
+from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark import since, _NoValue  # type: ignore[attr-defined]
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession

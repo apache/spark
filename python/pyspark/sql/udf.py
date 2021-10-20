@@ -21,7 +21,7 @@ import functools
 import sys
 from typing import Callable, Any, TYPE_CHECKING, Optional, cast, Union
 
-from py4j.java_gateway import JavaObject
+from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark import SparkContext
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType  # type: ignore[attr-defined]

@@ -16,7 +16,7 @@
 #
 from typing import Any, Dict, Optional
 
-from py4j.java_gateway import JavaObject, JVMView
+from py4j.java_gateway import JavaObject, JVMView  # type: ignore[import]
 
 from pyspark.sql import column
 from pyspark.sql.column import Column
