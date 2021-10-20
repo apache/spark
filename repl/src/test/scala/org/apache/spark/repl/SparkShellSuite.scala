@@ -79,7 +79,7 @@ class SparkShellSuite extends SparkFunSuite with BeforeAndAfterAll with Logging 
       log.info(newLine)
       buffer += newLine
 
-      if (line.startsWith("Spark context available") && line.contains("app id ")) {
+      if (line.startsWith("Spark context available") && line.contains("app id")) {
         foundMasterAndApplicationIdMessage.trySuccess(())
       }
 
