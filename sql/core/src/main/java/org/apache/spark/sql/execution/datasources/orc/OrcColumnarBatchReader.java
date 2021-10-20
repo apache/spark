@@ -74,6 +74,8 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
   // The wrapped ORC column vectors.
   private org.apache.spark.sql.vectorized.ColumnVector[] orcVectorWrappers;
 
+  private String path;
+
   public OrcColumnarBatchReader(int capacity) {
     this.capacity = capacity;
   }
@@ -96,7 +98,12 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
   @Override
   public boolean nextKeyValue() throws IOException {
-    return nextBatch();
+    try {
+      return nextBatch();
+    } catch (ArrayIndexOutOfBoundsException e) {
+      throw new RuntimeException("Throw ArrayIndexOutOfBoundsException: " + e.getMessage() +
+        " while reading file " + path, e.getCause());
+    }
   }
 
   @Override
@@ -127,6 +134,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
         .filesystem(fileSplit.getPath().getFileSystem(conf)));
     Reader.Options options =
       OrcInputFormat.buildOptions(conf, reader, fileSplit.getStart(), fileSplit.getLength());
+    path = fileSplit.getPath().toString();
     recordReader = reader.rows(options);
   }
 
