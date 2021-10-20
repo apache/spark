@@ -19,11 +19,10 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Expression, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
-import org.apache.spark.sql.catalyst.expressions.aggregate
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression, aggregate}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LeafNode, LocalLimit, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, V1Scan}
@@ -226,8 +225,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def applyLimit(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case globalLimit @ GlobalLimit(_,
-        LocalLimit(limitExpr, DataSourceV2ScanRelation(_, scan, _))) =>
+    case globalLimit @ Limit(IntegerLiteral(limitValue), DataSourceV2ScanRelation(_, scan, _)) =>
       val supportsPushDownLimit = scan match {
         case _: SupportsPushDownLimit => true
         case v1: V1ScanWrapper =>
@@ -238,11 +236,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         case _ => false
       }
       if (supportsPushDownLimit) {
-        assert(limitExpr.isInstanceOf[Literal] &&
-          limitExpr.asInstanceOf[Literal].value.isInstanceOf[Integer],
-          "Limit has to be an Integer")
-        val value = limitExpr.asInstanceOf[Literal].value.asInstanceOf[Integer]
-        PushDownUtils.pushLimit(scan, value)
+        PushDownUtils.pushLimit(scan, limitValue)
         globalLimit
       } else {
         globalLimit

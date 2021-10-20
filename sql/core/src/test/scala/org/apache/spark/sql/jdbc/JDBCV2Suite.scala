@@ -94,8 +94,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("simple scan with LIMIT") {
-    val df1 = spark.read.table("h2.test.employee").limit(4)
-    checkLimitResult(df1)
+    val df1 = spark.read.table("h2.test.employee").limit(1)
+    checkPushedLimit(df1, true)
+    checkAnswer(df1, Seq(Row(1, "amy", 10000.00, 1000.0)))
 
     val df2 = spark.read
       .option("partitionColumn", "dept")
@@ -103,22 +104,33 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .option("upperBound", "2")
       .option("numPartitions", "2")
       .table("h2.test.employee")
-      .limit(4)
-    checkLimitResult(df2)
+      .limit(1)
+    checkPushedLimit(df2, true)
+    checkAnswer(df1, Seq(Row(1, "amy", 10000.00, 1000.0)))
+
+    val df3 = spark.read
+      .table("h2.test.employee")
+      .groupBy("DEPT").sum("SALARY")
+      .limit(1)
+    checkPushedLimit(df3, false)
+    checkAnswer(df3, Seq(Row(1, 19000.00)))
+
+    val df4 = spark.read
+      .table("h2.test.employee")
+      .sort("SALARY")
+      .limit(1)
+    checkPushedLimit(df4, false)
+    checkAnswer(df4, Seq(Row(1, "cathy", 9000.00, 1200.0)))
   }
 
-  private def checkLimitResult(df: DataFrame): Unit = {
+  private def checkPushedLimit(df: DataFrame, pushed: Boolean): Unit = {
+    val pushedResult = if (pushed) "TRUE" else "FALSE"
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedLimit: TRUE"
+          s"PushedLimit: $pushedResult"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-
-    checkAnswer(df, Seq(Row(1, "amy", 10000.00, 1000.0),
-      Row(2, "alex", 12000.00, 1200.0),
-      Row(1, "cathy", 9000.00, 1200.0),
-      Row(2, "david", 10000.00, 1300.0)))
   }
 
   test("scan with filter push-down") {
