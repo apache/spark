@@ -71,14 +71,16 @@ private[spark] case class ExecutorDeadException(message: String)
 /**
  * Exception thrown when Spark returns different result after upgrading to a new version.
  */
-private[spark] class SparkUpgradeException(version: String, message: String, cause: Throwable)
+private[spark] case class SparkUpgradeException(version: String, message: String, cause: Throwable)
   extends RuntimeException("You may get a different result due to the upgrading of Spark" +
     s" $version: $message", cause)
 
 /**
  * Arithmetic exception thrown from Spark with an error class.
  */
-private[spark] class SparkArithmeticException(errorClass: String, messageParameters: Array[String])
+private[spark] case class SparkArithmeticException(
+    errorClass: String,
+    messageParameters: Array[String])
   extends ArithmeticException(SparkThrowableHelper.getMessage(errorClass, messageParameters))
     with SparkThrowable {
 
@@ -88,7 +90,7 @@ private[spark] class SparkArithmeticException(errorClass: String, messageParamet
 /**
  * Unsupported operation exception thrown from Spark with an error class.
  */
-private[spark] class SparkUnsupportedOperationException(
+private[spark] case class SparkUnsupportedOperationException(
     errorClass: String,
     messageParameters: Array[String])
   extends UnsupportedOperationException(
@@ -100,7 +102,7 @@ private[spark] class SparkUnsupportedOperationException(
 /**
  * Class not found exception thrown from Spark with an error class.
  */
-private[spark] class SparkClassNotFoundException(
+private[spark] case class SparkClassNotFoundException(
     errorClass: String,
     messageParameters: Array[String],
     cause: Throwable = null)
@@ -113,7 +115,7 @@ private[spark] class SparkClassNotFoundException(
 /**
  * Concurrent modification exception thrown from Spark with an error class.
  */
-private[spark] class SparkConcurrentModificationException(
+private[spark] case class SparkConcurrentModificationException(
     errorClass: String,
     messageParameters: Array[String],
     cause: Throwable = null)

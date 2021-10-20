@@ -24,7 +24,7 @@ import java.util.TimeZone
 
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
@@ -233,10 +233,10 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("unsupported types (map and struct) in Literal.apply") {
     def checkUnsupportedTypeInLiteral(v: Any): Unit = {
-      val errMsgMap = intercept[RuntimeException] {
+      val errMsgMap = intercept[SparkRuntimeException] {
         Literal(v)
       }
-      assert(errMsgMap.getMessage.startsWith("Unsupported literal type"))
+      assert(errMsgMap.getErrorClass == "UNSUPPORTED_LITERAL_TYPE")
     }
     checkUnsupportedTypeInLiteral(Map("key1" -> 1, "key2" -> 2))
     checkUnsupportedTypeInLiteral(("mike", 29, 1.0))

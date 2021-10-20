@@ -3017,19 +3017,19 @@ class DataFrameSuite extends QueryTest
     ).foreach { case (schema, jsonData) =>
       withTempDir { dir =>
         val colName = "col"
-        val msg = "can only contain StringType as a key type for a MapType"
+        val errorClass = "INVALID_JSON_SCHEMA_MAPTYPE"
 
         val thrown1 = intercept[AnalysisException](
           spark.read.schema(StructType(Seq(StructField(colName, schema))))
             .json(Seq(jsonData).toDS()).collect())
-        assert(thrown1.getMessage.contains(msg))
+        assert(thrown1.getErrorClass == errorClass)
 
         val jsonDir = new File(dir, "json").getCanonicalPath
         Seq(jsonData).toDF(colName).write.json(jsonDir)
         val thrown2 = intercept[AnalysisException](
           spark.read.schema(StructType(Seq(StructField(colName, schema))))
             .json(jsonDir).collect())
-        assert(thrown2.getMessage.contains(msg))
+        assert(thrown2.getErrorClass == errorClass)
       }
     }
   }

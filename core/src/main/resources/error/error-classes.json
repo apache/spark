@@ -33,10 +33,6 @@
   "FAILED_EXECUTE_UDF" : {
     "message" : [ "Failed to execute user defined function (%s: (%s) => %s)" ]
   },
-  "FAILED_RENAME_PATH" : {
-    "message" : [ "Failed to rename %s to %s as destination already exists" ],
-    "sqlState" : "22023"
-  },
   "FAILED_SET_ORIGINAL_PERMISSION_BACK" : {
     "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ]
   },
@@ -106,7 +102,11 @@
     "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
     "sqlState" : "42000"
   },
-  "RENAME_SRC_PATH_NOT_FOUND" : {
+  "RENAME_PATH_ALREADY_EXISTS" : {
+    "message" : [ "Failed to rename %s to %s as destination already exists" ],
+    "sqlState" : "22023"
+  },
+  "RENAME_PATH_NOT_FOUND" : {
     "message" : [ "Failed to rename as %s was not found" ],
     "sqlState" : "22023"
   },
@@ -125,20 +125,13 @@
     "message" : [ "Unrecognized SQL type %s" ],
     "sqlState" : "42000"
   },
-  "UNSUPPORTED_CHANGE_COLUMN" : {
-    "message" : [ "Please add an implementation for a column change here" ],
-    "sqlState" : "0A000"
-  },
   "UNSUPPORTED_DATATYPE" : {
-    "message" : [ "Unsupported data type %s" ],
+    "message" : [ "Unsupported data type: %s" ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_LITERAL_TYPE" : {
     "message" : [ "Unsupported literal type %s %s" ],
     "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID" : {
-    "message" : [ "%s does not implement simpleStringWithNodeId" ]
   },
   "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER" : {
     "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],

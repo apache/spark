@@ -289,8 +289,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       val e = intercept[java.sql.SQLException] {
         val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
         dfRead.collect()
-      }.getMessage
-      assert(e.contains("Unrecognized SQL type -101"))
+      }
+      assert(e.getErrorClass == "UNRECOGNIZED_SQL_TYPE")
+      assert(e.messageParameters.sameElements(Array("-101")))
     }
   }
 

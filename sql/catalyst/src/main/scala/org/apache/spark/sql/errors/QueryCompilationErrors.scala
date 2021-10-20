@@ -1304,7 +1304,8 @@ object QueryCompilationErrors {
   }
 
   def cannotConvertDataTypeToParquetTypeError(field: StructField): Throwable = {
-    new AnalysisException(s"Unsupported data type ${field.dataType.catalogString}")
+    new AnalysisException(errorClass = "UNSUPPORTED_DATATYPE",
+      messageParameters = Array(field.dataType.catalogString))
   }
 
   def incompatibleViewSchemaChange(

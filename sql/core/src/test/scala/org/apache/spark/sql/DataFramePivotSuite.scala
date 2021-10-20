@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.util.Locale
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.expressions.aggregate.PivotFirst
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -324,14 +325,14 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
   }
 
   test("pivoting column list") {
-    val exception = intercept[RuntimeException] {
+    val exception = intercept[SparkRuntimeException] {
       trainingSales
         .groupBy($"sales.year")
         .pivot(struct(lower($"sales.course"), $"training"))
         .agg(sum($"sales.earnings"))
         .collect()
     }
-    assert(exception.getMessage.contains("Unsupported literal type"))
+    assert(exception.getErrorClass == "UNSUPPORTED_LITERAL_TYPE")
   }
 
   test("SPARK-26403: pivoting by array column") {

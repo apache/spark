@@ -32,7 +32,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
-import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIllegalStateException, SparkIndexOutOfBoundsException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIllegalStateException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -65,11 +65,6 @@ import org.apache.spark.util.CircularBuffer
  * grouped into [[QueryCompilationErrors]].
  */
 object QueryExecutionErrors {
-
-  def columnChangeUnsupportedError(): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_CHANGE_COLUMN",
-      messageParameters = Array.empty)
-  }
 
   def logicalHintOperatorNotRemovedDuringAnalysisError(): Throwable = {
     new SparkIllegalStateException(errorClass = "INTERNAL_ERROR",
@@ -125,8 +120,8 @@ object QueryExecutionErrors {
   }
 
   def simpleStringWithNodeIdUnsupportedError(nodeName: String): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID",
-      messageParameters = Array(nodeName))
+    new SparkUnsupportedOperationException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Array(s"$nodeName does not implement simpleStringWithNodeId"))
   }
 
   def evaluateUnevaluableAggregateUnsupportedError(
@@ -778,7 +773,8 @@ object QueryExecutionErrors {
   }
 
   def unsupportedDataTypeError(dt: String): Throwable = {
-    new UnsupportedOperationException(s"Unsupported data type: ${dt}")
+    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_DATATYPE",
+      messageParameters = Array(dt))
   }
 
   def notSupportTypeError(dataType: DataType): Throwable = {
@@ -1364,17 +1360,17 @@ object QueryExecutionErrors {
   }
 
   def renamePathAsExistsPathError(srcPath: Path, dstPath: Path): Throwable = {
-    new SparkFileAlreadyExistsException(errorClass = "FAILED_RENAME_PATH",
+    new SparkFileAlreadyExistsException(errorClass = "RENAME_PATH_ALREADY_EXISTS",
       Array(srcPath.toString, dstPath.toString))
   }
 
   def renameAsExistsPathError(dstPath: Path): Throwable = {
-    new FileAlreadyExistsException(s"Failed to rename as $dstPath already exists")
+    new SparkFileAlreadyExistsException(errorClass = "RENAME_PATH_NOT_FOUND",
+      Array(dstPath.toString))
   }
 
   def renameSrcPathNotFoundError(srcPath: Path): Throwable = {
-    new SparkFileNotFoundException(errorClass = "RENAME_SRC_PATH_NOT_FOUND",
-      Array(srcPath.toString))
+    new SparkFileNotFoundException(errorClass = "RENAME_PATH_NOT_FOUND", Array(srcPath.toString))
   }
 
   def failedRenameTempFileError(srcPath: Path, dstPath: Path): Throwable = {

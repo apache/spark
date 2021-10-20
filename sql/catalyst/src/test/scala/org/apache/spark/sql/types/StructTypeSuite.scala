@@ -319,7 +319,8 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     var e = intercept[AnalysisException] {
       check(Seq("S1", "S12", "S123"), None)
     }
-    assert(e.getMessage.contains("Field name S1.S12.S123 is invalid: s1.s12 is not a struct"))
+    assert(e.getErrorClass == "INVALID_FIELD_NAME")
+    assert(e.messageParameters.sameElements(Array("S1.S12.S123", "s1.s12")))
 
     // ambiguous name
     e = intercept[AnalysisException] {
@@ -334,17 +335,20 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     e = intercept[AnalysisException] {
       check(Seq("m1", "key"), None)
     }
-    assert(e.getMessage.contains("Field name m1.key is invalid: m1 is not a struct"))
+    assert(e.getErrorClass == "INVALID_FIELD_NAME")
+    assert(e.messageParameters.sameElements(Array("m1.key", "m1")))
     checkCollection(Seq("m1", "key"), Some(Seq("m1") -> StructField("key", IntegerType, false)))
     checkCollection(Seq("M1", "value"), Some(Seq("m1") -> StructField("value", IntegerType)))
     e = intercept[AnalysisException] {
       checkCollection(Seq("M1", "key", "name"), None)
     }
-    assert(e.getMessage.contains("Field name M1.key.name is invalid: m1.key is not a struct"))
+    assert(e.getErrorClass == "INVALID_FIELD_NAME")
+    assert(e.messageParameters.sameElements(Array("M1.key.name", "m1.key")))
     e = intercept[AnalysisException] {
       checkCollection(Seq("M1", "value", "name"), None)
     }
-    assert(e.getMessage.contains("Field name M1.value.name is invalid: m1.value is not a struct"))
+    assert(e.getErrorClass == "INVALID_FIELD_NAME")
+    assert(e.messageParameters.sameElements(Array("M1.value.name", "m1.value")))
 
     // map of struct
     checkCollection(Seq("M2", "key", "A"),
@@ -356,24 +360,26 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     e = intercept[AnalysisException] {
       checkCollection(Seq("m2", "key", "A", "name"), None)
     }
-    assert(e.getMessage.contains("Field name m2.key.A.name is invalid: m2.key.a is not a struct"))
+    assert(e.getErrorClass == "INVALID_FIELD_NAME")
+    assert(e.messageParameters.sameElements(Array("m2.key.A.name", "m2.key.a")))
     e = intercept[AnalysisException] {
       checkCollection(Seq("M2", "value", "b", "name"), None)
     }
-    assert(e.getMessage.contains(
-      "Field name M2.value.b.name is invalid: m2.value.b is not a struct"))
+    assert(e.getErrorClass == "INVALID_FIELD_NAME")
+    assert(e.messageParameters.sameElements(Array("M2.value.b.name", "m2.value.b")))
 
     // simple array type
     e = intercept[AnalysisException] {
       check(Seq("A1", "element"), None)
     }
-    assert(e.getMessage.contains("Field name A1.element is invalid: a1 is not a struct"))
+    assert(e.getErrorClass == "INVALID_FIELD_NAME")
+    assert(e.messageParameters.sameElements(Array("A1.element", "a1")))
     checkCollection(Seq("A1", "element"), Some(Seq("a1") -> StructField("element", IntegerType)))
     e = intercept[AnalysisException] {
       checkCollection(Seq("A1", "element", "name"), None)
     }
-    assert(e.getMessage.contains(
-      "Field name A1.element.name is invalid: a1.element is not a struct"))
+    assert(e.getErrorClass == "INVALID_FIELD_NAME")
+    assert(e.messageParameters.sameElements(Array("A1.element.name", "a1.element")))
 
     // array of struct
     checkCollection(Seq("A2", "element", "C"),
@@ -382,8 +388,8 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     e = intercept[AnalysisException] {
       checkCollection(Seq("a2", "element", "C", "name"), None)
     }
-    assert(e.getMessage.contains(
-      "Field name a2.element.C.name is invalid: a2.element.c is not a struct"))
+    assert(e.getErrorClass == "INVALID_FIELD_NAME")
+    assert(e.messageParameters.sameElements(Array("a2.element.C.name", "a2.element.c")))
   }
 
   test("SPARK-36807: Merge ANSI interval types to a tightest common type") {

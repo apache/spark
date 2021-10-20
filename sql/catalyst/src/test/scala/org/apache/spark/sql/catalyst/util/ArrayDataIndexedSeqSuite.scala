@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIndexOutOfBoundsException}
 import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.{SafeProjection, UnsafeProjection}
