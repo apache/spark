@@ -593,6 +593,16 @@ object QueryExecutionErrors {
     new QueryExecutionException(message, e)
   }
 
+  def unsupportedParquetDictionaryDecodingError(
+      valueType: String,
+      dictionary: String,
+      file: String,
+      e: Exception): UnsupportedOperationException = {
+    val message = s"Decoding to $valueType is not supported by $dictionary " +
+      s"while reading file $file"
+    new UnsupportedOperationException(message, e)
+  }
+
   def cannotCreateColumnarReaderError(): Throwable = {
     new UnsupportedOperationException("Cannot create columnar reader.")
   }

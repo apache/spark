@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.execution.vectorized.Dictionary;
 
 import java.math.BigInteger;
 
 public final class ParquetDictionary implements Dictionary {
   private org.apache.parquet.column.Dictionary dictionary;
-  private String  file;
+  private String file;
   private boolean needTransform = false;
 
   public ParquetDictionary(
@@ -44,8 +45,8 @@ public final class ParquetDictionary implements Dictionary {
         return dictionary.decodeToInt(id);
       }
     } catch (UnsupportedOperationException e) {
-      throw new UnsupportedOperationException("Decoding to Int failed when reading file " +
-        file + "using " + e.getMessage(), e.getCause());
+      throw QueryExecutionErrors.unsupportedParquetDictionaryDecodingError(
+        "Int", dictionary.getClass().getSimpleName(), file, e);
     }
   }
 
@@ -61,8 +62,8 @@ public final class ParquetDictionary implements Dictionary {
         return dictionary.decodeToLong(id);
       }
     } catch (UnsupportedOperationException e) {
-      throw new UnsupportedOperationException("Decoding to Long failed when reading file " +
-        file + "using " + e.getMessage(), e.getCause());
+      throw QueryExecutionErrors.unsupportedParquetDictionaryDecodingError(
+        "Long", dictionary.getClass().getSimpleName(), file, e);
     }
   }
 
@@ -71,8 +72,8 @@ public final class ParquetDictionary implements Dictionary {
     try {
       return dictionary.decodeToFloat(id);
     } catch (UnsupportedOperationException e) {
-      throw new UnsupportedOperationException("Decoding to Float failed when reading file " +
-        file + "using " + e.getMessage(), e.getCause());
+      throw QueryExecutionErrors.unsupportedParquetDictionaryDecodingError(
+        "Float", dictionary.getClass().getSimpleName(), file, e);
     }
   }
 
@@ -81,8 +82,8 @@ public final class ParquetDictionary implements Dictionary {
     try {
       return dictionary.decodeToDouble(id);
     } catch (UnsupportedOperationException e) {
-      throw new UnsupportedOperationException("Decoding to Double failed when reading file " +
-        file + "using " + e.getMessage(), e.getCause());
+      throw QueryExecutionErrors.unsupportedParquetDictionaryDecodingError(
+        "Double", dictionary.getClass().getSimpleName(), file, e);
     }
   }
 
@@ -100,8 +101,8 @@ public final class ParquetDictionary implements Dictionary {
         return dictionary.decodeToBinary(id).getBytes();
       }
     } catch (UnsupportedOperationException e) {
-      throw new UnsupportedOperationException("Decoding to Binary failed when reading file " +
-        file + "using " + e.getMessage(), e.getCause());
+      throw QueryExecutionErrors.unsupportedParquetDictionaryDecodingError(
+        "Binary", dictionary.getClass().getSimpleName(), file, e);
     }
   }
 }
