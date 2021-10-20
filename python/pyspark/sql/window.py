@@ -19,7 +19,7 @@ import sys
 from typing import cast, Iterable, List, Tuple, TYPE_CHECKING, Union
 
 from pyspark import since, SparkContext
-from pyspark.sql.column import _to_seq, _to_java_column  # type: ignore[attr-defined]
+from pyspark.sql.column import _to_seq, _to_java_column
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 

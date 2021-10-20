@@ -18,7 +18,7 @@
 import sys
 from typing import Any, Optional
 
-from py4j.java_gateway import JavaObject
+from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark import since, _NoValue  # type: ignore[attr-defined]
 

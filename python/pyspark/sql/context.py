@@ -31,10 +31,10 @@ from typing import (
     TYPE_CHECKING, cast
 )
 
-from py4j.java_gateway import JavaObject
+from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark import since, _NoValue  # type: ignore[attr-defined]
-from pyspark.sql.session import _monkey_patch_RDD, SparkSession  # type: ignore[attr-defined]
+from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
@@ -121,7 +121,7 @@ class SQLContext(object):
         if sparkSession is None:
             sparkSession = SparkSession.builder.getOrCreate()
         if jsqlContext is None:
-            jsqlContext = sparkSession._jwrapped  # type: ignore[attr-defined]
+            jsqlContext = sparkSession._jwrapped
         self.sparkSession = sparkSession
         self._jsqlContext = jsqlContext
         _monkey_patch_RDD(self.sparkSession)
@@ -727,8 +727,7 @@ class HiveContext(SQLContext):
         if jhiveContext is None:
             sparkContext._conf.set(  # type: ignore[attr-defined]
                 "spark.sql.catalogImplementation", "hive")
-            sparkSession = SparkSession.builder._sparkContext(  # type: ignore[attr-defined]
-                sparkContext).getOrCreate()
+            sparkSession = SparkSession.builder._sparkContext(sparkContext).getOrCreate()
         else:
             sparkSession = SparkSession(sparkContext, jhiveContext.sparkSession())
         SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)

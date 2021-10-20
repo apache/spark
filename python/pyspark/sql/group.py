@@ -21,7 +21,7 @@ from typing import Callable, List, Optional, TYPE_CHECKING, overload, Dict, Unio
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
-from pyspark.sql.column import Column, _to_seq  # type: ignore[attr-defined]
+from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.context import SQLContext
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.group_ops import PandasGroupedOpsMixin
@@ -46,10 +46,7 @@ def dfapi(f: Callable) -> Callable:
 def df_varargs_api(f: Callable) -> Callable:
     def _api(self: "GroupedData", *cols: str) -> DataFrame:
         name = f.__name__
-        # TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
-        jdf = getattr(self._jgd, name)(
-            _to_seq(self.sql_ctx._sc, cols)  # type: ignore[attr-defined]
-        )
+        jdf = getattr(self._jgd, name)(_to_seq(self.sql_ctx._sc, cols))
         return DataFrame(jdf, self.sql_ctx)
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
@@ -135,11 +132,7 @@ class GroupedData(PandasGroupedOpsMixin):
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
             exprs = cast(Tuple[Column, ...], exprs)
-            # TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
-            jdf = self._jgd.agg(
-                exprs[0]._jc,
-                _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]])  # type: ignore[attr-defined]
-            )
+            jdf = self._jgd.agg(exprs[0]._jc, _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
         return DataFrame(jdf, self.sql_ctx)
 
     @dfapi
