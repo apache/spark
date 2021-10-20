@@ -141,6 +141,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // join condition.
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
+        PushExtraPredicateThroughNonJoin,
         PushDownPredicates) :: Nil
     }
 

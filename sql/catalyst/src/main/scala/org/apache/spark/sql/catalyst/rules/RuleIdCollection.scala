@@ -127,6 +127,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.PruneFilters" ::
       "org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushExtraPredicateThroughJoin" ::
+        "org.apache.spark.sql.catalyst.optimizer.PushExtraPredicateThroughNonJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushFoldableIntoBranches" ::
       "org.apache.spark.sql.catalyst.optimizer.PushLeftSemiLeftAntiThroughJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.ReassignLambdaVariableID" ::
