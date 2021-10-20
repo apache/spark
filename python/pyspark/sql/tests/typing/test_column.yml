@@ -30,7 +30,6 @@
     a_col >= today
     a_col > today
 
-
     a_col < now
     a_col <= now
     a_col == now

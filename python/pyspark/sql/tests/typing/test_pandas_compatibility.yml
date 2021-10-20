@@ -24,6 +24,7 @@
 
     df.foo()  # E: "DataFrameLike" has no attribute "foo"  [attr-defined]
 
+
 - case: PandasSeriesProtocol
   main: |
     from pyspark.sql.pandas._typing import PandasSeries

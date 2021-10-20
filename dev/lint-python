@@ -158,9 +158,11 @@ function mypy_data_test {
     fi
 
     PYTEST_REPORT=$( (MYPYPATH=python $PYTEST_BUILD \
+      -c python/pyproject.toml \
+      --rootdir python \
       --mypy-only-local-stub \
       --mypy-ini-file python/mypy.ini \
-      python/test_typing_data) 2>&1)
+      python/pyspark ) 2>&1)
 
     PYTEST_STATUS=$?
 
