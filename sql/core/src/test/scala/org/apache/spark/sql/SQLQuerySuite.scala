@@ -58,20 +58,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   setupTestData()
 
-  test("bad case") {
-    import java.util.Locale
-    import java.util.Formatter
-    val sb = new StringBuffer()
-    // Send all output to the Appendable object sb
-    val formatter = new Formatter(sb, Locale.US)
-
-    // Explicit argument indices may be used to re-order output.
-    // scalastyle:off
-    // println(formatter.format("Hello %0$s", "Hello"))
-
-    sql("select format_string('%0$s', 'Hello')")
-  }
-
   test("SPARK-8010: promote numeric to string") {
     withTempView("src") {
       val df = Seq((1, 1)).toDF("key", "value")
