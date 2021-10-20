@@ -1702,7 +1702,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
    * behavior of Java 8, Java 11 and Java 17.
    */
   private def checkArgumentIndexNotZero(expression: Expression): Boolean = expression match {
-    case pattern: Literal if pattern.dataType == StringType => !pattern.toString.contains("%0$")
+    case StringLiteral(pattern) => !pattern.contains("%0$")
     case _ => true
   }
 }
