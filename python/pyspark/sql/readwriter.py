@@ -1522,6 +1522,7 @@ class DataFrameWriterV2(object):
         """
         col = _to_java_column(col)
         cols = _to_seq(self._spark._sc, [_to_java_column(c) for c in cols])
+        self._jwriter.partitionedBy(col, cols)
         return self
 
     @since(3.1)
