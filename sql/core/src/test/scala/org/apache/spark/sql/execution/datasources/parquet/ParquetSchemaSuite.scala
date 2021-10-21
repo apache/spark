@@ -426,9 +426,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
   test("schema mismatch failure error message for parquet reader") {
     withTempPath { dir =>
       val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = false)
-      val expectedMessage = "Encounter error while reading parquet files. " +
-        "One possible cause: Parquet column cannot be converted in the corresponding " +
-        "files. Details:"
+      val expectedMessage = "One possible cause: Parquet column cannot be converted " +
+        "in the corresponding files. Details:"
       assert(e.getCause.isInstanceOf[QueryExecutionException])
       assert(e.getCause.getCause.isInstanceOf[ParquetDecodingException])
       assert(e.getCause.getMessage.startsWith(expectedMessage))

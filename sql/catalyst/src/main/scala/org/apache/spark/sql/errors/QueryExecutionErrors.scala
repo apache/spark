@@ -586,10 +586,11 @@ object QueryExecutionErrors {
     new QueryExecutionException(message, e)
   }
 
-  def cannotReadParquetFilesError(e: Exception): Throwable = {
-    val message = "Encounter error while reading parquet files. " +
-      "One possible cause: Parquet column cannot be converted in the " +
-      "corresponding files. Details: "
+  def cannotReadParquetFilesError(
+      e: Exception,
+      path: String,
+      notice: String): Throwable = {
+    val message = s"Encounter error while reading parquet file $path. $notice Details: "
     new QueryExecutionException(message, e)
   }
 

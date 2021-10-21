@@ -70,7 +70,9 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
         if (e.getCause.isInstanceOf[SparkUpgradeException]) {
           throw e.getCause
         } else if (e.getMessage.contains("Can not read value at")) {
-          throw QueryExecutionErrors.cannotReadParquetFilesError(e)
+          throw QueryExecutionErrors.cannotReadParquetFilesError(e, currentReader.file.filePath,
+            "One possible cause: Parquet column cannot be converted in the " +
+              "corresponding files.")
         }
         throw e
       case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
@@ -78,9 +80,7 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
           s"Skipped the rest of the content in the corrupted file: $currentReader", e)
         false
       case e: Exception =>
-        logError(s"Throw ${e.getClass.getSimpleName}: ${e.getMessage} " +
-          s"while reading file ${currentReader.file.filePath}")
-        throw e
+        throw QueryExecutionErrors.cannotReadParquetFilesError(e, currentReader.file.filePath, "")
     }
     if (hasNext) {
       true

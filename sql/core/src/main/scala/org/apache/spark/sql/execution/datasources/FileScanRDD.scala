@@ -174,13 +174,13 @@ class FileScanRDD(
               if (e.getCause.isInstanceOf[SparkUpgradeException]) {
                 throw e.getCause
               } else if (e.getMessage.contains("Can not read value at")) {
-                throw QueryExecutionErrors.cannotReadParquetFilesError(e)
+                throw QueryExecutionErrors.cannotReadParquetFilesError(e, currentFile.filePath,
+                  "One possible cause: Parquet column cannot be converted in the " +
+                    "corresponding files.")
               }
               throw e
             case e: Exception =>
-              logError(s"Throw ${e.getClass.getSimpleName}: ${e.getMessage} " +
-                s"while reading file ${currentFile.filePath}")
-              throw e
+              throw QueryExecutionErrors.cannotReadParquetFilesError(e, currentFile.filePath, "")
           }
         } else {
           currentFile = null
