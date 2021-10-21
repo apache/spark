@@ -226,22 +226,35 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def applyLimit(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case globalLimit @ Limit(IntegerLiteral(limitValue), DataSourceV2ScanRelation(_, scan, _)) =>
-      val supportsPushDownLimit = scan match {
-        case _: SupportsPushDownLimit => true
-        case v1: V1ScanWrapper =>
-          v1.v1Scan match {
-            case _: SupportsPushDownLimit => true
-            case _ => false
-          }
-        case _ => false
-      }
-      if (supportsPushDownLimit) {
-        PushDownUtils.pushLimit(scan, limitValue)
-        globalLimit
-      } else {
-        globalLimit
-      }
+    case globalLimit @ Limit(IntegerLiteral(limitValue), child) => child match {
+      case DataSourceV2ScanRelation(_, scan, _) =>
+        pushDownLimit(globalLimit, scan, limitValue)
+      case Project(_, DataSourceV2ScanRelation(_, scan, _)) =>
+        pushDownLimit (globalLimit, scan, limitValue)
+      case Aggregate(_, _, DataSourceV2ScanRelation(_, scan, _))
+        if (scan.isInstanceOf[V1ScanWrapper] &&
+          scan.asInstanceOf[V1ScanWrapper].pushedAggregate.nonEmpty) =>
+            pushDownLimit (globalLimit, scan, limitValue)
+      case _ => globalLimit
+    }
+  }
+
+  private def pushDownLimit(plan: LogicalPlan, scan: Scan, limitValue: Int): LogicalPlan = {
+    val supportsPushDownLimit = scan match {
+      case _: SupportsPushDownLimit => true
+      case v1: V1ScanWrapper =>
+        v1.v1Scan match {
+          case _: SupportsPushDownLimit =>
+            v1.pushedLimit = Some(limitValue)
+            true
+          case _ => false
+        }
+      case _ => false
+    }
+    if (supportsPushDownLimit) {
+      PushDownUtils.pushLimit(scan, limitValue)
+    }
+    plan
   }
 
   private def getWrappedScan(
@@ -255,7 +268,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             f.pushedFilters()
           case _ => Array.empty[sources.Filter]
         }
-        V1ScanWrapper(v1, pushedFilters, aggregation)
+        V1ScanWrapper(v1, pushedFilters, aggregation, None)
       case _ => scan
     }
   }
@@ -271,6 +284,7 @@ case class ScanBuilderHolder(
 case class V1ScanWrapper(
     v1Scan: V1Scan,
     handledFilters: Seq[sources.Filter],
-    pushedAggregate: Option[Aggregation]) extends Scan {
+    pushedAggregate: Option[Aggregation],
+    var pushedLimit: Option[Int]) extends Scan {
   override def readSchema(): StructType = v1Scan.readSchema()
 }

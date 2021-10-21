@@ -35,14 +35,12 @@ case class JDBCScan(
 
   private var pushedLimit = 0
 
-  override def pushLimit(limit: Integer): Unit = {
+  override def pushLimit(limit: Int): Unit = {
     if (relation.jdbcOptions.pushDownLimit &&
       JdbcDialects.get(relation.jdbcOptions.url).supportsLimit) {
       pushedLimit = limit
     }
   }
-
-  override def limitPushed(): Boolean = pushedLimit > 0
 
   override def toV1TableScan[T <: BaseRelation with TableScan](context: SQLContext): T = {
     new BaseRelation with TableScan {

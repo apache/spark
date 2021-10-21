@@ -108,23 +108,27 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedLimit(df2, true)
     checkAnswer(df1, Seq(Row(1, "amy", 10000.00, 1000.0)))
 
-    val df3 = spark.read
-      .table("h2.test.employee")
-      .groupBy("DEPT").sum("SALARY")
-      .limit(1)
-    checkPushedLimit(df3, false)
-    checkAnswer(df3, Seq(Row(1, 19000.00)))
+    val df3 = sql("SELECT name FROM h2.test.employee LIMIT 1")
+    checkPushedLimit(df3, true)
+    checkAnswer(df3, Seq(Row("amy")))
 
     val df4 = spark.read
       .table("h2.test.employee")
+      .groupBy("DEPT").sum("SALARY")
+      .limit(1)
+    checkPushedLimit(df4, true)
+    checkAnswer(df4, Seq(Row(1, 19000.00)))
+
+    val df5 = spark.read
+      .table("h2.test.employee")
       .sort("SALARY")
       .limit(1)
-    checkPushedLimit(df4, false)
-    checkAnswer(df4, Seq(Row(1, "cathy", 9000.00, 1200.0)))
+    checkPushedLimit(df5, false)
+    checkAnswer(df5, Seq(Row(1, "cathy", 9000.00, 1200.0)))
   }
 
   private def checkPushedLimit(df: DataFrame, pushed: Boolean): Unit = {
-    val pushedResult = if (pushed) "TRUE" else "FALSE"
+    val pushedResult = if (pushed) "LIMIT 1" else "[]"
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =

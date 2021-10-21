@@ -299,7 +299,7 @@ private[sql] case class JDBCRelation(
       finalSchema: StructType,
       filters: Array[Filter],
       groupByColumns: Option[Array[String]],
-      limit: Integer): RDD[Row] = {
+      limit: Int): RDD[Row] = {
     // If limit is pushed down, only a limited number of rows will be returned. PartitionInfo will
     // be ignored and the query will be done in one task.
     val partition = if (limit > 0 ) { Array[Partition](JDBCPartition(null, 0)) } else parts

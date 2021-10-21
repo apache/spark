@@ -22,7 +22,7 @@ import org.apache.spark.annotation.Evolving;
 /**
  * A mix-in interface for {@link Scan}. Data sources can implement this interface to
  * push down LIMIT. Please note that the combination of LIMIT with other operations
- * such as AGGREGATE, GROUP BY, SORT BY, CLUSTER BY, DISTRIBUTE BY, etc. is NOT pushed down.
+ * such as SORT BY, CLUSTER BY, DISTRIBUTE BY, etc. is NOT pushed down.
  *
  * @since 3.3.0
  */
@@ -32,11 +32,5 @@ public interface SupportsPushDownLimit extends Scan {
   /**
    * Pushes down LIMIT to the data source.
    */
-  void pushLimit(Integer limit);
-
-  /**
-   * Returns true if the LIMIT is pushed to the data source via {@link #pushLimit(Integer)},
-   * false otherwise.
-   */
-  boolean limitPushed();
+  void pushLimit(int limit);
 }

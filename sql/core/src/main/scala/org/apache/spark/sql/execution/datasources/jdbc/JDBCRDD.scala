@@ -192,7 +192,7 @@ object JDBCRDD extends Logging {
       options: JDBCOptions,
       outputSchema: Option[StructType] = None,
       groupByColumns: Option[Array[String]] = None,
-      limit: Integer = 0): RDD[InternalRow] = {
+      limit: Int = 0): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = if (groupByColumns.isEmpty) {
@@ -230,7 +230,7 @@ private[jdbc] class JDBCRDD(
     url: String,
     options: JDBCOptions,
     groupByColumns: Option[Array[String]],
-    limit: Integer)
+    limit: Int)
   extends RDD[InternalRow](sc, Nil) {
 
   /**
@@ -277,11 +277,6 @@ private[jdbc] class JDBCRDD(
       ""
     }
   }
-
-  /**
-   * A LIMIT clause representing pushed-down limit.
-   */
-  private def getLimitClause: String = JdbcDialects.get(url).getLimitClause(limit)
 
   /**
    * Runs the SQL query against the JDBC driver.
@@ -358,8 +353,10 @@ private[jdbc] class JDBCRDD(
 
     val myWhereClause = getWhereClause(part)
 
+    val myLimitClause: String = dialect.getLimitClause(limit)
+
     val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myWhereClause" +
-      s" $getGroupByClause $getLimitClause"
+      s" $getGroupByClause $myLimitClause"
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)

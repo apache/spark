@@ -104,7 +104,7 @@ case class RowDataSourceScanExec(
     filters: Set[Filter],
     handledFilters: Set[Filter],
     aggregation: Option[Aggregation],
-    limitPushed: Boolean,
+    limit: Option[Int],
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     tableIdentifier: Option[TableIdentifier])
@@ -150,7 +150,7 @@ case class RowDataSourceScanExec(
       handledFilters
     }
 
-    val limitStr = if (limitPushed) s"TRUE" else "FALSE"
+    val limitStr = if (limit.nonEmpty) s"LIMIT ${limit.get}" else "[]"
 
     Map(
       "ReadSchema" -> requiredSchema.catalogString,

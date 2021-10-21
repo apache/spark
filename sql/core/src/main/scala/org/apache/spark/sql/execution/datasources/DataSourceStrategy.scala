@@ -336,7 +336,7 @@ object DataSourceStrategy
         Set.empty,
         Set.empty,
         None,
-        false,
+        None,
         toCatalystRDD(l, baseRelation.buildScan()),
         baseRelation,
         None) :: Nil
@@ -411,7 +411,7 @@ object DataSourceStrategy
         pushedFilters.toSet,
         handledFilters,
         None,
-        false,
+        None,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.catalogTable.map(_.identifier))
@@ -435,7 +435,7 @@ object DataSourceStrategy
         pushedFilters.toSet,
         handledFilters,
         None,
-        false,
+        None,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.catalogTable.map(_.identifier))
