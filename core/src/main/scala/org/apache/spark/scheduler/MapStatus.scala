@@ -255,18 +255,23 @@ private[spark] object HighlyCompressedMapStatus {
     // we expect that there will be far fewer of them, so we will perform fewer bitmap insertions.
     val emptyBlocks = new RoaringBitmap()
     val totalNumBlocks = uncompressedSizes.length
-    val medianSize: Long = {
-      val sortedSizes = uncompressedSizes.sorted
-      if (totalNumBlocks % 2 == 0) {
-        Math.max((sortedSizes(totalNumBlocks / 2) + sortedSizes(totalNumBlocks / 2 - 1)) / 2, 1)
-      } else {
-        Math.max(sortedSizes(totalNumBlocks / 2), 1)
-      }
-    }
+    val sortedSizes = uncompressedSizes.sorted
+    val medianSize: Long = Utils.median(sortedSizes)
+    val accurateBlockSkewedFactor = Option(SparkEnv.get)
+      .map(_.conf.get(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR))
+      .getOrElse(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR.defaultValue.get)
+    val maxAccurateSkewedBlockNumber =
+      Math.min(
+        Option(SparkEnv.get)
+          .map(_.conf.get(config.SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER))
+          .getOrElse(config.SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER.defaultValue.get),
+        totalNumBlocks
+      )
     val skewSizeThreshold =
-      medianSize * Option(SparkEnv.get)
-        .map(_.conf.get(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR))
-        .getOrElse(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR.defaultValue.get)
+      Math.max(
+        medianSize * accurateBlockSkewedFactor,
+        sortedSizes(totalNumBlocks - maxAccurateSkewedBlockNumber)
+      )
     val threshold =
       Math.min(
         Option(SparkEnv.get)

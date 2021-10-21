@@ -191,4 +191,51 @@ class MapStatusSuite extends SparkFunSuite {
       assert(count === 3000)
     }
   }
+
+  def compressAndDecompressSize(size: Long): Long = {
+    MapStatus.decompressSize(MapStatus.compressSize(size))
+  }
+
+  test("SPARK-36967: HighlyCompressedMapStatus should record accurately the size " +
+    "of skewed shuffle blocks") {
+    val sizes = Array.tabulate[Long](3000)(i => (if (i < 2990) i else i + 350 * 1024).toLong)
+    val avg = sizes.filter(_ < 3000).sum / sizes.count(i => i > 0 && i < 3000)
+    val loc = BlockManagerId("a", "b", 10)
+    val mapTaskAttemptId = 5
+    val status = MapStatus(loc, sizes, mapTaskAttemptId)
+    val status1 = compressAndDecompressMapStatus(status)
+    assert(status1.isInstanceOf[HighlyCompressedMapStatus])
+    assert(status1.location == loc)
+    assert(status1.mapId == mapTaskAttemptId)
+    assert(status1.getSizeForBlock(0) == 0)
+    for (i <- 1 until 3000) {
+      val estimate = status1.getSizeForBlock(i)
+      if (i < 2990) {
+        assert(estimate === avg)
+      } else {
+        assert(estimate === compressAndDecompressSize(sizes(i)))
+      }
+    }
+  }
+
+  test("SPARK-36967: Limit accurated skewed block number if too many blocks are skewed") {
+    val sizes = Array.tabulate[Long](3000)(i => (if (i < 2500) i else i + 3500 * 1024).toLong)
+    val avg = sizes.slice(1, 2900).sum / 2899
+    val loc = BlockManagerId("a", "b", 10)
+    val mapTaskAttemptId = 5
+    val status = MapStatus(loc, sizes, mapTaskAttemptId)
+    val status1 = compressAndDecompressMapStatus(status)
+    assert(status1.isInstanceOf[HighlyCompressedMapStatus])
+    assert(status1.location == loc)
+    assert(status1.mapId == mapTaskAttemptId)
+    assert(status1.getSizeForBlock(0) == 0)
+    for (i <- 1 until 3000) {
+      val estimate = status1.getSizeForBlock(i)
+      if (i < 2900) {
+        assert(estimate === avg)
+      } else {
+        assert(estimate === compressAndDecompressSize(sizes(i)))
+      }
+    }
+  }
 }
