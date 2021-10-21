@@ -256,24 +256,6 @@ class ParquetFileFormat
     val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
     val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
 
-    var currentIterator: RecordReaderIterator[_] = null
-    def setCurrentIterator(newIterator: RecordReaderIterator[_]): Unit = {
-      if (currentIterator != null) {
-        currentIterator.close()
-      }
-      currentIterator = newIterator
-    }
-    // SPARK-23457: Register a task completion listener to close the iterator before calling
-    // `RecordReader#initialize()`. This avoids leaking the iterator's resources in case there is an
-    // exception in initialization.
-    //
-    // SPARK-37089: Register the listener up front rather than lazily in the function below. The
-    // listener invalidates the result iterator and any rows it has produced. Since task completion
-    // listeners are called in reverse order of registration, registering it up front guarantees the
-    // iterator is only invalidated after downstream operators' listeners have run.
-    val taskContext = Option(TaskContext.get())
-    taskContext.foreach(_.addTaskCompletionListener[Unit](_ => setCurrentIterator(null)))
-
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
 
@@ -337,6 +319,7 @@ class ParquetFileFormat
       if (pushed.isDefined) {
         ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, pushed.get)
       }
+      val taskContext = Option(TaskContext.get())
       if (enableVectorizedReader) {
         val vectorizedReader = new VectorizedParquetRecordReader(
           convertTz.orNull,
@@ -345,7 +328,8 @@ class ParquetFileFormat
           enableOffHeapColumnVector && taskContext.isDefined,
           capacity)
         val iter = new RecordReaderIterator(vectorizedReader)
-        setCurrentIterator(iter)
+        // SPARK-23457 Register a task completion listener before `initialization`.
+        taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
         vectorizedReader.initialize(split, hadoopAttemptContext)
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
         vectorizedReader.initBatch(partitionSchema, file.partitionValues)
@@ -370,7 +354,8 @@ class ParquetFileFormat
           new ParquetRecordReader[InternalRow](readSupport)
         }
         val iter = new RecordReaderIterator[InternalRow](reader)
-        setCurrentIterator(iter)
+        // SPARK-23457 Register a task completion listener before `initialization`.
+        taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
         reader.initialize(split, hadoopAttemptContext)
 
         val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
