@@ -27,7 +27,7 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
   import testImplicits._
 
   test("RatePerMicroBatchProvider in registry") {
-    val ds = DataSource.lookupDataSource("rate-epoch", spark.sqlContext.conf).newInstance()
+    val ds = DataSource.lookupDataSource("rate-micro-batch", spark.sqlContext.conf).newInstance()
     assert(ds.isInstanceOf[RatePerMicroBatchProvider], "Could not find rate-micro-batch source")
   }
 
@@ -116,8 +116,8 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
       }
     }
 
-    testIllegalOptionValue("rowsPerBatch", "-1", Seq("-1", "rowsPerEpoch", "positive"))
-    testIllegalOptionValue("rowsPerBatch", "0", Seq("0", "rowsPerEpoch", "positive"))
+    testIllegalOptionValue("rowsPerBatch", "-1", Seq("-1", "rowsPerBatch", "positive"))
+    testIllegalOptionValue("rowsPerBatch", "0", Seq("0", "rowsPerBatch", "positive"))
     testIllegalOptionValue("numPartitions", "-1", Seq("-1", "numPartitions", "positive"))
     testIllegalOptionValue("numPartitions", "0", Seq("0", "numPartitions", "positive"))
 
