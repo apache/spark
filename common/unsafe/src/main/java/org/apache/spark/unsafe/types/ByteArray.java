@@ -123,4 +123,82 @@ public final class ByteArray {
     }
     return result;
   }
+
+  // Helper method for implementing `lpad` and `rpad`.
+  // If the padding pattern's length is 0, return the first `len` bytes of the input byte
+  // sequence if it is longer than `len` bytes, or a copy of the byte sequence, otherwise.
+  private static byte[] padWithEmptyPattern(byte[] bytes, int len) {
+    len = Math.min(bytes.length, len);
+    final byte[] result = new byte[len];
+    Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET, result, Platform.BYTE_ARRAY_OFFSET, len);
+    return result;
+  }
+
+  // Helper method for implementing `lpad` and `rpad`.
+  // Fills the resulting byte sequence with the pattern. The resulting byte sequence is
+  // passed as the first argument and it is filled from position `firstPos` (inclusive)
+  // to position `beyondPos` (not inclusive).
+  private static void fillWithPattern(byte[] result, int firstPos, int beyondPos, byte[] pad) {
+    for (int pos = firstPos; pos < beyondPos; pos += pad.length) {
+      final int jMax = Math.min(pad.length, beyondPos - pos);
+      for (int j = 0; j < jMax; ++j) {
+        result[pos + j] = (byte) pad[j];
+      }
+    }
+  }
+
+  // Left-pads the input byte sequence using the provided padding pattern.
+  // In the special case that the padding pattern is empty, the resulting byte sequence
+  // contains the first `len` bytes of the input if they exist, or is a copy of the input
+  // byte sequence otherwise.
+  // For padding patterns with positive byte length, the resulting byte sequence's byte length is
+  // equal to `len`. If the input byte sequence is not less than `len` bytes, its first `len` bytes
+  // are returned. Otherwise, the remaining missing bytes are filled in with the provided pattern.
+  public static byte[] lpad(byte[] bytes, int len, byte[] pad) {
+    if (bytes == null || pad == null) return null;
+    // If the input length is 0, return the empty byte sequence.
+    if (len == 0) return EMPTY_BYTE;
+    // The padding pattern is empty.
+    if (pad.length == 0) return padWithEmptyPattern(bytes, len);
+    // The general case.
+    // 1. Copy the first `len` bytes of the input byte sequence into the output if they exist.
+    final byte[] result = new byte[len];
+    final int minLen = Math.min(len, bytes.length);
+    Platform.copyMemory(
+      bytes, Platform.BYTE_ARRAY_OFFSET,
+      result, Platform.BYTE_ARRAY_OFFSET + len - minLen,
+      minLen);
+    // 2. If the input has less than `len` bytes, fill in the rest using the provided pattern.
+    if (bytes.length < len) {
+      fillWithPattern(result, 0, len - bytes.length, pad);
+    }
+    return result;
+  }
+
+  // Right-pads the input byte sequence using the provided padding pattern.
+  // In the special case that the padding pattern is empty, the resulting byte sequence
+  // contains the first `len` bytes of the input if they exist, or is a copy of the input
+  // byte sequence otherwise.
+  // For padding patterns with positive byte length, the resulting byte sequence's byte length is
+  // equal to `len`. If the input byte sequence is not less than `len` bytes, its first `len` bytes
+  // are returned. Otherwise, the remaining missing bytes are filled in with the provided pattern.
+  public static byte[] rpad(byte[] bytes, int len, byte[] pad) {
+    if (bytes == null || pad == null) return null;
+    // If the input length is 0, return the empty byte sequence.
+    if (len == 0) return EMPTY_BYTE;
+    // The padding pattern is empty.
+    if (pad.length == 0) return padWithEmptyPattern(bytes, len);
+    // The general case.
+    // 1. Copy the first `len` bytes of the input sequence into the output if they exist.
+    final byte[] result = new byte[len];
+    Platform.copyMemory(
+      bytes, Platform.BYTE_ARRAY_OFFSET,
+      result, Platform.BYTE_ARRAY_OFFSET,
+      Math.min(len, bytes.length));
+    // 2. If the input has less than `len` bytes, fill in the rest using the provided pattern.
+    if (bytes.length < len) {
+      fillWithPattern(result, bytes.length, len, pad);
+    }
+    return result;
+  }
 }
