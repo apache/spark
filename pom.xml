@@ -285,6 +285,11 @@
     <maven.build.timestamp.format>yyyy-MM-dd HH:mm:ss z</maven.build.timestamp.format>
 
     <!-- SPARK-36796 for JDK-17 test-->
+    <!--
+      SPARK-37070 In order to enable the UTs in `mllib-local` and `mllib` to use `mockito`
+      to mock `j.u.Random`, "-add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED"
+      is added. Should remove it when `mockito` can mock `j.u.Random` directly.
+    -->
     <extraJavaTestArgs>
       -XX:+IgnoreUnrecognizedVMOptions
       --add-opens=java.base/java.lang=ALL-UNNAMED
@@ -298,6 +303,7 @@
       --add-opens=java.base/sun.nio.cs=ALL-UNNAMED
       --add-opens=java.base/sun.security.action=ALL-UNNAMED
       --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
+      --add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED
     </extraJavaTestArgs>
   </properties>
   <repositories>
