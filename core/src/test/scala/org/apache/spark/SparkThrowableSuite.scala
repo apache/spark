@@ -185,12 +185,19 @@ class SparkThrowableSuite extends SparkFunSuite {
   }
 
   test("Check if error class is tested") {
+    val manuallyTestedErrorClasses = Set(
+      // See SPARK-17065
+      "INCOMPATIBLE_DATASOURCE_REGISTER"
+    )
     val errorClassTestedMap = new mutable.HashMap[String, Boolean]()
     errorClassToInfoMap.foreach { case (errorClass, _) =>
-      errorClassTestedMap.put(errorClass, false)
+      if (manuallyTestedErrorClasses.contains(errorClass)) {
+        errorClassTestedMap.put(errorClass, true)
+      } else {
+        errorClassTestedMap.put(errorClass, false)
+      }
     }
     val baseDir = new File(Paths.get("..").toAbsolutePath().normalize().toString())
-    // Also test .sql.out
     val testFiles = FileUtils.listFiles(baseDir, Array("scala", "sql.out"), true).asScala
       .filter(_.getAbsolutePath.contains("/test/"))
     testFiles.foreach { file =>

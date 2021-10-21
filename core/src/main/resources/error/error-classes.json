@@ -114,8 +114,8 @@
     "message" : [ "Expected one row from CSV parser." ],
     "sqlState" : "42000"
   },
-  "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
-    "message" : [ "The second argument of '%s' function needs to be an integer." ],
+  "SECOND_FUNCTION_ARGUMENT_TYPE_MISMATCH" : {
+    "message" : [ "The second argument of '%s' function needs to be of type %s." ],
     "sqlState" : "22023"
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {

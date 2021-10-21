@@ -1538,10 +1538,10 @@ object QueryCompilationErrors {
 
   def secondArgumentOfFunctionIsNotIntegerError(
       function: String, e: NumberFormatException): Throwable = {
-    // The second argument of '{function}' function needs to be an integer
+    // The second argument of '{function}' function needs to be of type {type}
     new AnalysisException(
-      errorClass = "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
-      messageParameters = Array(function),
+      errorClass = "FUNCTION_ARGUMENT_TYPE_MISMATCH",
+      messageParameters = Array(function, "integer"),
       cause = Some(e))
   }
 
