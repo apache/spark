@@ -3412,8 +3412,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val EXEC_STAGING_DIR =
-    ConfigBuilder("spark.sql.exec.stagingDir")
+  val EXEC_STAGING_DIR = buildConf("spark.sql.exec.stagingDir")
       .doc("The staging directory of Spark job. Spark uses it to deal with files with " +
         "absolute output path, or writing data into partitioned directory when " +
         "dynamic partition overwrite mode. " +
