@@ -123,6 +123,22 @@ class DataTypeSuite extends SparkFunSuite {
     }
   }
 
+  test("extract field index and name from a StructType") {
+    val fieldA = StructField("a", LongType)
+    val fieldB = StructField("b", LongType)
+    val struct = StructType(
+      fieldA ::
+        fieldB :: Nil)
+
+    assert(struct.getIndexAndFieldByName("a").isDefined)
+    assert(struct.getIndexAndFieldByName("a").get._1 == 0)
+    assert(struct.getIndexAndFieldByName("a").get._2 == fieldA)
+    assert(struct.getIndexAndFieldByName("b").isDefined)
+    assert(struct.getIndexAndFieldByName("b").get._1 == 1)
+    assert(struct.getIndexAndFieldByName("b").get._2 == fieldB)
+    assert(struct.getIndexAndFieldByName("non_existent") == None)
+  }
+
   test("fieldsMap returns map of name to StructField") {
     val struct = StructType(
       StructField("a", LongType) ::

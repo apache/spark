@@ -24,11 +24,13 @@ import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
-import org.apache.spark.{SparkException, TaskContext}
-import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
+import org.apache.spark.{Partition, SparkContext, SparkException, TaskContext}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, InternalRow, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
-import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.sql.catalyst.util.{sideBySide, ArrayBasedMapData}
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
@@ -38,9 +40,25 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
 case class TestDataPoint2(x: Int, s: String)
+
+class CustomRDDPartition(val index: Int, internalRows: Seq[InternalRow]) extends Partition {
+  def getElements: Seq[InternalRow] = {
+    internalRows
+  }
+}
+class CustomRDD( sc: SparkContext, internalRows: Seq[InternalRow] )
+  extends RDD[InternalRow](sc, Nil) {
+  override def getPartitions: Array[Partition] = {
+    Array(new CustomRDDPartition(0, internalRows))
+  }
+  override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
+    split.asInstanceOf[CustomRDDPartition].getElements.iterator
+  }
+}
 
 object TestForTypeAlias {
   type TwoInt = (Int, Int)
@@ -1314,6 +1332,24 @@ class DatasetSuite extends QueryTest
     val data = Seq((("a", "b"), "c"), (null, "d"))
     val ds = spark.createDataset(data)(enc)
     checkDataset(ds, (("a", "b"), "c"), (null, "d"))
+  }
+
+  test("createDataset(data: RDD[InternalRow], schema: StructType) should be able to collect") {
+
+    val schema = StructType(Array(StructField("locales", MapType(StringType, StringType), true)))
+    val row = new GenericInternalRow(schema.length)
+    val testMap = Map(UTF8String.fromString("en") -> UTF8String.fromString("Hello"),
+      UTF8String.fromString("es") -> UTF8String.fromString("Ola"))
+    row.update(0, ArrayBasedMapData(testMap.keys.toArray, testMap.values.toArray))
+    val rowRDD = new CustomRDD(spark.sparkContext, Seq(row))
+
+    val df = spark.createDataset(rowRDD, schema)
+    val genericRows = df.rdd.collect()
+    genericRows.foreach(row => {
+      val localeMap = row.getAs[Map[String, String]]("locales")
+      assert(localeMap.keys sameElements testMap.keys.map(s => s.toString))
+      assert(localeMap.values sameElements testMap.values.map(s => s.toString))
+    })
   }
 
   test("SPARK-16995: flat mapping on Dataset containing a column created with lit/expr") {

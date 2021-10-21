@@ -310,6 +310,21 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
         s"$name does not exist. Available: ${fieldNames.mkString(", ")}"))
   }
 
+  /**
+   * Returns the index and field structure by name.
+   * If it doesn't find it, returns None.
+   * Avoids two client calls/loops to obtain consolidated field info,
+   * when looping through a schema and updating field values.
+   */
+  def getIndexAndFieldByName(name: String): Option[(Int, StructField)] = {
+    val field = nameToField.get(name)
+    if(field.isDefined) {
+      Some((fieldIndex(name), field.get))
+    } else {
+      None
+    }
+  }
+
   private[sql] def getFieldIndex(name: String): Option[Int] = {
     nameToIndex.get(name)
   }

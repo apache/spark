@@ -512,6 +512,20 @@ class SparkSession private(
   }
 
   /**
+   * Creates a [[Dataset]] from an RDD of spark.sql.catalyst.InternalRow. This method allows
+   * the caller to create externally the InternalRow set, as we as define the schema externally.
+   *
+   * @since 3.3.0
+   */
+  def createDataset(data: RDD[InternalRow], schema: StructType): DataFrame = {
+    val attributes = schema.toAttributes
+    val plan = LogicalRDD(attributes, data)(self)
+    val qe = sessionState.executePlan(plan)
+    qe.assertAnalyzed()
+    new Dataset[Row](this, plan, RowEncoder(schema))
+  }
+
+  /**
    * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
    * in a range from 0 to `end` (exclusive) with step value 1.
    *

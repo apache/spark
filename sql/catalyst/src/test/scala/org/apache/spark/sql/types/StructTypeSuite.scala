@@ -48,6 +48,11 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     assert(e.contains("Available: a, b"))
   }
 
+  test("lookup getIndexAndFieldByName for non-existing field should return None") {
+    val e = s.getIndexAndFieldByName("c")
+    assert(e == None)
+  }
+
   test("SPARK-24849: toDDL - simple struct") {
     val struct = StructType(Seq(StructField("a", IntegerType)))
 
