@@ -110,19 +110,19 @@ case class ParquetScanBuilder(
       }
       val structField = getStructFieldForCol(column)
 
-      structField.dataType match {
-        // not push down complex type
-        // not push down Timestamp because INT96 sort order is undefined,
-        // Parquet doesn't return statistics for INT96
-        // not push down Parquet Binary because min/max could be truncated
-        // (https://issues.apache.org/jira/browse/PARQUET-1685), Parquet Binary
-        // could be Spark StringType, BinaryType or DecimalType
-        case StructType(_) | ArrayType(_, _) | MapType(_, _, _) | TimestampType
-            | StringType | BinaryType | DecimalType() =>
-          false
-        case _ =>
-          finalSchema = finalSchema.add(structField.copy(s"$aggType(" + structField.name + ")"))
-          true
+      // not push down complex type
+      // not push down Timestamp because INT96 sort order is undefined,
+      // Parquet doesn't return statistics for INT96
+      // not push down Parquet Binary because min/max could be truncated
+      // (https://issues.apache.org/jira/browse/PARQUET-1685), Parquet Binary
+      // could be Spark StringType, BinaryType or DecimalType
+      val notPushedDownList = Seq(StructType, ArrayType, MapType, TimestampType, StringType,
+        BinaryType, DecimalType)
+      if (notPushedDownList.exists(_.acceptsType(structField.dataType))) {
+        false
+      } else {
+        finalSchema = finalSchema.add(structField.copy(s"$aggType(" + structField.name + ")"))
+        true
       }
     }
 
