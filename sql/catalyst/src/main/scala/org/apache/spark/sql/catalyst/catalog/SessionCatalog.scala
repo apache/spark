@@ -35,7 +35,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionInfo, ImplicitCastInputTypes, UpCast}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionInfo, UpCast}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
@@ -66,6 +66,7 @@ class SessionCatalog(
     hadoopConf: Configuration,
     parser: ParserInterface,
     functionResourceLoader: FunctionResourceLoader,
+    functionExpressionBuilder: FunctionExpressionBuilder,
     cacheSize: Int = SQLConf.get.tableRelationCacheSize,
     cacheTTL: Long = SQLConf.get.metadataCacheTTL) extends SQLConfHelper with Logging {
   import SessionCatalog._
@@ -85,6 +86,7 @@ class SessionCatalog(
       new Configuration(),
       new CatalystSqlParser(),
       DummyFunctionResourceLoader,
+      DummyFunctionExpressionBuilder,
       conf.tableRelationCacheSize,
       conf.metadataCacheTTL)
   }
@@ -1437,43 +1439,7 @@ class SessionCatalog(
    */
   private def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
     val clazz = Utils.classForName(functionClassName)
-    (input: Seq[Expression]) => makeFunctionExpression(name, clazz, input)
-  }
-
-  /**
-   * Constructs a [[Expression]] based on the provided class that represents a function.
-   *
-   * This performs reflection to decide what type of [[Expression]] to return in the builder.
-   */
-  protected def makeFunctionExpression(
-      name: String,
-      clazz: Class[_],
-      input: Seq[Expression]): Expression = {
-    // Unfortunately we need to use reflection here because UserDefinedAggregateFunction
-    // and ScalaUDAF are defined in sql/core module.
-    val clsForUDAF =
-      Utils.classForName("org.apache.spark.sql.expressions.UserDefinedAggregateFunction")
-    if (clsForUDAF.isAssignableFrom(clazz)) {
-      val cls = Utils.classForName("org.apache.spark.sql.execution.aggregate.ScalaUDAF")
-      val e = cls.getConstructor(
-          classOf[Seq[Expression]], clsForUDAF, classOf[Int], classOf[Int], classOf[Option[String]])
-        .newInstance(
-          input,
-          clazz.getConstructor().newInstance().asInstanceOf[Object],
-          Int.box(1),
-          Int.box(1),
-          Some(name))
-        .asInstanceOf[ImplicitCastInputTypes]
-
-      // Check input argument size
-      if (e.inputTypes.size != input.size) {
-        throw QueryCompilationErrors.invalidFunctionArgumentsError(
-          name, e.inputTypes.size.toString, input.size)
-      }
-      e
-    } else {
-      throw QueryCompilationErrors.noHandlerForUDAFError(clazz.getCanonicalName)
-    }
+    (input: Seq[Expression]) => functionExpressionBuilder.makeExpression(name, clazz, input)
   }
 
   /**
