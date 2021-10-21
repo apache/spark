@@ -179,7 +179,8 @@ object JDBCRDD extends Logging {
    * @param options - JDBC options that contains url, table and other information.
    * @param outputSchema - The schema of the columns or aggregate columns to SELECT.
    * @param groupByColumns - The pushed down group by columns.
-   * @param limit - The pushed down limit.
+   * @param limit - The pushed down limit. If the value is 0, it means no limit or limit
+   *                is not pushed down.
    *
    * @return An RDD representing "SELECT requiredColumns FROM fqTable".
    */

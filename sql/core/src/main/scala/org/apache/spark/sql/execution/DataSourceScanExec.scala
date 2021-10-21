@@ -150,14 +150,16 @@ case class RowDataSourceScanExec(
       handledFilters
     }
 
-    val limitStr = if (limit.nonEmpty) s"LIMIT ${limit.get}" else "[]"
-
-    Map(
+    val map = Map(
       "ReadSchema" -> requiredSchema.catalogString,
       "PushedFilters" -> seqToString(markedFilters.toSeq),
       "PushedAggregates" -> aggString,
-      "PushedGroupby" -> groupByString,
-      "PushedLimit" -> limitStr)
+      "PushedGroupby" -> groupByString)
+    if (limit.nonEmpty) {
+      map + ("PushedLimit" -> s"LIMIT ${limit.get}")
+    } else {
+      map
+    }
   }
 
   // Don't care about `rdd` and `tableIdentifier` when canonicalizing.

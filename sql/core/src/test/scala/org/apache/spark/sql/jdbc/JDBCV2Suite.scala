@@ -24,7 +24,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.Filter
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{lit, sum, udf}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -94,8 +94,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("simple scan with LIMIT") {
-    val df1 = spark.read.table("h2.test.employee").limit(1)
-    checkPushedLimit(df1, true)
+    val df1 = spark.read.table("h2.test.employee")
+      .where($"dept" === 1).limit(1)
+    checkPushedLimit(df1, true, 1)
     checkAnswer(df1, Seq(Row(1, "amy", 10000.00, 1000.0)))
 
     val df2 = spark.read
@@ -104,36 +105,40 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .option("upperBound", "2")
       .option("numPartitions", "2")
       .table("h2.test.employee")
+      .filter($"dept" > 1)
       .limit(1)
-    checkPushedLimit(df2, true)
-    checkAnswer(df1, Seq(Row(1, "amy", 10000.00, 1000.0)))
+    checkPushedLimit(df2, true, 1)
+    checkAnswer(df2, Seq(Row(2, "alex", 12000.00, 1200.0)))
 
-    val df3 = sql("SELECT name FROM h2.test.employee LIMIT 1")
-    checkPushedLimit(df3, true)
-    checkAnswer(df3, Seq(Row("amy")))
+    val df3 = sql("SELECT name FROM h2.test.employee WHERE dept > 1 LIMIT 1")
+    checkPushedLimit(df3, true, 1)
+    checkAnswer(df3, Seq(Row("alex")))
 
     val df4 = spark.read
       .table("h2.test.employee")
       .groupBy("DEPT").sum("SALARY")
       .limit(1)
-    checkPushedLimit(df4, true)
+    checkPushedLimit(df4, false, 0)
     checkAnswer(df4, Seq(Row(1, 19000.00)))
 
     val df5 = spark.read
       .table("h2.test.employee")
       .sort("SALARY")
       .limit(1)
-    checkPushedLimit(df5, false)
+    checkPushedLimit(df5, false, 0)
     checkAnswer(df5, Seq(Row(1, "cathy", 9000.00, 1200.0)))
   }
 
-  private def checkPushedLimit(df: DataFrame, pushed: Boolean): Unit = {
-    val pushedResult = if (pushed) "LIMIT 1" else "[]"
+  private def checkPushedLimit(df: DataFrame, pushed: Boolean, limit: Int): Unit = {
     df.queryExecution.optimizedPlan.collect {
-      case _: DataSourceV2ScanRelation =>
-        val expected_plan_fragment =
-          s"PushedLimit: $pushedResult"
-        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+      case DataSourceV2ScanRelation(_, scan, _) => scan match {
+        case v1: V1ScanWrapper =>
+          if (pushed) {
+            assert(v1.pushedLimit.nonEmpty && v1.pushedLimit.get === limit)
+          } else {
+            assert(v1.pushedLimit.isEmpty)
+          }
+      }
     }
   }
 
