@@ -107,7 +107,7 @@ the same session as pyspark (you can install in several steps too).
 
 .. code-block:: bash
 
-    conda install -c conda-forge pyspark python [other packages]  # can also use python=3.8, etc.
+    conda install -c conda-forge pyspark  # can also add "python=3.8 some_package [etc.]" here
 
 Note that `PySpark for conda <https://anaconda.org/conda-forge/pyspark>`_ is maintained
 separately by the community; while new versions generally get packaged quickly, the
@@ -115,8 +115,7 @@ availability through conda(-forge) is not directly in sync with the PySpark rele
 
 While using pip in a conda environment is technically feasible (with the same command as
 `above <#using-pypi>`_), this approach is `discouraged <https://www.anaconda.com/blog/using-pip-in-a-conda-environment/>`_,
-because pip does not interoperate with conda. In particular, pip might install over existing
-(conda-installed) packages and consequently break the functionality of the environment.
+because pip does not interoperate with conda.
 
 For a short summary about useful conda commands, see their
 `cheat sheet <https://docs.conda.io/projects/conda/en/latest/user-guide/cheatsheet.html/>`_.
