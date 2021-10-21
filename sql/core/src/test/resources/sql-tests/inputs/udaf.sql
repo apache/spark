@@ -19,3 +19,9 @@ SELECT default.udaf1(int_col1) as udaf1 from t1;
 
 DROP FUNCTION myDoubleAvg;
 DROP FUNCTION udaf1;
+
+CREATE FUNCTION myDoubleAverage AS 'test.org.apache.spark.sql.MyDoubleAverage';
+
+SELECT default.myDoubleAverage(int_col1) as my_avg from t1;
+
+DROP FUNCTION myDoubleAverage;

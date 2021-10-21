@@ -16,10 +16,15 @@
  */
 package org.apache.spark.sql.internal
 
+import scala.reflect.ClassTag
+import scala.reflect.runtime.universe
+
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, ReplaceCharWithVarchar, ResolveSessionCatalog, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
@@ -28,13 +33,13 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlan, SparkPlanner, SparkSqlParser}
-import org.apache.spark.sql.execution.aggregate.{ResolveEncodersInScalaAgg, ScalaUDAF}
+import org.apache.spark.sql.execution.aggregate.{ResolveEncodersInScalaAgg, ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.command.CommandCheck
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
 import org.apache.spark.sql.execution.streaming.ResolveWriteToStream
-import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
+import org.apache.spark.sql.expressions.{Aggregator, UserDefinedAggregateFunction}
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
 
@@ -405,6 +410,35 @@ class SparkUDFExpressionBuilder extends FunctionExpressionBuilder {
         input,
         clazz.getConstructor().newInstance().asInstanceOf[UserDefinedAggregateFunction],
         udafName = Some(name))
+      // Check input argument size
+      if (expr.inputTypes.size != input.size) {
+        throw QueryCompilationErrors.invalidFunctionArgumentsError(
+          name, expr.inputTypes.size.toString, input.size)
+      }
+      expr
+    } else if (classOf[Aggregator[_, _, _]].isAssignableFrom(clazz)) {
+      val aggregator = clazz.getConstructor().newInstance().asInstanceOf[Aggregator[Any, Any, Any]]
+
+      // Construct the input encoder
+      val mirror = universe.runtimeMirror(clazz.getClassLoader)
+      val classType = mirror.classSymbol(clazz)
+      val baseClassType = universe.typeOf[Aggregator[_, _, _]].typeSymbol.asClass
+      val baseType = universe.internal.thisType(classType).baseType(baseClassType)
+      val tpe = baseType.typeArgs.head
+      val cls = mirror.runtimeClass(tpe)
+      val serializer = ScalaReflection.serializerForType(tpe)
+      val deserializer = ScalaReflection.deserializerForType(tpe)
+      val inputEncoder = new ExpressionEncoder[Any](
+        serializer,
+        deserializer,
+        ClassTag(cls))
+
+      val expr = ScalaAggregator[Any, Any, Any](
+        input,
+        aggregator,
+        inputEncoder,
+        aggregator.bufferEncoder.asInstanceOf[ExpressionEncoder[Any]],
+        aggregatorName = Some(name))
       // Check input argument size
       if (expr.inputTypes.size != input.size) {
         throw QueryCompilationErrors.invalidFunctionArgumentsError(

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.lang.{Double => jlDouble}
 import java.math.BigDecimal
 import java.sql.Timestamp
 import java.time.{Instant, LocalDate}
@@ -49,6 +50,20 @@ import org.apache.spark.sql.util.QueryExecutionListener
 private case class FunctionResult(f1: String, f2: String)
 private case class LocalDateInstantType(date: LocalDate, instant: Instant)
 private case class TimestampInstantType(t: Timestamp, instant: Instant)
+
+class MyDoubleAverage extends Aggregator[jlDouble, (Double, Long), jlDouble] {
+  def zero: (Double, Long) = (0.0, 0L)
+  def reduce(b: (Double, Long), a: jlDouble): (Double, Long) = {
+    if (a != null) (b._1 + a, b._2 + 1L) else b
+  }
+  def merge(b1: (Double, Long), b2: (Double, Long)): (Double, Long) =
+    (b1._1 + b2._1, b1._2 + b2._2)
+  def finish(r: (Double, Long)): jlDouble =
+    if (r._2 > 0L) 100.0 + (r._1 / r._2.toDouble) else null
+  def bufferEncoder: Encoder[(Double, Long)] =
+    Encoders.tuple(Encoders.scalaDouble, Encoders.scalaLong)
+  def outputEncoder: Encoder[jlDouble] = Encoders.DOUBLE
+}
 
 class UDFSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -845,6 +860,26 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     spark.sessionState.catalog.lookupFunction(
       FunctionIdentifier("udaf34388"), Seq(Literal(1))) match {
       case udaf: ScalaUDAF => assert(udaf.name === "udaf34388")
+    }
+  }
+
+  test("SPARK-37018: Spark SQL should support create function with Aggregator") {
+    val avgFuncClass = "org.apache.spark.sql.MyDoubleAverage"
+    val functionName = "test_udf"
+    withTempDatabase { dbName =>
+      withUserDefinedFunction(
+        s"default.$functionName" -> false,
+        s"$dbName.$functionName" -> false,
+        functionName -> true) {
+        // create a function in default database
+        sql("USE DEFAULT")
+        sql(s"CREATE FUNCTION $functionName AS '$avgFuncClass'")
+        // create a view using a function in 'default' database
+        withView("v1") {
+          sql(s"CREATE VIEW v1 AS SELECT $functionName(col1) AS func FROM VALUES (1), (2), (3)")
+          checkAnswer(sql("SELECT * FROM v1"), Seq(Row(102.0)))
+        }
+      }
     }
   }
 

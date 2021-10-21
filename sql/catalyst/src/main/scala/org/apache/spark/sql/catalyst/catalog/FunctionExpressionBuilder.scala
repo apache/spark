@@ -21,6 +21,8 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 
 // A builder to create `Expression` from function information.
 trait FunctionExpressionBuilder {
+  // `name` and `clazz` are the name and provided class of user-defined functions, respectively.
+  // `input` is the children of `ScalaUDAF` or `ScalaAggregator`.
   def makeExpression(name: String, clazz: Class[_], input: Seq[Expression]): Expression
 }
 
