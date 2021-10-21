@@ -241,6 +241,12 @@ class FunctionsTests(ReusedSQLTestCase):
         row = df.select(dayofweek(df.date)).first()
         self.assertEqual(row[0], 2)
 
+    def test_make_date(self):
+        from pyspark.sql.functions import make_date
+        df = self.spark.createDataFrame([(2020, 6, 26)], ['Y', 'M', 'D'])
+        row = df.select(make_date(df.Y, df.M, df.D)).first()
+        self.assertEqual(row[0], datetime.date(2020, 6, 26))
+
     def test_expr(self):
         from pyspark.sql import functions
         row = Row(a="length string", b=75)

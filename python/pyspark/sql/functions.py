@@ -2131,6 +2131,21 @@ def weekofyear(col: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.weekofyear(_to_java_column(col)))
 
 
+def make_date(year: Column, month: Column, day: Column) -> Column:
+    """
+    Returns a column with date built from the year, month and day columns.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(2020, 6, 26)], ['Y', 'M', 'D'])
+    >>> df.select(make_date(df.Y, df.M, df.D).alias("datefield")).show()
+    [Row(datefield=datetime.date(2020, 6, 26))]
+    """
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    jc = sc._jvm.functions.make_date(_to_java_column(year), _to_java_column(month), _to_java_column(day))
+    return Column(jc)
+
+
 def date_add(start: "ColumnOrName", days: int) -> Column:
     """
     Returns the date that is `days` days after `start`
