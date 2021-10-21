@@ -374,7 +374,6 @@ private[hive] class HiveClientImpl(
       CatalogUtils.URIToString(database.locationUri),
       (props -- Seq(PROP_OWNER)).asJava)
     props.get(PROP_OWNER).orElse(userName).foreach { ownerName =>
-      HiveCatalogMetrics.incrementHiveClientCalls(1)
       shim.setDatabaseOwnerName(hiveDb, ownerName)
     }
     hiveDb
