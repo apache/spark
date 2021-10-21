@@ -170,11 +170,12 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   @VisibleForTesting
   @Override
   public void initialize(
+      String path,
       MessageType fileSchema,
       MessageType requestedSchema,
       ParquetRowGroupReader rowGroupReader,
       int totalRowCount) throws IOException {
-    super.initialize(fileSchema, requestedSchema, rowGroupReader, totalRowCount);
+    super.initialize(path, fileSchema, requestedSchema, rowGroupReader, totalRowCount);
     initializeInternal();
   }
 
@@ -351,7 +352,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         convertTz,
         datetimeRebaseMode,
         int96RebaseMode,
-        file == null? "null": file.toString());
+        file.toString());
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }

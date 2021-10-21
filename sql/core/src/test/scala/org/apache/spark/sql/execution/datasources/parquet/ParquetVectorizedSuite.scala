@@ -294,7 +294,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
 
     val recordReader = new VectorizedParquetRecordReader(
       DateTimeUtils.getZoneId("EST"), "CORRECTED", "CORRECTED", true, batchSize)
-    recordReader.initialize(fileSchema, fileSchema,
+    recordReader.initialize("/path/to/dummy.parquet", fileSchema, fileSchema,
       TestParquetRowGroupReader(Seq(readStore)), totalRowCount)
 
     // convert both actual and expected rows into collections

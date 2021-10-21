@@ -189,10 +189,12 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
   @VisibleForTesting
   protected void initialize(
+      String path,
       MessageType fileSchema,
       MessageType requestedSchema,
       ParquetRowGroupReader rowGroupReader,
       int totalRowCount) throws IOException {
+    this.file = new Path(path);
     this.reader = rowGroupReader;
     this.fileSchema = fileSchema;
     this.requestedSchema = requestedSchema;
