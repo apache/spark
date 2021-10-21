@@ -177,8 +177,8 @@ class FileScanRDD(
                 throw QueryExecutionErrors.cannotReadParquetFilesError(e)
               }
               throw e
-            case e: ArrayIndexOutOfBoundsException =>
-              logError(s"Throw ArrayIndexOutOfBoundsException: ${e.getMessage} " +
+            case e: Exception =>
+              logError(s"Throw ${e.getClass.getSimpleName}: ${e.getMessage} " +
                 s"while reading file ${currentFile.filePath}")
               throw e
           }
