@@ -323,15 +323,15 @@ def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.Dat
     Examples
     --------
     >>> pandas_on_spark_type(int)
-    (dtype('int64'), LongType)
+    (dtype('int64'), LongType())
     >>> pandas_on_spark_type(str)
-    (dtype('<U'), StringType)
+    (dtype('<U'), StringType())
     >>> pandas_on_spark_type(datetime.date)
-    (dtype('O'), DateType)
+    (dtype('O'), DateType())
     >>> pandas_on_spark_type(datetime.datetime)
-    (dtype('<M8[ns]'), TimestampType)
+    (dtype('<M8[ns]'), TimestampType())
     >>> pandas_on_spark_type(List[bool])
-    (dtype('O'), ArrayType(BooleanType,true))
+    (dtype('O'), ArrayType(BooleanType(), True))
     """
     try:
         dtype = pandas_dtype(tpe)
@@ -383,7 +383,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.dtype
     dtype('int64')
     >>> inferred.spark_type
-    LongType
+    LongType()
 
     >>> def func() -> ps.Series[int]:
     ...    pass
@@ -391,7 +391,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.dtype
     dtype('int64')
     >>> inferred.spark_type
-    LongType
+    LongType()
 
     >>> def func() -> ps.DataFrame[np.float, str]:
     ...    pass
@@ -399,7 +399,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.dtypes
     [dtype('float64'), dtype('<U')]
     >>> inferred.spark_type
-    StructType(List(StructField(c0,DoubleType,true),StructField(c1,StringType,true)))
+    StructType([StructField('c0', DoubleType(), True), StructField('c1', StringType(), True)])
 
     >>> def func() -> ps.DataFrame[np.float]:
     ...    pass
@@ -407,7 +407,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.dtypes
     [dtype('float64')]
     >>> inferred.spark_type
-    StructType(List(StructField(c0,DoubleType,true)))
+    StructType([StructField('c0', DoubleType(), True)])
 
     >>> def func() -> 'int':
     ...    pass
@@ -415,7 +415,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.dtype
     dtype('int64')
     >>> inferred.spark_type
-    LongType
+    LongType()
 
     >>> def func() -> 'ps.Series[int]':
     ...    pass
@@ -423,7 +423,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.dtype
     dtype('int64')
     >>> inferred.spark_type
-    LongType
+    LongType()
 
     >>> def func() -> 'ps.DataFrame[np.float, str]':
     ...    pass
@@ -431,7 +431,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.dtypes
     [dtype('float64'), dtype('<U')]
     >>> inferred.spark_type
-    StructType(List(StructField(c0,DoubleType,true),StructField(c1,StringType,true)))
+    StructType([StructField('c0', DoubleType(), True), StructField('c1', StringType(), True)])
 
     >>> def func() -> 'ps.DataFrame[np.float]':
     ...    pass
@@ -439,7 +439,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.dtypes
     [dtype('float64')]
     >>> inferred.spark_type
-    StructType(List(StructField(c0,DoubleType,true)))
+    StructType([StructField('c0', DoubleType(), True)])
 
     >>> def func() -> ps.DataFrame['a': np.float, 'b': int]:
     ...     pass
@@ -447,7 +447,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.dtypes
     [dtype('float64'), dtype('int64')]
     >>> inferred.spark_type
-    StructType(List(StructField(a,DoubleType,true),StructField(b,LongType,true)))
+    StructType([StructField('a', DoubleType(), True), StructField('b', LongType(), True)])
 
     >>> def func() -> "ps.DataFrame['a': np.float, 'b': int]":
     ...     pass
@@ -455,7 +455,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.dtypes
     [dtype('float64'), dtype('int64')]
     >>> inferred.spark_type
-    StructType(List(StructField(a,DoubleType,true),StructField(b,LongType,true)))
+    StructType([StructField('a', DoubleType(), True), StructField('b', LongType(), True)])
 
     >>> pdf = pd.DataFrame({"a": [1, 2, 3], "b": [3, 4, 5]})
     >>> def func() -> ps.DataFrame[pdf.dtypes]:
@@ -464,7 +464,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.dtypes
     [dtype('int64'), dtype('int64')]
     >>> inferred.spark_type
-    StructType(List(StructField(c0,LongType,true),StructField(c1,LongType,true)))
+    StructType([StructField('c0', LongType(), True), StructField('c1', LongType(), True)])
 
     >>> pdf = pd.DataFrame({"a": [1, 2, 3], "b": [3, 4, 5]})
     >>> def func() -> ps.DataFrame[zip(pdf.columns, pdf.dtypes)]:
@@ -473,7 +473,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.dtypes
     [dtype('int64'), dtype('int64')]
     >>> inferred.spark_type
-    StructType(List(StructField(a,LongType,true),StructField(b,LongType,true)))
+    StructType([StructField('a', LongType(), True), StructField('b', LongType(), True)])
 
     >>> pdf = pd.DataFrame({("x", "a"): [1, 2, 3], ("y", "b"): [3, 4, 5]})
     >>> def func() -> ps.DataFrame[zip(pdf.columns, pdf.dtypes)]:
@@ -482,7 +482,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.dtypes
     [dtype('int64'), dtype('int64')]
     >>> inferred.spark_type
-    StructType(List(StructField((x, a),LongType,true),StructField((y, b),LongType,true)))
+    StructType([StructField('(x, a)', LongType(), True), StructField('(y, b)', LongType(), True)])
 
     >>> pdf = pd.DataFrame({"a": [1, 2, 3], "b": pd.Categorical([3, 4, 5])})
     >>> def func() -> ps.DataFrame[pdf.dtypes]:
@@ -491,7 +491,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.dtypes
     [dtype('int64'), CategoricalDtype(categories=[3, 4, 5], ordered=False)]
     >>> inferred.spark_type
-    StructType(List(StructField(c0,LongType,true),StructField(c1,LongType,true)))
+    StructType([StructField('c0', LongType(), True), StructField('c1', LongType(), True)])
 
     >>> def func() -> ps.DataFrame[zip(pdf.columns, pdf.dtypes)]:
     ...     pass
@@ -499,7 +499,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.dtypes
     [dtype('int64'), CategoricalDtype(categories=[3, 4, 5], ordered=False)]
     >>> inferred.spark_type
-    StructType(List(StructField(a,LongType,true),StructField(b,LongType,true)))
+    StructType([StructField('a', LongType(), True), StructField('b', LongType(), True)])
 
     >>> def func() -> ps.Series[pdf.b.dtype]:
     ...     pass
@@ -507,7 +507,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.dtype
     CategoricalDtype(categories=[3, 4, 5], ordered=False)
     >>> inferred.spark_type
-    LongType
+    LongType()
 
     >>> def func() -> ps.DataFrame[int, [int, int]]:
     ...     pass
@@ -517,7 +517,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.spark_type.simpleString()
     'struct<__index_level_0__:bigint,c0:bigint,c1:bigint>'
     >>> inferred.index_fields
-    [InternalField(dtype=int64,struct_field=StructField(__index_level_0__,LongType,true))]
+    [InternalField(dtype=int64,struct_field=StructField('__index_level_0__', LongType(), True))]
 
     >>> def func() -> ps.DataFrame[pdf.index.dtype, pdf.dtypes]:
     ...     pass
@@ -527,7 +527,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.spark_type.simpleString()
     'struct<__index_level_0__:bigint,c0:bigint,c1:bigint>'
     >>> inferred.index_fields
-    [InternalField(dtype=int64,struct_field=StructField(__index_level_0__,LongType,true))]
+    [InternalField(dtype=int64,struct_field=StructField('__index_level_0__', LongType(), True))]
 
     >>> def func() -> ps.DataFrame[
     ...     ("index", CategoricalDtype(categories=[3, 4, 5], ordered=False)),
@@ -539,7 +539,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.spark_type.simpleString()
     'struct<index:bigint,id:bigint,A:bigint>'
     >>> inferred.index_fields
-    [InternalField(dtype=category,struct_field=StructField(index,LongType,true))]
+    [InternalField(dtype=category,struct_field=StructField('index', LongType(), True))]
 
     >>> def func() -> ps.DataFrame[
     ...         (pdf.index.name, pdf.index.dtype), zip(pdf.columns, pdf.dtypes)]:
@@ -550,7 +550,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.spark_type.simpleString()
     'struct<__index_level_0__:bigint,a:bigint,b:bigint>'
     >>> inferred.index_fields
-    [InternalField(dtype=int64,struct_field=StructField(__index_level_0__,LongType,true))]
+    [InternalField(dtype=int64,struct_field=StructField('__index_level_0__', LongType(), True))]
     """
     # We should re-import to make sure the class 'SeriesType' is not treated as a class
     # within this module locally. See Series.__class_getitem__ which imports this class
