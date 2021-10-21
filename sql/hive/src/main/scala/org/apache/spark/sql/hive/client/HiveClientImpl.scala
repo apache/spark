@@ -381,7 +381,6 @@ private[hive] class HiveClientImpl(
 
   override def getDatabase(dbName: String): CatalogDatabase = withHiveState {
     Option(client.getDatabase(dbName)).map { d =>
-      HiveCatalogMetrics.incrementHiveClientCalls(1)
       val params = Option(d.getParameters).map(_.asScala.toMap).getOrElse(Map()) ++
         Map(PROP_OWNER -> shim.getDatabaseOwnerName(d))
 
