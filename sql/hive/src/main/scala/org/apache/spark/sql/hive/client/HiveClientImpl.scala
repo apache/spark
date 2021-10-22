@@ -57,11 +57,11 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
+import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{CircularBuffer, Utils, VersionUtils}
+import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
@@ -201,12 +201,13 @@ private[hive] class HiveClientImpl(
   }
 
   private def getHive(conf: HiveConf): Hive = {
-    VersionUtils.majorMinorPatchVersion(version.fullVersion).map {
-      case (2, 3, v) if v >= 9 => Hive.getWithoutRegisterFns(conf)
-      case _ => Hive.get(conf)
-    }.getOrElse {
-      throw QueryExecutionErrors.unsupportedHiveMetastoreVersionError(
-        version.fullVersion, HiveUtils.HIVE_METASTORE_VERSION.key)
+    try {
+      Hive.getWithoutRegisterFns(conf)
+    } catch {
+      // SPARK-37069: not all Hive versions have the above method (e.g., Hive 2.3.9 has it but
+      // 2.3.8 don't), therefore here we fallback when encountering the exception.
+      case _: NoSuchMethodError =>
+        Hive.get(conf)
     }
   }
 
