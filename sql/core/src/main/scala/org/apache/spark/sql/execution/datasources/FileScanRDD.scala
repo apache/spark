@@ -143,12 +143,17 @@ class FileScanRDD(
           if (ignoreMissingFiles || ignoreCorruptFiles) {
             currentIterator = new NextIterator[Object] {
               // The readFunction may read some bytes before consuming the iterator, e.g.,
-              // vectorized Parquet reader. Here we use lazy val to delay the creation of
-              // iterator so that we will throw exception in `getNext`.
-              private lazy val internalIter = readCurrentFile()
+              // vectorized Parquet reader. Here we use a lazily initialized variable to delay the
+              // creation of iterator so that we will throw exception in `getNext`.
+              private var internalIter: Iterator[InternalRow] = null
 
               override def getNext(): AnyRef = {
                 try {
+                  // Initialize `internalIter` lazily.
+                  if (internalIter == null) {
+                    internalIter = readCurrentFile()
+                  }
+
                   if (internalIter.hasNext) {
                     internalIter.next()
                   } else {
