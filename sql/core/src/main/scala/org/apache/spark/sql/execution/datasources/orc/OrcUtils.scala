@@ -25,9 +25,9 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.hive.serde2.io.{DateWritable, HiveDecimalWritable}
-import org.apache.hadoop.io.{BooleanWritable, ByteWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, ShortWritable, Text, WritableComparable}
-import org.apache.orc.{BooleanColumnStatistics, ColumnStatistics, DateColumnStatistics, DecimalColumnStatistics, DoubleColumnStatistics, IntegerColumnStatistics, OrcConf, OrcFile, Reader, StringColumnStatistics, TypeDescription, Writer}
+import org.apache.hadoop.hive.serde2.io.DateWritable
+import org.apache.hadoop.io.{BooleanWritable, ByteWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, ShortWritable, WritableComparable}
+import org.apache.orc.{BooleanColumnStatistics, ColumnStatistics, DateColumnStatistics, DoubleColumnStatistics, IntegerColumnStatistics, OrcConf, OrcFile, Reader, TypeDescription, Writer}
 
 import org.apache.spark.SPARK_VERSION_SHORT
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -436,10 +436,6 @@ object OrcUtils extends Logging {
               s"getMaxFromColumnStatistics should not take type $dataType" +
                 "for DoubleColumnStatistics")
           }
-        case s: DecimalColumnStatistics =>
-          new HiveDecimalWritable(if (isMax) s.getMaximum else s.getMinimum)
-        case s: StringColumnStatistics =>
-          new Text(if (isMax) s.getMaximum else s.getMinimum)
         case s: DateColumnStatistics =>
           new DateWritable(
             if (isMax) s.getMaximumDayOfEpoch.toInt else s.getMinimumDayOfEpoch.toInt)

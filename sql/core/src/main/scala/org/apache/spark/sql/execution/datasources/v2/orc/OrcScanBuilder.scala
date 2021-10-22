@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.datasources.orc.OrcFilters
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, MapType, StringType, StructType, TimestampType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class OrcScanBuilder(
@@ -78,24 +78,11 @@ case class OrcScanBuilder(
       return false
     }
 
-    def isAllowedTypeForMinMaxAggregate(dataType: DataType): Boolean = {
-      dataType match {
-        // Not push down complex and Timestamp type.
-        // Not push down Binary type as ORC does not write min/max statistics for it.
-        // Not push down String type as ORC truncates min/max statistics for it.
-        case StructType(_) | ArrayType(_, _) | MapType(_, _, _) | TimestampType | BinaryType |
-             StringType =>
-          false
-        case _ => true
-      }
-    }
-
     AggregatePushDownUtils.getSchemaForPushedAggregation(
       aggregation,
       schema,
       partitionNameSet,
-      dataFilters,
-      isAllowedTypeForMinMaxAggregate) match {
+      dataFilters) match {
 
       case Some(schema) =>
         finalSchema = schema

@@ -23,7 +23,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
-import org.apache.spark.sql.types.{DataType, LongType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DateType, DoubleType, FloatType, IntegerType, LongType, ShortType, StructField, StructType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
 /**
@@ -38,8 +38,7 @@ object AggregatePushDownUtils {
       aggregation: Aggregation,
       schema: StructType,
       partitionNames: Set[String],
-      dataFilters: Seq[Expression],
-      isAllowedTypeForMinMaxAggregate: DataType => Boolean): Option[StructType] = {
+      dataFilters: Seq[Expression]): Option[StructType] = {
 
     var finalSchema = new StructType()
 
@@ -65,11 +64,20 @@ object AggregatePushDownUtils {
       }
       val structField = getStructFieldForCol(column)
 
-      if (isAllowedTypeForMinMaxAggregate(structField.dataType)) {
-        finalSchema = finalSchema.add(structField.copy(s"$aggType(" + structField.name + ")"))
-        true
-      } else {
-        false
+      structField.dataType match {
+        // not push down complex type
+        // not push down Timestamp because INT96 sort order is undefined,
+        // Parquet doesn't return statistics for INT96
+        // not push down Parquet Binary because min/max could be truncated
+        // (https://issues.apache.org/jira/browse/PARQUET-1685), Parquet Binary
+        // could be Spark StringType, BinaryType or DecimalType.
+        // not push down for ORC with same reason.
+        case BooleanType | ByteType | ShortType | IntegerType
+             | LongType | FloatType | DoubleType | DateType =>
+          finalSchema = finalSchema.add(structField.copy(s"$aggType(" + structField.name + ")"))
+          true
+        case _ =>
+          false
       }
     }
 

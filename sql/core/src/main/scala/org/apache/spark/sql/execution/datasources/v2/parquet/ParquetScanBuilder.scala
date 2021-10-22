@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, Spark
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DateType, DoubleType, FloatType, IntegerType, LongType, ShortType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class ParquetScanBuilder(
@@ -90,28 +90,11 @@ case class ParquetScanBuilder(
       return false
     }
 
-    def isAllowedTypeForMinMaxAggregate(dataType: DataType): Boolean = {
-      dataType match {
-        // not push down complex type
-        // not push down Timestamp because INT96 sort order is undefined,
-        // Parquet doesn't return statistics for INT96
-        // not push down Parquet Binary because min/max could be truncated
-        // (https://issues.apache.org/jira/browse/PARQUET-1685), Parquet Binary
-        // could be Spark StringType, BinaryType or DecimalType
-        case BooleanType | ByteType | ShortType | IntegerType
-             | LongType | FloatType | DoubleType | DateType =>
-          true
-        case _ =>
-          false
-      }
-    }
-
     AggregatePushDownUtils.getSchemaForPushedAggregation(
       aggregation,
       schema,
       partitionNameSet,
-      dataFilters,
-      isAllowedTypeForMinMaxAggregate) match {
+      dataFilters) match {
 
       case Some(schema) =>
         finalSchema = schema
