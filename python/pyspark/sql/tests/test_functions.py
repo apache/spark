@@ -244,8 +244,10 @@ class FunctionsTests(ReusedSQLTestCase):
     def test_make_date(self):
         from pyspark.sql.functions import make_date
         df = self.spark.createDataFrame([(2020, 6, 26)], ['Y', 'M', 'D'])
-        row = df.select(make_date(df.Y, df.M, df.D)).first()
-        self.assertEqual(row[0], datetime.date(2020, 6, 26))
+        row_from_col = df.select(make_date(df.Y, df.M, df.D)).first()
+        self.assertEqual(row_from_col[0], datetime.date(2020, 6, 26))
+        row_from_name = df.select(make_date("Y", "M", "D")).first()
+        self.assertEqual(row_from_name[0], datetime.date(2020, 6, 26))
 
     def test_expr(self):
         from pyspark.sql import functions

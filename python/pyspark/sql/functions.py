@@ -2131,7 +2131,7 @@ def weekofyear(col: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.weekofyear(_to_java_column(col)))
 
 
-def make_date(year: Column, month: Column, day: Column) -> Column:
+def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") -> Column:
     """
     Returns a column with date built from the year, month and day columns.
 
