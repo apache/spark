@@ -792,7 +792,7 @@ private[hive] class HiveClientImpl(
   override def listTablesByType(
       dbName: String,
       pattern: String,
-      tableType: CatalogTableType): Seq[String] = withHiveState(2) {
+      tableType: CatalogTableType): Seq[String] = withHiveState {
     val hiveTableType = toHiveTableType(tableType)
     try {
       // Try with Hive API getTablesByType first, it's supported from Hive 2.3+.
@@ -800,6 +800,9 @@ private[hive] class HiveClientImpl(
     } catch {
       case _: UnsupportedOperationException =>
         // Fallback to filter logic if getTablesByType not supported.
+        // Since Spark can't know if it will throw exception when call shim.getTablesByType(),
+        // here Spark update hive client calls once.
+        HiveCatalogMetrics.incrementHiveClientCalls(1)
         val tableNames = client.getTablesByPattern(dbName, pattern).asScala
         getRawTablesByName(dbName, tableNames.toSeq)
           .filter(_.getTableType == hiveTableType)
@@ -825,7 +828,7 @@ private[hive] class HiveClientImpl(
    * running MapReduce jobs with `runHive`.
    * Since HIVE-17626(Hive 3.0.0), need to set hive.query.reexecution.enabled=false.
    */
-  protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = withHiveState {
+  protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = withHiveState(0) {
     def closeDriver(driver: Driver): Unit = {
       // Since HIVE-18238(Hive 3.0.0), the Driver.close function's return type changed
       // and the CommandProcessorFactory.clean function removed.
