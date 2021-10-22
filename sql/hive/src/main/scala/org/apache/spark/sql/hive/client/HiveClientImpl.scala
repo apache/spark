@@ -204,8 +204,8 @@ private[hive] class HiveClientImpl(
     try {
       Hive.getWithoutRegisterFns(conf)
     } catch {
-      // Not all Hive versions have the above method (e.g., Hive 2.3.9 has it but 2.3.8 don't),
-      // therefore here we fallback when encountering the exception
+      // SPARK-37069: not all Hive versions have the above method (e.g., Hive 2.3.9 has it but
+      // 2.3.8 don't), therefore here we fallback when encountering the exception.
       case _: NoSuchMethodError =>
         Hive.get(conf)
     }
