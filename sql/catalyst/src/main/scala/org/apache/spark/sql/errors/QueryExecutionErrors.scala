@@ -589,8 +589,9 @@ object QueryExecutionErrors {
   def cannotReadParquetFilesError(
       e: Exception,
       path: String,
-      notice: String): Throwable = {
-    val message = s"Encounter error while reading parquet file $path. $notice Details: "
+      reason: Option[String] = None): Throwable = {
+    val message = s"Encountered error while reading Parquet file $path. " +
+      s"${reason.getOrElse("")} Details: "
     new QueryExecutionException(message, e)
   }
 

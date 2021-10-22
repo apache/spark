@@ -430,7 +430,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         "in the corresponding files. Details:"
       assert(e.getCause.isInstanceOf[QueryExecutionException])
       assert(e.getCause.getCause.isInstanceOf[ParquetDecodingException])
-      assert(e.getCause.getMessage.startsWith(expectedMessage))
+      assert(e.getCause.getMessage.contains(expectedMessage))
     }
   }
 
