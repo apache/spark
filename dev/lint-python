@@ -127,21 +127,21 @@ function pycodestyle_test {
 
 
 function mypy_annotation_test {
-    local PYTEST_REPORT=
-    local PYTEST_STATUS=
+    local MYPY_REPORT=
+    local MYPY_STATUS=
 
     echo "starting mypy annotations test..."
-    PYTEST_REPORT=$( ($MYPY_BUILD \
+    MYPY_REPORT=$( ($MYPY_BUILD \
       --config-file python/mypy.ini \
       --cache-dir /tmp/.mypy_cache/ \
       python/pyspark) 2>&1)
-    PYTEST_STATUS=$?
+    MYPY_STATUS=$?
 
-    if [ "$PYTEST_STATUS" -ne 0 ]; then
+    if [ "$MYPY_STATUS" -ne 0 ]; then
         echo "annotations failed mypy checks:"
-        echo "$PYTEST_REPORT"
-        echo "$PYTEST_STATUS"
-        exit "$PYTEST_STATUS"
+        echo "$MYPY_REPORT"
+        echo "$MYPY_STATUS"
+        exit "$MYPY_STATUS"
     else
         echo "annotations passed mypy checks."
         echo
@@ -187,6 +187,15 @@ function mypy_test {
 
     if ! hash "$MYPY_BUILD" 2> /dev/null; then
         echo "The $MYPY_BUILD command was not found. Skipping for now."
+        return
+    fi
+
+    _MYPY_VERSION=($($MYPY_BUILD --version))
+    MYPY_VERSION="${_MYPY_VERSION[1]}"
+    EXPECTED_MYPY="$(satisfies_min_version $MYPY_VERSION $MINIMUM_MYPY)"
+
+    if [[ "$EXPECTED_MYPY" == "False" ]]; then
+        echo "The minimum mypy version needs to be $MINIMUM_MYPY. Your current version is $MYPY_VERSION. Skipping for now."
         return
     fi
 
