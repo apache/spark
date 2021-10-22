@@ -1188,6 +1188,9 @@ case class Offset(offsetExpr: Expression, child: LogicalPlan) extends OrderPrese
       case _ => None
     }
   }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): Offset =
+    copy(child = newChild)
 }
 
 /**
@@ -1205,6 +1208,9 @@ case class GlobalLimitAndOffset(
       case _ => None
     }
   }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): GlobalLimitAndOffset =
+    copy(child = newChild)
 }
 
 /**
@@ -1344,6 +1350,8 @@ case class LimitRange0(startExpr: Expression, endExpr: Expression, child: Logica
       case _ => None
     }
   }
+  override protected def withNewChildInternal(newChild: LogicalPlan): LimitRange0 =
+    copy(child = newChild)
 }
 
 /**

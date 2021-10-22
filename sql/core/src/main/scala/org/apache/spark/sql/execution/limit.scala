@@ -254,6 +254,9 @@ case class CollectLimitRangeExec(start: Int, end: Int, child: SparkPlan) extends
         locallyLimited, child.output, SinglePartition, serializer, writeMetrics), readMetrics)
     shuffled.mapPartitionsInternal(_.slice(start, end))
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
 }
 
 /**
@@ -292,6 +295,9 @@ case class RangeLimitExec(start: Int, limit: Int, child: SparkPlan) extends Base
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
     iter.slice(start, limit)
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
 }
 
 /**
@@ -449,4 +455,7 @@ case class TakeOrderedRangeAndProjectExec(
     s"TakeOrderedRangeAndProject" +
       s"(start=$start, end=$end, orderBy=$orderByString, output=$outputString)"
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
 }
