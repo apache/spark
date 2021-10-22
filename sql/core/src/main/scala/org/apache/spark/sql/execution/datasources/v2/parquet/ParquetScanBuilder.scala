@@ -111,8 +111,7 @@ case class ParquetScanBuilder(
       schema,
       partitionNameSet,
       dataFilters,
-      isAllowedTypeForMinMaxAggregate,
-      sparkSession) match {
+      isAllowedTypeForMinMaxAggregate) match {
 
       case Some(schema) =>
         finalSchema = schema

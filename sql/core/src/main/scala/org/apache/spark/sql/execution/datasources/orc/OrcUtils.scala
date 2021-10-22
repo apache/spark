@@ -29,7 +29,7 @@ import org.apache.hadoop.hive.serde2.io.{DateWritable, HiveDecimalWritable}
 import org.apache.hadoop.io.{BooleanWritable, ByteWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, ShortWritable, Text, WritableComparable}
 import org.apache.orc.{BooleanColumnStatistics, ColumnStatistics, DateColumnStatistics, DecimalColumnStatistics, DoubleColumnStatistics, IntegerColumnStatistics, OrcConf, OrcFile, Reader, StringColumnStatistics, TypeDescription, Writer}
 
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
+import org.apache.spark.SPARK_VERSION_SHORT
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
@@ -392,7 +392,6 @@ object OrcUtils extends Logging {
    */
   def createAggInternalRowFromFooter(
       reader: Reader,
-      filePath: String,
       dataSchema: StructType,
       partitionSchema: StructType,
       aggregation: Aggregation,
@@ -425,7 +424,7 @@ object OrcUtils extends Logging {
             case IntegerType => new IntWritable(value.toInt)
             case LongType => new LongWritable(value)
             case _ => throw new IllegalArgumentException(
-              s"getMaxFromColumnStatistics should not take type $dataType" +
+              s"getMaxFromColumnStatistics should not take type $dataType " +
               "for IntegerColumnStatistics")
           }
         case s: DoubleColumnStatistics =>
@@ -456,14 +455,12 @@ object OrcUtils extends Logging {
           val columnName = max.column.fieldNames.head
           val statistics = getColumnStatistics(columnName)
           val dataType = aggSchema(index).dataType
-          val value = getMinMaxFromColumnStatistics(statistics, dataType, isMax = true)
-          value
+          getMinMaxFromColumnStatistics(statistics, dataType, isMax = true)
         case (min: Min, index) =>
           val columnName = min.column.fieldNames.head
           val statistics = getColumnStatistics(columnName)
           val dataType = aggSchema.apply(index).dataType
-          val value = getMinMaxFromColumnStatistics(statistics, dataType, isMax = false)
-          value
+          getMinMaxFromColumnStatistics(statistics, dataType, isMax = false)
         case (count: Count, _) =>
           val columnName = count.column.fieldNames.head
           val isPartitionColumn = partitionSchema.fields
@@ -471,28 +468,17 @@ object OrcUtils extends Logging {
             .contains(columnName)
           // NOTE: Count(columnName) doesn't include null values.
           // org.apache.orc.ColumnStatistics.getNumberOfValues() returns number of non-null values
-          // for ColumnStatistics of individual column. In addition to this, ORC also returns
-          // number of non-null and null values for its top-level
-          // ColumnStatistics.getNumberOfValues().
+          // for ColumnStatistics of individual column. In addition to this, ORC also stores number
+          // of all values (null and non-null) separately.
           val nonNullRowsCount = if (isPartitionColumn) {
-            val topLevelStatistics = columnsStatistics.getStatistics
-            if (topLevelStatistics.hasNull) {
-              throw new SparkException(s"Illegal ORC top-level column statistics with NULL " +
-                s"values: $topLevelStatistics. Aggregate expression: $count")
-            }
-            topLevelStatistics.getNumberOfValues
+            columnsStatistics.getStatistics.getNumberOfValues
           } else {
             getColumnStatistics(columnName).getNumberOfValues
           }
           new LongWritable(nonNullRowsCount)
         case (_: CountStar, _) =>
           // Count(*) includes both null and non-null values.
-          val topLevelStatistics = columnsStatistics.getStatistics
-          if (topLevelStatistics.hasNull) {
-            throw new SparkException(s"Illegal ORC top-level column statistics with NULL " +
-              s"values: $topLevelStatistics. Aggregate expression: Count(*)")
-          }
-          new LongWritable(topLevelStatistics.getNumberOfValues)
+          new LongWritable(columnsStatistics.getStatistics.getNumberOfValues)
         case (x, _) =>
           throw new IllegalArgumentException(
             s"createAggInternalRowFromFooter should not take $x as the aggregate expression")

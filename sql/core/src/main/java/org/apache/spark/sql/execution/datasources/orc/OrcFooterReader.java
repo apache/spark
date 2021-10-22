@@ -38,29 +38,29 @@ public class OrcFooterReader {
    * @param orcReader the reader to read ORC file footer.
    * @return Statistics for all columns in the file.
    */
-  public static OrcColumnsStatistics readStatistics(Reader orcReader) {
+  public static OrcColumnStatistics readStatistics(Reader orcReader) {
     TypeDescription orcSchema = orcReader.getSchema();
     ColumnStatistics[] orcStatistics = orcReader.getStatistics();
-    StructType dataType = OrcUtils.toCatalystSchema(orcSchema);
-    return convertStatistics(dataType, new LinkedList<>(Arrays.asList(orcStatistics)));
+    StructType sparkSchema = OrcUtils.toCatalystSchema(orcSchema);
+    return convertStatistics(sparkSchema, new LinkedList<>(Arrays.asList(orcStatistics)));
   }
 
   /**
-   * Convert a queue of ORC {@link ColumnStatistics}s into Spark {@link OrcColumnsStatistics}.
+   * Convert a queue of ORC {@link ColumnStatistics}s into Spark {@link OrcColumnStatistics}.
    * The queue of ORC {@link ColumnStatistics}s are assumed to be ordered as tree pre-order.
    */
-  private static OrcColumnsStatistics convertStatistics(
-      DataType dataType, Queue<ColumnStatistics> orcStatistics) {
-    OrcColumnsStatistics statistics = new OrcColumnsStatistics(orcStatistics.remove());
-    if (dataType instanceof StructType) {
-      for (StructField field : ((StructType) dataType).fields()) {
+  private static OrcColumnStatistics convertStatistics(
+      DataType sparkSchema, Queue<ColumnStatistics> orcStatistics) {
+    OrcColumnStatistics statistics = new OrcColumnStatistics(orcStatistics.remove());
+    if (sparkSchema instanceof StructType) {
+      for (StructField field : ((StructType) sparkSchema).fields()) {
         statistics.add(convertStatistics(field.dataType(), orcStatistics));
       }
-    } else if (dataType instanceof MapType) {
-      statistics.add(convertStatistics(((MapType) dataType).keyType(), orcStatistics));
-      statistics.add(convertStatistics(((MapType) dataType).valueType(), orcStatistics));
-    } else if (dataType instanceof ArrayType) {
-      statistics.add(convertStatistics(((ArrayType) dataType).elementType(), orcStatistics));
+    } else if (sparkSchema instanceof MapType) {
+      statistics.add(convertStatistics(((MapType) sparkSchema).keyType(), orcStatistics));
+      statistics.add(convertStatistics(((MapType) sparkSchema).valueType(), orcStatistics));
+    } else if (sparkSchema instanceof ArrayType) {
+      statistics.add(convertStatistics(((ArrayType) sparkSchema).elementType(), orcStatistics));
     }
     return statistics;
   }

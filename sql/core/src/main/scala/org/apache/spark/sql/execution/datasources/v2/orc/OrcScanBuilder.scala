@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.datasources.orc.OrcFilters
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, MapType, StructType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, MapType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class OrcScanBuilder(
@@ -82,7 +82,9 @@ case class OrcScanBuilder(
       dataType match {
         // Not push down complex and Timestamp type.
         // Not push down Binary type as ORC does not write min/max statistics for it.
-        case StructType(_) | ArrayType(_, _) | MapType(_, _, _) | TimestampType | BinaryType =>
+        // Not push down String type as ORC truncates min/max statistics for it.
+        case StructType(_) | ArrayType(_, _) | MapType(_, _, _) | TimestampType | BinaryType |
+             StringType =>
           false
         case _ => true
       }
@@ -93,8 +95,7 @@ case class OrcScanBuilder(
       schema,
       partitionNameSet,
       dataFilters,
-      isAllowedTypeForMinMaxAggregate,
-      sparkSession) match {
+      isAllowedTypeForMinMaxAggregate) match {
 
       case Some(schema) =>
         finalSchema = schema

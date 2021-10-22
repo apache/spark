@@ -111,7 +111,7 @@ trait FileSourceAggregatePushDownSuite
       spark.range(10).selectExpr("id", "id % 3 as p")
         .write.partitionBy("p").format(format).save(dir.getCanonicalPath)
       withTempView("tmp") {
-        spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+        spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
         withSQLConf(aggPushDownEnabledKey -> "true") {
           val max = sql("SELECT Max(p) FROM tmp")
           max.queryExecution.optimizedPlan.collect {
@@ -126,15 +126,16 @@ trait FileSourceAggregatePushDownSuite
     }
   }
 
-  test("aggregate push down - Count(partition Col): push down") {
+  test("Count(partition column): push down") {
     withTempPath { dir =>
       spark.range(10).selectExpr("id", "id % 3 as p")
-        .write.partitionBy("p").parquet(dir.getCanonicalPath)
+        .write.partitionBy("p").format(format).save(dir.getCanonicalPath)
       withTempView("tmp") {
-        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
-        Seq("false", "true").foreach { enableVectorizedReader =>
-          withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
-            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+        spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
+        val enableVectorizedReader = Seq("false", "true")
+        for (testVectorizedReader <- enableVectorizedReader) {
+          withSQLConf(aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> testVectorizedReader) {
             val count = sql("SELECT COUNT(p) FROM tmp")
             count.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>

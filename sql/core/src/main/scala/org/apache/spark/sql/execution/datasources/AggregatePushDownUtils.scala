@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.expressions.NamedReference
@@ -38,10 +37,9 @@ object AggregatePushDownUtils {
   def getSchemaForPushedAggregation(
       aggregation: Aggregation,
       schema: StructType,
-      partitionNameSet: Set[String],
+      partitionNames: Set[String],
       dataFilters: Seq[Expression],
-      isAllowedTypeForMinMaxAggregate: DataType => Boolean,
-      sparkSession: SparkSession): Option[StructType] = {
+      isAllowedTypeForMinMaxAggregate: DataType => Boolean): Option[StructType] = {
 
     var finalSchema = new StructType()
 
@@ -50,7 +48,7 @@ object AggregatePushDownUtils {
     }
 
     def isPartitionCol(col: NamedReference) = {
-      partitionNameSet.contains(col.fieldNames.head)
+      partitionNames.contains(col.fieldNames.head)
     }
 
     def processMinOrMax(agg: AggregateFunc): Boolean = {

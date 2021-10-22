@@ -27,13 +27,14 @@ import java.util.List;
  *
  * Because ORC {@link ColumnStatistics}s are stored as an flatten array in ORC file footer,
  * this class is used to covert ORC {@link ColumnStatistics}s from array to nested tree structure,
- * according to data types. This is used for aggregate push down in ORC.
+ * according to data types. The flatten array stores all data types (including nested types) in
+ * tree pre-ordering. This is used for aggregate push down in ORC.
  */
-public class OrcColumnsStatistics {
+public class OrcColumnStatistics {
   private final ColumnStatistics statistics;
-  private final List<OrcColumnsStatistics> children;
+  private final List<OrcColumnStatistics> children;
 
-  public OrcColumnsStatistics(ColumnStatistics statistics) {
+  public OrcColumnStatistics(ColumnStatistics statistics) {
     this.statistics = statistics;
     this.children = new ArrayList<>();
   }
@@ -42,7 +43,7 @@ public class OrcColumnsStatistics {
     return statistics;
   }
 
-  public OrcColumnsStatistics get(int ordinal) {
+  public OrcColumnStatistics get(int ordinal) {
     if (ordinal < 0 || ordinal >= children.size()) {
       throw new IndexOutOfBoundsException(
         String.format("Ordinal %d out of bounds of statistics size %d", ordinal, children.size()));
@@ -50,7 +51,7 @@ public class OrcColumnsStatistics {
     return children.get(ordinal);
   }
 
-  public void add(OrcColumnsStatistics newChild) {
+  public void add(OrcColumnStatistics newChild) {
     children.add(newChild);
   }
 }
