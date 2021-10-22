@@ -636,10 +636,12 @@ private[hive] class HiveClientImpl(
     val matchingParts =
       specs.flatMap { s =>
         assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
+        // Since Spark can't know the actual num of matching partitions,
+        // here Spark update hive client calls one by one.
+        HiveCatalogMetrics.incrementHiveClientCalls(1)
         // The provided spec here can be a partial spec, i.e. it will match all partitions
         // whose specs are supersets of this partial spec. E.g. If a table has partitions
         // (b='1', c='1') and (b='1', c='2'), a partial spec of (b='1') will match both.
-        HiveCatalogMetrics.incrementHiveClientCalls(1)
         val parts = client.getPartitions(hiveTable, s.asJava).asScala
         if (parts.isEmpty && !ignoreIfNotExists) {
           throw new NoSuchPartitionsException(db, table, Seq(s))
@@ -666,6 +668,8 @@ private[hive] class HiveClientImpl(
              """.stripMargin)
           throw e
       } finally {
+        // Since Spark can't know the actual num of matching partitions,
+        // here Spark update hive client calls one by one.
         HiveCatalogMetrics.incrementHiveClientCalls(1)
       }
       droppedParts += partition
@@ -676,11 +680,13 @@ private[hive] class HiveClientImpl(
       db: String,
       table: String,
       specs: Seq[TablePartitionSpec],
-      newSpecs: Seq[TablePartitionSpec]): Unit = withHiveState {
+      newSpecs: Seq[TablePartitionSpec]): Unit = withHiveState(0) {
     require(specs.size == newSpecs.size, "number of old and new partition specs differ")
     val catalogTable = getTable(db, table)
     val hiveTable = toHiveTable(catalogTable, Some(userName))
     specs.zip(newSpecs).foreach { case (oldSpec, newSpec) =>
+      // Since Spark may throw exception when call client.getPartition(),
+      // Spark need to update hive client calls one by one.
       HiveCatalogMetrics.incrementHiveClientCalls(1)
       if (client.getPartition(hiveTable, newSpec.asJava, false) != null) {
         throw new PartitionAlreadyExistsException(db, table, newSpec)
@@ -688,6 +694,8 @@ private[hive] class HiveClientImpl(
       val hivePart = getPartitionOption(catalogTable, oldSpec)
         .map { p => toHivePartition(p.copy(spec = newSpec), hiveTable) }
         .getOrElse { throw new NoSuchPartitionException(db, table, oldSpec) }
+      // Since Spark may throw exception when call client.getPartition(),
+      // Spark need to update hive client calls one by one.
       HiveCatalogMetrics.incrementHiveClientCalls(1)
       client.renamePartition(hiveTable, oldSpec.asJava, hivePart)
     }
@@ -972,6 +980,8 @@ private[hive] class HiveClientImpl(
   def reset(): Unit = withHiveState(2) {
     val allTables = client.getAllTables("default")
     val (mvs, others) = allTables.asScala.map(t => {
+      // Since Spark can't know the actual num of tables,
+      // here Spark update hive client calls one by one.
       HiveCatalogMetrics.incrementHiveClientCalls(1)
       client.getTable("default", t)
     }).partition(_.getTableType.toString.equals("MATERIALIZED_VIEW"))
@@ -980,6 +990,8 @@ private[hive] class HiveClientImpl(
     mvs.foreach { table =>
       val t = table.getTableName
       logDebug(s"Deleting materialized view $t")
+      // Since Spark can't know the actual num of materialized views,
+      // here Spark update hive client calls one by one.
       HiveCatalogMetrics.incrementHiveClientCalls(1)
       client.dropTable("default", t)
     }
@@ -988,26 +1000,35 @@ private[hive] class HiveClientImpl(
       val t = table.getTableName
       logDebug(s"Deleting table $t")
       try {
+        // Since Spark can't know the actual num of tables that are not materialized views,
+        // here Spark update hive client calls one by one.
         HiveCatalogMetrics.incrementHiveClientCalls(1)
         client.getIndexes("default", t, 255).asScala.foreach { index =>
+          // Since Spark can't know the actual num of indexes,
+          // here Spark update hive client calls one by one.
           HiveCatalogMetrics.incrementHiveClientCalls(1)
           shim.dropIndex(client, "default", t, index.getIndexName)
         }
         if (!table.isIndexTable) {
+          // Since Spark can't know if the table is index table before call dropTable(),
+          // here Spark update hive client calls once.
           HiveCatalogMetrics.incrementHiveClientCalls(1)
           client.dropTable("default", t)
         }
       } catch {
         case _: NoSuchMethodError =>
+          // Since Spark can't know if the operation will throw exception,
+          // here Spark update hive client calls once.
           // HIVE-18448 Hive 3.0 remove index APIs
           HiveCatalogMetrics.incrementHiveClientCalls(1)
           client.dropTable("default", t)
       }
     }
-    HiveCatalogMetrics.incrementHiveClientCalls(1)
     client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>
-      logDebug(s"Dropping Database: $db")
+      // Since Spark can't know if the actual num of databases,
+      // here Spark update hive client calls once here.
       HiveCatalogMetrics.incrementHiveClientCalls(1)
+      logDebug(s"Dropping Database: $db")
       client.dropDatabase(db, true, false, true)
     }
   }
