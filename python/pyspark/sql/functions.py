@@ -1681,7 +1681,7 @@ def struct(__cols: Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> C
 
 
 def struct(
-        *cols: Union["ColumnOrName", Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
 ) -> Column:
     """Creates a new struct column.
 
@@ -3591,7 +3591,7 @@ def create_map(__cols: Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]]) 
 
 
 def create_map(
-        *cols: Union["ColumnOrName", Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
 ) -> Column:
     """Creates a new map column.
 
@@ -3658,7 +3658,7 @@ def array(__cols: Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Co
 
 
 def array(
-        *cols: Union["ColumnOrName", Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
 ) -> Column:
     """Creates a new array column.
 
