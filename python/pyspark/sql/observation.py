@@ -14,16 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Dict, Optional
+
+from py4j.java_gateway import JavaObject, JVMView  # type: ignore[import]
 
 from pyspark.sql import column
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 
 __all__ = ["Observation"]
-
-if TYPE_CHECKING:
-    from pyspark import SparkContext  # noqa: F401
 
 
 class Observation:
@@ -80,8 +79,8 @@ class Observation:
             if name == '':
                 raise ValueError("name should not be empty")
         self._name = name
-        self._jvm = None
-        self._jo = None
+        self._jvm: Optional[JVMView] = None
+        self._jo: Optional[JavaObject] = None
 
     def _on(self, df: DataFrame, *exprs: Column) -> DataFrame:
         """Attaches this observation to the given :class:`DataFrame` to observe aggregations.
@@ -102,14 +101,13 @@ class Observation:
         assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
         assert self._jo is None, "an Observation can be used with a DataFrame only once"
 
-        self._jvm = df._sc._jvm  # type: ignore[assignment, attr-defined]
+        self._jvm = df._sc._jvm  # type: ignore[attr-defined]
         cls = self._jvm.org.apache.spark.sql.Observation  # type: ignore[attr-defined]
         self._jo = cls(self._name) if self._name is not None else cls()
-        observed_df = self._jo.on(  # type: ignore[attr-defined]
+        observed_df = self._jo.on(
             df._jdf,
             exprs[0]._jc,
-            column._to_seq(
-                df._sc, [c._jc for c in exprs[1:]])  # type: ignore[attr-defined]
+            column._to_seq(df._sc, [c._jc for c in exprs[1:]])
         )
         return DataFrame(observed_df, df.sql_ctx)
 

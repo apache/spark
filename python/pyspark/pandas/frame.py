@@ -6415,7 +6415,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4  1   True  1.0
         5  2  False  2.0
         """
-        from pyspark.sql.types import _parse_datatype_string  # type: ignore[attr-defined]
+        from pyspark.sql.types import _parse_datatype_string
 
         include_list: List[str]
         if not is_list_like(include):

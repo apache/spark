@@ -16,14 +16,7 @@
 #
 from abc import ABCMeta, abstractmethod
 from functools import partial
-from typing import (
-    Any,
-    Callable,
-    Generic,
-    List,
-    Optional,
-    cast,
-)
+from typing import Any, Callable, Generic, List, Optional
 
 from pyspark.sql import Window
 from pyspark.sql import functions as F
@@ -162,12 +155,13 @@ class Rolling(RollingLike[FrameLike]):
 
         super().__init__(window, min_periods)
 
+        self._psdf_or_psser = psdf_or_psser
+
         if not isinstance(psdf_or_psser, (DataFrame, Series)):
             raise TypeError(
                 "psdf_or_psser must be a series or dataframe; however, got: %s"
                 % type(psdf_or_psser)
             )
-        self._psdf_or_psser = psdf_or_psser
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeRolling, item):
@@ -179,12 +173,9 @@ class Rolling(RollingLike[FrameLike]):
         raise AttributeError(item)
 
     def _apply_as_series_or_frame(self, func: Callable[[Column], Column]) -> FrameLike:
-        return cast(
-            FrameLike,
-            self._psdf_or_psser._apply_series_op(
-                lambda psser: psser._with_new_scol(func(psser.spark.column)),  # TODO: dtype?
-                should_resolve=True,
-            ),
+        return self._psdf_or_psser._apply_series_op(
+            lambda psser: psser._with_new_scol(func(psser.spark.column)),  # TODO: dtype?
+            should_resolve=True,
         )
 
     def count(self) -> FrameLike:

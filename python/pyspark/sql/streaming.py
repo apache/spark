@@ -20,11 +20,11 @@ import json
 from collections.abc import Iterator
 from typing import cast, overload, Any, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
-from py4j.java_gateway import java_import, JavaObject
+from py4j.java_gateway import java_import, JavaObject  # type: ignore[import]
 
 from pyspark import since
 from pyspark.sql.column import _to_seq
-from pyspark.sql.readwriter import OptionUtils, to_str  # type: ignore[attr-defined]
+from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.types import Row, StructType, StructField, StringType
 from pyspark.sql.utils import ForeachBatchFunction, StreamingQueryException
 
@@ -319,7 +319,7 @@ class DataStreamReader(OptionUtils):
     """
 
     def __init__(self, spark: "SQLContext") -> None:
-        self._jreader = spark._ssql_ctx.readStream()  # type: ignore[attr-defined]
+        self._jreader = spark._ssql_ctx.readStream()
         self._spark = spark
 
     def _df(self, jdf: JavaObject) -> "DataFrame":
@@ -532,7 +532,7 @@ class DataStreamReader(OptionUtils):
         >>> json_sdf.schema == sdf_schema
         True
         """
-        self._set_opts(  # type: ignore[attr-defined]
+        self._set_opts(
             schema=schema, primitivesAsString=primitivesAsString, prefersDecimal=prefersDecimal,
             allowComments=allowComments, allowUnquotedFieldNames=allowUnquotedFieldNames,
             allowSingleQuotes=allowSingleQuotes, allowNumericLeadingZero=allowNumericLeadingZero,
@@ -576,7 +576,7 @@ class DataStreamReader(OptionUtils):
         >>> orc_sdf.schema == sdf_schema
         True
         """
-        self._set_opts(   # type: ignore[attr-defined]
+        self._set_opts(
             mergeSchema=mergeSchema,
             pathGlobFilter=pathGlobFilter,
             recursiveFileLookup=recursiveFileLookup
@@ -622,7 +622,7 @@ class DataStreamReader(OptionUtils):
         >>> parquet_sdf.schema == sdf_schema
         True
         """
-        self._set_opts(  # type: ignore[attr-defined]
+        self._set_opts(
             mergeSchema=mergeSchema,
             pathGlobFilter=pathGlobFilter,
             recursiveFileLookup=recursiveFileLookup,
@@ -678,7 +678,7 @@ class DataStreamReader(OptionUtils):
         >>> "value" in str(text_sdf.schema)
         True
         """
-        self._set_opts(  # type: ignore[attr-defined]
+        self._set_opts(
             wholetext=wholetext, lineSep=lineSep, pathGlobFilter=pathGlobFilter,
             recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, str):
@@ -757,7 +757,7 @@ class DataStreamReader(OptionUtils):
         >>> csv_sdf.schema == sdf_schema
         True
         """
-        self._set_opts(  # type: ignore[attr-defined]
+        self._set_opts(
             schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape, comment=comment,
             header=header, inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
             ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace, nullValue=nullValue,
@@ -929,7 +929,7 @@ class DataStreamWriter(object):
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]
         self._jwrite = self._jwrite.partitionBy(
-            _to_seq(self._spark._sc, cols))  # type: ignore[attr-defined]
+            _to_seq(self._spark._sc, cols))
         return self
 
     def queryName(self, queryName: str) -> "DataStreamWriter":
@@ -1215,9 +1215,7 @@ class DataStreamWriter(object):
             func = func_with_open_process_close  # type: ignore[assignment]
 
         serializer = AutoBatchedSerializer(PickleSerializer())
-        wrapped_func = _wrap_function(
-            self._spark._sc,  # type: ignore[attr-defined]
-            func, serializer, serializer)
+        wrapped_func = _wrap_function(self._spark._sc, func, serializer, serializer)
         jForeachWriter = (
             self._spark._sc    # type: ignore[attr-defined]
             ._jvm.org.apache.spark.sql.execution.python.PythonForeachWriter(
@@ -1424,7 +1422,7 @@ def _test() -> None:
     import tempfile
     from pyspark.sql import SparkSession, SQLContext
     import pyspark.sql.streaming
-    from py4j.protocol import Py4JError
+    from py4j.protocol import Py4JError  # type: ignore[import]
 
     os.chdir(os.environ["SPARK_HOME"])
 

@@ -38,7 +38,7 @@ from typing import (
 
 from pyspark import since, SparkContext
 from pyspark.rdd import PythonEvalType
-from pyspark.sql.column import (  # type: ignore[attr-defined]
+from pyspark.sql.column import (
     Column,
     _to_java_column,
     _to_seq,
@@ -47,7 +47,7 @@ from pyspark.sql.column import (  # type: ignore[attr-defined]
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import ArrayType, DataType, StringType, StructType
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
-from pyspark.sql.udf import UserDefinedFunction, _create_udf  # type: ignore[attr-defined] # noqa: F401
+from pyspark.sql.udf import UserDefinedFunction, _create_udf  # noqa: F401
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
 from pyspark.sql.utils import to_str
@@ -874,8 +874,8 @@ def collect_set(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df2 = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
-    >>> df2.agg(collect_set('age')).collect()
-    [Row(collect_set(age)=[5, 2])]
+    >>> df2.agg(array_sort(collect_set('age')).alias('c')).collect()
+    [Row(c=[2, 5])]
     """
     return _invoke_function_over_column("collect_set", col)
 

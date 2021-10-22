@@ -127,6 +127,10 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     }
   }
 
+  override def toString(): String = {
+    s"${getClass.getSimpleName}${fields.map(_.toString).mkString("(", ",", ")")}"
+  }
+
   private lazy val _hashCode: Int = java.util.Arrays.hashCode(fields.asInstanceOf[Array[AnyRef]])
   override def hashCode(): Int = _hashCode
 

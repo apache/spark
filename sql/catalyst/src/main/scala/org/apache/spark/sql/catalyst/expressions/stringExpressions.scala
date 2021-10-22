@@ -1329,13 +1329,30 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
 }
 
 /**
+ * Helper class for implementing StringLPad and StringRPad.
+ * Returns the default expression to be used in StringLPad or StringRPad based on the type of
+ * the input expression.
+ * For character string expressions the default padding expression is the string literal ' '.
+ * For byte sequence expressions the default padding expression is the byte literal 0x00.
+ */
+object StringPadDefaultValue {
+  def get(str: Expression): Expression = {
+    str.dataType match {
+      case StringType => Literal(" ")
+      case BinaryType => Literal(Array[Byte](0))
+    }
+  }
+}
+
+/**
  * Returns str, left-padded with pad to a length of len.
  */
 @ExpressionDescription(
   usage = """
     _FUNC_(str, len[, pad]) - Returns `str`, left-padded with `pad` to a length of `len`.
-      If `str` is longer than `len`, the return value is shortened to `len` characters.
-      If `pad` is not specified, `str` will be padded to the left with space characters.
+      If `str` is longer than `len`, the return value is shortened to `len` characters or bytes.
+      If `pad` is not specified, `str` will be padded to the left with space characters if it is
+      a character string, and with zeros if it is a byte sequence.
   """,
   examples = """
     Examples:
@@ -1345,6 +1362,10 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
        h
       > SELECT _FUNC_('hi', 5);
           hi
+      > SELECT hex(_FUNC_(unhex('aabb'), 5));
+          000000AABB
+      > SELECT hex(_FUNC_(unhex('aabb'), 5, unhex('1122')));
+          112211AABB
   """,
   since = "1.5.0",
   group = "string_funcs")
@@ -1352,21 +1373,33 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression = Litera
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   def this(str: Expression, len: Expression) = {
-    this(str, len, Literal(" "))
+    this(str, len, StringPadDefaultValue.get(str))
   }
 
   override def first: Expression = str
   override def second: Expression = len
   override def third: Expression = pad
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, StringType)
 
-  override def nullSafeEval(str: Any, len: Any, pad: Any): Any = {
-    str.asInstanceOf[UTF8String].lpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
+  override def dataType: DataType = str.dataType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(StringType, BinaryType), IntegerType, TypeCollection(StringType, BinaryType))
+
+  override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
+    str.dataType match {
+      case StringType => string.asInstanceOf[UTF8String]
+        .lpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
+      case BinaryType => ByteArray.lpad(string.asInstanceOf[Array[Byte]],
+        len.asInstanceOf[Int], pad.asInstanceOf[Array[Byte]])
+    }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (str, len, pad) => s"$str.lpad($len, $pad)")
+    defineCodeGen(ctx, ev, (string, len, pad) => {
+      str.dataType match {
+        case StringType => s"$string.lpad($len, $pad)"
+        case BinaryType => s"${classOf[ByteArray].getName}.lpad($string, $len, $pad)"
+      }
+    })
   }
 
   override def prettyName: String = "lpad"
@@ -1383,7 +1416,8 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression = Litera
   usage = """
     _FUNC_(str, len[, pad]) - Returns `str`, right-padded with `pad` to a length of `len`.
       If `str` is longer than `len`, the return value is shortened to `len` characters.
-      If `pad` is not specified, `str` will be padded to the right with space characters.
+      If `pad` is not specified, `str` will be padded to the right with space characters if it is
+      a character string, and with zeros if it is a binary string.
   """,
   examples = """
     Examples:
@@ -1393,6 +1427,10 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression = Litera
        h
       > SELECT _FUNC_('hi', 5);
        hi
+      > SELECT hex(_FUNC_(unhex('aabb'), 5));
+          AABB000000
+      > SELECT hex(_FUNC_(unhex('aabb'), 5, unhex('1122')));
+          AABB112211
   """,
   since = "1.5.0",
   group = "string_funcs")
@@ -1400,22 +1438,33 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression = Litera
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   def this(str: Expression, len: Expression) = {
-    this(str, len, Literal(" "))
+    this(str, len, StringPadDefaultValue.get(str))
   }
 
   override def first: Expression = str
   override def second: Expression = len
   override def third: Expression = pad
 
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, StringType)
+  override def dataType: DataType = str.dataType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(StringType, BinaryType), IntegerType, TypeCollection(StringType, BinaryType))
 
-  override def nullSafeEval(str: Any, len: Any, pad: Any): Any = {
-    str.asInstanceOf[UTF8String].rpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
+  override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
+    str.dataType match {
+      case StringType => string.asInstanceOf[UTF8String]
+        .rpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
+      case BinaryType => ByteArray.rpad(string.asInstanceOf[Array[Byte]],
+        len.asInstanceOf[Int], pad.asInstanceOf[Array[Byte]])
+    }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (str, len, pad) => s"$str.rpad($len, $pad)")
+    defineCodeGen(ctx, ev, (string, len, pad) => {
+      str.dataType match {
+        case StringType => s"$string.rpad($len, $pad)"
+        case BinaryType => s"${classOf[ByteArray].getName}.rpad($string, $len, $pad)"
+      }
+    })
   }
 
   override def prettyName: String = "rpad"

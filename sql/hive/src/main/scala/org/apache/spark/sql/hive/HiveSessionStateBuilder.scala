@@ -17,9 +17,17 @@
 
 package org.apache.spark.sql.hive
 
+import java.lang.reflect.InvocationTargetException
+
+import scala.util.control.NonFatal
+
+import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
+import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, ResolveSessionCatalog}
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
+import org.apache.spark.sql.catalyst.catalog.{ExternalCatalogWithListener, InvalidUDFClassException}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlanner
@@ -29,9 +37,10 @@ import org.apache.spark.sql.execution.command.CommandCheck
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.TableCapabilityCheck
 import org.apache.spark.sql.execution.streaming.ResolveWriteToStream
+import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.execution.PruneHiveTablePartitions
-import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState}
+import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState, SparkUDFExpressionBuilder}
 import org.apache.spark.util.Utils
 
 /**
@@ -64,7 +73,8 @@ class HiveSessionStateBuilder(
       tableFunctionRegistry,
       SessionState.newHadoopConf(session.sparkContext.hadoopConfiguration, conf),
       sqlParser,
-      resourceLoader)
+      resourceLoader,
+      HiveUDFExpressionBuilder)
     parentState.foreach(_.catalog.copyStateTo(catalog))
     catalog
   }
@@ -130,6 +140,71 @@ class HiveSessionResourceLoader(
     resolveJars(uri).foreach { p =>
       client.addJar(p)
       super.addJar(p)
+    }
+  }
+}
+
+object HiveUDFExpressionBuilder extends SparkUDFExpressionBuilder {
+  override def makeExpression(name: String, clazz: Class[_], input: Seq[Expression]): Expression = {
+    // Current thread context classloader may not be the one loaded the class. Need to switch
+    // context classloader to initialize instance properly.
+    Utils.withContextClassLoader(clazz.getClassLoader) {
+      try {
+        super.makeExpression(name, clazz, input)
+      } catch {
+        // If `super.makeFunctionExpression` throw `InvalidUDFClassException`, we construct
+        // Hive UDF/UDAF/UDTF with function definition. Otherwise, we just throw it earlier.
+        case _: InvalidUDFClassException =>
+          makeHiveFunctionExpression(name, clazz, input)
+        case NonFatal(e) => throw e
+      }
+    }
+  }
+
+  private def makeHiveFunctionExpression(
+      name: String,
+      clazz: Class[_],
+      input: Seq[Expression]): Expression = {
+    var udfExpr: Option[Expression] = None
+    try {
+      // When we instantiate hive UDF wrapper class, we may throw exception if the input
+      // expressions don't satisfy the hive UDF, such as type mismatch, input number
+      // mismatch, etc. Here we catch the exception and throw AnalysisException instead.
+      if (classOf[UDF].isAssignableFrom(clazz)) {
+        udfExpr = Some(HiveSimpleUDF(name, new HiveFunctionWrapper(clazz.getName), input))
+        udfExpr.get.dataType // Force it to check input data types.
+      } else if (classOf[GenericUDF].isAssignableFrom(clazz)) {
+        udfExpr = Some(HiveGenericUDF(name, new HiveFunctionWrapper(clazz.getName), input))
+        udfExpr.get.dataType // Force it to check input data types.
+      } else if (classOf[AbstractGenericUDAFResolver].isAssignableFrom(clazz)) {
+        udfExpr = Some(HiveUDAFFunction(name, new HiveFunctionWrapper(clazz.getName), input))
+        udfExpr.get.dataType // Force it to check input data types.
+      } else if (classOf[UDAF].isAssignableFrom(clazz)) {
+        udfExpr = Some(HiveUDAFFunction(
+          name,
+          new HiveFunctionWrapper(clazz.getName),
+          input,
+          isUDAFBridgeRequired = true))
+        udfExpr.get.dataType // Force it to check input data types.
+      } else if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
+        udfExpr = Some(HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), input))
+        // Force it to check data types.
+        udfExpr.get.asInstanceOf[HiveGenericUDTF].elementSchema
+      }
+    } catch {
+      case NonFatal(exception) =>
+        val e = exception match {
+          case i: InvocationTargetException => i.getCause
+          case o => o
+        }
+        val errorMsg = s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e"
+        val analysisException = new AnalysisException(errorMsg)
+        analysisException.setStackTrace(e.getStackTrace)
+        throw analysisException
+    }
+    udfExpr.getOrElse {
+      throw new InvalidUDFClassException(
+        s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'")
     }
   }
 }

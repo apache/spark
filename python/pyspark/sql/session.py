@@ -21,7 +21,7 @@ from functools import reduce
 from threading import RLock
 from types import TracebackType
 from typing import (
-    Any, Dict, Iterable, List, Optional, Tuple, Type, Union,
+    Any, ClassVar, Dict, Iterable, List, Optional, Tuple, Type, Union,
     cast, no_type_check, overload, TYPE_CHECKING
 )
 
@@ -34,7 +34,7 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.conversion import SparkConversionMixin
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.types import (  # type: ignore[attr-defined]
+from pyspark.sql.types import (
     AtomicType, DataType, StructType,
     _make_type_verifier, _infer_schema, _has_nulltype, _merge_type, _create_converter,
     _parse_datatype_string
@@ -127,7 +127,7 @@ class SparkSession(SparkConversionMixin):
 
         _lock = RLock()
         _options: Dict[str, Any] = {}
-        _sc = None
+        _sc: Optional[SparkContext] = None
 
         @overload
         def config(self, *, conf: SparkConf) -> "SparkSession.Builder":
@@ -268,8 +268,8 @@ class SparkSession(SparkConversionMixin):
     builder = Builder()
     """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances."""
 
-    _instantiatedSession = None
-    _activeSession = None
+    _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
+    _activeSession: ClassVar[Optional["SparkSession"]] = None
 
     def __init__(self, sparkContext: SparkContext, jsparkSession: Optional[JavaObject] = None):
         from pyspark.sql.context import SQLContext
@@ -292,7 +292,7 @@ class SparkSession(SparkConversionMixin):
         # which is stopped now, we need to renew the instantiated SparkSession.
         # Otherwise, we will use invalid SparkSession when we call Builder.getOrCreate.
         if SparkSession._instantiatedSession is None \
-                or SparkSession._instantiatedSession._sc._jsc is None:
+                or SparkSession._instantiatedSession._sc._jsc is None:  # type: ignore[attr-defined]
             SparkSession._instantiatedSession = self
             SparkSession._activeSession = self
             self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
@@ -845,7 +845,7 @@ class SparkSession(SparkConversionMixin):
         )
         jdf = self._jsparkSession.applySchemaToPythonRDD(jrdd.rdd(), struct.json())
         df = DataFrame(jdf, self._wrapped)
-        df._schema = struct  # type: ignore[attr-defined]
+        df._schema = struct
         return df
 
     def sql(self, sqlQuery: str) -> DataFrame:
@@ -945,7 +945,7 @@ class SparkSession(SparkConversionMixin):
         self._jvm.SparkSession.clearActiveSession()
         SparkSession._instantiatedSession = None
         SparkSession._activeSession = None
-        SQLContext._instantiatedContext = None  # type: ignore[attr-defined]
+        SQLContext._instantiatedContext = None
 
     @since(2.0)
     def __enter__(self) -> "SparkSession":
