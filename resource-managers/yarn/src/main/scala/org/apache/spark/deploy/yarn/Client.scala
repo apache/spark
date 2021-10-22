@@ -1277,10 +1277,14 @@ private[spark] class Client(
     } else {
       val YarnAppReport(appState, finalState, diags) = monitorApplication(appId)
       if (appState == YarnApplicationState.FAILED || finalState == FinalApplicationStatus.FAILED) {
+        var amContainerSuccess = false
         diags.foreach { err =>
+          amContainerSuccess = err.contains("AM Container") && err.contains("exitCode: 0")
           logError(s"Application diagnostics message: $err")
         }
-        throw new SparkException(s"Application $appId finished with failed status")
+        if (!amContainerSuccess) {
+          throw new SparkException(s"Application $appId finished with failed status")
+        }
       }
       if (appState == YarnApplicationState.KILLED || finalState == FinalApplicationStatus.KILLED) {
         throw new SparkException(s"Application $appId is killed")
