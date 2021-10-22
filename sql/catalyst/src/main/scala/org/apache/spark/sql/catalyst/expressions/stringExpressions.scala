@@ -1384,6 +1384,16 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression = Litera
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(StringType, BinaryType), IntegerType, TypeCollection(StringType, BinaryType))
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case fail: TypeCheckResult.TypeCheckFailure => fail
+      case _ if str.dataType != pad.dataType =>
+        TypeCheckResult.TypeCheckFailure(
+          s"Arguments 'str' and 'pad' of function '$prettyName' must be the same type.")
+      case other => other
+    }
+  }
+
   override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
     str.dataType match {
       case StringType => string.asInstanceOf[UTF8String]
@@ -1448,6 +1458,15 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression = Litera
   override def dataType: DataType = str.dataType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(StringType, BinaryType), IntegerType, TypeCollection(StringType, BinaryType))
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case fail: TypeCheckResult.TypeCheckFailure => fail
+      case _ if str.dataType != pad.dataType =>
+        TypeCheckResult.TypeCheckFailure(
+          s"Arguments 'str' and 'pad' of function '$prettyName' must be the same type.")
+      case other => other
+    }
+  }
 
   override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
     str.dataType match {
