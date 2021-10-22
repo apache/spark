@@ -2142,7 +2142,10 @@ def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") 
     [Row(datefield=datetime.date(2020, 6, 26))]
     """
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-    jc = sc._jvm.functions.make_date(_to_java_column(year), _to_java_column(month), _to_java_column(day))
+    year_col = _to_java_column(year)
+    month_col = _to_java_column(month)
+    day_col = _to_java_column(day)
+    jc = sc._jvm.functions.make_date(year_col, month_col, day_col)
     return Column(jc)
 
 
