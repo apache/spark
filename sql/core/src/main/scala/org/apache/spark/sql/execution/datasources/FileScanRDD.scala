@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.{FileNotFoundException, IOException}
+import java.io.{Closeable, FileNotFoundException, IOException}
 
 import org.apache.parquet.io.ParquetDecodingException
 
@@ -158,7 +158,13 @@ class FileScanRDD(
                 }
               }
 
-              override def close(): Unit = {}
+              override def close(): Unit = {
+                internalIter match {
+                  case iter: Closeable =>
+                    iter.close()
+                  case _ => // do nothing
+                }
+              }
             }
           } else {
             currentIterator = readCurrentFile()
@@ -188,6 +194,13 @@ class FileScanRDD(
       override def close(): Unit = {
         incTaskInputMetricsBytesRead()
         InputFileBlockHolder.unset()
+        currentIterator match {
+          case iter: NextIterator[_] =>
+            iter.closeIfNeeded()
+          case iter: Closeable =>
+            iter.close()
+          case _ => // do nothing
+        }
       }
     }
 
