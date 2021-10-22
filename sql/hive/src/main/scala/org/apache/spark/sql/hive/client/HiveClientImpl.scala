@@ -406,15 +406,15 @@ private[hive] class HiveClientImpl(
     Option(client.getTable(dbName, tableName, false /* do not throw exception */))
   }
 
-  private def getRawTablesByName(dbName: String, tableNames: Seq[String]): Seq[HiveTable] = {
+  private def getRawTablesByName(
+      dbName: String,
+      tableNames: Seq[String]): Seq[HiveTable] = withHiveState {
     try {
       msClient.getTableObjectsByName(dbName, tableNames.asJava).asScala
         .map(extraFixesForNonView).map(new HiveTable(_)).toSeq
     } catch {
       case ex: Exception =>
         throw QueryExecutionErrors.cannotFetchTablesOfDatabaseError(dbName, ex)
-    } finally {
-      HiveCatalogMetrics.incrementHiveClientCalls(1)
     }
   }
 
@@ -422,15 +422,11 @@ private[hive] class HiveClientImpl(
     getRawTableOption(dbName, tableName).nonEmpty
   }
 
-  override def getTablesByName(
-      dbName: String,
-      tableNames: Seq[String]): Seq[CatalogTable] = withHiveState(0) {
+  override def getTablesByName(dbName: String, tableNames: Seq[String]): Seq[CatalogTable] = {
     getRawTablesByName(dbName, tableNames).map(convertHiveTableToCatalogTable)
   }
 
-  override def getTableOption(
-      dbName: String,
-      tableName: String): Option[CatalogTable] = withHiveState(0) {
+  override def getTableOption(dbName: String, tableName: String): Option[CatalogTable] = {
     logDebug(s"Looking up $dbName.$tableName")
     getRawTableOption(dbName, tableName).map(convertHiveTableToCatalogTable)
   }
