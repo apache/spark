@@ -1666,6 +1666,8 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
   require(children.nonEmpty, s"$prettyName() should take at least 1 argument")
+  require(checkArgumentIndexNotZero(children(0)), "Illegal format argument index = 0")
+
 
   override def foldable: Boolean = children.forall(_.foldable)
   override def nullable: Boolean = children(0).nullable
@@ -1737,6 +1739,21 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): FormatString = FormatString(newChildren: _*)
+
+  /**
+   * SPARK-37013: The `formatSpecifier` defined in `j.u.Formatter` as follows:
+   *  "%[argument_index$][flags][width][.precision][t]conversion"
+   * The optional `argument_index` is a decimal integer indicating the position of the argument
+   * in the argument list. The first argument is referenced by "1$", the second by "2$", etc.
+   * However, for the illegal definition of "%0$", Java 8 and Java 11 uses it as "%1$",
+   * and Java 17 throws IllegalFormatArgumentIndexException(Illegal format argument index = 0).
+   * Therefore, manually check that the pattern string not contains "%0$" to ensure consistent
+   * behavior of Java 8, Java 11 and Java 17.
+   */
+  private def checkArgumentIndexNotZero(expression: Expression): Boolean = expression match {
+    case StringLiteral(pattern) => !pattern.contains("%0$")
+    case _ => true
+  }
 }
 
 /**
