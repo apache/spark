@@ -320,7 +320,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   private def getByteArrayRdd(
       n: Int = -1, takeFromEnd: Boolean = false): RDD[(Long, Array[Byte])] = {
-    val maxCollectSize = sqlContext.conf.maxCollectSize
+    val maxCollectSize = session.sessionState.conf.maxCollectSize
     execute().mapPartitionsInternal { iter =>
       new SizeLimitingByteArrayUnsafeRowsConverter(maxCollectSize).
         encodeUnsafeRows(n, iter, takeFromEnd)
@@ -336,7 +336,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     val byteArrayRdd = getByteArrayRdd()
 
     val results = ArrayBuffer[InternalRow]()
-    val decoder = new SizeLimitingByteArrayUnsafeRowsConverter(sqlContext.conf.maxCollectSize)
+    val maxCollectSize = session.sessionState.conf.maxCollectSize
+    val decoder = new SizeLimitingByteArrayUnsafeRowsConverter(maxCollectSize)
     byteArrayRdd.collect().foreach { countAndBytes =>
       decoder.decodeUnsafeRows(schema.length, countAndBytes._2).foreach(results.+=)
     }
@@ -346,7 +347,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   private[spark] def executeCollectIterator(): (Long, Iterator[InternalRow]) = {
     val countsAndBytes = getByteArrayRdd().collect()
     val total = countsAndBytes.map(_._1).sum
-    val decoder = new SizeLimitingByteArrayUnsafeRowsConverter(sqlContext.conf.maxCollectSize)
+    val maxCollectSize = session.sessionState.conf.maxCollectSize
+    val decoder = new SizeLimitingByteArrayUnsafeRowsConverter(maxCollectSize)
     val rows = countsAndBytes.iterator
       .flatMap(countAndBytes => decoder.decodeUnsafeRows(schema.length, countAndBytes._2))
     (total, rows)
@@ -358,7 +360,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * @note Triggers multiple jobs (one for each partition).
    */
   def executeToIterator(): Iterator[InternalRow] = {
-    val decoder = new SizeLimitingByteArrayUnsafeRowsConverter(sqlContext.conf.maxCollectSize)
+    val maxCollectSize = session.sessionState.conf.maxCollectSize
+    val decoder = new SizeLimitingByteArrayUnsafeRowsConverter(maxCollectSize)
     getByteArrayRdd().map(_._2).toLocalIterator
       .flatMap(iter => decoder.decodeUnsafeRows(schema.length, iter))
   }
@@ -395,7 +398,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     val buf = if (takeFromEnd) new ListBuffer[InternalRow] else new ArrayBuffer[InternalRow]
     val totalParts = childRDD.partitions.length
     var partsScanned = 0
-    val decoder = new SizeLimitingByteArrayUnsafeRowsConverter(sqlContext.conf.maxCollectSize)
+    val maxCollectSize = session.sessionState.conf.maxCollectSize
+    val decoder = new SizeLimitingByteArrayUnsafeRowsConverter(maxCollectSize)
     while (buf.length < n && partsScanned < totalParts) {
       // The number of partitions to try in this iteration. It is ok for this number to be
       // greater than totalParts because we actually cap it at totalParts in runJob.
