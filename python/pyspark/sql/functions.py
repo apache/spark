@@ -2138,7 +2138,7 @@ def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") 
     Examples
     --------
     >>> df = spark.createDataFrame([(2020, 6, 26)], ['Y', 'M', 'D'])
-    >>> df.select(make_date(df.Y, df.M, df.D).alias("datefield")).show()
+    >>> df.select(make_date(df.Y, df.M, df.D).alias("datefield")).collect()
     [Row(datefield=datetime.date(2020, 6, 26))]
     """
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
