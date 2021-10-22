@@ -144,4 +144,28 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
             .plus(123456, ChronoUnit.MICROS)))
     }
   }
+
+  test("SPARK-37098: Alter table properties should invalidate cache") {
+    // specify the compression in case we change it in future
+    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "snappy") {
+      withTempPath { dir =>
+        withTable("t") {
+          sql(s"CREATE TABLE t (c int) STORED AS PARQUET LOCATION '${dir.getCanonicalPath}'")
+          // cache table metadata
+          sql("SELECT * FROM t")
+          sql("ALTER TABLE t SET TBLPROPERTIES('parquet.compression'='zstd')")
+          sql("INSERT INTO TABLE t values(1)")
+          val files1 = dir.listFiles().filter(_.getName.endsWith("zstd.parquet"))
+          assert(files1.length == 1)
+
+          // cache table metadata again
+          sql("SELECT * FROM t")
+          sql("ALTER TABLE t UNSET TBLPROPERTIES('parquet.compression')")
+          sql("INSERT INTO TABLE t values(1)")
+          val files2 = dir.listFiles().filter(_.getName.endsWith("snappy.parquet"))
+          assert(files2.length == 1)
+        }
+      }
+    }
+  }
 }
