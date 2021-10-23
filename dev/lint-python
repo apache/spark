@@ -155,7 +155,10 @@ function mypy_data_test {
 
     echo "starting mypy data test..."
 
-    if [ "$(pip freeze | grep -c pytest-mypy-plugins )" -eq 0 ]; then
+    python3 -c "import importlib.util; import sys; \
+               sys.exit(0 if importlib.util.find_spec('pytest_mypy_plugins') else 1)"
+
+    if [ $? -ne 0 ]; then
       echo "pytest-mypy-plugins missing. Skipping for now."
       return
     fi
