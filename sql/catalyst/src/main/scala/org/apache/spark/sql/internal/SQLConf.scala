@@ -1419,8 +1419,8 @@ object SQLConf {
       " bigger files (which is scheduled first). This configuration is effective only when using" +
       " file-based sources such as Parquet, JSON and ORC.")
     .version("2.0.0")
-    .longConf
-    .createWithDefault(4 * 1024 * 1024)
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefaultString("4MB")
 
   val FILES_MIN_PARTITION_NUM = buildConf("spark.sql.files.minPartitionNum")
     .doc("The suggested (not guaranteed) minimum number of split file partitions. " +
