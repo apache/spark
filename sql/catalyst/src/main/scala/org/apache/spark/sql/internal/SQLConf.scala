@@ -3414,12 +3414,13 @@ object SQLConf {
 
   val EXEC_STAGING_DIR = buildConf("spark.sql.exec.stagingDir")
       .doc("The staging directory of Spark job. Spark uses it to deal with files with " +
-        "absolute output path, or writing data into partitioned directory when " +
-        "dynamic partition overwrite mode. " +
-        "Default value means staging dir is under table path.")
+        "absolute output path, or writing data into partitioned directory " +
+        "when dynamic partition overwrite mode is on. " +
+        "Default value means staging directory is under table path.")
       .version("3.3.0")
       .internal()
       .stringConf
+      .checkValue(!_.isEmpty, "Should not pass an empty string as staging diretory.")
       .createWithDefault(".spark-staging")
 
   val LEGACY_USE_V1_COMMAND =
