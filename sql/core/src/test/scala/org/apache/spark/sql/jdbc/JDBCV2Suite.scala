@@ -101,7 +101,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
     val df2 = spark.read
       .option("partitionColumn", "dept")
-      .option("lowerBound", "1")
+      .option("lowerBound", "0")
       .option("upperBound", "2")
       .option("numPartitions", "2")
       .table("h2.test.employee")

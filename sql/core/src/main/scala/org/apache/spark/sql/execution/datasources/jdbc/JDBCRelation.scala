@@ -300,16 +300,13 @@ private[sql] case class JDBCRelation(
       filters: Array[Filter],
       groupByColumns: Option[Array[String]],
       limit: Int): RDD[Row] = {
-    // If limit is pushed down, only a limited number of rows will be returned. PartitionInfo will
-    // be ignored and the query will be done in one task.
-    val partition = if (limit > 0 ) { Array[Partition](JDBCPartition(null, 0)) } else parts
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sparkSession.sparkContext,
       schema,
       requiredColumns,
       filters,
-      partition,
+      parts,
       jdbcOptions,
       Some(finalSchema),
       groupByColumns,

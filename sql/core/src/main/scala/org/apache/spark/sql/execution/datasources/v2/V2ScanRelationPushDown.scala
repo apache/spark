@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeRefer
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LeafNode, LocalLimit, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
@@ -226,32 +226,34 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def applyLimit(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case globalLimit @ Limit(IntegerLiteral(limitValue), child) => child match {
-      case relation @ DataSourceV2ScanRelation(_, scan, _) =>
-        val limit = PushDownUtils.pushLimit(scan, limitValue)
-        if (limit > 0) {
-          scan match {
-            case v1: V1ScanWrapper =>
-              globalLimit.copy(child = relation.copy(scan = v1.copy(pushedLimit = Some(limit))))
-            case _ => globalLimit
+    case globalLimit @ GlobalLimit(_, l @ LocalLimit(IntegerLiteral(limitValue), child)) =>
+      child match {
+        case relation @ DataSourceV2ScanRelation(_, scan, _) =>
+          val limit = PushDownUtils.pushLimit(scan, limitValue)
+          if (limit > 0) {
+            scan match {
+              case v1: V1ScanWrapper =>
+                globalLimit.copy(
+                  child = l.copy(child = relation.copy(scan = v1.copy(pushedLimit = Some(limit)))))
+              case _ => globalLimit
+            }
+          } else {
+            globalLimit
           }
-        } else {
-          globalLimit
-        }
-      case project @ Project(_, relation @ DataSourceV2ScanRelation(_, scan, _)) =>
-        val limit = PushDownUtils.pushLimit(scan, limitValue)
-        if (limit > 0) {
-          scan match {
-            case v1: V1ScanWrapper =>
-              globalLimit.copy(child = project.copy(child = relation.copy(
-                scan = v1.copy(pushedLimit = Some(limit)))))
-            case _ => globalLimit
+        case project @ Project(_, relation @ DataSourceV2ScanRelation(_, scan, _)) =>
+          val limit = PushDownUtils.pushLimit(scan, limitValue)
+          if (limit > 0) {
+            scan match {
+              case v1: V1ScanWrapper =>
+                globalLimit.copy(child = l.copy(child = project.copy(child = relation.copy(
+                  scan = v1.copy(pushedLimit = Some(limit))))))
+              case _ => globalLimit
+            }
+          } else {
+            globalLimit
           }
-        } else {
-          globalLimit
-        }
-      case _ => globalLimit
-    }
+        case _ => globalLimit
+      }
   }
 
   private def getWrappedScan(
