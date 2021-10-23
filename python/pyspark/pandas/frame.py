@@ -8259,6 +8259,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         internal = self._internal.with_new_sdf(sdf, data_fields=data_fields)
         self._update_internal_frame(internal, requires_same_anchor=False)
 
+    # TODO: ddof should be implemented.
     def cov(self, min_periods: Optional[int] = None) -> "DataFrame":
         """
         Compute pairwise covariance of columns, excluding NA/null values.

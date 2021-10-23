@@ -6033,7 +6033,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
         self.assert_eq(pdf.cov(), psdf.cov(), almost=True)
         self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4), almost=True)
-        self.assert_eq(pdf.cov(min_periods=5), psdf.cov(min_periods=5), almost=True)
+        self.assert_eq(pdf.cov(min_periods=5), psdf.cov(min_periods=5))
 
         # bool
         pdf = pd.DataFrame(
@@ -6046,7 +6046,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
         self.assert_eq(pdf.cov(), psdf.cov(), almost=True)
         self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4), almost=True)
-        self.assert_eq(pdf.cov(min_periods=5), psdf.cov(min_periods=5), almost=True)
+        self.assert_eq(pdf.cov(min_periods=5), psdf.cov(min_periods=5))
 
         # extension dtype
         numeric_dtypes = ["Int8", "Int16", "Int32", "Int64", "Float32", "Float64", "float"]
@@ -6062,7 +6062,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assert_eq(pdf.cov(), psdf.cov(), almost=True)
         self.assert_eq(pdf.cov(min_periods=3), psdf.cov(min_periods=3), almost=True)
-        self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4), almost=True)
+        self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4))
 
         # string column
         pdf = pd.DataFrame(
@@ -6072,7 +6072,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
         self.assert_eq(pdf.cov(), psdf.cov(), almost=True)
         self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4), almost=True)
-        self.assert_eq(pdf.cov(min_periods=5), psdf.cov(min_periods=5), almost=True)
+        self.assert_eq(pdf.cov(min_periods=5), psdf.cov(min_periods=5))
 
         # nan
         np.random.seed(42)
