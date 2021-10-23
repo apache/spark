@@ -155,7 +155,7 @@ function mypy_data_test {
 
     echo "starting mypy data test..."
 
-    python3 -c "import importlib.util; import sys; \
+    $PYTHON_EXECUTABLE -c "import importlib.util; import sys; \
                sys.exit(0 if importlib.util.find_spec('pytest_mypy_plugins') else 1)"
 
     if [ $? -ne 0 ]; then
