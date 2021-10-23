@@ -182,9 +182,6 @@ function mypy_data_test {
 
 
 function mypy_test {
-    local PYTEST_REPORT=
-    local PYTEST_STATUS=
-
     if ! hash "$MYPY_BUILD" 2> /dev/null; then
         echo "The $MYPY_BUILD command was not found. Skipping for now."
         return
