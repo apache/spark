@@ -628,7 +628,7 @@ class SparkSession(SparkConversionMixin):
     @overload
     def createDataFrame(
         self,
-        data: Union["RDD[RowLike]", Iterable["RowLike"]],
+        data: Iterable["RowLike"],
         schema: Union[List[str], Tuple[str, ...]] = ...,
         samplingRatio: Optional[float] = ...,
     ) -> DataFrame:
@@ -637,7 +637,16 @@ class SparkSession(SparkConversionMixin):
     @overload
     def createDataFrame(
         self,
-        data: Union["RDD[RowLike]", Iterable["RowLike"]],
+        data: "RDD[RowLike]",
+        schema: Union[List[str], Tuple[str, ...]] = ...,
+        samplingRatio: Optional[float] = ...,
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def createDataFrame(
+        self,
+        data: Iterable["RowLike"],
         schema: Union[StructType, str],
         *,
         verifySchema: bool = ...,
@@ -646,13 +655,29 @@ class SparkSession(SparkConversionMixin):
 
     @overload
     def createDataFrame(
+            self,
+            data: "RDD[RowLike]",
+            schema: Union[StructType, str],
+            *,
+            verifySchema: bool = ...,
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def createDataFrame(
         self,
-        data: Union[
-            "RDD[AtomicValue]",
-            Iterable["AtomicValue"],
-        ],
+        data: "RDD[AtomicValue]",
         schema: Union[AtomicType, str],
         verifySchema: bool = ...,
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def createDataFrame(
+            self,
+            data: Iterable["AtomicValue"],
+            schema: Union[AtomicType, str],
+            verifySchema: bool = ...,
     ) -> DataFrame:
         ...
 
