@@ -37,13 +37,13 @@ trait DescribeNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
   protected def notFoundMsgPrefix: String
 
   test("namespace does not exists") {
-    val dbName = "db1"
+    val ns = "db1"
     val message = intercept[AnalysisException] {
-      sql(s"DESCRIBE NAMESPACE EXTENDED $catalog.$dbName")
+      sql(s"DESCRIBE NAMESPACE EXTENDED $catalog.$ns")
     }.getMessage
 
-    assert(message.contains(s"$notFoundMsgPrefix '$dbName' not found"))
+    assert(message.contains(s"$notFoundMsgPrefix '$ns' not found"))
 
-    sql(s"DROP NAMESPACE IF EXISTS $catalog.$dbName")
+    sql(s"DROP NAMESPACE IF EXISTS $catalog.$ns")
   }
 }
