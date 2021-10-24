@@ -900,7 +900,10 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
               "filter from Hive. Falling back to fetching all partition metadata, which will " +
               "degrade performance. Modifying your Hive metastore configuration to set " +
               s"${tryDirectSqlConfVar.varname} to true (if it is not true already) may resolve " +
-              "this problem. Otherwise, to avoid degraded performance you can set " +
+              "this problem. Or you can enable " +
+              s"${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK.key} " +
+              "to alleviate performance downgrade." +
+              "Otherwise, to avoid degraded performance you can set " +
               s"${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key} " +
               " to false and let the query fail instead.", ex)
             // HiveShim clients are expected to handle a superset of the requested partitions
