@@ -103,7 +103,7 @@ Start-FileDownload "https://github.com/sbt/sbt/releases/download/v$sbtVer/sbt-$s
 # extract
 Invoke-Expression "7z.exe x sbt.zip"
 
-# add maven to environment variables
+# add sbt to environment variables
 $env:PATH = "$tools\sbt\bin;" + $env:PATH
 
 Pop-Location
