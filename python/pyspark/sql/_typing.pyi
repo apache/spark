@@ -54,7 +54,13 @@ AtomicValue = TypeVar(
     covariant=True,
 )
 
-RowLike = TypeVar("RowLike", List[Any], Tuple[Any, ...], pyspark.sql.types.Row)
+RowLike = TypeVar(
+    "RowLike",
+    List[Any],
+    Tuple[Any, ...],
+    pyspark.sql.types.Row,
+    covariant=True
+)
 
 class SupportsOpen(Protocol):
     def open(self, partition_id: int, epoch_id: int) -> bool: ...
