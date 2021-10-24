@@ -103,6 +103,11 @@ abstract class TaskContext extends Serializable {
    * This will be called in all situations - success, failure, or cancellation. Adding a listener
    * to an already completed task will result in that listener being called immediately.
    *
+   * Two listeners registered in the same thread will be invoked in reverse order of registration if
+   * the task completes after both are registered. There are no ordering guarantees for listeners
+   * registered in different threads, or for listeners registered after the task completes.
+   * Listeners are guaranteed to execute sequentially.
+   *
    * An example use is for HadoopRDD to register a callback to close the input stream.
    *
    * Exceptions thrown by the listener will result in failure of the task.
