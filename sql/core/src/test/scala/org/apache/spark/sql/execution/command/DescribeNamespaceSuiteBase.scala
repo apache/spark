@@ -31,21 +31,19 @@ import org.apache.spark.sql.{AnalysisException, QueryTest}
  *     - V1 Hive External catalog:
 *        `org.apache.spark.sql.hive.execution.command.DescribeNamespaceSuite`
  */
-trait DescribeNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils with CommandTestUtils {
+trait DescribeNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "DESCRIBE NAMESPACE"
 
+  protected def notFoundMsgPrefix: String
+
   test("namespace does not exists") {
-    val databaseNames = Seq("db1", "`database`")
-    databaseNames.foreach { dbName =>
-      val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-      val message = intercept[AnalysisException] {
-        sql(s"DESCRIBE NAMESPACE EXTENDED $catalog.$dbName")
-      }.getMessage
+    val dbName = "db1"
+    val message = intercept[AnalysisException] {
+      sql(s"DESCRIBE NAMESPACE EXTENDED $catalog.$dbName")
+    }.getMessage
 
-      val prefix = if (catalogVersion == "V2") "Namespace" else "Database"
-      assert(message.contains(s"$prefix '$dbNameWithoutBackTicks' not found"))
+    assert(message.contains(s"$notFoundMsgPrefix '$dbName' not found"))
 
-      sql(s"DROP NAMESPACE IF EXISTS $catalog.$dbName")
-    }
+    sql(s"DROP NAMESPACE IF EXISTS $catalog.$dbName")
   }
 }

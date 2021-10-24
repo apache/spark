@@ -25,9 +25,12 @@ class DescribeNamespaceParserSuite extends AnalysisTest {
   test("describe namespace") {
     val sql1 = "DESCRIBE NAMESPACE EXTENDED a.b"
     val sql2 = "DESCRIBE NAMESPACE a.b"
+    val sql3 = "DESCRIBE NAMESPACE cat.`database`"
     comparePlans(parsePlan(sql1),
       DescribeNamespace(UnresolvedNamespace(Seq("a", "b")), extended = true))
     comparePlans(parsePlan(sql2),
       DescribeNamespace(UnresolvedNamespace(Seq("a", "b")), extended = false))
+    comparePlans(parsePlan(sql3),
+      DescribeNamespace(UnresolvedNamespace(Seq("cat", "database")), extended = false))
   }
 }

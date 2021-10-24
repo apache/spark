@@ -225,29 +225,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
   }
 }
 
-trait CommandTestUtils extends SQLTestUtils {
-  private val escapedIdentifier = "`(.+)`".r
-
-  /**
-   * Strip backticks, if any, from the string.
-   */
-  protected def cleanIdentifier(ident: String): String = {
-    ident match {
-      case escapedIdentifier(i) => i
-      case plainIdent => plainIdent
-    }
-  }
-
-  /**
-   * Returns the path to the database of the given name.
-   */
-  protected def getDBPath(dbName: String): URI = {
-    val warehousePath = makeQualifiedPath(spark.sessionState.conf.warehousePath)
-    new Path(CatalogUtils.URIToString(warehousePath), s"$dbName.db").toUri
-  }
-}
-
-abstract class DDLSuite extends QueryTest with CommandTestUtils {
+abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   protected val reversedProperties = Seq(PROP_OWNER)
 
@@ -260,6 +238,8 @@ abstract class DDLSuite extends QueryTest with CommandTestUtils {
       name: TableIdentifier,
       isDataSource: Boolean = true,
       partitionCols: Seq[String] = Seq("a", "b")): CatalogTable
+
+  private val escapedIdentifier = "`(.+)`".r
 
   private def dataSource: String = {
     if (isUsingHiveMetastore) {
@@ -276,6 +256,16 @@ abstract class DDLSuite extends QueryTest with CommandTestUtils {
 
   private def checkCatalogTables(expected: CatalogTable, actual: CatalogTable): Unit = {
     assert(normalizeCatalogTable(actual) == normalizeCatalogTable(expected))
+  }
+
+  /**
+   * Strip backticks, if any, from the string.
+   */
+  protected def cleanIdentifier(ident: String): String = {
+    ident match {
+      case escapedIdentifier(i) => i
+      case plainIdent => plainIdent
+    }
   }
 
   private def assertUnsupported(query: String): Unit = {
@@ -312,6 +302,14 @@ abstract class DDLSuite extends QueryTest with CommandTestUtils {
     val part = CatalogTablePartition(
       spec, CatalogStorageFormat(None, None, None, None, false, Map()))
     catalog.createPartitions(tableName, Seq(part), ignoreIfExists = false)
+  }
+
+  /**
+   * Returns the path to the database of the given name.
+   */
+  protected def getDBPath(dbName: String): URI = {
+    val warehousePath = makeQualifiedPath(spark.sessionState.conf.warehousePath)
+    new Path(CatalogUtils.URIToString(warehousePath), s"$dbName.db").toUri
   }
 
   test("alter table: set location (datasource table)") {

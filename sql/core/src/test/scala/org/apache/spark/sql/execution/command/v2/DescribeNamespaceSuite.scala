@@ -27,11 +27,13 @@ import org.apache.spark.util.Utils
  * The class contains tests for the `DESCRIBE NAMESPACE` command to check V2 table catalogs.
  */
 class DescribeNamespaceSuite extends command.DescribeNamespaceSuiteBase with CommandSuiteBase {
+  override def notFoundMsgPrefix: String = "Namespace"
+
   test("DescribeNamespace using v2 catalog") {
-    withNamespace("test_catalog.ns1.ns2") {
-      sql("CREATE NAMESPACE IF NOT EXISTS test_catalog.ns1.ns2 COMMENT " +
+    withNamespace(s"$catalog.ns1.ns2") {
+      sql(s"CREATE NAMESPACE IF NOT EXISTS $catalog.ns1.ns2 COMMENT " +
         "'test namespace' LOCATION '/tmp/ns_test'")
-      val descriptionDf = sql("DESCRIBE NAMESPACE test_catalog.ns1.ns2")
+      val descriptionDf = sql(s"DESCRIBE NAMESPACE $catalog.ns1.ns2")
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
         Seq(
           ("info_name", StringType),

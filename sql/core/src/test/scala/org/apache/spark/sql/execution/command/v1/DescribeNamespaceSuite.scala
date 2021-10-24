@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.execution.command
 
 /**
@@ -31,24 +30,24 @@ import org.apache.spark.sql.execution.command
  *     `org.apache.spark.sql.hive.execution.command.DescribeNamespaceSuite`
  */
 trait DescribeNamespaceSuiteBase extends command.DescribeNamespaceSuiteBase {
+  override def notFoundMsgPrefix: String = "Database"
+
   test("basic") {
-    val namespaceNames = Seq("db1", "`database`")
-    withNamespace(namespaceNames: _*) {
-      namespaceNames.foreach { ns =>
-        val dbNameWithoutBackTicks = cleanIdentifier(ns)
-        val location = getDBPath(dbNameWithoutBackTicks)
+    val ns = "db1"
+    withNamespace(ns) {
+      sql(s"CREATE NAMESPACE $ns")
 
-        sql(s"CREATE NAMESPACE $ns")
+      val result = sql(s"DESCRIBE NAMESPACE EXTENDED $ns")
+        .toDF("key", "value")
+        .where("key not like 'Owner%'") // filter for consistency with in-memory catalog
+        .collect()
 
-        checkAnswer(
-          sql(s"DESCRIBE NAMESPACE EXTENDED $ns")
-            .toDF("key", "value")
-            .where("key not like 'Owner%'"), // filter for consistency with in-memory catalog
-          Row("Database Name", dbNameWithoutBackTicks) ::
-            Row("Comment", "") ::
-            Row("Location", CatalogUtils.URIToString(location)) ::
-            Row("Properties", "") :: Nil)
-      }
+      assert(result.length == 4)
+      assert(result(0) === Row("Database Name", ns))
+      assert(result(1) === Row("Comment", ""))
+      // Check only the key for "Location" since its value depends on warehouse path, etc.
+      assert(result(2).getString(0) === "Location")
+      assert(result(3) === Row("Properties", ""))
     }
   }
 }
