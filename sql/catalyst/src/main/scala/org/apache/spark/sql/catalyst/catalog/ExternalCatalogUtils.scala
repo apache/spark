@@ -24,10 +24,11 @@ import org.apache.hadoop.util.Shell
 
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BoundReference, Expression, Predicate}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BasePredicate, BoundReference, Expression, Predicate}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
 
 object ExternalCatalogUtils {
   // This duplicates default value of Hive `ConfVars.DEFAULTPARTITIONNAME`, since catalyst doesn't
@@ -156,27 +157,34 @@ object ExternalCatalogUtils {
     } else {
       val partitionSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
         catalogTable.partitionSchema)
-      val partitionColumnNames = catalogTable.partitionColumnNames.toSet
-
-      val nonPartitionPruningPredicates = predicates.filterNot {
-        _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
-      }
-      if (nonPartitionPruningPredicates.nonEmpty) {
-        throw QueryCompilationErrors.nonPartitionPruningPredicatesNotExpectedError(
-          nonPartitionPruningPredicates)
-      }
-
-      val boundPredicate =
-        Predicate.createInterpreted(predicates.reduce(And).transform {
-          case att: AttributeReference =>
-            val index = partitionSchema.indexWhere(_.name == att.name)
-            BoundReference(index, partitionSchema(index).dataType, nullable = true)
-        })
+      val boundPredicate = generatePartitionPredicateByFilter(catalogTable,
+        partitionSchema, predicates)
 
       inputPartitions.filter { p =>
         boundPredicate.eval(p.toRow(partitionSchema, defaultTimeZoneId))
       }
     }
+  }
+
+  def generatePartitionPredicateByFilter(
+      catalogTable: CatalogTable,
+      partitionSchema: StructType,
+      predicates: Seq[Expression]): BasePredicate = {
+    val partitionColumnNames = catalogTable.partitionColumnNames.toSet
+
+    val nonPartitionPruningPredicates = predicates.filterNot {
+      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+    }
+    if (nonPartitionPruningPredicates.nonEmpty) {
+      throw QueryCompilationErrors.nonPartitionPruningPredicatesNotExpectedError(
+        nonPartitionPruningPredicates)
+    }
+
+    Predicate.createInterpreted(predicates.reduce(And).transform {
+      case att: AttributeReference =>
+        val index = partitionSchema.indexWhere(_.name == att.name)
+        BoundReference(index, partitionSchema(index).dataType, nullable = true)
+    })
   }
 
   private def isNullPartitionValue(value: String): Boolean = {
