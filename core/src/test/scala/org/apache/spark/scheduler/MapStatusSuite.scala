@@ -198,6 +198,11 @@ class MapStatusSuite extends SparkFunSuite {
 
   test("SPARK-36967: HighlyCompressedMapStatus should record accurately the size " +
     "of skewed shuffle blocks") {
+    val conf = new SparkConf().set(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR.key, "5")
+    val env = mock(classOf[SparkEnv])
+    doReturn(conf).when(env).conf
+    SparkEnv.set(env)
+
     val sizes = Array.tabulate[Long](3000)(i => (if (i < 2990) i else i + 350 * 1024).toLong)
     val avg = sizes.filter(_ < 3000).sum / sizes.count(i => i > 0 && i < 3000)
     val loc = BlockManagerId("a", "b", 10)
@@ -219,6 +224,11 @@ class MapStatusSuite extends SparkFunSuite {
   }
 
   test("SPARK-36967: Limit accurated skewed block number if too many blocks are skewed") {
+    val conf = new SparkConf().set(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR.key, "5")
+    val env = mock(classOf[SparkEnv])
+    doReturn(conf).when(env).conf
+    SparkEnv.set(env)
+
     val sizes = Array.tabulate[Long](3000)(i => (if (i < 2500) i else i + 3500 * 1024).toLong)
     val avg = sizes.slice(1, 2900).sum / 2899
     val loc = BlockManagerId("a", "b", 10)
