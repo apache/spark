@@ -902,7 +902,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
               s"${tryDirectSqlConfVar.varname} to true (if it is not true already) may resolve " +
               "this problem. Or you can enable " +
               s"${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK.key} " +
-              "to alleviate performance downgrade." +
+              "to alleviate performance downgrade. " +
               "Otherwise, to avoid degraded performance you can set " +
               s"${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key} " +
               " to false and let the query fail instead.", ex)
@@ -932,8 +932,8 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
 
     if (!SQLConf.get.metastorePartitionPruningFastFallback ||
-      predicates.isEmpty ||
-      predicates.exists(hasTimeZoneAwareExpression)) {
+        predicates.isEmpty ||
+        predicates.exists(hasTimeZoneAwareExpression)) {
       getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].asScala.toSeq
     } else {
       try {

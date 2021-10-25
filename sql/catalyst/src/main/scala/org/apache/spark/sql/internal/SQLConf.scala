@@ -1013,7 +1013,8 @@ object SQLConf {
       .doc("When this config is enabled, if the predicates are not supported by Hive or Spark " +
         "does fallback due to encountering MetaException from the metastore, " +
         "Spark will instead prune partitions by getting the partition names first " +
-        "and then evaluate the filter expressions on the client side.")
+        "and then evaluating the filter expressions on the client side. " +
+        "Note that the predicates with TimeZoneAwareExpression is not supported.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(false)

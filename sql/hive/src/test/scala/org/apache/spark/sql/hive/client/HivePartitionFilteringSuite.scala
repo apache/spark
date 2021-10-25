@@ -31,14 +31,13 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DateType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.util.Utils
 
 class HivePartitionFilteringSuite(version: String)
-    extends HiveVersionSuite(version) with BeforeAndAfterAll with SQLHelper with PlanTest {
+    extends HiveVersionSuite(version) with BeforeAndAfterAll with SQLHelper {
 
   private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
   private val fallbackKey = SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key
@@ -623,8 +622,7 @@ class HivePartitionFilteringSuite(version: String)
   }
 
   test(s"getPartitionsByFilter: ds=20170101 when $fallbackKey=true") {
-    withSQLConf(fallbackKey -> "true",
-      pruningFastFallback -> "true") {
+    withSQLConf(fallbackKey -> "true", pruningFastFallback -> "true") {
       val client = init(false)
       val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test"),
         Seq(attr("ds") === 20170101))
