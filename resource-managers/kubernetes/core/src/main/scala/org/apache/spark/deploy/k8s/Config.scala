@@ -359,6 +359,17 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_EXECUTOR_POD_AffinityKey =
+    ConfigBuilder("spark.kubernetes.executor.podAffinityKey")
+      .doc("spark executor pod affinity key")
+      .version("3.0.0")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_POD_AffinityOperator = "spark.kubernetes.executor.podAffinityOperator"
+
+  val KUBERNETES_EXECUTOR_POD_AffinityValue = "spark.kubernetes.executor.podAffinityValue"
+
   val KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME =
     ConfigBuilder("spark.kubernetes.driver.podTemplateContainerName")
       .doc("container name to be used as a basis for the driver in the given pod template")
