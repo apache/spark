@@ -43,7 +43,5 @@ trait DescribeNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
     }.getMessage
 
     assert(message.contains(s"$notFoundMsgPrefix '$ns' not found"))
-
-    sql(s"DROP NAMESPACE IF EXISTS $catalog.$ns")
   }
 }
