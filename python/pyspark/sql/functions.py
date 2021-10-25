@@ -2133,7 +2133,15 @@ def weekofyear(col: "ColumnOrName") -> Column:
 
 def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") -> Column:
     """
-    Returns a column with date built from the year, month and day columns.
+    Returns a column with a date built from the year, month and day columns.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    year : :class:`ColumnOrName` with the year to build the date
+    month : :class:`ColumnOrName` with the month to build the date
+    day : :class:`ColumnOrName` with the day to build the date
 
     Examples
     --------

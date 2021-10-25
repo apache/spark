@@ -25,7 +25,7 @@ from pyspark.sql import Row, Window, types
 from pyspark.sql.functions import udf, input_file_name, col, percentile_approx, \
     lit, assert_true, sum_distinct, sumDistinct, shiftleft, shiftLeft, shiftRight, \
     shiftright, shiftrightunsigned, shiftRightUnsigned, octet_length, bit_length, \
-    sec, csc, cot
+    sec, csc, cot, make_date
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 
 
@@ -242,7 +242,7 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertEqual(row[0], 2)
 
     def test_make_date(self):
-        from pyspark.sql.functions import make_date
+        # SPARK-36554: expose make_date expression
         df = self.spark.createDataFrame([(2020, 6, 26)], ['Y', 'M', 'D'])
         row_from_col = df.select(make_date(df.Y, df.M, df.D)).first()
         self.assertEqual(row_from_col[0], datetime.date(2020, 6, 26))
