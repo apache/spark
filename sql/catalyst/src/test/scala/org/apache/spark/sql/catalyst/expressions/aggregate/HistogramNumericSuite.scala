@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions.{DslString, DslSymbol}
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference, Cast, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.catalyst.util.{DistributeHistogram, HistogramSerializer}
+import org.apache.spark.sql.catalyst.util.{DistributedHistogramSerializer, DistributeHistogram}
 import org.apache.spark.sql.types.{DoubleType, IntegerType}
 
 class HistogramNumericSuite extends SparkFunSuite {
@@ -39,7 +39,7 @@ class HistogramNumericSuite extends SparkFunSuite {
   }
 
   test("serialize and de-serialize") {
-    val serializer = new HistogramSerializer
+    val serializer = new DistributedHistogramSerializer
 
     // Check empty serialize and de-serialize
     val emptyBuffer = new DistributeHistogram(5)

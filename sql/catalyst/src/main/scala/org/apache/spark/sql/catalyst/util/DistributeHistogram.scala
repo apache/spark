@@ -33,7 +33,7 @@ import com.google.common.primitives.{Doubles, Ints}
  */
 class DistributeHistogram(private var nBins: Int) {
   private var nUsedBins: Int = 0
-  private var bins: util.ArrayList[Coord] = new util.ArrayList[Coord](nBins)
+  private var bins: util.ArrayList[Coord] = new util.ArrayList[Coord]()
   // init the RNG for breaking ties in histogram merging. A fixed seed is specified here
   // to aid testing, but can be eliminated to use a time-based seed (which would
   // make the algorithm non-deterministic).
@@ -76,38 +76,20 @@ class DistributeHistogram(private var nBins: Int) {
    * @param other A serialized histogram created by the serialize() method
    */
   def merge(other: DistributeHistogram): Unit = {
-    if (other == null) return
+    if (other == null) {
+      return
+    }
     if (nBins == 0 || nUsedBins == 0) {
       // Our aggregation buffer has nothing in it, so just copy over 'other'
       // by deserializing the ArrayList of (x,y) pairs into an array of Coord objects
       nBins = other.nBins
-      nUsedBins = other.nUsedBins
-      bins = new util.ArrayList[Coord](nUsedBins)
-      var i = 0
-      while (i < other.bins.size()) {
-        val bin = Coord(other.bins.get(i).x, other.bins.get(i).y)
-        bins.add(bin)
-        i += 1
-      }
+      nUsedBins = other.getUsedBins
+      bins = other.getBins
     } else {
-      // The aggregation buffer already contains a partial histogram. Therefore, we need
-      // to merge histograms using Algorithm #2 from the Ben-Haim and Tom-Tov paper.
-      val tmp_bins = new util.ArrayList[Coord](nUsedBins + other.bins.size())
-      // Copy all the histogram bins from us and 'other' into an overstuffed histogram
-      for (i <- 0 until nUsedBins) {
-        val bin = new Coord(bins.get(i).x, bins.get(i).y)
-        tmp_bins.add(bin)
-      }
-      var j = 0
-      while (j < other.bins.size()) {
-        val bin = Coord(other.bins.get(j).x, other.bins.get(j).y)
-        tmp_bins.add(bin)
-        j += 1
-      }
-      Collections.sort(tmp_bins)
+      bins.addAll(other.getBins)
+      Collections.sort(bins)
       // Now trim the overstuffed histogram down to the correct number of bins
-      bins = tmp_bins
-      nUsedBins += other.bins.size()
+      nUsedBins += other.getUsedBins
       trim()
     }
   }
@@ -129,14 +111,13 @@ class DistributeHistogram(private var nBins: Int) {
     var l = 0
     var r = nUsedBins
     var equal = false
-    while (l < r && equal) {
+    while (l < r && !equal) {
       bin = (l + r) / 2
       if (bins.get(bin).x > v) {
         r = bin
       } else if (bins.get(bin).x < v) {
-        l = {
-          bin += 1; bin
-        }
+        bin += 1;
+        l = bin
       } else {
         equal = true
       }
@@ -150,7 +131,7 @@ class DistributeHistogram(private var nBins: Int) {
     if (bin < nUsedBins && bins.get(bin).x == v) {
       bins.get(bin).y += 1
     } else {
-      val newBin = new Coord(v, 1)
+      val newBin = Coord(v, 1)
       bins.add(bin, newBin)
       // Trim the bins down to the correct number of bins.
       nUsedBins += 1;
@@ -178,7 +159,7 @@ class DistributeHistogram(private var nBins: Int) {
           smallestDiffLoc = i
           smallestDiffCount = 1
         } else if (diff == smallestDiff && prng.nextDouble <= (1.0 / {
-          smallestDiffCount += 1;
+          smallestDiffCount += 1
           smallestDiffCount
         })) {
           smallestDiffLoc = i
@@ -212,25 +193,22 @@ case class Coord(var x: Double, var y: Double) extends Comparable[Coord] {
   }
 }
 
-class HistogramSerializer {
+class DistributedHistogramSerializer {
 
   private final def length(histogram: DistributeHistogram): Int = {
     // histogram.nBins, histogram.nUsedBins
     Ints.BYTES + Ints.BYTES +
-      // length of histogram.bins
-      Ints.BYTES +
       //  histogram.bins, Array[Coord(x: Double, y: Double)]
-      histogram.getBins.size * (Doubles.BYTES + Doubles.BYTES)
+      histogram.getUsedBins * (Doubles.BYTES + Doubles.BYTES)
   }
 
   def serialize(histogram: DistributeHistogram): Array[Byte] = {
     val buffer = ByteBuffer.wrap(new Array(length(histogram)))
     buffer.putInt(histogram.getNBins)
     buffer.putInt(histogram.getUsedBins)
-    buffer.putInt(histogram.getBins.size())
 
     var i = 0
-    while (i < histogram.getBins.size()) {
+    while (i < histogram.getUsedBins) {
       val coord = histogram.getBins.get(i)
       buffer.putDouble(coord.x)
       buffer.putDouble(coord.y)
@@ -243,11 +221,10 @@ class HistogramSerializer {
     val buffer = ByteBuffer.wrap(bytes)
     val nBins = buffer.getInt()
     val nUsedBins = buffer.getInt()
-    val binsSize = buffer.getInt()
 
-    val bins: util.ArrayList[Coord] = new util.ArrayList[Coord](binsSize)
+    val bins: util.ArrayList[Coord] = new util.ArrayList[Coord]()
     var i: Int = 0
-    while (i < binsSize) {
+    while (i < nUsedBins) {
       val x = buffer.getDouble()
       val y = buffer.getDouble()
       bins.add(Coord(x, y))
@@ -259,3 +236,4 @@ class HistogramSerializer {
     histogram
   }
 }
+

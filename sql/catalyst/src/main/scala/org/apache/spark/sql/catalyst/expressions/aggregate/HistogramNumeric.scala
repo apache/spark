@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.catalyst.util.{DistributeHistogram, GenericArrayData, HistogramSerializer}
+import org.apache.spark.sql.catalyst.util.{DistributedHistogramSerializer, DistributeHistogram, GenericArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, DateType, DoubleType, IntegerType, NumericType, StructField, StructType, TimestampNTZType, TimestampType, TypeCollection}
 
@@ -69,8 +69,6 @@ case class HistogramNumeric(
     case null => null
     case n: Int => n
   }
-
-  private val serializer: HistogramSerializer = new HistogramSerializer
 
   override def inputTypes: Seq[AbstractDataType] = {
     // Support NumericType, DateType, TimestampType and TimestampNTZType since their internal types
@@ -133,11 +131,11 @@ case class HistogramNumeric(
   }
 
   override def serialize(obj: DistributeHistogram): Array[Byte] = {
-    serializer.serialize(obj)
+    HistogramNumeric.serializer.serialize(obj)
   }
 
   override def deserialize(bytes: Array[Byte]): DistributeHistogram = {
-    serializer.deserialize(bytes)
+    HistogramNumeric.serializer.deserialize(bytes)
   }
 
   override def left: Expression = child
@@ -163,4 +161,8 @@ case class HistogramNumeric(
     ArrayType(new StructType(Array(StructField("x", DoubleType), StructField("y", DoubleType))))
 
   override def prettyName: String = "histogram_numeric"
+}
+
+object HistogramNumeric {
+  val serializer: DistributedHistogramSerializer = new DistributedHistogramSerializer
 }
