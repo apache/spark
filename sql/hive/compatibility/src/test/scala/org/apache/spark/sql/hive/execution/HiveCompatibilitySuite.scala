@@ -969,7 +969,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "type_cast_1",
     "type_widening",
     "udaf_collect_set",
-    "udaf_histogram_numeric",
     "udf2",
     "udf5",
     "udf6",
