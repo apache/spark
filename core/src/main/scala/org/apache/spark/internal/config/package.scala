@@ -1182,11 +1182,12 @@ package object config {
     ConfigBuilder("spark.shuffle.accurateBlockSkewedFactor")
       .doc("A shuffle block is considered as skewed and will be accurately recorded in " +
         "HighlyCompressedMapStatus if its size is larger than this factor multiplying " +
-        "the median shuffle block size or SHUFFLE_ACCURATE_BLOCK_THRESHOLD.")
+        "the median shuffle block size or SHUFFLE_ACCURATE_BLOCK_THRESHOLD. It is " +
+        "recommended to set this parameter to be the same as SKEW_JOIN_SKEWED_PARTITION_FACTOR." +
+        "-1 to disable this feature by default.")
       .version("3.3.0")
       .intConf
-      .checkValue(_ > 0, "The skew factor must be positive.")
-      .createWithDefault(5)
+      .createWithDefault(-1)
 
   private[spark] val SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER =
     ConfigBuilder("spark.shuffle.maxAccurateSkewedBlockNumber")
