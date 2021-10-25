@@ -57,7 +57,7 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
-import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
+import org.apache.spark.launcher.{JavaModuleOptions, LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.{CallerContext, Utils, YarnContainerInfoHelper}
@@ -932,6 +932,11 @@ private[spark] class Client(
     amContainer.setEnvironment(launchEnv.asJava)
 
     val javaOpts = ListBuffer[String]()
+
+    // SPARK-37106: To start AM with Java 17, `JavaModuleOptions.defaultModuleOptions`
+    // is added by default. It will not affect Java 8 and Java 11 due to existence of
+    // `-XX:+IgnoreUnrecognizedVMOptions`.
+    javaOpts += JavaModuleOptions.defaultModuleOptions()
 
     // Set the environment variable through a command prefix
     // to append to the existing value of the variable
