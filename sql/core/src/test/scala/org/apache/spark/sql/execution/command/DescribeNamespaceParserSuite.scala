@@ -23,14 +23,17 @@ import org.apache.spark.sql.catalyst.plans.logical.DescribeNamespace
 
 class DescribeNamespaceParserSuite extends AnalysisTest {
   test("describe namespace") {
-    val sql1 = "DESCRIBE NAMESPACE EXTENDED a.b"
-    val sql2 = "DESCRIBE NAMESPACE a.b"
-    val sql3 = "DESCRIBE NAMESPACE cat.`database`"
-    comparePlans(parsePlan(sql1),
+    def check(sql: String, expected: LogicalPlan): Unit = {
+      comparePlans(parsePlan(sql), expected)
+      comparePlans(parsePlan(sql.replace("NAMESPACE", "DATABASE")), expected)
+      comparePlans(parsePlan(sql.replace("NAMESPACE", "SCHEMA")), expected)
+    }
+    
+    check("DESCRIBE NAMESPACE EXTENDED a.b",
       DescribeNamespace(UnresolvedNamespace(Seq("a", "b")), extended = true))
-    comparePlans(parsePlan(sql2),
+    check("DESCRIBE NAMESPACE a.b",
       DescribeNamespace(UnresolvedNamespace(Seq("a", "b")), extended = false))
-    comparePlans(parsePlan(sql3),
-      DescribeNamespace(UnresolvedNamespace(Seq("cat", "database")), extended = false))
+    check("DESCRIBE NAMESPACE `a.b`",
+      DescribeNamespace(UnresolvedNamespace(Seq("a.b")), extended = false))
   }
 }
