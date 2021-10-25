@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.plans.logical.DescribeNamespace
+import org.apache.spark.sql.catalyst.plans.logical.{DescribeNamespace, LogicalPlan}
 
 class DescribeNamespaceParserSuite extends AnalysisTest {
   test("describe namespace") {
@@ -28,7 +28,7 @@ class DescribeNamespaceParserSuite extends AnalysisTest {
       comparePlans(parsePlan(sql.replace("NAMESPACE", "DATABASE")), expected)
       comparePlans(parsePlan(sql.replace("NAMESPACE", "SCHEMA")), expected)
     }
-    
+
     check("DESCRIBE NAMESPACE EXTENDED a.b",
       DescribeNamespace(UnresolvedNamespace(Seq("a", "b")), extended = true))
     check("DESCRIBE NAMESPACE a.b",
