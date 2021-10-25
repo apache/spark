@@ -917,7 +917,8 @@ object SparkR {
   val buildRPackage = taskKey[Unit]("Build the R package")
   lazy val settings = Seq(
     buildRPackage := {
-      val command = baseDirectory.value / ".." / "R" / "install-dev.sh"
+      val postfix = if (File.separator == "\\") ".bat" else ".sh"
+      val command = baseDirectory.value / ".." / "R" / s"install-dev$postfix"
       Process(command.toString).!!
     },
     (Compile / compile) := (Def.taskDyn {

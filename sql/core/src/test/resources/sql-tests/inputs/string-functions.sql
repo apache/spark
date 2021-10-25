@@ -90,6 +90,12 @@ SELECT hex(rpad(unhex(''), 6, unhex('')));
 SELECT hex(rpad(unhex('aabbcc'), 6, unhex('')));
 SELECT hex(rpad(unhex('aabbcc'), 2, unhex('ff')));
 
+-- lpad/rpad with mixed STRING and BINARY input
+SELECT lpad('abc', 5, x'12');
+SELECT lpad(x'12', 5, 'abc');
+SELECT rpad('abc', 5, x'12');
+SELECT rpad(x'12', 5, 'abc');
+
 -- decode
 select decode();
 select decode(encode('abc', 'utf-8'));
