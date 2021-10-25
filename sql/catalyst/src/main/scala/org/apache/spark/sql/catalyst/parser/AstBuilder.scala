@@ -19,19 +19,20 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-import javax.xml.bind.DatatypeConverter
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, Set}
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
+import org.apache.commons.codec.DecoderException
+import org.apache.commons.codec.binary.Hex
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, FunctionResource, FunctionResourceType}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -137,7 +138,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       throw QueryParsingErrors.duplicateCteDefinitionNamesError(
         duplicates.mkString("'", "', '", "'"), ctx)
     }
-    With(plan, ctes.toSeq)
+    UnresolvedWith(plan, ctes.toSeq)
   }
 
   /**
@@ -238,9 +239,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitSingleInsertQuery(
       ctx: SingleInsertQueryContext): LogicalPlan = withOrigin(ctx) {
-    withInsertInto(
-      ctx.insertInto(),
-      plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses))
+    withInsertInto(ctx.insertInto(), visitQuery(ctx.query))
   }
 
   /**
@@ -1556,7 +1555,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Add a predicate to the given expression. Supported expressions are:
    * - (NOT) BETWEEN
    * - (NOT) IN
-   * - (NOT) LIKE (ANY | SOME | ALL)
+   * - (NOT) (LIKE | ILIKE) (ANY | SOME | ALL)
    * - (NOT) RLIKE
    * - IS (NOT) NULL.
    * - IS (NOT) (TRUE | FALSE | UNKNOWN)
@@ -1574,6 +1573,20 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case other => Seq(other)
     }
 
+    def lowerLikeArgsIfNeeded(
+        expr: Expression,
+        patterns: Seq[UTF8String]): (Expression, Seq[UTF8String]) = ctx.kind.getType match {
+      // scalastyle:off caselocale
+      case SqlBaseParser.ILIKE => (Lower(expr), patterns.map(_.toLowerCase))
+      // scalastyle:on caselocale
+      case _ => (expr, patterns)
+    }
+
+    def getLike(expr: Expression, pattern: Expression): Expression = ctx.kind.getType match {
+      case SqlBaseParser.ILIKE => new ILike(expr, pattern)
+      case _ => new Like(expr, pattern)
+    }
+
     // Create the predicate.
     ctx.kind.getType match {
       case SqlBaseParser.BETWEEN =>
@@ -1585,7 +1598,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         invertIfNotDefined(InSubquery(getValueExpressions(e), ListQuery(plan(ctx.query))))
       case SqlBaseParser.IN =>
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression).toSeq))
-      case SqlBaseParser.LIKE =>
+      case SqlBaseParser.LIKE | SqlBaseParser.ILIKE =>
         Option(ctx.quantifier).map(_.getType) match {
           case Some(SqlBaseParser.ANY) | Some(SqlBaseParser.SOME) =>
             validate(!ctx.expression.isEmpty, "Expected something between '(' and ')'.", ctx)
@@ -1594,13 +1607,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
               // If there are many pattern expressions, will throw StackOverflowError.
               // So we use LikeAny or NotLikeAny instead.
               val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])
+              val (expr, pat) = lowerLikeArgsIfNeeded(e, patterns)
               ctx.NOT match {
-                case null => LikeAny(e, patterns)
-                case _ => NotLikeAny(e, patterns)
+                case null => LikeAny(expr, pat)
+                case _ => NotLikeAny(expr, pat)
               }
             } else {
               ctx.expression.asScala.map(expression)
-                .map(p => invertIfNotDefined(new Like(e, p))).toSeq.reduceLeft(Or)
+                .map(p => invertIfNotDefined(getLike(e, p))).toSeq.reduceLeft(Or)
             }
           case Some(SqlBaseParser.ALL) =>
             validate(!ctx.expression.isEmpty, "Expected something between '(' and ')'.", ctx)
@@ -1609,13 +1623,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
               // If there are many pattern expressions, will throw StackOverflowError.
               // So we use LikeAll or NotLikeAll instead.
               val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])
+              val (expr, pat) = lowerLikeArgsIfNeeded(e, patterns)
               ctx.NOT match {
-                case null => LikeAll(e, patterns)
-                case _ => NotLikeAll(e, patterns)
+                case null => LikeAll(expr, pat)
+                case _ => NotLikeAll(expr, pat)
               }
             } else {
               ctx.expression.asScala.map(expression)
-                .map(p => invertIfNotDefined(new Like(e, p))).toSeq.reduceLeft(And)
+                .map(p => invertIfNotDefined(getLike(e, p))).toSeq.reduceLeft(And)
             }
           case _ =>
             val escapeChar = Option(ctx.escapeChar).map(string).map { str =>
@@ -1624,7 +1639,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
               }
               str.charAt(0)
             }.getOrElse('\\')
-            invertIfNotDefined(Like(e, expression(ctx.pattern), escapeChar))
+            val likeExpr = ctx.kind.getType match {
+              case SqlBaseParser.ILIKE => new ILike(e, expression(ctx.pattern), escapeChar)
+              case _ => Like(e, expression(ctx.pattern), escapeChar)
+            }
+            invertIfNotDefined(likeExpr)
         }
       case SqlBaseParser.RLIKE =>
         invertIfNotDefined(RLike(e, expression(ctx.pattern)))
@@ -2132,25 +2151,27 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           val specialDate = convertSpecialDate(value, zoneId).map(Literal(_, DateType))
           specialDate.getOrElse(toLiteral(stringToDate, DateType))
         case "TIMESTAMP_NTZ" =>
-          val specialTs = convertSpecialTimestampNTZ(value).map(Literal(_, TimestampNTZType))
-          specialTs.getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
+          convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
+            .map(Literal(_, TimestampNTZType))
+            .getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
         case "TIMESTAMP_LTZ" =>
           constructTimestampLTZLiteral(value)
         case "TIMESTAMP" =>
           SQLConf.get.timestampType match {
             case TimestampNTZType =>
-              val specialTs = convertSpecialTimestampNTZ(value).map(Literal(_, TimestampNTZType))
-              specialTs.getOrElse {
-                val containsTimeZonePart =
-                  DateTimeUtils.parseTimestampString(UTF8String.fromString(value))._2.isDefined
-                // If the input string contains time zone part, return a timestamp with local time
-                // zone literal.
-                if (containsTimeZonePart) {
-                  constructTimestampLTZLiteral(value)
-                } else {
-                  toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType)
+              convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
+                .map(Literal(_, TimestampNTZType))
+                .getOrElse {
+                  val containsTimeZonePart =
+                    DateTimeUtils.parseTimestampString(UTF8String.fromString(value))._2.isDefined
+                  // If the input string contains time zone part, return a timestamp with local time
+                  // zone literal.
+                  if (containsTimeZonePart) {
+                    constructTimestampLTZLiteral(value)
+                  } else {
+                    toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType)
+                  }
                 }
-              }
 
             case TimestampType =>
               constructTimestampLTZLiteral(value)
@@ -2176,7 +2197,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           }
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
-          Literal(DatatypeConverter.parseHexBinary(padding + value))
+          try {
+            Literal(Hex.decodeHex(padding + value))
+          } catch {
+            case _: DecoderException =>
+              throw new IllegalArgumentException(
+                s"contains illegal character for hexBinary: $padding$value");
+          }
         case other =>
           throw QueryParsingErrors.literalValueTypeUnsupportedError(other, ctx)
       }
@@ -2498,7 +2525,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
             if (value.exists(Character.isLetter)) {
               throw QueryParsingErrors.invalidIntervalFormError(value, ctx)
             }
-            value
+            if (values(i).MINUS() == null) {
+              value
+            } else {
+              value.startsWith("-") match {
+                case true => value.replaceFirst("-", "")
+                case false => s"-$value"
+              }
+            }
           } else {
             values(i).getText
           }
@@ -2990,7 +3024,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[CreateNamespaceStatement]] command.
+   * Create a [[CreateNamespace]] command.
    *
    * For example:
    * {{{
@@ -3028,8 +3062,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       properties += PROP_LOCATION -> _
     }
 
-    CreateNamespaceStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
+    CreateNamespace(
+      UnresolvedDBObjectName(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        isNamespace = true),
       ctx.EXISTS != null,
       properties)
   }
@@ -3527,19 +3563,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[UseStatement]] logical plan.
+   * Create a [[SetCatalogAndNamespace]] command.
    */
   override def visitUse(ctx: UseContext): LogicalPlan = withOrigin(ctx) {
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
-    UseStatement(ctx.NAMESPACE != null, nameParts)
-  }
-
-  /**
-   * Create a [[ShowCurrentNamespaceStatement]].
-   */
-  override def visitShowCurrentNamespace(
-      ctx: ShowCurrentNamespaceContext) : LogicalPlan = withOrigin(ctx) {
-    ShowCurrentNamespaceStatement()
+    SetCatalogAndNamespace(UnresolvedDBObjectName(nameParts, isNamespace = true))
   }
 
   /**
@@ -4256,62 +4284,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create or replace a view. This creates a [[CreateViewStatement]]
-   *
-   * For example:
-   * {{{
-   *   CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] multi_part_name
-   *   [(column_name [COMMENT column_comment], ...) ]
-   *   create_view_clauses
-   *
-   *   AS SELECT ...;
-   *
-   *   create_view_clauses (order insensitive):
-   *     [COMMENT view_comment]
-   *     [TBLPROPERTIES (property_name = property_value, ...)]
-   * }}}
-   */
-  override def visitCreateView(ctx: CreateViewContext): LogicalPlan = withOrigin(ctx) {
-    if (!ctx.identifierList.isEmpty) {
-      operationNotAllowed("CREATE VIEW ... PARTITIONED ON", ctx)
-    }
-
-    checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
-    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED ON", ctx)
-    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
-
-    val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
-      icl.identifierComment.asScala.map { ic =>
-        ic.identifier.getText -> Option(ic.commentSpec()).map(visitCommentSpec)
-      }
-    }
-
-    val properties = ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues)
-      .getOrElse(Map.empty)
-    if (ctx.TEMPORARY != null && !properties.isEmpty) {
-      operationNotAllowed("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW", ctx)
-    }
-
-    val viewType = if (ctx.TEMPORARY == null) {
-      PersistedView
-    } else if (ctx.GLOBAL != null) {
-      GlobalTempView
-    } else {
-      LocalTempView
-    }
-    CreateViewStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
-      userSpecifiedColumns,
-      visitCommentSpecList(ctx.commentSpec()),
-      properties,
-      Option(source(ctx.query)),
-      plan(ctx.query),
-      ctx.EXISTS != null,
-      ctx.REPLACE != null,
-      viewType)
-  }
-
-  /**
    * Alter the query of a view. This creates a [[AlterViewAs]]
    *
    * For example:
@@ -4408,36 +4380,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       UnresolvedFunc(functionName),
       ctx.EXISTS != null,
       ctx.TEMPORARY != null)
-  }
-
-  /**
-   * Create a CREATE FUNCTION statement.
-   *
-   * For example:
-   * {{{
-   *   CREATE [OR REPLACE] [TEMPORARY] FUNCTION [IF NOT EXISTS] [db_name.]function_name
-   *   AS class_name [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri']];
-   * }}}
-   */
-  override def visitCreateFunction(ctx: CreateFunctionContext): LogicalPlan = withOrigin(ctx) {
-    val resources = ctx.resource.asScala.map { resource =>
-      val resourceType = resource.identifier.getText.toLowerCase(Locale.ROOT)
-      resourceType match {
-        case "jar" | "file" | "archive" =>
-          FunctionResource(FunctionResourceType.fromString(resourceType), string(resource.STRING))
-        case other =>
-          operationNotAllowed(s"CREATE FUNCTION with resource type '$resourceType'", ctx)
-      }
-    }
-
-    val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
-    CreateFunctionStatement(
-      functionIdentifier,
-      string(ctx.className),
-      resources.toSeq,
-      ctx.TEMPORARY != null,
-      ctx.EXISTS != null,
-      ctx.REPLACE != null)
   }
 
   override def visitRefreshFunction(ctx: RefreshFunctionContext): LogicalPlan = withOrigin(ctx) {

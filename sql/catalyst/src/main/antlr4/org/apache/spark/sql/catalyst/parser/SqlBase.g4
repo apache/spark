@@ -106,7 +106,9 @@ singleTableSchema
 statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
-    | USE NAMESPACE? multipartIdentifier                               #use
+    | USE multipartIdentifier                                          #use
+    | USE NAMESPACE multipartIdentifier                                #useNamespace
+    | SET CATALOG (identifier | STRING)                                #setCatalog
     | CREATE namespace (IF NOT EXISTS)? multipartIdentifier
         (commentSpec |
          locationSpec |
@@ -212,6 +214,7 @@ statement
         (LIKE? (multipartIdentifier | pattern=STRING))?                #showFunctions
     | SHOW CREATE TABLE multipartIdentifier (AS SERDE)?                #showCreateTable
     | SHOW CURRENT NAMESPACE                                           #showCurrentNamespace
+    | SHOW CATALOGS (LIKE? pattern=STRING)?                            #showCatalogs
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) namespace EXTENDED?
         multipartIdentifier                                            #describeNamespace
@@ -442,7 +445,7 @@ resource
     ;
 
 dmlStatementNoWith
-    : insertInto queryTerm queryOrganization                                       #singleInsertQuery
+    : insertInto query                                                             #singleInsertQuery
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
     | DELETE FROM multipartIdentifier tableAlias whereClause?                      #deleteFromTable
     | UPDATE multipartIdentifier tableAlias setClause whereClause?                 #updateTable
@@ -797,8 +800,8 @@ predicate
     | NOT? kind=IN '(' expression (',' expression)* ')'
     | NOT? kind=IN '(' query ')'
     | NOT? kind=RLIKE pattern=valueExpression
-    | NOT? kind=LIKE quantifier=(ANY | SOME | ALL) ('('')' | '(' expression (',' expression)* ')')
-    | NOT? kind=LIKE pattern=valueExpression (ESCAPE escapeChar=STRING)?
+    | NOT? kind=(LIKE | ILIKE) quantifier=(ANY | SOME | ALL) ('('')' | '(' expression (',' expression)* ')')
+    | NOT? kind=(LIKE | ILIKE) pattern=valueExpression (ESCAPE escapeChar=STRING)?
     | IS NOT? kind=NULL
     | IS NOT? kind=(TRUE | FALSE | UNKNOWN)
     | IS NOT? kind=DISTINCT FROM right=valueExpression
@@ -1034,6 +1037,8 @@ alterColumnAction
     | setOrDrop=(SET | DROP) NOT NULL
     ;
 
+
+
 // When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.
 // - Reserved keywords:
 //     Keywords that are reserved and can't be used as identifiers for table, view, column,
@@ -1061,6 +1066,8 @@ ansiNonReserved
     | BY
     | CACHE
     | CASCADE
+    | CATALOG
+    | CATALOGS
     | CHANGE
     | CLEAR
     | CLUSTER
@@ -1126,6 +1133,7 @@ ansiNonReserved
     | LAST
     | LAZY
     | LIKE
+    | ILIKE
     | LIMIT
     | LINES
     | LIST
@@ -1289,6 +1297,8 @@ nonReserved
     | CASCADE
     | CASE
     | CAST
+    | CATALOG
+    | CATALOGS
     | CHANGE
     | CHECK
     | CLEAR
@@ -1380,6 +1390,7 @@ nonReserved
     | LAZY
     | LEADING
     | LIKE
+    | ILIKE
     | LIMIT
     | LINES
     | LIST
@@ -1542,6 +1553,8 @@ CACHE: 'CACHE';
 CASCADE: 'CASCADE';
 CASE: 'CASE';
 CAST: 'CAST';
+CATALOG: 'CATALOG';
+CATALOGS: 'CATALOGS';
 CHANGE: 'CHANGE';
 CHECK: 'CHECK';
 CLEAR: 'CLEAR';
@@ -1641,6 +1654,7 @@ LAZY: 'LAZY';
 LEADING: 'LEADING';
 LEFT: 'LEFT';
 LIKE: 'LIKE';
+ILIKE: 'ILIKE';
 LIMIT: 'LIMIT';
 LINES: 'LINES';
 LIST: 'LIST';
@@ -1805,6 +1819,8 @@ HAT: '^';
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
     | '"' ( ~('"'|'\\') | ('\\' .) )* '"'
+    | 'R\'' (~'\'')* '\''
+    | 'R"'(~'"')* '"'
     ;
 
 BIGINT_LITERAL

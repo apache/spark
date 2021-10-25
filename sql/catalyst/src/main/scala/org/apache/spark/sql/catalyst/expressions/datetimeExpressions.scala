@@ -708,6 +708,19 @@ case class UnixSeconds(child: Expression) extends TimestampToLongBase {
     copy(child = newChild)
 }
 
+// Internal expression used to get the raw UTC timestamp in pandas API on Spark.
+// This is to work around casting timestamp_ntz to long disallowed by ANSI.
+case class CastTimestampNTZToLong(child: Expression) extends TimestampToLongBase {
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampNTZType)
+
+  override def scaleFactor: Long = MICROS_PER_SECOND
+
+  override def prettyName: String = "cast_timestamp_ntz_to_long"
+
+  override protected def withNewChildInternal(newChild: Expression): CastTimestampNTZToLong =
+    copy(child = newChild)
+}
+
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp) - Returns the number of milliseconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of precision.",
@@ -2494,8 +2507,9 @@ case class MakeTimestampLTZ(
       * day - the day-of-month to represent, from 1 to 31
       * hour - the hour-of-day to represent, from 0 to 23
       * min - the minute-of-hour to represent, from 0 to 59
-      * sec - the second-of-minute and its micro-fraction to represent, from
-              0 to 60. If the sec argument equals to 60, the seconds field is set
+      * sec - the second-of-minute and its micro-fraction to represent, from 0 to 60.
+              The value can be either an integer like 13 , or a fraction like 13.123.
+              If the sec argument equals to 60, the seconds field is set
               to 0 and 1 minute is added to the final timestamp.
       * timezone - the time zone identifier. For example, CET, UTC and etc.
   """,
@@ -2507,6 +2521,8 @@ case class MakeTimestampLTZ(
        2014-12-27 21:30:45.887
       > SELECT _FUNC_(2019, 6, 30, 23, 59, 60);
        2019-07-01 00:00:00
+      > SELECT _FUNC_(2019, 6, 30, 23, 59, 1);
+       2019-06-30 23:59:01
       > SELECT _FUNC_(2019, 13, 1, 10, 11, 12, 'PST');
        NULL
       > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
@@ -2554,10 +2570,11 @@ case class MakeTimestamp(
 
   override def children: Seq[Expression] = Seq(year, month, day, hour, min, sec) ++ timezone
   // Accept `sec` as DecimalType to avoid loosing precision of microseconds while converting
-  // them to the fractional part of `sec`.
+  // them to the fractional part of `sec`. For accepts IntegerType as `sec` and integer can be
+  // casted into decimal safely, we use DecimalType(16, 6) which is wider than DecimalType(10, 0).
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType, DecimalType(8, 6)) ++
-    timezone.map(_ => StringType)
+    Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType, DecimalType(16, 6)) ++
+      timezone.map(_ => StringType)
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -2575,8 +2592,6 @@ case class MakeTimestamp(
       assert(secAndMicros.scale == 6,
         s"Seconds fraction must have 6 digits for microseconds but got ${secAndMicros.scale}")
       val unscaledSecFrac = secAndMicros.toUnscaledLong
-      assert(secAndMicros.precision <= 8,
-        s"Seconds and fraction cannot have more than 8 digits but got ${secAndMicros.precision}")
       val totalMicros = unscaledSecFrac.toInt // 8 digits cannot overflow Int
       val seconds = Math.floorDiv(totalMicros, MICROS_PER_SECOND.toInt)
       val nanos = Math.floorMod(totalMicros, MICROS_PER_SECOND.toInt) * NANOS_PER_MICROS.toInt
@@ -2712,7 +2727,7 @@ object DatePart {
         throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(fieldStr, source)
 
       source.dataType match {
-        case _: YearMonthIntervalType | _: DayTimeIntervalType | CalendarIntervalType =>
+        case _: AnsiIntervalType | CalendarIntervalType =>
           ExtractIntervalPart.parseExtractField(fieldStr, source, analysisException)
         case _ =>
           DatePart.parseExtractField(fieldStr, source, analysisException)

@@ -48,7 +48,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, PartitionAlreadyExistsException, PartitionsAlreadyExistException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, NoSuchTableException, PartitionAlreadyExistsException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -57,11 +57,11 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
+import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{CircularBuffer, Utils, VersionUtils}
+import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
@@ -201,12 +201,13 @@ private[hive] class HiveClientImpl(
   }
 
   private def getHive(conf: HiveConf): Hive = {
-    VersionUtils.majorMinorPatchVersion(version.fullVersion).map {
-      case (2, 3, v) if v >= 9 => Hive.getWithoutRegisterFns(conf)
-      case _ => Hive.get(conf)
-    }.getOrElse {
-      throw QueryExecutionErrors.unsupportedHiveMetastoreVersionError(
-        version.fullVersion, HiveUtils.HIVE_METASTORE_VERSION.key)
+    try {
+      Hive.getWithoutRegisterFns(conf)
+    } catch {
+      // SPARK-37069: not all Hive versions have the above method (e.g., Hive 2.3.9 has it but
+      // 2.3.8 don't), therefore here we fallback when encountering the exception.
+      case _: NoSuchMethodError =>
+        Hive.get(conf)
     }
   }
 
@@ -733,14 +734,19 @@ private[hive] class HiveClientImpl(
     Option(hivePartition).map(fromHivePartition)
   }
 
-  /**
-   * Returns the partitions for the given table that match the supplied partition spec.
-   * If no partition spec is specified, all partitions are returned.
-   */
   override def getPartitions(
-      table: CatalogTable,
+      db: String,
+      table: String,
+      spec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = {
+    val hiveTable = withHiveState {
+      getRawTableOption(db, table).getOrElse(throw new NoSuchTableException(db, table))
+    }
+    getPartitions(hiveTable, spec)
+  }
+
+  private def getPartitions(
+      hiveTable: HiveTable,
       spec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = withHiveState {
-    val hiveTable = toHiveTable(table, Some(userName))
     val partSpec = spec match {
       case None => CatalogTypes.emptyTablePartitionSpec
       case Some(s) =>
@@ -999,8 +1005,11 @@ private[hive] object HiveClientImpl extends Logging {
     // For Hive Serde, we still need to to restore the raw type for char and varchar type.
     // When reading data in parquet, orc, or avro file format with string type for char,
     // the tailing spaces may lost if we are not going to pad it.
-    val typeString = CharVarcharUtils.getRawTypeString(c.metadata)
-      .getOrElse(c.dataType.catalogString)
+    val typeString = if (SQLConf.get.charVarcharAsString) {
+      c.dataType.catalogString
+    } else {
+      CharVarcharUtils.getRawTypeString(c.metadata).getOrElse(c.dataType.catalogString)
+    }
     new FieldSchema(c.name, typeString, c.getComment().orNull)
   }
 

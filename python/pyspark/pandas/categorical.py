@@ -22,11 +22,12 @@ from pandas.api.types import CategoricalDtype, is_dict_like, is_list_like
 
 from pyspark.pandas.internal import InternalField
 from pyspark.pandas.spark import functions as SF
+from pyspark.pandas.data_type_ops.categorical_ops import _to_cat
 from pyspark.sql import functions as F
 from pyspark.sql.types import StructField
 
 if TYPE_CHECKING:
-    import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
+    import pyspark.pandas as ps
 
 
 class CategoricalAccessor(object):
@@ -238,8 +239,9 @@ class CategoricalAccessor(object):
                 FutureWarning,
             )
 
+        categories: List[Any]
         if is_list_like(new_categories):
-            categories = list(new_categories)  # type: List
+            categories = list(new_categories)
         else:
             categories = [new_categories]
 
@@ -432,8 +434,9 @@ class CategoricalAccessor(object):
                 FutureWarning,
             )
 
+        categories: List[Any]
         if is_list_like(removals):
-            categories = [cat for cat in removals if cat is not None]  # type: List
+            categories = [cat for cat in removals if cat is not None]
         elif removals is None:
             categories = []
         else:
@@ -735,7 +738,7 @@ class CategoricalAccessor(object):
                 return self._data.copy()
         else:
             dtype = CategoricalDtype(categories=new_categories, ordered=ordered)
-            psser = self._data.astype(dtype)
+            psser = _to_cat(self._data).astype(dtype)
 
             if inplace:
                 internal = self._data._psdf._internal.with_new_spark_column(

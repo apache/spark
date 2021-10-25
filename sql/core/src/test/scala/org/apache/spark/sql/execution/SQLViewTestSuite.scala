@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.execution
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.Repartition
+import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -394,6 +397,20 @@ class GlobalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   }
 }
 
+class OneTableCatalog extends InMemoryCatalog {
+  override def loadTable(ident: Identifier): Table = {
+    if (ident.namespace.isEmpty && ident.name == "t") {
+      new InMemoryTable(
+        "t",
+        StructType.fromDDL("c1 INT"),
+        Array.empty,
+        Map.empty[String, String].asJava)
+    } else {
+      super.loadTable(ident)
+    }
+  }
+}
+
 class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   private def db: String = "default"
   override protected def viewTypeString: String = "VIEW"
@@ -491,6 +508,26 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
           }
         }
       }
+    }
+  }
+
+  test("SPARK-36466: Table in unloaded catalog referenced by view should load correctly") {
+    val viewName = "v"
+    val tableInOtherCatalog = "cat.t"
+    try {
+      spark.conf.set("spark.sql.catalog.cat", classOf[OneTableCatalog].getName)
+      withTable(tableInOtherCatalog) {
+        withView(viewName) {
+          createView(viewName, s"SELECT count(*) AS cnt FROM $tableInOtherCatalog")
+          checkViewOutput(viewName, Seq(Row(0)))
+          spark.sessionState.catalogManager.reset()
+          checkViewOutput(viewName, Seq(Row(0)))
+        }
+      }
+    } finally {
+      spark.sessionState.catalog.reset()
+      spark.sessionState.catalogManager.reset()
+      spark.sessionState.conf.clear()
     }
   }
 }

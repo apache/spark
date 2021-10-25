@@ -20,7 +20,7 @@ Infrastructure of options for pandas-on-Spark.
 """
 from contextlib import contextmanager
 import json
-from typing import Any, Callable, Dict, Iterator, List, Tuple, Union  # noqa: F401 (SPARK-34943)
+from typing import Any, Callable, Dict, Iterator, List, Tuple, Union
 
 from pyspark._globals import _NoValue, _NoValueType
 
@@ -116,7 +116,7 @@ class Option:
 #     See the examples below:
 #     >>> from pyspark.pandas.config import show_options
 #     >>> show_options()
-_options = [
+_options: List[Option] = [
     Option(
         key="display.max_rows",
         doc=(
@@ -195,6 +195,31 @@ _options = [
         types=bool,
     ),
     Option(
+        key="compute.eager_check",
+        doc=(
+            "'compute.eager_check' sets whether or not to launch some Spark jobs just for the sake "
+            "of validation. If 'compute.eager_check' is set to True, pandas-on-Spark performs the "
+            "validation beforehand, but it will cause a performance overhead. Otherwise, "
+            "pandas-on-Spark skip the validation and will be slightly different from pandas"
+        ),
+        default=True,
+        types=bool,
+    ),
+    Option(
+        key="compute.isin_limit",
+        doc=(
+            "'compute.isin_limit' sets the limit for filtering by 'Column.isin(list)'. "
+            "If the length of the ‘list’ is above the limit, broadcast join is used instead "
+            "for better performance."
+        ),
+        default=80,
+        types=int,
+        check_func=(
+            lambda v: v >= 0,
+            "'compute.isin_limit' should be greater than or equal to 0.",
+        ),
+    ),
+    Option(
         key="plotting.max_rows",
         doc=(
             "'plotting.max_rows' sets the visual limit on top-n-based plots such as `plot.bar` "
@@ -232,9 +257,9 @@ _options = [
         default="plotly",
         types=str,
     ),
-]  # type: List[Option]
+]
 
-_options_dict = dict(zip((option.key for option in _options), _options))  # type: Dict[str, Option]
+_options_dict: Dict[str, Option] = dict(zip((option.key for option in _options), _options))
 
 _key_format = "pandas_on_Spark.{}".format
 

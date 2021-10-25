@@ -174,8 +174,10 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
 
-  override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
-    !Utils.isTesting || LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(plan)
+  override protected def isPlanIntegral(
+      previousPlan: LogicalPlan,
+      currentPlan: LogicalPlan): Boolean = {
+    !Utils.isTesting || LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan)
   }
 
   override def isView(nameParts: Seq[String]): Boolean = v1SessionCatalog.isView(nameParts)
@@ -260,6 +262,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveHints.ResolveCoalesceHints),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
+    Batch("Keep Legacy Outputs", Once,
+      KeepLegacyOutputs),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions(v1SessionCatalog) ::
       ResolveNamespace(catalogManager) ::
@@ -305,6 +309,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveBinaryArithmetic ::
       ResolveUnion ::
       typeCoercionRules ++
+      Seq(ResolveWithCTE) ++
       extendedResolutionRules : _*),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Apply Char Padding", Once,
@@ -374,6 +379,10 @@ class Analyzer(override val catalogManager: CatalogManager)
             TimestampAddYMInterval(r, l)
           case (CalendarIntervalType, CalendarIntervalType) |
                (_: DayTimeIntervalType, _: DayTimeIntervalType) => a
+          case (_: NullType, _: AnsiIntervalType) =>
+            a.copy(left = Cast(a.left, a.right.dataType))
+          case (_: AnsiIntervalType, _: NullType) =>
+            a.copy(right = Cast(a.right, a.left.dataType))
           case (DateType, CalendarIntervalType) => DateAddInterval(l, r, ansiEnabled = f)
           case (_, CalendarIntervalType | _: DayTimeIntervalType) => Cast(TimeAdd(l, r), l.dataType)
           case (CalendarIntervalType, DateType) => DateAddInterval(r, l, ansiEnabled = f)
@@ -393,6 +402,10 @@ class Analyzer(override val catalogManager: CatalogManager)
             DatetimeSub(l, r, TimestampAddYMInterval(l, UnaryMinus(r, f)))
           case (CalendarIntervalType, CalendarIntervalType) |
                (_: DayTimeIntervalType, _: DayTimeIntervalType) => s
+          case (_: NullType, _: AnsiIntervalType) =>
+            s.copy(left = Cast(s.left, s.right.dataType))
+          case (_: AnsiIntervalType, _: NullType) =>
+            s.copy(right = Cast(s.right, s.left.dataType))
           case (DateType, CalendarIntervalType) =>
             DatetimeSub(l, r, DateAddInterval(l, UnaryMinus(r, f), ansiEnabled = f))
           case (_, CalendarIntervalType | _: DayTimeIntervalType) =>
@@ -426,8 +439,8 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Substitute child plan with WindowSpecDefinitions.
    */
   object WindowsSubstitution extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      _.containsPattern(WITH_WINDOW_DEFINITION), ruleId) {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
+      _.containsAnyPattern(WITH_WINDOW_DEFINITION, UNRESOLVED_WINDOW_EXPRESSION), ruleId) {
       // Lookup WindowSpecDefinitions. This rule works with unresolved children.
       case WithWindowDefinition(windowDefinitions, child) => child.resolveExpressions {
         case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
@@ -435,6 +448,14 @@ class Analyzer(override val catalogManager: CatalogManager)
             throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName))
           WindowExpression(c, windowSpecDefinition)
       }
+
+      case p @ Project(projectList, _) =>
+        projectList.foreach(_.transformDownWithPruning(
+          _.containsPattern(UNRESOLVED_WINDOW_EXPRESSION), ruleId) {
+          case UnresolvedWindowExpression(_, windowSpec) =>
+            throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowSpec.name)
+        })
+        p
     }
   }
 
@@ -1080,9 +1101,6 @@ class Analyzer(override val catalogManager: CatalogManager)
             }.getOrElse(write)
           case _ => write
         }
-
-      case u: UnresolvedV2Relation =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
     }
 
     /**
@@ -1435,7 +1453,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
         }
       case g: Generate if containsStar(g.generator.children) =>
-        throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF")
+        throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF",
+          extractStar(g.generator.children))
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on its descendants
@@ -1649,6 +1668,9 @@ class Analyzer(override val catalogManager: CatalogManager)
     def containsStar(exprs: Seq[Expression]): Boolean =
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
 
+    private def extractStar(exprs: Seq[Expression]): Seq[Star] =
+      exprs.map(_.collect { case s: Star => s }).flatten
+
     /**
      * Expands the matching attribute.*'s in `child`'s output.
      */
@@ -1696,7 +1718,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           })
         // count(*) has been replaced by count(1)
         case o if containsStar(o.children) =>
-          throw QueryCompilationErrors.invalidStarUsageError(s"expression '${o.prettyName}'")
+          throw QueryCompilationErrors.invalidStarUsageError(s"expression '${o.prettyName}'",
+            extractStar(o.children))
       }
     }
   }
@@ -1940,7 +1963,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // mayResolveAttrByAggregateExprs requires the TreePattern UNRESOLVED_ATTRIBUTE.
       _.containsAllPatterns(AGGREGATE, UNRESOLVED_ATTRIBUTE), ruleId) {
       case agg @ Aggregate(groups, aggs, child)
-          if allowGroupByAlias && child.resolved && aggs.forall(_.resolved) &&
+          if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
             groups.exists(!_.resolved) =>
         agg.copy(groupingExpressions = mayResolveAttrByAggregateExprs(groups, aggs, child))
     }
@@ -2481,6 +2504,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         expr.collect {
           case WindowExpression(ae: AggregateExpression, _) => ae
           case WindowExpression(e: PythonUDF, _) if PythonUDF.isGroupedAggPandasUDF(e) => e
+          case UnresolvedWindowExpression(ae: AggregateExpression, _) => ae
+          case UnresolvedWindowExpression(e: PythonUDF, _)
+            if PythonUDF.isGroupedAggPandasUDF(e) => e
         }
       }.toSet
 
@@ -3975,14 +4001,22 @@ object SessionWindowing extends Rule[LogicalPlan] {
         val sessionAttr = AttributeReference(
           SESSION_COL_NAME, session.dataType, metadata = newMetadata)()
 
-        val sessionStart = PreciseTimestampConversion(session.timeColumn, TimestampType, LongType)
-        val sessionEnd = sessionStart + session.gapDuration
+        val sessionStart =
+          PreciseTimestampConversion(session.timeColumn, session.timeColumn.dataType, LongType)
+        val gapDuration = session.gapDuration match {
+          case expr if Cast.canCast(expr.dataType, CalendarIntervalType) =>
+            Cast(expr, CalendarIntervalType)
+          case other =>
+            throw QueryCompilationErrors.sessionWindowGapDurationDataTypeError(other.dataType)
+        }
+        val sessionEnd = PreciseTimestampConversion(session.timeColumn + gapDuration,
+          session.timeColumn.dataType, LongType)
 
         val literalSessionStruct = CreateNamedStruct(
           Literal(SESSION_START) ::
-            PreciseTimestampConversion(sessionStart, LongType, TimestampType) ::
+            PreciseTimestampConversion(sessionStart, LongType, session.timeColumn.dataType) ::
             Literal(SESSION_END) ::
-            PreciseTimestampConversion(sessionEnd, LongType, TimestampType) ::
+            PreciseTimestampConversion(sessionEnd, LongType, session.timeColumn.dataType) ::
             Nil)
 
         val sessionStruct = Alias(literalSessionStruct, SESSION_COL_NAME)(
@@ -3993,11 +4027,13 @@ object SessionWindowing extends Rule[LogicalPlan] {
         }
 
         // As same as tumbling window, we add a filter to filter out nulls.
-        val filterExpr = IsNotNull(session.timeColumn)
+        // And we also filter out events with negative or zero gap duration.
+        val filterExpr = IsNotNull(session.timeColumn) &&
+          (sessionAttr.getField(SESSION_END) > sessionAttr.getField(SESSION_START))
 
         replacedPlan.withNewChildren(
-          Project(sessionStruct +: child.output,
-            Filter(filterExpr, child)) :: Nil)
+          Filter(filterExpr,
+            Project(sessionStruct +: child.output, child)) :: Nil)
       } else if (numWindowExpr > 1) {
         throw QueryCompilationErrors.multiTimeWindowExpressionsNotSupportedError(p)
       } else {

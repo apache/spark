@@ -259,6 +259,7 @@ Column APIs
     Column.eqNullSafe
     Column.getField
     Column.getItem
+    Column.ilike
     Column.isNotNull
     Column.isNull
     Column.isin
@@ -298,6 +299,7 @@ Data Types
     StringType
     StructField
     StructType
+    TimestampNTZType
     TimestampType
 
 
@@ -366,6 +368,7 @@ Functions
     avg
     base64
     bin
+    bit_length
     bitwise_not
     bitwiseNOT
     broadcast
@@ -384,6 +387,7 @@ Functions
     corr
     cos
     cosh
+    cot
     count
     count_distinct
     countDistinct
@@ -391,6 +395,7 @@ Functions
     covar_samp
     crc32
     create_map
+    csc
     cume_dist
     current_date
     current_timestamp
@@ -470,9 +475,11 @@ Functions
     map_values
     map_zip_with
     max
+    max_by
     md5
     mean
     min
+    min_by
     minute
     monotonically_increasing_id
     month
@@ -482,6 +489,7 @@ Functions
     next_day
     nth_value
     ntile
+    octet_length
     overlay
     pandas_udf
     percent_rank
@@ -507,9 +515,11 @@ Functions
     rtrim
     schema_of_csv
     schema_of_json
+    sec
     second
     sentences
     sequence
+    session_window
     sha1
     sha2
     shiftleft

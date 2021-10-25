@@ -38,10 +38,11 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
         NullPropagation, UnwrapCastInBinaryComparison) :: Nil
   }
 
-  val testRelation: LocalRelation = LocalRelation('a.short, 'b.float, 'c.decimal(5, 2))
+  val testRelation: LocalRelation = LocalRelation('a.short, 'b.float, 'c.decimal(5, 2), 'd.boolean)
   val f: BoundReference = 'a.short.canBeNull.at(0)
   val f2: BoundReference = 'b.float.canBeNull.at(1)
   val f3: BoundReference = 'c.decimal(5, 2).canBeNull.at(2)
+  val f4: BoundReference = 'd.boolean.canBeNull.at(3)
 
   test("unwrap casts when literal == max") {
     val v = Short.MaxValue
@@ -302,6 +303,42 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
       In(Cast(f2, DoubleType), Seq(0.0d, 1.0d, add)))
   }
 
+  test("SPARK-36607: Support BooleanType in UnwrapCastInBinaryComparison") {
+    assert(Some((false, true)) === getRange(BooleanType))
+
+    val n = -1
+    assertEquivalent(castInt(f4) > n, trueIfNotNull(f4))
+    assertEquivalent(castInt(f4) >= n, trueIfNotNull(f4))
+    assertEquivalent(castInt(f4) === n, falseIfNotNull(f4))
+    assertEquivalent(castInt(f4) <=> n, false)
+    assertEquivalent(castInt(f4) <= n, falseIfNotNull(f4))
+    assertEquivalent(castInt(f4) < n, falseIfNotNull(f4))
+
+    val z = 0
+    assertEquivalent(castInt(f4) > z, f4 =!= false)
+    assertEquivalent(castInt(f4) >= z, trueIfNotNull(f4))
+    assertEquivalent(castInt(f4) === z, f4 === false)
+    assertEquivalent(castInt(f4) <=> z, f4 <=> false)
+    assertEquivalent(castInt(f4) <= z, f4 === false)
+    assertEquivalent(castInt(f4) < z, falseIfNotNull(f4))
+
+    val o = 1
+    assertEquivalent(castInt(f4) > o, falseIfNotNull(f4))
+    assertEquivalent(castInt(f4) >= o, f4 === true)
+    assertEquivalent(castInt(f4) === o, f4 === true)
+    assertEquivalent(castInt(f4) <=> o, f4 <=> true)
+    assertEquivalent(castInt(f4) <= o, trueIfNotNull(f4))
+    assertEquivalent(castInt(f4) < o, f4 =!= true)
+
+    val t = 2
+    assertEquivalent(castInt(f4) > t, falseIfNotNull(f4))
+    assertEquivalent(castInt(f4) >= t, falseIfNotNull(f4))
+    assertEquivalent(castInt(f4) === t, falseIfNotNull(f4))
+    assertEquivalent(castInt(f4) <=> t, false)
+    assertEquivalent(castInt(f4) <= t, trueIfNotNull(f4))
+    assertEquivalent(castInt(f4) < t, trueIfNotNull(f4))
+  }
+
   private def castInt(e: Expression): Expression = Cast(e, IntegerType)
   private def castDouble(e: Expression): Expression = Cast(e, DoubleType)
   private def castDecimal2(e: Expression): Expression = Cast(e, DecimalType(10, 4))
@@ -317,16 +354,16 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
 
     if (evaluate) {
       Seq(
-        (100.toShort, 3.14.toFloat, decimal2(100)),
-        (-300.toShort, 3.1415927.toFloat, decimal2(-3000.50)),
-        (null, Float.NaN, decimal2(12345.6789)),
-        (null, null, null),
-        (Short.MaxValue, Float.PositiveInfinity, decimal2(Short.MaxValue)),
-        (Short.MinValue, Float.NegativeInfinity, decimal2(Short.MinValue)),
-        (0.toShort, Float.MaxValue, decimal2(0)),
-        (0.toShort, Float.MinValue, decimal2(0.01))
+        (100.toShort, 3.14.toFloat, decimal2(100), true),
+        (-300.toShort, 3.1415927.toFloat, decimal2(-3000.50), false),
+        (null, Float.NaN, decimal2(12345.6789), null),
+        (null, null, null, null),
+        (Short.MaxValue, Float.PositiveInfinity, decimal2(Short.MaxValue), true),
+        (Short.MinValue, Float.NegativeInfinity, decimal2(Short.MinValue), false),
+        (0.toShort, Float.MaxValue, decimal2(0), null),
+        (0.toShort, Float.MinValue, decimal2(0.01), null)
       ).foreach(v => {
-        val row = create_row(v._1, v._2, v._3)
+        val row = create_row(v._1, v._2, v._3, v._4)
         checkEvaluation(e1, e2.eval(row), row)
       })
     }

@@ -1,3 +1,21 @@
+..  Licensed to the Apache Software Foundation (ASF) under one
+    or more contributor license agreements.  See the NOTICE file
+    distributed with this work for additional information
+    regarding copyright ownership.  The ASF licenses this file
+    to you under the Apache License, Version 2.0 (the
+    "License"); you may not use this file except in compliance
+    with the License.  You may obtain a copy of the License at
+
+..    http://www.apache.org/licenses/LICENSE-2.0
+
+..  Unless required by applicable law or agreed to in writing,
+    software distributed under the License is distributed on an
+    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, either express or implied.  See the License for the
+    specific language governing permissions and limitations
+    under the License.
+
+
 ====================
 Options and settings
 ====================
@@ -262,6 +280,17 @@ compute.ordered_head            False          'compute.ordered_head' sets wheth
                                                'compute.ordered_head' is set to True, pandas-on-
                                                Spark performs natural ordering beforehand, but it
                                                will cause a performance overhead.
+compute.eager_check             True           'compute.eager_check' sets whether or not to launch
+                                               some Spark jobs just for the sake of validation. If
+                                               'compute.eager_check' is set to True, pandas-on-Spark
+                                               performs the validation beforehand, but it will cause
+                                               a performance overhead. Otherwise, pandas-on-Spark
+                                               skip the validation and will be slightly different
+                                               from pandas
+compute.isin_limit              80             'compute.isin_limit' sets the limit for filtering by
+                                               'Column.isin(list)'. If the length of the ‘list’ is
+                                               above the limit, broadcast join is used instead for
+                                               better performance.
 plotting.max_rows               1000           'plotting.max_rows' sets the visual limit on top-n-
                                                based plots such as `plot.bar` and `plot.pie`. If it
                                                is set to 1000, the first 1000 data points will be

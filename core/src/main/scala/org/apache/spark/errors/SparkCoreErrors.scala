@@ -18,10 +18,12 @@
 package org.apache.spark.errors
 
 import java.io.IOException
+import java.util.concurrent.TimeoutException
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, TaskNotSerializableException}
+import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleManager}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, BlockSavedOnDecommissionedBlockManagerException, RDDBlockId, UnrecognizedBlockId}
 
@@ -29,6 +31,22 @@ import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException
  * Object for grouping error messages from (most) exceptions thrown during query execution.
  */
 object SparkCoreErrors {
+  def unexpectedPy4JServerError(other: Object): Throwable = {
+    new RuntimeException(s"Unexpected Py4J server ${other.getClass}")
+  }
+
+  def eofExceptionWhileReadPortNumberError(
+      daemonModule: String,
+      daemonExitValue: Option[Int] = null): Throwable = {
+    val msg = s"EOFException occurred while reading the port number from $daemonModule's" +
+      s" stdout" + daemonExitValue.map(v => s" and terminated with code: $v.").getOrElse("")
+    new SparkException(msg)
+  }
+
+  def unsupportedDataTypeError(other: Any): Throwable = {
+    new SparkException(s"Data of type $other is not supported")
+  }
+
   def rddBlockNotFoundError(blockId: BlockId, id: Int): Throwable = {
     new Exception(s"Could not compute split, block $blockId of RDD $id not found")
   }
@@ -75,10 +93,6 @@ object SparkCoreErrors {
 
   def reduceByKeyLocallyNotSupportArrayKeysError(): Throwable = {
     new SparkException("reduceByKeyLocally() does not support array keys")
-  }
-
-  def noSuchElementException(): Throwable = {
-    new NoSuchElementException()
   }
 
   def rddLacksSparkContextError(): Throwable = {
@@ -141,6 +155,71 @@ object SparkCoreErrors {
 
   def mustSpecifyCheckpointDirError(): Throwable = {
     new SparkException("Checkpoint dir must be specified.")
+  }
+
+  def askStandaloneSchedulerToShutDownExecutorsError(e: Exception): Throwable = {
+    new SparkException("Error asking standalone scheduler to shut down executors", e)
+  }
+
+  def stopStandaloneSchedulerDriverEndpointError(e: Exception): Throwable = {
+    new SparkException("Error stopping standalone scheduler's driver endpoint", e)
+  }
+
+  def noExecutorIdleError(id: String): Throwable = {
+    new NoSuchElementException(id)
+  }
+
+  def barrierStageWithRDDChainPatternError(): Throwable = {
+    new BarrierJobUnsupportedRDDChainException
+  }
+
+  def barrierStageWithDynamicAllocationError(): Throwable = {
+    new BarrierJobRunWithDynamicAllocationException
+  }
+
+  def numPartitionsGreaterThanMaxNumConcurrentTasksError(
+      numPartitions: Int,
+      maxNumConcurrentTasks: Int): Throwable = {
+    new BarrierJobSlotsNumberCheckFailed(numPartitions, maxNumConcurrentTasks)
+  }
+
+  def cannotRunSubmitMapStageOnZeroPartitionRDDError(): Throwable = {
+    new SparkException("Can't run submitMapStage on RDD with 0 partitions")
+  }
+
+  def accessNonExistentAccumulatorError(id: Long): Throwable = {
+    new SparkException(s"attempted to access non-existent accumulator $id")
+  }
+
+  def sendResubmittedTaskStatusForShuffleMapStagesOnlyError(): Throwable = {
+    new SparkException("TaskSetManagers should only send Resubmitted task " +
+      "statuses for tasks in ShuffleMapStages.")
+  }
+
+  def nonEmptyEventQueueAfterTimeoutError(timeoutMillis: Long): Throwable = {
+    new TimeoutException(s"The event queue is not empty after $timeoutMillis ms.")
+  }
+
+  def durationCalledOnUnfinishedTaskError(): Throwable = {
+    new UnsupportedOperationException("duration() called on unfinished task")
+  }
+
+  def unrecognizedSchedulerModePropertyError(
+      schedulerModeProperty: String,
+      schedulingModeConf: String): Throwable = {
+    new SparkException(s"Unrecognized $schedulerModeProperty: $schedulingModeConf")
+  }
+
+  def sparkError(errorMsg: String): Throwable = {
+    new SparkException(errorMsg)
+  }
+
+  def clusterSchedulerError(message: String): Throwable = {
+    new SparkException(s"Exiting due to error from cluster scheduler: $message")
+  }
+
+  def failToSerializeTaskError(e: Throwable): Throwable = {
+    new TaskNotSerializableException(e)
   }
 
   def unrecognizedBlockIdError(name: String): Throwable = {

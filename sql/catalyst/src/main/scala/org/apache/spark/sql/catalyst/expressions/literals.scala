@@ -31,12 +31,12 @@ import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffset}
 import java.util
 import java.util.Objects
-import javax.xml.bind.DatatypeConverter
 
 import scala.math.{BigDecimal, BigInt}
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
+import org.apache.commons.codec.binary.{Hex => ApacheHex}
 import org.json4s.JsonAST._
 
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
@@ -344,7 +344,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
 
   override def toString: String = value match {
     case null => "null"
-    case binary: Array[Byte] => s"0x" + DatatypeConverter.printHexBinary(binary)
+    case binary: Array[Byte] => s"0x" + ApacheHex.encodeHexString(binary, false)
     case d: ArrayBasedMapData => s"map(${d.toString})"
     case other =>
       dataType match {
@@ -479,7 +479,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       s"TIMESTAMP_NTZ '$toString'"
     case (i: CalendarInterval, CalendarIntervalType) =>
       s"INTERVAL '${i.toString}'"
-    case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
+    case (v: Array[Byte], BinaryType) => s"X'${ApacheHex.encodeHexString(v, false)}'"
     case (i: Long, DayTimeIntervalType(startField, endField)) =>
       toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)
     case (i: Int, YearMonthIntervalType(startField, endField)) =>

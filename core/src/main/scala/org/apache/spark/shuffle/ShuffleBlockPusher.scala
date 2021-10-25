@@ -24,15 +24,14 @@ import java.util.concurrent.ExecutorService
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 
-import com.google.common.base.Throwables
-
-import org.apache.spark.{ShuffleDependency, SparkConf, SparkEnv}
+import org.apache.spark.{ShuffleDependency, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.network.server.BlockPushNonFatalFailure
 import org.apache.spark.network.shuffle.BlockPushingListener
 import org.apache.spark.network.shuffle.ErrorHandler.BlockPushErrorHandler
 import org.apache.spark.network.util.TransportConf
@@ -78,10 +77,11 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         if (t.getCause != null && t.getCause.isInstanceOf[FileNotFoundException]) {
           return false
         }
-        val errorStackTraceString = Throwables.getStackTraceAsString(t)
-        // If the block is too late or the invalid block push, there is no need to retry it
-        !errorStackTraceString.contains(
-          BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX)
+        // If the block is too late or the invalid block push or the attempt is not the latest one,
+        // there is no need to retry it
+        !(t.isInstanceOf[BlockPushNonFatalFailure] &&
+          BlockPushNonFatalFailure.
+            shouldNotRetryErrorCode(t.asInstanceOf[BlockPushNonFatalFailure].getReturnCode));
       }
     }
   }
@@ -463,7 +463,8 @@ private[spark] object ShuffleBlockPusher {
 
   private val BLOCK_PUSHER_POOL: ExecutorService = {
     val conf = SparkEnv.get.conf
-    if (Utils.isPushBasedShuffleEnabled(conf)) {
+    if (Utils.isPushBasedShuffleEnabled(conf,
+        isDriver = SparkContext.DRIVER_IDENTIFIER == SparkEnv.get.executorId)) {
       val numThreads = conf.get(SHUFFLE_NUM_PUSH_THREADS)
         .getOrElse(conf.getInt(SparkLauncher.EXECUTOR_CORES, 1))
       ThreadUtils.newDaemonFixedThreadPool(numThreads, "shuffle-block-push-thread")

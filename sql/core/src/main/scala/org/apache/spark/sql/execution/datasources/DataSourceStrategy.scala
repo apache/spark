@@ -40,7 +40,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{AggregateFunc, Count, CountStar, FieldReference, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
@@ -464,7 +465,7 @@ object DataSourceStrategy
    */
   protected[sql] def normalizeExprs(
       exprs: Seq[Expression],
-      attributes: Seq[AttributeReference]): Seq[Expression] = {
+      attributes: Seq[Attribute]): Seq[Expression] = {
     exprs.map { e =>
       e transform {
         case a: AttributeReference =>
@@ -550,6 +551,9 @@ object DataSourceStrategy
 
     case expressions.Literal(false, BooleanType) =>
       Some(sources.AlwaysFalse)
+
+    case e @ pushableColumn(name) if e.dataType.isInstanceOf[BooleanType] =>
+      Some(sources.EqualTo(name, true))
 
     case _ => None
   }
@@ -643,7 +647,7 @@ object DataSourceStrategy
    * If the underlying subquery hasn't completed yet, this method will throw an exception.
    */
   protected[sql] def translateRuntimeFilter(expr: Expression): Option[Filter] = expr match {
-    case in @ InSubqueryExec(e @ PushableColumnAndNestedColumn(name), _, _, _) =>
+    case in @ InSubqueryExec(e @ PushableColumnAndNestedColumn(name), _, _, _, _, _) =>
       val values = in.values().getOrElse {
         throw new IllegalStateException(s"Can't translate $in to source filter, no subquery result")
       }
@@ -701,20 +705,19 @@ object DataSourceStrategy
     if (aggregates.filter.isEmpty) {
       aggregates.aggregateFunction match {
         case aggregate.Min(PushableColumnWithoutNestedColumn(name)) =>
-          Some(new Min(FieldReference(name).asInstanceOf[FieldReference]))
+          Some(new Min(FieldReference(name)))
         case aggregate.Max(PushableColumnWithoutNestedColumn(name)) =>
-          Some(new Max(FieldReference(name).asInstanceOf[FieldReference]))
+          Some(new Max(FieldReference(name)))
         case count: aggregate.Count if count.children.length == 1 =>
           count.children.head match {
             // SELECT COUNT(*) FROM table is translated to SELECT 1 FROM table
             case Literal(_, _) => Some(new CountStar())
             case PushableColumnWithoutNestedColumn(name) =>
-              Some(new Count(FieldReference(name).asInstanceOf[FieldReference],
-                aggregates.isDistinct))
+              Some(new Count(FieldReference(name), aggregates.isDistinct))
             case _ => None
           }
         case sum @ aggregate.Sum(PushableColumnWithoutNestedColumn(name), _) =>
-          Some(new Sum(FieldReference(name).asInstanceOf[FieldReference], aggregates.isDistinct))
+          Some(new Sum(FieldReference(name), aggregates.isDistinct))
         case _ => None
       }
     } else {

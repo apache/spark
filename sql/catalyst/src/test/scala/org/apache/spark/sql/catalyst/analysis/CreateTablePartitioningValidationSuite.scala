@@ -156,5 +156,6 @@ private[sql] case object TestRelation2 extends LeafNode with NamedRelation {
 private[sql] case object TestTable2 extends Table {
   override def name: String = "table_name"
   override def schema: StructType = CreateTablePartitioningValidationSuite.schema
-  override def capabilities: util.Set[TableCapability] = new util.HashSet[TableCapability]()
+  override def capabilities: util.Set[TableCapability] =
+    util.EnumSet.noneOf(classOf[TableCapability])
 }

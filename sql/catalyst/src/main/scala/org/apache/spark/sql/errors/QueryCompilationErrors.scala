@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
@@ -46,7 +46,7 @@ import org.apache.spark.sql.types._
  * As commands are executed eagerly, this also includes errors thrown during the execution of
  * commands, which users can see immediately.
  */
-private[spark] object QueryCompilationErrors {
+object QueryCompilationErrors {
 
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
@@ -262,8 +262,19 @@ private[spark] object QueryCompilationErrors {
       "Star (*) is not allowed in select list when GROUP BY ordinal position is used")
   }
 
-  def invalidStarUsageError(prettyName: String): Throwable = {
-    new AnalysisException(s"Invalid usage of '*' in $prettyName")
+  def invalidStarUsageError(prettyName: String, stars: Seq[Star]): Throwable = {
+    val regExpr = stars.collect{ case UnresolvedRegex(pattern, _, _) => s"'$pattern'" }
+    val resExprMsg = Option(regExpr.distinct).filter(_.nonEmpty).map {
+      case Seq(p) => s"regular expression $p"
+      case patterns => s"regular expressions ${patterns.mkString(", ")}"
+    }
+    val starMsg = if (stars.length - regExpr.length > 0) {
+      Some("'*'")
+    } else {
+      None
+    }
+    val elem = Seq(starMsg, resExprMsg).flatten.mkString(" and ")
+    new AnalysisException(s"Invalid usage of $elem in $prettyName")
   }
 
   def singleTableStarInCountNotAllowedError(targetString: String): Throwable = {
@@ -369,6 +380,11 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("Multiple time/session window expressions would result in a cartesian " +
       "product of rows, therefore they are currently not supported.", t.origin.line,
       t.origin.startPosition)
+  }
+
+  def sessionWindowGapDurationDataTypeError(dt: DataType): Throwable = {
+    new AnalysisException("Gap duration expression used in session window must be " +
+      s"CalendarIntervalType, but got ${dt}")
   }
 
   def viewOutputNumberMismatchQueryColumnNamesError(
@@ -1833,19 +1849,6 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("Cannot overwrite a path that is also being read from.")
   }
 
-  def createFuncWithBothIfNotExistsAndReplaceError(): Throwable = {
-    new AnalysisException("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed.")
-  }
-
-  def defineTempFuncWithIfNotExistsError(): Throwable = {
-    new AnalysisException("It is not allowed to define a TEMPORARY function with IF NOT EXISTS.")
-  }
-
-  def specifyingDBInCreateTempFuncError(databaseName: String): Throwable = {
-    new AnalysisException(
-      s"Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: '$databaseName'")
-  }
-
   def specifyingDBInDropTempFuncError(databaseName: String): Throwable = {
     new AnalysisException(
       s"Specifying a database in DROP TEMPORARY FUNCTION is not allowed: '$databaseName'")
@@ -1993,19 +1996,6 @@ private[spark] object QueryCompilationErrors {
       s"Failed to execute SHOW CREATE TABLE against table/view ${table.identifier}, " +
         "which is created by Hive and uses the following unsupported feature(s)\n" +
         features.map(" - " + _).mkString("\n"))
-  }
-
-  def createViewWithBothIfNotExistsAndReplaceError(): Throwable = {
-    new AnalysisException("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.")
-  }
-
-  def defineTempViewWithIfNotExistsError(): Throwable = {
-    new AnalysisException("It is not allowed to define a TEMPORARY view with IF NOT EXISTS.")
-  }
-
-  def notAllowedToAddDBPrefixForTempViewError(database: String): Throwable = {
-    new AnalysisException(
-      s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.")
   }
 
   def logicalPlanForViewNotAnalyzedError(): Throwable = {
@@ -2317,7 +2307,11 @@ private[spark] object QueryCompilationErrors {
   }
 
   def cannotModifyValueOfSparkConfigError(key: String): Throwable = {
-    new AnalysisException(s"Cannot modify the value of a Spark config: $key")
+    new AnalysisException(
+      s"""
+         |Cannot modify the value of a Spark config: $key.
+         |See also 'https://spark.apache.org/docs/latest/sql-migration-guide.html#ddl-statements'
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   def commandExecutionInRunnerUnsupportedError(runner: String): Throwable = {
@@ -2365,5 +2359,11 @@ private[spark] object QueryCompilationErrors {
       errorClass = "INVALID_FIELD_NAME",
       messageParameters = Array(fieldName.quoted, path.quoted),
       origin = context)
+  }
+
+  def invalidJsonSchema(schema: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
+      messageParameters = Array(schema.toString))
   }
 }

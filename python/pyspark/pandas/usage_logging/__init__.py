@@ -41,7 +41,6 @@ from pyspark.pandas.missing.groupby import (
     MissingPandasLikeSeriesGroupBy,
 )
 from pyspark.pandas.missing.indexes import (
-    MissingPandasLikeCategoricalIndex,
     MissingPandasLikeDatetimeIndex,
     MissingPandasLikeIndex,
     MissingPandasLikeMultiIndex,
@@ -114,8 +113,8 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
     except ImportError:
         pass
 
-    sql_processor._CAPTURE_SCOPES = 3  # type: ignore
-    modules.append(sql_processor)  # type: ignore
+    sql_processor._CAPTURE_SCOPES = 3
+    modules.append(sql_processor)
 
     # Modules
     for target_module in modules:
@@ -157,7 +156,6 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
         (pd.Series, MissingPandasLikeSeries),
         (pd.Index, MissingPandasLikeIndex),
         (pd.MultiIndex, MissingPandasLikeMultiIndex),
-        (pd.CategoricalIndex, MissingPandasLikeCategoricalIndex),
         (pd.DatetimeIndex, MissingPandasLikeDatetimeIndex),
         (pd.core.groupby.DataFrameGroupBy, MissingPandasLikeDataFrameGroupBy),
         (pd.core.groupby.SeriesGroupBy, MissingPandasLikeSeriesGroupBy),
