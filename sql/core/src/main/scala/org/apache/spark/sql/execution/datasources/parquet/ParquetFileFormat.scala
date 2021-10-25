@@ -327,18 +327,31 @@ class ParquetFileFormat
           int96RebaseMode.toString,
           enableOffHeapColumnVector && taskContext.isDefined,
           capacity)
+        // SPARK-37089: We cannot register a task completion listener to close this iterator here
+        // because downstream exec nodes have already registered their listeners. Since listeners
+        // are executed in reverse order of registration, a listener registered here would close the
+        // iterator while downstream exec nodes are still running. When off-heap column vectors are
+        // enabled, this can cause a use-after-free bug leading to a segfault.
+        //
+        // Instead, we use FileScanRDD's task completion listener to close this iterator.
         val iter = new RecordReaderIterator(vectorizedReader)
-        // SPARK-23457 Register a task completion listener before `initialization`.
-        taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
-        vectorizedReader.initialize(split, hadoopAttemptContext)
-        logDebug(s"Appending $partitionSchema ${file.partitionValues}")
-        vectorizedReader.initBatch(partitionSchema, file.partitionValues)
-        if (returningBatch) {
-          vectorizedReader.enableReturningBatches()
-        }
+        try {
+          vectorizedReader.initialize(split, hadoopAttemptContext)
+          logDebug(s"Appending $partitionSchema ${file.partitionValues}")
+          vectorizedReader.initBatch(partitionSchema, file.partitionValues)
+          if (returningBatch) {
+            vectorizedReader.enableReturningBatches()
+          }
 
-        // UnsafeRowParquetRecordReader appends the columns internally to avoid another copy.
-        iter.asInstanceOf[Iterator[InternalRow]]
+          // UnsafeRowParquetRecordReader appends the columns internally to avoid another copy.
+          iter.asInstanceOf[Iterator[InternalRow]]
+        } catch {
+          case e: Throwable =>
+            // SPARK-23457: In case there is an exception in initialization, close the iterator to
+            // avoid leaking resources.
+            iter.close()
+            throw e
+        }
       } else {
         logDebug(s"Falling back to parquet-mr")
         // ParquetRecordReader returns InternalRow
@@ -354,19 +367,25 @@ class ParquetFileFormat
           new ParquetRecordReader[InternalRow](readSupport)
         }
         val iter = new RecordReaderIterator[InternalRow](reader)
-        // SPARK-23457 Register a task completion listener before `initialization`.
-        taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
-        reader.initialize(split, hadoopAttemptContext)
+        try {
+          reader.initialize(split, hadoopAttemptContext)
 
-        val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
-        val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+          val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+          val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
 
-        if (partitionSchema.length == 0) {
-          // There is no partition columns
-          iter.map(unsafeProjection)
-        } else {
-          val joinedRow = new JoinedRow()
-          iter.map(d => unsafeProjection(joinedRow(d, file.partitionValues)))
+          if (partitionSchema.length == 0) {
+            // There is no partition columns
+            iter.map(unsafeProjection)
+          } else {
+            val joinedRow = new JoinedRow()
+            iter.map(d => unsafeProjection(joinedRow(d, file.partitionValues)))
+          }
+        } catch {
+          case e: Throwable =>
+            // SPARK-23457: In case there is an exception in initialization, close the iterator to
+            // avoid leaking resources.
+            iter.close()
+            throw e
         }
       }
     }
