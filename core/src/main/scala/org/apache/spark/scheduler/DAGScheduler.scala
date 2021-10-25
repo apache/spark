@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.annotation.tailrec
 import scala.collection.Map
 import scala.collection.mutable
-import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
+import scala.collection.mutable.{HashMap, HashSet, ListBuffer, Set}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
@@ -164,6 +164,9 @@ private[spark] class DAGScheduler(
   // Stages that must be resubmitted due to fetch failures
   private[scheduler] val failedStages = new HashSet[Stage]
 
+  // Stages that have succeeded yet whose child stages aren't done
+  private[scheduler] val succeededStages = new HashSet[Stage]
+
   private[scheduler] val activeJobs = new HashSet[ActiveJob]
 
   /**
@@ -272,6 +275,9 @@ private[spark] class DAGScheduler(
 
   private val shuffleMergeFinalizeNumThreads =
     sc.getConf.get(config.PUSH_BASED_SHUFFLE_MERGE_FINALIZE_THREADS)
+
+  private val reuseMergerLocations =
+    sc.getConf.get(config.PUSH_BASED_SHUFFLE_REUSE_MERGER_LOCATIONS)
 
   // Since SparkEnv gets initialized after DAGScheduler, externalShuffleClient needs to be
   // initialized lazily
@@ -834,6 +840,10 @@ private[spark] class DAGScheduler(
                   logDebug("Removing stage %d from failed set.".format(stageId))
                   failedStages -= stage
                 }
+                if (succeededStages.contains(stage)) {
+                  logDebug("Removing stage %d from succeeded set.".format(stageId))
+                  succeededStages -= stage
+                }
               }
               // data structures based on StageId
               stageIdToStage -= stageId
@@ -1328,10 +1338,12 @@ private[spark] class DAGScheduler(
           logInfo("Submitting " + stage + " (" + stage.rdd + "), which has no missing parents")
           submitMissingTasks(stage, jobId.get)
         } else {
+          // Add the stage to waitingStages set before visiting parent stages. This allows
+          // discovery of sibling stages inside findCoPartitionedSiblingMapStages()
+          waitingStages += stage
           for (parent <- missing) {
             submitStage(parent)
           }
-          waitingStages += stage
         }
       }
     } else {
@@ -1388,16 +1400,73 @@ private[spark] class DAGScheduler(
   }
 
   private def getAndSetShufflePushMergerLocations(stage: ShuffleMapStage): Seq[BlockManagerId] = {
-    val mergerLocs = sc.schedulerBackend.getShufflePushMergerLocations(
-      stage.shuffleDep.partitioner.numPartitions, stage.resourceProfileId)
+    val coPartitionedSiblingStages = if (reuseMergerLocations) {
+      // Reuse merger locations for sibling stages (for eg: join cases) so that
+      // both the RDD's output will be collocated giving better locality. Since this
+      // method is invoked only within the event loop thread, it's safe to find sibling
+      // stages and set the merger locations accordingly in this way.
+      findCoPartitionedSiblingMapStages(stage)
+    } else {
+      Set.empty[ShuffleMapStage]
+    }
+    val mergerLocs = if (reuseMergerLocations) {
+      coPartitionedSiblingStages.collectFirst({
+        case s if s.shuffleDep.getMergerLocs.nonEmpty => s.shuffleDep.getMergerLocs})
+        .getOrElse(sc.schedulerBackend.getShufflePushMergerLocations(
+          stage.shuffleDep.partitioner.numPartitions, stage.resourceProfileId))
+    } else {
+      sc.schedulerBackend.getShufflePushMergerLocations(
+        stage.shuffleDep.partitioner.numPartitions, stage.resourceProfileId)
+    }
     if (mergerLocs.nonEmpty) {
       stage.shuffleDep.setMergerLocs(mergerLocs)
+      if (reuseMergerLocations) {
+        coPartitionedSiblingStages.filter(_.shuffleDep.getMergerLocs.isEmpty)
+          .foreach(_.shuffleDep.setMergerLocs(mergerLocs))
+      }
     }
 
     logDebug(s"Shuffle merge locations for shuffle ${stage.shuffleDep.shuffleId} with" +
       s" shuffle merge ${stage.shuffleDep.shuffleMergeId} is" +
       s" ${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
     mergerLocs
+  }
+
+  /**
+   * Identify sibling stages for a given ShuffleMapStage. A sibling stage is defined as
+   * one stage that shares one or more child stages with the given stage. For example,
+   * when we have a join, the reduce stage of the join will be the common child stage for
+   * the shuffle map stages shuffling the tables involved in this join. These shuffle map
+   * stages are sibling stages to each other. Being able to identify the sibling stages would
+   * allow us to set common merger locations for these shuffle map stages so that the reduce
+   * stage can have better locality especially for join operations.
+   */
+  private def findCoPartitionedSiblingMapStages(
+      stage: ShuffleMapStage): Set[ShuffleMapStage] = {
+    val numShufflePartitions = stage.shuffleDep.partitioner.numPartitions
+    val siblingStages = new HashSet[ShuffleMapStage]
+    siblingStages += stage
+    var prevSize = 0
+    val allStagesSoFar = waitingStages ++ runningStages ++ failedStages ++ succeededStages
+    do {
+      prevSize = siblingStages.size
+      siblingStages ++= allStagesSoFar.filter(_.parents.intersect(siblingStages.toSeq).nonEmpty)
+        .flatMap(_.parents).filter{ parentStage =>
+          parentStage.isInstanceOf[ShuffleMapStage] &&
+            parentStage.asInstanceOf[ShuffleMapStage]
+              .shuffleDep.partitioner.numPartitions == numShufflePartitions
+        }.map(_.asInstanceOf[ShuffleMapStage])
+    } while (siblingStages.size > prevSize)
+    // This filter will select only shuffle map stages that are/were push enabled. Notice that
+    // when we retry a push-enabled shuffle map stage, we will disable push but the merge finalized
+    // flag will remain true. We cannot do this filter in the above while loop, which would miss
+    // identifying all the sibling stages currently. Furthermore, when the final stage of a job or
+    // a map-only job gets submitted, the stage DAG for that job are visited in a depth first
+    // manner (submitStage), which means the allStagesSoFar set might not include all the sibling
+    // stages when we invoke this method. However, this is fine because when the unvisited sibling
+    // stages get visited later, their merger locations will be set accordingly.
+    siblingStages.filter(siblingStage => siblingStage.shuffleDep.shuffleMergeEnabled
+      || siblingStage.shuffleDep.shuffleMergeFinalized)
   }
 
   /** Called when stage's parents are available and we can now do its task. */
@@ -2576,6 +2645,14 @@ private[spark] class DAGScheduler(
     }
     listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
     runningStages -= stage
+    if (errorMessage.isEmpty) {
+      // Add succeeded stage into the succeeded set
+      succeededStages += stage
+      // Remove all parent stages with no pending child stages from the succeeded set
+      stage.parents.filter{ parentStage =>
+        !waitingStages.exists(_.parents.contains(parentStage))}
+        .foreach(succeededStages -= _)
+    }
   }
 
   /**

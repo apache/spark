@@ -2190,6 +2190,17 @@ package object config {
       .checkValue(_ >= 0L, "Timeout must be >= 0.")
       .createWithDefaultString("10s")
 
+  private[spark] val PUSH_BASED_SHUFFLE_REUSE_MERGER_LOCATIONS =
+    ConfigBuilder("spark.shuffle.push.reuse.merger.locations")
+      .doc("For sibling shuffle map stages, i.e. ones that share common child stages, reusing " +
+        "merger locations between them can help to further increase shuffle locality ratio " +
+        "when push based shuffle is enabled. Examples include joins where the reduce stage " +
+        "needs to fetch shuffle data from multiple parent shuffle map stages. Set to 'true' " +
+        "to enable this feature.")
+      .version("3.2.1")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val SHUFFLE_MERGER_MAX_RETAINED_LOCATIONS =
     ConfigBuilder("spark.shuffle.push.maxRetainedMergerLocations")
       .doc("Maximum number of merger locations cached for push-based shuffle. Currently, merger" +
