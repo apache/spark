@@ -1184,10 +1184,10 @@ package object config {
         "HighlyCompressedMapStatus if its size is larger than this factor multiplying " +
         "the median shuffle block size or SHUFFLE_ACCURATE_BLOCK_THRESHOLD. It is " +
         "recommended to set this parameter to be the same as SKEW_JOIN_SKEWED_PARTITION_FACTOR." +
-        "-1 to disable this feature by default.")
+        "Set to -1.0 to disable this feature by default.")
       .version("3.3.0")
-      .intConf
-      .createWithDefault(-1)
+      .doubleConf
+      .createWithDefault(-1.0)
 
   private[spark] val SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER =
     ConfigBuilder("spark.shuffle.maxAccurateSkewedBlockNumber")

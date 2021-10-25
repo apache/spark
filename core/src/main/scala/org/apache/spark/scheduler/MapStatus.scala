@@ -258,6 +258,10 @@ private[spark] object HighlyCompressedMapStatus {
     val accurateBlockSkewedFactor = Option(SparkEnv.get)
       .map(_.conf.get(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR))
       .getOrElse(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR.defaultValue.get)
+    val shuffleAccurateBlockThreshold =
+      Option(SparkEnv.get)
+        .map(_.conf.get(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD))
+        .getOrElse(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD.defaultValue.get)
     val threshold =
       if (accurateBlockSkewedFactor > 0) {
         val sortedSizes = uncompressedSizes.sorted
@@ -274,16 +278,10 @@ private[spark] object HighlyCompressedMapStatus {
             medianSize * accurateBlockSkewedFactor,
             sortedSizes(totalNumBlocks - maxAccurateSkewedBlockNumber)
           )
-        Math.min(
-          Option(SparkEnv.get)
-            .map(_.conf.get(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD))
-            .getOrElse(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD.defaultValue.get),
-          skewSizeThreshold)
+        Math.min(shuffleAccurateBlockThreshold, skewSizeThreshold)
       } else {
         // Disable skew detection if accurateBlockSkewedFactor <= 0
-        Option(SparkEnv.get)
-          .map(_.conf.get(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD))
-          .getOrElse(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD.defaultValue.get)
+        shuffleAccurateBlockThreshold
       }
 
     val hugeBlockSizes = mutable.Map.empty[Int, Byte]
