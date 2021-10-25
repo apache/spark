@@ -23,7 +23,6 @@ import java.util.{Collections, Random}
 
 import com.google.common.primitives.{Doubles, Ints}
 
-
 /**
  * A generic, re-usable histogram class that supports partial aggregations.
  * The algorithm is a heuristic adapted from the following paper:
@@ -32,7 +31,7 @@ import com.google.common.primitives.{Doubles, Ints}
  * guarantees, it appears to work well with adequate data and a large (e.g., 20-80) number
  * of histogram bins.
  */
-class DistributeHistogram(var nBins: Int) {
+class DistributeHistogram(private var nBins: Int) {
   private var nUsedBins: Int = 0
   private var bins: util.ArrayList[Coord] = new util.ArrayList[Coord](nBins)
   // init the RNG for breaking ties in histogram merging. A fixed seed is specified here
@@ -45,6 +44,9 @@ class DistributeHistogram(var nBins: Int) {
    */
   def getNBins: Int = nBins
 
+  /**
+   * Set the number of bins.
+   */
   def setNBins(nBins: Int): Unit = this.nBins = nBins
 
   /**
@@ -52,6 +54,9 @@ class DistributeHistogram(var nBins: Int) {
    */
   def getUsedBins: Int = nUsedBins
 
+  /**
+   * Set the number of bins currently being used by the histogram.
+   */
   def setUsedBins(nUsedBins: Int): Unit = this.nUsedBins = nUsedBins
 
   /**
@@ -59,6 +64,9 @@ class DistributeHistogram(var nBins: Int) {
    */
   def getBins: util.ArrayList[Coord] = bins
 
+  /**
+   * Set a particular histogram bin.
+   */
   def setBins(bins: util.ArrayList[Coord]): Unit = this.bins = bins
 
   /**
@@ -66,7 +74,6 @@ class DistributeHistogram(var nBins: Int) {
    * it with the current histogram object.
    *
    * @param other A serialized histogram created by the serialize() method
-   * @see #merge
    */
   def merge(other: DistributeHistogram): Unit = {
     if (other == null) return
