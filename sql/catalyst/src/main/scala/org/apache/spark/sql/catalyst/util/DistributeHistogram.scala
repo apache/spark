@@ -32,22 +32,13 @@ import com.google.common.primitives.{Doubles, Ints}
  * guarantees, it appears to work well with adequate data and a large (e.g., 20-80) number
  * of histogram bins.
  */
-class DistributeHistogram {
-  private var nBins: Int = _
-  private var nUsedBins: Int = _
-  private var bins: util.ArrayList[Coord] = _
+class DistributeHistogram(var nBins: Int) {
+  private var nUsedBins: Int = 0
+  private var bins: util.ArrayList[Coord] = new util.ArrayList[Coord](nBins)
   // init the RNG for breaking ties in histogram merging. A fixed seed is specified here
   // to aid testing, but can be eliminated to use a time-based seed (which would
   // make the algorithm non-deterministic).
   private val prng = new Random(31183)
-
-  def allocate(nBins: Int): Unit = {
-    this.nBins = nBins
-    assert(nBins >= 2,
-      s"${this.getClass.getSimpleName} needs nBins to be at least 2, but you supplied ${nBins}")
-    this.nUsedBins = 0
-    bins = new util.ArrayList[Coord](nBins)
-  }
 
   /**
    * Returns the number of bins.
@@ -87,7 +78,7 @@ class DistributeHistogram {
       bins = new util.ArrayList[Coord](nUsedBins)
       var i = 0
       while (i < other.bins.size()) {
-        val bin = new Coord(other.bins.get(i).x, other.bins.get(i).y)
+        val bin = Coord(other.bins.get(i).x, other.bins.get(i).y)
         bins.add(bin)
         i += 1
       }
@@ -102,7 +93,7 @@ class DistributeHistogram {
       }
       var j = 0
       while (j < other.bins.size()) {
-        val bin = new Coord(other.bins.get(j).x, other.bins.get(j).y)
+        val bin = Coord(other.bins.get(j).x, other.bins.get(j).y)
         tmp_bins.add(bin)
         j += 1
       }
@@ -255,8 +246,7 @@ class HistogramSerializer {
       bins.add(Coord(x, y))
       i += 1
     }
-    val histogram = new DistributeHistogram()
-    histogram.setNBins(nBins)
+    val histogram = new DistributeHistogram(nBins)
     histogram.setUsedBins(nUsedBins)
     histogram.setBins(bins)
     histogram

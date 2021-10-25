@@ -94,9 +94,7 @@ case class HistogramNumeric(
   }
 
   override def createAggregationBuffer(): DistributeHistogram = {
-    val histogram = new DistributeHistogram()
-    histogram.allocate(nb.asInstanceOf[Int])
-    histogram
+    new DistributeHistogram(nb.asInstanceOf[Int])
   }
 
   override def update(buffer: DistributeHistogram, inputRow: InternalRow): DistributeHistogram = {

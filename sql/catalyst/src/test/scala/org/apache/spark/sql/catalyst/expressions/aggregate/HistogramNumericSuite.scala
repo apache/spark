@@ -42,19 +42,10 @@ class HistogramNumericSuite extends SparkFunSuite {
     val serializer = new HistogramSerializer
 
     // Check empty serialize and de-serialize
-    val emptyBuffer = new DistributeHistogram()
-    emptyBuffer.allocate(5)
-    emptyBuffer.add(1)
-    emptyBuffer.add(2)
-    emptyBuffer.add(3)
-    emptyBuffer.add(4)
-    emptyBuffer.add(5)
-    emptyBuffer.add(6)
-    emptyBuffer.add(7)
+    val emptyBuffer = new DistributeHistogram(5)
     assert(compareEquals(emptyBuffer, serializer.deserialize(serializer.serialize(emptyBuffer))))
 
-    val buffer = new DistributeHistogram()
-    buffer.allocate(data.size / 3)
+    val buffer = new DistributeHistogram(data.size / 3)
     data.foreach { value =>
       buffer.add(value)
     }
@@ -67,11 +58,9 @@ class HistogramNumericSuite extends SparkFunSuite {
   test("class DistributeHistogram, basic operations") {
     val valueCount = 5
     Seq(3, 5).foreach { nBins: Int =>
-      val buffer = new DistributeHistogram()
-      buffer.allocate(nBins)
+      val buffer = new DistributeHistogram(nBins)
       (1 to valueCount).grouped(nBins).foreach { group =>
-        val partialBuffer = new DistributeHistogram()
-        partialBuffer.allocate(nBins)
+        val partialBuffer = new DistributeHistogram(nBins)
         group.foreach(x => partialBuffer.add(x))
         buffer.merge(partialBuffer)
       }
