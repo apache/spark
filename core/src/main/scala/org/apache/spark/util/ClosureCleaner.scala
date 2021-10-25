@@ -397,7 +397,7 @@ private[spark] object ClosureCleaner extends Logging {
           val outerField = func.getClass.getDeclaredField("arg$1")
           // SPARK-37072: When Java 17 is used and `outerField` is read-only,
           // the content of `outerField` cannot be set by reflect api directly.
-          // But We can remove the `final` modifier of `outerField` before set value
+          // But we can remove the `final` modifier of `outerField` before set value
           // and reset the modifier after set value.
           val modifiersField = getFinalModifiersFieldForJava17(outerField)
           modifiersField
@@ -418,18 +418,18 @@ private[spark] object ClosureCleaner extends Logging {
   }
 
   /**
-   * This method is used to get the final modifier field when use Java 17.
+   * This method is used to get the final modifier field when on Java 17.
    */
   private def getFinalModifiersFieldForJava17(field: Field): Option[Field] = {
     if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17) &&
-      Modifier.isFinal(field.getModifiers)) {
+        Modifier.isFinal(field.getModifiers)) {
       val methodGetDeclaredFields0 = classOf[Class[_]]
         .getDeclaredMethod("getDeclaredFields0", classOf[Boolean])
       methodGetDeclaredFields0.setAccessible(true)
       val fields = methodGetDeclaredFields0.invoke(classOf[Field], false.asInstanceOf[Object])
         .asInstanceOf[Array[Field]]
       val modifiersFieldOption = fields.find(field => "modifiers".equals(field.getName))
-      assert(modifiersFieldOption.isDefined)
+      require(modifiersFieldOption.isDefined)
       modifiersFieldOption.foreach(_.setAccessible(true))
       modifiersFieldOption
     } else None
