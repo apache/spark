@@ -286,7 +286,7 @@ compute.eager_check             True           'compute.eager_check' sets whethe
                                                performs the validation beforehand, but it will cause
                                                a performance overhead. Otherwise, pandas-on-Spark
                                                skip the validation and will be slightly different
-                                               from pandas
+                                               from pandas. Affected APIs: `Series.dot`.
 compute.isin_limit              80             'compute.isin_limit' sets the limit for filtering by
                                                'Column.isin(list)'. If the length of the ‘list’ is
                                                above the limit, broadcast join is used instead for

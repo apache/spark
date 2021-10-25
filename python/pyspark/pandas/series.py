@@ -4960,9 +4960,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         It can also be called using `self @ other` in Python >= 3.5.
 
         .. note:: This API is slightly different from pandas when indexes from both Series
-            are not aligned. To match with pandas', it requires to read the whole data for,
-            for example, counting. pandas raises an exception; however, pandas-on-Spark
-            just proceeds and performs by ignoring mismatches with NaN permissively.
+            are not aligned and config 'compute.eager_check' is False. pandas raises an exception;
+            however, pandas-on-Spark just proceeds and performs by ignoring mismatches with NaN
+            permissively.
 
             >>> pdf1 = pd.Series([1, 2, 3], index=[0, 1, 2])
             >>> pdf2 = pd.Series([1, 2, 3], index=[0, 1, 3])
@@ -4972,7 +4972,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
             >>> psdf1 = ps.Series([1, 2, 3], index=[0, 1, 2])
             >>> psdf2 = ps.Series([1, 2, 3], index=[0, 1, 3])
-            >>> psdf1.dot(psdf2)  # doctest: +SKIP
+            >>> with ps.option_context("compute.eager_check", False):
+            ...     psdf1.dot(psdf2)  # doctest: +SKIP
+            ...
             5
 
         Parameters
@@ -5017,11 +5019,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         y   -14
         dtype: int64
         """
-        if isinstance(other, DataFrame):
-            if not same_anchor(self, other):
-                if not self.index.sort_values().equals(other.index.sort_values()):
-                    raise ValueError("matrices are not aligned")
+        if not same_anchor(self, other):
+            if get_option("compute.eager_check") and not self.index.sort_values().equals(
+                other.index.sort_values()
+            ):
+                raise ValueError("matrices are not aligned")
+            elif len(self.index) != len(other.index):
+                raise ValueError("matrices are not aligned")
 
+        if isinstance(other, DataFrame):
             other_copy: DataFrame = other.copy()
             column_labels = other_copy._internal.column_labels
 
@@ -5041,9 +5047,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         else:
             assert isinstance(other, Series)
-            if not same_anchor(self, other):
-                if len(self.index) != len(other.index):
-                    raise ValueError("matrices are not aligned")
             return (self * other).sum()
 
     def __matmul__(self, other: Union["Series", DataFrame]) -> Union[Scalar, "Series"]:
