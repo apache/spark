@@ -1467,6 +1467,31 @@ setMethod("ltrim",
           })
 
 #' @details
+#' \code{make_date}:
+#'
+#' @rdname column_datetime_functions
+#' @aliases make_date make_date,Column-method
+#' @note make_date since 3.3.0
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(
+#'   list(list(2021, 10, 22), list(2021, 13, 1),
+#'        list(2021, 2, 29), list(2020, 2, 29)),
+#'   list("year", "month", "day")
+#' )
+#' tmp <- head(select(df, make_date(df$year, df$month, df$day)))
+#' head(tmp)}
+setMethod("make_date",
+          #signature(year = "Column", month = "Column", day = "Column"),
+          signature(year = "Column", month = "Column", day = "Column"),
+          function(year, month, day) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "make_date",
+                              year@jc, month@jc, day@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{max}: Returns the maximum value of the expression in a group.
 #'
 #' @rdname column_aggregate_functions
