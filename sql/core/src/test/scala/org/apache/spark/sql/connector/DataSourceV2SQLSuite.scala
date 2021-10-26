@@ -2969,6 +2969,17 @@ class DataSourceV2SQLSuite
       Row("testcat"), Row("testcat2")))
   }
 
+  test("CREATE INDEX should fail") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string COMMENT 'hello') USING foo")
+      val ex = intercept[AnalysisException] {
+        sql(s"CREATE index i1 ON $t(col1)")
+      }
+      assert(ex.getMessage.contains(s"CreateIndex is not supported in this table $t."))
+    }
+  }
+
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")

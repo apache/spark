@@ -338,7 +338,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       replace = ctx.REPLACE != null,
       global = ctx.GLOBAL != null,
       provider = ctx.tableProvider.multipartIdentifier.getText,
-      options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
+      options = Option(ctx.propertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
   }
 
   /**
@@ -464,7 +464,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(ctx)
     }
 
-    val properties = ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues)
+    val properties = ctx.propertyList.asScala.headOption.map(visitPropertyKeyValues)
       .getOrElse(Map.empty)
     if (ctx.TEMPORARY != null && !properties.isEmpty) {
       operationNotAllowed("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW", ctx)

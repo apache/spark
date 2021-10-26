@@ -2366,4 +2366,8 @@ object QueryCompilationErrors {
       errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
       messageParameters = Array(schema.toString))
   }
+
+  def tableIndexNotSupportedError(errorMessage: String): Throwable = {
+    new AnalysisException(errorMessage)
+  }
 }

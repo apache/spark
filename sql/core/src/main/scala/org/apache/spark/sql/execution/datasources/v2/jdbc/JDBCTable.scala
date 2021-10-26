@@ -56,8 +56,8 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
       indexName: String,
       indexType: String,
       columns: Array[NamedReference],
-      columnsProperties: Array[util.Map[NamedReference, util.Properties]],
-      properties: util.Properties): Unit = {
+      columnsProperties: util.Map[NamedReference, util.Map[String, String]],
+      properties: util.Map[String, String]): Unit = {
     JdbcUtils.withConnection(jdbcOptions) { conn =>
       JdbcUtils.classifyException(s"Failed to create index: $indexName in $name",
         JdbcDialects.get(jdbcOptions.url)) {
