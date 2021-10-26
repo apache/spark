@@ -65,6 +65,10 @@ ERROR_MESSAGE_CANNOT_COMBINE = (
 SPARK_CONF_ARROW_ENABLED = "spark.sql.execution.arrow.pyspark.enabled"
 
 
+class PandasAPIOnSparkAdviceWarning(Warning):
+    pass
+
+
 def same_anchor(
     this: Union["DataFrame", "IndexOpsMixin", "InternalFrame"],
     that: Union["DataFrame", "IndexOpsMixin", "InternalFrame"],
@@ -956,6 +960,12 @@ def compare_allow_null(
     comp: Callable[[Column, Column], Column],
 ) -> Column:
     return left.isNull() | right.isNull() | comp(left, right)
+
+
+def raise_advice_warning(
+    message: str,
+) -> None:
+    warnings.warn(message, PandasAPIOnSparkAdviceWarning)
 
 
 def _test() -> None:

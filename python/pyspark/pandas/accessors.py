@@ -43,6 +43,7 @@ from pyspark.pandas.utils import (
     name_like_string,
     scol_for,
     verify_temp_column_name,
+    raise_advice_warning,
 )
 
 if TYPE_CHECKING:
@@ -348,6 +349,10 @@ class PandasOnSparkFrameMethods(object):
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            raise_advice_warning(
+                "If the type hints is not specified for `apply_batch`, "
+                "it could be expensive for inferring the type internally."
+            )
             limit = ps.get_option("compute.shortcut_limit")
             pdf = self_applied.head(limit + 1)._to_internal_pandas()
             applied = func(pdf)
@@ -584,6 +589,10 @@ class PandasOnSparkFrameMethods(object):
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            raise_advice_warning(
+                "If the type hints is not specified for `transform_batch`, "
+                "it could be expensive for inferring the type internally."
+            )
             limit = ps.get_option("compute.shortcut_limit")
             pdf = self._psdf.head(limit + 1)._to_internal_pandas()
             transformed = func(pdf)

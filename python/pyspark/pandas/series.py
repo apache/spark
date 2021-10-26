@@ -98,6 +98,7 @@ from pyspark.pandas.utils import (
     validate_bool_kwarg,
     verify_temp_column_name,
     SPARK_CONF_ARROW_ENABLED,
+    raise_advice_warning,
 )
 from pyspark.pandas.datetimes import DatetimeMethods
 from pyspark.pandas.spark import functions as SF
@@ -1580,6 +1581,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3    0.2
         Name: dogs, dtype: float64
         """
+        raise_advice_warning(
+            "`to_pandas` loads the all data into the driver's memory. "
+            "It should only be used if the resulting pandas Series is expected to be small."
+        )
         return self._to_internal_pandas().copy()
 
     def to_list(self) -> List:
@@ -1594,6 +1599,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             to be small, as all the data is loaded into the driver's memory.
 
         """
+        raise_advice_warning(
+            "`to_list` loads the all data into the driver's memory. "
+            "It should only be used if the resulting list is expected to be small."
+        )
         return self._to_internal_pandas().tolist()
 
     tolist = to_list
@@ -2537,6 +2546,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         0    z
         dtype: object
         """
+        raise_advice_warning(
+            "`sort_values` is expensive. Be aware of use it unless it is absolutely necessary."
+        )
         inplace = validate_bool_kwarg(inplace, "inplace")
         psdf = self._psdf[[self.name]]._sort(
             by=[self.spark.column], ascending=ascending, na_position=na_position
@@ -2632,6 +2644,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         b  1    0
         Name: 0, dtype: int64
         """
+        raise_advice_warning(
+            "`sort_index` is expensive. Be aware of use it unless it is absolutely necessary."
+        )
         inplace = validate_bool_kwarg(inplace, "inplace")
         psdf = self._psdf[[self.name]].sort_index(
             axis=axis, level=level, ascending=ascending, kind=kind, na_position=na_position

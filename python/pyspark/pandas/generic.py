@@ -74,6 +74,7 @@ from pyspark.pandas.utils import (
     validate_axis,
     validate_mode,
     SPARK_CONF_ARROW_ENABLED,
+    raise_advice_warning,
 )
 
 if TYPE_CHECKING:
@@ -573,6 +574,10 @@ class Frame(object, metaclass=ABCMeta):
         >>> ps.Series(['a', 'b', 'a']).to_numpy()
         array(['a', 'b', 'a'], dtype=object)
         """
+        raise_advice_warning(
+            "`to_numpy` loads the all data into the driver's memory. "
+            "It should only be used if the resulting NumPy ndarray is expected to be small."
+        )
         return self.to_pandas().values
 
     @property
@@ -1142,6 +1147,10 @@ class Frame(object, metaclass=ABCMeta):
 
         >>> df1.to_excel('output1.xlsx', engine='xlsxwriter')  # doctest: +SKIP
         """
+        raise_advice_warning(
+            "`to_excel` loads the all data into the driver's memory. "
+            "It should only be used if the resulting DataFrame is expected to be small."
+        )
         # Make sure locals() call is at the top of the function so we don't capture local variables.
         args = locals()
         psdf = self
@@ -2997,6 +3006,10 @@ class Frame(object, metaclass=ABCMeta):
             raise NotImplementedError(
                 "`to_markdown()` only supported in pandas-on-Spark with pandas >= 1.0.0"
             )
+        raise_advice_warning(
+            "`to_markdown` loads the all data into the driver's memory. "
+            "It should only be used if the resulting pandas object is expected to be small."
+        )
         # Make sure locals() call is at the top of the function so we don't capture local variables.
         args = locals()
         psser_or_psdf = self
