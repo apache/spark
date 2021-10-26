@@ -74,8 +74,9 @@ case class HistogramNumeric(
   }
 
   override def inputTypes: Seq[AbstractDataType] = {
-    // Support NumericType, DateType, TimestampType and TimestampNTZType since their internal types
-    // are all numeric, and can be easily cast to double for processing.
+    // Support NumericType, DateType, TimestampType and TimestampNTZType, YearMonthIntervalType,
+    // DayTimeIntervalType since their internal types are all numeric,
+    // and can be easily cast to double for processing.
     Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType,
       YearMonthIntervalType, DayTimeIntervalType), IntegerType)
   }
