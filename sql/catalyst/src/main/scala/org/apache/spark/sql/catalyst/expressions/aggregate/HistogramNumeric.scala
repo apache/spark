@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.nio.ByteBuffer
 
 import com.google.common.primitives.{Doubles, Ints}
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
@@ -28,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescript
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, DateType, DoubleType, IntegerType, NumericType, StructField, StructType, TimestampNTZType, TimestampType, TypeCollection}
+import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, DateType, DayTimeIntervalType, DoubleType, IntegerType, NumericType, StructField, StructType, TimestampNTZType, TimestampType, TypeCollection, YearMonthIntervalType}
 import org.apache.spark.sql.util.NumericHistogram
 
 /**
@@ -76,7 +75,8 @@ case class HistogramNumeric(
   override def inputTypes: Seq[AbstractDataType] = {
     // Support NumericType, DateType, TimestampType and TimestampNTZType since their internal types
     // are all numeric, and can be easily cast to double for processing.
-    Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType), IntegerType)
+    Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType,
+      YearMonthIntervalType, DayTimeIntervalType), IntegerType)
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -107,7 +107,9 @@ case class HistogramNumeric(
       // Convert the value to a double value
       val doubleValue = child.dataType match {
         case DateType => value.asInstanceOf[Int].toDouble
-        case TimestampType | TimestampNTZType => value.asInstanceOf[Long].toDouble
+        case TimestampType | TimestampNTZType | DayTimeIntervalType(_, _) =>
+          value.asInstanceOf[Long].toDouble
+        case YearMonthIntervalType(_, _) => value.asInstanceOf[Int].toDouble
         case n: NumericType => n.numeric.toDouble(value.asInstanceOf[n.InternalType])
         case other: DataType =>
           throw QueryExecutionErrors.dataTypeUnexpectedError(other)
