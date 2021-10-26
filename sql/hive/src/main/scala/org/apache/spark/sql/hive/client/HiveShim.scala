@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.lang.{Boolean => JBoolean, Integer => JInteger, Long => JLong, Short => JShort}
+import java.lang.{Boolean => JBoolean, Integer => JInteger, Long => JLong}
 import java.lang.reflect.{InvocationTargetException, Method, Modifier}
 import java.net.URI
 import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap, Set => JSet}
@@ -627,7 +627,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       dbName: String,
       tblName: String,
       max: Short): JList[String] = {
-    hive.getPartitionNames(dbName, tblName, max: JShort)
+    hive.getPartitionNames(dbName, tblName, max)
   }
 
   override def getPartitionNames(
@@ -636,7 +636,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       tblName: String,
       partSpec: JMap[String, String],
       max: Short): JList[String] = {
-    hive.getPartitionNames(dbName, tblName, partSpec, max: JShort)
+    hive.getPartitionNames(dbName, tblName, partSpec, max)
   }
 
   override def renamePartition(
@@ -652,7 +652,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       dbName: String,
       tblName: String,
       max: Short): JList[Index] = {
-    hive.getIndexes(dbName, tblName, max: JShort)
+    hive.getIndexes(dbName, tblName, max)
   }
 }
 
