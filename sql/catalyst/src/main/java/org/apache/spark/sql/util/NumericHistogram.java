@@ -30,12 +30,15 @@ import java.util.Random;
  * J. Machine Learning Research 11 (2010), pp. 849--872. Although there are no approximation
  * guarantees, it appears to work well with adequate data and a large (e.g., 20-80) number
  * of histogram bins.
+ *
+ * Adapted from Hive's NumericHistogram. Can refer to
+ * https://github.com/apache/hive/blob/master/ql/src/java/org/apache/hadoop/hive/ql/udf/generic/NumericHistogram.java
  */
 public class NumericHistogram {
     /**
      * The Coord class defines a histogram bin, which is just an (x,y) pair.
      */
-    static class Coord implements Comparable {
+    public static class Coord implements Comparable {
         public double x;
         public double y;
 
@@ -150,7 +153,7 @@ public class NumericHistogram {
             nbins = other.nbins;
             nusedbins = other.nusedbins;
             bins = new ArrayList<Coord>(nusedbins);
-            for (int i = 1; i < other.nusedbins; i += 2) {
+            for (int i = 0; i < other.nusedbins; i += 1) {
                 Coord bin = new Coord();
                 bin.x = other.getBin(i).x;
                 bin.y = other.getBin(i).y;
@@ -168,7 +171,7 @@ public class NumericHistogram {
                 bin.y = bins.get(i).y;
                 tmp_bins.add(bin);
             }
-            for (int j = 1; j < other.nusedbins; j += 1) {
+            for (int j = 0; j < other.nusedbins; j += 1) {
                 Coord bin = new Coord();
                 bin.x = other.getBin(j).x;
                 bin.y = other.getBin(j).y;

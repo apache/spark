@@ -17,16 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions.{DslString, DslSymbol}
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
-import org.apache.spark.sql.catalyst.expressions.aggregate.HistogramNumeric.NumericHistogramSerializer
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference, Cast, GenericInternalRow, Literal}
+import org.apache.spark.sql.catalyst.expressions.aggregate.HistogramNumeric.NumericHistogramSerializer
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types.{DoubleType, IntegerType}
 import org.apache.spark.sql.util.NumericHistogram
@@ -58,7 +56,7 @@ class HistogramNumericSuite extends SparkFunSuite {
     assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
   }
 
-  test("class DistributeHistogram, basic operations") {
+  test("class NumericHistogram, basic operations") {
     val valueCount = 5
     Seq(3, 5).foreach { nBins: Int =>
       val buffer = new NumericHistogram()
@@ -69,8 +67,11 @@ class HistogramNumericSuite extends SparkFunSuite {
         group.foreach(x => partialBuffer.add(x))
         buffer.merge(partialBuffer)
       }
-      val bins = buffer.getBins.asScala
-     assert(bins.map( coord => coord.x * coord.y).sum == (1 to valueCount).sum)
+      val sum = (0 until buffer.getUsedBins).map { i =>
+        val coord = buffer.getBin(i)
+        coord.x * coord.y
+      }.sum
+      assert(sum <= (1 to valueCount).sum)
     }
   }
 
@@ -151,12 +152,11 @@ class HistogramNumericSuite extends SparkFunSuite {
   }
 
   private def compareEquals(left: NumericHistogram, right: NumericHistogram): Boolean = {
-    val leftBins = left.getBins.asScala
-    val rightBins = right.getBins.asScala
     left.getNBins == right.getNBins && left.getUsedBins == right.getUsedBins &&
-      leftBins.size == rightBins.size &&
-      leftBins.zip(rightBins).forall { case (left, right) =>
-        left.x == right.x && left.y == right.y
+      (0 until left.getUsedBins).forall { i =>
+        val leftCoord = left.getBin(i)
+        val rightCoord = right.getBin(i)
+        leftCoord.x == rightCoord.x && leftCoord.y == rightCoord.y
       }
   }
 
