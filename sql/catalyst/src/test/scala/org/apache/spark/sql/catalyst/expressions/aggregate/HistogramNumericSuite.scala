@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions.{DslString, DslSymbol}
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference, Cast, GenericInternalRow, Literal}
-import org.apache.spark.sql.catalyst.expressions.aggregate.HistogramNumeric.NumericHistogramSerializer
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types.{DoubleType, IntegerType}
 import org.apache.spark.sql.util.NumericHistogram
@@ -38,19 +37,20 @@ class HistogramNumericSuite extends SparkFunSuite {
   }
 
   test("serialize and de-serialize") {
-    val serializer = new NumericHistogramSerializer
 
     // Check empty serialize and de-serialize
     val emptyBuffer = new NumericHistogram()
     emptyBuffer.allocate(5)
-    assert(compareEquals(emptyBuffer, serializer.deserialize(serializer.serialize(emptyBuffer))))
+    assert(compareEquals(emptyBuffer,
+      NumericHistogramSerializer.deserialize(NumericHistogramSerializer.serialize(emptyBuffer))))
 
     val buffer = new NumericHistogram()
     buffer.allocate(data.size / 3)
     data.foreach { value =>
       buffer.add(value)
     }
-    assert(compareEquals(buffer, serializer.deserialize(serializer.serialize(buffer))))
+    assert(compareEquals(buffer,
+      NumericHistogramSerializer.deserialize(NumericHistogramSerializer.serialize(buffer))))
 
     val agg = new HistogramNumeric(BoundReference(0, DoubleType, true), Literal(5))
     assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))

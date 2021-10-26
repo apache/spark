@@ -107,15 +107,7 @@ case class HistogramNumeric(
     // Ignore empty rows, for example: histogram_numeric(null)
     if (value != null) {
       // Convert the value to a double value
-      val doubleValue = child.dataType match {
-        case DateType => value.asInstanceOf[Int].toDouble
-        case TimestampType | TimestampNTZType | DayTimeIntervalType(_, _) =>
-          value.asInstanceOf[Long].toDouble
-        case YearMonthIntervalType(_, _) => value.asInstanceOf[Int].toDouble
-        case n: NumericType => n.numeric.toDouble(value.asInstanceOf[n.InternalType])
-        case other: DataType =>
-          throw QueryExecutionErrors.dataTypeUnexpectedError(other)
-      }
+      val doubleValue = value.asInstanceOf[Number].doubleValue
       buffer.add(doubleValue)
     }
     buffer
@@ -141,11 +133,11 @@ case class HistogramNumeric(
   }
 
   override def serialize(obj: NumericHistogram): Array[Byte] = {
-    HistogramNumeric.serializer.serialize(obj)
+    NumericHistogramSerializer.serialize(obj)
   }
 
   override def deserialize(bytes: Array[Byte]): NumericHistogram = {
-    HistogramNumeric.serializer.deserialize(bytes)
+    NumericHistogramSerializer.deserialize(bytes)
   }
 
   override def left: Expression = child
@@ -167,14 +159,14 @@ case class HistogramNumeric(
   override def nullable: Boolean = true
 
   override def dataType: DataType =
-    ArrayType(new StructType(Array(StructField("x", DoubleType), StructField("y", DoubleType))))
+    ArrayType(new StructType(Array(
+      StructField("x", DoubleType, true),
+      StructField("y", DoubleType, true))), true)
 
   override def prettyName: String = "histogram_numeric"
 }
 
-object HistogramNumeric {
-  class NumericHistogramSerializer {
-
+object NumericHistogramSerializer {
     private final def length(histogram: NumericHistogram): Int = {
       // histogram.nBins, histogram.nUsedBins
       Ints.BYTES + Ints.BYTES +
@@ -213,7 +205,4 @@ object HistogramNumeric {
       }
       histogram
     }
-  }
-
-  val serializer: NumericHistogramSerializer = new NumericHistogramSerializer
 }
