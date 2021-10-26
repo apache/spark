@@ -476,7 +476,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   private lazy val renamePartitionMethod =
     findMethod(
       classOf[Hive],
-      "getPartitionNames",
+      "renamePartition",
       classOf[Table],
       classOf[JMap[String, String]],
       classOf[Partition])
