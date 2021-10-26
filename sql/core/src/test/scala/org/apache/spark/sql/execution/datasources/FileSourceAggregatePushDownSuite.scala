@@ -128,7 +128,7 @@ trait FileSourceAggregatePushDownSuite
 
   test("Count(partition column): push down") {
     withTempPath { dir =>
-      spark.range(10).selectExpr("id", "id % 3 as p")
+      spark.range(10).selectExpr("if(id % 2 = 0, null, id) AS n", "id % 3 as p")
         .write.partitionBy("p").format(format).save(dir.getCanonicalPath)
       withTempView("tmp") {
         spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
@@ -305,6 +305,151 @@ trait FileSourceAggregatePushDownSuite
     }
   }
 
+  private def testPushDownForAllDataTypes(
+      inputRows: Seq[Row],
+      expectedMinWithAllTypes: Seq[Row],
+      expectedMinWithOutTSAndBinary: Seq[Row],
+      expectedMaxWithAllTypes: Seq[Row],
+      expectedMaxWithOutTSAndBinary: Seq[Row],
+      expectedCount: Seq[Row]): Unit = {
+    implicit class StringToDate(s: String) {
+      def date: Date = Date.valueOf(s)
+    }
+
+    implicit class StringToTs(s: String) {
+      def ts: Timestamp = Timestamp.valueOf(s)
+    }
+
+    val schema = StructType(List(StructField("StringCol", StringType, true),
+      StructField("BooleanCol", BooleanType, false),
+      StructField("ByteCol", ByteType, false),
+      StructField("BinaryCol", BinaryType, false),
+      StructField("ShortCol", ShortType, false),
+      StructField("IntegerCol", IntegerType, true),
+      StructField("LongCol", LongType, false),
+      StructField("FloatCol", FloatType, false),
+      StructField("DoubleCol", DoubleType, false),
+      StructField("DecimalCol", DecimalType(25, 5), true),
+      StructField("DateCol", DateType, false),
+      StructField("TimestampCol", TimestampType, false)).toArray)
+
+    val rdd = sparkContext.parallelize(inputRows)
+    withTempPath { file =>
+      spark.createDataFrame(rdd, schema).write.format(format).save(file.getCanonicalPath)
+      withTempView("test") {
+        spark.read.format(format).load(file.getCanonicalPath).createOrReplaceTempView("test")
+        Seq("false", "true").foreach { enableVectorizedReader =>
+          withSQLConf(aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+
+            val testMinWithAllTypes = sql("SELECT min(StringCol), min(BooleanCol), min(ByteCol), " +
+              "min(BinaryCol), min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +
+              "min(DoubleCol), min(DecimalCol), min(DateCol), min(TimestampCol) FROM test")
+
+            // INT96 (Timestamp) sort order is undefined, parquet doesn't return stats for this type
+            // so aggregates are not pushed down
+            // In addition, Parquet Binary min/max could be truncated, so we disable aggregate
+            // push down for Parquet Binary (could be Spark StringType, BinaryType or DecimalType).
+            // Also do not push down for ORC with same reason.
+            testMinWithAllTypes.queryExecution.optimizedPlan.collect {
+              case _: DataSourceV2ScanRelation =>
+                val expected_plan_fragment =
+                  "PushedAggregation: []"
+                checkKeywordsExistsInExplain(testMinWithAllTypes, expected_plan_fragment)
+            }
+
+            checkAnswer(testMinWithAllTypes, expectedMinWithAllTypes)
+
+            val testMinWithOutTSAndBinary = sql("SELECT min(BooleanCol), min(ByteCol), " +
+              "min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +
+              "min(DoubleCol), min(DateCol) FROM test")
+
+            testMinWithOutTSAndBinary.queryExecution.optimizedPlan.collect {
+              case _: DataSourceV2ScanRelation =>
+                val expected_plan_fragment =
+                  "PushedAggregation: [MIN(BooleanCol), " +
+                    "MIN(ByteCol), " +
+                    "MIN(ShortCol), " +
+                    "MIN(IntegerCol), " +
+                    "MIN(LongCol), " +
+                    "MIN(FloatCol), " +
+                    "MIN(DoubleCol), " +
+                    "MIN(DateCol)]"
+                checkKeywordsExistsInExplain(testMinWithOutTSAndBinary, expected_plan_fragment)
+            }
+
+            checkAnswer(testMinWithOutTSAndBinary, expectedMinWithOutTSAndBinary)
+
+            val testMaxWithAllTypes = sql("SELECT max(StringCol), max(BooleanCol), " +
+              "max(ByteCol), max(BinaryCol), max(ShortCol), max(IntegerCol), max(LongCol), " +
+              "max(FloatCol), max(DoubleCol), max(DecimalCol), max(DateCol), max(TimestampCol) " +
+              "FROM test")
+
+            // INT96 (Timestamp) sort order is undefined, parquet doesn't return stats for this type
+            // so aggregates are not pushed down
+            // In addition, Parquet Binary min/max could be truncated, so we disable aggregate
+            // push down for Parquet Binary (could be Spark StringType, BinaryType or DecimalType).
+            // Also do not push down for ORC with same reason.
+            testMaxWithAllTypes.queryExecution.optimizedPlan.collect {
+              case _: DataSourceV2ScanRelation =>
+                val expected_plan_fragment =
+                  "PushedAggregation: []"
+                checkKeywordsExistsInExplain(testMaxWithAllTypes, expected_plan_fragment)
+            }
+
+            checkAnswer(testMaxWithAllTypes, expectedMaxWithAllTypes)
+
+            val testMaxWithoutTSAndBinary = sql("SELECT max(BooleanCol), max(ByteCol), " +
+              "max(ShortCol), max(IntegerCol), max(LongCol), max(FloatCol), " +
+              "max(DoubleCol), max(DateCol) FROM test")
+
+            testMaxWithoutTSAndBinary.queryExecution.optimizedPlan.collect {
+              case _: DataSourceV2ScanRelation =>
+                val expected_plan_fragment =
+                  "PushedAggregation: [MAX(BooleanCol), " +
+                    "MAX(ByteCol), " +
+                    "MAX(ShortCol), " +
+                    "MAX(IntegerCol), " +
+                    "MAX(LongCol), " +
+                    "MAX(FloatCol), " +
+                    "MAX(DoubleCol), " +
+                    "MAX(DateCol)]"
+                checkKeywordsExistsInExplain(testMaxWithoutTSAndBinary, expected_plan_fragment)
+            }
+
+            checkAnswer(testMaxWithoutTSAndBinary, expectedMaxWithOutTSAndBinary)
+
+            val testCount = sql("SELECT count(StringCol), count(BooleanCol)," +
+              " count(ByteCol), count(BinaryCol), count(ShortCol), count(IntegerCol)," +
+              " count(LongCol), count(FloatCol), count(DoubleCol)," +
+              " count(DecimalCol), count(DateCol), count(TimestampCol) FROM test")
+
+            testCount.queryExecution.optimizedPlan.collect {
+              case _: DataSourceV2ScanRelation =>
+                val expected_plan_fragment =
+                  "PushedAggregation: [" +
+                    "COUNT(StringCol), " +
+                    "COUNT(BooleanCol), " +
+                    "COUNT(ByteCol), " +
+                    "COUNT(BinaryCol), " +
+                    "COUNT(ShortCol), " +
+                    "COUNT(IntegerCol), " +
+                    "COUNT(LongCol), " +
+                    "COUNT(FloatCol), " +
+                    "COUNT(DoubleCol), " +
+                    "COUNT(DecimalCol), " +
+                    "COUNT(DateCol), " +
+                    "COUNT(TimestampCol)]"
+                checkKeywordsExistsInExplain(testCount, expected_plan_fragment)
+            }
+
+            checkAnswer(testCount, expectedCount)
+          }
+        }
+      }
+    }
+  }
+
   test("aggregate push down - different data types") {
     implicit class StringToDate(s: String) {
       def date: Date = Date.valueOf(s)
@@ -357,140 +502,27 @@ trait FileSourceAggregatePushDownSuite
           ("1999-08-26 10:43:59.123").ts)
       )
 
-    val schema = StructType(List(StructField("StringCol", StringType, true),
-      StructField("BooleanCol", BooleanType, false),
-      StructField("ByteCol", ByteType, false),
-      StructField("BinaryCol", BinaryType, false),
-      StructField("ShortCol", ShortType, false),
-      StructField("IntegerCol", IntegerType, true),
-      StructField("LongCol", LongType, false),
-      StructField("FloatCol", FloatType, false),
-      StructField("DoubleCol", DoubleType, false),
-      StructField("DecimalCol", DecimalType(25, 5), true),
-      StructField("DateCol", DateType, false),
-      StructField("TimestampCol", TimestampType, false)).toArray)
+    testPushDownForAllDataTypes(
+      rows,
+      Seq(Row("a string", false, 1.toByte,
+        "Parquet".getBytes, 2.toShort, 3, -9223372036854775808L, 0.15.toFloat, 0.75D,
+        1.23457, ("2004-06-19").date, ("1999-08-26 10:43:59.123").ts)),
+      Seq(Row(false, 1.toByte,
+        2.toShort, 3, -9223372036854775808L, 0.15.toFloat, 0.75D, ("2004-06-19").date)),
+      Seq(Row("test string", true, 16.toByte,
+        "Spark SQL".getBytes, 222.toShort, 113, 9223372036854775807L, 0.25.toFloat, 0.85D,
+        12345.678, ("2021-01-01").date, ("2021-01-01 23:50:59.123").ts)),
+      Seq(Row(true, 16.toByte,
+        222.toShort, 113, 9223372036854775807L, 0.25.toFloat, 0.85D, ("2021-01-01").date)),
+      Seq(Row(2, 3, 3, 3, 3, 2, 3, 3, 3, 3, 3, 3))
+    )
 
-    val rdd = sparkContext.parallelize(rows)
-    withTempPath { file =>
-      spark.createDataFrame(rdd, schema).write.format(format).save(file.getCanonicalPath)
-      withTempView("test") {
-        spark.read.format(format).load(file.getCanonicalPath).createOrReplaceTempView("test")
-        Seq("false", "true").foreach { enableVectorizedReader =>
-          withSQLConf(aggPushDownEnabledKey -> "true",
-            vectorizedReaderEnabledKey -> enableVectorizedReader) {
-
-            val testMinWithAllTypes = sql("SELECT min(StringCol), min(BooleanCol), min(ByteCol), " +
-              "min(BinaryCol), min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +
-              "min(DoubleCol), min(DecimalCol), min(DateCol), min(TimestampCol) FROM test")
-
-            // INT96 (Timestamp) sort order is undefined, parquet doesn't return stats for this type
-            // so aggregates are not pushed down
-            // In addition, Parquet Binary min/max could be truncated, so we disable aggregate
-            // push down for Parquet Binary (could be Spark StringType, BinaryType or DecimalType).
-            // Also do not push down for ORC with same reason.
-            testMinWithAllTypes.queryExecution.optimizedPlan.collect {
-              case _: DataSourceV2ScanRelation =>
-                val expected_plan_fragment =
-                  "PushedAggregation: []"
-                checkKeywordsExistsInExplain(testMinWithAllTypes, expected_plan_fragment)
-            }
-
-            checkAnswer(testMinWithAllTypes, Seq(Row("a string", false, 1.toByte,
-              "Parquet".getBytes, 2.toShort, 3, -9223372036854775808L, 0.15.toFloat, 0.75D,
-              1.23457, ("2004-06-19").date, ("1999-08-26 10:43:59.123").ts)))
-
-            val testMinWithOutTSAndBinary = sql("SELECT min(BooleanCol), min(ByteCol), " +
-              "min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +
-              "min(DoubleCol), min(DateCol) FROM test")
-
-            testMinWithOutTSAndBinary.queryExecution.optimizedPlan.collect {
-              case _: DataSourceV2ScanRelation =>
-                val expected_plan_fragment =
-                  "PushedAggregation: [MIN(BooleanCol), " +
-                    "MIN(ByteCol), " +
-                    "MIN(ShortCol), " +
-                    "MIN(IntegerCol), " +
-                    "MIN(LongCol), " +
-                    "MIN(FloatCol), " +
-                    "MIN(DoubleCol), " +
-                    "MIN(DateCol)]"
-                checkKeywordsExistsInExplain(testMinWithOutTSAndBinary, expected_plan_fragment)
-            }
-
-            checkAnswer(testMinWithOutTSAndBinary, Seq(Row(false, 1.toByte,
-              2.toShort, 3, -9223372036854775808L, 0.15.toFloat, 0.75D, ("2004-06-19").date)))
-
-            val testMaxWithAllTypes = sql("SELECT max(StringCol), max(BooleanCol), " +
-              "max(ByteCol), max(BinaryCol), max(ShortCol), max(IntegerCol), max(LongCol), " +
-              "max(FloatCol), max(DoubleCol), max(DecimalCol), max(DateCol), max(TimestampCol) " +
-              "FROM test")
-
-            // INT96 (Timestamp) sort order is undefined, parquet doesn't return stats for this type
-            // so aggregates are not pushed down
-            // In addition, Parquet Binary min/max could be truncated, so we disable aggregate
-            // push down for Parquet Binary (could be Spark StringType, BinaryType or DecimalType).
-            // Also do not push down for ORC with same reason.
-            testMaxWithAllTypes.queryExecution.optimizedPlan.collect {
-              case _: DataSourceV2ScanRelation =>
-                val expected_plan_fragment =
-                  "PushedAggregation: []"
-                checkKeywordsExistsInExplain(testMaxWithAllTypes, expected_plan_fragment)
-            }
-
-            checkAnswer(testMaxWithAllTypes, Seq(Row("test string", true, 16.toByte,
-              "Spark SQL".getBytes, 222.toShort, 113, 9223372036854775807L, 0.25.toFloat, 0.85D,
-              12345.678, ("2021-01-01").date, ("2021-01-01 23:50:59.123").ts)))
-
-            val testMaxWithoutTSAndBinary = sql("SELECT max(BooleanCol), max(ByteCol), " +
-              "max(ShortCol), max(IntegerCol), max(LongCol), max(FloatCol), " +
-              "max(DoubleCol), max(DateCol) FROM test")
-
-            testMaxWithoutTSAndBinary.queryExecution.optimizedPlan.collect {
-              case _: DataSourceV2ScanRelation =>
-                val expected_plan_fragment =
-                  "PushedAggregation: [MAX(BooleanCol), " +
-                    "MAX(ByteCol), " +
-                    "MAX(ShortCol), " +
-                    "MAX(IntegerCol), " +
-                    "MAX(LongCol), " +
-                    "MAX(FloatCol), " +
-                    "MAX(DoubleCol), " +
-                    "MAX(DateCol)]"
-                checkKeywordsExistsInExplain(testMaxWithoutTSAndBinary, expected_plan_fragment)
-            }
-
-            checkAnswer(testMaxWithoutTSAndBinary, Seq(Row(true, 16.toByte,
-              222.toShort, 113, 9223372036854775807L, 0.25.toFloat, 0.85D, ("2021-01-01").date)))
-
-            val testCount = sql("SELECT count(StringCol), count(BooleanCol)," +
-              " count(ByteCol), count(BinaryCol), count(ShortCol), count(IntegerCol)," +
-              " count(LongCol), count(FloatCol), count(DoubleCol)," +
-              " count(DecimalCol), count(DateCol), count(TimestampCol) FROM test")
-
-            testCount.queryExecution.optimizedPlan.collect {
-              case _: DataSourceV2ScanRelation =>
-                val expected_plan_fragment =
-                  "PushedAggregation: [" +
-                    "COUNT(StringCol), " +
-                    "COUNT(BooleanCol), " +
-                    "COUNT(ByteCol), " +
-                    "COUNT(BinaryCol), " +
-                    "COUNT(ShortCol), " +
-                    "COUNT(IntegerCol), " +
-                    "COUNT(LongCol), " +
-                    "COUNT(FloatCol), " +
-                    "COUNT(DoubleCol), " +
-                    "COUNT(DecimalCol), " +
-                    "COUNT(DateCol), " +
-                    "COUNT(TimestampCol)]"
-                checkKeywordsExistsInExplain(testCount, expected_plan_fragment)
-            }
-
-            checkAnswer(testCount, Seq(Row(2, 3, 3, 3, 3, 2, 3, 3, 3, 3, 3, 3)))
-          }
-        }
-      }
-    }
+    // Test for 0 row (empty file)
+    val nullRow = Row.fromSeq((1 to 12).map(_ => null))
+    val nullRowWithOutTSAndBinary = Row.fromSeq((1 to 8).map(_ => null))
+    val zeroCount = Row.fromSeq((1 to 12).map(_ => 0))
+    testPushDownForAllDataTypes(Seq.empty, Seq(nullRow), Seq(nullRowWithOutTSAndBinary),
+      Seq(nullRow), Seq(nullRowWithOutTSAndBinary), Seq(zeroCount))
   }
 
   test("column name case sensitivity") {

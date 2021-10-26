@@ -29,6 +29,29 @@ import java.util.List;
  * this class is used to covert ORC {@link ColumnStatistics}s from array to nested tree structure,
  * according to data types. The flatten array stores all data types (including nested types) in
  * tree pre-ordering. This is used for aggregate push down in ORC.
+ *
+ * For nested data types (array, map and struct), the sub-field statistics are stored recursively
+ * inside parent column's `children` field. Here is an example of `OrcColumnStatistics`:
+ *
+ * Data schema:
+ * c1: int
+ * c2: struct<f1: int, f2: float>
+ * c3: map<key: int, value: string>
+ * c4: array<int>
+ *
+ *                        OrcColumnStatistics
+ *                                | (children)
+ *             ---------------------------------------------
+ *            /         |                 \                 \
+ *           c1        c2                 c3                c4
+ *      (integer)    (struct)            (map)             (array)
+*        (min:1,        | (children)       | (children)      | (children)
+ *       max:10)      -----              -----             element
+ *                   /     \            /     \           (integer)
+ *                c2.f1    c2.f2      key     value
+ *              (integer) (float)  (integer) (string)
+ *                       (min:0.1,           (min:"a",
+ *                       max:100.5)          max:"zzz")
  */
 public class OrcColumnStatistics {
   private final ColumnStatistics statistics;

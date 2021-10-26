@@ -961,8 +961,9 @@ object SQLConf {
     .createWithDefault(true)
 
   val ORC_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.aggregatePushdown")
-    .doc("If true, MAX/MIN/COUNT without filter and group by will be pushed" +
-      " down to ORC for optimization. MAX/MIN for complex types can't be pushed down")
+    .doc("If true, aggregates will be pushed down to ORC for optimization. Support MIN, MAX and " +
+      "COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date " +
+      "type. For COUNT, support all data types.")
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)

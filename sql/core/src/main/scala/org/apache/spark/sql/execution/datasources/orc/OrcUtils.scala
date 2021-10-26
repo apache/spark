@@ -29,7 +29,7 @@ import org.apache.hadoop.hive.serde2.io.DateWritable
 import org.apache.hadoop.io.{BooleanWritable, ByteWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, ShortWritable, WritableComparable}
 import org.apache.orc.{BooleanColumnStatistics, ColumnStatistics, DateColumnStatistics, DoubleColumnStatistics, IntegerColumnStatistics, OrcConf, OrcFile, Reader, TypeDescription, Writer}
 
-import org.apache.spark.SPARK_VERSION_SHORT
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CharVarcharUtils}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SchemaMergeUtils}
+import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -392,14 +392,21 @@ object OrcUtils extends Logging {
    */
   def createAggInternalRowFromFooter(
       reader: Reader,
+      filePath: String,
       dataSchema: StructType,
       partitionSchema: StructType,
       aggregation: Aggregation,
-      aggSchema: StructType,
-      isCaseSensitive: Boolean): InternalRow = {
+      aggSchema: StructType): InternalRow = {
     require(aggregation.groupByColumns.length == 0,
       s"aggregate $aggregation with group-by column shouldn't be pushed down")
-    val columnsStatistics = OrcFooterReader.readStatistics(reader)
+    var columnsStatistics: OrcColumnStatistics = null
+    try {
+      columnsStatistics = OrcFooterReader.readStatistics(reader)
+    } catch { case e: RuntimeException =>
+      throw new SparkException(
+        s"Cannot read columns statistics in file: $filePath. Please consider disabling " +
+        s"ORC aggregate push down by setting 'spark.sql.orc.aggregatePushdown' to false.", e)
+    }
 
     // Get column statistics with column name.
     def getColumnStatistics(columnName: String): ColumnStatistics = {
@@ -408,10 +415,15 @@ object OrcUtils extends Logging {
     }
 
     // Get Min/Max statistics and store as ORC `WritableComparable` format.
+    // Return null if number of non-null values is zero.
     def getMinMaxFromColumnStatistics(
         statistics: ColumnStatistics,
         dataType: DataType,
         isMax: Boolean): WritableComparable[_] = {
+      if (statistics.getNumberOfValues == 0) {
+        return null
+      }
+
       statistics match {
         case s: BooleanColumnStatistics =>
           val value = if (isMax) s.getTrueCount > 0 else !(s.getFalseCount > 0)
@@ -424,7 +436,7 @@ object OrcUtils extends Logging {
             case IntegerType => new IntWritable(value.toInt)
             case LongType => new LongWritable(value)
             case _ => throw new IllegalArgumentException(
-              s"getMaxFromColumnStatistics should not take type $dataType " +
+              s"getMinMaxFromColumnStatistics should not take type $dataType " +
               "for IntegerColumnStatistics")
           }
         case s: DoubleColumnStatistics =>
@@ -433,14 +445,14 @@ object OrcUtils extends Logging {
             case FloatType => new FloatWritable(value.toFloat)
             case DoubleType => new DoubleWritable(value)
             case _ => throw new IllegalArgumentException(
-              s"getMaxFromColumnStatistics should not take type $dataType" +
+              s"getMinMaxFromColumnStatistics should not take type $dataType " +
                 "for DoubleColumnStatistics")
           }
         case s: DateColumnStatistics =>
           new DateWritable(
             if (isMax) s.getMaximumDayOfEpoch.toInt else s.getMinimumDayOfEpoch.toInt)
         case _ => throw new IllegalArgumentException(
-          s"getMaxFromColumnStatistics should not take ${statistics.getClass.getName}: " +
+          s"getMinMaxFromColumnStatistics should not take ${statistics.getClass.getName}: " +
             s"$statistics as the ORC column statistics")
       }
     }
@@ -459,9 +471,7 @@ object OrcUtils extends Logging {
           getMinMaxFromColumnStatistics(statistics, dataType, isMax = false)
         case (count: Count, _) =>
           val columnName = count.column.fieldNames.head
-          val isPartitionColumn = partitionSchema.fields
-            .map(PartitioningUtils.getColName(_, isCaseSensitive))
-            .contains(columnName)
+          val isPartitionColumn = partitionSchema.fields.map(_.name).contains(columnName)
           // NOTE: Count(columnName) doesn't include null values.
           // org.apache.orc.ColumnStatistics.getNumberOfValues() returns number of non-null values
           // for ColumnStatistics of individual column. In addition to this, ORC also stores number

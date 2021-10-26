@@ -182,7 +182,7 @@ case class ParquetPartitionReaderFactory(
               dataSchema, partitionSchema, aggregation.get, readDataSchema,
               getDatetimeRebaseMode(footer.getFileMetaData), isCaseSensitive)
             AggregatePushDownUtils.convertAggregatesRowToBatch(
-              row, readDataSchema, enableOffHeapColumnVector)
+              row, readDataSchema, enableOffHeapColumnVector && Option(TaskContext.get()).isDefined)
           } else {
             null
           }
