@@ -34,13 +34,21 @@ import java.util.Random;
  * Adapted from Hive's NumericHistogram. Can refer to
  * https://github.com/apache/hive/blob/master/ql/src/
  * java/org/apache/hadoop/hive/ql/udf/generic/NumericHistogram.java
+ *
+ * Differences:
+ *   1. Declaring [[Coord]] and it's variables as public types for
+ *      easy access in the HistogramNumeric class.
+ *   2. Add method [[getNBins()]] for serialize [[NumericHistogram]]
+ *      in [[NumericHistogramSerializer]].
+ *   3. Add method [[setBin()]] for deserialize [[NumericHistogram]]
+ *      in [[NumericHistogramSerializer]].
+ *   4. In Hive's code, the method [[merge()] pass a serialized histogram,
+ *      in Spark, this method pass a deserialized histogram.
+ *      Here we change the code about merge bins.
  */
 public class NumericHistogram {
     /**
      * The Coord class defines a histogram bin, which is just an (x,y) pair.
-     *
-     * In Spark, we declare this class and it's variables as public types for
-     * easy access in the HistogramNumeric class.
      */
     public static class Coord implements Comparable {
         public double x;
@@ -83,7 +91,6 @@ public class NumericHistogram {
 
     /**
      * Returns the number of bins.
-     * Add this method for serialize [[NumericHistogram]] in [[NumericHistogramSerializer]].
      */
     public int getNBins() {
         return nbins;
@@ -120,8 +127,6 @@ public class NumericHistogram {
 
     /**
      * Set a particular histogram bin with index.
-     *
-     * Add this method for serialize [[NumericHistogram]] in [[NumericHistogramSerializer]].
      */
     public void setBin(double x, double y, int b) {
         Coord coord = new Coord();
@@ -144,10 +149,6 @@ public class NumericHistogram {
     /**
      * Takes a serialized histogram created by the serialize() method and merges
      * it with the current histogram object.
-     *
-     * In Hive's code, this method pass a serialized histogram,
-     * in Spark, this method pass a deserialized histogram.
-     * Here we change the code about merge bins.
      */
     public void merge(NumericHistogram other) {
         if (other == null) {
