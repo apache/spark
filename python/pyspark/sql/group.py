@@ -17,7 +17,7 @@
 
 import sys
 
-from typing import Callable, List, Optional, TYPE_CHECKING, overload, Dict, Union, cast, Tuple
+from typing import Callable, Optional, TYPE_CHECKING, overload, Dict, Union, cast, Tuple, Sequence
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
@@ -241,12 +241,17 @@ class GroupedData(PandasGroupedOpsMixin):
         [Row(sum(age)=7, sum(height)=165)]
         """
 
-    def pivot(self, pivot_col: str, values: Optional[List["LiteralType"]] = None) -> "GroupedData":
+    def pivot(
+        self,
+        pivot_col: str,
+        values: Optional[Sequence["LiteralType"]] = None
+    ) -> "GroupedData":
         """
         Pivots a column of the current :class:`DataFrame` and perform the specified aggregation.
-        There are two versions of pivot function: one that requires the caller to specify the list
-        of distinct values to pivot on, and one that does not. The latter is more concise but less
-        efficient, because Spark needs to first compute the list of distinct values internally.
+        There are two versions of pivot function: one that requires the caller to specify the
+        sequence of distinct values to pivot on, and one that does not. The latter is more concise
+        but less efficient, because Spark needs to first compute the sequence of distinct values
+        internally.
 
         .. versionadded:: 1.6.0
 
@@ -254,8 +259,8 @@ class GroupedData(PandasGroupedOpsMixin):
         ----------
         pivot_col : str
             Name of the column to pivot.
-        values : list, optional
-            List of values that will be translated to columns in the output DataFrame.
+        values : sequence, optional
+            Sequence of values that will be translated to columns in the output DataFrame.
 
         Examples
         --------
