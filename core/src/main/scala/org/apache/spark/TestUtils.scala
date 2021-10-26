@@ -280,10 +280,10 @@ private[spark] object TestUtils {
 
   def isPythonVersionAtLeast38(): Boolean = {
     val cmdSeq = if (Utils.isWindows) Seq("cmd.exe", "/C") else Seq("sh", "-c")
-    val versionPattern = """Python (\d+)\.(\d+)\.\d+""".r
+    val versionPattern = """Python 3\.(\d+)\.\d+""".r
     try {
       Process(cmdSeq :+ "python3 --version").!!.trim match {
-        case versionPattern(v1, v2) => v1.toInt > 3 || (v1.toInt == 3 && v2.toInt >= 8)
+        case versionPattern(minorVersion) => minorVersion.toInt >= 8
       }
     } catch {
       case NonFatal(_) => false
