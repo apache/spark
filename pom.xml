@@ -136,7 +136,7 @@
     <kafka.version>2.8.1</kafka.version>
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
-    <parquet.version>1.12.1</parquet.version>
+    <parquet.version>1.12.2</parquet.version>
     <orc.version>1.7.0</orc.version>
     <jetty.version>9.4.43.v20210629</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
