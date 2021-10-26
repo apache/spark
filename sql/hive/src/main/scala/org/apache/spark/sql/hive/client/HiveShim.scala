@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.lang.{Boolean => JBoolean, Integer => JInteger, Long => JLong}
+import java.lang.{Boolean => JBoolean, Integer => JInteger, Long => JLong, Short => JShort}
 import java.lang.reflect.{InvocationTargetException, Method, Modifier}
 import java.net.URI
 import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap, Set => JSet}
@@ -30,7 +30,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.IMetaStoreClient
 import org.apache.hadoop.hive.metastore.TableType
-import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Function => HiveFunction, FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri}
+import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Function => HiveFunction, FunctionType, Index, MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.io.AcidUtils
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
@@ -77,6 +77,25 @@ private[client] sealed abstract class Shim {
    */
   def getDataLocation(table: Table): Option[String]
 
+  def createDatabase(hive: Hive, db: Database, ignoreIfExists: Boolean): Unit
+
+  def dropDatabase(
+      hive: Hive,
+      name: String,
+      deleteData: Boolean,
+      ignoreUnknownDb: Boolean,
+      cascade: Boolean): Unit
+
+  def alterDatabase(hive: Hive, dbName: String, d: Database): Unit
+
+  def getDatabase(hive: Hive, dbName: String): Database
+
+  def getAllDatabases(hive: Hive): JList[String]
+
+  def getDatabasesByPattern(hive: Hive, pattern: String): JList[String]
+
+  def databaseExists(hive: Hive, dbName: String): Boolean
+
   def setDataLocation(table: Table, loc: String): Unit
 
   def getAllPartitions(hive: Hive, table: Table): Seq[Partition]
@@ -97,11 +116,49 @@ private[client] sealed abstract class Shim {
 
   def alterPartitions(hive: Hive, tableName: String, newParts: JList[Partition]): Unit
 
+  def createTable(hive: Hive, table: Table, ifNotExists: Boolean): Unit
+
+  def getTable(
+      hive: Hive,
+      dbName: String,
+      tableName: String,
+      throwException: Boolean = true): Table
+
   def getTablesByType(
       hive: Hive,
       dbName: String,
       pattern: String,
       tableType: TableType): Seq[String]
+
+  def getTablesByPattern(hive: Hive, dbName: String, pattern: String): JList[String]
+
+  def getAllTables(hive: Hive, dbName: String): JList[String]
+
+  def dropTable(hive: Hive, dbName: String, tableName: String): Unit
+
+  def getPartition(
+      hive: Hive,
+      table: Table,
+      partSpec: JMap[String, String],
+      forceCreate: Boolean): Partition
+
+  def getPartitions(
+      hive: Hive,
+      table: Table,
+      partSpec: JMap[String, String]): JList[Partition]
+
+  def getPartitionNames(
+    hive: Hive,
+    dbName: String,
+    tblName: String,
+    max: Short): JList[String]
+
+  def getPartitionNames(
+      hive: Hive,
+      dbName: String,
+      tblName: String,
+      partSpec: JMap[String, String],
+      max: Short): JList[String]
 
   def createPartitions(
       hive: Hive,
@@ -119,6 +176,12 @@ private[client] sealed abstract class Shim {
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean,
       isSrcLocal: Boolean): Unit
+
+  def renamePartition(
+      hive: Hive,
+      tbl: Table,
+      oldPartSpec: JMap[String, String],
+      newPart: Partition): Unit
 
   def loadTable(
       hive: Hive,
@@ -178,6 +241,8 @@ private[client] sealed abstract class Shim {
   }
 
   def getMSC(hive: Hive): IMetaStoreClient
+
+  def getIndexes(hive: Hive, dbName: String, tblName: String, max: Short): JList[Index]
 
   protected def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     klass.getMethod(name, args: _*)
@@ -294,6 +359,135 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       "alterPartitions",
       classOf[String],
       classOf[JList[Partition]])
+
+  private lazy val createDatabaseMethod =
+    findMethod(
+      classOf[Hive],
+      "createDatabase",
+      classOf[Database],
+      JBoolean.TYPE)
+
+  private lazy val dropDatabaseMethod =
+    findMethod(
+      classOf[Hive],
+      "dropDatabase",
+      classOf[String],
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE)
+
+  private lazy val alterDatabaseMethod =
+    findMethod(
+      classOf[Hive],
+      "alterDatabase",
+      classOf[String],
+      classOf[Database])
+
+  private lazy val getDatabaseMethod =
+    findMethod(
+      classOf[Hive],
+      "getDatabase",
+      classOf[String])
+
+  private lazy val getAllDatabasesMethod =
+    findMethod(
+      classOf[Hive],
+      "getAllDatabases")
+
+  private lazy val getDatabasesByPatternMethod =
+    findMethod(
+      classOf[Hive],
+      "getDatabasesByPattern",
+      classOf[String])
+
+  private lazy val databaseExistsMethod =
+    findMethod(
+      classOf[Hive],
+      "databaseExists",
+      classOf[String])
+
+  private lazy val createTableMethod =
+    findMethod(
+      classOf[Hive],
+      "createTable",
+      classOf[Table],
+      JBoolean.TYPE)
+
+  private lazy val getTableMethod =
+    findMethod(
+      classOf[Hive],
+      "getTable",
+      classOf[String],
+      classOf[String],
+      JBoolean.TYPE)
+
+  private lazy val getTablesByPatternMethod =
+    findMethod(
+      classOf[Hive],
+      "getTablesByPattern",
+      classOf[String],
+      classOf[String])
+
+  private lazy val getAllTablesMethod =
+    findMethod(
+      classOf[Hive],
+      "getAllTables",
+      classOf[String])
+
+  private lazy val dropTableMethod =
+    findMethod(
+      classOf[Hive],
+      "dropTable",
+      classOf[String],
+      classOf[String])
+
+  private lazy val getPartitionMethod =
+    findMethod(
+      classOf[Hive],
+      "getPartition",
+      classOf[Table],
+      classOf[JMap[String, String]],
+      JBoolean.TYPE)
+
+  private lazy val getPartitionsMethod =
+    findMethod(
+      classOf[Hive],
+      "getPartitions",
+      classOf[Table],
+      classOf[JMap[String, String]])
+
+  private lazy val getPartitionNamesMethod =
+    findMethod(
+      classOf[Hive],
+      "getPartitionNames",
+      classOf[String],
+      classOf[String],
+      JShort.TYPE)
+
+  private lazy val getPartitionNamesWithSpecMethod =
+    findMethod(
+      classOf[Hive],
+      "getPartitionNames",
+      classOf[String],
+      classOf[String],
+      classOf[JMap[String, String]],
+      JShort.TYPE)
+
+  private lazy val renamePartitionMethod =
+    findMethod(
+      classOf[Hive],
+      "getPartitionNames",
+      classOf[Table],
+      classOf[JMap[String, String]],
+      classOf[Partition])
+
+  private lazy val getIndexesMethod =
+    findMethod(
+      classOf[Hive],
+      "getIndexes",
+      classOf[String],
+      classOf[String],
+      JShort.TYPE)
 
   override def setCurrentSessionState(state: SessionState): Unit = {
     // Starting from Hive 0.13, setCurrentSessionState will internally override
@@ -484,6 +678,113 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   override def getDatabaseOwnerName(db: Database): String = ""
 
   override def setDatabaseOwnerName(db: Database, owner: String): Unit = {}
+
+  override def createDatabase(hive: Hive, db: Database, ignoreIfExists: Boolean): Unit = {
+    createDatabaseMethod.invoke(hive, db, ignoreIfExists: JBoolean)
+  }
+
+  override def dropDatabase(
+      hive: Hive,
+      name: String,
+      deleteData: Boolean,
+      ignoreUnknownDb: Boolean,
+      cascade: Boolean): Unit = {
+    dropDatabaseMethod.invoke(
+      hive, name, deleteData: JBoolean, ignoreUnknownDb: JBoolean, cascade: JBoolean)
+  }
+
+  override def alterDatabase(hive: Hive, dbName: String, d: Database): Unit = {
+    alterDatabaseMethod.invoke(hive, dbName, d)
+  }
+
+  override def getDatabase(hive: Hive, dbName: String): Database = {
+    getDatabaseMethod.invoke(hive, dbName).asInstanceOf[Database]
+  }
+
+  override def getAllDatabases(hive: Hive): JList[String] = {
+    getAllDatabasesMethod.invoke(hive).asInstanceOf[JList[String]]
+  }
+
+  override def getDatabasesByPattern(hive: Hive, pattern: String): JList[String] = {
+    getDatabasesByPatternMethod.invoke(hive, pattern).asInstanceOf[JList[String]]
+  }
+
+  override def databaseExists(hive: Hive, dbName: String): Boolean = {
+    databaseExistsMethod.invoke(hive, dbName).asInstanceOf[Boolean]
+  }
+
+  override def createTable(hive: Hive, table: Table, ifNotExists: Boolean): Unit = {
+    createTableMethod.invoke(hive, table, ifNotExists: JBoolean)
+  }
+
+  override def getTable(
+      hive: Hive,
+      dbName: String,
+      tableName: String,
+      throwException: Boolean): Table = {
+    getTableMethod.invoke(hive, dbName, tableName, throwException: JBoolean).asInstanceOf[Table]
+  }
+
+  override def getTablesByPattern(hive: Hive, dbName: String, pattern: String): JList[String] = {
+    getTablesByPatternMethod.invoke(hive, dbName, pattern).asInstanceOf[JList[String]]
+  }
+
+  override def getAllTables(hive: Hive, dbName: String): JList[String] = {
+    getAllTablesMethod.invoke(hive, dbName).asInstanceOf[JList[String]]
+  }
+
+  override def dropTable(hive: Hive, dbName: String, tableName: String): Unit = {
+    dropTableMethod.invoke(hive, dbName, tableName)
+  }
+
+  override def getPartition(
+      hive: Hive,
+      table: Table,
+      partSpec: JMap[String, String],
+      forceCreate: Boolean): Partition = {
+    getPartitionMethod.invoke(hive, table, partSpec, forceCreate: JBoolean).asInstanceOf[Partition]
+  }
+
+  override def getPartitions(
+      hive: Hive,
+      table: Table,
+      partSpec: JMap[String, String]): JList[Partition] = {
+    getPartitionsMethod.invoke(hive, table, partSpec).asInstanceOf[JList[Partition]]
+  }
+
+  override def getPartitionNames(
+      hive: Hive,
+      dbName: String,
+      tblName: String,
+      max: Short): JList[String] = {
+    getPartitionNamesMethod.invoke(hive, dbName, tblName, max: JShort).asInstanceOf[JList[String]]
+  }
+
+  override def getPartitionNames(
+      hive: Hive,
+      dbName: String,
+      tblName: String,
+      partSpec: JMap[String, String],
+      max: Short): JList[String] = {
+    getPartitionNamesWithSpecMethod.invoke(hive, dbName, tblName, partSpec, max: JShort)
+      .asInstanceOf[JList[String]]
+  }
+
+  override def renamePartition(
+      hive: Hive,
+      tbl: Table,
+      oldPartSpec: JMap[String, String],
+      newPart: Partition): Unit = {
+    renamePartitionMethod.invoke(hive, tbl, oldPartSpec, newPart)
+  }
+
+  override def getIndexes(
+      hive: Hive,
+      dbName: String,
+      tblName: String,
+      max: Short): JList[Index] = {
+    getIndexesMethod.invoke(hive, dbName, tblName, max: JShort).asInstanceOf[JList[Index]]
+  }
 }
 
 private[client] class Shim_v0_13 extends Shim_v0_12 {
