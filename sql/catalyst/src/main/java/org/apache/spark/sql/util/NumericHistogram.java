@@ -38,6 +38,9 @@ import java.util.Random;
 public class NumericHistogram {
     /**
      * The Coord class defines a histogram bin, which is just an (x,y) pair.
+     *
+     * In Spark, we declare this class and it's variables as public types for
+     * easy access in the HistogramNumeric class.
      */
     public static class Coord implements Comparable {
         public double x;
@@ -78,9 +81,9 @@ public class NumericHistogram {
         nbins = nusedbins = 0;
     }
 
-
     /**
      * Returns the number of bins.
+     * Add this method for serialize [[NumericHistogram]] in [[NumericHistogramSerializer]].
      */
     public int getNBins() {
         return nbins;
@@ -117,6 +120,8 @@ public class NumericHistogram {
 
     /**
      * Set a particular histogram bin with index.
+     *
+     * Add this method for serialize [[NumericHistogram]] in [[NumericHistogramSerializer]].
      */
     public void setBin(double x, double y, int b) {
         Coord coord = new Coord();
@@ -140,8 +145,9 @@ public class NumericHistogram {
      * Takes a serialized histogram created by the serialize() method and merges
      * it with the current histogram object.
      *
-     * @param other A serialized histogram created by the serialize() method
-     * @see #merge
+     * In Hive's code, this method pass a serialized histogram,
+     * in Spark, this method pass a deserialized histogram.
+     * Here we change the code about merge bins.
      */
     public void merge(NumericHistogram other) {
         if (other == null) {
