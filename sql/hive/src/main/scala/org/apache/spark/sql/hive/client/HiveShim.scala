@@ -481,14 +481,6 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       classOf[JMap[String, String]],
       classOf[Partition])
 
-  private lazy val getIndexesMethod =
-    findMethod(
-      classOf[Hive],
-      "getIndexes",
-      classOf[String],
-      classOf[String],
-      JShort.TYPE)
-
   override def setCurrentSessionState(state: SessionState): Unit = {
     // Starting from Hive 0.13, setCurrentSessionState will internally override
     // the context class loader of the current thread by the class loader set in
@@ -783,7 +775,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       dbName: String,
       tblName: String,
       max: Short): JList[Index] = {
-    getIndexesMethod.invoke(hive, dbName, tblName, max: JShort).asInstanceOf[JList[Index]]
+    // Since Hive 3 remove getIndex method, here Spark directly call hive client's method.
+    hive.getIndexes(dbName, tblName, max: JShort)
   }
 }
 
