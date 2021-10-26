@@ -551,7 +551,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   override def setDatabaseOwnerName(db: Database, owner: String): Unit = {}
 
   override def createDatabase(hive: Hive, db: Database, ignoreIfExists: Boolean): Unit = {
-    hive.createDatabase(db, ignoreIfExists: JBoolean)
+    hive.createDatabase(db, ignoreIfExists)
   }
 
   override def dropDatabase(
@@ -592,7 +592,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       dbName: String,
       tableName: String,
       throwException: Boolean): Table = {
-    hive.getTable(dbName, tableName, throwException: JBoolean)
+    hive.getTable(dbName, tableName, throwException)
   }
 
   override def getTablesByPattern(hive: Hive, dbName: String, pattern: String): JList[String] = {
