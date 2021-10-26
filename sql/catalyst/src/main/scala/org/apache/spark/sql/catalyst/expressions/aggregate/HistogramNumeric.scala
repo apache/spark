@@ -17,16 +17,19 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import scala.collection.JavaConverters._
+import java.nio.ByteBuffer
+
+import com.google.common.primitives.{Doubles, Ints}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.catalyst.util.{DistributedHistogramSerializer, DistributeHistogram, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, DateType, DoubleType, IntegerType, NumericType, StructField, StructType, TimestampNTZType, TimestampType, TypeCollection}
+import org.apache.spark.sql.util.NumericHistogram
 
 /**
  * Computes an approximate histogram of a numerical column using a user-specified number of bins.
@@ -58,7 +61,7 @@ case class HistogramNumeric(
     nBins: Expression,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
-  extends TypedImperativeAggregate[DistributeHistogram] with ImplicitCastInputTypes
+  extends TypedImperativeAggregate[NumericHistogram] with ImplicitCastInputTypes
   with BinaryLike[Expression] {
 
   def this(child: Expression, nBins: Expression) = {
@@ -91,11 +94,13 @@ case class HistogramNumeric(
     }
   }
 
-  override def createAggregationBuffer(): DistributeHistogram = {
-    new DistributeHistogram(nb.asInstanceOf[Int])
+  override def createAggregationBuffer(): NumericHistogram = {
+    val buffer = new NumericHistogram()
+    buffer.allocate(nb.asInstanceOf[Int])
+    buffer
   }
 
-  override def update(buffer: DistributeHistogram, inputRow: InternalRow): DistributeHistogram = {
+  override def update(buffer: NumericHistogram, inputRow: InternalRow): NumericHistogram = {
     val value = child.eval(inputRow)
     // Ignore empty rows, for example: histogram_numeric(null)
     if (value != null) {
@@ -113,28 +118,29 @@ case class HistogramNumeric(
   }
 
   override def merge(
-      buffer: DistributeHistogram,
-      other: DistributeHistogram): DistributeHistogram = {
+      buffer: NumericHistogram,
+      other: NumericHistogram): NumericHistogram = {
     buffer.merge(other)
     buffer
   }
 
-  override def eval(buffer: DistributeHistogram): Any = {
+  override def eval(buffer: NumericHistogram): Any = {
     if (buffer.getUsedBins < 1) {
       null
     } else {
-      val result = buffer.getBins.asScala.map { coord =>
+      val result = (0 until buffer.getUsedBins).map { index =>
+        val coord = buffer.getBin(index)
         InternalRow.apply(coord.x, coord.y)
-      }.toArray
+      }
       new GenericArrayData(result)
     }
   }
 
-  override def serialize(obj: DistributeHistogram): Array[Byte] = {
+  override def serialize(obj: NumericHistogram): Array[Byte] = {
     HistogramNumeric.serializer.serialize(obj)
   }
 
-  override def deserialize(bytes: Array[Byte]): DistributeHistogram = {
+  override def deserialize(bytes: Array[Byte]): NumericHistogram = {
     HistogramNumeric.serializer.deserialize(bytes)
   }
 
@@ -163,5 +169,47 @@ case class HistogramNumeric(
 }
 
 object HistogramNumeric {
-  val serializer: DistributedHistogramSerializer = new DistributedHistogramSerializer
+  class NumericHistogramSerializer {
+
+    private final def length(histogram: NumericHistogram): Int = {
+      // histogram.nBins, histogram.nUsedBins
+      Ints.BYTES + Ints.BYTES +
+        //  histogram.bins, Array[Coord(x: Double, y: Double)]
+        histogram.getUsedBins * (Doubles.BYTES + Doubles.BYTES)
+    }
+
+    def serialize(histogram: NumericHistogram): Array[Byte] = {
+      val buffer = ByteBuffer.wrap(new Array(length(histogram)))
+      buffer.putInt(histogram.getNBins)
+      buffer.putInt(histogram.getUsedBins)
+
+      var i = 0
+      while (i < histogram.getUsedBins) {
+        val coord = histogram.getBin(i)
+        buffer.putDouble(coord.x)
+        buffer.putDouble(coord.y)
+        i += 1
+      }
+      buffer.array()
+    }
+
+    def deserialize(bytes: Array[Byte]): NumericHistogram = {
+      val buffer = ByteBuffer.wrap(bytes)
+      val nBins = buffer.getInt()
+      val nUsedBins = buffer.getInt()
+      val histogram = new NumericHistogram()
+      histogram.allocate(nBins)
+      histogram.setUsedBins(nUsedBins)
+      var i: Int = 0
+      while (i < nUsedBins) {
+        val x = buffer.getDouble()
+        val y = buffer.getDouble()
+        histogram.setBin(x, y, i)
+        i += 1
+      }
+      histogram
+    }
+  }
+
+  val serializer: NumericHistogramSerializer = new NumericHistogramSerializer
 }

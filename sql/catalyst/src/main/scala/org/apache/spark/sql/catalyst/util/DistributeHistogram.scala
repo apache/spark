@@ -67,7 +67,7 @@ class DistributeHistogram(private var nBins: Int) {
   /**
    * Set a particular histogram bin.
    */
-  def setBins(bins: util.ArrayList[Coord]): Unit = this.bins = bins
+  def setBins(bins: Coord, site: Iny): Unit = this.bins = bins
 
   /**
    * Takes a serialized histogram created by the serialize() method and merges
@@ -190,47 +190,5 @@ case class Coord(var x: Double, var y: Double) extends Comparable[Coord] {
   }
 }
 
-class DistributedHistogramSerializer {
 
-  private final def length(histogram: DistributeHistogram): Int = {
-    // histogram.nBins, histogram.nUsedBins
-    Ints.BYTES + Ints.BYTES +
-      //  histogram.bins, Array[Coord(x: Double, y: Double)]
-      histogram.getUsedBins * (Doubles.BYTES + Doubles.BYTES)
-  }
-
-  def serialize(histogram: DistributeHistogram): Array[Byte] = {
-    val buffer = ByteBuffer.wrap(new Array(length(histogram)))
-    buffer.putInt(histogram.getNBins)
-    buffer.putInt(histogram.getUsedBins)
-
-    var i = 0
-    while (i < histogram.getUsedBins) {
-      val coord = histogram.getBins.get(i)
-      buffer.putDouble(coord.x)
-      buffer.putDouble(coord.y)
-      i += 1
-    }
-    buffer.array()
-  }
-
-  def deserialize(bytes: Array[Byte]): DistributeHistogram = {
-    val buffer = ByteBuffer.wrap(bytes)
-    val nBins = buffer.getInt()
-    val nUsedBins = buffer.getInt()
-
-    val bins: util.ArrayList[Coord] = new util.ArrayList[Coord]()
-    var i: Int = 0
-    while (i < nUsedBins) {
-      val x = buffer.getDouble()
-      val y = buffer.getDouble()
-      bins.add(Coord(x, y))
-      i += 1
-    }
-    val histogram = new DistributeHistogram(nBins)
-    histogram.setUsedBins(nUsedBins)
-    histogram.setBins(bins)
-    histogram
-  }
-}
 

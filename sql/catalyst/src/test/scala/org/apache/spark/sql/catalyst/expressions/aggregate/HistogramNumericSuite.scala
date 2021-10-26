@@ -25,10 +25,11 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions.{DslString, DslSymbol}
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
+import org.apache.spark.sql.catalyst.expressions.aggregate.HistogramNumeric.NumericHistogramSerializer
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference, Cast, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.catalyst.util.{DistributedHistogramSerializer, DistributeHistogram}
 import org.apache.spark.sql.types.{DoubleType, IntegerType}
+import org.apache.spark.sql.util.NumericHistogram
 
 class HistogramNumericSuite extends SparkFunSuite {
 
@@ -39,13 +40,15 @@ class HistogramNumericSuite extends SparkFunSuite {
   }
 
   test("serialize and de-serialize") {
-    val serializer = new DistributedHistogramSerializer
+    val serializer = new NumericHistogramSerializer
 
     // Check empty serialize and de-serialize
-    val emptyBuffer = new DistributeHistogram(5)
+    val emptyBuffer = new NumericHistogram()
+    emptyBuffer.allocate(5)
     assert(compareEquals(emptyBuffer, serializer.deserialize(serializer.serialize(emptyBuffer))))
 
-    val buffer = new DistributeHistogram(data.size / 3)
+    val buffer = new NumericHistogram()
+    buffer.allocate(data.size / 3)
     data.foreach { value =>
       buffer.add(value)
     }
@@ -58,9 +61,11 @@ class HistogramNumericSuite extends SparkFunSuite {
   test("class DistributeHistogram, basic operations") {
     val valueCount = 5
     Seq(3, 5).foreach { nBins: Int =>
-      val buffer = new DistributeHistogram(nBins)
+      val buffer = new NumericHistogram()
+      buffer.allocate(nBins)
       (1 to valueCount).grouped(nBins).foreach { group =>
-        val partialBuffer = new DistributeHistogram(nBins)
+        val partialBuffer = new NumericHistogram()
+        partialBuffer.allocate(nBins)
         group.foreach(x => partialBuffer.add(x))
         buffer.merge(partialBuffer)
       }
@@ -145,7 +150,7 @@ class HistogramNumericSuite extends SparkFunSuite {
     assert(agg.eval(buffer) != null)
   }
 
-  private def compareEquals(left: DistributeHistogram, right: DistributeHistogram): Boolean = {
+  private def compareEquals(left: NumericHistogram, right: NumericHistogram): Boolean = {
     val leftBins = left.getBins.asScala
     val rightBins = right.getBins.asScala
     left.getNBins == right.getNBins && left.getUsedBins == right.getUsedBins &&
