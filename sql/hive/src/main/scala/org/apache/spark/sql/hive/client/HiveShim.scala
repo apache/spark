@@ -148,10 +148,10 @@ private[client] sealed abstract class Shim {
       partSpec: JMap[String, String]): JList[Partition]
 
   def getPartitionNames(
-    hive: Hive,
-    dbName: String,
-    tblName: String,
-    max: Short): JList[String]
+      hive: Hive,
+      dbName: String,
+      tblName: String,
+      max: Short): JList[String]
 
   def getPartitionNames(
       hive: Hive,
@@ -600,7 +600,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   }
 
   override def getAllTables(hive: Hive, dbName: String): JList[String] = {
-   hive.getAllTables(dbName)
+    hive.getAllTables(dbName)
   }
 
   override def dropTable(hive: Hive, dbName: String, tableName: String): Unit = {
