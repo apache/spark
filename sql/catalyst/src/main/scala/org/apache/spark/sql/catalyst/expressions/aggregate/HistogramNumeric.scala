@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, DateTy
 /**
  * Computes an approximate histogram of a numerical column using a user-specified number of bins.
  *
- * The output is an array of (x,y) pairs as Hive struct objects that represents the histogram's
+ * The output is an array of (x,y) pairs as struct objects that represents the histogram's
  * bin centers and heights.
  */
 @ExpressionDescription(
@@ -97,7 +97,7 @@ case class HistogramNumeric(
 
   override def update(buffer: DistributeHistogram, inputRow: InternalRow): DistributeHistogram = {
     val value = child.eval(inputRow)
-    // Ignore empty rows, for example: percentile_approx(null)
+    // Ignore empty rows, for example: histogram_numeric(null)
     if (value != null) {
       // Convert the value to a double value
       val doubleValue = child.dataType match {
@@ -147,7 +147,6 @@ case class HistogramNumeric(
       newRight: Expression): HistogramNumeric = {
     copy(child = newLeft, nBins = newRight)
   }
-
 
   override def withNewMutableAggBufferOffset(newOffset: Int): HistogramNumeric =
     copy(mutableAggBufferOffset = newOffset)

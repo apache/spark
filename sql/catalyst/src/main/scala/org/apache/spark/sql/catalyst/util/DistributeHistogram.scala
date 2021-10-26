@@ -72,8 +72,6 @@ class DistributeHistogram(private var nBins: Int) {
   /**
    * Takes a serialized histogram created by the serialize() method and merges
    * it with the current histogram object.
-   *
-   * @param other A serialized histogram created by the serialize() method
    */
   def merge(other: DistributeHistogram): Unit = {
     if (other == null) {
@@ -95,8 +93,7 @@ class DistributeHistogram(private var nBins: Int) {
   }
 
   /**
-   * Adds a new data point to the histogram approximation. Make sure you have
-   * called either allocate() or merge() first. This method implements Algorithm #1
+   * Adds a new data point to the histogram approximation. This method implements Algorithm #1
    * from Ben-Haim and Tom-Tov, "A Streaming Parallel Decision Tree Algorithm", JMLR 2010.
    *
    * @param v The data point to add to the histogram approximation.
