@@ -57,7 +57,7 @@ from pyspark.pandas.utils import (
     verify_temp_column_name,
     validate_bool_kwarg,
     ERROR_MESSAGE_CANNOT_COMBINE,
-    raise_advice_warning,
+    log_advice,
 )
 from pyspark.pandas.internal import (
     InternalField,
@@ -489,7 +489,7 @@ class Index(IndexOpsMixin):
         >>> df['dogs'].index.to_pandas()
         Index(['a', 'b', 'c', 'd'], dtype='object')
         """
-        raise_advice_warning(
+        log_advice(
             "`to_pandas` loads the all data into the driver's memory. "
             "It should only be used if the resulting pandas Index is expected to be small."
         )
@@ -1558,7 +1558,7 @@ class Index(IndexOpsMixin):
                     ('a', 'x', 1)],
                    )
         """
-        raise_advice_warning(
+        log_advice(
             "`sort_values` is expensive. Be aware of use it unless it is absolutely necessary."
         )
         sdf = self._internal.spark_frame
@@ -2557,7 +2557,7 @@ class Index(IndexOpsMixin):
         >>> midx.to_list()
         [(1, 'red'), (1, 'blue'), (2, 'red'), (2, 'green')]
         """
-        raise_advice_warning(
+        log_advice(
             "`to_list` loads the all data into the driver's memory. "
             "It should only be used if the resulting list is expected to be small."
         )

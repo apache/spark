@@ -78,7 +78,7 @@ from pyspark.pandas.utils import (
     same_anchor,
     scol_for,
     validate_axis,
-    raise_advice_warning,
+    log_advice,
 )
 from pyspark.pandas.frame import DataFrame, _reduce_spark_multi
 from pyspark.pandas.internal import (
@@ -414,7 +414,7 @@ def read_csv(
             (label, col) for label, col in column_labels.items() if label not in index_col
         )
     else:
-        raise_advice_warning(
+        log_advice(
             "If `index_col` is not specified for `read_csv`, "
             "the default index is attached which is expensive."
         )
@@ -497,7 +497,7 @@ def read_json(
     1         c     d
     """
     if index_col is None:
-        raise_advice_warning(
+        log_advice(
             "If `index_col` is not specified for `read_json`, "
             "the default index is attached which is expensive."
         )
@@ -587,7 +587,7 @@ def read_delta(
     4      14
     """
     if index_col is None:
-        raise_advice_warning(
+        log_advice(
             "If `index_col` is not specified for `read_delta`, "
             "the default index is attached which is expensive."
         )
@@ -640,7 +640,7 @@ def read_table(name: str, index_col: Optional[Union[str, List[str]]] = None) -> 
     0       0
     """
     if index_col is None:
-        raise_advice_warning(
+        log_advice(
             "If `index_col` is not specified for `read_table`, "
             "the default index is attached which is expensive."
         )
@@ -787,6 +787,11 @@ def read_parquet(
     index
     0       0
     """
+    if index_col is None:
+        log_advice(
+            "If `index_col` is not specified for `read_parquet`, "
+            "the default index is attached which is expensive."
+        )
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")
 
@@ -795,46 +800,39 @@ def read_parquet(
 
     index_names = None
 
-    if index_col is None:
-        raise_advice_warning(
-            "If `index_col` is not specified for `read_parquet`, "
-            "the default index is attached which is expensive."
+    if index_col is None and pandas_metadata:
+        # Try to read pandas metadata
+
+        @no_type_check
+        @pandas_udf("index_col array<string>, index_names array<string>")
+        def read_index_metadata(pser: pd.Series) -> pd.DataFrame:
+            binary = pser.iloc[0]
+            metadata = pq.ParquetFile(pa.BufferReader(binary)).metadata.metadata
+            if b"pandas" in metadata:
+                pandas_metadata = json.loads(metadata[b"pandas"].decode("utf8"))
+                if all(isinstance(col, str) for col in pandas_metadata["index_columns"]):
+                    index_col = []
+                    index_names = []
+                    for col in pandas_metadata["index_columns"]:
+                        index_col.append(col)
+                        for column in pandas_metadata["columns"]:
+                            if column["field_name"] == col:
+                                index_names.append(column["name"])
+                                break
+                        else:
+                            index_names.append(None)
+                    return pd.DataFrame({"index_col": [index_col], "index_names": [index_names]})
+            return pd.DataFrame({"index_col": [None], "index_names": [None]})
+
+        index_col, index_names = (
+            default_session()
+            .read.format("binaryFile")
+            .load(path)
+            .limit(1)
+            .select(read_index_metadata("content").alias("index_metadata"))
+            .select("index_metadata.*")
+            .head()
         )
-        if pandas_metadata:
-            # Try to read pandas metadata
-
-            @no_type_check
-            @pandas_udf("index_col array<string>, index_names array<string>")
-            def read_index_metadata(pser: pd.Series) -> pd.DataFrame:
-                binary = pser.iloc[0]
-                metadata = pq.ParquetFile(pa.BufferReader(binary)).metadata.metadata
-                if b"pandas" in metadata:
-                    pandas_metadata = json.loads(metadata[b"pandas"].decode("utf8"))
-                    if all(isinstance(col, str) for col in pandas_metadata["index_columns"]):
-                        index_col = []
-                        index_names = []
-                        for col in pandas_metadata["index_columns"]:
-                            index_col.append(col)
-                            for column in pandas_metadata["columns"]:
-                                if column["field_name"] == col:
-                                    index_names.append(column["name"])
-                                    break
-                            else:
-                                index_names.append(None)
-                        return pd.DataFrame(
-                            {"index_col": [index_col], "index_names": [index_names]}
-                        )
-                return pd.DataFrame({"index_col": [None], "index_names": [None]})
-
-            index_col, index_names = (
-                default_session()
-                .read.format("binaryFile")
-                .load(path)
-                .limit(1)
-                .select(read_index_metadata("content").alias("index_metadata"))
-                .select("index_metadata.*")
-                .head()
-            )
 
     psdf = read_spark_io(path=path, format="parquet", options=options, index_col=index_col)
 

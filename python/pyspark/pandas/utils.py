@@ -65,10 +65,6 @@ ERROR_MESSAGE_CANNOT_COMBINE = (
 SPARK_CONF_ARROW_ENABLED = "spark.sql.execution.arrow.pyspark.enabled"
 
 
-class PandasAPIOnSparkAdviceWarning(Warning):
-    pass
-
-
 def same_anchor(
     this: Union["DataFrame", "IndexOpsMixin", "InternalFrame"],
     that: Union["DataFrame", "IndexOpsMixin", "InternalFrame"],
@@ -962,10 +958,15 @@ def compare_allow_null(
     return left.isNull() | right.isNull() | comp(left, right)
 
 
-def raise_advice_warning(
+def log_advice(
     message: str,
 ) -> None:
-    warnings.warn(message, PandasAPIOnSparkAdviceWarning)
+    """
+    Display advisory logs for functions to be aware of when using pandas API on Spark
+    for the existing pandas/PySpark users who may not be familiar with distributed environments
+    or the behavior of pandas.
+    """
+    warnings.warn(message, UserWarning)
 
 
 def _test() -> None:

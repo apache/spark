@@ -90,7 +90,7 @@ from pyspark.pandas.utils import (
     same_anchor,
     scol_for,
     verify_temp_column_name,
-    raise_advice_warning,
+    log_advice,
 )
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.exceptions import DataError
@@ -1200,7 +1200,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
-            raise_advice_warning(
+            log_advice(
                 "If the type hints is not specified for `grouby.apply`, "
                 "it could be expensive for inferring the type internally."
             )
@@ -2269,7 +2269,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
-            raise_advice_warning(
+            log_advice(
                 "If the type hints is not specified for `grouby.transform`, "
                 "it could be expensive for inferring the type internally."
             )

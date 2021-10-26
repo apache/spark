@@ -43,7 +43,7 @@ from pyspark.pandas.utils import (
     name_like_string,
     scol_for,
     verify_temp_column_name,
-    raise_advice_warning,
+    log_advice,
 )
 
 if TYPE_CHECKING:
@@ -349,7 +349,7 @@ class PandasOnSparkFrameMethods(object):
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
-            raise_advice_warning(
+            log_advice(
                 "If the type hints is not specified for `apply_batch`, "
                 "it could be expensive for inferring the type internally."
             )
@@ -589,7 +589,7 @@ class PandasOnSparkFrameMethods(object):
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
-            raise_advice_warning(
+            log_advice(
                 "If the type hints is not specified for `transform_batch`, "
                 "it could be expensive for inferring the type internally."
             )

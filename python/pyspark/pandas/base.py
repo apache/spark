@@ -47,7 +47,7 @@ from pyspark.pandas.utils import (
     scol_for,
     validate_axis,
     ERROR_MESSAGE_CANNOT_COMBINE,
-    raise_advice_warning,
+    log_advice,
 )
 from pyspark.pandas.frame import DataFrame
 
@@ -440,9 +440,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         return self._dtype_op.rxor(self, other)
 
     def __len__(self) -> int:
-        raise_advice_warning(
-            "`len` is expensive. Be aware of use it unless it is absolutely necessary."
-        )
+        log_advice("`len` is expensive. Be aware of use it unless it is absolutely necessary.")
         return len(self._psdf)
 
     # NDArray Compat

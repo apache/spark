@@ -103,7 +103,7 @@ from pyspark.pandas.utils import (
     validate_how,
     validate_mode,
     verify_temp_column_name,
-    raise_advice_warning,
+    log_advice,
 )
 from pyspark.pandas.generic import Frame
 from pyspark.pandas.internal import (
@@ -2481,7 +2481,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
-            raise_advice_warning(
+            log_advice(
                 "If the type hints is not specified for `apply`, "
                 "it could be expensive for inferring the type internally."
             )
@@ -2725,7 +2725,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
-            raise_advice_warning(
+            log_advice(
                 "If the type hints is not specified for `transform`, "
                 "it could be expensive for inferring the type internally."
             )
@@ -4540,7 +4540,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         **options: Any
     ) -> None:
         if index_col is None:
-            raise_advice_warning(
+            log_advice(
                 "If `index_col` is not specified for `to_table`, "
                 "the existing index is lost when converting to table."
             )
@@ -4618,7 +4618,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...             mode='overwrite', replaceWhere='date >= "2012-01-01"')  # doctest: +SKIP
         """
         if index_col is None:
-            raise_advice_warning(
+            log_advice(
                 "If `index_col` is not specified for `to_delta`, "
                 "the existing index is lost when converting to Delta."
             )
@@ -4700,7 +4700,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     partition_cols=['date', 'country'])
         """
         if index_col is None:
-            raise_advice_warning(
+            log_advice(
                 "If `index_col` is not specified for `to_parquet`, "
                 "the existing index is lost when converting to Parquet."
             )
@@ -4777,7 +4777,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     partition_cols=['date', 'country'])
         """
         if index_col is None:
-            raise_advice_warning(
+            log_advice(
                 "If `index_col` is not specified for `to_orc`, "
                 "the existing index is lost when converting to ORC."
             )
@@ -4816,7 +4816,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def to_spark(self, index_col: Optional[Union[str, List[str]]] = None) -> SparkDataFrame:
         if index_col is None:
-            raise_advice_warning(
+            log_advice(
                 "If `index_col` is not specified for `to_spark`, "
                 "the existing index is lost when converting to Spark DataFrame."
             )
@@ -4842,7 +4842,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2   0.6   0.0
         3   0.2   0.1
         """
-        raise_advice_warning(
+        log_advice(
             "`to_pandas` loads the all data into the driver's memory. "
             "It should only be used if the resulting pandas DataFrame is expected to be small."
         )
@@ -6917,7 +6917,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4     D     7     2
         3  None     8     4
         """
-        raise_advice_warning(
+        log_advice(
             "`sort_values` is expensive. Be aware of use it unless it is absolutely necessary."
         )
         inplace = validate_bool_kwarg(inplace, "inplace")
@@ -7029,7 +7029,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         a 1  2  1
         b 1  0  3
         """
-        raise_advice_warning(
+        log_advice(
             "`sort_index` is expensive. Be aware of use it unless it is absolutely necessary."
         )
         inplace = validate_bool_kwarg(inplace, "inplace")
@@ -12079,9 +12079,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 warnings.warn(msg, UserWarning)
 
     def __len__(self) -> int:
-        raise_advice_warning(
-            "`len` is expensive. Be aware of use it unless it is absolutely necessary."
-        )
+        log_advice("`len` is expensive. Be aware of use it unless it is absolutely necessary.")
         return self._internal.resolved_copy.spark_frame.count()
 
     def __dir__(self) -> Iterable[str]:

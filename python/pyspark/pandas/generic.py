@@ -74,7 +74,7 @@ from pyspark.pandas.utils import (
     validate_axis,
     validate_mode,
     SPARK_CONF_ARROW_ENABLED,
-    raise_advice_warning,
+    log_advice,
 )
 
 if TYPE_CHECKING:
@@ -574,7 +574,7 @@ class Frame(object, metaclass=ABCMeta):
         >>> ps.Series(['a', 'b', 'a']).to_numpy()
         array(['a', 'b', 'a'], dtype=object)
         """
-        raise_advice_warning(
+        log_advice(
             "`to_numpy` loads the all data into the driver's memory. "
             "It should only be used if the resulting NumPy ndarray is expected to be small."
         )
@@ -1147,7 +1147,7 @@ class Frame(object, metaclass=ABCMeta):
 
         >>> df1.to_excel('output1.xlsx', engine='xlsxwriter')  # doctest: +SKIP
         """
-        raise_advice_warning(
+        log_advice(
             "`to_excel` loads the all data into the driver's memory. "
             "It should only be used if the resulting DataFrame is expected to be small."
         )
@@ -3006,7 +3006,7 @@ class Frame(object, metaclass=ABCMeta):
             raise NotImplementedError(
                 "`to_markdown()` only supported in pandas-on-Spark with pandas >= 1.0.0"
             )
-        raise_advice_warning(
+        log_advice(
             "`to_markdown` loads the all data into the driver's memory. "
             "It should only be used if the resulting pandas object is expected to be small."
         )
