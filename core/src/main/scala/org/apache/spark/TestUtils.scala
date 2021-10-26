@@ -38,6 +38,7 @@ import scala.io.Source
 import scala.reflect.{classTag, ClassTag}
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.lang3.StringUtils
@@ -278,16 +279,15 @@ private[spark] object TestUtils {
   }
 
   def isPythonVersionAtLeast38(): Boolean = {
-    val attempt = if (Utils.isWindows) {
-      Try(Process(Seq("cmd.exe", "/C", "python3 --version"))
-        .run(ProcessLogger(s => s.startsWith("Python 3.8") || s.startsWith("Python 3.9")))
-        .exitValue())
-    } else {
-      Try(Process(Seq("sh", "-c", "python3 --version"))
-        .run(ProcessLogger(s => s.startsWith("Python 3.8") || s.startsWith("Python 3.9")))
-        .exitValue())
+    val cmdSeq = if (Utils.isWindows) Seq("cmd.exe", "/C") else Seq("sh", "-c")
+    val versionPattern = """Python (\d+)\.(\d+)\.\d+""".r
+    try {
+      Process(cmdSeq :+ "python3 --version").!!.trim match {
+        case versionPattern(v1, v2) => v1.toInt > 3 || (v1.toInt == 3 && v2.toInt >= 8)
+      }
+    } catch {
+      case NonFatal(_) => false
     }
-    attempt.isSuccess && attempt.get == 0
   }
 
   /**
