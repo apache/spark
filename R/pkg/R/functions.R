@@ -1483,7 +1483,6 @@ setMethod("ltrim",
 #' tmp <- head(select(df, make_date(df$year, df$month, df$day)))
 #' head(tmp)}
 setMethod("make_date",
-          #signature(year = "Column", month = "Column", day = "Column"),
           signature(year = "Column", month = "Column", day = "Column"),
           function(year, month, day) {
             jc <- callJStatic("org.apache.spark.sql.functions", "make_date",
