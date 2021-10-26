@@ -32,7 +32,8 @@ import java.util.Random;
  * of histogram bins.
  *
  * Adapted from Hive's NumericHistogram. Can refer to
- * https://github.com/apache/hive/blob/master/ql/src/java/org/apache/hadoop/hive/ql/udf/generic/NumericHistogram.java
+ * https://github.com/apache/hive/blob/master/ql/src/
+ * java/org/apache/hadoop/hive/ql/udf/generic/NumericHistogram.java
  */
 public class NumericHistogram {
     /**
