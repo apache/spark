@@ -277,7 +277,6 @@ case class AlterTableSetPropertiesCommand(
       properties = table.properties ++ properties,
       comment = properties.get(TableCatalog.PROP_COMMENT).orElse(table.comment))
     catalog.alterTable(newTable)
-    catalog.invalidateCachedTable(tableName)
     Seq.empty[Row]
   }
 
@@ -316,7 +315,6 @@ case class AlterTableUnsetPropertiesCommand(
     val newProperties = table.properties.filter { case (k, _) => !propKeys.contains(k) }
     val newTable = table.copy(properties = newProperties, comment = tableComment)
     catalog.alterTable(newTable)
-    catalog.invalidateCachedTable(tableName)
     Seq.empty[Row]
   }
 
