@@ -1103,6 +1103,10 @@ class Analyzer(override val catalogManager: CatalogManager)
       tmpView
     }
 
+    /**
+     * Resolves relations to `ResolvedTable` or `ResolvedView`. This is for resolving DDL and
+     * misc commands.
+     */
     private def lookupTableOrView(identifier: Seq[String]): Option[LogicalPlan] = {
       lookupTempView(identifier).map { _ =>
         ResolvedView(identifier.asIdentifier, isTemp = true)
@@ -1160,10 +1164,10 @@ class Analyzer(override val catalogManager: CatalogManager)
       }
     }
 
-    // Look up a relation from the catalog with the following logic:
-    // 1) If a relation is not found in the catalog, return None.
-    // 2) If a v1 table is found from the session catalog, create a v1 relation. Otherwise, create
-    //    a v2 relation.
+    /**
+     * Resolves relations to v1 relation if it's a v1 table from the session catalog, or to v2
+     * relation. This is for resolving DML commands and SELECT queries.
+     */
     private def lookupRelation(u: UnresolvedRelation): Option[LogicalPlan] = {
       lookupTempView(u.multipartIdentifier, u.isStreaming).orElse {
         expandIdentifier(u.multipartIdentifier) match {
