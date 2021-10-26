@@ -22,6 +22,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
 import org.apache.spark.internal.config.ConfigBuilder
+import org.apache.spark.network.util.ByteUnit
 
 private[spark] object Config extends Logging {
 
@@ -635,6 +636,24 @@ private[spark] object Config extends Logging {
   val KUBERNETES_EXECUTOR_SECRETS_PREFIX = "spark.kubernetes.executor.secrets."
   val KUBERNETES_EXECUTOR_SECRET_KEY_REF_PREFIX = "spark.kubernetes.executor.secretKeyRef."
   val KUBERNETES_EXECUTOR_VOLUMES_PREFIX = "spark.kubernetes.executor.volumes."
+
+  val KUBERNETES_ENABLE_PODGROUP = ConfigBuilder("spark.kubernetes.enablePodGroup")
+    .doc("If true, PodGroup annotation('scheduling.k8s.io/group-name') would be specified to " +
+      "each driver/executor pod, all pods in a Job would be set in a same PodGroup, this info " +
+      "would be used by Kubernetes batch scheduler.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+  val KUBERNETES_PODGROUP_MIN_MEMORY = ConfigBuilder("spark.kubernetes.podgroup.min.memory")
+    .doc("Amount of memory to use for the PodGroup minResource, in MiB unless otherwise specified.")
+    .version("3.3.0")
+    .bytesConf(ByteUnit.MiB)
+    .createWithDefaultString("3g")
+  val KUBERNETES_PODGROUP_MIN_CPU = ConfigBuilder("spark.kubernetes.podgroup.min.cpu")
+    .doc("Amount of cpu to use for the PodGroup minResource")
+    .version("3.3.0")
+    .doubleConf
+    .createWithDefault(2.0)
 
   val KUBERNETES_VOLUMES_HOSTPATH_TYPE = "hostPath"
   val KUBERNETES_VOLUMES_PVC_TYPE = "persistentVolumeClaim"

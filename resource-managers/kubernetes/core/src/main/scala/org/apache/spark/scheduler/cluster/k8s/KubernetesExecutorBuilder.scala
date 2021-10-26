@@ -52,7 +52,8 @@ private[spark] class KubernetesExecutorBuilder {
       new MountSecretsFeatureStep(conf),
       new EnvSecretsFeatureStep(conf),
       new MountVolumesFeatureStep(conf),
-      new LocalDirsFeatureStep(conf)) ++ userFeatures
+      new LocalDirsFeatureStep(conf),
+      new PodGroupFeatureStep(conf)) ++ userFeatures
 
     val spec = KubernetesExecutorSpec(
       initialPod,

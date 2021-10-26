@@ -51,7 +51,16 @@
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
       <type>test-jar</type>
     </dependency>
-
+    <dependency>
+      <groupId>io.fabric8</groupId>
+      <artifactId>volcano-client</artifactId>
+      <version>${kubernetes-client.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.fabric8</groupId>
+      <artifactId>volcano-model-v1beta1</artifactId>
+      <version>${kubernetes-client.version}</version>
+    </dependency>
     <dependency>
       <groupId>io.fabric8</groupId>
       <artifactId>kubernetes-client</artifactId>
