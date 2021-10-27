@@ -175,7 +175,7 @@ object NumericHistogramSerializer {
 
     def serialize(histogram: NumericHistogram): Array[Byte] = {
       val buffer = ByteBuffer.wrap(new Array(length(histogram)))
-      buffer.putInt(histogram.getNBins)
+      buffer.putInt(histogram.getNumBins)
       buffer.putInt(histogram.getUsedBins)
 
       var i = 0

@@ -152,7 +152,7 @@ class HistogramNumericSuite extends SparkFunSuite {
   }
 
   private def compareEquals(left: NumericHistogram, right: NumericHistogram): Boolean = {
-    left.getNBins == right.getNBins && left.getUsedBins == right.getUsedBins &&
+    left.getNumBins == right.getNumBins && left.getUsedBins == right.getUsedBins &&
       (0 until left.getUsedBins).forall { i =>
         val leftCoord = left.getBin(i)
         val rightCoord = right.getBin(i)

@@ -37,9 +37,9 @@ import java.util.Random;
  * Differences:
  *   1. Declaring [[Coord]] and it's variables as public types for
  *      easy access in the HistogramNumeric class.
- *   2. Add method [[getNBins()]] for serialize [[NumericHistogram]]
+ *   2. Add method [[getNumBins()]] for serialize [[NumericHistogram]]
  *      in [[NumericHistogramSerializer]].
- *   3. Add method [[setBin()]] for deserialize [[NumericHistogram]]
+ *   3. Add method [[addBin()]] for deserialize [[NumericHistogram]]
  *      in [[NumericHistogramSerializer]].
  *   4. In Hive's code, the method [[merge()] pass a serialized histogram,
  *      in Spark, this method pass a deserialized histogram.
@@ -91,7 +91,7 @@ public class NumericHistogram {
   /**
    * Returns the number of bins.
    */
-  public int getNBins() {
+  public int getNumBins() {
     return nbins;
   }
 
