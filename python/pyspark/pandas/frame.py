@@ -2478,13 +2478,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         self_applied: DataFrame = DataFrame(self._internal.resolved_copy)
 
         column_labels: Optional[List[Label]] = None
-        if should_infer_schema:
+        if should_infer_schema and log_advice(
+            "If the type hints is not specified for `apply`, "
+            "it could be expensive for inferring the type internally."
+        ):
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
-            log_advice(
-                "If the type hints is not specified for `apply`, "
-                "it could be expensive for inferring the type internally."
-            )
             limit = get_option("compute.shortcut_limit")
             pdf = self_applied.head(limit + 1)._to_internal_pandas()
             applied = pdf.apply(func, axis=axis, args=args, **kwds)
@@ -2722,13 +2721,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return_sig = spec.annotations.get("return", None)
         should_infer_schema = return_sig is None
 
-        if should_infer_schema:
+        if should_infer_schema and log_advice(
+            "If the type hints is not specified for `transform`, "
+            "it could be expensive for inferring the type internally."
+        ):
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
-            log_advice(
-                "If the type hints is not specified for `transform`, "
-                "it could be expensive for inferring the type internally."
-            )
             limit = get_option("compute.shortcut_limit")
             pdf = self.head(limit + 1)._to_internal_pandas()
             transformed = pdf.transform(func, axis, *args, **kwargs)
@@ -4539,11 +4537,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         index_col: Optional[Union[str, List[str]]] = None,
         **options: Any
     ) -> None:
-        if index_col is None:
-            log_advice(
-                "If `index_col` is not specified for `to_table`, "
-                "the existing index is lost when converting to table."
-            )
+        index_col is None and log_advice(
+            "If `index_col` is not specified for `to_table`, "
+            "the existing index is lost when converting to table."
+        )
         mode = validate_mode(mode)
         return self.spark.to_table(name, format, mode, partition_cols, index_col, **options)
 
@@ -4617,11 +4614,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> df.to_delta('%s/to_delta/bar' % path,
         ...             mode='overwrite', replaceWhere='date >= "2012-01-01"')  # doctest: +SKIP
         """
-        if index_col is None:
-            log_advice(
-                "If `index_col` is not specified for `to_delta`, "
-                "the existing index is lost when converting to Delta."
-            )
+        index_col is None and log_advice(
+            "If `index_col` is not specified for `to_delta`, "
+            "the existing index is lost when converting to Delta."
+        )
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore[assignment]
 
@@ -4699,11 +4695,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     mode = 'overwrite',
         ...     partition_cols=['date', 'country'])
         """
-        if index_col is None:
-            log_advice(
-                "If `index_col` is not specified for `to_parquet`, "
-                "the existing index is lost when converting to Parquet."
-            )
+        index_col is None and log_advice(
+            "If `index_col` is not specified for `to_parquet`, "
+            "the existing index is lost when converting to Parquet."
+        )
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")
 
@@ -4776,11 +4771,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     mode = 'overwrite',
         ...     partition_cols=['date', 'country'])
         """
-        if index_col is None:
-            log_advice(
-                "If `index_col` is not specified for `to_orc`, "
-                "the existing index is lost when converting to ORC."
-            )
+        index_col is None and log_advice(
+            "If `index_col` is not specified for `to_orc`, "
+            "the existing index is lost when converting to ORC."
+        )
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore[assignment]
 
@@ -4815,11 +4809,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     to_spark_io.__doc__ = SparkFrameMethods.to_spark_io.__doc__
 
     def to_spark(self, index_col: Optional[Union[str, List[str]]] = None) -> SparkDataFrame:
-        if index_col is None:
-            log_advice(
-                "If `index_col` is not specified for `to_spark`, "
-                "the existing index is lost when converting to Spark DataFrame."
-            )
+        index_col is None and log_advice(
+            "If `index_col` is not specified for `to_spark`, "
+            "the existing index is lost when converting to Spark DataFrame."
+        )
         return self.spark.frame(index_col)
 
     to_spark.__doc__ = SparkFrameMethods.__doc__
