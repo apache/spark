@@ -260,7 +260,7 @@ case class ScanBuilderHolder(
     relation: DataSourceV2Relation,
     builder: ScanBuilder) extends LeafNode {
   var pushedLimit: Option[Int] = None
-  private[sql] def pushedLimit(limit: Option[Int]) = pushedLimit = limit
+  private[sql] def pushedLimit(limit: Option[Int]): Unit = pushedLimit = limit
 }
 
 
