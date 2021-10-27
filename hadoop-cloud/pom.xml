@@ -259,7 +259,6 @@
               <groupId>org.apache.hadoop</groupId>
               <artifactId>hadoop-common</artifactId>
             </exclusion>
-          </exclusions>
             <exclusion>
               <groupId>com.fasterxml.jackson.core</groupId>
               <artifactId>jackson-core</artifactId>
