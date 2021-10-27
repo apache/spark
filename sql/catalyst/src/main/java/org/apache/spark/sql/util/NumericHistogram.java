@@ -58,8 +58,6 @@ public class NumericHistogram {
     }
   }
 
-  ;
-
   // Class variables
   private int nbins;
   private int nusedbins;
