@@ -308,7 +308,6 @@ private[hive] class HiveClientImpl(
     } finally {
       state.getConf.setClassLoader(originalConfLoader)
       Thread.currentThread().setContextClassLoader(original)
-      HiveCatalogMetrics.incrementHiveClientCalls(1)
     }
     ret
   }
