@@ -1233,26 +1233,6 @@ class DataSourceV2SQLSuite
     assert(exception.getMessage.contains("Namespace 'ns1' not found"))
   }
 
-  test("DescribeNamespace using v2 catalog") {
-    withNamespace("testcat.ns1.ns2") {
-      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
-        "'test namespace' LOCATION '/tmp/ns_test'")
-      val descriptionDf = sql("DESCRIBE NAMESPACE testcat.ns1.ns2")
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
-        Seq(
-          ("info_name", StringType),
-          ("info_value", StringType)
-        ))
-      val description = descriptionDf.collect()
-      assert(description === Seq(
-        Row("Namespace Name", "ns2"),
-        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
-        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test"),
-        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser))
-      )
-    }
-  }
-
   test("ALTER NAMESPACE .. SET PROPERTIES using v2 catalog") {
     withNamespace("testcat.ns1.ns2") {
       sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
@@ -2806,25 +2786,6 @@ class DataSourceV2SQLSuite
       assert(noCommentDataset.schema === expectedSchema)
       val isNullDataset = noCommentDataset
         .withColumn("is_null", noCommentDataset("info_name").isNull)
-      assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
-    }
-  }
-
-  test("SPARK-34577: drop/add columns to a dataset of `DESCRIBE NAMESPACE`") {
-    withNamespace("ns") {
-      sql("CREATE NAMESPACE ns")
-      val description = sql(s"DESCRIBE NAMESPACE ns")
-      val noCommentDataset = description.drop("info_name")
-      val expectedSchema = new StructType()
-        .add(
-          name = "info_value",
-          dataType = StringType,
-          nullable = true,
-          metadata = new MetadataBuilder()
-            .putString("comment", "value of the namespace info").build())
-      assert(noCommentDataset.schema === expectedSchema)
-      val isNullDataset = noCommentDataset
-        .withColumn("is_null", noCommentDataset("info_value").isNull)
       assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
     }
   }
