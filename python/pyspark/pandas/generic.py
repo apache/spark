@@ -575,7 +575,7 @@ class Frame(object, metaclass=ABCMeta):
         array(['a', 'b', 'a'], dtype=object)
         """
         log_advice(
-            "`to_numpy` loads the all data into the driver's memory. "
+            "`to_numpy` loads all data into the driver's memory. "
             "It should only be used if the resulting NumPy ndarray is expected to be small."
         )
         return self.to_pandas().values
@@ -1148,7 +1148,7 @@ class Frame(object, metaclass=ABCMeta):
         >>> df1.to_excel('output1.xlsx', engine='xlsxwriter')  # doctest: +SKIP
         """
         log_advice(
-            "`to_excel` loads the all data into the driver's memory. "
+            "`to_excel` loads all data into the driver's memory. "
             "It should only be used if the resulting DataFrame is expected to be small."
         )
         # Make sure locals() call is at the top of the function so we don't capture local variables.
@@ -3007,7 +3007,7 @@ class Frame(object, metaclass=ABCMeta):
                 "`to_markdown()` only supported in pandas-on-Spark with pandas >= 1.0.0"
             )
         log_advice(
-            "`to_markdown` loads the all data into the driver's memory. "
+            "`to_markdown` loads all data into the driver's memory. "
             "It should only be used if the resulting pandas object is expected to be small."
         )
         # Make sure locals() call is at the top of the function so we don't capture local variables.

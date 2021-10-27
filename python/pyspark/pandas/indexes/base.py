@@ -490,7 +490,7 @@ class Index(IndexOpsMixin):
         Index(['a', 'b', 'c', 'd'], dtype='object')
         """
         log_advice(
-            "`to_pandas` loads the all data into the driver's memory. "
+            "`to_pandas` loads all data into the driver's memory. "
             "It should only be used if the resulting pandas Index is expected to be small."
         )
         return self._to_internal_pandas().copy()
@@ -2558,7 +2558,7 @@ class Index(IndexOpsMixin):
         [(1, 'red'), (1, 'blue'), (2, 'red'), (2, 'green')]
         """
         log_advice(
-            "`to_list` loads the all data into the driver's memory. "
+            "`to_list` loads all data into the driver's memory. "
             "It should only be used if the resulting list is expected to be small."
         )
         return self._to_internal_pandas().tolist()

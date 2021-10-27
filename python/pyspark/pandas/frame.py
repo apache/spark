@@ -4843,7 +4843,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3   0.2   0.1
         """
         log_advice(
-            "`to_pandas` loads the all data into the driver's memory. "
+            "`to_pandas` loads all data into the driver's memory. "
             "It should only be used if the resulting pandas DataFrame is expected to be small."
         )
         return self._internal.to_pandas_frame.copy()
