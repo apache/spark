@@ -1508,7 +1508,7 @@ class SessionCatalog(
    */
   def isTemporaryFunction(name: FunctionIdentifier): Boolean = {
     // copied from HiveSessionCatalog
-    val hiveFunctions = Seq("histogram_numeric")
+    val hiveFunctions = Seq()
 
     // A temporary function is a function that has been registered in functionRegistry
     // without a database name, and is neither a built-in function nor a Hive function

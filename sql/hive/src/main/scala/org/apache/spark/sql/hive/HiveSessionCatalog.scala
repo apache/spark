@@ -128,7 +128,5 @@ private[sql] class HiveSessionCatalog(
   // in_file, index, matchpath, ngrams, noop, noopstreaming, noopwithmap,
   // noopwithmapstreaming, parse_url_tuple, reflect2, windowingtablefunction.
   // Note: don't forget to update SessionCatalog.isTemporaryFunction
-  private val hiveFunctions = Seq(
-    "histogram_numeric"
-  )
+  private val hiveFunctions = Seq()
 }

@@ -433,6 +433,7 @@ object FunctionRegistry {
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
     expression[ApproximatePercentile]("approx_percentile", true),
+    expression[HistogramNumeric]("histogram_numeric"),
     expression[StddevSamp]("std", true),
     expression[StddevSamp]("stddev", true),
     expression[StddevPop]("stddev_pop"),
