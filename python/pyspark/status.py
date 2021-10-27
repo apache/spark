@@ -21,7 +21,7 @@ __all__ = ["SparkJobInfo", "SparkStageInfo", "StatusTracker"]
 
 from typing import Optional, List
 
-from py4j.java_gateway import JavaObject
+from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 
 class SparkJobInfo(namedtuple("SparkJobInfo", "jobId stageIds status")):
