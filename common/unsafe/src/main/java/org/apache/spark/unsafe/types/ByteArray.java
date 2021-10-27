@@ -19,6 +19,7 @@ package org.apache.spark.unsafe.types;
 
 import java.nio.ByteOrder;
 import java.util.Arrays;
+import java.util.function.BiFunction;
 
 import com.google.common.primitives.Ints;
 
@@ -227,42 +228,8 @@ public final class ByteArray {
   // a valid value, and based on that value we do the appropriate semantic padding.
   public static byte[] bitwiseAnd(byte[] bytes1, byte[] bytes2, UTF8String padding,
                                   boolean isTwoArgs) {
-    if (bytes1 == null || bytes2 == null || padding == null) return null;
-    final int len1 = bytes1.length;
-    final int len2 = bytes2.length;
-    if (isTwoArgs && len1 != len2) {
-      throw new IllegalArgumentException("Two-argument BITAND cannot operate on BINARY strings "
-              + "with unequal byte length; use the three-argument overload instead.");
-    }
-    final boolean isLeftPadding = padding.toLowerCase().equals(LPAD_UTF8);
-    final boolean isRightPadding = padding.toLowerCase().equals(RPAD_UTF8);
-    if (!isTwoArgs && !isLeftPadding && !isRightPadding) {
-      throw new IllegalArgumentException("Third argument for BITAND is invalid; valid values "
-              + "are 'lpad' and 'rpad'");
-    }
-    // Compute the length of the result (maximum of the lengths of the inputs).
-    final int maxLen = Math.max(len1, len2);
-    if (maxLen == 0) {
-      return EMPTY_BYTE;
-    }
-    final byte[] result = new byte[maxLen];
-    final int minLen = Math.min(len1, len2);
-    if (isLeftPadding) {
-      // Initialize the first `maxLen - minLen` bytes to 0.
-      Platform.setMemory(result, Platform.BYTE_ARRAY_OFFSET, maxLen - minLen, (byte) 0);
-      // Compute the right-most minLen bytes of the result.
-      for (int j = 0; j < minLen; ++j) {
-        result[maxLen - 1 - j] = (byte) (bytes1[len1 - 1 - j] & bytes2[len2 - 1 - j]);
-      }
-    } else {
-      // Initialize the last `maxLen - minLen` bytes to 0.
-      Platform.setMemory(result, Platform.BYTE_ARRAY_OFFSET + minLen, maxLen - minLen, (byte) 0);
-      // Compute the left-most minLen bytes of the result.
-      for (int j = 0; j < minLen; ++j) {
-        result[j] = (byte) (bytes1[j] & bytes2[j]);
-      }
-    }
-    return result;
+    return bitwiseOp(bytes1, bytes2, padding, isTwoArgs, true, (b1, b2) -> (byte)(b1 & b2),
+            "BITAND");
   }
 
   // Return the bitwise OR of two byte sequences.
@@ -285,51 +252,8 @@ public final class ByteArray {
   // a valid value, and based on that value we do the appropriate semantic padding.
   public static byte[] bitwiseOr(byte[] bytes1, byte[] bytes2, UTF8String padding,
                                  boolean isTwoArgs) {
-    if (bytes1 == null || bytes2 == null || padding == null) return null;
-    final int len1 = bytes1.length;
-    final int len2 = bytes2.length;
-    if (isTwoArgs && len1 != len2) {
-      throw new IllegalArgumentException("Two-argument BITOR cannot operate on BINARY strings "
-              + "with unequal byte length; use the three-argument overload instead.");
-    }
-    final boolean isLeftPadding = padding.toLowerCase().equals(LPAD_UTF8);
-    final boolean isRightPadding = padding.toLowerCase().equals(RPAD_UTF8);
-    if (!isTwoArgs && !isLeftPadding && !isRightPadding) {
-      throw new IllegalArgumentException("Third argument for BITOR is invalid; valid values "
-              + "are 'lpad' and 'rpad'");
-    }
-    // Compute the length of the result (maximum of the lengths of the inputs).
-    final int maxLen = Math.max(len1, len2);
-    if (maxLen == 0) {
-      return EMPTY_BYTE;
-    }
-    final byte[] result = new byte[maxLen];
-    final int minLen = Math.min(len1, len2);
-    final byte[] maxLenBytes = (len1 == maxLen) ? bytes1 : bytes2;
-    if (isLeftPadding) {
-      // Copy the first `maxLen - minLen` bytes of the longer byte sequence into the
-      // `maxLen - minLen` left-most bytes of the result buffer.
-      Platform.copyMemory(
-              maxLenBytes, Platform.BYTE_ARRAY_OFFSET,
-              result, Platform.BYTE_ARRAY_OFFSET,
-              maxLen - minLen);
-      // Compute the right-most minLen bytes of the result.
-      for (int j = 0; j < minLen; ++j) {
-        result[maxLen - 1 - j] = (byte)(bytes1[len1 - 1 - j] | bytes2[len2 - 1 - j]);
-      }
-    } else {
-      // Copy the last `maxLen - minLen` bytes of the longer byte sequence into the
-      // `maxLen - minLen` right-most bytes of the result buffer.
-      Platform.copyMemory(
-              maxLenBytes, Platform.BYTE_ARRAY_OFFSET + minLen,
-              result, Platform.BYTE_ARRAY_OFFSET + minLen,
-              maxLen - minLen);
-      // Compute the left-most minLen bytes of the result.
-      for (int j = 0; j < minLen; ++j) {
-        result[j] = (byte) (bytes1[j] | bytes2[j]);
-      }
-    }
-    return result;
+    return bitwiseOp(bytes1, bytes2, padding, isTwoArgs, false, (b1, b2) -> (byte)(b1 | b2),
+            "BITOR");
   }
 
   // Return the bitwise XOR of two byte sequences.
@@ -352,17 +276,33 @@ public final class ByteArray {
   // a valid value, and based on that value we do the appropriate semantic padding.
   public static byte[] bitwiseXor(byte[] bytes1, byte[] bytes2, UTF8String padding,
                                   boolean isTwoArgs) {
+    return bitwiseOp(bytes1, bytes2, padding, isTwoArgs, false, (b1, b2) -> (byte)(b1 ^ b2),
+            "BITXOR");
+  }
+
+  // Catch-all implementation for BITAND, BITOR, and BITXOR. See the description at the three
+  // methods above regarding the behavior of the method for each one of the bitwise operations.
+  // - The `isBitAnd` argument determines whether we evaluate BITAND, in which case the
+  //   initialization of the result byte sequence is different compared to BITOR and BITXOR (in the
+  //   case of unequal length arguments).
+  // - The `op` argument allows to pass the operation at the byte level in a generic way as a
+  //   lambda function.
+  // - The `opname` argument refers to the bitwise function evaluated and is used in error
+  //   messages.
+  private static byte[] bitwiseOp(byte[] bytes1, byte[] bytes2, UTF8String padding,
+                                  boolean isTwoArgs, boolean isBitAnd,
+                                  BiFunction<Byte, Byte, Byte> op, String opname) {
     if (bytes1 == null || bytes2 == null || padding == null) return null;
     final int len1 = bytes1.length;
     final int len2 = bytes2.length;
     if (isTwoArgs && len1 != len2) {
-      throw new IllegalArgumentException("Two-argument BITXOR cannot operate on BINARY strings "
+      throw new IllegalArgumentException("Two-argument " + opname + " cannot operate on BINARY strings "
               + "with unequal byte length; use the three-argument overload instead.");
     }
     final boolean isLeftPadding = padding.toLowerCase().equals(LPAD_UTF8);
     final boolean isRightPadding = padding.toLowerCase().equals(RPAD_UTF8);
     if (!isTwoArgs && !isLeftPadding && !isRightPadding) {
-      throw new IllegalArgumentException("Third argument for BITXOR is invalid; valid values "
+      throw new IllegalArgumentException("Third argument for " + opname + " is invalid; valid values "
               + "are 'lpad' and 'rpad'");
     }
     // Compute the length of the result (maximum of the lengths of the inputs).
@@ -372,28 +312,37 @@ public final class ByteArray {
     }
     final byte[] result = new byte[maxLen];
     final int minLen = Math.min(len1, len2);
-    final byte[] maxLenBytes = (len1 == maxLen) ? bytes1 : bytes2;
     if (isLeftPadding) {
-      // Copy the first `maxLen - minLen` bytes of the longer byte sequence into the
-      // `maxLen - minLen` left-most bytes of the result buffer.
-      Platform.copyMemory(
-              maxLenBytes, Platform.BYTE_ARRAY_OFFSET,
-              result, Platform.BYTE_ARRAY_OFFSET,
-              maxLen - minLen);
+      if (isBitAnd) {
+        // Initialize the first `maxLen - minLen` bytes to 0.
+        Platform.setMemory(result, Platform.BYTE_ARRAY_OFFSET, maxLen - minLen, (byte) 0);
+      } else {
+        // Copy the first `maxLen - minLen` bytes of the longer byte sequence into the
+        // `maxLen - minLen` left-most bytes of the result buffer.
+        Platform.copyMemory(
+          (len1 == maxLen) ? bytes1 : bytes2, Platform.BYTE_ARRAY_OFFSET,
+          result, Platform.BYTE_ARRAY_OFFSET,
+          maxLen - minLen);
+      }
       // Compute the right-most minLen bytes of the result.
       for (int j = 0; j < minLen; ++j) {
-        result[maxLen - 1 - j] = (byte)(bytes1[len1 - 1 - j] ^ bytes2[len2 - 1 - j]);
+        result[maxLen - 1 - j] = op.apply(bytes1[len1 - 1 - j], bytes2[len2 - 1 - j]);
       }
     } else {
-      // Copy the last `maxLen - minLen` bytes of the longer byte sequence into the
-      // `maxLen - minLen` right-most bytes of the result buffer.
-      Platform.copyMemory(
-              maxLenBytes, Platform.BYTE_ARRAY_OFFSET + minLen,
-              result, Platform.BYTE_ARRAY_OFFSET + minLen,
-              maxLen - minLen);
+      if (isBitAnd) {
+        // Initialize the last `maxLen - minLen` bytes to 0.
+        Platform.setMemory(result, Platform.BYTE_ARRAY_OFFSET + minLen, maxLen - minLen, (byte) 0);
+      } else {
+        // Copy the last `maxLen - minLen` bytes of the longer byte sequence into the
+        // `maxLen - minLen` right-most bytes of the result buffer.
+        Platform.copyMemory(
+          (len1 == maxLen) ? bytes1 : bytes2, Platform.BYTE_ARRAY_OFFSET + minLen,
+          result, Platform.BYTE_ARRAY_OFFSET + minLen,
+          maxLen - minLen);
+      }
       // Compute the left-most minLen bytes of the result.
       for (int j = 0; j < minLen; ++j) {
-        result[j] = (byte) (bytes1[j] ^ bytes2[j]);
+        result[j] = op.apply(bytes1[j], bytes2[j]);
       }
     }
     return result;
