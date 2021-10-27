@@ -271,12 +271,15 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val originalLeft = testRelation1.subquery('left)
     val originalRight = testRelation2.where('b === 1L).subquery('right)
 
-    val left = testRelation1.where(IsNotNull('a) && 'a.cast(LongType) === 1L).subquery('left)
-    val right = testRelation2.where(IsNotNull('b) && 'b === 1L).subquery('right)
-
     Seq(Some("left.a".attr.cast(LongType) === "right.b".attr),
       Some("right.b".attr === "left.a".attr.cast(LongType))).foreach { condition =>
-      testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
+      testConstraintsAfterJoin(
+        originalLeft,
+        originalRight,
+        testRelation1.where(IsNotNull('a) && 'a.cast(LongType) === 1L).subquery('left),
+        testRelation2.where(IsNotNull('b) && 'b === 1L).subquery('right),
+        Inner,
+        condition)
     }
 
     Seq(Some("left.a".attr === "right.b".attr.cast(IntegerType)),
@@ -285,7 +288,8 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         originalLeft,
         originalRight,
         testRelation1.where(IsNotNull('a)).subquery('left),
-        right,
+        testRelation2.where(IsNotNull('b) && IsNotNull('b.cast(IntegerType)) &&
+          'b === 1L).subquery('right),
         Inner,
         condition)
     }
@@ -302,7 +306,13 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
 
     Seq(Some("left.a".attr.cast(LongType) === "right.b".attr),
       Some("right.b".attr === "left.a".attr.cast(LongType))).foreach { condition =>
-      testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
+      testConstraintsAfterJoin(
+        originalLeft,
+        originalRight,
+        testRelation1.where(IsNotNull('a) && 'a === 1).subquery('left),
+        testRelation2.where(IsNotNull('b)).subquery('right),
+        Inner,
+        condition)
     }
 
     Seq(Some("left.a".attr === "right.b".attr.cast(IntegerType)),
@@ -310,8 +320,9 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       testConstraintsAfterJoin(
         originalLeft,
         originalRight,
-        left,
-        testRelation2.where(IsNotNull('b) && 'b.attr.cast(IntegerType) === 1).subquery('right),
+        testRelation1.where(IsNotNull('a) && 'a === 1).subquery('left),
+        testRelation2.where(IsNotNull('b) && IsNotNull('b.cast(IntegerType)) &&
+          'b.attr.cast(IntegerType) === 1).subquery('right),
         Inner,
         condition)
     }
@@ -360,5 +371,24 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-31809: Infer IsNotNull for join condition") {
+    testConstraintsAfterJoin(
+      testRelation.subquery('left),
+      testRelation.subquery('right),
+      testRelation.where(IsNotNull('a.cast(StringType).cast(DoubleType)) && IsNotNull('a))
+        .subquery('left),
+      testRelation.where(IsNotNull('c)).subquery('right),
+      Inner,
+      Some("left.a".attr.cast(StringType).cast(DoubleType) === "right.c".attr.cast(DoubleType)))
+
+    testConstraintsAfterJoin(
+      testRelation.subquery('left),
+      testRelation.subquery('right),
+      testRelation.where(IsNotNull(Coalesce(Seq('a, 'b)))).subquery('left),
+      testRelation.where(IsNotNull('c)).subquery('right),
+      Inner,
+      Some(Coalesce(Seq("left.a".attr, "left.b".attr)) === "right.c".attr))
   }
 }

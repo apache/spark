@@ -1215,6 +1215,14 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
     }
   }
 
+  // Whether the result of this expression may be null. For example: CAST(strCol AS double)
+  // We will infer an IsNotNull expression for this expression to avoid skew join.
+  private def resultMayBeNull(e: Expression): Boolean = e match {
+    case Cast(child, dataType, _, _) => !Cast.canUpCast(child.dataType, dataType)
+    case _: Coalesce => true
+    case _ => false
+  }
+
   private def inferFilters(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(FILTER, JOIN)) {
     case filter @ Filter(condition, child) =>
@@ -1227,25 +1235,43 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       }
 
     case join @ Join(left, right, joinType, conditionOpt, _) =>
+      val leftKeys = new mutable.HashSet[Expression]
+      val rightKeys = new mutable.HashSet[Expression]
+      conditionOpt.foreach { condition =>
+        splitConjunctivePredicates(condition).foreach {
+          case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty =>
+          case EqualTo(l, r) =>
+            if (resultMayBeNull(l)) {
+              if (canEvaluate(l, left)) leftKeys.add(l)
+              if (canEvaluate(l, right)) rightKeys.add(l)
+            }
+            if (resultMayBeNull(r)) {
+              if (canEvaluate(r, left)) leftKeys.add(r)
+              if (canEvaluate(r, right)) rightKeys.add(r)
+            }
+          case _ =>
+        }
+      }
+
       joinType match {
         // For inner join, we can infer additional filters for both sides. LeftSemi is kind of an
         // inner join, it just drops the right side in the final output.
         case _: InnerLike | LeftSemi =>
           val allConstraints = getAllConstraints(left, right, conditionOpt)
-          val newLeft = inferNewFilter(left, allConstraints)
-          val newRight = inferNewFilter(right, allConstraints)
+          val newLeft = inferNewFilter(left, allConstraints, leftKeys)
+          val newRight = inferNewFilter(right, allConstraints, rightKeys)
           join.copy(left = newLeft, right = newRight)
 
         // For right outer join, we can only infer additional filters for left side.
         case RightOuter =>
           val allConstraints = getAllConstraints(left, right, conditionOpt)
-          val newLeft = inferNewFilter(left, allConstraints)
+          val newLeft = inferNewFilter(left, allConstraints, leftKeys)
           join.copy(left = newLeft)
 
         // For left join, we can only infer additional filters for right side.
         case LeftOuter | LeftAnti =>
           val allConstraints = getAllConstraints(left, right, conditionOpt)
-          val newRight = inferNewFilter(right, allConstraints)
+          val newRight = inferNewFilter(right, allConstraints, rightKeys)
           join.copy(right = newRight)
 
         case _ => join
@@ -1261,9 +1287,13 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
     baseConstraints.union(inferAdditionalConstraints(baseConstraints))
   }
 
-  private def inferNewFilter(plan: LogicalPlan, constraints: ExpressionSet): LogicalPlan = {
+  private def inferNewFilter(
+      plan: LogicalPlan,
+      constraints: ExpressionSet,
+      joinKeys: mutable.HashSet[Expression]): LogicalPlan = {
     val newPredicates = constraints
       .union(constructIsNotNullConstraints(constraints, plan.output))
+      .union(ExpressionSet(joinKeys.map(IsNotNull)))
       .filter { c =>
         c.references.nonEmpty && c.references.subsetOf(plan.outputSet) && c.deterministic
       } -- plan.constraints
