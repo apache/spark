@@ -146,8 +146,7 @@ public class NumericHistogram {
   }
 
   /**
-   * Takes a serialized histogram created by the serialize() method and merges
-   * it with the current histogram object.
+   * Takes a histogram and merges it with the current histogram object.
    */
   public void merge(NumericHistogram other) {
     if (other == null) {
