@@ -27,10 +27,10 @@ import org.apache.spark.annotation.Evolving;
  * @since 3.3.0
  */
 @Evolving
-public interface SupportsPushDownLimit extends Scan {
+public interface SupportsPushDownLimit extends ScanBuilder {
 
   /**
    * Pushes down LIMIT to the data source.
    */
-  int pushLimit(int limit);
+  boolean pushLimit(int limit);
 }

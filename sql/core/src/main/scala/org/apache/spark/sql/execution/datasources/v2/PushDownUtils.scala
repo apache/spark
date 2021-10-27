@@ -141,17 +141,11 @@ object PushDownUtils extends PredicateHelper {
   /**
    * Pushes down LIMIT to the data source Scan
    */
-  def pushLimit(scan: Scan, limit: Int): Int = {
-    scan match {
+  def pushLimit(scanBuilder: ScanBuilder, limit: Int): Boolean = {
+    scanBuilder match {
       case s: SupportsPushDownLimit =>
         s.pushLimit(limit)
-      case v1: V1ScanWrapper =>
-        v1.v1Scan match {
-          case s: SupportsPushDownLimit =>
-            s.pushLimit(limit)
-          case _ => 0
-        }
-      case _ => 0
+      case _ => false
     }
   }
 

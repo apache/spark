@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeRefer
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LeafNode, LocalLimit, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
@@ -36,7 +36,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    applyLimit(applyColumnPruning(pushDownAggregates(pushDownFilters(createScanBuilder(plan)))))
+    applyColumnPruning(applyLimit(pushDownAggregates(pushDownFilters(createScanBuilder(plan)))))
   }
 
   private def createScanBuilder(plan: LogicalPlan) = plan.transform {
@@ -226,32 +226,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def applyLimit(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case globalLimit @ GlobalLimit(_, l @ LocalLimit(IntegerLiteral(limitValue), child)) =>
+    case globalLimit @ Limit(IntegerLiteral(limitValue), child) =>
       child match {
-        case relation @ DataSourceV2ScanRelation(_, scan, _) =>
-          val limit = PushDownUtils.pushLimit(scan, limitValue)
-          if (limit > 0) {
-            scan match {
-              case v1: V1ScanWrapper =>
-                globalLimit.copy(
-                  child = l.copy(child = relation.copy(scan = v1.copy(pushedLimit = Some(limit)))))
-              case _ => globalLimit
-            }
-          } else {
-            globalLimit
+        case ScanOperation(_, _, sHolder: ScanBuilderHolder) =>
+          val limitPushed = PushDownUtils.pushLimit(sHolder.builder, limitValue)
+          if (limitPushed) {
+            sHolder.pushedLimit(Some(limitValue))
           }
-        case project @ Project(_, relation @ DataSourceV2ScanRelation(_, scan, _)) =>
-          val limit = PushDownUtils.pushLimit(scan, limitValue)
-          if (limit > 0) {
-            scan match {
-              case v1: V1ScanWrapper =>
-                globalLimit.copy(child = l.copy(child = project.copy(child = relation.copy(
-                  scan = v1.copy(pushedLimit = Some(limit))))))
-              case _ => globalLimit
-            }
-          } else {
-            globalLimit
-          }
+          globalLimit
         case _ => globalLimit
       }
   }
@@ -267,7 +249,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             f.pushedFilters()
           case _ => Array.empty[sources.Filter]
         }
-        V1ScanWrapper(v1, pushedFilters, aggregation, None)
+        V1ScanWrapper(v1, pushedFilters, aggregation, sHolder.pushedLimit)
       case _ => scan
     }
   }
@@ -276,7 +258,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 case class ScanBuilderHolder(
     output: Seq[AttributeReference],
     relation: DataSourceV2Relation,
-    builder: ScanBuilder) extends LeafNode
+    builder: ScanBuilder) extends LeafNode {
+  var pushedLimit: Option[Int] = None
+  private[sql] def pushedLimit(limit: Option[Int]) = pushedLimit = limit
+}
+
 
 // A wrapper for v1 scan to carry the translated filters and the handled ones. This is required by
 // the physical v1 scan node.
