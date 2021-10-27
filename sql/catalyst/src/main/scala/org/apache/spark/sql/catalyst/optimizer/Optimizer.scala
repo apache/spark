@@ -1239,7 +1239,6 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       val rightKeys = new mutable.HashSet[Expression]
       conditionOpt.foreach { condition =>
         splitConjunctivePredicates(condition).foreach {
-          case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty =>
           case EqualTo(l, r) =>
             if (resultMayBeNull(l)) {
               if (canEvaluate(l, left)) leftKeys.add(l)
