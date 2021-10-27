@@ -231,7 +231,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         case ScanOperation(_, _, sHolder: ScanBuilderHolder) =>
           val limitPushed = PushDownUtils.pushLimit(sHolder.builder, limitValue)
           if (limitPushed) {
-            sHolder.pushedLimit(Some(limitValue))
+            sHolder.setLimit(Some(limitValue))
           }
           globalLimit
         case _ => globalLimit
@@ -260,7 +260,7 @@ case class ScanBuilderHolder(
     relation: DataSourceV2Relation,
     builder: ScanBuilder) extends LeafNode {
   var pushedLimit: Option[Int] = None
-  private[sql] def pushedLimit(limit: Option[Int]): Unit = pushedLimit = limit
+  private[sql] def setLimit(limit: Option[Int]): Unit = pushedLimit = limit
 }
 
 
