@@ -105,7 +105,7 @@ case class RowDataSourceScanExec(
     filters: Set[Filter],
     handledFilters: Set[Filter],
     aggregation: Option[Aggregation],
-    sample: TableSample,
+    sample: Option[TableSample],
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     tableIdentifier: Option[TableIdentifier])
@@ -151,18 +151,14 @@ case class RowDataSourceScanExec(
       handledFilters
     }
 
-    val sampleStr = if (sample != null) {
-      s"TABLESAMPLE ${sample.methodName} ${sample.lowerBound} ${sample.upperBound} " +
-        s"${sample.withReplacement} ${sample.seed}"
-    } else {
-      "[]"
-    }
     Map(
       "ReadSchema" -> requiredSchema.catalogString,
       "PushedFilters" -> seqToString(markedFilters.toSeq),
       "PushedAggregates" -> aggString,
-      "PushedGroupby" -> groupByString,
-      "PushedSample" -> sampleStr)
+      "PushedGroupby" -> groupByString) ++
+      sample.map(v => "PushedSample" ->
+        s"SAMPLE ${v.methodName} ${v.lowerBound} ${v.upperBound} ${v.withReplacement} ${v.seed}"
+      )
   }
 
   // Don't care about `rdd` and `tableIdentifier` when canonicalizing.

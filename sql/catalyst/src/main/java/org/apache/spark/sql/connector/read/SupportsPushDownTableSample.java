@@ -27,16 +27,10 @@ import org.apache.spark.sql.connector.expressions.TableSample;
  * @since 3.3.0
  */
 @Evolving
-public interface SupportsPushDownTableSample extends Scan {
+public interface SupportsPushDownTableSample extends ScanBuilder {
 
   /**
    * Pushes down SAMPLE to the data source.
    */
   boolean pushTableSample(TableSample limit);
-
-  /**
-   * Returns the TableSample that is pushed to the data source via
-   * {@link #pushTableSample(TableSample)}.
-   */
-  TableSample pushedTableSample();
 }

@@ -25,9 +25,9 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, LogicalPlan, Project, Sample}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.expressions.LogicalExpressions
+import org.apache.spark.sql.connector.expressions.{LogicalExpressions, TableSample}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownTableSample, V1Scan}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
@@ -37,7 +37,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    applySample(applyColumnPruning(pushDownAggregates(pushDownFilters(createScanBuilder(plan)))))
+    applyColumnPruning(applySample(pushDownAggregates(pushDownFilters(createScanBuilder(plan)))))
   }
 
   private def createScanBuilder(plan: LogicalPlan) = plan.transform {
@@ -227,27 +227,23 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def applySample(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case sample @ Sample(_, _, _, _, DataSourceV2ScanRelation(_, scan, _)) =>
-      val supportsPushDownSample = scan match {
-        case _: SupportsPushDownTableSample => true
-        case v1: V1ScanWrapper =>
-          v1.v1Scan match {
-            case _: SupportsPushDownTableSample => true
-            case _ => false
+    case sample @ Sample(_, _, _, _, child) => child match {
+        case ScanOperation(_, _, sHolder: ScanBuilderHolder) =>
+          val tableSample = LogicalExpressions.tableSample(
+            "",
+            sample.lowerBound,
+            sample.upperBound,
+            sample.withReplacement,
+            sample.seed)
+          val pushed = PushDownUtils.pushTableSample(sHolder.builder, tableSample)
+          if (pushed) {
+            sHolder.setSample(Some(tableSample))
+            sample.child
+          } else {
+            sample
           }
-        case _ => false
-      }
-      if (supportsPushDownSample) {
-        val tableSample = LogicalExpressions.tableSample(
-          "",
-          sample.lowerBound,
-          sample.upperBound,
-          sample.withReplacement,
-          sample.seed)
-        val pushed = PushDownUtils.pushTableSample(scan, tableSample)
-        if (pushed) sample.child else sample
-      } else {
-        sample
+
+        case _ => sample
       }
   }
 
@@ -262,7 +258,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             f.pushedFilters()
           case _ => Array.empty[sources.Filter]
         }
-        V1ScanWrapper(v1, pushedFilters, aggregation)
+        V1ScanWrapper(v1, pushedFilters, aggregation, sHolder.pushedSample)
       case _ => scan
     }
   }
@@ -271,13 +267,17 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 case class ScanBuilderHolder(
     output: Seq[AttributeReference],
     relation: DataSourceV2Relation,
-    builder: ScanBuilder) extends LeafNode
+    builder: ScanBuilder) extends LeafNode {
+  var pushedSample: Option[TableSample] = None
+  private[sql] def setSample(sample: Option[TableSample]): Unit = pushedSample = sample
+}
 
 // A wrapper for v1 scan to carry the translated filters and the handled ones. This is required by
 // the physical v1 scan node.
 case class V1ScanWrapper(
     v1Scan: V1Scan,
     handledFilters: Seq[sources.Filter],
-    pushedAggregate: Option[Aggregation]) extends Scan {
+    pushedAggregate: Option[Aggregation],
+    pushedSAmple: Option[TableSample]) extends Scan {
   override def readSchema(): StructType = v1Scan.readSchema()
 }

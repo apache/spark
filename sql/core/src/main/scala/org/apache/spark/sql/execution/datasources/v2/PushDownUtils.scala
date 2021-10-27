@@ -141,15 +141,10 @@ object PushDownUtils extends PredicateHelper {
   /**
    * Pushes down TableSample to the data source Scan
    */
-  def pushTableSample(scan: Scan, sample: TableSample): Boolean = {
-    scan match {
-      case s: SupportsPushDownTableSample => s.pushTableSample(sample)
-      case v1: V1ScanWrapper =>
-        v1.v1Scan match {
-          case s: SupportsPushDownTableSample =>
-            s.pushTableSample(sample)
-          case _ => false
-        }
+  def pushTableSample(scanBuilder: ScanBuilder, sample: TableSample): Boolean = {
+    scanBuilder match {
+      case s: SupportsPushDownTableSample =>
+        s.pushTableSample(sample)
       case _ => false
     }
   }

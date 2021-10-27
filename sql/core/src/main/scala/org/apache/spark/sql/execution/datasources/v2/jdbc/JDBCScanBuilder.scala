@@ -20,8 +20,9 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.expressions.TableSample
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns, SupportsPushDownTableSample}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.jdbc.JdbcDialects
@@ -36,6 +37,7 @@ case class JDBCScanBuilder(
     with SupportsPushDownFilters
     with SupportsPushDownRequiredColumns
     with SupportsPushDownAggregates
+    with SupportsPushDownTableSample
     with Logging {
 
   private val isCaseSensitive = session.sessionState.conf.caseSensitiveAnalysis
@@ -43,6 +45,8 @@ case class JDBCScanBuilder(
   private var pushedFilter = Array.empty[Filter]
 
   private var finalSchema = schema
+
+  private var tableSample: Option[TableSample] = None
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
@@ -98,6 +102,15 @@ case class JDBCScanBuilder(
     }
   }
 
+  override def pushTableSample(sample: TableSample): Boolean = {
+    if (jdbcOptions.pushDownTableSample &&
+      JdbcDialects.get(jdbcOptions.url).supportsTableSample) {
+      this.tableSample = Some(sample)
+      return true
+    }
+    false
+  }
+
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // JDBC doesn't support nested column pruning.
     // TODO (SPARK-32593): JDBC support nested column and nested column pruning.
@@ -123,6 +136,6 @@ case class JDBCScanBuilder(
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
     JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedFilter,
-      pushedAggregateList, pushedGroupByCols)
+      pushedAggregateList, pushedGroupByCols, tableSample)
   }
 }
