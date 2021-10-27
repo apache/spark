@@ -933,9 +933,17 @@ class ExpressionParserSuite extends AnalysisTest {
       assertEqual("current_timestamp", CurrentTimestamp())
     }
 
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+    def testNonAnsiBehavior(): Unit = {
       assertEqual("current_date", UnresolvedAttribute.quoted("current_date"))
       assertEqual("current_timestamp", UnresolvedAttribute.quoted("current_timestamp"))
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      testNonAnsiBehavior()
+    }
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "false") {
+      testNonAnsiBehavior()
     }
   }
 
