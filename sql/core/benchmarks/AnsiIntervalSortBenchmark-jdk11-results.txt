@@ -1,0 +1,28 @@
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.8.0-1042-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+year month interval one column:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------
+year month interval one column enable radix           40092          40744         668          2.5         400.9       1.0X
+year month interval one column disable radix          55178          55871         609          1.8         551.8       0.7X
+
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.8.0-1042-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+year month interval two columns:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------
+year month interval two columns enable radix           56855          57911        1497          1.8         568.5       1.0X
+year month interval two columns disable radix          58694          59525         774          1.7         586.9       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.8.0-1042-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+day time interval one columns:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+day time interval one columns enable radix           52460          52564         115          1.9         524.6       1.0X
+day time interval one columns disable radix          56617          56967         505          1.8         566.2       0.9X
+
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.8.0-1042-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+day time interval two columns:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+day time interval two columns enable radix           57437          60961         770          1.7         574.4       1.0X
+day time interval two columns disable radix          59075          60393        1153          1.7         590.7       1.0X
+
