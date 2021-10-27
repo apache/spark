@@ -28,7 +28,8 @@ class ContainsProxyClass implements Serializable {
     new Class[]{MyInterface.class},
     new MyInvocationHandler());
 
-  // Interface needs to be public as classloaders will mismatch - see ObjectInputStream#resolveProxyClass for details.
+  // Interface needs to be public as classloaders will mismatch.
+  // See ObjectInputStream#resolveProxyClass for details.
   public interface MyInterface {
     void myMethod();
   }
