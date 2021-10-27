@@ -199,7 +199,7 @@ object NumericHistogramSerializer {
       while (i < nUsedBins) {
         val x = buffer.getDouble()
         val y = buffer.getDouble()
-        histogram.setBin(x, y, i)
+        histogram.addBin(x, y, i)
         i += 1
       }
       histogram

@@ -127,7 +127,7 @@ public class NumericHistogram {
   /**
    * Set a particular histogram bin with index.
    */
-  public void setBin(double x, double y, int b) {
+  public void addBin(double x, double y, int b) {
     Coord coord = new Coord();
     coord.x = x;
     coord.y = y;
