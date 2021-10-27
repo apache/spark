@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import TypeVar, Optional, Callable, cast
+from typing import TypeVar, Optional, Callable, Union, overload
 
 from pyspark.serializers import NoOpSerializer
 from pyspark.storagelevel import StorageLevel
@@ -38,6 +38,46 @@ def utf8_decoder(s: Optional[bytes]) -> Optional[str]:
 class KinesisUtils(object):
 
     @staticmethod
+    @overload
+    def createStream(
+        ssc: StreamingContext,
+        kinesisAppName: str,
+        streamName: str,
+        endpointUrl: str,
+        regionName: str,
+        initialPositionInStream: str,
+        checkpointInterval: int,
+        storageLevel: StorageLevel = ...,
+        awsAccessKeyId: Optional[str] = ...,
+        awsSecretKey: Optional[str] = ...,
+        decoder: Callable[[Optional[bytes]], Optional[str]] = ...,
+        stsAssumeRoleArn: Optional[str] = ...,
+        stsSessionName: Optional[str] = ...,
+        stsExternalId: Optional[str] = ...,
+    ) -> "DStream[Optional[str]]":
+        ...
+
+    @staticmethod
+    @overload
+    def createStream(
+        ssc: StreamingContext,
+        kinesisAppName: str,
+        streamName: str,
+        endpointUrl: str,
+        regionName: str,
+        initialPositionInStream: str,
+        checkpointInterval: int,
+        storageLevel: StorageLevel = ...,
+        awsAccessKeyId: Optional[str] = ...,
+        awsSecretKey: Optional[str] = ...,
+        decoder: Callable[[Optional[bytes]], T] = ...,
+        stsAssumeRoleArn: Optional[str] = ...,
+        stsSessionName: Optional[str] = ...,
+        stsExternalId: Optional[str] = ...,
+    ) -> "DStream[T]":
+        ...
+
+    @staticmethod
     def createStream(
         ssc: StreamingContext,
         kinesisAppName: str,
@@ -49,13 +89,14 @@ class KinesisUtils(object):
         storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_2,
         awsAccessKeyId: Optional[str] = None,
         awsSecretKey: Optional[str] = None,
-        decoder: Callable[[Optional[bytes]], T] = cast(
-            Callable[[Optional[bytes]], T], utf8_decoder
-        ),
+        decoder: Union[
+            Callable[[Optional[bytes]], T],
+            Callable[[Optional[bytes]], Optional[str]]
+        ] = utf8_decoder,
         stsAssumeRoleArn: Optional[str] = None,
         stsSessionName: Optional[str] = None,
         stsExternalId: Optional[str] = None,
-    ) -> "DStream[T]":
+    ) -> Union["DStream[Union[T, Optional[str]]]", "DStream[T]"]:
         """
         Create an input stream that pulls messages from a Kinesis stream. This uses the
         Kinesis Client Library (KCL) to pull messages from Kinesis.
