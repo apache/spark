@@ -493,11 +493,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       numDP: JInteger, holdDDLTime, listBucketingEnabled: JBoolean)
   }
 
-  override def dropIndex(
-      hive: Hive,
-      dbName: String,
-      tableName: String,
-      indexName: String): Unit = {
+  override def dropIndex(hive: Hive, dbName: String, tableName: String, indexName: String): Unit = {
     recordHiveCall
     dropIndexMethod.invoke(hive, dbName, tableName, indexName, deleteDataInDropIndex)
   }
@@ -568,10 +564,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
 
   override def setDatabaseOwnerName(db: Database, owner: String): Unit = {}
 
-  override def createDatabase(
-      hive: Hive,
-      db: Database,
-      ignoreIfExists: Boolean): Unit = {
+  override def createDatabase(hive: Hive, db: Database, ignoreIfExists: Boolean): Unit = {
     recordHiveCall
     hive.createDatabase(db, ignoreIfExists)
   }
@@ -625,10 +618,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     hive.getTable(dbName, tableName, throwException)
   }
 
-  override def getTablesByPattern(
-      hive: Hive,
-      dbName: String,
-      pattern: String): Seq[String] = {
+  override def getTablesByPattern(hive: Hive, dbName: String, pattern: String): Seq[String] = {
     recordHiveCall
     hive.getTablesByPattern(dbName, pattern).asScala.toSeq
   }
@@ -799,11 +789,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     hive.dropFunction(db, name)
   }
 
-  override def renameFunction(
-      hive: Hive,
-      db: String,
-      oldName: String,
-      newName: String): Unit = {
+  override def renameFunction(hive: Hive, db: String, oldName: String, newName: String): Unit = {
     val catalogFunc = getFunctionOption(hive, db, oldName)
       .getOrElse(throw new NoSuchPermanentFunctionException(db, oldName))
       .copy(identifier = FunctionIdentifier(newName, Some(db)))
@@ -831,10 +817,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     CatalogFunction(name, hf.getClassName, resources.toSeq)
   }
 
-  override def getFunctionOption(
-      hive: Hive,
-      db: String,
-      name: String): Option[CatalogFunction] = {
+  override def getFunctionOption(hive: Hive, db: String, name: String): Option[CatalogFunction] = {
     try {
       recordHiveCall
       Option(hive.getFunction(db, name)).map(fromHiveFunction)
@@ -1303,11 +1286,7 @@ private[client] class Shim_v1_1 extends Shim_v1_0 {
       JBoolean.TYPE,
       JBoolean.TYPE)
 
-  override def dropIndex(
-      hive: Hive,
-      dbName: String,
-      tableName: String,
-      indexName: String): Unit = {
+  override def dropIndex(hive: Hive, dbName: String, tableName: String, indexName: String): Unit = {
     recordHiveCall
     dropIndexMethod.invoke(hive, dbName, tableName, indexName, throwExceptionInDropIndex,
       deleteDataInDropIndex)
@@ -1560,10 +1539,7 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
     alterTableMethod.invoke(hive, tableName, table, environmentContextInAlterTable)
   }
 
-  override def alterPartitions(
-      hive: Hive,
-      tableName: String,
-      newParts: JList[Partition]): Unit = {
+  override def alterPartitions(hive: Hive, tableName: String, newParts: JList[Partition]): Unit = {
     recordHiveCall
     alterPartitionsMethod.invoke(hive, tableName, newParts, environmentContextInAlterTable)
   }
