@@ -16,6 +16,9 @@
 # limitations under the License.
 #
 # define test binaries + versions
+
+set -x
+
 FLAKE8_BUILD="flake8"
 MINIMUM_FLAKE8="3.9.0"
 MINIMUM_MYPY="0.910"
@@ -226,6 +229,11 @@ The minimum flake8 version needs to be $MINIMUM_FLAKE8. Your current version is 
 flake8 checks failed."
         exit 1
     fi
+
+    echo "DEBUGGING:"
+    echo $PATH
+    echo $(which flake8)
+    echo $(which python)
 
     echo "starting $FLAKE8_BUILD test..."
     FLAKE8_REPORT=$( ($FLAKE8_BUILD --append-config dev/tox.ini --count --show-source --statistics .) 2>&1)
