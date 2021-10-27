@@ -404,6 +404,7 @@ private[hive] class HiveClientImpl(
 
   private def getRawTablesByName(dbName: String, tableNames: Seq[String]): Seq[HiveTable] = {
     try {
+      shim.recordHiveCall
       msClient.getTableObjectsByName(dbName, tableNames.asJava).asScala
         .map(extraFixesForNonView).map(new HiveTable(_)).toSeq
     } catch {

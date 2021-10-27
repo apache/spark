@@ -246,16 +246,8 @@ private[client] sealed abstract class Shim {
     klass.getMethod(name, args: _*)
   }
 
-  protected def withHiveCall[A](f: => A): A = {
-    withHiveCall(1)(f)
-  }
-
-  protected def withHiveCall[A](numCalls: Int = 1)(f: => A): A = {
-    try {
-      f
-    } finally {
-      HiveCatalogMetrics.incrementHiveClientCalls(numCalls)
-    }
+  def recordHiveCall() {
+    HiveCatalogMetrics.incrementHiveClientCalls(1)
   }
 }
 
@@ -272,7 +264,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     msc
   }
 
-  override def getMSC(hive: Hive): IMetaStoreClient = withHiveCall {
+  override def getMSC(hive: Hive): IMetaStoreClient = {
     getMSCMethod.invoke(hive).asInstanceOf[IMetaStoreClient]
   }
 
@@ -392,16 +384,15 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       database: String,
       tableName: String,
       parts: Seq[CatalogTablePartition],
-      ignoreIfExists: Boolean): Unit = withHiveCall {
+      ignoreIfExists: Boolean): Unit = {
+    recordHiveCall
     val table = hive.getTable(database, tableName)
     parts.foreach { s =>
       val location = s.storage.locationUri.map(
         uri => new Path(table.getPath, new Path(uri))).orNull
       val params = if (s.parameters.nonEmpty) s.parameters.asJava else null
       val spec = s.spec.asJava
-      // Since Spark don't know if it will throw exception when iterate all parts.
-      // So Spark increase the hive client call metrics here when invoke getTable().
-      HiveCatalogMetrics.incrementHiveClientCalls(1)
+      recordHiveCall
       if (hive.getPartition(table, spec, false) != null && ignoreIfExists) {
         // Ignore this partition since it already exists and ignoreIfExists == true
       } else {
@@ -409,9 +400,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
           throw QueryExecutionErrors.illegalLocationClauseForViewPartitionError()
         }
 
-        // Since Spark don't know if the partition is existed, so Spark need to increase
-        // the hive client call metrics here when invoke createPartition().
-        HiveCatalogMetrics.incrementHiveClientCalls(1)
+        recordHiveCall
         createPartitionMethod.invoke(
           hive,
           table,
@@ -430,7 +419,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     }
   }
 
-  override def getAllPartitions(hive: Hive, table: Table): Seq[Partition] = withHiveCall {
+  override def getAllPartitions(hive: Hive, table: Table): Seq[Partition] = {
+    recordHiveCall
     getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].asScala.toSeq
   }
 
@@ -474,7 +464,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       replace: Boolean,
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean,
-      isSrcLocal: Boolean): Unit = withHiveCall {
+      isSrcLocal: Boolean): Unit = {
+    recordHiveCall
     loadPartitionMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       JBoolean.FALSE, inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean)
   }
@@ -484,7 +475,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       loadPath: Path,
       tableName: String,
       replace: Boolean,
-      isSrcLocal: Boolean): Unit = withHiveCall {
+      isSrcLocal: Boolean): Unit = {
+    recordHiveCall
     loadTableMethod.invoke(hive, loadPath, tableName, replace: JBoolean, holdDDLTime)
   }
 
@@ -495,7 +487,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      listBucketingEnabled: Boolean): Unit = withHiveCall {
+      listBucketingEnabled: Boolean): Unit = {
+    recordHiveCall
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       numDP: JInteger, holdDDLTime, listBucketingEnabled: JBoolean)
   }
@@ -504,7 +497,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       hive: Hive,
       dbName: String,
       tableName: String,
-      indexName: String): Unit = withHiveCall {
+      indexName: String): Unit = {
+    recordHiveCall
     dropIndexMethod.invoke(hive, dbName, tableName, indexName, deleteDataInDropIndex)
   }
 
@@ -518,17 +512,17 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     if (purge) {
       throw QueryExecutionErrors.dropTableWithPurgeUnsupportedError()
     }
-    withHiveCall(hive.dropTable(dbName, tableName, deleteData, ignoreIfNotExists))
+    recordHiveCall
+    hive.dropTable(dbName, tableName, deleteData, ignoreIfNotExists)
   }
 
-  override def alterTable(hive: Hive, tableName: String, table: Table): Unit = withHiveCall {
+  override def alterTable(hive: Hive, tableName: String, table: Table): Unit = {
+    recordHiveCall
     alterTableMethod.invoke(hive, tableName, table)
   }
 
-  override def alterPartitions(
-      hive: Hive,
-      tableName: String,
-      newParts: JList[Partition]): Unit = withHiveCall {
+  override def alterPartitions(hive: Hive, tableName: String, newParts: JList[Partition]): Unit = {
+    recordHiveCall
     alterPartitionsMethod.invoke(hive, tableName, newParts)
   }
 
@@ -542,7 +536,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     if (purge) {
       throw QueryExecutionErrors.alterTableWithDropPartitionAndPurgeUnsupportedError()
     }
-    withHiveCall(hive.dropPartition(dbName, tableName, part, deleteData))
+    recordHiveCall
+    hive.dropPartition(dbName, tableName, part, deleteData)
   }
 
   override def createFunction(hive: Hive, db: String, func: CatalogFunction): Unit = {
@@ -576,7 +571,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   override def createDatabase(
       hive: Hive,
       db: Database,
-      ignoreIfExists: Boolean): Unit = withHiveCall {
+      ignoreIfExists: Boolean): Unit = {
+    recordHiveCall
     hive.createDatabase(db, ignoreIfExists)
   }
 
@@ -585,31 +581,38 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       dbName: String,
       deleteData: Boolean,
       ignoreUnknownDb: Boolean,
-      cascade: Boolean): Unit = withHiveCall {
+      cascade: Boolean): Unit = {
+    recordHiveCall
     hive.dropDatabase(dbName, deleteData, ignoreUnknownDb, cascade)
   }
 
-  override def alterDatabase(hive: Hive, dbName: String, d: Database): Unit = withHiveCall {
+  override def alterDatabase(hive: Hive, dbName: String, d: Database): Unit = {
+    recordHiveCall
     hive.alterDatabase(dbName, d)
   }
 
-  override def getDatabase(hive: Hive, dbName: String): Database = withHiveCall {
+  override def getDatabase(hive: Hive, dbName: String): Database = {
+    recordHiveCall
     hive.getDatabase(dbName)
   }
 
-  override def getAllDatabases(hive: Hive): Seq[String] = withHiveCall {
+  override def getAllDatabases(hive: Hive): Seq[String] = {
+    recordHiveCall
     hive.getAllDatabases.asScala.toSeq
   }
 
-  override def getDatabasesByPattern(hive: Hive, pattern: String): Seq[String] = withHiveCall {
+  override def getDatabasesByPattern(hive: Hive, pattern: String): Seq[String] = {
+    recordHiveCall
     hive.getDatabasesByPattern(pattern).asScala.toSeq
   }
 
-  override def databaseExists(hive: Hive, dbName: String): Boolean = withHiveCall {
+  override def databaseExists(hive: Hive, dbName: String): Boolean = {
+    recordHiveCall
     hive.databaseExists(dbName)
   }
 
-  override def createTable(hive: Hive, table: Table, ifNotExists: Boolean): Unit = withHiveCall {
+  override def createTable(hive: Hive, table: Table, ifNotExists: Boolean): Unit = {
+    recordHiveCall
     hive.createTable(table, ifNotExists)
   }
 
@@ -617,22 +620,26 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       hive: Hive,
       dbName: String,
       tableName: String,
-      throwException: Boolean): Table = withHiveCall {
+      throwException: Boolean): Table = {
+    recordHiveCall
     hive.getTable(dbName, tableName, throwException)
   }
 
   override def getTablesByPattern(
       hive: Hive,
       dbName: String,
-      pattern: String): Seq[String] = withHiveCall {
+      pattern: String): Seq[String] = {
+    recordHiveCall
     hive.getTablesByPattern(dbName, pattern).asScala.toSeq
   }
 
-  override def getAllTables(hive: Hive, dbName: String): Seq[String] = withHiveCall {
+  override def getAllTables(hive: Hive, dbName: String): Seq[String] = {
+    recordHiveCall
     hive.getAllTables(dbName).asScala.toSeq
   }
 
-  override def dropTable(hive: Hive, dbName: String, tableName: String): Unit = withHiveCall {
+  override def dropTable(hive: Hive, dbName: String, tableName: String): Unit = {
+    recordHiveCall
     hive.dropTable(dbName, tableName)
   }
 
@@ -640,14 +647,16 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       hive: Hive,
       table: Table,
       partSpec: JMap[String, String],
-      forceCreate: Boolean): Partition = withHiveCall {
+      forceCreate: Boolean): Partition = {
+    recordHiveCall
     hive.getPartition(table, partSpec, forceCreate)
   }
 
   override def getPartitions(
       hive: Hive,
       table: Table,
-      partSpec: JMap[String, String]): Seq[Partition] = withHiveCall {
+      partSpec: JMap[String, String]): Seq[Partition] = {
+    recordHiveCall
     hive.getPartitions(table, partSpec).asScala.toSeq
   }
 
@@ -655,7 +664,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       hive: Hive,
       dbName: String,
       tableName: String,
-      max: Short): Seq[String] = withHiveCall {
+      max: Short): Seq[String] = {
+    recordHiveCall
     hive.getPartitionNames(dbName, tableName, max).asScala.toSeq
   }
 
@@ -664,7 +674,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       dbName: String,
       tableName: String,
       partSpec: JMap[String, String],
-      max: Short): Seq[String] = withHiveCall {
+      max: Short): Seq[String] = {
+    recordHiveCall
     hive.getPartitionNames(dbName, tableName, partSpec, max).asScala.toSeq
   }
 
@@ -672,7 +683,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       hive: Hive,
       table: Table,
       oldPartSpec: JMap[String, String],
-      newPart: Partition): Unit = withHiveCall {
+      newPart: Partition): Unit = {
+    recordHiveCall
     hive.renamePartition(table, oldPartSpec, newPart)
   }
 
@@ -680,7 +692,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       hive: Hive,
       dbName: String,
       tableName: String,
-      max: Short): Seq[Index] = withHiveCall {
+      max: Short): Seq[Index] = {
+    recordHiveCall
     hive.getIndexes(dbName, tableName, max).asScala.toSeq
   }
 }
@@ -742,7 +755,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       db: String,
       table: String,
       parts: Seq[CatalogTablePartition],
-      ignoreIfExists: Boolean): Unit = withHiveCall {
+      ignoreIfExists: Boolean): Unit = {
     val addPartitionDesc = new AddPartitionDesc(db, table, ignoreIfExists)
     parts.zipWithIndex.foreach { case (s, i) =>
       addPartitionDesc.addPartition(
@@ -751,10 +764,12 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         addPartitionDesc.getPartition(i).setPartParams(s.parameters.asJava)
       }
     }
+    recordHiveCall
     hive.createPartitions(addPartitionDesc)
   }
 
-  override def getAllPartitions(hive: Hive, table: Table): Seq[Partition] = withHiveCall {
+  override def getAllPartitions(hive: Hive, table: Table): Seq[Partition] = {
+    recordHiveCall
     getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].asScala.toSeq
   }
 
@@ -774,11 +789,13 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       resourceUris.asJava)
   }
 
-  override def createFunction(hive: Hive, db: String, func: CatalogFunction): Unit = withHiveCall {
+  override def createFunction(hive: Hive, db: String, func: CatalogFunction): Unit = {
+    recordHiveCall
     hive.createFunction(toHiveFunction(func, db))
   }
 
-  override def dropFunction(hive: Hive, db: String, name: String): Unit = withHiveCall {
+  override def dropFunction(hive: Hive, db: String, name: String): Unit = {
+    recordHiveCall
     hive.dropFunction(db, name)
   }
 
@@ -786,15 +803,17 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       hive: Hive,
       db: String,
       oldName: String,
-      newName: String): Unit = withHiveCall {
+      newName: String): Unit = {
     val catalogFunc = getFunctionOption(hive, db, oldName)
       .getOrElse(throw new NoSuchPermanentFunctionException(db, oldName))
       .copy(identifier = FunctionIdentifier(newName, Some(db)))
     val hiveFunc = toHiveFunction(catalogFunc, db)
+    recordHiveCall
     hive.alterFunction(db, oldName, hiveFunc)
   }
 
-  override def alterFunction(hive: Hive, db: String, func: CatalogFunction): Unit = withHiveCall {
+  override def alterFunction(hive: Hive, db: String, func: CatalogFunction): Unit = {
+    recordHiveCall
     hive.alterFunction(db, func.identifier.funcName, toHiveFunction(func, db))
   }
 
@@ -815,8 +834,9 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   override def getFunctionOption(
       hive: Hive,
       db: String,
-      name: String): Option[CatalogFunction] = withHiveCall {
+      name: String): Option[CatalogFunction] = {
     try {
+      recordHiveCall
       Option(hive.getFunction(db, name)).map(fromHiveFunction)
     } catch {
       case NonFatal(e) if isCausedBy(e, s"$name does not exist") =>
@@ -834,7 +854,8 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
   }
 
-  override def listFunctions(hive: Hive, db: String, pattern: String): Seq[String] = withHiveCall {
+  override def listFunctions(hive: Hive, db: String, pattern: String): Seq[String] = {
+    recordHiveCall
     hive.getFunctions(db, pattern).asScala.toSeq
   }
 
@@ -1075,7 +1096,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   override def getPartitionsByFilter(
       hive: Hive,
       table: Table,
-      predicates: Seq[Expression]): Seq[Partition] = withHiveCall {
+      predicates: Seq[Expression]): Seq[Partition] = {
 
     // Hive getPartitionsByFilter() takes a string that represents partition
     // predicates like "str_key=\"value\" and int_key=1 ..."
@@ -1083,6 +1104,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
     val partitions =
       if (filter.isEmpty) {
+        recordHiveCall
         getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
       } else {
         logDebug(s"Hive metastore filter is '$filter'.")
@@ -1098,6 +1120,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           // Because of the above we'll fallback to use `Hive.getAllPartitionsOf` when the exception
           // occurs and the config`spark.sql.hive.metastorePartitionPruningFallbackOnException` is
           // enabled.
+          recordHiveCall
           getPartitionsByFilterMethod.invoke(hive, table, filter)
             .asInstanceOf[JArrayList[Partition]]
         } catch {
@@ -1111,6 +1134,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
               s"${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key} " +
               " to false and let the query fail instead.", ex)
             // HiveShim clients are expected to handle a superset of the requested partitions
+            recordHiveCall
             getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
           case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] =>
             throw QueryExecutionErrors.getPartitionMetadataByFilterError(ex)
@@ -1210,7 +1234,8 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       replace: Boolean,
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean,
-      isSrcLocal: Boolean): Unit = withHiveCall {
+      isSrcLocal: Boolean): Unit = {
+    recordHiveCall
     loadPartitionMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       holdDDLTime, inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean,
       isSrcLocal: JBoolean, isAcid)
@@ -1221,7 +1246,8 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       loadPath: Path,
       tableName: String,
       replace: Boolean,
-      isSrcLocal: Boolean): Unit = withHiveCall {
+      isSrcLocal: Boolean): Unit = {
+    recordHiveCall
     loadTableMethod.invoke(hive, loadPath, tableName, replace: JBoolean, holdDDLTime,
       isSrcLocal: JBoolean, isSkewedStoreAsSubdir, isAcid)
   }
@@ -1233,7 +1259,8 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      listBucketingEnabled: Boolean): Unit = withHiveCall {
+      listBucketingEnabled: Boolean): Unit = {
+    recordHiveCall
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       numDP: JInteger, holdDDLTime, listBucketingEnabled: JBoolean, isAcid)
   }
@@ -1244,7 +1271,8 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       tableName: String,
       deleteData: Boolean,
       ignoreIfNotExists: Boolean,
-      purge: Boolean): Unit = withHiveCall {
+      purge: Boolean): Unit = {
+    recordHiveCall
     dropTableMethod.invoke(hive, dbName, tableName, deleteData: JBoolean,
       ignoreIfNotExists: JBoolean, purge: JBoolean)
   }
@@ -1279,7 +1307,8 @@ private[client] class Shim_v1_1 extends Shim_v1_0 {
       hive: Hive,
       dbName: String,
       tableName: String,
-      indexName: String): Unit = withHiveCall {
+      indexName: String): Unit = {
+    recordHiveCall
     dropIndexMethod.invoke(hive, dbName, tableName, indexName, throwExceptionInDropIndex,
       deleteDataInDropIndex)
   }
@@ -1325,7 +1354,8 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      listBucketingEnabled: Boolean): Unit = withHiveCall {
+      listBucketingEnabled: Boolean): Unit = {
+    recordHiveCall
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       numDP: JInteger, holdDDLTime, listBucketingEnabled: JBoolean, isAcid,
       txnIdInLoadDynamicPartitions)
@@ -1337,10 +1367,11 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
       tableName: String,
       part: JList[String],
       deleteData: Boolean,
-      purge: Boolean): Unit = withHiveCall {
+      purge: Boolean): Unit = {
     val dropOptions = dropOptionsClass.getConstructor().newInstance().asInstanceOf[Object]
     dropOptionsDeleteData.setBoolean(dropOptions, deleteData)
     dropOptionsPurge.setBoolean(dropOptions, purge)
+    recordHiveCall
     dropPartitionMethod.invoke(hive, dbName, tableName, part, dropOptions)
   }
 
@@ -1390,7 +1421,8 @@ private[client] class Shim_v2_0 extends Shim_v1_2 {
       replace: Boolean,
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean,
-      isSrcLocal: Boolean): Unit = withHiveCall {
+      isSrcLocal: Boolean): Unit = {
+    recordHiveCall
     loadPartitionMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean,
       isSrcLocal: JBoolean, isAcid)
@@ -1401,7 +1433,8 @@ private[client] class Shim_v2_0 extends Shim_v1_2 {
       loadPath: Path,
       tableName: String,
       replace: Boolean,
-      isSrcLocal: Boolean): Unit = withHiveCall {
+      isSrcLocal: Boolean): Unit = {
+    recordHiveCall
     loadTableMethod.invoke(hive, loadPath, tableName, replace: JBoolean, isSrcLocal: JBoolean,
       isSkewedStoreAsSubdir, isAcid)
   }
@@ -1413,7 +1446,8 @@ private[client] class Shim_v2_0 extends Shim_v1_2 {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      listBucketingEnabled: Boolean): Unit = withHiveCall {
+      listBucketingEnabled: Boolean): Unit = {
+    recordHiveCall
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       numDP: JInteger, listBucketingEnabled: JBoolean, isAcid, txnIdInLoadDynamicPartitions)
   }
@@ -1489,7 +1523,8 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
       replace: Boolean,
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean,
-      isSrcLocal: Boolean): Unit = withHiveCall {
+      isSrcLocal: Boolean): Unit = {
+    recordHiveCall
     loadPartitionMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean,
       isSrcLocal: JBoolean, isAcid, hasFollowingStatsTask)
@@ -1500,7 +1535,8 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
       loadPath: Path,
       tableName: String,
       replace: Boolean,
-      isSrcLocal: Boolean): Unit = withHiveCall {
+      isSrcLocal: Boolean): Unit = {
+    recordHiveCall
     loadTableMethod.invoke(hive, loadPath, tableName, replace: JBoolean, isSrcLocal: JBoolean,
       isSkewedStoreAsSubdir, isAcid, hasFollowingStatsTask)
   }
@@ -1512,20 +1548,23 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      listBucketingEnabled: Boolean): Unit = withHiveCall {
+      listBucketingEnabled: Boolean): Unit = {
+    recordHiveCall
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       numDP: JInteger, listBucketingEnabled: JBoolean, isAcid, txnIdInLoadDynamicPartitions,
       hasFollowingStatsTask, AcidUtils.Operation.NOT_ACID)
   }
 
-  override def alterTable(hive: Hive, tableName: String, table: Table): Unit = withHiveCall {
+  override def alterTable(hive: Hive, tableName: String, table: Table): Unit = {
+    recordHiveCall
     alterTableMethod.invoke(hive, tableName, table, environmentContextInAlterTable)
   }
 
   override def alterPartitions(
       hive: Hive,
       tableName: String,
-      newParts: JList[Partition]): Unit = withHiveCall {
+      newParts: JList[Partition]): Unit = {
+    recordHiveCall
     alterPartitionsMethod.invoke(hive, tableName, newParts, environmentContextInAlterTable)
   }
 }
@@ -1545,7 +1584,8 @@ private[client] class Shim_v2_3 extends Shim_v2_1 {
       hive: Hive,
       dbName: String,
       pattern: String,
-      tableType: TableType): Seq[String] = withHiveCall {
+      tableType: TableType): Seq[String] = {
+    recordHiveCall
     getTablesByTypeMethod.invoke(hive, dbName, pattern, tableType)
       .asInstanceOf[JList[String]].asScala.toSeq
   }
@@ -1621,7 +1661,8 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
       replace: Boolean,
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean,
-      isSrcLocal: Boolean): Unit = withHiveCall (2) {
+      isSrcLocal: Boolean): Unit = {
+    recordHiveCall
     val table = hive.getTable(tableName)
     val loadFileType = if (replace) {
       clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("REPLACE_ALL"))
@@ -1629,6 +1670,7 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
       clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("KEEP_EXISTING"))
     }
     assert(loadFileType.isDefined)
+    recordHiveCall
     loadPartitionMethod.invoke(hive, loadPath, table, partSpec, loadFileType.get,
       inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean,
       isSrcLocal: JBoolean, isAcid, hasFollowingStatsTask,
@@ -1640,13 +1682,14 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
       loadPath: Path,
       tableName: String,
       replace: Boolean,
-      isSrcLocal: Boolean): Unit = withHiveCall {
+      isSrcLocal: Boolean): Unit = {
     val loadFileType = if (replace) {
       clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("REPLACE_ALL"))
     } else {
       clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("KEEP_EXISTING"))
     }
     assert(loadFileType.isDefined)
+    recordHiveCall
     loadTableMethod.invoke(hive, loadPath, tableName, loadFileType.get, isSrcLocal: JBoolean,
       isSkewedStoreAsSubdir, isAcidIUDoperation, hasFollowingStatsTask,
       writeIdInLoadTableOrPartition, stmtIdInLoadTableOrPartition: JInteger, replace: JBoolean)
@@ -1659,13 +1702,14 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      listBucketingEnabled: Boolean): Unit = withHiveCall {
+      listBucketingEnabled: Boolean): Unit = {
     val loadFileType = if (replace) {
       clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("REPLACE_ALL"))
     } else {
       clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("KEEP_EXISTING"))
     }
     assert(loadFileType.isDefined)
+    recordHiveCall
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, loadFileType.get,
       numDP: JInteger, listBucketingLevel, isAcid, writeIdInLoadTableOrPartition,
       stmtIdInLoadTableOrPartition, hasFollowingStatsTask, AcidUtils.Operation.NOT_ACID,
