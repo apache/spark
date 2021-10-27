@@ -4697,7 +4697,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     mode = 'overwrite',
         ...     partition_cols=['date', 'country'])
         """
-        index_col is None and log_advice(
+        index_col is None and log_advice(  # type: ignore
             "If `index_col` is not specified for `to_parquet`, "
             "the existing index is lost when converting to Parquet."
         )
