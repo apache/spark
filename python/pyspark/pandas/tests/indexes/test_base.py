@@ -2243,12 +2243,14 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
 
         pidx = pd.Index([10, 20, 15, 30, 45, None], name="x")
         psidx = ps.Index(pidx)
+        self.assert_eq(psidx.astype(bool), pidx.astype(bool))
+        self.assert_eq(psidx.astype(str), pidx.astype(str))
 
         pidx = pd.Index(["hi", "hi ", " ", " \t", "", None], name="x")
         psidx = ps.Index(pidx)
 
         self.assert_eq(psidx.astype(bool), pidx.astype(bool))
-        self.assert_eq(psidx.astype(str).to_numpy(), ["hi", "hi ", " ", " \t", "", "None"])
+        self.assert_eq(psidx.astype(str), pidx.astype(str))
 
         pidx = pd.Index([True, False, None], name="x")
         psidx = ps.Index(pidx)

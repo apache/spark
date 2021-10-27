@@ -2282,6 +2282,24 @@ class DDLParserSuite extends AnalysisTest {
       RefreshFunction(UnresolvedFunc(Seq("a", "b", "c"))))
   }
 
+  test("CREATE INDEX") {
+    parseCompare("CREATE index i1 ON a.b.c USING BTREE (col1)",
+      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", "BTREE", false,
+        Array(FieldReference("col1")).toSeq.zip(Seq(Map.empty[String, String])), Map.empty))
+
+    parseCompare("CREATE index IF NOT EXISTS i1 ON TABLE a.b.c USING BTREE" +
+      " (col1 OPTIONS ('k1'='v1'), col2 OPTIONS ('k2'='v2')) ",
+      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", "BTREE", true,
+        Array(FieldReference("col1"), FieldReference("col2")).toSeq
+          .zip(Seq(Map("k1" -> "v1"), Map("k2" -> "v2"))), Map.empty))
+
+    parseCompare("CREATE index i1 ON a.b.c" +
+      " (col1 OPTIONS ('k1'='v1'), col2 OPTIONS ('k2'='v2')) OPTIONS ('k3'='v3', 'k4'='v4')",
+      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", "", false,
+        Array(FieldReference("col1"), FieldReference("col2")).toSeq
+          .zip(Seq(Map("k1" -> "v1"), Map("k2" -> "v2"))), Map("k3" -> "v3", "k4" -> "v4")))
+  }
+
   private case class TableSpec(
       name: Seq[String],
       schema: Option[StructType],

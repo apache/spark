@@ -27,7 +27,7 @@ from typing import (
     Union
 )
 
-from py4j.java_gateway import JavaClass, JavaObject
+from py4j.java_gateway import JavaClass, JavaObject  # type: ignore[import]
 
 from pyspark import RDD, since
 from pyspark.sql.column import _to_seq, _to_java_column, Column
@@ -358,8 +358,7 @@ class DataFrameReader(OptionUtils):
                        modifiedAfter=modifiedAfter, datetimeRebaseMode=datetimeRebaseMode,
                        int96RebaseMode=int96RebaseMode)
 
-        return self._df(
-            self._jreader.parquet(_to_seq(self._spark._sc, paths)))  # type: ignore[attr-defined]
+        return self._df(self._jreader.parquet(_to_seq(self._spark._sc, paths)))
 
     def text(
         self,
@@ -571,8 +570,7 @@ class DataFrameReader(OptionUtils):
                        recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, str):
             path = [path]
-        return self._df(
-            self._jreader.orc(_to_seq(self._spark._sc, path)))  # type: ignore[attr-defined]
+        return self._df(self._jreader.orc(_to_seq(self._spark._sc, path)))
 
     @overload
     def jdbc(
@@ -783,10 +781,7 @@ class DataFrameWriter(OptionUtils):
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]  # type: ignore[assignment]
         self._jwrite = self._jwrite.partitionBy(
-            _to_seq(
-                self._spark._sc,  # type: ignore[attr-defined]
-                cast(Iterable["ColumnOrName"], cols)
-            )
+            _to_seq(self._spark._sc, cast(Iterable["ColumnOrName"], cols))
         )
         return self
 
@@ -848,10 +843,7 @@ class DataFrameWriter(OptionUtils):
         self._jwrite = self._jwrite.bucketBy(
             numBuckets,
             col,
-            _to_seq(
-                self._spark._sc,    # type: ignore[attr-defined]
-                cast(Iterable["ColumnOrName"], cols)
-            )
+            _to_seq(self._spark._sc, cast(Iterable["ColumnOrName"], cols))
         )
         return self
 
@@ -897,11 +889,7 @@ class DataFrameWriter(OptionUtils):
             raise TypeError("all names should be `str`")
 
         self._jwrite = self._jwrite.sortBy(
-            col,
-            _to_seq(
-                self._spark._sc,  # type: ignore[attr-defined]
-                cast(Iterable["ColumnOrName"], cols)
-            )
+            col, _to_seq(self._spark._sc, cast(Iterable["ColumnOrName"], cols))
         )
         return self
 
@@ -1385,8 +1373,8 @@ class DataFrameWriterV2(object):
 
         """
         col = _to_java_column(col)
-        cols = _to_seq(
-            self._spark._sc, [_to_java_column(c) for c in cols])  # type: ignore[attr-defined]
+        cols = _to_seq(self._spark._sc, [_to_java_column(c) for c in cols])
+        self._jwriter.partitionedBy(col, cols)
         return self
 
     @since(3.1)
