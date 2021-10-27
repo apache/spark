@@ -47,7 +47,6 @@ from pyspark.pandas.utils import (
     scol_for,
     validate_axis,
     ERROR_MESSAGE_CANNOT_COMBINE,
-    log_advice,
 )
 from pyspark.pandas.frame import DataFrame
 
