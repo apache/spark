@@ -401,6 +401,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       val spec = s.spec.asJava
       // Since Spark don't know if it will throw exception when iterate all parts.
       // So Spark increase the hive client call metrics here when invoke getTable().
+      HiveCatalogMetrics.incrementHiveClientCalls(1)
       if (hive.getPartition(table, spec, false) != null && ignoreIfExists) {
         // Ignore this partition since it already exists and ignoreIfExists == true
       } else {
