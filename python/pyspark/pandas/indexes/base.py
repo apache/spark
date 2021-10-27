@@ -523,6 +523,10 @@ class Index(IndexOpsMixin):
         >>> ps.DataFrame({'a': ['a', 'b', 'c']}, index=[[1, 2, 3], [4, 5, 6]]).index.to_numpy()
         array([(1, 4), (2, 5), (3, 6)], dtype=object)
         """
+        log_advice(
+            "`to_numpy` loads all data into the driver's memory. "
+            "It should only be used if the resulting NumPy ndarray is expected to be small."
+        )
         result = np.asarray(self._to_internal_pandas()._values, dtype=dtype)
         if copy:
             result = result.copy()
