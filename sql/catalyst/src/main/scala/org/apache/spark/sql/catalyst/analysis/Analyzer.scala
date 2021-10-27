@@ -271,7 +271,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveUserSpecifiedColumns ::
       ResolveInsertInto ::
       ResolveRelations ::
-      ResolveTables ::
       ResolvePartitionSpec ::
       ResolveAlterTableCommands ::
       AddMetadataColumns ::
@@ -889,87 +888,6 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
   }
 
-  private def unwrapRelationPlan(plan: LogicalPlan): LogicalPlan = {
-    EliminateSubqueryAliases(plan) match {
-      case v: View if v.isTempViewStoringAnalyzedPlan => v.child
-      case other => other
-    }
-  }
-
-  /**
-   * Resolve relations to temp views. This is not an actual rule, and is called by
-   * [[ResolveTables]] and [[ResolveRelations]].
-   */
-  object ResolveTempViews extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      AlwaysProcess.fn, ruleId) {
-      case u @ UnresolvedRelation(ident, _, isStreaming) =>
-        lookupAndResolveTempView(ident, isStreaming).getOrElse(u)
-      case i @ InsertIntoStatement(UnresolvedRelation(ident, _, false), _, _, _, _, _) =>
-        lookupAndResolveTempView(ident)
-          .map(view => i.copy(table = view))
-          .getOrElse(i)
-      // TODO (SPARK-27484): handle streaming write commands when we have them.
-      case write: V2WriteCommand =>
-        write.table match {
-          case UnresolvedRelation(ident, _, false) =>
-            lookupAndResolveTempView(ident).map(unwrapRelationPlan).map {
-              case r: DataSourceV2Relation => write.withNewTable(r)
-              case _ => throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(ident.quoted)
-            }.getOrElse(write)
-          case _ => write
-        }
-      case u @ UnresolvedTable(ident, cmd, _) =>
-        lookupTempView(ident).foreach { _ =>
-          throw QueryCompilationErrors.expectTableNotViewError(
-            ResolvedView(ident.asIdentifier, isTemp = true), cmd, u.relationTypeMismatchHint, u)
-        }
-        u
-      case u @ UnresolvedView(ident, cmd, allowTemp, _) =>
-        lookupTempView(ident).map { _ =>
-          if (!allowTemp) {
-            u.failAnalysis(s"${ident.quoted} is a temp view. '$cmd' expects a permanent view.")
-          }
-          ResolvedView(ident.asIdentifier, isTemp = true)
-        }
-        .getOrElse(u)
-      case u @ UnresolvedTableOrView(ident, cmd, allowTempView) =>
-        lookupTempView(ident)
-          .map { _ =>
-            if (!allowTempView) {
-              throw QueryCompilationErrors.expectTableOrPermanentViewNotTempViewError(
-                ident.quoted, cmd, u)
-            }
-            ResolvedView(ident.asIdentifier, isTemp = true)
-          }
-          .getOrElse(u)
-    }
-
-    private def lookupTempView(
-        identifier: Seq[String],
-        isStreaming: Boolean = false): Option[LogicalPlan] = {
-      // Permanent View can't refer to temp views, no need to lookup at all.
-      if (isResolvingView && !isReferredTempViewName(identifier)) return None
-
-      val tmpView = identifier match {
-        case Seq(part1) => v1SessionCatalog.lookupTempView(part1)
-        case Seq(part1, part2) => v1SessionCatalog.lookupGlobalTempView(part1, part2)
-        case _ => None
-      }
-
-      if (isStreaming && tmpView.nonEmpty && !tmpView.get.isStreaming) {
-        throw QueryCompilationErrors.readNonStreamingTempViewError(identifier.quoted)
-      }
-      tmpView
-    }
-
-    private def lookupAndResolveTempView(
-        identifier: Seq[String],
-        isStreaming: Boolean = false): Option[LogicalPlan] = {
-      lookupTempView(identifier, isStreaming).map(ResolveRelations.resolveViews)
-    }
-  }
-
   // If we are resolving database objects (relations, functions, etc.) insides views, we may need to
   // expand single or multi-part identifiers with the current catalog and namespace of when the
   // view was created.
@@ -1057,77 +975,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   /**
-   * Resolve table relations with concrete relations from v2 catalog.
-   *
-   * [[ResolveRelations]] still resolves v1 tables.
-   */
-  object ResolveTables extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).
-      resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
-      case u: UnresolvedRelation =>
-        lookupV2Relation(u.multipartIdentifier, u.options, u.isStreaming)
-          .map { relation =>
-            val (catalog, ident) = relation match {
-              case ds: DataSourceV2Relation => (ds.catalog, ds.identifier.get)
-              case s: StreamingRelationV2 => (s.catalog, s.identifier.get)
-            }
-            SubqueryAlias(catalog.get.name +: ident.namespace :+ ident.name, relation)
-          }.getOrElse(u)
-
-      case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident), _, _) =>
-        CatalogV2Util.loadTable(catalog, ident)
-          .map(table => ResolvedTable.create(catalog.asTableCatalog, ident, table))
-          .getOrElse(u)
-
-      case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident), _, _) =>
-        CatalogV2Util.loadTable(catalog, ident)
-          .map(table => ResolvedTable.create(catalog.asTableCatalog, ident, table))
-          .getOrElse(u)
-
-      case i @ InsertIntoStatement(u @ UnresolvedRelation(_, _, false), _, _, _, _, _)
-          if i.query.resolved =>
-        lookupV2Relation(u.multipartIdentifier, u.options, false)
-          .map(v2Relation => i.copy(table = v2Relation))
-          .getOrElse(i)
-
-      // TODO (SPARK-27484): handle streaming write commands when we have them.
-      case write: V2WriteCommand =>
-        write.table match {
-          case u: UnresolvedRelation if !u.isStreaming =>
-            lookupV2Relation(u.multipartIdentifier, u.options, false).map {
-              case r: DataSourceV2Relation => write.withNewTable(r)
-              case other => throw new IllegalStateException(
-                "[BUG] unexpected plan returned by `lookupV2Relation`: " + other)
-            }.getOrElse(write)
-          case _ => write
-        }
-    }
-
-    /**
-     * Performs the lookup of DataSourceV2 Tables from v2 catalog.
-     */
-    private def lookupV2Relation(
-        identifier: Seq[String],
-        options: CaseInsensitiveStringMap,
-        isStreaming: Boolean): Option[LogicalPlan] =
-      expandIdentifier(identifier) match {
-        case NonSessionCatalogAndIdentifier(catalog, ident) =>
-          CatalogV2Util.loadTable(catalog, ident) match {
-            case Some(table) =>
-              if (isStreaming) {
-                Some(StreamingRelationV2(None, table.name, table, options,
-                  table.schema.toAttributes, Some(catalog), Some(ident), None))
-              } else {
-                Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), options))
-              }
-            case None => None
-          }
-        case _ => None
-      }
-  }
-
-  /**
-   * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
+   * Replaces unresolved relations (tables and views) with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
     // The current catalog and namespace may be different from when the view was created, we must
@@ -1136,7 +984,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     // look at `AnalysisContext.catalogAndNamespace` when resolving relations with single-part name.
     // If `AnalysisContext.catalogAndNamespace` is non-empty, analyzer will expand single-part names
     // with it, instead of current catalog and namespace.
-    def resolveViews(plan: LogicalPlan): LogicalPlan = plan match {
+    private def resolveViews(plan: LogicalPlan): LogicalPlan = plan match {
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
@@ -1162,12 +1010,19 @@ class Analyzer(override val catalogManager: CatalogManager)
       case _ => plan
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).
-      resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
+    private def unwrapRelationPlan(plan: LogicalPlan): LogicalPlan = {
+      EliminateSubqueryAliases(plan) match {
+        case v: View if v.isTempViewStoringAnalyzedPlan => v.child
+        case other => other
+      }
+    }
+
+    def apply(plan: LogicalPlan)
+        : LogicalPlan = plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
       case i @ InsertIntoStatement(table, _, _, _, _, _) if i.query.resolved =>
         val relation = table match {
-          case u @ UnresolvedRelation(_, _, false) =>
-            lookupRelation(u.multipartIdentifier, u.options, false).getOrElse(u)
+          case u: UnresolvedRelation if !u.isStreaming =>
+            lookupRelation(u).getOrElse(u)
           case other => other
         }
 
@@ -1184,24 +1039,22 @@ class Analyzer(override val catalogManager: CatalogManager)
       case write: V2WriteCommand =>
         write.table match {
           case u: UnresolvedRelation if !u.isStreaming =>
-            lookupRelation(u.multipartIdentifier, u.options, false)
-              .map(EliminateSubqueryAliases(_))
-              .map {
-                case v: View => throw QueryCompilationErrors.writeIntoViewNotAllowedError(
-                  v.desc.identifier, write)
-                case u: UnresolvedCatalogRelation =>
-                  throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
-                    u.tableMeta.identifier, write)
-                case r: DataSourceV2Relation => write.withNewTable(r)
-                case other => throw new IllegalStateException(
-                  "[BUG] unexpected plan returned by `lookupRelation`: " + other)
-              }.getOrElse(write)
+            lookupRelation(u).map(unwrapRelationPlan).map {
+              case v: View => throw QueryCompilationErrors.writeIntoViewNotAllowedError(
+                v.desc.identifier, write)
+              case r: DataSourceV2Relation => write.withNewTable(r)
+              case u: UnresolvedCatalogRelation =>
+                throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
+                  u.tableMeta.identifier, write)
+              case other =>
+                throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(
+                  u.multipartIdentifier.quoted)
+            }.getOrElse(write)
           case _ => write
         }
 
       case u: UnresolvedRelation =>
-        lookupRelation(u.multipartIdentifier, u.options, u.isStreaming)
-          .map(resolveViews).getOrElse(u)
+        lookupRelation(u).map(resolveViews).getOrElse(u)
 
       case u @ UnresolvedTable(identifier, cmd, relationTypeMismatchHint) =>
         lookupTableOrView(identifier).map {
@@ -1211,82 +1064,128 @@ class Analyzer(override val catalogManager: CatalogManager)
           case table => table
         }.getOrElse(u)
 
-      case u @ UnresolvedView(identifier, cmd, _, relationTypeMismatchHint) =>
+      case u @ UnresolvedView(identifier, cmd, allowTemp, relationTypeMismatchHint) =>
         lookupTableOrView(identifier).map {
+          case v: ResolvedView if v.isTemp && !allowTemp =>
+            val name = identifier.quoted
+            u.failAnalysis(s"$name is a temp view. '$cmd' expects a permanent view.")
           case t: ResolvedTable =>
             throw QueryCompilationErrors.expectViewNotTableError(
               t, cmd, relationTypeMismatchHint, u)
-          case view => view
+          case other => other
         }.getOrElse(u)
 
-      case u @ UnresolvedTableOrView(identifier, _, _) =>
-        lookupTableOrView(identifier).getOrElse(u)
+      case u @ UnresolvedTableOrView(identifier, cmd, allowTempView) =>
+        lookupTableOrView(identifier).map {
+          case v: ResolvedView if v.isTemp && !allowTempView =>
+            throw QueryCompilationErrors.expectTableOrPermanentViewNotTempViewError(
+              identifier.quoted, cmd, u)
+          case other => other
+        }.getOrElse(u)
     }
 
-    private def lookupTableOrView(identifier: Seq[String]): Option[LogicalPlan] = {
-      expandIdentifier(identifier) match {
-        case SessionCatalogAndIdentifier(catalog, ident) =>
-          CatalogV2Util.loadTable(catalog, ident).map {
-            case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
-              ResolvedView(ident, isTemp = false)
-            case table =>
-              ResolvedTable.create(catalog.asTableCatalog, ident, table)
-          }
+    private def lookupTempView(
+        identifier: Seq[String],
+        isStreaming: Boolean = false): Option[LogicalPlan] = {
+      // We are resolving a view and this name is not a temp view when that view was created. We
+      // return None earlier here.
+      if (isResolvingView && !isReferredTempViewName(identifier)) return None
+
+      val tmpView = identifier match {
+        case Seq(part1) => v1SessionCatalog.lookupTempView(part1)
+        case Seq(part1, part2) => v1SessionCatalog.lookupGlobalTempView(part1, part2)
         case _ => None
+      }
+
+      if (isStreaming && tmpView.nonEmpty && !tmpView.get.isStreaming) {
+        throw QueryCompilationErrors.readNonStreamingTempViewError(identifier.quoted)
+      }
+      tmpView
+    }
+
+    /**
+     * Resolves relations to `ResolvedTable` or `ResolvedView`. This is for resolving DDL and
+     * misc commands.
+     */
+    private def lookupTableOrView(identifier: Seq[String]): Option[LogicalPlan] = {
+      lookupTempView(identifier).map { _ =>
+        ResolvedView(identifier.asIdentifier, isTemp = true)
+      }.orElse {
+        expandIdentifier(identifier) match {
+          case CatalogAndIdentifier(catalog, ident) =>
+            CatalogV2Util.loadTable(catalog, ident).map {
+              case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
+                v1Table.v1Table.tableType == CatalogTableType.VIEW =>
+                ResolvedView(ident, isTemp = false)
+              case table =>
+                ResolvedTable.create(catalog.asTableCatalog, ident, table)
+            }
+          case _ => None
+        }
       }
     }
 
-    // Look up a relation from the session catalog with the following logic:
-    // 1) If the resolved catalog is not session catalog, return None.
-    // 2) If a relation is not found in the catalog, return None.
-    // 3) If a v1 table is found, create a v1 relation. Otherwise, create a v2 relation.
-    private def lookupRelation(
-        identifier: Seq[String],
+    private def createRelation(
+        catalog: CatalogPlugin,
+        ident: Identifier,
+        table: Option[Table],
         options: CaseInsensitiveStringMap,
         isStreaming: Boolean): Option[LogicalPlan] = {
-      expandIdentifier(identifier) match {
-        case SessionCatalogAndIdentifier(catalog, ident) =>
-          lazy val loaded = CatalogV2Util.loadTable(catalog, ident).map {
-            case v1Table: V1Table =>
-              if (isStreaming) {
-                if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
-                  throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
-                    identifier.quoted)
-                }
-                SubqueryAlias(
-                  catalog.name +: ident.asMultipartIdentifier,
-                  UnresolvedCatalogRelation(v1Table.v1Table, options, isStreaming = true))
-              } else {
-                v1SessionCatalog.getRelation(v1Table.v1Table, options)
-              }
-            case table =>
-              if (isStreaming) {
-                val v1Fallback = table match {
-                  case withFallback: V2TableWithV1Fallback =>
-                    Some(UnresolvedCatalogRelation(withFallback.v1Table, isStreaming = true))
-                  case _ => None
-                }
-                SubqueryAlias(
-                  catalog.name +: ident.asMultipartIdentifier,
-                  StreamingRelationV2(None, table.name, table, options, table.schema.toAttributes,
-                    Some(catalog), Some(ident), v1Fallback))
-              } else {
-                SubqueryAlias(
-                  catalog.name +: ident.asMultipartIdentifier,
-                  DataSourceV2Relation.create(table, Some(catalog), Some(ident), options))
-              }
+      table.map {
+        case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) =>
+          if (isStreaming) {
+            if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
+              throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
+                ident.quoted)
+            }
+            SubqueryAlias(
+              catalog.name +: ident.asMultipartIdentifier,
+              UnresolvedCatalogRelation(v1Table.v1Table, options, isStreaming = true))
+          } else {
+            v1SessionCatalog.getRelation(v1Table.v1Table, options)
           }
-          val key = catalog.name +: ident.namespace :+ ident.name
-          AnalysisContext.get.relationCache.get(key).map(_.transform {
-            case multi: MultiInstanceRelation =>
-              val newRelation = multi.newInstance()
-              newRelation.copyTagsFrom(multi)
-              newRelation
-          }).orElse {
-            loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
-            loaded
+
+        case table =>
+          if (isStreaming) {
+            val v1Fallback = table match {
+              case withFallback: V2TableWithV1Fallback =>
+                Some(UnresolvedCatalogRelation(withFallback.v1Table, isStreaming = true))
+              case _ => None
+            }
+            SubqueryAlias(
+              catalog.name +: ident.asMultipartIdentifier,
+              StreamingRelationV2(None, table.name, table, options, table.schema.toAttributes,
+                Some(catalog), Some(ident), v1Fallback))
+          } else {
+            SubqueryAlias(
+              catalog.name +: ident.asMultipartIdentifier,
+              DataSourceV2Relation.create(table, Some(catalog), Some(ident), options))
           }
-        case _ => None
+      }
+    }
+
+    /**
+     * Resolves relations to v1 relation if it's a v1 table from the session catalog, or to v2
+     * relation. This is for resolving DML commands and SELECT queries.
+     */
+    private def lookupRelation(u: UnresolvedRelation): Option[LogicalPlan] = {
+      lookupTempView(u.multipartIdentifier, u.isStreaming).orElse {
+        expandIdentifier(u.multipartIdentifier) match {
+          case CatalogAndIdentifier(catalog, ident) =>
+            val key = catalog.name +: ident.namespace :+ ident.name
+            AnalysisContext.get.relationCache.get(key).map(_.transform {
+              case multi: MultiInstanceRelation =>
+                val newRelation = multi.newInstance()
+                newRelation.copyTagsFrom(multi)
+                newRelation
+            }).orElse {
+              val loaded = createRelation(
+                catalog, ident, CatalogV2Util.loadTable(catalog, ident), u.options, u.isStreaming)
+              loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
+              loaded
+            }
+          case _ => None
+        }
       }
     }
   }

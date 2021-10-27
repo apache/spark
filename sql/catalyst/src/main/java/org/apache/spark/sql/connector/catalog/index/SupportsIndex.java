@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.catalog.index;
 
 import java.util.Map;
-import java.util.Properties;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException;
@@ -38,7 +37,8 @@ public interface SupportsIndex extends Table {
    * Creates an index.
    *
    * @param indexName the name of the index to be created
-   * @param indexType the IndexType of the index to be created
+   * @param indexType the type of the index to be created. If this is not specified, Spark
+   *                  will use empty String.
    * @param columns the columns on which index to be created
    * @param columnsProperties the properties of the columns on which index to be created
    * @param properties the properties of the index to be created
@@ -47,8 +47,8 @@ public interface SupportsIndex extends Table {
   void createIndex(String indexName,
       String indexType,
       NamedReference[] columns,
-      Map<NamedReference, Properties>[] columnsProperties,
-      Properties properties)
+      Map<NamedReference, Map<String, String>> columnsProperties,
+      Map<String, String> properties)
       throws IndexAlreadyExistsException;
 
   /**

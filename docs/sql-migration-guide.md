@@ -48,6 +48,8 @@ license: |
       * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
       * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
 
+  - Since Spark 3.3, the `strfmt` in `format_string(strfmt, obj, ...)` and `printf(strfmt, obj, ...)` will no longer support to use "0$" to specify the first argument, the first argument should always reference by "1$" when use argument index to indicating the position of the argument in the argument list.
+
 ## Upgrading from Spark SQL 3.1 to 3.2
 
   - Since Spark 3.2, ADD FILE/JAR/ARCHIVE commands require each path to be enclosed by `"` or `'` if the path contains whitespaces.

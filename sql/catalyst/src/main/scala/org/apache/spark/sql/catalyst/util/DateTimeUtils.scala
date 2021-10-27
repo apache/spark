@@ -51,8 +51,13 @@ object DateTimeUtils {
   val TIMEZONE_OPTION = "timeZone"
 
   def getZoneId(timeZoneId: String): ZoneId = {
-    // To support the (+|-)h:mm format because it was supported before Spark 3.0.
-    ZoneId.of(timeZoneId.replaceFirst("(\\+|\\-)(\\d):", "$10$2:"), ZoneId.SHORT_IDS)
+    val formattedZoneId = timeZoneId
+      // To support the (+|-)h:mm format because it was supported before Spark 3.0.
+      .replaceFirst("(\\+|\\-)(\\d):", "$10$2:")
+      // To support the (+|-)hh:m format because it was supported before Spark 3.0.
+      .replaceFirst("(\\+|\\-)(\\d\\d):(\\d)$", "$1$2:0$3")
+
+    ZoneId.of(formattedZoneId, ZoneId.SHORT_IDS)
   }
   def getTimeZone(timeZoneId: String): TimeZone = TimeZone.getTimeZone(getZoneId(timeZoneId))
 
@@ -328,16 +333,7 @@ object DateTimeUtils {
             return (Array.empty, None, false)
           }
         } else if (i == 5 || i == 6) {
-          if (b == '-' || b == '+') {
-            if (!isValidDigits(i, currentSegmentDigits)) {
-              return (Array.empty, None, false)
-            }
-            segments(i) = currentSegmentValue
-            currentSegmentValue = 0
-            currentSegmentDigits = 0
-            i += 1
-            tz = Some(new String(bytes, j, 1))
-          } else if (b == '.' && i == 5) {
+          if (b == '.' && i == 5) {
             if (!isValidDigits(i, currentSegmentDigits)) {
               return (Array.empty, None, false)
             }
@@ -397,11 +393,7 @@ object DateTimeUtils {
     }
 
     // This step also validates time zone part
-    val zoneId = tz.map {
-      case "+" => ZoneOffset.ofHoursMinutes(segments(7), segments(8))
-      case "-" => ZoneOffset.ofHoursMinutes(-segments(7), -segments(8))
-      case zoneName: String => getZoneId(zoneName.trim)
-    }
+    val zoneId = tz.map(zoneName => getZoneId(zoneName.trim))
     segments(0) *= yearSign.getOrElse(1)
     (segments, zoneId, justTime)
   }
