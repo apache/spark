@@ -4815,7 +4815,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     to_spark_io.__doc__ = SparkFrameMethods.to_spark_io.__doc__
 
     def to_spark(self, index_col: Optional[Union[str, List[str]]] = None) -> SparkDataFrame:
-        if index_col is None:
+        index_col is None and log_advice(
+            ...
+        )
             log_advice(
                 "If `index_col` is not specified for `to_spark`, "
                 "the existing index is lost when converting to Spark DataFrame."
