@@ -396,7 +396,7 @@ private[hive] class HiveClientImpl(
   }
 
   override def listDatabases(pattern: String): Seq[String] = withHiveState {
-    shim.getDatabasesByPattern(client, pattern).asScala.toSeq
+    shim.getDatabasesByPattern(client, pattern)
   }
 
   private def getRawTableOption(dbName: String, tableName: String): Option[HiveTable] = {
@@ -638,7 +638,7 @@ private[hive] class HiveClientImpl(
         // The provided spec here can be a partial spec, i.e. it will match all partitions
         // whose specs are supersets of this partial spec. E.g. If a table has partitions
         // (b='1', c='1') and (b='1', c='2'), a partial spec of (b='1') will match both.
-        val parts = shim.getPartitions(client, hiveTable, s.asJava).asScala
+        val parts = shim.getPartitions(client, hiveTable, s.asJava)
         if (parts.isEmpty && !ignoreIfNotExists) {
           throw new NoSuchPartitionsException(db, table, Seq(s))
         }
@@ -723,7 +723,7 @@ private[hive] class HiveClientImpl(
           assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
           shim.getPartitionNames(client, table.database, table.identifier.table, s.asJava, -1)
       }
-    hivePartitionNames.asScala.sorted.toSeq
+    hivePartitionNames.sorted.toSeq
   }
 
   override def getPartitionOption(
@@ -753,8 +753,7 @@ private[hive] class HiveClientImpl(
         assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
         s
     }
-    val parts = shim.getPartitions(client, hiveTable, partSpec.asJava)
-      .asScala.map(fromHivePartition)
+    val parts = shim.getPartitions(client, hiveTable, partSpec.asJava).map(fromHivePartition)
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
     parts.toSeq
   }
@@ -770,11 +769,11 @@ private[hive] class HiveClientImpl(
   }
 
   override def listTables(dbName: String): Seq[String] = withHiveState {
-    shim.getAllTables(client, dbName).asScala.toSeq
+    shim.getAllTables(client, dbName)
   }
 
   override def listTables(dbName: String, pattern: String): Seq[String] = withHiveState {
-    shim.getTablesByPattern(client, dbName, pattern).asScala.toSeq
+    shim.getTablesByPattern(client, dbName, pattern)
   }
 
   override def listTablesByType(
@@ -788,8 +787,8 @@ private[hive] class HiveClientImpl(
     } catch {
       case _: UnsupportedOperationException =>
         // Fallback to filter logic if getTablesByType not supported.
-        val tableNames = shim.getTablesByPattern(client, dbName, pattern).asScala
-        getRawTablesByName(dbName, tableNames.toSeq)
+        val tableNames = shim.getTablesByPattern(client, dbName, pattern)
+        getRawTablesByName(dbName, tableNames)
           .filter(_.getTableType == hiveTableType)
           .map(_.getTableName)
     }
@@ -967,7 +966,7 @@ private[hive] class HiveClientImpl(
 
   def reset(): Unit = withHiveState {
     val allTables = shim.getAllTables(client, "default")
-    val (mvs, others) = allTables.asScala.map(t => shim.getTable(client, "default", t))
+    val (mvs, others) = allTables.map(t => shim.getTable(client, "default", t))
       .partition(_.getTableType.toString.equals("MATERIALIZED_VIEW"))
 
     // Remove materialized view first, otherwise caused a violation of foreign key constraint.
@@ -981,7 +980,7 @@ private[hive] class HiveClientImpl(
       val t = table.getTableName
       logDebug(s"Deleting table $t")
       try {
-        shim.getIndexes(client, "default", t, 255).asScala.foreach { index =>
+        shim.getIndexes(client, "default", t, 255).foreach { index =>
           shim.dropIndex(client, "default", t, index.getIndexName)
         }
         if (!table.isIndexTable) {
@@ -993,7 +992,7 @@ private[hive] class HiveClientImpl(
           shim.dropTable(client, "default", t)
       }
     }
-    shim.getAllDatabases(client).asScala.filterNot(_ == "default").foreach { db =>
+    shim.getAllDatabases(client).filterNot(_ == "default").foreach { db =>
       logDebug(s"Dropping Database: $db")
       shim.dropDatabase(client, db, true, false, true)
     }

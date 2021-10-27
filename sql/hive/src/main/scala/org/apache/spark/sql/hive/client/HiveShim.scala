@@ -90,9 +90,9 @@ private[client] sealed abstract class Shim {
 
   def getDatabase(hive: Hive, dbName: String): Database
 
-  def getAllDatabases(hive: Hive): JList[String]
+  def getAllDatabases(hive: Hive): Seq[String]
 
-  def getDatabasesByPattern(hive: Hive, pattern: String): JList[String]
+  def getDatabasesByPattern(hive: Hive, pattern: String): Seq[String]
 
   def databaseExists(hive: Hive, dbName: String): Boolean
 
@@ -130,9 +130,9 @@ private[client] sealed abstract class Shim {
       pattern: String,
       tableType: TableType): Seq[String]
 
-  def getTablesByPattern(hive: Hive, dbName: String, pattern: String): JList[String]
+  def getTablesByPattern(hive: Hive, dbName: String, pattern: String): Seq[String]
 
-  def getAllTables(hive: Hive, dbName: String): JList[String]
+  def getAllTables(hive: Hive, dbName: String): Seq[String]
 
   def dropTable(hive: Hive, dbName: String, tableName: String): Unit
 
@@ -145,20 +145,20 @@ private[client] sealed abstract class Shim {
   def getPartitions(
       hive: Hive,
       table: Table,
-      partSpec: JMap[String, String]): JList[Partition]
+      partSpec: JMap[String, String]): Seq[Partition]
 
   def getPartitionNames(
       hive: Hive,
       dbName: String,
       tableName: String,
-      max: Short): JList[String]
+      max: Short): Seq[String]
 
   def getPartitionNames(
       hive: Hive,
       dbName: String,
       tableName: String,
       partSpec: JMap[String, String],
-      max: Short): JList[String]
+      max: Short): Seq[String]
 
   def createPartitions(
       hive: Hive,
@@ -242,7 +242,7 @@ private[client] sealed abstract class Shim {
 
   def getMSC(hive: Hive): IMetaStoreClient
 
-  def getIndexes(hive: Hive, dbName: String, tableName: String, max: Short): JList[Index]
+  def getIndexes(hive: Hive, dbName: String, tableName: String, max: Short): Seq[Index]
 
   protected def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     klass.getMethod(name, args: _*)
@@ -571,12 +571,12 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     hive.getDatabase(dbName)
   }
 
-  override def getAllDatabases(hive: Hive): JList[String] = {
-    hive.getAllDatabases
+  override def getAllDatabases(hive: Hive): Seq[String] = {
+    hive.getAllDatabases.asScala.toSeq
   }
 
-  override def getDatabasesByPattern(hive: Hive, pattern: String): JList[String] = {
-    hive.getDatabasesByPattern(pattern)
+  override def getDatabasesByPattern(hive: Hive, pattern: String): Seq[String] = {
+    hive.getDatabasesByPattern(pattern).asScala.toSeq
   }
 
   override def databaseExists(hive: Hive, dbName: String): Boolean = {
@@ -595,12 +595,12 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     hive.getTable(dbName, tableName, throwException)
   }
 
-  override def getTablesByPattern(hive: Hive, dbName: String, pattern: String): JList[String] = {
-    hive.getTablesByPattern(dbName, pattern)
+  override def getTablesByPattern(hive: Hive, dbName: String, pattern: String): Seq[String] = {
+    hive.getTablesByPattern(dbName, pattern).asScala.toSeq
   }
 
-  override def getAllTables(hive: Hive, dbName: String): JList[String] = {
-    hive.getAllTables(dbName)
+  override def getAllTables(hive: Hive, dbName: String): Seq[String] = {
+    hive.getAllTables(dbName).asScala.toSeq
   }
 
   override def dropTable(hive: Hive, dbName: String, tableName: String): Unit = {
@@ -618,16 +618,16 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   override def getPartitions(
       hive: Hive,
       table: Table,
-      partSpec: JMap[String, String]): JList[Partition] = {
-    hive.getPartitions(table, partSpec)
+      partSpec: JMap[String, String]): Seq[Partition] = {
+    hive.getPartitions(table, partSpec).asScala.toSeq
   }
 
   override def getPartitionNames(
       hive: Hive,
       dbName: String,
       tableName: String,
-      max: Short): JList[String] = {
-    hive.getPartitionNames(dbName, tableName, max)
+      max: Short): Seq[String] = {
+    hive.getPartitionNames(dbName, tableName, max).asScala.toSeq
   }
 
   override def getPartitionNames(
@@ -635,8 +635,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       dbName: String,
       tableName: String,
       partSpec: JMap[String, String],
-      max: Short): JList[String] = {
-    hive.getPartitionNames(dbName, tableName, partSpec, max)
+      max: Short): Seq[String] = {
+    hive.getPartitionNames(dbName, tableName, partSpec, max).asScala.toSeq
   }
 
   override def renamePartition(
@@ -651,8 +651,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       hive: Hive,
       dbName: String,
       tableName: String,
-      max: Short): JList[Index] = {
-    hive.getIndexes(dbName, tableName, max)
+      max: Short): Seq[Index] = {
+    hive.getIndexes(dbName, tableName, max).asScala.toSeq
   }
 }
 
