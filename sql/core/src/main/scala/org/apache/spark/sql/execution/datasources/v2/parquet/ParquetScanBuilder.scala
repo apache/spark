@@ -134,10 +134,9 @@ case class ParquetScanBuilder(
       // are combined with filter or group by
       // e.g. SELECT COUNT(col1) FROM t WHERE col2 = 8
       //      SELECT COUNT(col1) FROM t GROUP BY col2
-      // Todo: 1. add support if groupby column is partition col
-      //          (https://issues.apache.org/jira/browse/SPARK-36646)
-      //       2. add support if filter col is partition col
-      //          (https://issues.apache.org/jira/browse/SPARK-36647)
+      // However, if the filter is on partition column, max/min/count can still be pushed down
+      // Todo:  add support if groupby column is partition col
+      //        (https://issues.apache.org/jira/browse/SPARK-36646)
       return false
     }
 
