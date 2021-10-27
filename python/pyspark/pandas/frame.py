@@ -6912,9 +6912,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4     D     7     2
         3  None     8     4
         """
-        log_advice(
-            "`sort_values` is expensive. Be aware of use it unless it is absolutely necessary."
-        )
         inplace = validate_bool_kwarg(inplace, "inplace")
         if is_name_like_value(by):
             by = [by]
@@ -7024,9 +7021,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         a 1  2  1
         b 1  0  3
         """
-        log_advice(
-            "`sort_index` is expensive. Be aware of use it unless it is absolutely necessary."
-        )
         inplace = validate_bool_kwarg(inplace, "inplace")
         axis = validate_axis(axis)
         if axis != 0:
@@ -12074,7 +12068,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 warnings.warn(msg, UserWarning)
 
     def __len__(self) -> int:
-        log_advice("`len` is expensive. Be aware of use it unless it is absolutely necessary.")
         return self._internal.resolved_copy.spark_frame.count()
 
     def __dir__(self) -> Iterable[str]:

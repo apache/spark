@@ -440,7 +440,6 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         return self._dtype_op.rxor(self, other)
 
     def __len__(self) -> int:
-        log_advice("`len` is expensive. Be aware of use it unless it is absolutely necessary.")
         return len(self._psdf)
 
     # NDArray Compat

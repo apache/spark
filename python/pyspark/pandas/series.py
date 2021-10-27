@@ -2546,9 +2546,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         0    z
         dtype: object
         """
-        log_advice(
-            "`sort_values` is expensive. Be aware of use it unless it is absolutely necessary."
-        )
         inplace = validate_bool_kwarg(inplace, "inplace")
         psdf = self._psdf[[self.name]]._sort(
             by=[self.spark.column], ascending=ascending, na_position=na_position
@@ -2644,9 +2641,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         b  1    0
         Name: 0, dtype: int64
         """
-        log_advice(
-            "`sort_index` is expensive. Be aware of use it unless it is absolutely necessary."
-        )
         inplace = validate_bool_kwarg(inplace, "inplace")
         psdf = self._psdf[[self.name]].sort_index(
             axis=axis, level=level, ascending=ascending, kind=kind, na_position=na_position

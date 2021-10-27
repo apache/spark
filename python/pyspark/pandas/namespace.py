@@ -416,7 +416,7 @@ def read_csv(
     else:
         log_advice(
             "If `index_col` is not specified for `read_csv`, "
-            "the default index is attached which is expensive."
+            "the default index is attached which can cause additional overhead."
         )
         index_spark_column_names = []
         index_names = []
@@ -498,7 +498,7 @@ def read_json(
     """
     index_col is None and log_advice(
         "If `index_col` is not specified for `read_json`, "
-        "the default index is attached which is expensive."
+        "the default index is attached which can cause additional overhead."
     )
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")
@@ -587,7 +587,7 @@ def read_delta(
     """
     index_col is None and log_advice(
         "If `index_col` is not specified for `read_delta`, "
-        "the default index is attached which is expensive."
+        "the default index is attached which can cause additional overhead."
     )
     if version is not None and timestamp is not None:
         raise ValueError("version and timestamp cannot be used together.")
@@ -639,7 +639,7 @@ def read_table(name: str, index_col: Optional[Union[str, List[str]]] = None) -> 
     """
     index_col is None and log_advice(
         "If `index_col` is not specified for `read_table`, "
-        "the default index is attached which is expensive."
+        "the default index is attached which can cause additional overhead."
     )
     sdf = default_session().read.table(name)
     index_spark_columns, index_names = _get_index_map(sdf, index_col)
@@ -786,7 +786,7 @@ def read_parquet(
     """
     index_col is None and log_advice(
         "If `index_col` is not specified for `read_parquet`, "
-        "the default index is attached which is expensive."
+        "the default index is attached which can cause additional overhead."
     )
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")

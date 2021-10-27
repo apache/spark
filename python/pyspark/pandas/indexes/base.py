@@ -1558,9 +1558,6 @@ class Index(IndexOpsMixin):
                     ('a', 'x', 1)],
                    )
         """
-        log_advice(
-            "`sort_values` is expensive. Be aware of use it unless it is absolutely necessary."
-        )
         sdf = self._internal.spark_frame
         sdf = sdf.orderBy(*self._internal.index_spark_columns, ascending=ascending).select(
             self._internal.index_spark_columns
