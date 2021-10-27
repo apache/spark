@@ -81,7 +81,7 @@ private[client] sealed abstract class Shim {
 
   def dropDatabase(
       hive: Hive,
-      name: String,
+      dbName: String,
       deleteData: Boolean,
       ignoreUnknownDb: Boolean,
       cascade: Boolean): Unit
@@ -150,20 +150,20 @@ private[client] sealed abstract class Shim {
   def getPartitionNames(
       hive: Hive,
       dbName: String,
-      tblName: String,
+      tableName: String,
       max: Short): JList[String]
 
   def getPartitionNames(
       hive: Hive,
       dbName: String,
-      tblName: String,
+      tableName: String,
       partSpec: JMap[String, String],
       max: Short): JList[String]
 
   def createPartitions(
       hive: Hive,
-      db: String,
-      table: String,
+      dbName: String,
+      tableName: String,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit
 
@@ -179,7 +179,7 @@ private[client] sealed abstract class Shim {
 
   def renamePartition(
       hive: Hive,
-      tbl: Table,
+      table: Table,
       oldPartSpec: JMap[String, String],
       newPart: Partition): Unit
 
@@ -242,7 +242,7 @@ private[client] sealed abstract class Shim {
 
   def getMSC(hive: Hive): IMetaStoreClient
 
-  def getIndexes(hive: Hive, dbName: String, tblName: String, max: Short): JList[Index]
+  def getIndexes(hive: Hive, dbName: String, tableName: String, max: Short): JList[Index]
 
   protected def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     klass.getMethod(name, args: _*)
@@ -556,11 +556,11 @@ private[client] class Shim_v0_12 extends Shim with Logging {
 
   override def dropDatabase(
       hive: Hive,
-      name: String,
+      dbName: String,
       deleteData: Boolean,
       ignoreUnknownDb: Boolean,
       cascade: Boolean): Unit = {
-    hive.dropDatabase(name, deleteData, ignoreUnknownDb, cascade)
+    hive.dropDatabase(dbName, deleteData, ignoreUnknownDb, cascade)
   }
 
   override def alterDatabase(hive: Hive, dbName: String, d: Database): Unit = {
@@ -625,34 +625,34 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   override def getPartitionNames(
       hive: Hive,
       dbName: String,
-      tblName: String,
+      tableName: String,
       max: Short): JList[String] = {
-    hive.getPartitionNames(dbName, tblName, max)
+    hive.getPartitionNames(dbName, tableName, max)
   }
 
   override def getPartitionNames(
       hive: Hive,
       dbName: String,
-      tblName: String,
+      tableName: String,
       partSpec: JMap[String, String],
       max: Short): JList[String] = {
-    hive.getPartitionNames(dbName, tblName, partSpec, max)
+    hive.getPartitionNames(dbName, tableName, partSpec, max)
   }
 
   override def renamePartition(
       hive: Hive,
-      tbl: Table,
+      table: Table,
       oldPartSpec: JMap[String, String],
       newPart: Partition): Unit = {
-    hive.renamePartition(tbl, oldPartSpec, newPart)
+    hive.renamePartition(table, oldPartSpec, newPart)
   }
 
   override def getIndexes(
       hive: Hive,
       dbName: String,
-      tblName: String,
+      tableName: String,
       max: Short): JList[Index] = {
-    hive.getIndexes(dbName, tblName, max)
+    hive.getIndexes(dbName, tableName, max)
   }
 }
 
