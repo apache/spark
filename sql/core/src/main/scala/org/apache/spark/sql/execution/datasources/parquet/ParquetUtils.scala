@@ -31,9 +31,9 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.execution.RowToColumnConverter
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, PARQUET_AGGREGATE_PUSHDOWN_ENABLED}
 import org.apache.spark.sql.types.StructType
@@ -160,17 +160,26 @@ object ParquetUtils {
       partitionSchema: StructType,
       aggregation: Aggregation,
       aggSchema: StructType,
-      datetimeRebaseMode: LegacyBehaviorPolicy.Value,
-      isCaseSensitive: Boolean): InternalRow = {
+      partitionColValue: InternalRow,
+      datetimeRebaseMode: LegacyBehaviorPolicy.Value): InternalRow = {
     val (primitiveTypes, values) = getPushedDownAggResult(
-      footer, filePath, dataSchema, partitionSchema, aggregation, isCaseSensitive)
+      footer, filePath, dataSchema, partitionSchema, aggregation)
 
     val builder = Types.buildMessage
     primitiveTypes.foreach(t => builder.addField(t))
     val parquetSchema = builder.named("root")
 
+    val groupByColNums = aggregation.groupByColumns.length
+    // if there are group by columns, we will build result set row first,
+    // and then append group by columns values (partition col values) to the result set row.
+    val aggSchemaWithoutGroupby = if (groupByColNums > 0) {
+      aggSchema.apply(aggSchema.fieldNames.drop(groupByColNums).toSet)
+    } else {
+      aggSchema
+    }
+
     val schemaConverter = new ParquetToSparkSchemaConverter
-    val converter = new ParquetRowConverter(schemaConverter, parquetSchema, aggSchema,
+    val converter = new ParquetRowConverter(schemaConverter, parquetSchema, aggSchemaWithoutGroupby,
       None, datetimeRebaseMode, LegacyBehaviorPolicy.CORRECTED, NoopUpdater)
     val primitiveTypeNames = primitiveTypes.map(_.getPrimitiveTypeName)
     primitiveTypeNames.zipWithIndex.foreach {
@@ -198,7 +207,12 @@ object ParquetUtils {
       case (_, i) =>
         throw new SparkException("Unexpected parquet type name: " + primitiveTypeNames(i))
     }
-    converter.currentRecord
+
+    if (groupByColNums > 0) {
+      new JoinedRow().apply(partitionColValue, converter.currentRecord)
+    } else {
+      converter.currentRecord
+    }
   }
 
   /**
@@ -218,8 +232,8 @@ object ParquetUtils {
       aggregation: Aggregation,
       aggSchema: StructType,
       offHeap: Boolean,
-      datetimeRebaseMode: LegacyBehaviorPolicy.Value,
-      isCaseSensitive: Boolean): ColumnarBatch = {
+      partitionColValue: InternalRow,
+      datetimeRebaseMode: LegacyBehaviorPolicy.Value): ColumnarBatch = {
     val row = createAggInternalRowFromFooter(
       footer,
       filePath,
@@ -227,8 +241,8 @@ object ParquetUtils {
       partitionSchema,
       aggregation,
       aggSchema,
-      datetimeRebaseMode,
-      isCaseSensitive)
+      partitionColValue,
+      datetimeRebaseMode)
     val converter = new RowToColumnConverter(aggSchema)
     val columnVectors = if (offHeap) {
       OffHeapColumnVector.allocateColumns(1, aggSchema)
@@ -252,8 +266,7 @@ object ParquetUtils {
       filePath: String,
       dataSchema: StructType,
       partitionSchema: StructType,
-      aggregation: Aggregation,
-      isCaseSensitive: Boolean)
+      aggregation: Aggregation)
   : (Array[PrimitiveType], Array[Any]) = {
     val footerFileMetaData = footer.getFileMetaData
     val fields = footerFileMetaData.getSchema.getFields
@@ -261,7 +274,6 @@ object ParquetUtils {
     val primitiveTypeBuilder = mutable.ArrayBuilder.make[PrimitiveType]
     val valuesBuilder = mutable.ArrayBuilder.make[Any]
 
-    assert(aggregation.groupByColumns.length == 0, "group by shouldn't be pushed down")
     aggregation.aggregateExpressions.foreach { agg =>
       var value: Any = None
       var rowCount = 0L
@@ -291,8 +303,7 @@ object ParquetUtils {
             schemaName = "count(" + count.column.fieldNames.head + ")"
             rowCount += block.getRowCount
             var isPartitionCol = false
-            if (partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive))
-              .toSet.contains(count.column.fieldNames.head)) {
+            if (partitionSchema.fields.map(_.name).toSet.contains(count.column.fieldNames.head)) {
               isPartitionCol = true
             }
             isCount = true

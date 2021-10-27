@@ -262,6 +262,62 @@ abstract class ParquetAggregatePushDownSuite
     }
   }
 
+  test("aggregate push down - aggregate with partition group by can be pushed down") {
+    withTempPath { dir =>
+      spark.range(10).selectExpr("id", "id % 3 as p")
+        .write.partitionBy("p").parquet(dir.getCanonicalPath)
+      withTempView("tmp") {
+        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+        Seq("false", "true").foreach { enableVectorizedReader =>
+          withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            val df = sql("SELECT count(*), count(id), p, max(id), p, p, max(id), min(id), p" +
+              " FROM tmp group by p")
+            df.queryExecution.optimizedPlan.collect {
+              case _: DataSourceV2ScanRelation =>
+                val expected_plan_fragment =
+                  "PushedAggregation: [COUNT(*), COUNT(id), MAX(id), MIN(id)], " +
+                    "PushedFilters: [], PushedGroupBy: [p]"
+                checkKeywordsExistsInExplain(df, expected_plan_fragment)
+            }
+            checkAnswer(df, Seq(Row(3, 3, 1, 7, 1, 1, 7, 1, 1), Row(3, 3, 2, 8, 2, 2, 8, 2, 2),
+              Row(4, 4, 0, 9, 0, 0, 9, 0, 0)))
+          }
+        }
+      }
+    }
+  }
+
+  test("aggregate push down - aggregate with multi partition group by columns") {
+    withTempPath { dir =>
+      Seq((10, 1, 2), (2, 1, 2), (3, 2, 1), (4, 2, 1), (5, 2, 1), (6, 2, 1),
+        (1, 1, 2), (4, 1, 2), (3, 2, 2), (-4, 2, 2), (6, 2, 2))
+        .toDF("value", "p1", "p2")
+        .write
+        .partitionBy("p1", "p2")
+        .parquet(dir.getCanonicalPath)
+      withTempView("tmp") {
+        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+        Seq("false", "true").foreach { enableVectorizedReader =>
+          withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            val df = sql("SELECT count(*), count(value), max(value), min(value), p1, p2 FROM tmp" +
+              " GROUP BY p1, p2")
+            df.queryExecution.optimizedPlan.collect {
+              case _: DataSourceV2ScanRelation =>
+                val expected_plan_fragment =
+                  "PushedAggregation: [COUNT(*), COUNT(value), MAX(value), MIN(value)]," +
+                    " PushedFilters: [], PushedGroupBy: [p1, p2]"
+                checkKeywordsExistsInExplain(df, expected_plan_fragment)
+            }
+            checkAnswer(df, Seq(Row(4, 4, 10, 1, 1, 2), Row(4, 4, 6, 3, 2, 1),
+              Row(3, 3, 6, -4, 2, 2)))
+          }
+        }
+      }
+    }
+  }
+
   test("aggregate push down - push down only if all the aggregates can be pushed down") {
     val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
       (9, "mno", 7), (2, null, 7))

@@ -136,8 +136,8 @@ case class ParquetPartitionReaderFactory(
           val footer = getFooter(file)
           if (footer != null && footer.getBlocks.size > 0) {
             ParquetUtils.createAggInternalRowFromFooter(footer, file.filePath, dataSchema,
-              partitionSchema, aggregation.get, readDataSchema,
-              getDatetimeRebaseMode(footer.getFileMetaData), isCaseSensitive)
+              partitionSchema, aggregation.get, readDataSchema, file.partitionValues,
+              getDatetimeRebaseMode(footer.getFileMetaData))
           } else {
             null
           }
@@ -180,7 +180,7 @@ case class ParquetPartitionReaderFactory(
           if (footer != null && footer.getBlocks.size > 0) {
             ParquetUtils.createAggColumnarBatchFromFooter(footer, file.filePath, dataSchema,
               partitionSchema, aggregation.get, readDataSchema, enableOffHeapColumnVector,
-              getDatetimeRebaseMode(footer.getFileMetaData), isCaseSensitive)
+              file.partitionValues, getDatetimeRebaseMode(footer.getFileMetaData))
           } else {
             null
           }

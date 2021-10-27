@@ -126,22 +126,20 @@ case class ParquetScanBuilder(
       }
     }
 
-    if (!sparkSession.sessionState.conf.parquetAggregatePushDown ||
-      aggregation.groupByColumns.nonEmpty || dataFilters.length > 0) {
+    if (!sparkSession.sessionState.conf.parquetAggregatePushDown || dataFilters.length > 0) {
       // Parquet footer has max/min/count for columns
       // e.g. SELECT COUNT(col1) FROM t
       // but footer doesn't have max/min/count for a column if max/min/count
       // are combined with filter or group by
       // e.g. SELECT COUNT(col1) FROM t WHERE col2 = 8
       //      SELECT COUNT(col1) FROM t GROUP BY col2
-      // However, if the filter is on partition column, max/min/count can still be pushed down
-      // Todo:  add support if groupby column is partition col
-      //        (https://issues.apache.org/jira/browse/SPARK-36646)
+      // However, if the filter or group by is on partition column,
+      // max/min/count can still be pushed down
       return false
     }
 
     aggregation.groupByColumns.foreach { col =>
-      if (col.fieldNames.length != 1) return false
+      if (col.fieldNames.length != 1 || !isPartitionCol(col)) return false
       finalSchema = finalSchema.add(getStructFieldForCol(col))
     }
 
