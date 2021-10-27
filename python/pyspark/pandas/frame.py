@@ -4539,7 +4539,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         index_col: Optional[Union[str, List[str]]] = None,
         **options: Any
     ) -> None:
-        index_col is None and log_advice(  # type: ignore
+        index_col is None and log_advice(  # type: ignore[func-returns-value]
             "If `index_col` is not specified for `to_table`, "
             "the existing index is lost when converting to table."
         )
@@ -4616,7 +4616,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> df.to_delta('%s/to_delta/bar' % path,
         ...             mode='overwrite', replaceWhere='date >= "2012-01-01"')  # doctest: +SKIP
         """
-        index_col is None and log_advice(  # type: ignore
+        index_col is None and log_advice(  # type: ignore[func-returns-value]
             "If `index_col` is not specified for `to_delta`, "
             "the existing index is lost when converting to Delta."
         )
@@ -4697,7 +4697,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     mode = 'overwrite',
         ...     partition_cols=['date', 'country'])
         """
-        index_col is None and log_advice(  # type: ignore
+        index_col is None and log_advice(  # type: ignore[func-returns-value]
             "If `index_col` is not specified for `to_parquet`, "
             "the existing index is lost when converting to Parquet."
         )
@@ -4773,7 +4773,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     mode = 'overwrite',
         ...     partition_cols=['date', 'country'])
         """
-        index_col is None and log_advice(  # type: ignore
+        index_col is None and log_advice(  # type: ignore[func-returns-value]
             "If `index_col` is not specified for `to_orc`, "
             "the existing index is lost when converting to ORC."
         )
@@ -4811,7 +4811,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     to_spark_io.__doc__ = SparkFrameMethods.to_spark_io.__doc__
 
     def to_spark(self, index_col: Optional[Union[str, List[str]]] = None) -> SparkDataFrame:
-        index_col is None and log_advice(  # type: ignore
+        index_col is None and log_advice(  # type: ignore[func-returns-value]
             "If `index_col` is not specified for `to_spark`, "
             "the existing index is lost when converting to Spark DataFrame."
         )

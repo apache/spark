@@ -496,7 +496,7 @@ def read_json(
     0         a     b
     1         c     d
     """
-    index_col is None and log_advice(  # type: ignore
+    index_col is None and log_advice(  # type: ignore[func-returns-value]
         "If `index_col` is not specified for `read_json`, "
         "the default index is attached which can cause additional overhead."
     )
@@ -585,7 +585,7 @@ def read_delta(
     3      13
     4      14
     """
-    index_col is None and log_advice(  # type: ignore
+    index_col is None and log_advice(  # type: ignore[func-returns-value]
         "If `index_col` is not specified for `read_delta`, "
         "the default index is attached which can cause additional overhead."
     )
@@ -637,7 +637,7 @@ def read_table(name: str, index_col: Optional[Union[str, List[str]]] = None) -> 
     index
     0       0
     """
-    index_col is None and log_advice(  # type: ignore
+    index_col is None and log_advice(  # type: ignore[func-returns-value]
         "If `index_col` is not specified for `read_table`, "
         "the default index is attached which can cause additional overhead."
     )
@@ -784,7 +784,7 @@ def read_parquet(
     index
     0       0
     """
-    index_col is None and log_advice(  # type: ignore
+    index_col is None and log_advice(  # type: ignore[func-returns-value]
         "If `index_col` is not specified for `read_parquet`, "
         "the default index is attached which can cause additional overhead."
     )
