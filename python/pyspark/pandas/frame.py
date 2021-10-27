@@ -2478,12 +2478,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         self_applied: DataFrame = DataFrame(self._internal.resolved_copy)
 
         column_labels: Optional[List[Label]] = None
-        if should_infer_schema and log_advice(
-            "If the type hints is not specified for `apply`, "
-            "it could be expensive for inferring the type internally."
-        ):
+        if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified for `apply`, "
+                "it could be expensive for inferring the type internally."
+            )
             limit = get_option("compute.shortcut_limit")
             pdf = self_applied.head(limit + 1)._to_internal_pandas()
             applied = pdf.apply(func, axis=axis, args=args, **kwds)
@@ -2721,12 +2722,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return_sig = spec.annotations.get("return", None)
         should_infer_schema = return_sig is None
 
-        if should_infer_schema and log_advice(
-            "If the type hints is not specified for `transform`, "
-            "it could be expensive for inferring the type internally."
-        ):
+        if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified for `transform`, "
+                "it could be expensive for inferring the type internally."
+            )
             limit = get_option("compute.shortcut_limit")
             pdf = self.head(limit + 1)._to_internal_pandas()
             transformed = pdf.transform(func, axis, *args, **kwargs)
