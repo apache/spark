@@ -118,7 +118,8 @@ case class Percentile(
       case _: ArrayType => ArrayType(DoubleType, false)
       case _ => DoubleType
     }
-    Seq(NumericType, percentageExpType, IntegralType)
+    Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType),
+      percentageExpType, IntegralType)
   }
 
   // Check the inputTypes are valid, and the percentageExpression satisfies:

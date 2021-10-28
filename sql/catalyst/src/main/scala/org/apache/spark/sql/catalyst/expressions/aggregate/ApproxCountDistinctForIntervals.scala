@@ -61,7 +61,8 @@ case class ApproxCountDistinctForIntervals(
   }
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(TypeCollection(NumericType, TimestampType, DateType, TimestampNTZType), ArrayType)
+    Seq(TypeCollection(NumericType, TimestampType, DateType, TimestampNTZType,
+      YearMonthIntervalType, DayTimeIntervalType), ArrayType)
   }
 
   // Mark as lazy so that endpointsExpression is not evaluated during tree transformation.

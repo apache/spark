@@ -94,7 +94,8 @@ case class ApproximatePercentile(
   override def inputTypes: Seq[AbstractDataType] = {
     // Support NumericType, DateType, TimestampType and TimestampNTZType since their internal types
     // are all numeric, and can be easily cast to double for processing.
-    Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType),
+    Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType,
+      YearMonthIntervalType, DayTimeIntervalType),
       TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)), IntegralType)
   }
 
