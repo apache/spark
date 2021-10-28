@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import TypeVar, Optional, Callable, Union, overload
+from typing import overload, Callable, Optional, TypeVar, Union
 
 from pyspark.serializers import NoOpSerializer
 from pyspark.storagelevel import StorageLevel
