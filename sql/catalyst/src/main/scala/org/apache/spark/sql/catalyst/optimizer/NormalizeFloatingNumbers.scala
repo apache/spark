@@ -67,7 +67,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       // Only hash join and sort merge join need the normalization. Here we catch all Joins with
       // join keys, assuming Joins with join keys are always planned as hash join or sort merge
       // join. It's very unlikely that we will break this assumption in the near future.
-      case j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, condition, _, _, _)
+      case j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, condition, _, _, _, _)
           // The analyzer guarantees left and right joins keys are of the same data type. Here we
           // only need to check join keys of one side.
           if leftKeys.exists(k => needNormalize(k)) =>

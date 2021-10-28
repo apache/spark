@@ -876,6 +876,11 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(yearOfMaxEarnings, Row("dotNET", 2013) :: Row("Java", 2013) :: Nil)
 
     checkAnswer(
+      courseSales.groupBy("course").agg(max_by(col("year"), col("earnings"))),
+      Row("dotNET", 2013) :: Row("Java", 2013) :: Nil
+    )
+
+    checkAnswer(
       sql("SELECT max_by(x, y) FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)"),
       Row("b") :: Nil
     )
@@ -930,6 +935,11 @@ class DataFrameAggregateSuite extends QueryTest
     val yearOfMinEarnings =
       sql("SELECT course, min_by(year, earnings) FROM courseSales GROUP BY course")
     checkAnswer(yearOfMinEarnings, Row("dotNET", 2012) :: Row("Java", 2012) :: Nil)
+
+    checkAnswer(
+      courseSales.groupBy("course").agg(min_by(col("year"), col("earnings"))),
+      Row("dotNET", 2012) :: Row("Java", 2012) :: Nil
+    )
 
     checkAnswer(
       sql("SELECT min_by(x, y) FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)"),
@@ -1426,6 +1436,12 @@ class DataFrameAggregateSuite extends QueryTest
       new StructType().add(StructField("ts", TimestampNTZType)).add("count", LongType, false)
     assert (df.schema == expectedSchema)
     checkAnswer(df, Seq(Row(LocalDateTime.parse(ts1), 2), Row(LocalDateTime.parse(ts2), 1)))
+  }
+
+  test("SPARK-36926: decimal average mistakenly overflow") {
+    val df = (1 to 10).map(_ => "9999999999.99").toDF("d")
+    val res = df.select($"d".cast("decimal(12, 2)").as("d")).agg(avg($"d").cast("string"))
+    checkAnswer(res, Row("9999999999.990000"))
   }
 }
 

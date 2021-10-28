@@ -23,6 +23,7 @@ import java.io.FileOutputStream
 
 import scala.collection.immutable.IndexedSeq
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 import org.scalatest.BeforeAndAfterAll
@@ -70,6 +71,7 @@ class WholeTextFileRecordReaderSuite extends SparkFunSuite with BeforeAndAfterAl
                                compress: Boolean) = {
     val out = if (compress) {
       val codec = new GzipCodec
+      codec.setConf(new Configuration())
       val path = s"${inputDir.toString}/$fileName${codec.getDefaultExtension}"
       codec.createOutputStream(new DataOutputStream(new FileOutputStream(path)))
     } else {

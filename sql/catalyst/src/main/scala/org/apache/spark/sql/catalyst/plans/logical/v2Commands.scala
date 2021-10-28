@@ -19,12 +19,13 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.connector.write.Write
 import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
 
@@ -621,12 +622,13 @@ object ShowViews {
 }
 
 /**
- * The logical plan of the USE/USE NAMESPACE command.
+ * The logical plan of the USE command.
  */
-case class SetCatalogAndNamespace(
-    catalogManager: CatalogManager,
-    catalogName: Option[String],
-    namespace: Option[Seq[String]]) extends LeafCommand
+case class SetCatalogAndNamespace(child: LogicalPlan) extends UnaryCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): SetCatalogAndNamespace = {
+    copy(child = newChild)
+  }
+}
 
 /**
  * The logical plan of the REFRESH TABLE command.
@@ -634,15 +636,6 @@ case class SetCatalogAndNamespace(
 case class RefreshTable(child: LogicalPlan) extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): RefreshTable =
     copy(child = newChild)
-}
-
-/**
- * The logical plan of the SHOW CURRENT NAMESPACE command.
- */
-case class ShowCurrentNamespace(catalogManager: CatalogManager) extends LeafCommand {
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("catalog", StringType, nullable = false)(),
-    AttributeReference("namespace", StringType, nullable = false)())
 }
 
 /**
@@ -691,6 +684,19 @@ case class RefreshFunction(child: LogicalPlan) extends UnaryCommand {
  */
 case class DescribeFunction(child: LogicalPlan, isExtended: Boolean) extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): DescribeFunction =
+    copy(child = newChild)
+}
+
+/**
+ * The logical plan of the CREATE FUNCTION command.
+ */
+case class CreateFunction(
+    child: LogicalPlan,
+    className: String,
+    resources: Seq[FunctionResource],
+    ifExists: Boolean,
+    replace: Boolean) extends UnaryCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): CreateFunction =
     copy(child = newChild)
 }
 
@@ -941,6 +947,25 @@ case class AlterViewAs(
 }
 
 /**
+ * The logical plan of the CREATE VIEW ... command.
+ */
+case class CreateView(
+    child: LogicalPlan,
+    userSpecifiedColumns: Seq[(String, Option[String])],
+    comment: Option[String],
+    properties: Map[String, String],
+    originalText: Option[String],
+    query: LogicalPlan,
+    allowExisting: Boolean,
+    replace: Boolean) extends BinaryCommand {
+  override def left: LogicalPlan = child
+  override def right: LogicalPlan = query
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
+    copy(child = newLeft, query = newRight)
+}
+
+/**
  * The logical plan of the ALTER VIEW ... SET TBLPROPERTIES command.
  */
 case class SetViewProperties(
@@ -1030,4 +1055,18 @@ case class UncacheTable(
   override def childrenToAnalyze: Seq[LogicalPlan] = table :: Nil
 
   override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
+}
+
+/**
+ * The logical plan of the CREATE INDEX command.
+ */
+case class CreateIndex(
+    child: LogicalPlan,
+    indexName: String,
+    indexType: String,
+    ignoreIfExists: Boolean,
+    columns: Seq[(NamedReference, Map[String, String])],
+    properties: Map[String, String]) extends UnaryCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): CreateIndex =
+    copy(child = newChild)
 }

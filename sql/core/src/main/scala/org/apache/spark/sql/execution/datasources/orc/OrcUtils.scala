@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -48,6 +49,8 @@ object OrcUtils extends Logging {
     "ZSTD" -> ".zstd",
     "LZ4" -> ".lz4",
     "LZO" -> ".lzo")
+
+  val CATALYST_TYPE_ATTRIBUTE_NAME = "spark.sql.catalyst.type"
 
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
     val origPath = new Path(pathStr)
@@ -85,10 +88,50 @@ object OrcUtils extends Logging {
   }
 
   private def toCatalystSchema(schema: TypeDescription): StructType = {
+    import TypeDescription.Category
+
+    def toCatalystType(orcType: TypeDescription): DataType = {
+      orcType.getCategory match {
+        case Category.STRUCT => toStructType(orcType)
+        case Category.LIST => toArrayType(orcType)
+        case Category.MAP => toMapType(orcType)
+        case _ =>
+          val catalystTypeAttrValue = orcType.getAttributeValue(CATALYST_TYPE_ATTRIBUTE_NAME)
+          if (catalystTypeAttrValue != null) {
+            CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+          } else {
+            CatalystSqlParser.parseDataType(orcType.toString)
+          }
+      }
+    }
+
+    def toStructType(orcType: TypeDescription): StructType = {
+      val fieldNames = orcType.getFieldNames.asScala
+      val fieldTypes = orcType.getChildren.asScala
+      val fields = new ArrayBuffer[StructField]()
+      fieldNames.zip(fieldTypes).foreach {
+        case (fieldName, fieldType) =>
+          val catalystType = toCatalystType(fieldType)
+          fields += StructField(fieldName, catalystType)
+      }
+      StructType(fields.toSeq)
+    }
+
+    def toArrayType(orcType: TypeDescription): ArrayType = {
+      val elementType = orcType.getChildren.get(0)
+      ArrayType(toCatalystType(elementType))
+    }
+
+    def toMapType(orcType: TypeDescription): MapType = {
+      val Seq(keyType, valueType) = orcType.getChildren.asScala.toSeq
+      val catalystKeyType = toCatalystType(keyType)
+      val catalystValueType = toCatalystType(valueType)
+      MapType(catalystKeyType, catalystValueType)
+    }
+
     // The Spark query engine has not completely supported CHAR/VARCHAR type yet, and here we
     // replace the orc CHAR/VARCHAR with STRING type.
-    CharVarcharUtils.replaceCharVarcharWithStringInSchema(
-      CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType])
+    CharVarcharUtils.replaceCharVarcharWithStringInSchema(toStructType(schema))
   }
 
   def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
@@ -230,7 +273,59 @@ object OrcUtils extends Logging {
       s"array<${orcTypeDescriptionString(a.elementType)}>"
     case m: MapType =>
       s"map<${orcTypeDescriptionString(m.keyType)},${orcTypeDescriptionString(m.valueType)}>"
+    case _: DayTimeIntervalType => LongType.catalogString
+    case _: YearMonthIntervalType => IntegerType.catalogString
     case _ => dt.catalogString
+  }
+
+  def orcTypeDescription(dt: DataType): TypeDescription = {
+    def getInnerTypeDecription(dt: DataType): Option[TypeDescription] = {
+      dt match {
+        case y: YearMonthIntervalType =>
+          val typeDesc = orcTypeDescription(IntegerType)
+          typeDesc.setAttribute(
+            CATALYST_TYPE_ATTRIBUTE_NAME, y.typeName)
+          Some(typeDesc)
+        case d: DayTimeIntervalType =>
+          val typeDesc = orcTypeDescription(LongType)
+          typeDesc.setAttribute(
+            CATALYST_TYPE_ATTRIBUTE_NAME, d.typeName)
+          Some(typeDesc)
+        case _ => None
+      }
+    }
+
+    dt match {
+      case s: StructType =>
+        val result = new TypeDescription(TypeDescription.Category.STRUCT)
+        s.fields.foreach { f =>
+          getInnerTypeDecription(f.dataType) match {
+            case Some(t) => result.addField(f.name, t)
+            case None => result.addField(f.name, orcTypeDescription(f.dataType))
+          }
+        }
+        result
+      case a: ArrayType =>
+        val result = new TypeDescription(TypeDescription.Category.LIST)
+        getInnerTypeDecription(a.elementType) match {
+          case Some(t) => result.addChild(t)
+          case None => result.addChild(orcTypeDescription(a.elementType))
+        }
+        result
+      case m: MapType =>
+        val result = new TypeDescription(TypeDescription.Category.MAP)
+        getInnerTypeDecription(m.keyType) match {
+          case Some(t) => result.addChild(t)
+          case None => result.addChild(orcTypeDescription(m.keyType))
+        }
+        getInnerTypeDecription(m.valueType) match {
+          case Some(t) => result.addChild(t)
+          case None => result.addChild(orcTypeDescription(m.valueType))
+        }
+        result
+      case other =>
+        TypeDescription.fromString(other.catalogString)
+    }
   }
 
   /**
