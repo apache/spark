@@ -1345,6 +1345,24 @@ object StringPadDefaultValue {
 }
 
 /**
+ * Helper class for implementing StringLPad and StringRPad.
+ * Returns the return type of the StringLPad or StringRPad expression based on the types of
+ * the input expressions (input string and padding).
+ * When at least one of the input expressions is of StringType the result is also of StringType.
+ * Otherwise, if both expressions are of BinaryType the result is also of BinaryType.
+ * The result returned by this class is applicable only in non-ANSI mode. In ANSI mode we
+ * disallow mixing the input types for StringLPad and StringRPad.
+ */
+object StringPadReturnType {
+  def get(str: Expression, pad: Expression): DataType = {
+    str.dataType match {
+      case StringType => StringType
+      case BinaryType => pad.dataType
+    }
+  }
+}
+
+/**
  * Returns str, left-padded with pad to a length of len.
  */
 @ExpressionDescription(
@@ -1353,6 +1371,9 @@ object StringPadDefaultValue {
       If `str` is longer than `len`, the return value is shortened to `len` characters or bytes.
       If `pad` is not specified, `str` will be padded to the left with space characters if it is
       a character string, and with zeros if it is a byte sequence.
+      In ANSI mode the types of `str` and `pad` are expected to be the same, otherwise an error is
+      returned. In non-ANSI mode, if the types of `str` and `pad` are the same, the resulting
+      expression has the same common type, otherwise the resulting expression is a string.
   """,
   examples = """
     Examples:
@@ -1380,34 +1401,57 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression = Litera
   override def second: Expression = len
   override def third: Expression = pad
 
-  override def dataType: DataType = str.dataType
+  override def dataType: DataType = StringPadReturnType.get(str, pad)
+
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(StringType, BinaryType), IntegerType, TypeCollection(StringType, BinaryType))
 
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
       case fail: TypeCheckResult.TypeCheckFailure => fail
-      case _ if str.dataType != pad.dataType =>
+      case _ if str.dataType != pad.dataType && SQLConf.get.ansiEnabled =>
         TypeCheckResult.TypeCheckFailure(
           s"Arguments 'str' and 'pad' of function '$prettyName' must be the same type.")
       case other => other
     }
   }
 
-  override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
+  override def nullSafeEval(string: Any, len: Any, padding: Any): Any = {
     str.dataType match {
-      case StringType => string.asInstanceOf[UTF8String]
-        .lpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
-      case BinaryType => ByteArray.lpad(string.asInstanceOf[Array[Byte]],
-        len.asInstanceOf[Int], pad.asInstanceOf[Array[Byte]])
+      case StringType =>
+        pad.dataType match {
+          case StringType =>
+            string.asInstanceOf[UTF8String].lpad(len.asInstanceOf[Int],
+              padding.asInstanceOf[UTF8String])
+          case BinaryType =>
+            string.asInstanceOf[UTF8String].lpad(len.asInstanceOf[Int],
+              UTF8String.fromBytes(padding.asInstanceOf[Array[Byte]]))
+        }
+      case BinaryType =>
+        pad.dataType match {
+          case BinaryType =>
+            ByteArray.lpad(string.asInstanceOf[Array[Byte]],
+              len.asInstanceOf[Int], padding.asInstanceOf[Array[Byte]])
+          case StringType =>
+            UTF8String.fromBytes(string.asInstanceOf[Array[Byte]]).lpad(len.asInstanceOf[Int],
+              padding.asInstanceOf[UTF8String])
+        }
     }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (string, len, pad) => {
+    defineCodeGen(ctx, ev, (string, len, padding) => {
       str.dataType match {
-        case StringType => s"$string.lpad($len, $pad)"
-        case BinaryType => s"${classOf[ByteArray].getName}.lpad($string, $len, $pad)"
+        case StringType => pad.dataType match {
+          case StringType => s"$string.lpad($len, $padding)"
+          case BinaryType =>
+            s"$string.lpad($len, ${classOf[UTF8String].getName}.fromBytes($padding))"
+        }
+        case BinaryType => pad.dataType match {
+          case StringType =>
+            s"${classOf[UTF8String].getName}.fromBytes($string).lpad($len, $padding)"
+          case BinaryType => s"${classOf[ByteArray].getName}.lpad($string, $len, $padding)"
+        }
       }
     })
   }
@@ -1428,6 +1472,9 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression = Litera
       If `str` is longer than `len`, the return value is shortened to `len` characters.
       If `pad` is not specified, `str` will be padded to the right with space characters if it is
       a character string, and with zeros if it is a binary string.
+      In ANSI mode the types of `str` and `pad` are expected to be the same, otherwise an error is
+      returned. In non-ANSI mode, if the types of `str` and `pad` are the same, the resulting
+      expression has the same common type, otherwise the resulting expression is a string.
   """,
   examples = """
     Examples:
@@ -1455,33 +1502,57 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression = Litera
   override def second: Expression = len
   override def third: Expression = pad
 
-  override def dataType: DataType = str.dataType
+  override def dataType: DataType = StringPadReturnType.get(str, pad)
+
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(StringType, BinaryType), IntegerType, TypeCollection(StringType, BinaryType))
+
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
       case fail: TypeCheckResult.TypeCheckFailure => fail
-      case _ if str.dataType != pad.dataType =>
+      case _ if str.dataType != pad.dataType && SQLConf.get.ansiEnabled =>
         TypeCheckResult.TypeCheckFailure(
           s"Arguments 'str' and 'pad' of function '$prettyName' must be the same type.")
       case other => other
     }
   }
 
-  override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
+  override def nullSafeEval(string: Any, len: Any, padding: Any): Any = {
     str.dataType match {
-      case StringType => string.asInstanceOf[UTF8String]
-        .rpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
-      case BinaryType => ByteArray.rpad(string.asInstanceOf[Array[Byte]],
-        len.asInstanceOf[Int], pad.asInstanceOf[Array[Byte]])
+      case StringType =>
+        pad.dataType match {
+          case StringType =>
+            string.asInstanceOf[UTF8String].rpad(len.asInstanceOf[Int],
+              padding.asInstanceOf[UTF8String])
+          case BinaryType =>
+            string.asInstanceOf[UTF8String].rpad(len.asInstanceOf[Int],
+              UTF8String.fromBytes(padding.asInstanceOf[Array[Byte]]))
+        }
+      case BinaryType =>
+        pad.dataType match {
+          case BinaryType =>
+            ByteArray.rpad(string.asInstanceOf[Array[Byte]],
+              len.asInstanceOf[Int], padding.asInstanceOf[Array[Byte]])
+          case StringType =>
+            UTF8String.fromBytes(string.asInstanceOf[Array[Byte]]).rpad(len.asInstanceOf[Int],
+              padding.asInstanceOf[UTF8String])
+        }
     }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (string, len, pad) => {
+    defineCodeGen(ctx, ev, (string, len, padding) => {
       str.dataType match {
-        case StringType => s"$string.rpad($len, $pad)"
-        case BinaryType => s"${classOf[ByteArray].getName}.rpad($string, $len, $pad)"
+        case StringType => pad.dataType match {
+          case StringType => s"$string.rpad($len, $padding)"
+          case BinaryType =>
+            s"$string.rpad($len, ${classOf[UTF8String].getName}.fromBytes($padding))"
+        }
+        case BinaryType => pad.dataType match {
+          case StringType =>
+            s"${classOf[UTF8String].getName}.fromBytes($string).rpad($len, $padding)"
+          case BinaryType => s"${classOf[ByteArray].getName}.rpad($string, $len, $padding)"
+        }
       }
     })
   }
