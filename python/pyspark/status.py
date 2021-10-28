@@ -17,7 +17,7 @@
 
 __all__ = ["SparkJobInfo", "SparkStageInfo", "StatusTracker"]
 
-from typing import Optional, List, NamedTuple
+from typing import List, NamedTuple, Optional
 
 from py4j.java_collections import JavaArray  # type: ignore[import]
 from py4j.java_gateway import JavaObject  # type: ignore[import]
