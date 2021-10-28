@@ -18,7 +18,10 @@
 __all__ = ['SparkConf']
 
 import sys
+from typing import overload
+from typing import List, Optional, Tuple
 
+from py4j.java_gateway import JVMView, JavaObject  # type: ignore[import]
 
 class SparkConf(object):
 
@@ -105,7 +108,7 @@ class SparkConf(object):
     spark.home=/path
     """
 
-    def __init__(self, loadDefaults=True, _jvm=None, _jconf=None):
+    def __init__(self, loadDefaults: bool = True, _jvm: Optional[JVMView] = None, _jconf: Optional[JavaObject] = None) -> None:
         """
         Create a new Spark configuration.
         """
@@ -124,7 +127,7 @@ class SparkConf(object):
                 self._jconf = None
                 self._conf = {}
 
-    def set(self, key, value):
+    def set(self, key: str, value: str) -> SparkConf:
         """Set a configuration property."""
         # Try to set self._jconf first if JVM is created, set self._conf if JVM is not created yet.
         if self._jconf is not None:
@@ -133,18 +136,18 @@ class SparkConf(object):
             self._conf[key] = str(value)
         return self
 
-    def setIfMissing(self, key, value):
+    def setIfMissing(self, key: str, value: str) -> SparkConf:
         """Set a configuration property, if not already set."""
         if self.get(key) is None:
             self.set(key, value)
         return self
 
-    def setMaster(self, value):
+    def setMaster(self, value: str) -> SparkConf:
         """Set master URL to connect to."""
         self.set("spark.master", value)
         return self
 
-    def setAppName(self, value):
+    def setAppName(self, value: str) -> SparkConf:
         """Set application name."""
         self.set("spark.app.name", value)
         return self
