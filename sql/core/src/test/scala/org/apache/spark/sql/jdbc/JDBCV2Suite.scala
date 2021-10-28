@@ -111,6 +111,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df2, Seq(Row(2, "alex", 12000.00, 1200.0)))
 
     val df3 = sql("SELECT name FROM h2.test.employee WHERE dept > 1 LIMIT 1")
+    val scan = df3.queryExecution.optimizedPlan.collectFirst {
+      case s: DataSourceV2ScanRelation => s
+    }.get
+    assert(scan.schema.names.sameElements(Seq("NAME")))
     checkPushedLimit(df3, true, 1)
     checkAnswer(df3, Seq(Row("alex")))
 
@@ -127,6 +131,17 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .limit(1)
     checkPushedLimit(df5, false, 0)
     checkAnswer(df5, Seq(Row(1, "cathy", 9000.00, 1200.0)))
+
+    val name = udf { (x: String) => x.matches("cat|dav|amy") }
+    val sub = udf { (x: String) => x.substring(0, 3) }
+    val df6 = spark.read
+      .table("h2.test.employee")
+      .select($"SALARY", $"BONUS", sub($"NAME").as("shortName"))
+      .filter(name($"shortName"))
+      .limit(1)
+    // LIMIT is pushed down only if all the filters are pushed down
+    checkPushedLimit(df6, false, 0)
+    checkAnswer(df6, Seq(Row(10000.00, 1000.0, "amy")))
   }
 
   private def checkPushedLimit(df: DataFrame, pushed: Boolean, limit: Int): Unit = {
