@@ -98,6 +98,7 @@ from pyspark.pandas.utils import (
     validate_bool_kwarg,
     verify_temp_column_name,
     SPARK_CONF_ARROW_ENABLED,
+    log_advice,
 )
 from pyspark.pandas.datetimes import DatetimeMethods
 from pyspark.pandas.spark import functions as SF
@@ -1580,6 +1581,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3    0.2
         Name: dogs, dtype: float64
         """
+        log_advice(
+            "`to_pandas` loads all data into the driver's memory. "
+            "It should only be used if the resulting pandas Series is expected to be small."
+        )
         return self._to_internal_pandas().copy()
 
     def to_list(self) -> List:
@@ -1594,6 +1599,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             to be small, as all the data is loaded into the driver's memory.
 
         """
+        log_advice(
+            "`to_list` loads all data into the driver's memory. "
+            "It should only be used if the resulting list is expected to be small."
+        )
         return self._to_internal_pandas().tolist()
 
     tolist = to_list
