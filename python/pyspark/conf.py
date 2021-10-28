@@ -18,8 +18,8 @@
 __all__ = ['SparkConf']
 
 import sys
-from typing import overload
-from typing import List, Optional, Tuple
+from typing import overload, ItemsView, Any
+from typing import List, Optional, Tuple, Union
 
 from py4j.java_gateway import JVMView, JavaObject  # type: ignore[import]
 
@@ -117,7 +117,7 @@ class SparkConf(object):
             self._jconf = _jconf
         else:
             from pyspark.context import SparkContext
-            _jvm = _jvm or SparkContext._jvm
+            _jvm = _jvm or SparkContext._jvm  # type: ignore[attr-defined]
 
             if _jvm is not None:
                 # JVM is created, so create self._jconf directly through JVM
@@ -126,7 +126,7 @@ class SparkConf(object):
             else:
                 # JVM is not created, so store data in self._conf first
                 self._jconf = None
-                self._conf = {}
+                self._conf = {}  # type: ignore[var-annotated]
 
     def set(self, key: str, value: str) -> "SparkConf":
         """Set a configuration property."""
@@ -166,8 +166,8 @@ class SparkConf(object):
     def setExecutorEnv(self, *, pairs: List[Tuple[str, str]]) -> "SparkConf":
         ...
 
-    def setExecutorEnv(self, key: Optional[str] = None, value: Optional[str] = None,
-                       pairs: Optional[List[Tuple[str, str]]] = None) -> "SparkConf":  # not sure
+    # TODO
+    def setExecutorEnv(self, key=None, value=None, pairs=None):  # type: ignore[no-untyped-def]
         """Set an environment variable to be passed to executors."""
         if (key is not None and pairs is not None) or (key is None and pairs is None):
             raise RuntimeError("Either pass one key-value pair or a list of pairs")
@@ -191,7 +191,16 @@ class SparkConf(object):
             self.set(k, v)
         return self
 
-    def get(self, key: str, defaultValue: Optional[str] = None) -> str:
+    @overload
+    def get(self, key: str, defaultValue: str) -> str:
+        ...
+
+    @overload
+    def get(self, key: str) -> Optional[str]:
+        ...
+
+    # TODO
+    def get(self, key: str, defaultValue: Optional[str] = None) -> Optional[str]:
         """Get the configured value for some key, or return a default otherwise."""
         if defaultValue is None:  # Py4J doesn't call the right get() if we pass None
             if self._jconf is not None:
@@ -208,7 +217,7 @@ class SparkConf(object):
             else:
                 return self._conf.get(key, defaultValue)
 
-    def getAll(self) -> List[Tuple[str, str]]:
+    def getAll(self) -> Union[List[Tuple[str, str]], ItemsView[Any, Any]]:
         """Get all values as a list of key-value pairs."""
         if self._jconf is not None:
             return [(elem._1(), elem._2()) for elem in self._jconf.getAll()]
