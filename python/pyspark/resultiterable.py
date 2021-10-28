@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-from collections.abc import Iterable
 from typing import TypeVar, TYPE_CHECKING, Type, Iterator
 
 if TYPE_CHECKING:
