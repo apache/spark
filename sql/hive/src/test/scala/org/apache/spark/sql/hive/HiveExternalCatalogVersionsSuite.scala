@@ -218,7 +218,11 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
         "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",
-        "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
+        "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath} " +
+          // TODO: Consider to remove the following three JVM options once the Spark 3.2 is EOL.
+          "-XX:+IgnoreUnrecognizedVMOptions " +
+          "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED " +
+          "--add-opens=java.base/java.net=ALL-UNNAMED",
         tempPyFile.getCanonicalPath)
       runSparkSubmit(args, Some(sparkHome.getCanonicalPath), isSparkTesting = false)
     }
@@ -263,6 +267,8 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
     versions
       .filter(v => v.startsWith("3") || !TestUtils.isPythonVersionAtLeast38())
       .filter(v => v.startsWith("3") || !SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
+      .filter(v => !((v.startsWith("3.0") || v.startsWith("3.1")) &&
+        SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17)))
   }
 
   protected var spark: SparkSession = _
