@@ -246,7 +246,7 @@ private[client] sealed abstract class Shim {
     klass.getMethod(name, args: _*)
   }
 
-  def recordHiveCall() {
+  def recordHiveCall(): Unit {
     HiveCatalogMetrics.incrementHiveClientCalls(1)
   }
 }
