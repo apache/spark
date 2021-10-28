@@ -573,6 +573,29 @@ NULL	9
 
 
 -- !query
+SELECT s2.id, s2.id IN (SELECT s1.id FROM s1) FROM s2
+-- !query schema
+struct<id:int,res:boolean>
+-- !query output
+1   true
+3   true
+4   false
+6   false
+9   true
+
+
+-- !query
+SELECT COUNT(s2.id), CASE WHEN s2.id in (SELECT s1.id FROM s1) THEN 'tag1' ELSE 'tag2' END AS tag
+FROM s2
+GROUP BY CASE WHEN s2.id in (SELECT s1.id FROM s1) THEN 'tag1' ELSE 'tag2' END
+-- !query schema
+struct<cnt:int,tag:string>
+-- !query output
+3   tag1
+2   tag2
+
+
+-- !query
 DROP VIEW s1
 -- !query schema
 struct<>

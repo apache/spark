@@ -387,6 +387,14 @@ FULL OUTER JOIN s2
 ON s1.id = s2.id
 AND s1.id NOT IN (SELECT id FROM s3);
 
+-- IN with subQuery on Project
+SELECT s2.id, s2.id IN (SELECT s1.id FROM s1) AS res FROM s2;
+
+-- IN with subQuery on Aggregate
+SELECT COUNT(s2.id) AS cnt, CASE WHEN s2.id in (SELECT s1.id FROM s1) THEN 'tag1' ELSE 'tag2' END AS tag
+FROM s2
+GROUP BY CASE WHEN s2.id in (SELECT s1.id FROM s1) THEN 'tag1' ELSE 'tag2' END;
+
 
 DROP VIEW s1;
 
