@@ -1217,9 +1217,9 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
 
   // Whether the result of this expression may be null. For example: CAST(strCol AS double)
   // We will infer an IsNotNull expression for this expression to avoid skew join.
-  private def resultMayBeNull(e: Expression): Boolean = e match {
-    case Cast(child, dataType, _, _) => !Cast.canUpCast(child.dataType, dataType)
-    case _: Coalesce => true
+  private def resultMayBeNull(exp: Expression): Boolean = exp match {
+    case Cast(child: Attribute, dataType, _, _) => !Cast.canUpCast(child.dataType, dataType)
+    case c: Coalesce if c.children.forall(_.isInstanceOf[Attribute]) => true
     case _ => false
   }
 

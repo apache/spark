@@ -374,14 +374,23 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("SPARK-31809: Infer IsNotNull for join condition") {
+    val testRelation2 = LocalRelation('a.string, 'b.int)
+
     testConstraintsAfterJoin(
       testRelation.subquery('left),
-      testRelation.subquery('right),
-      testRelation.where(IsNotNull('a.cast(StringType).cast(DoubleType)) && IsNotNull('a))
-        .subquery('left),
-      testRelation.where(IsNotNull('c)).subquery('right),
+      testRelation2.subquery('right),
+      testRelation.where(IsNotNull('a)).subquery('left),
+      testRelation2.where(IsNotNull('a.cast(IntegerType)) && IsNotNull('a)).subquery('right),
       Inner,
-      Some("left.a".attr.cast(StringType).cast(DoubleType) === "right.c".attr.cast(DoubleType)))
+      Some("left.a".attr === "right.a".attr))
+
+    testConstraintsAfterJoin(
+      testRelation.subquery('left),
+      testRelation2.subquery('right),
+      testRelation.where(IsNotNull('a)).subquery('left),
+      testRelation2.subquery('right),
+      RightOuter,
+      Some("left.a".attr === "right.a".attr))
 
     testConstraintsAfterJoin(
       testRelation.subquery('left),
