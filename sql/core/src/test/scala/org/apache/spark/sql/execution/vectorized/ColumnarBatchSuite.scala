@@ -1758,4 +1758,36 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(ex.getMessage.contains(
           "Cannot reserve additional contiguous bytes in the vectorized reader (integer overflow)"))
   }
+
+  DataTypeTestUtils.yearMonthIntervalTypes.foreach { dt =>
+    testVector(dt.typeName, 10, dt) {
+      column =>
+        (0 until 10).foreach{ i =>
+          column.putInt(i, i)
+        }
+        val bachRow = new ColumnarBatchRow(Array(column))
+        (0 until 10).foreach { i =>
+          bachRow.rowId = i
+          assert(bachRow.get(0, dt) === i)
+          val batchRowCopy = bachRow.copy()
+          assert(batchRowCopy.get(0, dt) === i)
+        }
+    }
+  }
+
+  DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt =>
+    testVector(dt.typeName, 10, dt) {
+      column =>
+        (0 until 10).foreach{ i =>
+          column.putLong(i, i)
+        }
+        val bachRow = new ColumnarBatchRow(Array(column))
+        (0 until 10).foreach { i =>
+          bachRow.rowId = i
+          assert(bachRow.get(0, dt) === i)
+          val batchRowCopy = bachRow.copy()
+          assert(batchRowCopy.get(0, dt) === i)
+        }
+    }
+  }
 }
