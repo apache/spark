@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import TypeVar, TYPE_CHECKING, Type, Iterator
+from typing import TypeVar, TYPE_CHECKING, Iterator, Iterable
 
 if TYPE_CHECKING:
     from pyspark._typing import SizedIterable
@@ -26,7 +26,7 @@ __all__ = ["ResultIterable"]
 T = TypeVar("T")
 
 
-class ResultIterable(Type["SizedIterable[T]"]):  # type: ignore[misc]
+class ResultIterable(Iterable[T]):
 
     """
     A special result iterable. This is used because the standard
