@@ -15,27 +15,34 @@
 # limitations under the License.
 #
 
-from collections import namedtuple
-
 __all__ = ["SparkJobInfo", "SparkStageInfo", "StatusTracker"]
 
-from typing import Optional, List
+from typing import Optional, List, NamedTuple
 
+from py4j.java_collections import JavaArray  # type: ignore[import]
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 
-class SparkJobInfo(namedtuple("SparkJobInfo", "jobId stageIds status")):
+class SparkJobInfo(NamedTuple):
     """
     Exposes information about Spark Jobs.
     """
+    jobId: int
+    stageIds: JavaArray
+    status: str
 
 
-class SparkStageInfo(namedtuple("SparkStageInfo",
-                                "stageId currentAttemptId name numTasks numActiveTasks "
-                                "numCompletedTasks numFailedTasks")):
+class SparkStageInfo(NamedTuple):
     """
     Exposes information about Spark Stages.
     """
+    stageId: int
+    currentAttemptId: int
+    name: str
+    numTasks: int
+    numActiveTasks: int
+    numCompletedTasks: int
+    numFailedTasks: int
 
 
 class StatusTracker(object):
