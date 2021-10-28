@@ -496,10 +496,11 @@ def read_json(
     0         a     b
     1         c     d
     """
-    index_col is None and log_advice(  # type: ignore[func-returns-value]
-        "If `index_col` is not specified for `read_json`, "
-        "the default index is attached which can cause additional overhead."
-    )
+    if index_col is None:
+        log_advice(
+            "If `index_col` is not specified for `read_json`, "
+            "the default index is attached which can cause additional overhead."
+        )
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")
 
@@ -585,10 +586,11 @@ def read_delta(
     3      13
     4      14
     """
-    index_col is None and log_advice(  # type: ignore[func-returns-value]
-        "If `index_col` is not specified for `read_delta`, "
-        "the default index is attached which can cause additional overhead."
-    )
+    if index_col is None:
+        log_advice(
+            "If `index_col` is not specified for `read_delta`, "
+            "the default index is attached which can cause additional overhead."
+        )
     if version is not None and timestamp is not None:
         raise ValueError("version and timestamp cannot be used together.")
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
@@ -637,10 +639,11 @@ def read_table(name: str, index_col: Optional[Union[str, List[str]]] = None) -> 
     index
     0       0
     """
-    index_col is None and log_advice(  # type: ignore[func-returns-value]
-        "If `index_col` is not specified for `read_table`, "
-        "the default index is attached which can cause additional overhead."
-    )
+    if index_col is None:
+        log_advice(
+            "If `index_col` is not specified for `read_table`, "
+            "the default index is attached which can cause additional overhead."
+        )
     sdf = default_session().read.table(name)
     index_spark_columns, index_names = _get_index_map(sdf, index_col)
 
@@ -784,10 +787,11 @@ def read_parquet(
     index
     0       0
     """
-    index_col is None and log_advice(  # type: ignore[func-returns-value]
-        "If `index_col` is not specified for `read_parquet`, "
-        "the default index is attached which can cause additional overhead."
-    )
+    if index_col is None:
+        log_advice(
+            "If `index_col` is not specified for `read_parquet`, "
+            "the default index is attached which can cause additional overhead."
+        )
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")
 

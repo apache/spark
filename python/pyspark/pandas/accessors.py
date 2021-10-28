@@ -351,7 +351,7 @@ class PandasOnSparkFrameMethods(object):
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
             log_advice(
                 "If the type hints is not specified for `apply_batch`, "
-                "it could be expensive for inferring the type internally."
+                "it is expensive to infer the data type internally."
             )
             limit = ps.get_option("compute.shortcut_limit")
             pdf = self_applied.head(limit + 1)._to_internal_pandas()
@@ -591,7 +591,7 @@ class PandasOnSparkFrameMethods(object):
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
             log_advice(
                 "If the type hints is not specified for `transform_batch`, "
-                "it could be expensive for inferring the type internally."
+                "it is expensive to infer the data type internally."
             )
             limit = ps.get_option("compute.shortcut_limit")
             pdf = self._psdf.head(limit + 1)._to_internal_pandas()

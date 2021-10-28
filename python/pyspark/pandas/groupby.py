@@ -1202,7 +1202,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             # Here we execute with the first 1000 to get the return type.
             log_advice(
                 "If the type hints is not specified for `grouby.apply`, "
-                "it could be expensive for inferring the type internally."
+                "it is expensive to infer the data type internally."
             )
             limit = get_option("compute.shortcut_limit")
             pdf = psdf.head(limit + 1)._to_internal_pandas()
@@ -2271,7 +2271,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
             log_advice(
                 "If the type hints is not specified for `grouby.transform`, "
-                "it could be expensive for inferring the type internally."
+                "it is expensive to infer the data type internally."
             )
             limit = get_option("compute.shortcut_limit")
             pdf = psdf.head(limit + 1)._to_internal_pandas()
