@@ -91,7 +91,7 @@ class RatePerMicroBatchTable(
     startTimestamp: Long,
     advanceMillisPerBatch: Int) extends Table with SupportsRead {
   override def name(): String = {
-    s"RatePerEpoch(rowsPerBatch=$rowsPerBatch, numPartitions=$numPartitions," +
+    s"RatePerMicroBatch(rowsPerBatch=$rowsPerBatch, numPartitions=$numPartitions," +
       s"startTimestamp=$startTimestamp, advanceMillisPerBatch=$advanceMillisPerBatch)"
   }
 

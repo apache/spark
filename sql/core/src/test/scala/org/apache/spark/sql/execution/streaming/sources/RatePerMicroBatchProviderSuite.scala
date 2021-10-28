@@ -121,7 +121,7 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
     testIllegalOptionValue("numPartitions", "-1", Seq("-1", "numPartitions", "positive"))
     testIllegalOptionValue("numPartitions", "0", Seq("0", "numPartitions", "positive"))
 
-    // RatePerEpochProvider allows setting below options to 0
+    // RatePerMicroBatchProvider allows setting below options to 0
     testIllegalOptionValue("advanceMillisPerBatch", "-1",
       Seq("-1", "advanceMillisPerBatch", "non-negative"))
     testIllegalOptionValue("startTimestamp", "-1", Seq("-1", "startTimestamp", "non-negative"))
