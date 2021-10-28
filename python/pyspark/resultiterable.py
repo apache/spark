@@ -16,25 +16,31 @@
 #
 
 from collections.abc import Iterable
+from typing import TypeVar, TYPE_CHECKING, Type, Iterator
+
+if TYPE_CHECKING:
+    from pyspark._typing import SizedIterable
 
 
 __all__ = ["ResultIterable"]
 
+T = TypeVar("T")
 
-class ResultIterable(Iterable):
+
+class ResultIterable(Type["SizedIterable[T]"]):  # type: ignore[misc]
 
     """
     A special result iterable. This is used because the standard
     iterator can not be pickled
     """
 
-    def __init__(self, data):
-        self.data = data
-        self.index = 0
-        self.maxindex = len(data)
+    def __init__(self, data: "SizedIterable[T]"):
+        self.data: "SizedIterable[T]" = data
+        self.index: int = 0
+        self.maxindex: int = len(data)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[T]:
         return iter(self.data)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.data)
