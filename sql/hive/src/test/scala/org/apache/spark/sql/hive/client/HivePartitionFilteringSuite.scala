@@ -63,6 +63,8 @@ class HivePartitionFilteringSuite(version: String)
     properties = Map.empty
   )
 
+  private var directSqlClient: HiveClient = _
+
   private def init(tryDirectSql: Boolean): HiveClient = {
     val hadoopConf = new Configuration()
     hadoopConf.setBoolean(tryDirectSqlKey, tryDirectSql)
@@ -112,12 +114,13 @@ class HivePartitionFilteringSuite(version: String)
   override def beforeAll(): Unit = {
     super.beforeAll()
     client = init(true)
+    directSqlClient = init(false)
   }
 
   test(s"getPartitionsByFilter returns all partitions when $fallbackKey=true") {
     withSQLConf(fallbackKey -> "true") {
-      val client = init(false)
-      val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test"),
+      val filteredPartitions = directSqlClient.getPartitionsByFilter(
+        directSqlClient.getTable("default", "test"),
         Seq(attr("ds") === 20170101))
 
       assert(filteredPartitions.size == testPartitionCount)
@@ -126,9 +129,8 @@ class HivePartitionFilteringSuite(version: String)
 
   test(s"getPartitionsByFilter should fail when $fallbackKey=false") {
     withSQLConf(fallbackKey -> "false") {
-      val client = init(false)
       val e = intercept[RuntimeException](
-        client.getPartitionsByFilter(client.getTable("default", "test"),
+        directSqlClient.getPartitionsByFilter(directSqlClient.getTable("default", "test"),
           Seq(attr("ds") === 20170101)))
       assert(e.getMessage.contains("Caught Hive MetaException"))
     }
@@ -623,8 +625,8 @@ class HivePartitionFilteringSuite(version: String)
 
   test(s"getPartitionsByFilter: ds=20170101 when $fallbackKey=true") {
     withSQLConf(fallbackKey -> "true", pruningFastFallback -> "true") {
-      val client = init(false)
-      val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test"),
+      val filteredPartitions = directSqlClient.getPartitionsByFilter(
+        directSqlClient.getTable("default", "test"),
         Seq(attr("ds") === 20170101))
 
       assert(filteredPartitions.size == 1 * hValue.size * chunkValue.size *
