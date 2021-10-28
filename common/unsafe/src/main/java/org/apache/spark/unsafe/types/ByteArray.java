@@ -332,13 +332,13 @@ public final class ByteArray {
     final int len1 = bytes1.length;
     final int len2 = bytes2.length;
     if (isTwoArgs && len1 != len2) {
-      throw new IllegalArgumentException("Two-argument " + opname + " cannot operate on BINARY "
+      throw new IllegalArgumentException("Two-argument " + opname + " cannot operate on BINARY " +
               "values with unequal byte length; use the three-argument overload instead.");
     }
     final boolean isLeftPadding = padding.toLowerCase().equals(LPAD_UTF8);
     final boolean isRightPadding = padding.toLowerCase().equals(RPAD_UTF8);
     if (!isTwoArgs && !isLeftPadding && !isRightPadding) {
-      throw new IllegalArgumentException("Third argument for " + opname + " is invalid; valid "
+      throw new IllegalArgumentException("Third argument for " + opname + " is invalid; valid " +
               "values are 'lpad' and 'rpad' (case insensitive)");
     }
     // Compute the length of the result (maximum of the lengths of the inputs).
