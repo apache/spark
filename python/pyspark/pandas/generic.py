@@ -37,7 +37,7 @@ from typing import (
 )
 import warnings
 
-import numpy as np  # noqa: F401
+import numpy as np
 import pandas as pd
 from pandas.api.types import is_list_like
 
@@ -74,14 +74,15 @@ from pyspark.pandas.utils import (
     validate_axis,
     validate_mode,
     SPARK_CONF_ARROW_ENABLED,
+    log_advice,
 )
 
 if TYPE_CHECKING:
-    from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.indexes.base import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.groupby import GroupBy  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.window import Rolling, Expanding  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.frame import DataFrame
+    from pyspark.pandas.indexes.base import Index
+    from pyspark.pandas.groupby import GroupBy
+    from pyspark.pandas.series import Series
+    from pyspark.pandas.window import Rolling, Expanding
 
 
 bool_type = bool
@@ -573,6 +574,10 @@ class Frame(object, metaclass=ABCMeta):
         >>> ps.Series(['a', 'b', 'a']).to_numpy()
         array(['a', 'b', 'a'], dtype=object)
         """
+        log_advice(
+            "`to_numpy` loads all data into the driver's memory. "
+            "It should only be used if the resulting NumPy ndarray is expected to be small."
+        )
         return self.to_pandas().values
 
     @property
@@ -874,7 +879,7 @@ class Frame(object, metaclass=ABCMeta):
         builder = sdf.write.mode(mode)
         if partition_cols is not None:
             builder.partitionBy(partition_cols)
-        builder._set_opts(  # type: ignore[attr-defined]
+        builder._set_opts(
             sep=sep,
             nullValue=na_rep,
             header=header,
@@ -1022,7 +1027,7 @@ class Frame(object, metaclass=ABCMeta):
         builder = sdf.write.mode(mode)
         if partition_cols is not None:
             builder.partitionBy(partition_cols)
-        builder._set_opts(compression=compression)  # type: ignore[attr-defined]
+        builder._set_opts(compression=compression)
         builder.options(**options).format("json").save(path)
         return None
 
@@ -1142,6 +1147,10 @@ class Frame(object, metaclass=ABCMeta):
 
         >>> df1.to_excel('output1.xlsx', engine='xlsxwriter')  # doctest: +SKIP
         """
+        log_advice(
+            "`to_excel` loads all data into the driver's memory. "
+            "It should only be used if the resulting DataFrame is expected to be small."
+        )
         # Make sure locals() call is at the top of the function so we don't capture local variables.
         args = locals()
         psdf = self
@@ -2997,6 +3006,10 @@ class Frame(object, metaclass=ABCMeta):
             raise NotImplementedError(
                 "`to_markdown()` only supported in pandas-on-Spark with pandas >= 1.0.0"
             )
+        log_advice(
+            "`to_markdown` loads all data into the driver's memory. "
+            "It should only be used if the resulting pandas object is expected to be small."
+        )
         # Make sure locals() call is at the top of the function so we don't capture local variables.
         args = locals()
         psser_or_psdf = self

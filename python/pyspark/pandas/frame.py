@@ -56,7 +56,7 @@ from pandas.api.types import is_list_like, is_dict_like, is_scalar
 from pandas.tseries.frequencies import DateOffset, to_offset
 
 if TYPE_CHECKING:
-    from pandas.io.formats.style import Styler  # noqa: F401 (SPARK-34943)
+    from pandas.io.formats.style import Styler
 
 if LooseVersion(pd.__version__) >= LooseVersion("0.24"):
     from pandas.core.dtypes.common import infer_dtype_from_object
@@ -67,12 +67,11 @@ from pandas.core.dtypes.inference import is_sequence
 from pyspark import StorageLevel
 from pyspark.sql import Column, DataFrame as SparkDataFrame, functions as F
 from pyspark.sql.functions import pandas_udf
-from pyspark.sql.types import (  # noqa: F401 (SPARK-34943)
+from pyspark.sql.types import (
     ArrayType,
     BooleanType,
     DataType,
     DoubleType,
-    FloatType,
     NumericType,
     Row,
     StringType,
@@ -104,6 +103,7 @@ from pyspark.pandas.utils import (
     validate_how,
     validate_mode,
     verify_temp_column_name,
+    log_advice,
 )
 from pyspark.pandas.generic import Frame
 from pyspark.pandas.internal import (
@@ -131,11 +131,11 @@ from pyspark.pandas.typedef.typehints import (
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import OptionalPrimitiveType  # noqa: F401 (SPARK-34943)
+    from pyspark.sql._typing import OptionalPrimitiveType
 
-    from pyspark.pandas.groupby import DataFrameGroupBy  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.groupby import DataFrameGroupBy
+    from pyspark.pandas.indexes import Index
+    from pyspark.pandas.series import Series
 
 
 # These regular expression patterns are complied and defined here to avoid to compile the same
@@ -2481,6 +2481,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified for `apply`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = get_option("compute.shortcut_limit")
             pdf = self_applied.head(limit + 1)._to_internal_pandas()
             applied = pdf.apply(func, axis=axis, args=args, **kwds)
@@ -2721,6 +2725,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified for `transform`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = get_option("compute.shortcut_limit")
             pdf = self.head(limit + 1)._to_internal_pandas()
             transformed = pdf.transform(func, axis, *args, **kwargs)
@@ -4531,6 +4539,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         index_col: Optional[Union[str, List[str]]] = None,
         **options: Any
     ) -> None:
+        if index_col is None:
+            log_advice(
+                "If `index_col` is not specified for `to_table`, "
+                "the existing index is lost when converting to table."
+            )
         mode = validate_mode(mode)
         return self.spark.to_table(name, format, mode, partition_cols, index_col, **options)
 
@@ -4604,6 +4617,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> df.to_delta('%s/to_delta/bar' % path,
         ...             mode='overwrite', replaceWhere='date >= "2012-01-01"')  # doctest: +SKIP
         """
+        if index_col is None:
+            log_advice(
+                "If `index_col` is not specified for `to_delta`, "
+                "the existing index is lost when converting to Delta."
+            )
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore[assignment]
 
@@ -4681,6 +4699,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     mode = 'overwrite',
         ...     partition_cols=['date', 'country'])
         """
+        if index_col is None:
+            log_advice(
+                "If `index_col` is not specified for `to_parquet`, "
+                "the existing index is lost when converting to Parquet."
+            )
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")
 
@@ -4753,6 +4776,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     mode = 'overwrite',
         ...     partition_cols=['date', 'country'])
         """
+        if index_col is None:
+            log_advice(
+                "If `index_col` is not specified for `to_orc`, "
+                "the existing index is lost when converting to ORC."
+            )
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore[assignment]
 
@@ -4787,6 +4815,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     to_spark_io.__doc__ = SparkFrameMethods.to_spark_io.__doc__
 
     def to_spark(self, index_col: Optional[Union[str, List[str]]] = None) -> SparkDataFrame:
+        if index_col is None:
+            log_advice(
+                "If `index_col` is not specified for `to_spark`, "
+                "the existing index is lost when converting to Spark DataFrame."
+            )
         return self.spark.frame(index_col)
 
     to_spark.__doc__ = SparkFrameMethods.__doc__
@@ -4809,6 +4842,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2   0.6   0.0
         3   0.2   0.1
         """
+        log_advice(
+            "`to_pandas` loads all data into the driver's memory. "
+            "It should only be used if the resulting pandas DataFrame is expected to be small."
+        )
         return self._internal.to_pandas_frame.copy()
 
     def assign(self, **kwargs: Any) -> "DataFrame":
@@ -6416,14 +6453,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4  1   True  1.0
         5  2  False  2.0
         """
-        from pyspark.sql.types import _parse_datatype_string  # type: ignore[attr-defined]
+        from pyspark.sql.types import _parse_datatype_string
 
+        include_list: List[str]
         if not is_list_like(include):
-            include_list = [include] if include is not None else []
+            include_list = [cast(str, include)] if include is not None else []
         else:
             include_list = list(include)
+        exclude_list: List[str]
         if not is_list_like(exclude):
-            exclude_list = [exclude] if exclude is not None else []
+            exclude_list = [cast(str, exclude)] if exclude is not None else []
         else:
             exclude_list = list(exclude)
 

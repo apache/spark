@@ -23,7 +23,7 @@ import numpy as np
 
 from pyspark import SparkContext
 from pyspark.sql import functions as F
-from pyspark.sql.column import (  # type: ignore[attr-defined]
+from pyspark.sql.column import (
     Column,
     _to_java_column,
     _create_column_from_literal,

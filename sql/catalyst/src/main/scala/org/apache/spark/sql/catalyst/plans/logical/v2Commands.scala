@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.connector.write.Write
 import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
 
@@ -688,17 +688,6 @@ case class DescribeFunction(child: LogicalPlan, isExtended: Boolean) extends Una
 }
 
 /**
- * The logical plan of the CREATE TEMPORARY FUNCTION command.
- */
-case class CreateTempFunction(
-    nameParts: Seq[String],
-    className: String,
-    resources: Seq[FunctionResource],
-    ifExists: Boolean,
-    replace: Boolean) extends LeafCommand {
-}
-
-/**
  * The logical plan of the CREATE FUNCTION command.
  */
 case class CreateFunction(
@@ -958,6 +947,25 @@ case class AlterViewAs(
 }
 
 /**
+ * The logical plan of the CREATE VIEW ... command.
+ */
+case class CreateView(
+    child: LogicalPlan,
+    userSpecifiedColumns: Seq[(String, Option[String])],
+    comment: Option[String],
+    properties: Map[String, String],
+    originalText: Option[String],
+    query: LogicalPlan,
+    allowExisting: Boolean,
+    replace: Boolean) extends BinaryCommand {
+  override def left: LogicalPlan = child
+  override def right: LogicalPlan = query
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
+    copy(child = newLeft, query = newRight)
+}
+
+/**
  * The logical plan of the ALTER VIEW ... SET TBLPROPERTIES command.
  */
 case class SetViewProperties(
@@ -1047,4 +1055,18 @@ case class UncacheTable(
   override def childrenToAnalyze: Seq[LogicalPlan] = table :: Nil
 
   override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
+}
+
+/**
+ * The logical plan of the CREATE INDEX command.
+ */
+case class CreateIndex(
+    child: LogicalPlan,
+    indexName: String,
+    indexType: String,
+    ignoreIfExists: Boolean,
+    columns: Seq[(NamedReference, Map[String, String])],
+    properties: Map[String, String]) extends UnaryCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): CreateIndex =
+    copy(child = newChild)
 }

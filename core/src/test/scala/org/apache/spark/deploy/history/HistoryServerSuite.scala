@@ -91,7 +91,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val securityManager = HistoryServer.createSecurityManager(conf)
 
     server = new HistoryServer(conf, provider, securityManager, 18080)
-    server.initialize()
     server.bind()
     provider.start()
     port = server.boundPort
@@ -413,7 +412,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     }
 
     server = new HistoryServer(myConf, provider, securityManager, 0)
-    server.initialize()
     server.bind()
     provider.start()
     val port = server.boundPort

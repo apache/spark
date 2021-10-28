@@ -18,7 +18,7 @@
 """
 Wrappers around spark that correspond to common pandas functions.
 """
-from typing import (  # noqa: F401 (SPARK-34943)
+from typing import (
     Any,
     Callable,
     Dict,
@@ -31,7 +31,6 @@ from typing import (  # noqa: F401 (SPARK-34943)
     Union,
     cast,
     no_type_check,
-    overload,
 )
 from collections import OrderedDict
 from collections.abc import Iterable
@@ -67,7 +66,7 @@ from pyspark.sql.types import (
     DataType,
 )
 
-from pyspark import pandas as ps  # noqa: F401
+from pyspark import pandas as ps
 from pyspark.pandas._typing import Axis, Dtype, Label, Name
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.utils import (
@@ -79,6 +78,7 @@ from pyspark.pandas.utils import (
     same_anchor,
     scol_for,
     validate_axis,
+    log_advice,
 )
 from pyspark.pandas.frame import DataFrame, _reduce_spark_multi
 from pyspark.pandas.internal import (
@@ -414,6 +414,10 @@ def read_csv(
             (label, col) for label, col in column_labels.items() if label not in index_col
         )
     else:
+        log_advice(
+            "If `index_col` is not specified for `read_csv`, "
+            "the default index is attached which can cause additional overhead."
+        )
         index_spark_column_names = []
         index_names = []
 
@@ -492,6 +496,11 @@ def read_json(
     0         a     b
     1         c     d
     """
+    if index_col is None:
+        log_advice(
+            "If `index_col` is not specified for `read_json`, "
+            "the default index is attached which can cause additional overhead."
+        )
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")
 
@@ -577,6 +586,11 @@ def read_delta(
     3      13
     4      14
     """
+    if index_col is None:
+        log_advice(
+            "If `index_col` is not specified for `read_delta`, "
+            "the default index is attached which can cause additional overhead."
+        )
     if version is not None and timestamp is not None:
         raise ValueError("version and timestamp cannot be used together.")
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
@@ -625,6 +639,11 @@ def read_table(name: str, index_col: Optional[Union[str, List[str]]] = None) -> 
     index
     0       0
     """
+    if index_col is None:
+        log_advice(
+            "If `index_col` is not specified for `read_table`, "
+            "the default index is attached which can cause additional overhead."
+        )
     sdf = default_session().read.table(name)
     index_spark_columns, index_names = _get_index_map(sdf, index_col)
 
@@ -768,6 +787,11 @@ def read_parquet(
     index
     0       0
     """
+    if index_col is None:
+        log_advice(
+            "If `index_col` is not specified for `read_parquet`, "
+            "the default index is attached which can cause additional overhead."
+        )
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")
 
@@ -1643,21 +1667,25 @@ def to_datetime(
         "months": "month",
         "day": "day",
         "days": "day",
+        "hour": "h",
+        "hours": "h",
+        "minute": "m",
+        "minutes": "m",
+        "second": "s",
+        "seconds": "s",
+        "ms": "ms",
+        "millisecond": "ms",
+        "milliseconds": "ms",
+        "us": "us",
+        "microsecond": "us",
+        "microseconds": "us",
     }
 
-    # replace passed unit with _unit_map
-    def f(value):
-        if value in _unit_map:
-            return _unit_map[value]
-
-        if value.lower() in _unit_map:
-            return _unit_map[value.lower()]
-
-        return value
-
-    def pandas_to_datetime(pser_or_pdf: Union[pd.DataFrame, pd.Series]) -> Series[np.datetime64]:
+    def pandas_to_datetime(
+        pser_or_pdf: Union[pd.DataFrame, pd.Series], cols: Optional[List[str]] = None
+    ) -> Series[np.datetime64]:
         if isinstance(pser_or_pdf, pd.DataFrame):
-            pser_or_pdf = pser_or_pdf[[unit_rev["year"], unit_rev["month"], unit_rev["day"]]]
+            pser_or_pdf = pser_or_pdf[cols]
         return pd.to_datetime(
             pser_or_pdf,
             errors=errors,
@@ -1670,10 +1698,16 @@ def to_datetime(
     if isinstance(arg, Series):
         return arg.pandas_on_spark.transform_batch(pandas_to_datetime)
     if isinstance(arg, DataFrame):
-        unit = {k: f(k) for k in arg.keys()}
+        unit = {k: _unit_map[k.lower()] for k in arg.keys() if k.lower() in _unit_map}
         unit_rev = {v: k for k, v in unit.items()}
-        psdf = arg[[unit_rev["year"], unit_rev["month"], unit_rev["day"]]]
-        return psdf.pandas_on_spark.transform_batch(pandas_to_datetime)
+        list_cols = [unit_rev["year"], unit_rev["month"], unit_rev["day"]]
+        for u in ["h", "m", "s", "ms", "us"]:
+            value = unit_rev.get(u)
+            if value is not None and value in arg:
+                list_cols.append(value)
+
+        psdf = arg[list_cols]
+        return psdf.pandas_on_spark.transform_batch(pandas_to_datetime, list_cols)
     return pd.to_datetime(
         arg,
         errors=errors,

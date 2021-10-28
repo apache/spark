@@ -129,10 +129,9 @@ abstract class ParquetAggregatePushDownSuite
         .write.partitionBy("p").parquet(dir.getCanonicalPath)
       withTempView("tmp") {
         spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
-        val enableVectorizedReader = Seq("false", "true")
-        for (testVectorizedReader <- enableVectorizedReader) {
+        Seq("false", "true").foreach { enableVectorizedReader =>
           withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
-            vectorizedReaderEnabledKey -> testVectorizedReader) {
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
             val count = sql("SELECT COUNT(p) FROM tmp")
             count.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>
@@ -221,7 +220,7 @@ abstract class ParquetAggregatePushDownSuite
     }
   }
 
-  test("aggregate push down - query with filter not push down") {
+  test("aggregate push down - aggregate with data filter cannot be pushed down") {
     val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
       (9, "mno", 7), (2, null, 7))
     withParquetTable(data, "t") {
@@ -236,6 +235,29 @@ abstract class ParquetAggregatePushDownSuite
             checkKeywordsExistsInExplain(selectAgg, expected_plan_fragment)
         }
         checkAnswer(selectAgg, Seq(Row(2)))
+      }
+    }
+  }
+
+  test("aggregate push down - aggregate with partition filter can be pushed down") {
+    withTempPath { dir =>
+      spark.range(10).selectExpr("id", "id % 3 as p")
+        .write.partitionBy("p").parquet(dir.getCanonicalPath)
+      withTempView("tmp") {
+        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+        Seq("false", "true").foreach { enableVectorizedReader =>
+          withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            val max = sql("SELECT max(id), min(id), count(id) FROM tmp WHERE p = 0")
+            max.queryExecution.optimizedPlan.collect {
+              case _: DataSourceV2ScanRelation =>
+                val expected_plan_fragment =
+                  "PushedAggregation: [MAX(id), MIN(id), COUNT(id)]"
+                checkKeywordsExistsInExplain(max, expected_plan_fragment)
+            }
+            checkAnswer(max, Seq(Row(9, 0, 4)))
+          }
+        }
       }
     }
   }
@@ -356,94 +378,90 @@ abstract class ParquetAggregatePushDownSuite
       spark.createDataFrame(rdd, schema).write.parquet(file.getCanonicalPath)
       withTempView("test") {
         spark.read.parquet(file.getCanonicalPath).createOrReplaceTempView("test")
-        val enableVectorizedReader = Seq("false", "true")
-        for (testVectorizedReader <- enableVectorizedReader) {
+        Seq("false", "true").foreach { enableVectorizedReader =>
           withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
-            vectorizedReaderEnabledKey -> testVectorizedReader) {
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
 
-            val testMinWithTS = sql("SELECT min(StringCol), min(BooleanCol), min(ByteCol), " +
+            val testMinWithAllTypes = sql("SELECT min(StringCol), min(BooleanCol), min(ByteCol), " +
               "min(BinaryCol), min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +
               "min(DoubleCol), min(DecimalCol), min(DateCol), min(TimestampCol) FROM test")
 
             // INT96 (Timestamp) sort order is undefined, parquet doesn't return stats for this type
             // so aggregates are not pushed down
-            testMinWithTS.queryExecution.optimizedPlan.collect {
+            // In addition, Parquet Binary min/max could be truncated, so we disable aggregate
+            // push down for Parquet Binary (could be Spark StringType, BinaryType or DecimalType)
+            testMinWithAllTypes.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>
                 val expected_plan_fragment =
                   "PushedAggregation: []"
-                checkKeywordsExistsInExplain(testMinWithTS, expected_plan_fragment)
+                checkKeywordsExistsInExplain(testMinWithAllTypes, expected_plan_fragment)
             }
 
-            checkAnswer(testMinWithTS, Seq(Row("a string", false, 1.toByte, "Parquet".getBytes,
-              2.toShort, 3, -9223372036854775808L, 0.15.toFloat, 0.75D, 1.23457,
-              ("2004-06-19").date, ("1999-08-26 10:43:59.123").ts)))
+            checkAnswer(testMinWithAllTypes, Seq(Row("a string", false, 1.toByte,
+              "Parquet".getBytes, 2.toShort, 3, -9223372036854775808L, 0.15.toFloat, 0.75D,
+              1.23457, ("2004-06-19").date, ("1999-08-26 10:43:59.123").ts)))
 
-            val testMinWithOutTS = sql("SELECT min(StringCol), min(BooleanCol), min(ByteCol), " +
-              "min(BinaryCol), min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +
-              "min(DoubleCol), min(DecimalCol), min(DateCol) FROM test")
+            val testMinWithOutTSAndBinary = sql("SELECT min(BooleanCol), min(ByteCol), " +
+              "min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +
+              "min(DoubleCol), min(DateCol) FROM test")
 
-            testMinWithOutTS.queryExecution.optimizedPlan.collect {
+            testMinWithOutTSAndBinary.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>
                 val expected_plan_fragment =
-                  "PushedAggregation: [MIN(StringCol), " +
-                    "MIN(BooleanCol), " +
+                  "PushedAggregation: [MIN(BooleanCol), " +
                     "MIN(ByteCol), " +
-                    "MIN(BinaryCol), " +
                     "MIN(ShortCol), " +
                     "MIN(IntegerCol), " +
                     "MIN(LongCol), " +
                     "MIN(FloatCol), " +
                     "MIN(DoubleCol), " +
-                    "MIN(DecimalCol), " +
                     "MIN(DateCol)]"
-                checkKeywordsExistsInExplain(testMinWithOutTS, expected_plan_fragment)
+                checkKeywordsExistsInExplain(testMinWithOutTSAndBinary, expected_plan_fragment)
             }
 
-            checkAnswer(testMinWithOutTS, Seq(Row("a string", false, 1.toByte, "Parquet".getBytes,
-              2.toShort, 3, -9223372036854775808L, 0.15.toFloat, 0.75D, 1.23457,
-              ("2004-06-19").date)))
+            checkAnswer(testMinWithOutTSAndBinary, Seq(Row(false, 1.toByte,
+              2.toShort, 3, -9223372036854775808L, 0.15.toFloat, 0.75D, ("2004-06-19").date)))
 
-            val testMaxWithTS = sql("SELECT max(StringCol), max(BooleanCol), max(ByteCol), " +
-              "max(BinaryCol), max(ShortCol), max(IntegerCol), max(LongCol), max(FloatCol), " +
-              "max(DoubleCol), max(DecimalCol), max(DateCol), max(TimestampCol) FROM test")
+            val testMaxWithAllTypes = sql("SELECT max(StringCol), max(BooleanCol), " +
+              "max(ByteCol), max(BinaryCol), max(ShortCol), max(IntegerCol), max(LongCol), " +
+              "max(FloatCol), max(DoubleCol), max(DecimalCol), max(DateCol), max(TimestampCol) " +
+              "FROM test")
 
             // INT96 (Timestamp) sort order is undefined, parquet doesn't return stats for this type
             // so aggregates are not pushed down
-            testMaxWithTS.queryExecution.optimizedPlan.collect {
+            // In addition, Parquet Binary min/max could be truncated, so we disable aggregate
+            // push down for Parquet Binary (could be Spark StringType, BinaryType or DecimalType)
+            testMaxWithAllTypes.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>
                 val expected_plan_fragment =
                   "PushedAggregation: []"
-                checkKeywordsExistsInExplain(testMaxWithTS, expected_plan_fragment)
+                checkKeywordsExistsInExplain(testMaxWithAllTypes, expected_plan_fragment)
             }
 
-            checkAnswer(testMaxWithTS, Seq(Row("test string", true, 16.toByte,
+            checkAnswer(testMaxWithAllTypes, Seq(Row("test string", true, 16.toByte,
               "Spark SQL".getBytes, 222.toShort, 113, 9223372036854775807L, 0.25.toFloat, 0.85D,
               12345.678, ("2021-01-01").date, ("2021-01-01 23:50:59.123").ts)))
 
-            val testMaxWithoutTS = sql("SELECT max(StringCol), max(BooleanCol), max(ByteCol), " +
-              "max(BinaryCol), max(ShortCol), max(IntegerCol), max(LongCol), max(FloatCol), " +
-              "max(DoubleCol), max(DecimalCol), max(DateCol) FROM test")
+            val testMaxWithoutTSAndBinary = sql("SELECT max(BooleanCol), max(ByteCol), " +
+              "max(ShortCol), max(IntegerCol), max(LongCol), max(FloatCol), " +
+              "max(DoubleCol), max(DateCol) FROM test")
 
-            testMaxWithoutTS.queryExecution.optimizedPlan.collect {
+            testMaxWithoutTSAndBinary.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>
                 val expected_plan_fragment =
-                  "PushedAggregation: [MAX(StringCol), " +
-                    "MAX(BooleanCol), " +
+                  "PushedAggregation: [MAX(BooleanCol), " +
                     "MAX(ByteCol), " +
-                    "MAX(BinaryCol), " +
                     "MAX(ShortCol), " +
                     "MAX(IntegerCol), " +
                     "MAX(LongCol), " +
                     "MAX(FloatCol), " +
                     "MAX(DoubleCol), " +
-                    "MAX(DecimalCol), " +
                     "MAX(DateCol)]"
-                checkKeywordsExistsInExplain(testMaxWithoutTS, expected_plan_fragment)
+                checkKeywordsExistsInExplain(testMaxWithoutTSAndBinary, expected_plan_fragment)
             }
 
-            checkAnswer(testMaxWithoutTS, Seq(Row("test string", true, 16.toByte,
-              "Spark SQL".getBytes, 222.toShort, 113, 9223372036854775807L, 0.25.toFloat, 0.85D,
-              12345.678, ("2021-01-01").date)))
+            checkAnswer(testMaxWithoutTSAndBinary, Seq(Row(true, 16.toByte,
+              222.toShort, 113, 9223372036854775807L, 0.25.toFloat, 0.85D, ("2021-01-01").date)))
 
             val testCount = sql("SELECT count(StringCol), count(BooleanCol)," +
               " count(ByteCol), count(BinaryCol), count(ShortCol), count(IntegerCol)," +
@@ -477,10 +495,9 @@ abstract class ParquetAggregatePushDownSuite
   }
 
   test("aggregate push down - column name case sensitivity") {
-    val enableVectorizedReader = Seq("false", "true")
-    for (testVectorizedReader <- enableVectorizedReader) {
+    Seq("false", "true").foreach { enableVectorizedReader =>
       withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
-        vectorizedReaderEnabledKey -> testVectorizedReader) {
+        vectorizedReaderEnabledKey -> enableVectorizedReader) {
         withTempPath { dir =>
           spark.range(10).selectExpr("id", "id % 3 as p")
             .write.partitionBy("p").parquet(dir.getCanonicalPath)

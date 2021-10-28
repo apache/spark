@@ -806,6 +806,17 @@ The following extra configuration options are available when the shuffle service
     NodeManager.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.shuffle.service.logs.namespace</code></td>
+  <td><code>(not set)</code></td>
+  <td>
+    A namespace which will be appended to the class name when forming the logger name to use for
+    emitting logs from the YARN shuffle service, like
+    <code>org.apache.spark.network.yarn.YarnShuffleService.logsNamespaceValue</code>. Since some logging frameworks
+    may expect the logger name to look like a class name, it's generally recommended to provide a value which
+    would be a valid Java package or class name and not include spaces.
+  </td>
+</tr>
 </table>
 
 Please note that the instructions above assume that the default shuffle service name,

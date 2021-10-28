@@ -2732,6 +2732,17 @@ object functions {
   }
 
   /**
+   * Left-pad the binary column with pad to a byte length of len. If the binary column is longer
+   * than len, the return value is shortened to len bytes.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def lpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
+    StringLPad(str.expr, lit(len).expr, lit(pad).expr)
+  }
+
+  /**
    * Trim the spaces from left end for the specified string value.
    *
    * @group string_funcs
@@ -2806,6 +2817,17 @@ object functions {
    * @since 1.5.0
    */
   def rpad(str: Column, len: Int, pad: String): Column = withExpr {
+    StringRPad(str.expr, lit(len).expr, lit(pad).expr)
+  }
+
+  /**
+   * Right-pad the binary column with pad to a byte length of len. If the binary column is longer
+   * than len, the return value is shortened to len bytes.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def rpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
     StringRPad(str.expr, lit(len).expr, lit(pad).expr)
   }
 

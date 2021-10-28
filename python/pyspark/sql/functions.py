@@ -38,7 +38,7 @@ from typing import (
 
 from pyspark import since, SparkContext
 from pyspark.rdd import PythonEvalType
-from pyspark.sql.column import (  # type: ignore[attr-defined]
+from pyspark.sql.column import (
     Column,
     _to_java_column,
     _to_seq,
@@ -47,7 +47,7 @@ from pyspark.sql.column import (  # type: ignore[attr-defined]
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import ArrayType, DataType, StringType, StructType
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
-from pyspark.sql.udf import UserDefinedFunction, _create_udf  # type: ignore[attr-defined] # noqa: F401
+from pyspark.sql.udf import UserDefinedFunction, _create_udf  # noqa: F401
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
 from pyspark.sql.utils import to_str
@@ -109,7 +109,7 @@ def _invoke_binary_math_function(name: str, col1: Any, col2: Any) -> Column:
     )
 
 
-def _options_to_str(options: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+def _options_to_str(options: Optional[Dict[str, Any]] = None) -> Dict[str, Optional[str]]:
     if options:
         return {key: to_str(value) for (key, value) in options.items()}
     return {}
@@ -200,7 +200,6 @@ def min(col: "ColumnOrName") -> Column:
     return _invoke_function_over_column("min", col)
 
 
-@since(3.3)
 def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     """
     Returns the value associated with the maximum value of ord.
@@ -236,7 +235,6 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     return _invoke_function("max_by", _to_java_column(col), _to_java_column(ord))
 
 
-@since(3.3)
 def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     """
     Returns the value associated with the minimum value of ord.
@@ -876,8 +874,8 @@ def collect_set(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df2 = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
-    >>> df2.agg(collect_set('age')).collect()
-    [Row(collect_set(age)=[5, 2])]
+    >>> df2.agg(array_sort(collect_set('age')).alias('c')).collect()
+    [Row(c=[2, 5])]
     """
     return _invoke_function_over_column("collect_set", col)
 
@@ -5421,7 +5419,7 @@ def udf(
 
 def udf(
     f: Optional[Union[Callable[..., Any], "DataTypeOrString"]] = None,
-    returnType: Optional["DataTypeOrString"] = StringType(),
+    returnType: "DataTypeOrString" = StringType(),
 ) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
     """Creates a user defined function (UDF).
 

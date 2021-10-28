@@ -1826,4 +1826,14 @@ object QueryExecutionErrors {
   def pivotNotAfterGroupByUnsupportedError(): Throwable = {
     new UnsupportedOperationException("pivot is only supported after a groupBy")
   }
+
+  def invalidAesKeyLengthError(actualLength: Int): RuntimeException = {
+    new RuntimeException(
+      s"The key length of aes_encrypt/aes_decrypt should be " +
+        "one of 16, 24 or 32 bytes, but got: $actualLength")
+  }
+
+  def hiveTableWithAnsiIntervalsError(tableName: String): Throwable = {
+    new UnsupportedOperationException(s"Hive table $tableName with ANSI intervals is not supported")
+  }
 }

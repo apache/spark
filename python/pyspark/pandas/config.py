@@ -20,7 +20,7 @@ Infrastructure of options for pandas-on-Spark.
 """
 from contextlib import contextmanager
 import json
-from typing import Any, Callable, Dict, Iterator, List, Tuple, Union  # noqa: F401 (SPARK-34943)
+from typing import Any, Callable, Dict, Iterator, List, Tuple, Union
 
 from pyspark._globals import _NoValue, _NoValueType
 
@@ -192,6 +192,18 @@ _options: List[Option] = [
             "performance overhead."
         ),
         default=False,
+        types=bool,
+    ),
+    Option(
+        key="compute.eager_check",
+        doc=(
+            "'compute.eager_check' sets whether or not to launch some Spark jobs just for the sake "
+            "of validation. If 'compute.eager_check' is set to True, pandas-on-Spark performs the "
+            "validation beforehand, but it will cause a performance overhead. Otherwise, "
+            "pandas-on-Spark skip the validation and will be slightly different from pandas. "
+            "Affected APIs: `Series.dot`."
+        ),
+        default=True,
         types=bool,
     ),
     Option(

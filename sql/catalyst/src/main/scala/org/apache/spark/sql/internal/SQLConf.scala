@@ -416,6 +416,14 @@ object SQLConf {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10MB")
 
+  val SHUFFLE_HASH_JOIN_FACTOR = buildConf("spark.sql.shuffledHashJoinFactor")
+    .doc("The shuffle hash join can be selected if the data size of small" +
+      " side multiplied by this factor is still smaller than the large side.")
+    .version("3.3.0")
+    .intConf
+    .checkValue(_ >= 1, "The shuffle hash join factor cannot be negative.")
+    .createWithDefault(3)
+
   val LIMIT_SCALE_UP_FACTOR = buildConf("spark.sql.limit.scaleUpFactor")
     .internal()
     .doc("Minimal increase rate in number of partitions between attempts when executing a take " +
@@ -1411,8 +1419,8 @@ object SQLConf {
       " bigger files (which is scheduled first). This configuration is effective only when using" +
       " file-based sources such as Parquet, JSON and ORC.")
     .version("2.0.0")
-    .longConf
-    .createWithDefault(4 * 1024 * 1024)
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefaultString("4MB")
 
   val FILES_MIN_PARTITION_NUM = buildConf("spark.sql.files.minPartitionNum")
     .doc("The suggested (not guaranteed) minimum number of split file partitions. " +
@@ -1707,6 +1715,16 @@ object SQLConf {
         "2nd-level, larger, slower map when 1st level is full or keys cannot be found. " +
         "When disabled, records go directly to the 2nd level.")
       .version("2.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_TWOLEVEL_AGG_MAP_PARTIAL_ONLY =
+    buildConf("spark.sql.codegen.aggregate.map.twolevel.partialOnly")
+      .internal()
+      .doc("Enable two-level aggregate hash map for partial aggregate only, " +
+        "because final aggregate might get more distinct keys compared to partial aggregate. " +
+        "Overhead of looking up 1st-level map might dominate when having a lot of distinct keys.")
+      .version("3.2.1")
       .booleanConf
       .createWithDefault(true)
 
@@ -2572,6 +2590,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ENFORCE_RESERVED_KEYWORDS = buildConf("spark.sql.ansi.enforceReservedKeywords")
+    .doc(s"When true and '${ANSI_ENABLED.key}' is true, the Spark SQL parser enforces the ANSI " +
+      "reserved keywords and forbids SQL queries that use reserved keywords as alias names " +
+      "and/or identifiers for table, view, function, etc.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
       .internal()
@@ -3364,7 +3390,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.keepCommandOutputSchema")
       .internal()
       .doc("When true, Spark will keep the output schema of commands such as SHOW DATABASES " +
-        "unchanged, for v1 catalog and/or table.")
+        "unchanged.")
       .version("3.0.2")
       .booleanConf
       .createWithDefault(false)
@@ -4022,6 +4048,8 @@ class SQLConf extends Serializable with Logging {
     StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
 
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
+
+  def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>

@@ -27,7 +27,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import StructField
 
 if TYPE_CHECKING:
-    import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
+    import pyspark.pandas as ps
 
 
 class CategoricalAccessor(object):
