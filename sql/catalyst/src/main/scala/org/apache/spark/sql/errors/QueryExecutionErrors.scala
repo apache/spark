@@ -93,15 +93,15 @@ object QueryExecutionErrors {
   }
 
   def castingCauseOverflowError(t: Any, targetType: String): ArithmeticException = {
-    new SparkArithmeticException (errorClass = "CAST_CAUSES_OVERFLOW",
-      messageParameters = Array(t.toString, targetType))
+    new SparkArithmeticException(errorClass = "CAST_CAUSES_OVERFLOW",
+      messageParameters = Array(t.toString, targetType, SQLConf.ANSI_ENABLED.key))
   }
 
   def cannotChangeDecimalPrecisionError(
       value: Decimal, decimalPrecision: Int, decimalScale: Int): ArithmeticException = {
     new SparkArithmeticException(errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
       messageParameters = Array(value.toDebugString,
-        decimalPrecision.toString, decimalScale.toString))
+        decimalPrecision.toString, decimalScale.toString, SQLConf.ANSI_ENABLED.key))
   }
 
   def invalidInputSyntaxForNumericError(s: UTF8String): NumberFormatException = {
@@ -152,7 +152,8 @@ object QueryExecutionErrors {
   }
 
   def divideByZeroError(): ArithmeticException = {
-    new SparkArithmeticException(errorClass = "DIVIDE_BY_ZERO", messageParameters = Array.empty)
+    new SparkArithmeticException(
+      errorClass = "DIVIDE_BY_ZERO", messageParameters = Array(SQLConf.ANSI_ENABLED.key))
   }
 
   def invalidArrayIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
@@ -179,11 +180,11 @@ object QueryExecutionErrors {
   }
 
   def overflowInSumOfDecimalError(): ArithmeticException = {
-    new ArithmeticException("Overflow in sum of decimals.")
+    arithmeticOverflowError("Overflow in sum of decimals")
   }
 
   def overflowInIntegralDivideError(): ArithmeticException = {
-    new ArithmeticException("Overflow in integral divide.")
+    arithmeticOverflowError("Overflow in integral divide", Some("try_divide"))
   }
 
   def mapSizeExceedArraySizeWhenZipMapError(size: Int): RuntimeException = {
@@ -392,13 +393,20 @@ object QueryExecutionErrors {
     new IllegalStateException("table stats must be specified.")
   }
 
+  def arithmeticOverflowError(
+      message: String, hint: Option[String] = None): ArithmeticException = {
+    new ArithmeticException(s"$message. You can ${hint.map(x => s"use '$x' or ").getOrElse("")}" +
+      s"set ${SQLConf.ANSI_ENABLED.key} to false (except for ANSI interval type) " +
+      "to bypass this error.")
+  }
+
   def unaryMinusCauseOverflowError(originValue: AnyVal): ArithmeticException = {
-    new ArithmeticException(s"- $originValue caused overflow.")
+    arithmeticOverflowError(s"- $originValue caused overflow")
   }
 
   def binaryArithmeticCauseOverflowError(
       eval1: Short, symbol: String, eval2: Short): ArithmeticException = {
-    new ArithmeticException(s"$eval1 $symbol $eval2 caused overflow.")
+    arithmeticOverflowError(s"$eval1 $symbol $eval2 caused overflow")
   }
 
   def failedSplitSubExpressionMsg(length: Int): String = {
