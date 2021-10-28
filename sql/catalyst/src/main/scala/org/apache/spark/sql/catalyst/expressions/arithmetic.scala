@@ -243,8 +243,8 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
       assert(exactMathMethod.isDefined,
         s"The expression '$nodeName' must override the exactMathMethod() method " +
         "if it is supposed to operate over interval types.")
-      val mathClass = classOf[Math].getName
-      defineCodeGen(ctx, ev, (eval1, eval2) => s"$mathClass.${exactMathMethod.get}($eval1, $eval2)")
+      val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$mathUtils.${exactMathMethod.get}($eval1, $eval2)")
     // byte and short are casted into int when add, minus, times or divide
     case ByteType | ShortType =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
@@ -269,8 +269,8 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
     case IntegerType | LongType =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         val operation = if (failOnError && exactMathMethod.isDefined) {
-          val mathClass = classOf[Math].getName
-          s"$mathClass.${exactMathMethod.get}($eval1, $eval2)"
+          val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
+          s"$mathUtils.${exactMathMethod.get}($eval1, $eval2)"
         } else {
           s"$eval1 $symbol $eval2"
         }
