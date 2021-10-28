@@ -219,7 +219,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",
         "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath} " +
-          // TODO: Consider to remove the following three JVM options once the Spark 3.2 is EOL.
+          // TODO: Consider to remove the following JVM options once the Spark 3.2 line is EOL.
           "-XX:+IgnoreUnrecognizedVMOptions " +
           "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED " +
           "--add-opens=java.base/java.net=ALL-UNNAMED",
