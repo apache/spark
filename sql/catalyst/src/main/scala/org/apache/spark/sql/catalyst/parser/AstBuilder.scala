@@ -1728,7 +1728,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   override def visitCurrentLike(ctx: CurrentLikeContext): Expression = withOrigin(ctx) {
-    if (conf.ansiEnabled) {
+    if (conf.enforceReservedKeywords) {
       ctx.name.getType match {
         case SqlBaseParser.CURRENT_DATE =>
           CurrentDate()

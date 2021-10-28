@@ -958,6 +958,15 @@ def compare_allow_null(
     return left.isNull() | right.isNull() | comp(left, right)
 
 
+def log_advice(message: str) -> None:
+    """
+    Display advisory logs for functions to be aware of when using pandas API on Spark
+    for the existing pandas/PySpark users who may not be familiar with distributed environments
+    or the behavior of pandas.
+    """
+    warnings.warn(message, UserWarning)
+
+
 def _test() -> None:
     import os
     import doctest
