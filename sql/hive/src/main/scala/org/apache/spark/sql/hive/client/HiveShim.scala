@@ -246,6 +246,7 @@ private[client] sealed abstract class Shim {
     klass.getMethod(name, args: _*)
   }
 
+  // This method should be called before a Hive client call is made.
   def recordHiveCall(): Unit = {
     HiveCatalogMetrics.incrementHiveClientCalls(1)
   }
