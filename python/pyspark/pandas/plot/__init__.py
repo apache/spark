@@ -14,4 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.pandas.plot.core import *  # noqa: F401
+from pyspark.pandas.plot.core import *
+
+__all__ = [  # noqa: F405
+    "TopNPlotBase",
+    "SampledPlotBase",
+    "NumericPlotBase",
+    "HistogramPlotBase",
+    "BoxPlotBase",
+    "KdePlotBase",
+    "PandasOnSparkPlotAccessor",
+]
