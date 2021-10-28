@@ -27,7 +27,7 @@ import java.util.LinkedList;
 import java.util.Queue;
 
 /**
- * `OrcFooterReader` is a util class which encapsulates the helper
+ * {@link OrcFooterReader} is a util class which encapsulates the helper
  * methods of reading ORC file footer.
  */
 public class OrcFooterReader {

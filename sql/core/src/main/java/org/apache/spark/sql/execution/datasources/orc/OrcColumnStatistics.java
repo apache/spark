@@ -31,7 +31,7 @@ import java.util.List;
  * tree pre-ordering. This is used for aggregate push down in ORC.
  *
  * For nested data types (array, map and struct), the sub-field statistics are stored recursively
- * inside parent column's `children` field. Here is an example of `OrcColumnStatistics`:
+ * inside parent column's children field. Here is an example of {@link OrcColumnStatistics}:
  *
  * Data schema:
  * c1: int

@@ -402,7 +402,7 @@ object OrcUtils extends Logging {
     var columnsStatistics: OrcColumnStatistics = null
     try {
       columnsStatistics = OrcFooterReader.readStatistics(reader)
-    } catch { case e: RuntimeException =>
+    } catch { case e: Exception =>
       throw new SparkException(
         s"Cannot read columns statistics in file: $filePath. Please consider disabling " +
         s"ORC aggregate push down by setting 'spark.sql.orc.aggregatePushdown' to false.", e)
