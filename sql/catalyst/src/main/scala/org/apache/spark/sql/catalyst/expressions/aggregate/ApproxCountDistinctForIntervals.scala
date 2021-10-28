@@ -80,14 +80,16 @@ case class ApproxCountDistinctForIntervals(
       TypeCheckFailure("The endpoints provided must be constant literals")
     } else {
       endpointsExpression.dataType match {
-        case ArrayType(_: NumericType | DateType | TimestampType | TimestampNTZType, _) =>
+        case ArrayType(_: NumericType | DateType | TimestampType | TimestampNTZType |
+            YearMonthIntervalType(_, _) | DayTimeIntervalType(_, _), _) =>
           if (endpoints.length < 2) {
             TypeCheckFailure("The number of endpoints must be >= 2 to construct intervals")
           } else {
             TypeCheckSuccess
           }
         case _ =>
-          TypeCheckFailure("Endpoints require (numeric or timestamp or date) type")
+          TypeCheckFailure("Endpoints require (numeric or timestamp or date or timestamp_ntz or " +
+            "interval year to month or interval day to second) type")
       }
     }
   }
@@ -124,6 +126,10 @@ case class ApproxCountDistinctForIntervals(
         case _: DateType =>
           value.asInstanceOf[Int].toDouble
         case TimestampType | TimestampNTZType =>
+          value.asInstanceOf[Long].toDouble
+        case YearMonthIntervalType(_, _) =>
+          value.asInstanceOf[Int].toDouble
+        case DayTimeIntervalType(_, _) =>
           value.asInstanceOf[Long].toDouble
       }
 

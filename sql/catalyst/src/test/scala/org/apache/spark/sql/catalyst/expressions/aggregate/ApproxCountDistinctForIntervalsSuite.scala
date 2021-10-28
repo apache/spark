@@ -39,7 +39,8 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       assert(
         wrongColumn.checkInputDataTypes() match {
           case TypeCheckFailure(msg)
-            if msg.contains("requires (numeric or timestamp or date or timestamp_ntz) type") => true
+            if msg.contains("requires (numeric or timestamp or date or timestamp_ntz or " +
+              "interval year to month or interval day to second) type") => true
           case _ => false
         })
     }
@@ -69,7 +70,8 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       AttributeReference("a", DoubleType)(),
       endpointsExpression = CreateArray(Array("foobar").map(Literal(_))))
     assert(wrongEndpoints.checkInputDataTypes() ==
-        TypeCheckFailure("Endpoints require (numeric or timestamp or date) type"))
+      TypeCheckFailure("Endpoints require (numeric or timestamp or date or timestamp_ntz or " +
+        "interval year to month or interval day to second) type"))
   }
 
   /** Create an ApproxCountDistinctForIntervals instance and an input and output buffer. */
