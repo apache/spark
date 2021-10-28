@@ -23,6 +23,7 @@ import org.apache.log4j.Level
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
+import org.apache.spark.sql.catalyst.plans.logical.Sample
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
@@ -282,6 +283,34 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     withTable(s"$catalogName.new_table") {
       sql(s"CREATE TABLE $catalogName.new_table(col1 INT, col2 INT, col3 INT, col4 INT, col5 INT)")
       testIndexUsingSQL(s"$catalogName.new_table")
+    }
+  }
+
+  def supportsTableSample: Boolean = false
+
+  test("Test TABLESAMPLE") {
+    withTable(s"$catalogName.new_table") {
+      sql(s"CREATE TABLE $catalogName.new_table (col1 INT, col2 INT)")
+      sql(s"INSERT INTO TABLE $catalogName.new_table values (1, 2)")
+      sql(s"INSERT INTO TABLE $catalogName.new_table values (3, 4)")
+      sql(s"INSERT INTO TABLE $catalogName.new_table values (5, 6)")
+      sql(s"INSERT INTO TABLE $catalogName.new_table values (7, 8)")
+      sql(s"INSERT INTO TABLE $catalogName.new_table values (9, 10)")
+      sql(s"INSERT INTO TABLE $catalogName.new_table values (11, 12)")
+      sql(s"INSERT INTO TABLE $catalogName.new_table values (13, 14)")
+      sql(s"INSERT INTO TABLE $catalogName.new_table values (15, 16)")
+      sql(s"INSERT INTO TABLE $catalogName.new_table values (17, 18)")
+      sql(s"INSERT INTO TABLE $catalogName.new_table values (19, 20)")
+      if (supportsTableSample) {
+        val df = sql(s"SELECT * FROM $catalogName.new_table TABLESAMPLE (BUCKET 6 OUT OF 10)" +
+          s" REPEATABLE (12345)")
+        df.explain(true)
+        val sample = df.queryExecution.optimizedPlan.collect {
+          case s: Sample => s
+        }
+        assert(sample.isEmpty)
+        assert(df.collect().length <= 7)
+      }
     }
   }
 }
