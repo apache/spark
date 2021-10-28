@@ -192,8 +192,15 @@ case class Percentile(
       return Seq.empty
     }
 
-    val sortedCounts = buffer.toSeq.sortBy(_._1)(
-      child.dataType.asInstanceOf[NumericType].ordering.asInstanceOf[Ordering[AnyRef]])
+    val ordering =
+      if (child.dataType.isInstanceOf[NumericType]) {
+        child.dataType.asInstanceOf[NumericType].ordering
+      } else if (child.dataType.isInstanceOf[YearMonthIntervalType]) {
+        child.dataType.asInstanceOf[YearMonthIntervalType].ordering
+      } else if (child.dataType.isInstanceOf[DayTimeIntervalType]) {
+        child.dataType.asInstanceOf[DayTimeIntervalType].ordering
+      }
+    val sortedCounts = buffer.toSeq.sortBy(_._1)(ordering.asInstanceOf[Ordering[AnyRef]])
     val accumulatedCounts = sortedCounts.scanLeft((sortedCounts.head._1, 0L)) {
       case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
     }.tail
