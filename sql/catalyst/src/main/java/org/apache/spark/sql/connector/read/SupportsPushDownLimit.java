@@ -20,14 +20,17 @@ package org.apache.spark.sql.connector.read;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * An interface for building the {@link Scan}. Implementations can mixin SupportsPushDownXYZ
- * interfaces to do operator push down, and keep the operator push down result in the returned
- * {@link Scan}. When pushing down operators, the push down order is:
- * filter -&gt; aggregate -&gt; limit -&gt; column pruning.
+ * A mix-in interface for {@link Scan}. Data sources can implement this interface to
+ * push down LIMIT. Please note that the combination of LIMIT with other operations
+ * such as AGGREGATE, GROUP BY, SORT BY, CLUSTER BY, DISTRIBUTE BY, etc. is NOT pushed down.
  *
- * @since 3.0.0
+ * @since 3.3.0
  */
 @Evolving
-public interface ScanBuilder {
-  Scan build();
+public interface SupportsPushDownLimit extends ScanBuilder {
+
+  /**
+   * Pushes down LIMIT to the data source.
+   */
+  boolean pushLimit(int limit);
 }
