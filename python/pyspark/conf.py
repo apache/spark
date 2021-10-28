@@ -23,8 +23,8 @@ from typing import List, Optional, Tuple
 
 from py4j.java_gateway import JVMView, JavaObject  # type: ignore[import]
 
-class SparkConf(object):
 
+class SparkConf(object):
     """
     Configuration for a Spark application. Used to set various Spark
     parameters as key-value pairs.
@@ -108,7 +108,8 @@ class SparkConf(object):
     spark.home=/path
     """
 
-    def __init__(self, loadDefaults: bool = True, _jvm: Optional[JVMView] = None, _jconf: Optional[JavaObject] = None) -> None:
+    def __init__(self, loadDefaults: bool = True, _jvm: Optional[JVMView] = None,
+                 _jconf: Optional[JavaObject] = None) -> None:
         """
         Create a new Spark configuration.
         """
@@ -158,14 +159,15 @@ class SparkConf(object):
         return self
 
     @overload
-    def setExecutorEnv(self, key: str, value: str) -> "SparkConf": 
+    def setExecutorEnv(self, key: str, value: str) -> "SparkConf":
         ...
 
     @overload
     def setExecutorEnv(self, *, pairs: List[Tuple[str, str]]) -> "SparkConf":
         ...
-    
-    def setExecutorEnv(self, key: Optional[str] = None, value: Optional[str] = None, pairs: Optional[List[Tuple[str, str]]] = None) -> "SparkConf": # not sure 
+
+    def setExecutorEnv(self, key: Optional[str] = None, value: Optional[str] = None,
+                       pairs: Optional[List[Tuple[str, str]]] = None) -> "SparkConf":  # not sure
         """Set an environment variable to be passed to executors."""
         if (key is not None and pairs is not None) or (key is None and pairs is None):
             raise RuntimeError("Either pass one key-value pair or a list of pairs")
@@ -191,7 +193,7 @@ class SparkConf(object):
 
     def get(self, key: str, defaultValue: Optional[str] = None) -> str:
         """Get the configured value for some key, or return a default otherwise."""
-        if defaultValue is None:   # Py4J doesn't call the right get() if we pass None
+        if defaultValue is None:  # Py4J doesn't call the right get() if we pass None
             if self._jconf is not None:
                 if not self._jconf.contains(key):
                     return None
