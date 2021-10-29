@@ -44,7 +44,7 @@ case class DescribeNamespaceExec(
     }
 
     if (isExtended) {
-      val properties = metadata.asScala -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
+      val properties = metadata.asScala.toMap -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
       val propertiesStr =
         if (properties.isEmpty) {
           ""
