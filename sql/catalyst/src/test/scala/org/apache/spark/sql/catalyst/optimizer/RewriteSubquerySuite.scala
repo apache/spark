@@ -76,8 +76,4 @@ class RewriteSubquerySuite extends PlanTest {
     Optimize.executeAndTrack(query.analyze, tracker)
     assert(tracker.rules(RewritePredicateSubquery.ruleName).numEffectiveInvocations == 0)
   }
-
-  test("SPARK-30220: ") {
-
-  }
 }
