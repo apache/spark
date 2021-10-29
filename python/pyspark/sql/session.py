@@ -610,7 +610,7 @@ class SparkSession(SparkConversionMixin):
         try:
             # Try to access HiveConf, it will raise exception if Hive is not added
             conf = SparkConf()
-            if conf.get('spark.sql.catalogImplementation', 'hive').lower() == 'hive':
+            if cast(str, conf.get('spark.sql.catalogImplementation', 'hive')).lower() == 'hive':
                 (SparkContext._jvm  # type: ignore[attr-defined]
                  .org.apache.hadoop.hive.conf.HiveConf())
                 return SparkSession.builder\
@@ -619,7 +619,7 @@ class SparkSession(SparkConversionMixin):
             else:
                 return SparkSession.builder.getOrCreate()
         except (py4j.protocol.Py4JError, TypeError):
-            if conf.get('spark.sql.catalogImplementation', '').lower() == 'hive':
+            if cast(str, conf.get('spark.sql.catalogImplementation', '')).lower() == 'hive':
                 warnings.warn("Fall back to non-hive support because failing to access HiveConf, "
                               "please make sure you build spark with hive")
 
