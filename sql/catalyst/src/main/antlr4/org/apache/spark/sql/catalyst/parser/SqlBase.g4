@@ -674,7 +674,7 @@ joinCriteria
     ;
 
 sample
-    : TABLESAMPLE '(' sampleMethod? ')'
+    : TABLESAMPLE '(' sampleMethod? ')' (REPEATABLE '('seed=INTEGER_VALUE')')?
     ;
 
 sampleMethod
@@ -1194,6 +1194,7 @@ ansiNonReserved
     | REFRESH
     | RENAME
     | REPAIR
+    | REPEATABLE
     | REPLACE
     | RESET
     | RESPECT
@@ -1460,6 +1461,7 @@ nonReserved
     | REFRESH
     | RENAME
     | REPAIR
+    | REPEATABLE
     | REPLACE
     | RESET
     | RESPECT
@@ -1726,6 +1728,7 @@ REFERENCES: 'REFERENCES';
 REFRESH: 'REFRESH';
 RENAME: 'RENAME';
 REPAIR: 'REPAIR';
+REPEATABLE: 'REPEATABLE';
 REPLACE: 'REPLACE';
 RESET: 'RESET';
 RESPECT: 'RESPECT';

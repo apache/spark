@@ -4211,6 +4211,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       sql("SELECT * FROM testData, LATERAL (SELECT * FROM testData)").collect()
     }
   }
+
+  test("TABLE SAMPLE") {
+    withTable("test") {
+      sql("CREATE TABLE test(c int) USING PARQUET")
+      for( i <- 0 to 20) {
+        sql(s"INSERT INTO test VALUES ($i)")
+      }
+      val df1 = sql("SELECT * FROM test TABLESAMPLE (20 PERCENT) REPEATABLE (12345)")
+      val df2 = sql("SELECT * FROM test TABLESAMPLE (20 PERCENT) REPEATABLE (12345)")
+      checkAnswer(df1, df2)
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
