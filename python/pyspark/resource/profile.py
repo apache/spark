@@ -170,7 +170,7 @@ class ResourceProfileBuilder(object):
                     )
             else:
                 self._executor_resource_requests.update(  # type: ignore[union-attr]
-                    resourceRequest.request  # type: ignore[attr-defined]
+                    resourceRequest.requests  # type: ignore[attr-defined]
                 )
         return self
 
