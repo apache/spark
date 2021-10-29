@@ -170,17 +170,12 @@ class FileScanRDD(
             case e: SchemaColumnConvertNotSupportedException =>
               throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
                 currentFile.filePath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
-            case e: ParquetDecodingException =>
+            case e: Exception =>
               if (e.getCause.isInstanceOf[SparkUpgradeException]) {
                 throw e.getCause
-              } else if (e.getMessage.contains("Can not read value at")) {
-                throw QueryExecutionErrors.cannotReadParquetFilesError(e, currentFile.filePath,
-                  Some("One possible cause: Parquet column cannot be converted in the " +
-                    "corresponding files."))
+              } else {
+                throw QueryExecutionErrors.cannotReadFilesError(e, currentFile.filePath)
               }
-              throw e
-            case e: Exception =>
-              throw QueryExecutionErrors.cannotReadParquetFilesError(e, currentFile.filePath)
           }
         } else {
           currentFile = null

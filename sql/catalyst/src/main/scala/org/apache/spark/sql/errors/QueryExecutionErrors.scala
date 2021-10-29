@@ -586,12 +586,11 @@ object QueryExecutionErrors {
     new QueryExecutionException(message, e)
   }
 
-  def cannotReadParquetFilesError(
+  def cannotReadFilesError(
       e: Exception,
       path: String,
       reason: Option[String] = None): Throwable = {
-    val message = s"Encountered error while reading Parquet file $path. " +
-      s"${reason.getOrElse("")} Details: "
+    val message = s"Encountered error while reading file $path. Details: "
     new QueryExecutionException(message, e)
   }
 

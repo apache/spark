@@ -66,21 +66,16 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
       case e: SchemaColumnConvertNotSupportedException =>
         throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
           currentReader.file.filePath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
-      case e: ParquetDecodingException =>
-        if (e.getCause.isInstanceOf[SparkUpgradeException]) {
-          throw e.getCause
-        } else if (e.getMessage.contains("Can not read value at")) {
-          throw QueryExecutionErrors.cannotReadParquetFilesError(e, currentReader.file.filePath,
-            Some("One possible cause: Parquet column cannot be converted in the " +
-              "corresponding files."))
-        }
-        throw e
       case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
         logWarning(
           s"Skipped the rest of the content in the corrupted file: $currentReader", e)
         false
       case e: Exception =>
-        throw QueryExecutionErrors.cannotReadParquetFilesError(e, currentReader.file.filePath)
+        if (e.getCause.isInstanceOf[SparkUpgradeException]) {
+          throw e.getCause
+        } else {
+          throw QueryExecutionErrors.cannotReadFilesError(e, currentReader.file.filePath)
+        }
     }
     if (hasNext) {
       true
