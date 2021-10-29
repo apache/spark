@@ -40,8 +40,8 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
 import org.apache.spark.metrics.source.HiveCatalogMetrics
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTable, CatalogTablePartition, CatalogUtils, ExternalCatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -1151,6 +1151,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     if (!SQLConf.get.metastorePartitionPruningFastFallback ||
         predicates.isEmpty ||
         predicates.exists(hasTimeZoneAwareExpression)) {
+      recordHiveCall()
       getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].asScala.toSeq
     } else {
       try {
@@ -1176,11 +1177,13 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           val spec = PartitioningUtils.parsePathFragment(p)
           boundPredicate.eval(toRow(spec))
         }
+        recordHiveCall()
         hive.getPartitionsByNames(table, partNames.asJava).asScala.toSeq
       } catch {
         case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] =>
           logWarning("Caught Hive MetaException attempting to get partition metadata by " +
             "filter from client side. Falling back to fetching all partition metadata", ex)
+          recordHiveCall()
           getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].asScala.toSeq
       }
     }
