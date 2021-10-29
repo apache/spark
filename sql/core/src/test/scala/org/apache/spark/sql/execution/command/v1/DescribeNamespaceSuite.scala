@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This base suite contains unified tests for the `DESCRIBE NAMESPACE` command that checks V1
@@ -44,29 +43,13 @@ trait DescribeNamespaceSuiteBase extends command.DescribeNamespaceSuiteBase
         .where("key not like 'Owner%'") // filter for consistency with in-memory catalog
         .collect()
 
+      val namePrefix = if (conf.useV1Command) "Database" else "Namespace"
       assert(result.length == 4)
-      assert(result(0) === Row("Namespace Name", ns))
+      assert(result(0) === Row(s"$namePrefix Name", ns))
       assert(result(1) === Row("Comment", ""))
       // Check only the key for "Location" since its value depends on warehouse path, etc.
       assert(result(2).getString(0) === "Location")
       assert(result(3) === Row("Properties", ""))
-    }
-  }
-
-  test("Keep the legacy output schema") {
-    Seq(true, false).foreach { keepLegacySchema =>
-      withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> keepLegacySchema.toString) {
-        val ns = "db1"
-        withNamespace(ns) {
-          sql(s"CREATE NAMESPACE $ns")
-          val schema = sql(s"DESCRIBE NAMESPACE $ns").schema.fieldNames.toSeq
-          if (keepLegacySchema) {
-            assert(schema === Seq("database_description_item", "database_description_value"))
-          } else {
-            assert(schema === Seq("info_name", "info_value"))
-          }
-        }
-      }
     }
   }
 }

@@ -1079,7 +1079,8 @@ class DataSourceV2SQLSuite
           assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
             .toDF("k", "v")
             .where("k='Properties'")
-            .isEmpty, s"$key is a reserved namespace property and ignored")
+            .where("v=''")
+            .count == 1, s"$key is a reserved namespace property and ignored")
           val meta =
             catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("reservedTest"))
           assert(meta.get(key) == null || !meta.get(key).contains("foo"),
@@ -1244,7 +1245,7 @@ class DataSourceV2SQLSuite
         Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
         Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test"),
         Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
-        Row("Properties", "((a,b),(b,a),(c,c))"))
+        Row("Properties", "((a,b), (b,a), (c,c))"))
       )
     }
   }
@@ -1270,7 +1271,8 @@ class DataSourceV2SQLSuite
           assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
             .toDF("k", "v")
             .where("k='Properties'")
-            .isEmpty, s"$key is a reserved namespace property and ignored")
+            .where("v=''")
+            .count == 1, s"$key is a reserved namespace property and ignored")
           val meta =
             catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("reservedTest"))
           assert(meta.get(key) == null || !meta.get(key).contains("foo"),
@@ -1290,7 +1292,8 @@ class DataSourceV2SQLSuite
         Row("Namespace Name", "ns2"),
         Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
         Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test_2"),
-        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser))
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
+        Row("Properties", ""))
       )
     }
   }
