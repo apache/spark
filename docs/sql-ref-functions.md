@@ -44,3 +44,28 @@ User-Defined Functions (UDFs) are a feature of Spark SQL that allows users to de
  * [Scalar User-Defined Functions (UDFs)](sql-ref-functions-udf-scalar.html)
  * [User-Defined Aggregate Functions (UDAFs)](sql-ref-functions-udf-aggregate.html)
  * [Integration with Hive UDFs/UDAFs/UDTFs](sql-ref-functions-udf-hive.html)
+
+### Not Supported Hive Built-in Functions
+
+Spark have a list of Hive built-in functions that Spark do not support. List of functions spark are explicitly not supporting are:
+
+  * compute_stats
+  * context_ngrams
+  * create_union
+  * current_user
+  * ewah_bitmap
+  * ewah_bitmap_and
+  * ewah_bitmap_empty
+  * ewah_bitmap_or
+  * field
+  * in_file
+  * index
+  * matchpath
+  * ngrams
+  * noop
+  * noopstreaming
+  * noopwithmap
+  * noopwithmapstreaming
+  * parse_url_tuple
+  * reflect2
+  * windowingtablefunction
