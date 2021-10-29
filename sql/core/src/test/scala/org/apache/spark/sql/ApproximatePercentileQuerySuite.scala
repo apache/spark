@@ -32,7 +32,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  private val table = "percentile_test"
+  private val table = "percentile_approx"
 
   test("percentile_approx, single percentile value") {
     withTempView(table) {
@@ -329,12 +329,12 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
         checkAnswer(
           spark.sql(
             s"""SELECT
-               |  CAST(percentile_approx(col1, 0.5) AS STRING),
+               |  percentile_approx(col1, 0.5),
                |  SUM(null),
-               |  CAST(percentile_approx(col2, 0.5) AS STRING)
+               |  percentile_approx(col2, 0.5)
                |FROM $table
            """.stripMargin),
-          Row("INTERVAL '16-8' YEAR TO MONTH", null, "INTERVAL '0 00:03:20' DAY TO SECOND"))
+          Row(Period.ofMonths(200).normalized(), null, Duration.ofSeconds(200L)))
     }
   }
 }

@@ -160,8 +160,8 @@ case class ApproximatePercentile(
   override def eval(buffer: PercentileDigest): Any = {
     val doubleResult = buffer.getPercentiles(percentages)
     val result = child.dataType match {
-      case DateType => doubleResult.map(_.toInt)
-      case TimestampType | TimestampNTZType => doubleResult.map(_.toLong)
+      case DateType | _: YearMonthIntervalType => doubleResult.map(_.toInt)
+      case TimestampType | TimestampNTZType | _: DayTimeIntervalType => doubleResult.map(_.toLong)
       case ByteType => doubleResult.map(_.toByte)
       case ShortType => doubleResult.map(_.toShort)
       case IntegerType => doubleResult.map(_.toInt)
@@ -169,8 +169,6 @@ case class ApproximatePercentile(
       case FloatType => doubleResult.map(_.toFloat)
       case DoubleType => doubleResult
       case _: DecimalType => doubleResult.map(Decimal(_))
-      case YearMonthIntervalType(_, _) => doubleResult.map(_.toInt)
-      case DayTimeIntervalType(_, _) => doubleResult.map(_.toLong)
       case other: DataType =>
         throw QueryExecutionErrors.dataTypeUnexpectedError(other)
     }

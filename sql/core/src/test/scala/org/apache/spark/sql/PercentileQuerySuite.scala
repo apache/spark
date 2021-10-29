@@ -29,7 +29,7 @@ class PercentileQuerySuite extends QueryTest with SharedSparkSession {
 
   private val table = "percentile_test"
 
-  test("SPARK-37138: Support Ansi Interval type in ApproximatePercentile") {
+  test("SPARK-37138: Support Ansi Interval type in Percentile") {
     withTempView(table) {
       Seq((Period.ofMonths(100), Duration.ofSeconds(100L)),
         (Period.ofMonths(200), Duration.ofSeconds(200L)),

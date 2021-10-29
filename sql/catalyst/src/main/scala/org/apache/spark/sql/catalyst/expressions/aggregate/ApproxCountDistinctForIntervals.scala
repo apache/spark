@@ -81,7 +81,7 @@ case class ApproxCountDistinctForIntervals(
     } else {
       endpointsExpression.dataType match {
         case ArrayType(_: NumericType | DateType | TimestampType | TimestampNTZType |
-            YearMonthIntervalType(_, _) | DayTimeIntervalType(_, _), _) =>
+           _: AnsiIntervalType, _) =>
           if (endpoints.length < 2) {
             TypeCheckFailure("The number of endpoints must be >= 2 to construct intervals")
           } else {
@@ -123,13 +123,9 @@ case class ApproxCountDistinctForIntervals(
       val doubleValue = child.dataType match {
         case n: NumericType =>
           n.numeric.toDouble(value.asInstanceOf[n.InternalType])
-        case _: DateType =>
+        case _: DateType | _: YearMonthIntervalType =>
           value.asInstanceOf[Int].toDouble
-        case TimestampType | TimestampNTZType =>
-          value.asInstanceOf[Long].toDouble
-        case YearMonthIntervalType(_, _) =>
-          value.asInstanceOf[Int].toDouble
-        case DayTimeIntervalType(_, _) =>
+        case TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
           value.asInstanceOf[Long].toDouble
       }
 

@@ -62,7 +62,7 @@ class ApproxCountDistinctForIntervalsQuerySuite extends QueryTest with SharedSpa
   }
 
   test("SPARK-37138: Support Ansi Interval type in ApproxCountDistinctForIntervals") {
-    val table = "approx_count_distinct_for_ym_intervals_tbl"
+    val table = "approx_count_distinct_for_ansi_intervals_tbl"
     withTable(table) {
       Seq((Period.ofMonths(100), Duration.ofSeconds(100L)),
         (Period.ofMonths(200), Duration.ofSeconds(200L)),
