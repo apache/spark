@@ -63,7 +63,8 @@ class HivePartitionFilteringSuite(version: String)
     properties = Map.empty
   )
 
-  private var directSqlClient: HiveClient = _
+  // Avoid repeatedly constructing multiple hive instances that do not use direct sql
+  private var disableDirectSqlClient: HiveClient = _
 
   private def init(tryDirectSql: Boolean): HiveClient = {
     val hadoopConf = new Configuration()
@@ -114,13 +115,13 @@ class HivePartitionFilteringSuite(version: String)
   override def beforeAll(): Unit = {
     super.beforeAll()
     client = init(true)
-    directSqlClient = init(false)
+    disableDirectSqlClient = init(false)
   }
 
   test(s"getPartitionsByFilter returns all partitions when $fallbackKey=true") {
     withSQLConf(fallbackKey -> "true") {
-      val filteredPartitions = directSqlClient.getPartitionsByFilter(
-        directSqlClient.getTable("default", "test"),
+      val filteredPartitions = disableDirectSqlClient.getPartitionsByFilter(
+        disableDirectSqlClient.getTable("default", "test"),
         Seq(attr("ds") === 20170101))
 
       assert(filteredPartitions.size == testPartitionCount)
@@ -130,7 +131,8 @@ class HivePartitionFilteringSuite(version: String)
   test(s"getPartitionsByFilter should fail when $fallbackKey=false") {
     withSQLConf(fallbackKey -> "false") {
       val e = intercept[RuntimeException](
-        directSqlClient.getPartitionsByFilter(directSqlClient.getTable("default", "test"),
+        disableDirectSqlClient.getPartitionsByFilter(
+          disableDirectSqlClient.getTable("default", "test"),
           Seq(attr("ds") === 20170101)))
       assert(e.getMessage.contains("Caught Hive MetaException"))
     }
@@ -625,8 +627,8 @@ class HivePartitionFilteringSuite(version: String)
 
   test(s"getPartitionsByFilter: ds=20170101 when $fallbackKey=true") {
     withSQLConf(fallbackKey -> "true", pruningFastFallback -> "true") {
-      val filteredPartitions = directSqlClient.getPartitionsByFilter(
-        directSqlClient.getTable("default", "test"),
+      val filteredPartitions = disableDirectSqlClient.getPartitionsByFilter(
+        disableDirectSqlClient.getTable("default", "test"),
         Seq(attr("ds") === 20170101))
 
       assert(filteredPartitions.size == 1 * hValue.size * chunkValue.size *
