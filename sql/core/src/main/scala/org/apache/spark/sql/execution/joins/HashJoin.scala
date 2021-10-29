@@ -444,7 +444,7 @@ trait HashJoin extends JoinCodegenSupport {
     val HashedRelationInfo(relationTerm, keyIsUnique, _) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val matched = ctx.freshName("matched")
-    val buildVars = genBuildSideVars(ctx, matched, buildPlan)
+    val buildVars = genOneSideJoinVars(ctx, matched, buildPlan, setDefaultValue = true)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     // filter the output via condition
@@ -646,7 +646,7 @@ trait HashJoin extends JoinCodegenSupport {
     val existsVar = ctx.freshName("exists")
 
     val matched = ctx.freshName("matched")
-    val buildVars = genBuildSideVars(ctx, matched, buildPlan)
+    val buildVars = genOneSideJoinVars(ctx, matched, buildPlan, setDefaultValue = false)
     val checkCondition = if (condition.isDefined) {
       val expr = condition.get
       // evaluate the variables from build side that used by condition
