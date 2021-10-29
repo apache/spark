@@ -94,7 +94,7 @@ SELECT
 FROM   emp;
 
 -- correlated exist in window
--- TC.01.06
+-- TC.01.07
 SELECT
     emp_name,
     sum(salary) OVER (PARTITION BY EXISTS (SELECT 1
