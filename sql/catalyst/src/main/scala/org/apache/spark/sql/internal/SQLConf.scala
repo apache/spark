@@ -3382,6 +3382,7 @@ object SQLConf {
     .doc("When true, Spark replaces CHAR type with VARCHAR type in CREATE/REPLACE/ALTER TABLE " +
       "commands, so that newly created/updated tables will not have CHAR type columns/fields. " +
       "Existing tables with CHAR type columns/fields are not affected by this config.")
+    .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
 
