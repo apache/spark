@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
-import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitionedFile, RecordReaderIterator}
+import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, DataSourceUtils, PartitionedFile, RecordReaderIterator}
 import org.apache.spark.sql.execution.datasources.parquet._
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
@@ -175,24 +175,26 @@ case class ParquetPartitionReaderFactory(
     } else {
       new PartitionReader[ColumnarBatch] {
         private var hasNext = true
-        private val row: ColumnarBatch = {
+        private val batch: ColumnarBatch = {
           val footer = getFooter(file)
           if (footer != null && footer.getBlocks.size > 0) {
-            ParquetUtils.createAggColumnarBatchFromFooter(footer, file.filePath, dataSchema,
-              partitionSchema, aggregation.get, readDataSchema, enableOffHeapColumnVector,
+            val row = ParquetUtils.createAggInternalRowFromFooter(footer, file.filePath,
+              dataSchema, partitionSchema, aggregation.get, readDataSchema,
               getDatetimeRebaseMode(footer.getFileMetaData), isCaseSensitive)
+            AggregatePushDownUtils.convertAggregatesRowToBatch(
+              row, readDataSchema, enableOffHeapColumnVector && Option(TaskContext.get()).isDefined)
           } else {
             null
           }
         }
 
         override def next(): Boolean = {
-          hasNext && row != null
+          hasNext && batch != null
         }
 
         override def get(): ColumnarBatch = {
           hasNext = false
-          row
+          batch
         }
 
         override def close(): Unit = {}

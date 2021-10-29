@@ -104,6 +104,7 @@ case class RowDataSourceScanExec(
     filters: Set[Filter],
     handledFilters: Set[Filter],
     aggregation: Option[Aggregation],
+    limit: Option[Int],
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     tableIdentifier: Option[TableIdentifier])
@@ -153,7 +154,8 @@ case class RowDataSourceScanExec(
       "ReadSchema" -> requiredSchema.catalogString,
       "PushedFilters" -> seqToString(markedFilters.toSeq),
       "PushedAggregates" -> aggString,
-      "PushedGroupby" -> groupByString)
+      "PushedGroupby" -> groupByString) ++
+      limit.map(value => "PushedLimit" -> s"LIMIT $value")
   }
 
   // Don't care about `rdd` and `tableIdentifier` when canonicalizing.

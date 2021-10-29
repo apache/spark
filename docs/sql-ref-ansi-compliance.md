@@ -299,7 +299,9 @@ When the ANSI mode is disabled, Spark SQL has two kinds of keywords:
 * Non-reserved keywords: Same definition as the one when the ANSI mode enabled.
 * Strict-non-reserved keywords: A strict version of non-reserved keywords, which can not be used as table alias.
 
-By default `spark.sql.ansi.enabled` is false.
+If you want to still use reserved keywords as identifiers with ANSI mode, you can set `spark.sql.ansi.enforceReservedKeywords` to false.
+
+By default `spark.sql.ansi.enabled` is false and `spark.sql.ansi.enforceReservedKeywords` is true.
 
 Below is a list of all the keywords in Spark SQL.
 
