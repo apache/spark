@@ -88,7 +88,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.file = split.getPath();
 
     ParquetReadOptions options = HadoopReadOptions
-      .builder(configuration)
+      .builder(configuration, file)
       .withRange(split.getStart(), split.getStart() + split.getLength())
       .build();
     ParquetFileReader fileReader = new ParquetFileReader(
@@ -157,7 +157,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     long length = this.file.getFileSystem(config).getFileStatus(this.file).getLen();
 
     ParquetReadOptions options = HadoopReadOptions
-      .builder(config)
+      .builder(config, file)
       .withRange(0, length)
       .build();
     ParquetFileReader fileReader = ParquetFileReader.open(
