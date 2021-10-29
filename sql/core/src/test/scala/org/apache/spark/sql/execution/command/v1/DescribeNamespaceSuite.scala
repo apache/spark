@@ -30,7 +30,8 @@ import org.apache.spark.sql.internal.SQLConf
  *   - V1 Hive External catalog:
  *     `org.apache.spark.sql.hive.execution.command.DescribeNamespaceSuite`
  */
-trait DescribeNamespaceSuiteBase extends command.DescribeNamespaceSuiteBase {
+trait DescribeNamespaceSuiteBase extends command.DescribeNamespaceSuiteBase
+    with command.TestsV1AndV2Commands {
   override def notFoundMsgPrefix: String = "Database"
 
   test("basic") {
@@ -44,7 +45,7 @@ trait DescribeNamespaceSuiteBase extends command.DescribeNamespaceSuiteBase {
         .collect()
 
       assert(result.length == 4)
-      assert(result(0) === Row("Database Name", ns))
+      assert(result(0) === Row("Namespace Name", ns))
       assert(result(1) === Row("Comment", ""))
       // Check only the key for "Location" since its value depends on warehouse path, etc.
       assert(result(2).getString(0) === "Location")
@@ -74,4 +75,6 @@ trait DescribeNamespaceSuiteBase extends command.DescribeNamespaceSuiteBase {
  * The class contains tests for the `DESCRIBE NAMESPACE` command to check V1 In-Memory
  * table catalog.
  */
-class DescribeNamespaceSuite extends DescribeNamespaceSuiteBase with CommandSuiteBase
+class DescribeNamespaceSuite extends DescribeNamespaceSuiteBase with CommandSuiteBase {
+  override def commandVersion: String = super[DescribeNamespaceSuiteBase].commandVersion
+}

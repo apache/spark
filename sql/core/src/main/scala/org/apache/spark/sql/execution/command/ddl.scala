@@ -180,7 +180,7 @@ case class DescribeDatabaseCommand(
       sparkSession.sessionState.catalog.getDatabaseMetadata(databaseName)
     val allDbProperties = dbMetadata.properties
     val result =
-      Row("Database Name", dbMetadata.name) ::
+      Row("Namespace Name", dbMetadata.name) ::
         Row("Comment", dbMetadata.description) ::
         Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri))::
         Row("Owner", allDbProperties.getOrElse(PROP_OWNER, "")) :: Nil
