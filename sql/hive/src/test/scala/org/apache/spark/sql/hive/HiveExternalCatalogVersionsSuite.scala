@@ -222,7 +222,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath} " +
           // TODO SPARK-37159 Consider to remove the following
           // JVM module options once the Spark 3.2 line is EOL.
-          String.join(" ", JavaModuleOptions.defaultModuleOptions()),
+          JavaModuleOptions.defaultModuleOptions(),
         tempPyFile.getCanonicalPath)
       runSparkSubmit(args, Some(sparkHome.getCanonicalPath), isSparkTesting = false)
     }
