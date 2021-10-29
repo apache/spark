@@ -21,7 +21,9 @@ import java.io.{FileNotFoundException, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{URISyntaxException, URL}
 import java.sql.{SQLException, SQLFeatureNotSupportedException}
+import java.text.{ParseException => JavaParseException}
 import java.time.{DateTimeException, LocalDate}
+import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoField
 import java.util.ConcurrentModificationException
 import java.util.concurrent.TimeoutException
@@ -158,12 +160,12 @@ object QueryExecutionErrors {
 
   def invalidArrayIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_ARRAY_INDEX",
-      messageParameters = Array(index.toString, numElements.toString))
+      messageParameters = Array(index.toString, numElements.toString, SQLConf.ANSI_ENABLED.key))
   }
 
   def mapKeyNotExistError(key: Any): NoSuchElementException = {
     new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
-      messageParameters = Array(key.toString))
+      messageParameters = Array(key.toString, SQLConf.ANSI_ENABLED.key))
   }
 
   def rowFromCSVParserNotExpectedError(): Throwable = {
@@ -177,6 +179,34 @@ object QueryExecutionErrors {
 
   def invalidFractionOfSecondError(): DateTimeException = {
     new SparkDateTimeException(errorClass = "INVALID_FRACTION_OF_SECOND", Array.empty)
+  }
+
+  def ansiDateTimeParseError(e: DateTimeParseException): DateTimeParseException = {
+    val newMessage = s"${e.getMessage}. " +
+      s"You can set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
+    new DateTimeParseException(newMessage, e.getParsedString, e.getErrorIndex, e.getCause)
+  }
+
+  def ansiDateTimeError(e: DateTimeException): DateTimeException = {
+    val newMessage = s"${e.getMessage}. " +
+      s"You can set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
+    new DateTimeException(newMessage, e.getCause)
+  }
+
+  def ansiParseError(e: JavaParseException): JavaParseException = {
+    val newMessage = s"${e.getMessage}. " +
+      s"You can set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
+    new JavaParseException(newMessage, e.getErrorOffset)
+  }
+
+  def ansiIllegalArgumentError(message: String): IllegalArgumentException = {
+    val newMessage = s"$message. You can set ${SQLConf.ANSI_ENABLED.key} " +
+      s"to false to bypass this error."
+    new IllegalArgumentException(newMessage)
+  }
+
+  def ansiIllegalArgumentError(e: IllegalArgumentException): IllegalArgumentException = {
+    ansiIllegalArgumentError(e.getMessage)
   }
 
   def overflowInSumOfDecimalError(): ArithmeticException = {
@@ -225,7 +255,8 @@ object QueryExecutionErrors {
   }
 
   def invalidUrlError(url: UTF8String, e: URISyntaxException): Throwable = {
-    new IllegalArgumentException(s"Find an invaild url string ${url.toString}", e)
+    new IllegalArgumentException(s"Find an invalid url string ${url.toString}. " +
+      s"You can set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.", e)
   }
 
   def dataTypeOperationUnsupportedError(): Throwable = {
@@ -863,7 +894,8 @@ object QueryExecutionErrors {
   }
 
   def unscaledValueTooLargeForPrecisionError(): Throwable = {
-    new ArithmeticException("Unscaled value too large for precision")
+    new ArithmeticException("Unscaled value too large for precision. " +
+      s"You can set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
   }
 
   def decimalPrecisionExceedsMaxPrecisionError(precision: Int, maxPrecision: Int): Throwable = {

@@ -770,8 +770,10 @@ object DateTimeUtils {
   def dateAddInterval(
      start: Int,
      interval: CalendarInterval): Int = {
-    require(interval.microseconds == 0,
-      "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date")
+    if (interval.microseconds != 0) {
+      throw QueryExecutionErrors.ansiIllegalArgumentError(
+        "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date")
+    }
     val ld = daysToLocalDate(start).plusMonths(interval.months).plusDays(interval.days)
     localDateToDays(ld)
   }
