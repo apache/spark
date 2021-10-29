@@ -50,6 +50,8 @@ license: |
 
   - Since Spark 3.3, the `strfmt` in `format_string(strfmt, obj, ...)` and `printf(strfmt, obj, ...)` will no longer support to use "0$" to specify the first argument, the first argument should always reference by "1$" when use argument index to indicating the position of the argument in the argument list.
 
+  - Since Spark 3.3, casting Date type values as Numeric types is disallowed by default. In Spark 3.2 or earlier, the conversion is allowed and the result is always NULL. To restore the behavior before Spark 3.3, you can set `spark.sql.legacy.allowCastDateAsNumeric` as `true`.
+
 ## Upgrading from Spark SQL 3.1 to 3.2
 
   - Since Spark 3.2, ADD FILE/JAR/ARCHIVE commands require each path to be enclosed by `"` or `'` if the path contains whitespaces.

@@ -87,7 +87,7 @@ object Cast {
 
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
-    case (DateType, _: NumericType) => true
+    case (DateType, _: NumericType) if SQLConf.get.legacyCastDateAsNumeric => true
     case (TimestampType, _: NumericType) => true
     case (_: NumericType, _: NumericType) => true
 

@@ -52,7 +52,9 @@ class CastSuite extends CastSuiteBase {
     checkNullCast(BooleanType, TimestampType)
     numericTypes.foreach(dt => checkNullCast(dt, TimestampType))
     numericTypes.foreach(dt => checkNullCast(TimestampType, dt))
-    numericTypes.foreach(dt => checkNullCast(DateType, dt))
+    withSQLConf(SQLConf.LEGACY_CAST_DATE_AS_NUMERIC.key -> "true") {
+      numericTypes.foreach(dt => checkNullCast(DateType, dt))
+    }
   }
 
   test("cast from long #2") {
@@ -436,14 +438,21 @@ class CastSuite extends CastSuiteBase {
   }
 
   test("cast from date") {
+    import DataTypeTestUtils._
+
     val d = Date.valueOf("1970-01-01")
-    checkEvaluation(cast(d, ShortType), null)
-    checkEvaluation(cast(d, IntegerType), null)
-    checkEvaluation(cast(d, LongType), null)
-    checkEvaluation(cast(d, FloatType), null)
-    checkEvaluation(cast(d, DoubleType), null)
-    checkEvaluation(cast(d, DecimalType.SYSTEM_DEFAULT), null)
-    checkEvaluation(cast(d, DecimalType(10, 2)), null)
+    withSQLConf(SQLConf.LEGACY_CAST_DATE_AS_NUMERIC.key -> "true") {
+      checkEvaluation(cast(d, ShortType), null)
+      checkEvaluation(cast(d, IntegerType), null)
+      checkEvaluation(cast(d, LongType), null)
+      checkEvaluation(cast(d, FloatType), null)
+      checkEvaluation(cast(d, DoubleType), null)
+      checkEvaluation(cast(d, DecimalType.SYSTEM_DEFAULT), null)
+      checkEvaluation(cast(d, DecimalType(10, 2)), null)
+    }
+    withSQLConf(SQLConf.LEGACY_CAST_DATE_AS_NUMERIC.key -> "false") {
+      numericTypes.foreach(dt => verifyCastFailure(cast(d, dt)))
+    }
     checkEvaluation(cast(d, StringType), "1970-01-01")
 
     checkEvaluation(

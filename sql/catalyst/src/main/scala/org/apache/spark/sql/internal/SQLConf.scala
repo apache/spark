@@ -2893,6 +2893,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_CAST_DATE_AS_NUMERIC =
+    buildConf("spark.sql.legacy.allowCastDateAsNumeric")
+      .internal()
+      .doc(s"When true and '${ANSI_ENABLED.key}' is false, casting Date type to Numeric type is" +
+        s" allowed. Before version 3.3.0, the conversion is allowed and the result is always NULL.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val TRUNCATE_TABLE_IGNORE_PERMISSION_ACL =
     buildConf("spark.sql.truncateTable.ignorePermissionAcl.enabled")
       .internal()
@@ -4106,6 +4115,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED)
 
   def legacyStatisticalAggregate: Boolean = getConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE)
+
+  def legacyCastDateAsNumeric: Boolean = getConf(SQLConf.LEGACY_CAST_DATE_AS_NUMERIC)
 
   def truncateTableIgnorePermissionAcl: Boolean =
     getConf(SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL)
