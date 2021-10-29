@@ -21,8 +21,9 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
-import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
+import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.v2.FileScan
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
@@ -37,10 +38,25 @@ case class OrcScan(
     readDataSchema: StructType,
     readPartitionSchema: StructType,
     options: CaseInsensitiveStringMap,
+    pushedAggregate: Option[Aggregation] = None,
     pushedFilters: Array[Filter],
     partitionFilters: Seq[Expression] = Seq.empty,
     dataFilters: Seq[Expression] = Seq.empty) extends FileScan {
-  override def isSplitable(path: Path): Boolean = true
+  override def isSplitable(path: Path): Boolean = {
+    // If aggregate is pushed down, only the file footer will be read once,
+    // so file should be not split across multiple tasks.
+    pushedAggregate.isEmpty
+  }
+
+  override def readSchema(): StructType = {
+    // If aggregate is pushed down, schema has already been pruned in `OrcScanBuilder`
+    // and no need to call super.readSchema()
+    if (pushedAggregate.nonEmpty) {
+      readDataSchema
+    } else {
+      super.readSchema()
+    }
+  }
 
   override def createReaderFactory(): PartitionReaderFactory = {
     val broadcastedConf = sparkSession.sparkContext.broadcast(
@@ -48,24 +64,39 @@ case class OrcScan(
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     OrcPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-      dataSchema, readDataSchema, readPartitionSchema, pushedFilters)
+      dataSchema, readDataSchema, readPartitionSchema, pushedFilters, pushedAggregate)
   }
 
   override def equals(obj: Any): Boolean = obj match {
     case o: OrcScan =>
+      val pushedDownAggEqual = if (pushedAggregate.nonEmpty && o.pushedAggregate.nonEmpty) {
+        AggregatePushDownUtils.equivalentAggregations(pushedAggregate.get, o.pushedAggregate.get)
+      } else {
+        pushedAggregate.isEmpty && o.pushedAggregate.isEmpty
+      }
       super.equals(o) && dataSchema == o.dataSchema && options == o.options &&
-        equivalentFilters(pushedFilters, o.pushedFilters)
-
+        equivalentFilters(pushedFilters, o.pushedFilters) && pushedDownAggEqual
     case _ => false
   }
 
   override def hashCode(): Int = getClass.hashCode()
 
+  lazy private val (pushedAggregationsStr, pushedGroupByStr) = if (pushedAggregate.nonEmpty) {
+    (seqToString(pushedAggregate.get.aggregateExpressions),
+      seqToString(pushedAggregate.get.groupByColumns))
+  } else {
+    ("[]", "[]")
+  }
+
   override def description(): String = {
-    super.description() + ", PushedFilters: " + seqToString(pushedFilters)
+    super.description() + ", PushedFilters: " + seqToString(pushedFilters) +
+      ", PushedAggregation: " + pushedAggregationsStr +
+      ", PushedGroupBy: " + pushedGroupByStr
   }
 
   override def getMetaData(): Map[String, String] = {
-    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters))
+    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters)) ++
+      Map("PushedAggregation" -> pushedAggregationsStr) ++
+      Map("PushedGroupBy" -> pushedGroupByStr)
   }
 }
