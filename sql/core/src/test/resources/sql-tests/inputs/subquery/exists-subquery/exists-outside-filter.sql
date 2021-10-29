@@ -22,6 +22,17 @@ CREATE TEMPORARY VIEW DEPT AS SELECT * FROM VALUES
   (70, "dept 7", "FL")
 AS DEPT(dept_id, dept_name, state);
 
+CREATE TEMPORARY VIEW BONUS AS SELECT * FROM VALUES
+  ("emp 1", 10.00D),
+  ("emp 1", 20.00D),
+  ("emp 2", 300.00D),
+  ("emp 2", 100.00D),
+  ("emp 3", 300.00D),
+  ("emp 4", 100.00D),
+  ("emp 5", 1000.00D),
+  ("emp 6 - no dept", 500.00D)
+AS BONUS(emp_name, bonus_amt);
+
 -- uncorrelated select exist
 -- TC.01.01
 SELECT
@@ -60,8 +71,20 @@ SELECT
                                     WHERE  emp.dept_id = dept.dept_id))
 FROM   emp;
 
--- uncorrelated exist in window
+-- Multiple correlated exist in aggregate filter
 -- TC.01.05
+SELECT
+    sum(salary),
+    sum(salary) FILTER (WHERE EXISTS (SELECT 1
+                                    FROM   dept
+                                    WHERE  emp.dept_id = dept.dept_id)
+                        OR EXISTS (SELECT 1
+                                    FROM   bonus
+                                    WHERE  emp.emp_name = bonus.emp_name))
+FROM   emp;
+
+-- uncorrelated exist in window
+-- TC.01.06
 SELECT
     emp_name,
     sum(salary) OVER (PARTITION BY EXISTS (SELECT 1
