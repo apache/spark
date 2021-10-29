@@ -174,10 +174,10 @@ class SparkConf(object):
         if (key is not None and pairs is not None) or (key is None and pairs is None):
             raise RuntimeError("Either pass one key-value pair or a list of pairs")
         elif key is not None:
-            self.set("spark.executorEnv." + key, cast(str, value))
+            self.set("spark.executorEnv.{}".format(key), cast(str, value))
         elif pairs is not None:
             for (k, v) in pairs:
-                self.set("spark.executorEnv." + k, v)
+                self.set("spark.executorEnv.{}".format(k), v)
         return self
 
     def setAll(self, pairs: List[Tuple[str, str]]) -> "SparkConf":
