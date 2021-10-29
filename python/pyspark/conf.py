@@ -128,7 +128,7 @@ class SparkConf(object):
             else:
                 # JVM is not created, so store data in self._conf first
                 self._jconf = None
-                self._conf = {}  # type: ignore[var-annotated]
+                self._conf = {}
 
     def set(self, key: str, value: str) -> "SparkConf":
         """Set a configuration property."""
