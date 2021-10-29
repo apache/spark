@@ -46,9 +46,9 @@ import org.apache.spark.util.collection.OpenHashMap
 @ExpressionDescription(
   usage =
     """
-      _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric column
-       `col` at the given percentage. The value of percentage must be between 0.0 and 1.0. The
-       value of frequency should be positive integral
+      _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric
+       or ansi interval column `col` at the given percentage. The value of percentage must be
+       between 0.0 and 1.0. The value of frequency should be positive integral
 
       _FUNC_(col, array(percentage1 [, percentage2]...) [, frequency]) - Returns the exact
       percentile value array of numeric column `col` at the given percentage(s). Each value
