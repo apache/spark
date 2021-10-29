@@ -20,6 +20,11 @@ import os
 
 __all__ = ['SparkFiles']
 
+from typing import cast, ClassVar, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pyspark import SparkContext
+
 
 class SparkFiles(object):
 
@@ -30,15 +35,15 @@ class SparkFiles(object):
     instances.
     """
 
-    _root_directory = None
-    _is_running_on_worker = False
-    _sc = None
+    _root_directory: ClassVar[Optional[str]] = None
+    _is_running_on_worker: ClassVar[bool] = False
+    _sc: ClassVar[Optional["SparkContext"]] = None
 
-    def __init__(self):
+    def __init__(self) -> None:
         raise NotImplementedError("Do not construct SparkFiles objects")
 
     @classmethod
-    def get(cls, filename):
+    def get(cls, filename: str) -> str:
         """
         Get the absolute path of a file added through :meth:`SparkContext.addFile`.
         """
@@ -46,13 +51,16 @@ class SparkFiles(object):
         return os.path.abspath(path)
 
     @classmethod
-    def getRootDirectory(cls):
+    def getRootDirectory(cls) -> str:
         """
         Get the root directory that contains files added through
         :meth:`SparkContext.addFile`.
         """
         if cls._is_running_on_worker:
-            return cls._root_directory
+            return cast(str, cls._root_directory)
         else:
             # This will have to change if we support multiple SparkContexts:
-            return cls._sc._jvm.org.apache.spark.SparkFiles.getRootDirectory()
+            return cast(
+                "SparkContext",
+                cls._sc
+            )._jvm.org.apache.spark.SparkFiles.getRootDirectory()  # type: ignore[attr-defined]

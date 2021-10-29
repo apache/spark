@@ -94,7 +94,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters,
-        DataSourceV2ScanRelation(_, V1ScanWrapper(scan, pushed, aggregate), output)) =>
+        DataSourceV2ScanRelation(_, V1ScanWrapper(scan, pushed, aggregate, limit), output)) =>
       val v1Relation = scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
       if (v1Relation.schema != scan.readSchema()) {
         throw QueryExecutionErrors.fallbackV1RelationReportsInconsistentSchemaError(
@@ -102,12 +102,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       val rdd = v1Relation.buildScan()
       val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
+
       val dsScan = RowDataSourceScanExec(
         output,
         output.toStructType,
         Set.empty,
         pushed.toSet,
         aggregate,
+        limit,
         unsafeRowRDD,
         v1Relation,
         tableIdentifier = None)
