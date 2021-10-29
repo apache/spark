@@ -48,7 +48,7 @@ public class ParquetFooterReader {
       ParquetMetadataConverter.MetadataFilter filter) throws IOException {
     ParquetReadOptions readOptions =
       HadoopReadOptions.builder(inputFile.getConfiguration(), inputFile.getPath())
-          .withMetadataFilter(filter).build();
+        .withMetadataFilter(filter).build();
     // Use try-with-resources to ensure fd is closed.
     try (ParquetFileReader fileReader = ParquetFileReader.open(inputFile, readOptions)) {
       return fileReader.getFooter();
