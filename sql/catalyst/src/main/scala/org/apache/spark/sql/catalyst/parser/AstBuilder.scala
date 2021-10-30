@@ -1174,9 +1174,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    *
    * This currently supports the following sampling methods:
    * - TABLESAMPLE(x ROWS): Sample the table down to the given number of rows.
-   * - TABLESAMPLE(x PERCENT): Sample the table down to the given percentage. Note that percentages
-   * are defined as a number between 0 and 100.
-   * - TABLESAMPLE(BUCKET x OUT OF y): Sample the table down to a 'x' divided by 'y' fraction.
+   * - TABLESAMPLE(x PERCENT) [REPEATABLE (y)]: Sample the table down to the given percentage with
+   * seed 'y'. Note that percentages are defined as a number between 0 and 100.
+   * - TABLESAMPLE(BUCKET x OUT OF y) [REPEATABLE (z)]: Sample the table down to a 'x' divided by
+   * 'y' fraction with seed 'z'.
    */
   private def withSample(ctx: SampleContext, query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     // Create a sampled plan if we need one.
