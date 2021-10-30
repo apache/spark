@@ -22,7 +22,7 @@ import java.time.{Duration, Period}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
- * End-to-end tests for approximate percentile aggregate function.
+ * End-to-end tests for percentile aggregate function.
  */
 class PercentileQuerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
