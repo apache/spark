@@ -435,15 +435,16 @@ class CastSuite extends CastSuiteBase {
     }
   }
 
-  test("cast from date") {
+  test("SPARK-37169: cast from date") {
     val d = Date.valueOf("1970-01-01")
-    checkEvaluation(cast(d, ShortType), null)
-    checkEvaluation(cast(d, IntegerType), null)
-    checkEvaluation(cast(d, LongType), null)
-    checkEvaluation(cast(d, FloatType), null)
-    checkEvaluation(cast(d, DoubleType), null)
-    checkEvaluation(cast(d, DecimalType.SYSTEM_DEFAULT), null)
-    checkEvaluation(cast(d, DecimalType(10, 2)), null)
+    checkEvaluation(cast(d, ByteType), -128.toByte)
+    checkEvaluation(cast(d, ShortType), 28800.toShort)
+    checkEvaluation(cast(d, IntegerType), 28800)
+    checkEvaluation(cast(d, LongType), 28800L)
+    checkEvaluation(cast(d, FloatType), 28800F)
+    checkEvaluation(cast(d, DoubleType), 28800D)
+    checkEvaluation(cast(d, DecimalType.SYSTEM_DEFAULT), Decimal(28800))
+    checkEvaluation(cast(d, DecimalType(10, 2)), Decimal(28800))
     checkEvaluation(cast(d, StringType), "1970-01-01")
 
     checkEvaluation(

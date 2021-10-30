@@ -1298,18 +1298,4 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         }
     }
   }
-
-  test("SPARK-37169: Fix uncorrect result when cast DateType to NumericType") {
-    val date = Cast(Literal("2015-03-18"), DateType)
-    Seq((ByteType, 112.toByte),
-      (ShortType, 8816.toShort),
-      (IntegerType, 1426662000),
-      (LongType, 1426662000L),
-      (FloatType, 1426662000F),
-      (DoubleType, 1426662000D),
-      (DecimalType.USER_DEFAULT, Decimal(1426662000D)))
-      .foreach { case (dataType: DataType, result) =>
-        checkEvaluation(cast(date, dataType), result)
-      }
-  }
 }
