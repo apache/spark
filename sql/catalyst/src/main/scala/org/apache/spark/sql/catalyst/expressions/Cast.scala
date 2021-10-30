@@ -602,7 +602,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1L else 0L)
     case DateType =>
-      buildCast[Int](_, d => null)
+      buildCast[Int](_, d => timestampToLong(daysToMicros(d, zoneId)))
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t))
     case x: NumericType if ansiEnabled =>
@@ -620,8 +620,17 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       buildCast[UTF8String](_, s => if (s.toInt(result)) result.value else null)
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1 else 0)
+    case DateType if ansiEnabled =>
+      buildCast[Int](_, d => {
+        val longValue = timestampToLong(daysToMicros(d, zoneId))
+        if (longValue == longValue.toInt) {
+          longValue.toInt
+        } else {
+          throw QueryExecutionErrors.castingCauseOverflowError(d, IntegerType.catalogString)
+        }
+      })
     case DateType =>
-      buildCast[Int](_, d => null)
+      buildCast[Int](_, d => timestampToLong(daysToMicros(d, zoneId)).toInt)
     case TimestampType if ansiEnabled =>
       buildCast[Long](_, t => {
         val longValue = timestampToLong(t)
@@ -652,8 +661,17 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1.toShort else 0.toShort)
+    case DateType if ansiEnabled =>
+      buildCast[Int](_, d => {
+        val longValue = timestampToLong(daysToMicros(d, zoneId))
+        if (longValue == longValue.toShort) {
+          longValue.toShort
+        } else {
+          throw QueryExecutionErrors.castingCauseOverflowError(d, ShortType.catalogString)
+        }
+      })
     case DateType =>
-      buildCast[Int](_, d => null)
+      buildCast[Int](_, d => timestampToLong(daysToMicros(d, zoneId)).toShort)
     case TimestampType if ansiEnabled =>
       buildCast[Long](_, t => {
         val longValue = timestampToLong(t)
@@ -695,8 +713,17 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1.toByte else 0.toByte)
+    case DateType if ansiEnabled =>
+      buildCast[Int](_, d => {
+        val longValue = timestampToLong(daysToMicros(d, zoneId))
+        if (longValue == longValue.toByte) {
+          longValue.toByte
+        } else {
+          throw QueryExecutionErrors.castingCauseOverflowError(d, ByteType.catalogString)
+        }
+      })
     case DateType =>
-      buildCast[Int](_, d => null)
+      buildCast[Int](_, d => timestampToLong(daysToMicros(d, zoneId)).toByte)
     case TimestampType if ansiEnabled =>
       buildCast[Long](_, t => {
         val longValue = timestampToLong(t)
@@ -767,7 +794,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case BooleanType =>
       buildCast[Boolean](_, b => toPrecision(if (b) Decimal.ONE else Decimal.ZERO, target))
     case DateType =>
-      buildCast[Int](_, d => null) // date can't cast to decimal in Hive
+      // Note that we lose precision here.
+      buildCast[Int](_, d =>
+        changePrecision(Decimal(timestampToDouble(daysToMicros(d, zoneId))), target))
     case TimestampType =>
       // Note that we lose precision here.
       buildCast[Long](_, t => changePrecision(Decimal(timestampToDouble(t)), target))
@@ -801,7 +830,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1d else 0d)
     case DateType =>
-      buildCast[Int](_, d => null)
+      buildCast[Int](_, d => timestampToDouble(daysToMicros(d, zoneId)))
     case TimestampType =>
       buildCast[Long](_, t => timestampToDouble(t))
     case x: NumericType =>
@@ -826,7 +855,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1f else 0f)
     case DateType =>
-      buildCast[Int](_, d => null)
+      buildCast[Int](_, d => timestampToDouble(daysToMicros(d, zoneId)).toFloat)
     case TimestampType =>
       buildCast[Long](_, t => timestampToDouble(t).toFloat)
     case x: NumericType =>
@@ -1323,8 +1352,20 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
             ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
           """
       case DateType =>
-        // date can't cast to decimal in Hive
-        (c, evPrim, evNull) => code"$evNull = true;"
+        // Note that we lose precision here.
+        val zoneIdClass = classOf[ZoneId]
+        val zid = JavaCode.global(
+          ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
+          zoneIdClass)
+        val timestampValue = ctx.freshVariable("timestampValue", classOf[Long])
+        (c, evPrim, evNull) =>
+          code"""
+            long $timestampValue =
+              org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMicros($c, $zid);
+            Decimal $tmp = Decimal.apply(
+              scala.math.BigDecimal.valueOf(${timestampToDoubleCode(timestampValue)}));
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+          """
       case TimestampType =>
         // Note that we lose precision here.
         (c, evPrim, evNull) =>
@@ -1544,6 +1585,38 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evPrim = $c != 0;"
   }
 
+  private[this] def castDateToIntegralTypeCode(
+    ctx: CodegenContext,
+    integralType: String,
+    catalogType: String): CastFunction = {
+    val zoneIdClass = classOf[ZoneId]
+    val zid = JavaCode.global(
+      ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
+      zoneIdClass)
+    val timestampValue = ctx.freshVariable("timestampValue", classOf[Long])
+    if (ansiEnabled) {
+      val longValue = ctx.freshName("longValue")
+      (c, evPrim, evNull) =>
+        code"""
+          long $timestampValue =
+            org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMicros($c, $zid);
+          long $longValue = ${timestampToLongCode(timestampValue)};
+          if ($longValue == ($integralType) $longValue) {
+            $evPrim = ($integralType) $longValue;
+          } else {
+            throw QueryExecutionErrors.castingCauseOverflowError($c, "$catalogType");
+          }
+        """
+    } else {
+      (c, evPrim, evNull) =>
+        code"""
+          long $timestampValue =
+            org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMicros($c, $zid);
+          $evPrim = ($integralType) ${timestampToLongCode(timestampValue)};
+        """
+    }
+  }
+
   private[this] def castTimestampToIntegralTypeCode(
       ctx: CodegenContext,
       integralType: String,
@@ -1637,8 +1710,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         """
     case BooleanType =>
       (c, evPrim, evNull) => code"$evPrim = $c ? (byte) 1 : (byte) 0;"
-    case DateType =>
-      (c, evPrim, evNull) => code"$evNull = true;"
+    case DateType => castDateToIntegralTypeCode(ctx, "byte", ByteType.catalogString)
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "byte", ByteType.catalogString)
     case DecimalType() => castDecimalToIntegralTypeCode(ctx, "byte", ByteType.catalogString)
     case ShortType | IntegerType | LongType if ansiEnabled =>
@@ -1668,8 +1740,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         """
     case BooleanType =>
       (c, evPrim, evNull) => code"$evPrim = $c ? (short) 1 : (short) 0;"
-    case DateType =>
-      (c, evPrim, evNull) => code"$evNull = true;"
+    case DateType => castDateToIntegralTypeCode(ctx, "short", ShortType.catalogString)
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "short", ShortType.catalogString)
     case DecimalType() => castDecimalToIntegralTypeCode(ctx, "short", ShortType.catalogString)
     case IntegerType | LongType if ansiEnabled =>
@@ -1697,8 +1768,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         """
     case BooleanType =>
       (c, evPrim, evNull) => code"$evPrim = $c ? 1 : 0;"
-    case DateType =>
-      (c, evPrim, evNull) => code"$evNull = true;"
+    case DateType => castDateToIntegralTypeCode(ctx, "int", IntegerType.catalogString)
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "int", IntegerType.catalogString)
     case DecimalType() => castDecimalToIntegralTypeCode(ctx, "int", IntegerType.catalogString)
     case LongType if ansiEnabled =>
@@ -1727,7 +1797,17 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case BooleanType =>
       (c, evPrim, evNull) => code"$evPrim = $c ? 1L : 0L;"
     case DateType =>
-      (c, evPrim, evNull) => code"$evNull = true;"
+      val zoneIdClass = classOf[ZoneId]
+      val zid = JavaCode.global(
+        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
+        zoneIdClass)
+      val timestampValue = ctx.freshVariable("timestampValue", classOf[Long])
+      (c, evPrim, evNull) =>
+        code"""
+          long $timestampValue =
+            org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMicros($c, $zid);
+          $evPrim = (long) ${timestampToLongCode(timestampValue)};
+        """
     case TimestampType =>
       (c, evPrim, evNull) => code"$evPrim = (long) ${timestampToLongCode(c)};"
     case DecimalType() => castDecimalToIntegralTypeCode(ctx, "long", LongType.catalogString)
@@ -1763,7 +1843,17 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       case BooleanType =>
         (c, evPrim, evNull) => code"$evPrim = $c ? 1.0f : 0.0f;"
       case DateType =>
-        (c, evPrim, evNull) => code"$evNull = true;"
+        val zoneIdClass = classOf[ZoneId]
+        val zid = JavaCode.global(
+          ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
+          zoneIdClass)
+        val timestampValue = ctx.freshVariable("timestampValue", classOf[Long])
+        (c, evPrim, evNull) =>
+          code"""
+            long $timestampValue =
+              org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMicros($c, $zid);
+            $evPrim = (float) (${timestampToDoubleCode(timestampValue)});
+          """
       case TimestampType =>
         (c, evPrim, evNull) => code"$evPrim = (float) (${timestampToDoubleCode(c)});"
       case DecimalType() =>
@@ -1799,7 +1889,17 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       case BooleanType =>
         (c, evPrim, evNull) => code"$evPrim = $c ? 1.0d : 0.0d;"
       case DateType =>
-        (c, evPrim, evNull) => code"$evNull = true;"
+        val zoneIdClass = classOf[ZoneId]
+        val zid = JavaCode.global(
+          ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
+          zoneIdClass)
+        val timestampValue = ctx.freshVariable("timestampValue", classOf[Long])
+        (c, evPrim, evNull) =>
+          code"""
+            long $timestampValue =
+              org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMicros($c, $zid);
+            $evPrim = ${timestampToDoubleCode(timestampValue)};
+          """
       case TimestampType =>
         (c, evPrim, evNull) => code"$evPrim = ${timestampToDoubleCode(c)};"
       case DecimalType() =>
