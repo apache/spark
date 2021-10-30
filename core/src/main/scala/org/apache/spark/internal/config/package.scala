@@ -1192,8 +1192,9 @@ package object config {
   private[spark] val SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER =
     ConfigBuilder("spark.shuffle.maxAccurateSkewedBlockNumber")
       .doc("Max skewed shuffle blocks allowed to be accurately recorded in " +
-        "HighlyCompressedMapStatus if its size is larger than this factor multiplying " +
-        "the median shuffle block size or SHUFFLE_ACCURATE_BLOCK_THRESHOLD.")
+        "HighlyCompressedMapStatus if its size is larger than " +
+        "SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR multiplying the median shuffle block size or " +
+        "SHUFFLE_ACCURATE_BLOCK_THRESHOLD.")
       .version("3.3.0")
       .intConf
       .checkValue(_ > 0, "Allowed max accurate skewed block number must be positive.")

@@ -203,8 +203,10 @@ class MapStatusSuite extends SparkFunSuite {
     doReturn(conf).when(env).conf
     SparkEnv.set(env)
 
-    val sizes = Array.tabulate[Long](3000)(i => (if (i < 2990) i else i + 350 * 1024).toLong)
-    val avg = sizes.filter(_ < 3000).sum / sizes.count(i => i > 0 && i < 3000)
+    val smallBlockSizes = Array.tabulate[Long](2889)(i => i)
+    val skewBlocksSizes = Array.tabulate[Long](10)(i => i + 350 * 1024)
+    val sizes = smallBlockSizes ++: skewBlocksSizes
+    val avg = smallBlockSizes.sum / smallBlockSizes.length
     val loc = BlockManagerId("a", "b", 10)
     val mapTaskAttemptId = 5
     val status = MapStatus(loc, sizes, mapTaskAttemptId)
@@ -213,13 +215,12 @@ class MapStatusSuite extends SparkFunSuite {
     assert(status1.location == loc)
     assert(status1.mapId == mapTaskAttemptId)
     assert(status1.getSizeForBlock(0) == 0)
-    for (i <- 1 until 3000) {
-      val estimate = status1.getSizeForBlock(i)
-      if (i < 2990) {
-        assert(estimate === avg)
-      } else {
-        assert(estimate === compressAndDecompressSize(sizes(i)))
-      }
+    for (i <- 1 until smallBlockSizes.length) {
+      assert(status1.getSizeForBlock(i) === avg)
+    }
+    for (i <- 0 until skewBlocksSizes.length) {
+      assert(status1.getSizeForBlock(smallBlockSizes.length + i) ===
+        compressAndDecompressSize(skewBlocksSizes(i)))
     }
   }
 
@@ -229,8 +230,13 @@ class MapStatusSuite extends SparkFunSuite {
     doReturn(conf).when(env).conf
     SparkEnv.set(env)
 
-    val sizes = Array.tabulate[Long](3000)(i => (if (i < 2500) i else i + 3500 * 1024).toLong)
-    val avg = sizes.slice(1, 2900).sum / 2899
+    val sizes: Array[Long] = Array.tabulate[Long](2500)(i => i) ++:
+      Array.tabulate[Long](500)(i => i + 3500 * 1024)
+    val emptyBlocksSize = sizes.filter(_ == 0).length
+    val smallBlockSizes = sizes.slice(emptyBlocksSize, sizes.size - 100)
+    val skewBlocksSizes = sizes.slice(sizes.size - 100, sizes.size)
+    val avg = smallBlockSizes.sum / smallBlockSizes.length
+
     val loc = BlockManagerId("a", "b", 10)
     val mapTaskAttemptId = 5
     val status = MapStatus(loc, sizes, mapTaskAttemptId)
@@ -239,13 +245,12 @@ class MapStatusSuite extends SparkFunSuite {
     assert(status1.location == loc)
     assert(status1.mapId == mapTaskAttemptId)
     assert(status1.getSizeForBlock(0) == 0)
-    for (i <- 1 until 3000) {
-      val estimate = status1.getSizeForBlock(i)
-      if (i < 2900) {
-        assert(estimate === avg)
-      } else {
-        assert(estimate === compressAndDecompressSize(sizes(i)))
-      }
+    for (i <- 1 until sizes.length - 100) {
+      assert(status1.getSizeForBlock(i) === avg)
+    }
+    for (i <- 0 until 100) {
+      assert(status1.getSizeForBlock(sizes.length - 100 + i) ===
+        compressAndDecompressSize(skewBlocksSizes(skewBlocksSizes.length - 100 + i)))
     }
   }
 }
