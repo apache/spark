@@ -35,11 +35,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
+import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CharVarcharUtils}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
+import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -396,9 +397,8 @@ object OrcUtils extends Logging {
       dataSchema: StructType,
       partitionSchema: StructType,
       aggregation: Aggregation,
-      aggSchema: StructType): InternalRow = {
-    require(aggregation.groupByColumns.length == 0,
-      s"aggregate $aggregation with group-by column shouldn't be pushed down")
+      aggSchema: StructType,
+      partitionValues: InternalRow): InternalRow = {
     var columnsStatistics: OrcColumnStatistics = null
     try {
       columnsStatistics = OrcFooterReader.readStatistics(reader)
@@ -457,17 +457,22 @@ object OrcUtils extends Logging {
       }
     }
 
+    // if there are group by columns, we will build result set row first,
+    // and then append group by columns values (partition col values) to the result set row.
+    val schemaWithoutGroupby =
+      AggregatePushDownUtils.aggSchemaWithOutGroupBy(aggregation, aggSchema)
+
     val aggORCValues: Seq[WritableComparable[_]] =
       aggregation.aggregateExpressions.zipWithIndex.map {
         case (max: Max, index) =>
           val columnName = max.column.fieldNames.head
           val statistics = getColumnStatistics(columnName)
-          val dataType = aggSchema(index).dataType
+          val dataType = schemaWithoutGroupby(index).dataType
           getMinMaxFromColumnStatistics(statistics, dataType, isMax = true)
         case (min: Min, index) =>
           val columnName = min.column.fieldNames.head
           val statistics = getColumnStatistics(columnName)
-          val dataType = aggSchema.apply(index).dataType
+          val dataType = schemaWithoutGroupby.apply(index).dataType
           getMinMaxFromColumnStatistics(statistics, dataType, isMax = false)
         case (count: Count, _) =>
           val columnName = count.column.fieldNames.head
@@ -490,7 +495,12 @@ object OrcUtils extends Logging {
             s"createAggInternalRowFromFooter should not take $x as the aggregate expression")
       }
 
-    val orcValuesDeserializer = new OrcDeserializer(aggSchema, (0 until aggSchema.length).toArray)
-    orcValuesDeserializer.deserializeFromValues(aggORCValues)
+    val orcValuesDeserializer = new OrcDeserializer(schemaWithoutGroupby,
+      (0 until schemaWithoutGroupby.length).toArray)
+    if (aggregation.groupByColumns.length > 0) {
+      new JoinedRow(partitionValues, orcValuesDeserializer.deserializeFromValues(aggORCValues))
+    } else {
+      orcValuesDeserializer.deserializeFromValues(aggORCValues)
+    }
   }
 }

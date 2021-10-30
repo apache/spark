@@ -81,7 +81,7 @@ object AggregatePushDownUtils {
       }
     }
 
-    if (aggregation.groupByColumns.nonEmpty || dataFilters.nonEmpty) {
+    if (dataFilters.nonEmpty) {
       // Parquet/ORC footer has max/min/count for columns
       // e.g. SELECT COUNT(col1) FROM t
       // but footer doesn't have max/min/count for a column if max/min/count
@@ -89,9 +89,12 @@ object AggregatePushDownUtils {
       // e.g. SELECT COUNT(col1) FROM t WHERE col2 = 8
       //      SELECT COUNT(col1) FROM t GROUP BY col2
       // However, if the filter is on partition column, max/min/count can still be pushed down
-      // Todo:  add support if groupby column is partition col
-      //        (https://issues.apache.org/jira/browse/SPARK-36646)
       return None
+    }
+
+    aggregation.groupByColumns.foreach { col =>
+      if (col.fieldNames.length != 1 || !isPartitionCol(col)) return None
+      finalSchema = finalSchema.add(getStructFieldForCol(col))
     }
 
     aggregation.aggregateExpressions.foreach {
@@ -138,4 +141,14 @@ object AggregatePushDownUtils {
     converter.convert(aggregatesAsRow, columnVectors.toArray)
     new ColumnarBatch(columnVectors.asInstanceOf[Array[ColumnVector]], 1)
   }
+
+  def aggSchemaWithOutGroupBy(aggregation: Aggregation, aggSchema: StructType): StructType = {
+    val groupByColNums = aggregation.groupByColumns.length
+    if (groupByColNums > 0) {
+      new StructType(aggSchema.fields.drop(groupByColNums))
+    } else {
+      aggSchema
+    }
+  }
+
 }

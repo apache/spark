@@ -86,7 +86,7 @@ case class OrcPartitionReaderFactory(
     val filePath = new Path(new URI(file.filePath))
 
     if (aggregation.nonEmpty) {
-      return buildReaderWithAggregates(filePath, conf)
+      return buildReaderWithAggregates(file, conf)
     }
 
     val resultedColPruneInfo =
@@ -130,7 +130,7 @@ case class OrcPartitionReaderFactory(
     val filePath = new Path(new URI(file.filePath))
 
     if (aggregation.nonEmpty) {
-      return buildColumnarReaderWithAggregates(filePath, conf)
+      return buildColumnarReaderWithAggregates(file, conf)
     }
 
     val resultedColPruneInfo =
@@ -183,14 +183,16 @@ case class OrcPartitionReaderFactory(
    * Build reader with aggregate push down.
    */
   private def buildReaderWithAggregates(
-      filePath: Path,
+      file: PartitionedFile,
       conf: Configuration): PartitionReader[InternalRow] = {
+    val filePath = new Path(new URI(file.filePath))
     new PartitionReader[InternalRow] {
       private var hasNext = true
       private lazy val row: InternalRow = {
         Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
           OrcUtils.createAggInternalRowFromFooter(
-            reader, filePath.toString, dataSchema, partitionSchema, aggregation.get, readDataSchema)
+            reader, filePath.toString, dataSchema, partitionSchema, aggregation.get,
+            readDataSchema, file.partitionValues)
         }
       }
 
@@ -209,15 +211,16 @@ case class OrcPartitionReaderFactory(
    * Build columnar reader with aggregate push down.
    */
   private def buildColumnarReaderWithAggregates(
-      filePath: Path,
+      file: PartitionedFile,
       conf: Configuration): PartitionReader[ColumnarBatch] = {
+    val filePath = new Path(new URI(file.filePath))
     new PartitionReader[ColumnarBatch] {
       private var hasNext = true
       private lazy val batch: ColumnarBatch = {
         Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
           val row = OrcUtils.createAggInternalRowFromFooter(
             reader, filePath.toString, dataSchema, partitionSchema, aggregation.get,
-            readDataSchema)
+            readDataSchema, file.partitionValues)
           AggregatePushDownUtils.convertAggregatesRowToBatch(row, readDataSchema, offHeap = false)
         }
       }
