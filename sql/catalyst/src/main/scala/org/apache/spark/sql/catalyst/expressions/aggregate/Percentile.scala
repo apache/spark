@@ -43,6 +43,7 @@ import org.apache.spark.util.collection.OpenHashMap
  *                             percentage values. Each percentage value must be in the range
  *                             [0.0, 1.0].
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage =
     """
@@ -62,15 +63,14 @@ import org.apache.spark.util.collection.OpenHashMap
        3.0
       > SELECT _FUNC_(col, array(0.25, 0.75)) FROM VALUES (0), (10) AS tab(col);
        [2.5,7.5]
-      > SELECT _FUNC_(col, 0.5) FROM VALUES
-          (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
+      > SELECT _FUNC_(col, 0.5) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
        5.0
-      > SELECT _FUNC_(col, array(0.2, 0.5)) FROM VALUES
-          (INTERVAL '0' SECOND), (INTERVAL '10' SECOND) AS tab(col);
+      > SELECT _FUNC_(col, array(0.2, 0.5)) FROM VALUES (INTERVAL '0' SECOND), (INTERVAL '10' SECOND) AS tab(col);
        [2000000.0,5000000.0]
   """,
   group = "agg_funcs",
   since = "2.1.0")
+// scalastyle:on line.size.limit
 case class Percentile(
     child: Expression,
     percentageExpression: Expression,

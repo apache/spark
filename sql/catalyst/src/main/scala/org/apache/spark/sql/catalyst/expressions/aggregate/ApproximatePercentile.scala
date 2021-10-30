@@ -49,6 +49,7 @@ import org.apache.spark.sql.types._
  *                           yields better accuracy, the default value is
  *                           DEFAULT_PERCENTILE_ACCURACY.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(col, percentage [, accuracy]) - Returns the approximate `percentile` of the numeric or
@@ -68,17 +69,14 @@ import org.apache.spark.sql.types._
        [1,1,0]
       > SELECT _FUNC_(col, 0.5, 100) FROM VALUES (0), (6), (7), (9), (10) AS tab(col);
        7
-      > SELECT _FUNC_(col, 0.5, 100) FROM VALUES
-         (INTERVAL '0' MONTH), (INTERVAL '1' MONTH),
-         (INTERVAL '2' MONTH), (INTERVAL '10' MONTH) AS tab(col);
+      > SELECT _FUNC_(col, 0.5, 100) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '1' MONTH), (INTERVAL '2' MONTH), (INTERVAL '10' MONTH) AS tab(col);
        0-1
-      > SELECT _FUNC_(col, array(0.5, 0.7), 100) FROM VALUES
-          (INTERVAL '0' SECOND), (INTERVAL '1' SECOND),
-          (INTERVAL '2' SECOND), (INTERVAL '10' SECOND) AS tab(col);
+      > SELECT _FUNC_(col, array(0.5, 0.7), 100) FROM VALUES (INTERVAL '0' SECOND), (INTERVAL '1' SECOND), (INTERVAL '2' SECOND), (INTERVAL '10' SECOND) AS tab(col);
        [0 00:00:01.000000000,0 00:00:02.000000000]
   """,
   group = "agg_funcs",
   since = "2.1.0")
+// scalastyle:on line.size.limit
 case class ApproximatePercentile(
     child: Expression,
     percentageExpression: Expression,
