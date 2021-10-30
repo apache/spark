@@ -169,10 +169,10 @@ class FileScanRDD(
               throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
                 currentFile.filePath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
             case e: Exception =>
-              if (e.getCause.isInstanceOf[SparkUpgradeException]) {
-                throw e.getCause
-              } else {
-                throw QueryExecutionErrors.cannotReadFilesError(e, currentFile.filePath)
+              e.getCause match {
+                case sue: SparkUpgradeException =>
+                  throw sue
+                case _ => throw QueryExecutionErrors.cannotReadFilesError(e, currentFile.filePath)
               }
           }
         } else {
