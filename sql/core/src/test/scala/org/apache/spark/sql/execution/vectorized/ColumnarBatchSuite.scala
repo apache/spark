@@ -1688,7 +1688,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }
   }
 
-  test("RowToColumnConverter for AnsiIntervalType") {
+  test("SPARK-37161: RowToColumnConverter for AnsiIntervalType") {
     DataTypeTestUtils.yearMonthIntervalTypes.foreach { dt =>
       val schema = new StructType().add(dt.typeName, dt)
       val converter = new RowToColumnConverter(schema)
