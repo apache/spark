@@ -395,6 +395,66 @@ class DatasetSuite extends QueryTest
     }
   }
 
+  test("SPARK-37171: forany returns true if condition is true for any row") {
+    val df = Seq("aa", "bb", "cc", "abc").toDF("zoo")
+    assert(df.forany($"zoo".contains(Array('a', 'b'))))
+  }
+
+  test("SPARK-37171: forall returns true if condition true for all rows") {
+    val df = Seq("ab", "ba").toDF("zoo")
+    assert(df.forall($"zoo".contains("a")))
+  }
+
+  test("SPARK-37171: forany returns false if condition is false for all rows") {
+    val df = Seq("aa", "bb", "cc").toDF("zoo")
+    assert(!df.forany($"zoo".contains(Array('a', 'b'))))
+  }
+
+  test("SPARK-37171: forall returns false if condition false for any rows") {
+    val df = Seq("ab", "ba").toDF("zoo")
+    assert(!df.forall($"zoo".contains("c")))
+  }
+
+  test("SPARK-37171: forany expression returns true if condition is true for any row") {
+    val df = Seq("aa", "bb", "cc", "abc").toDF("zoo")
+    assert(df.forany("zoo like 'ab%'"))
+  }
+
+  test("SPARK-37171: forall expressions returns true if condition true for all rows") {
+    val df = Seq("ab", "ba").toDF("zoo")
+    assert(df.forall("zoo like '%a%'"))
+  }
+
+  test("SPARK-37171: forany expressions returns false if condition is false for all rows") {
+    val df = Seq("aa", "bb", "cc").toDF("zoo")
+    assert(!df.forany("zoo like '%ab%'"))
+  }
+
+  test("SPARK-37171: forall expressions returns false if condition false for any rows") {
+    val df = Seq("ab", "ba").toDF("zoo")
+    assert(!df.forall("zoo like '%c%'"))
+  }
+
+  test("SPARK-37171: forany function returns true if condition is true for any row") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+    assert(ds.forany(_._1 == "b"))
+  }
+
+  test("SPARK-37171: forall function returns true if condition is true for all rows") {
+    val ds = Seq(("a", 1), ("a", 1), ("a", 2)).toDS()
+    assert(ds.forall(_._1 == "a"))
+  }
+
+  test("SPARK-37171: forany function returns false if condition is false for all rows") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+    assert(!ds.forany(_._1 == "d"))
+  }
+
+  test("SPARK-37171: forall function returns false if condition is false for any row") {
+    val ds = Seq(("a", 1), ("a", 1), ("a", 2)).toDS()
+    assert(!ds.forall(_._2 == 2))
+  }
+
   test("filter") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkDataset(

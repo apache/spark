@@ -1639,6 +1639,58 @@ class Dataset[T] private[sql](
     selectUntyped(c1, c2, c3, c4, c5).asInstanceOf[Dataset[(U1, U2, U3, U4, U5)]]
 
   /**
+   * Checks if the condition is true for any of the rows.
+   * {{{
+   *   peopleDs.forany($"age" > 15)
+   * }}}
+   *
+   * @group typedrel
+   * @since 3.2.0
+   */
+  def forany(condition: Column): Boolean = {
+    !filter(condition).isEmpty
+  }
+
+  /**
+   * Checks if the SQL expression is true for any of the rows.
+   * {{{
+   *   peopleDs.forany("age > 15")
+   * }}}
+   *
+   * @group typedrel
+   * @since 3.2.0
+   */
+  def forany(conditionExpr: String): Boolean = {
+    !filter(conditionExpr).isEmpty
+  }
+
+  /**
+   * Checks if the condition is true for all the rows.
+   * {{{
+   *   peopleDs.forall($"age" > 15)
+   * }}}
+   *
+   * @group typedrel
+   * @since 3.2.0
+   */
+  def forall(condition: Column): Boolean = {
+    filter(!condition).isEmpty
+  }
+
+  /**
+   * Checks if the SQL expression is true for all the rows.
+   * {{{
+   *   peopleDs.forall("age > 15")
+   * }}}
+   *
+   * @group typedrel
+   * @since 3.2.0
+   */
+  def forall(conditionExpr: String): Boolean = {
+    filter(!Column(sparkSession.sessionState.sqlParser.parseExpression(conditionExpr))).isEmpty
+  }
+
+  /**
    * Filters rows using the given condition.
    * {{{
    *   // The following are equivalent:
@@ -2859,6 +2911,26 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def transform[U](t: Dataset[T] => Dataset[U]): Dataset[U] = t(this)
+
+  /**
+   * Checks if there are any elements for which `func` returns `true`.
+   *
+   * @group typedrel
+   * @since 3.2.0
+   */
+  def forany(func: T => Boolean): Boolean = {
+    !filter(func).isEmpty
+  }
+
+  /**
+   * Checks if `func` returns `true` for all elements.
+   *
+   * @group typedrel
+   * @since 3.2.0
+   */
+  def forall(func: T => Boolean): Boolean = {
+    filter((x: T) => !func(x)).isEmpty
+  }
 
   /**
    * (Scala-specific)
