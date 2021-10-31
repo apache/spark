@@ -256,6 +256,15 @@ logging into the data sources.
   </tr>
 
   <tr>
+    <td><code>pushDownTableSample</code></td>
+    <td><code>false</code></td>
+    <td>
+     The option to enable or disable TABLESAMPLE push-down into the JDBC data source. The default value is false, in which case Spark does not push down TABLESAMPLE to the JDBC data source. Otherwise, if value sets to true, TABLESAMPLE is pushed down to the JDBC data source.
+    </td>
+    <td>read</td>
+  </tr>
+
+  <tr>
     <td><code>keytab</code></td>
     <td>(none)</td>
     <td>

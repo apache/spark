@@ -23,9 +23,11 @@ import org.apache.log4j.Level
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
+import org.apache.spark.sql.catalyst.plans.logical.Sample
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -282,6 +284,95 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     withTable(s"$catalogName.new_table") {
       sql(s"CREATE TABLE $catalogName.new_table(col1 INT, col2 INT, col3 INT, col4 INT, col5 INT)")
       testIndexUsingSQL(s"$catalogName.new_table")
+    }
+  }
+
+  def supportsTableSample: Boolean = false
+
+  test("Test TABLESAMPLE") {
+    if (supportsTableSample) {
+      withTable(s"$catalogName.new_table") {
+        sql(s"CREATE TABLE $catalogName.new_table (col1 INT, col2 INT)")
+        sql(s"INSERT INTO TABLE $catalogName.new_table values (1, 2)")
+        sql(s"INSERT INTO TABLE $catalogName.new_table values (3, 4)")
+        sql(s"INSERT INTO TABLE $catalogName.new_table values (5, 6)")
+        sql(s"INSERT INTO TABLE $catalogName.new_table values (7, 8)")
+        sql(s"INSERT INTO TABLE $catalogName.new_table values (9, 10)")
+        sql(s"INSERT INTO TABLE $catalogName.new_table values (11, 12)")
+        sql(s"INSERT INTO TABLE $catalogName.new_table values (13, 14)")
+        sql(s"INSERT INTO TABLE $catalogName.new_table values (15, 16)")
+        sql(s"INSERT INTO TABLE $catalogName.new_table values (17, 18)")
+        sql(s"INSERT INTO TABLE $catalogName.new_table values (19, 20)")
+
+        val df1 = sql(s"SELECT col1 FROM $catalogName.new_table TABLESAMPLE (BUCKET 6 OUT OF 10)" +
+          s" REPEATABLE (12345)")
+        val scan1 = df1.queryExecution.optimizedPlan.collectFirst {
+          case s: DataSourceV2ScanRelation => s
+        }.get
+        assert(scan1.schema.names.sameElements(Seq("col1")))
+
+        val sample1 = df1.queryExecution.optimizedPlan.collect {
+          case s: Sample => s
+        }
+        assert(sample1.isEmpty)
+        assert(df1.collect().length <= 7)
+
+        val df2 = sql(s"SELECT * FROM $catalogName.new_table TABLESAMPLE (50 PERCENT)" +
+          s" REPEATABLE (12345)")
+        val sample2 = df2.queryExecution.optimizedPlan.collect {
+          case s: Sample => s
+        }
+        assert(sample2.isEmpty)
+        assert(df2.collect().length <= 7)
+
+        val df3 = sql(s"SELECT col1 FROM $catalogName.new_table TABLESAMPLE (BUCKET 6 OUT OF 10)" +
+          s" LIMIT 2")
+        val sample3 = df3.queryExecution.optimizedPlan.collect {
+          case s: Sample => s
+        }
+        assert(sample3.isEmpty)
+        df3.queryExecution.optimizedPlan.collectFirst {
+          case s @ DataSourceV2ScanRelation(_, scan, _) => scan match {
+            case v1: V1ScanWrapper =>
+              assert(v1.pushedDownOperators.limit.nonEmpty &&
+                v1.pushedDownOperators.limit.get === 2)
+              s.schema.names.sameElements(Seq("col1"))
+          }
+        }
+        assert(df3.collect().length == 2)
+
+        val df4 = sql(s"SELECT col1 FROM $catalogName.new_table" +
+          s" TABLESAMPLE (50 PERCENT) REPEATABLE (12345) LIMIT 2")
+        val sample4 = df4.queryExecution.optimizedPlan.collect {
+          case s: Sample => s
+        }
+        assert(sample4.isEmpty)
+        df4.queryExecution.optimizedPlan.collect {
+          case s @ DataSourceV2ScanRelation(_, scan, _) => scan match {
+            case v1: V1ScanWrapper =>
+              assert(v1.pushedDownOperators.limit.nonEmpty &&
+                v1.pushedDownOperators.limit.get === 2)
+              s.schema.names.sameElements(Seq("col1"))
+          }
+        }
+        assert(df4.collect().length == 2)
+
+        // Push down order is filter -> sample -> limit
+        // in this test only limit is pushed down because sample is after limit
+        // Filter in combination with sample is not allowed so no need to test
+        val df5 = spark.read.table(s"$catalogName.new_table").limit(2).sample(0.5)
+        val sample5 = df5.queryExecution.optimizedPlan.collect {
+          case s: Sample => s
+        }
+        assert(sample5.nonEmpty)
+        df5.queryExecution.optimizedPlan.collect {
+          case DataSourceV2ScanRelation(_, scan, _) => scan match {
+            case v1: V1ScanWrapper =>
+              assert(v1.pushedDownOperators.limit.nonEmpty &&
+                v1.pushedDownOperators.limit.get === 2)
+          }
+        }
+      }
     }
   }
 }

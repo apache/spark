@@ -22,10 +22,10 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.connector.expressions.{FieldReference, TableSample}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PushableColumnWithoutNestedColumn}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
@@ -135,6 +135,17 @@ object PushDownUtils extends PredicateHelper {
         val agg = new Aggregation(translatedAggregates.toArray, translatedGroupBys.toArray)
         Some(agg).filter(r.pushAggregation)
       case _ => None
+    }
+  }
+
+  /**
+   * Pushes down TableSample to the data source Scan
+   */
+  def pushTableSample(scanBuilder: ScanBuilder, sample: TableSample): Boolean = {
+    scanBuilder match {
+      case s: SupportsPushDownTableSample =>
+        s.pushTableSample(sample)
+      case _ => false
     }
   }
 

@@ -15,19 +15,36 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.read;
+package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.annotation.Evolving;
+import org.apache.spark.annotation.Experimental;
 
 /**
- * An interface for building the {@link Scan}. Implementations can mixin SupportsPushDownXYZ
- * interfaces to do operator push down, and keep the operator push down result in the returned
- * {@link Scan}. When pushing down operators, the push down order is:
- * filter -&gt; aggregate -&gt; sample -&gt; limit -&gt; column pruning.
+ * Represents a TableSample in the public expression API.
  *
- * @since 3.0.0
+ * @since 3.3.0
  */
-@Evolving
-public interface ScanBuilder {
-  Scan build();
+@Experimental
+public interface TableSample extends Expression {
+
+  /**
+   * Returns the lower-bound of the sampling probability (usually 0.0).
+   */
+  double lowerBound();
+
+  /**
+   * Returns the upper-bound of the sampling probability. The expected fraction sampled
+   * will be ub - lb.
+   */
+  double upperBound();
+
+  /**
+   * Returns whether to sample with replacement.
+   */
+  boolean withReplacement();
+
+  /**
+   * Returns the random seed.
+   */
+  long seed();
 }

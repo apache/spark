@@ -25,6 +25,7 @@ import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskCon
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.expressions.TableSample
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
@@ -181,6 +182,7 @@ object JDBCRDD extends Logging {
    * @param groupByColumns - The pushed down group by columns.
    * @param limit - The pushed down limit. If the value is 0, it means no limit or limit
    *                is not pushed down.
+   * @param sample - The pushed down tableSample.
    *
    * @return An RDD representing "SELECT requiredColumns FROM fqTable".
    */
@@ -193,6 +195,7 @@ object JDBCRDD extends Logging {
       options: JDBCOptions,
       outputSchema: Option[StructType] = None,
       groupByColumns: Option[Array[String]] = None,
+      sample: Option[TableSample] = None,
       limit: Int = 0): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
@@ -212,6 +215,7 @@ object JDBCRDD extends Logging {
       url,
       options,
       groupByColumns,
+      sample,
       limit)
   }
 }
@@ -231,6 +235,7 @@ private[jdbc] class JDBCRDD(
     url: String,
     options: JDBCOptions,
     groupByColumns: Option[Array[String]],
+    sample: Option[TableSample],
     limit: Int)
   extends RDD[InternalRow](sc, Nil) {
 
@@ -354,10 +359,13 @@ private[jdbc] class JDBCRDD(
 
     val myWhereClause = getWhereClause(part)
 
+    val myTableSampleClause: String = JdbcDialects.get(url).getTableSample(sample)
+
     val myLimitClause: String = dialect.getLimitClause(limit)
 
     val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myWhereClause" +
-      s" $getGroupByClause $myLimitClause"
+      s" $getGroupByClause $myTableSampleClause $myLimitClause"
+    println(sqlText)
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)

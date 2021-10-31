@@ -190,4 +190,23 @@ public class Expressions {
   public static SortOrder sort(Expression expr, SortDirection direction) {
     return LogicalExpressions.sort(expr, direction, direction.defaultNullOrdering());
   }
+
+  /**
+   * Create a tableSample expression.
+   *
+   * @param lowerBound the lower-bound of the sampling probability (usually 0.0)
+   * @param upperBound the upper-bound of the sampling probability
+   * @param withReplacement whether to sample with replacement
+   * @param seed the random seed
+   * @return a TableSample
+   *
+   * @since 3.3.0
+   */
+  public static TableSample tableSample(
+      double lowerBound,
+      double upperBound,
+      boolean withReplacement,
+      long seed)  {
+    return LogicalExpressions.tableSample(lowerBound, upperBound, withReplacement, seed);
+  }
 }
