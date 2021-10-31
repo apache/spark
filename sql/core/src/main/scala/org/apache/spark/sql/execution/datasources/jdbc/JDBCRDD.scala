@@ -365,7 +365,6 @@ private[jdbc] class JDBCRDD(
 
     val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myWhereClause" +
       s" $getGroupByClause $myTableSampleClause $myLimitClause"
-    println(sqlText)
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)
