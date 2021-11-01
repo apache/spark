@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
+
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.functions.spark_partition_id
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
@@ -41,11 +43,13 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
     val clock = new StreamManualClock
     testStream(input)(
       StartStream(trigger = Trigger.ProcessingTime(10), triggerClock = clock),
-      AdvanceManualClock(10),
+      waitUntilBatchProcessed(clock),
       CheckLastBatch((0 until 10).map(v => new java.sql.Timestamp(1000L) -> v): _*),
       AdvanceManualClock(10),
+      waitUntilBatchProcessed(clock),
       CheckLastBatch((10 until 20).map(v => new java.sql.Timestamp(1050L) -> v): _*),
       AdvanceManualClock(10),
+      waitUntilBatchProcessed(clock),
       CheckLastBatch((20 until 30).map(v => new java.sql.Timestamp(1100L) -> v): _*)
     )
   }
@@ -58,21 +62,80 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
         .load()
         .select('value)
 
+      val clock = new StreamManualClock
       testStream(input)(
-        StartStream(checkpointLocation = dir.getAbsolutePath),
-        Execute(_.awaitOffset(0, RatePerMicroBatchStreamOffset(20, 2000),
-          streamingTimeout.toMillis)),
-        CheckAnswer(0 until 20: _*),
+        StartStream(checkpointLocation = dir.getAbsolutePath,
+          trigger = Trigger.ProcessingTime(10), triggerClock = clock),
+        waitUntilBatchProcessed(clock),
+        CheckLastBatch(0 until 10: _*),
+        AdvanceManualClock(10),
+        waitUntilBatchProcessed(clock),
+        CheckLastBatch(10 until 20: _*),
         StopStream
       )
 
       testStream(input)(
-        StartStream(checkpointLocation = dir.getAbsolutePath),
-        Execute(_.awaitOffset(0, RatePerMicroBatchStreamOffset(40, 4000),
-          streamingTimeout.toMillis)),
-        CheckAnswer(20 until 40: _*)
+        StartStream(checkpointLocation = dir.getAbsolutePath,
+          trigger = Trigger.ProcessingTime(10), triggerClock = clock),
+        waitUntilBatchProcessed(clock),
+        CheckLastBatch(20 until 30: _*)
       )
     }
+  }
+
+  test("Trigger.Once") {
+    testTrigger(Trigger.Once())
+  }
+
+  test("Trigger.AvailableNow") {
+    testTrigger(Trigger.AvailableNow())
+  }
+
+  private def testTrigger(triggerToTest: Trigger): Unit = {
+    withTempDir { dir =>
+      val input = spark.readStream
+        .format("rate-micro-batch")
+        .option("rowsPerBatch", "10")
+        .load()
+        .select('value)
+
+      val clock = new StreamManualClock
+      testStream(input)(
+        StartStream(checkpointLocation = dir.getAbsolutePath,
+          trigger = Trigger.ProcessingTime(10), triggerClock = clock),
+        waitUntilBatchProcessed(clock),
+        CheckLastBatch(0 until 10: _*),
+        StopStream
+      )
+
+      testStream(input)(
+        StartStream(checkpointLocation = dir.getAbsolutePath, trigger = triggerToTest,
+          triggerClock = clock),
+        ProcessAllAvailable(),
+        CheckLastBatch(10 until 20: _*),
+        StopStream
+      )
+
+      testStream(input)(
+        StartStream(checkpointLocation = dir.getAbsolutePath,
+          trigger = Trigger.ProcessingTime(10), triggerClock = clock),
+        waitUntilBatchProcessed(clock),
+        CheckLastBatch(20 until 30: _*),
+        StopStream
+      )
+    }
+  }
+
+  private def waitUntilBatchProcessed(clock: StreamManualClock) = AssertOnQuery { q =>
+    eventually(Timeout(streamingTimeout)) {
+      if (!q.exception.isDefined) {
+        assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
+      }
+    }
+    if (q.exception.isDefined) {
+      throw q.exception.get
+    }
+    true
   }
 
   test("numPartitions") {
@@ -86,7 +149,7 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
     val clock = new StreamManualClock
     testStream(input)(
       StartStream(trigger = Trigger.ProcessingTime(10), triggerClock = clock),
-      AdvanceManualClock(10),
+      waitUntilBatchProcessed(clock),
       CheckLastBatch(0 until 6: _*)
     )
   }

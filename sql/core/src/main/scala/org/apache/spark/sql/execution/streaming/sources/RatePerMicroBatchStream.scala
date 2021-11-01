@@ -24,7 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
-import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadLimit, ReadMaxRows, SupportsAdmissionControl}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadLimit, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class RatePerMicroBatchStream(
@@ -33,7 +33,7 @@ class RatePerMicroBatchStream(
     startTimestamp: Long,
     advanceMsPerBatch: Int,
     options: CaseInsensitiveStringMap)
-  extends SupportsAdmissionControl with MicroBatchStream with Logging {
+  extends SupportsTriggerAvailableNow with MicroBatchStream with Logging {
 
   override def initialOffset(): Offset = RatePerMicroBatchStreamOffset(0L, startTimestamp)
 
@@ -54,15 +54,36 @@ class RatePerMicroBatchStream(
     }
   }
 
+  private var isTriggerAvailableNow: Boolean = false
+  private var offsetForTriggerAvailableNow: Offset = _
+
+  override def prepareForTriggerAvailableNow(): Unit = {
+    isTriggerAvailableNow = true
+  }
+
   override def latestOffset(startOffset: Offset, limit: ReadLimit): Offset = {
-    val (startOffsetLong, timestampAtStartOffset) = extractOffsetAndTimestamp(startOffset)
-    val numRows = limit.asInstanceOf[ReadMaxRows].maxRows()
+    def calculateNextOffset(start: Offset): Offset = {
+      val (startOffsetLong, timestampAtStartOffset) = extractOffsetAndTimestamp(start)
+      // NOTE: This means the data source will provide a set of inputs for "single" batch if
+      // the trigger is Trigger.Once.
+      val numRows = rowsPerBatch
 
-    val endOffsetLong = Math.min(startOffsetLong + numRows, Long.MaxValue)
-    val endOffset = RatePerMicroBatchStreamOffset(endOffsetLong,
-      timestampAtStartOffset + advanceMsPerBatch)
+      val endOffsetLong = Math.min(startOffsetLong + numRows, Long.MaxValue)
+      val endOffset = RatePerMicroBatchStreamOffset(endOffsetLong,
+        timestampAtStartOffset + advanceMsPerBatch)
 
-    endOffset
+      endOffset
+    }
+
+    if (isTriggerAvailableNow) {
+      if (offsetForTriggerAvailableNow == null) {
+        offsetForTriggerAvailableNow = calculateNextOffset(startOffset)
+      }
+
+      offsetForTriggerAvailableNow
+    } else {
+      calculateNextOffset(startOffset)
+    }
   }
 
   override def deserializeOffset(json: String): Offset = {
@@ -127,7 +148,7 @@ object RatePerMicroBatchStreamReaderFactory extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[RatePerMicroBatchStreamInputPartition]
     new RatePerMicroBatchStreamPartitionReader(p.partitionId, p.numPartitions,
-      p.startOffset, p.startTimestamp, p.endOffset, p.endTimestamp)
+      p.startOffset, p.startTimestamp, p.endOffset)
   }
 }
 
@@ -136,8 +157,7 @@ class RatePerMicroBatchStreamPartitionReader(
     numPartitions: Int,
     startOffset: Long,
     startTimestamp: Long,
-    endOffset: Long,
-    endTimestamp: Long) extends PartitionReader[InternalRow] {
+    endOffset: Long) extends PartitionReader[InternalRow] {
   private var count: Long = 0
 
   override def next(): Boolean = {
