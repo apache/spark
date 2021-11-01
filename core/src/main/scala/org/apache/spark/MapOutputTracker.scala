@@ -1180,8 +1180,22 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       endMapIndex: Int,
       startPartition: Int,
       endPartition: Int): MapSizesByExecutorId = {
+    getShuffleMapSizesByExecutorIdImpl(
+      shuffleId, startMapIndex, endMapIndex, startPartition, endPartition, useMergeResult = true)
+  }
+
+  private def getShuffleMapSizesByExecutorIdImpl(
+      shuffleId: Int,
+      startMapIndex: Int,
+      endMapIndex: Int,
+      startPartition: Int,
+      endPartition: Int,
+    useMergeResult: Boolean): MapSizesByExecutorId = {
     logDebug(s"Fetching outputs for shuffle $shuffleId")
-    val (mapOutputStatuses, mergedOutputStatuses) = getStatuses(shuffleId, conf)
+    val (mapOutputStatuses, mergedOutputStatuses) = getStatuses(shuffleId, conf,
+      // The boolean check helps to insure that unnecessary merge status won't be fetched, and thus
+      // mergedOutputStatuses won't be passed to convertMapStatuses. See details in [SPARK-37023].
+      if (useMergeResult) fetchMergeResult else false)
     try {
       val actualEndMapIndex =
         if (endMapIndex == Int.MaxValue) mapOutputStatuses.length else endMapIndex
@@ -1205,7 +1219,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     logDebug(s"Fetching backup outputs for shuffle $shuffleId, partition $partitionId")
     // Fetch the map statuses and merge statuses again since they might have already been
     // cleared by another task running in the same executor.
-    val (mapOutputStatuses, mergeResultStatuses) = getStatuses(shuffleId, conf)
+    val (mapOutputStatuses, mergeResultStatuses) = getStatuses(shuffleId, conf, fetchMergeResult)
     try {
       val mergeStatus = mergeResultStatuses(partitionId)
       // If the original MergeStatus is no longer available, we cannot identify the list of
@@ -1230,7 +1244,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     logDebug(s"Fetching backup outputs for shuffle $shuffleId, partition $partitionId")
     // Fetch the map statuses and merge statuses again since they might have already been
     // cleared by another task running in the same executor.
-    val (mapOutputStatuses, _) = getStatuses(shuffleId, conf)
+    val (mapOutputStatuses, _) = getStatuses(shuffleId, conf, fetchMergeResult)
     try {
       MapOutputTracker.getMapStatusesForMergeStatus(shuffleId, partitionId, mapOutputStatuses,
         chunkTracker)
@@ -1252,8 +1266,9 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
    */
   private def getStatuses(
       shuffleId: Int,
-      conf: SparkConf): (Array[MapStatus], Array[MergeStatus]) = {
-    if (fetchMergeResult) {
+      conf: SparkConf,
+      canFetchMergeResult: Boolean): (Array[MapStatus], Array[MergeStatus]) = {
+    if (canFetchMergeResult) {
       val mapOutputStatuses = mapStatuses.get(shuffleId).orNull
       val mergeOutputStatuses = mergeStatuses.get(shuffleId).orNull
 
