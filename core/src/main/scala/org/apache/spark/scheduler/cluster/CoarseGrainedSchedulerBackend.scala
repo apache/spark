@@ -737,14 +737,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
     logInfo(s"Requesting $numAdditionalExecutors additional executor(s) from the cluster manager")
 
-    val response = synchronized {
+    val (request, response) = synchronized {
       val defaultProf = scheduler.sc.resourceProfileManager.defaultResourceProfile
       val numExisting = requestedTotalExecutorsPerResourceProfile.getOrElse(defaultProf, 0)
       requestedTotalExecutorsPerResourceProfile(defaultProf) = numExisting + numAdditionalExecutors
       // Account for executors pending to be added or removed
-      doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
+      (requestedTotalExecutorsPerResourceProfile, doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap))
     }
-
+    resourceProfileIdToNumExecutors = request.map {
+      case (rp, v) =>
+        (rp.id, v)
+    }
+    listenerBus.post(
+      SparkListenerExecutorRequestsUpdates(resourceProfileIdToNumExecutors))
     defaultAskTimeout.awaitResult(response)
   }
 
@@ -786,6 +791,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       this.rpHostToLocalTaskCount = hostToLocalTaskCount
       doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
     }
+    listenerBus.post(
+      SparkListenerExecutorRequestsUpdates(resourceProfileIdToNumExecutors))
     defaultAskTimeout.awaitResult(response)
   }
 
