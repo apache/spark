@@ -24,6 +24,7 @@ import java.util.Locale
 
 import org.apache.commons.text.StringEscapeUtils
 
+import org.apache.spark.SparkDateTimeException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -1268,10 +1269,10 @@ abstract class ToTimestamp
           s"""
              |try {
              |  ${ev.value} = $formatterName.$parseMethod($datetimeStr.toString()) $downScaleCode;
-             |} catch (java.time.DateTimeException e) {
-             |  ${parseErrorBranch("ansiDateTimeError")}
              |} catch (java.time.format.DateTimeParseException e) {
              |  ${parseErrorBranch("ansiDateTimeParseError")}
+             |} catch (java.time.DateTimeException e) {
+             |  ${parseErrorBranch("ansiDateTimeError")}
              |} catch (java.text.ParseException e) {
              |  ${parseErrorBranch("ansiParseError")}
              |}
@@ -2613,7 +2614,7 @@ case class MakeTimestamp(
           // This case of sec = 60 and nanos = 0 is supported for compatibility with PostgreSQL
           LocalDateTime.of(year, month, day, hour, min, 0, 0).plusMinutes(1)
         } else {
-          throw QueryExecutionErrors.invalidFractionOfSecondError
+          throw QueryExecutionErrors.invalidFractionOfSecondError()
         }
       } else {
         LocalDateTime.of(year, month, day, hour, min, seconds, nanos)
@@ -2624,8 +2625,10 @@ case class MakeTimestamp(
         localDateTimeToMicros(ldt)
       }
     } catch {
-      case e: DateTimeException =>
-        if (failOnError) throw QueryExecutionErrors.ansiDateTimeError(e) else null
+      case e: SparkDateTimeException if failOnError => throw e
+      case e: DateTimeException if failOnError =>
+        throw QueryExecutionErrors.ansiDateTimeError(e)
+      case _: DateTimeException => null
     }
   }
 
@@ -2659,6 +2662,7 @@ case class MakeTimestamp(
     } else {
       s"${ev.isNull} = true;"
     }
+    val failOnSparkErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
     nullSafeCodeGen(ctx, ev, (year, month, day, hour, min, secAndNanos, timezone) => {
       val zoneId = timezone.map(tz => s"$dtu.getZoneId(${tz}.toString())").getOrElse(zid)
       val toMicrosCode = if (dataType == TimestampType) {
@@ -2687,6 +2691,8 @@ case class MakeTimestamp(
           ldt = java.time.LocalDateTime.of($year, $month, $day, $hour, $min, seconds, nanos);
         }
         $toMicrosCode
+      } catch (org.apache.spark.SparkDateTimeException e) {
+        $failOnSparkErrorBranch
       } catch (java.time.DateTimeException e) {
         $failOnErrorBranch
       }"""

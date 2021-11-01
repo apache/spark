@@ -337,7 +337,7 @@ case class MakeInterval(
       val iu = IntervalUtils.getClass.getName.stripSuffix("$")
       val secFrac = sec.getOrElse("0")
       val failOnErrorBranch = if (failOnError) {
-        "throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage);"
+        "throw QueryExecutionErrors.arithmeticOverflowError(e);"
       } else {
         s"${ev.isNull} = true;"
       }

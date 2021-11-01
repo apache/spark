@@ -76,7 +76,7 @@
     "sqlState" : "42000"
   },
   "INVALID_FRACTION_OF_SECOND" : {
-    "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]." ],
+    "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]. You can set %s to false to bypass this error. " ],
     "sqlState" : "22023"
   },
   "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE" : {

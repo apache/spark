@@ -178,7 +178,8 @@ object QueryExecutionErrors {
   }
 
   def invalidFractionOfSecondError(): DateTimeException = {
-    new SparkDateTimeException(errorClass = "INVALID_FRACTION_OF_SECOND", Array.empty)
+    new SparkDateTimeException(errorClass = "INVALID_FRACTION_OF_SECOND",
+      Array(SQLConf.ANSI_ENABLED.key))
   }
 
   def ansiDateTimeParseError(e: DateTimeParseException): DateTimeParseException = {
@@ -422,6 +423,11 @@ object QueryExecutionErrors {
 
   def tableStatsNotSpecifiedError(): Throwable = {
     new IllegalStateException("table stats must be specified.")
+  }
+
+  def arithmeticOverflowError(e: ArithmeticException): ArithmeticException = {
+    new ArithmeticException(s"${e.getMessage}. You can set ${SQLConf.ANSI_ENABLED.key} to false " +
+      s"to bypass this error.")
   }
 
   def arithmeticOverflowError(
