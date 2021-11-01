@@ -1931,18 +1931,29 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         sql(
           """
             |SELECT c1, s, s * 10 FROM (
-            |  SELECT c1, (SELECT FIRST(c2) FROM t2 WHERE t1.c1 = t2.c1) s FROM t1)
+            |  SELECT c1, (SELECT MIN(c2) FROM t2 WHERE t1.c1 = t2.c1) s FROM t1)
             |""".stripMargin),
         correctAnswer)
       checkAnswer(
         sql(
           """
             |SELECT c1, s, s * 10 FROM (
-            |  SELECT c1, SUM((SELECT FIRST(c2) FROM t2 WHERE t1.c1 = t2.c1)) s
+            |  SELECT c1, SUM((SELECT MIN(c2) FROM t2 WHERE t1.c1 = t2.c1)) s
             |  FROM t1 GROUP BY c1
             |)
             |""".stripMargin),
         correctAnswer)
     }
   }
+
+  test("Add jira: deterministic in QueryPlan considers subquery") {
+    val deterministicQueryPlan = sql("select (select 1 as b) as b")
+      .queryExecution.executedPlan
+    assert(deterministicQueryPlan.deterministic)
+
+    val nonDeterministicQueryPlan = sql("select (select rand(1) as b) as b")
+      .queryExecution.executedPlan
+    assert(!nonDeterministicQueryPlan.deterministic)
+  }
+
 }
