@@ -51,7 +51,6 @@ AtomicValue = TypeVar(
     str,
     int,
     float,
-    covariant=True,
 )
 
 RowLike = TypeVar("RowLike", List[Any], Tuple[Any, ...], pyspark.sql.types.Row)
