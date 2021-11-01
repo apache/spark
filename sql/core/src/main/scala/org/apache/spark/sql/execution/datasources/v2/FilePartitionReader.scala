@@ -18,6 +18,8 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.io.{FileNotFoundException, IOException}
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.InputFileBlockHolder
@@ -68,7 +70,7 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
         logWarning(
           s"Skipped the rest of the content in the corrupted file: $currentReader", e)
         false
-      case e: Exception =>
+      case NonFatal(e) =>
         e.getCause match {
           case sue: SparkUpgradeException =>
             throw sue

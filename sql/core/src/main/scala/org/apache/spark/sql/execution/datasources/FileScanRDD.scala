@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.{FileNotFoundException, IOException}
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.{Partition => RDDPartition, SparkUpgradeException, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
@@ -168,7 +170,7 @@ class FileScanRDD(
             case e: SchemaColumnConvertNotSupportedException =>
               throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
                 currentFile.filePath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
-            case e: Exception =>
+            case NonFatal(e) =>
               e.getCause match {
                 case sue: SparkUpgradeException =>
                   throw sue
