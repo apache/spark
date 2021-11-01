@@ -2435,6 +2435,20 @@ abstract class JsonSuite
     }
   }
 
+  test("SPARK-37176: inferring should be possible when parse mode is permissive") {
+    withTempPath { tempDir =>
+      val path = tempDir.getAbsolutePath
+      // normal input to let spark correctly infer schema
+      val record = """{"a":1}"""
+      Seq(record, badJson + record).toDS().write.text(path)
+      val expected = s"""${badJson}{"a":1}"""
+      val df = spark.read.format("json")
+        .option("mode", "PERMISSIVE")
+        .load(path)
+      checkAnswer(df, Seq(Row(null, 1), Row(expected, null)))
+    }
+  }
+
   test("SPARK-23094: permissively read JSON file with leading nulls when multiLine is disabled") {
     withTempPath { tempDir =>
       val path = tempDir.getAbsolutePath
@@ -2449,9 +2463,14 @@ abstract class JsonSuite
     }
   }
 
+
   test("SPARK-23094: permissively parse a dataset contains JSON with leading nulls") {
     checkAnswer(
       spark.read.option("mode", "PERMISSIVE").option("encoding", "UTF-8").json(Seq(badJson).toDS()),
+      Row(badJson))
+    checkAnswer(
+      // encoding auto detection should also be possible with json schema infer
+      spark.read.option("mode", "PERMISSIVE").json(Seq(badJson).toDS()),
       Row(badJson))
   }
 
