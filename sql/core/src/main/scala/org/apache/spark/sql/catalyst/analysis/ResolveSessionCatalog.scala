@@ -105,15 +105,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case UnsetViewProperties(ResolvedView(ident, _), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = true)
 
-    case DescribeNamespace(DatabaseInSessionCatalog(db), extended, output) =>
-      val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
-        assert(output.length == 2)
-        Seq(output.head.withName("database_description_item"),
-          output.last.withName("database_description_value"))
-      } else {
-        output
-      }
-      DescribeDatabaseCommand(db, extended, newOutput)
+    case DescribeNamespace(DatabaseInSessionCatalog(db), extended, output) if conf.useV1Command =>
+      DescribeDatabaseCommand(db, extended, output)
 
     case SetNamespaceProperties(DatabaseInSessionCatalog(db), properties) =>
       AlterDatabasePropertiesCommand(db, properties)

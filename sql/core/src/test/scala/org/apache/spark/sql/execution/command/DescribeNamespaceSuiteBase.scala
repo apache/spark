@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This base suite contains unified tests for the `DESCRIBE NAMESPACE` command that check V1 and V2
@@ -46,5 +47,22 @@ trait DescribeNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
 
     // TODO: Move this to DropNamespaceSuite when the test suite is introduced.
     sql(s"DROP NAMESPACE IF EXISTS $catalog.$ns")
+  }
+
+  test("Keep the legacy output schema") {
+    Seq(true, false).foreach { keepLegacySchema =>
+      withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> keepLegacySchema.toString) {
+        val ns = "db1"
+        withNamespace(ns) {
+          sql(s"CREATE NAMESPACE $ns")
+          val schema = sql(s"DESCRIBE NAMESPACE $ns").schema.fieldNames.toSeq
+          if (keepLegacySchema) {
+            assert(schema === Seq("database_description_item", "database_description_value"))
+          } else {
+            assert(schema === Seq("info_name", "info_value"))
+          }
+        }
+      }
+    }
   }
 }
