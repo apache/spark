@@ -281,7 +281,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
           val data = new ExecutorData(executorRef, executorAddress, hostname,
             0, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
-            resourcesInfo, resourceProfileId, registrationTs = System.currentTimeMillis())
+            resourcesInfo, resourceProfileId, registrationTs = System.currentTimeMillis(),
+            requestTs = reqTs)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
