@@ -21,7 +21,7 @@ import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.mutable.{HashMap, HashSet}
+import scala.collection.mutable.{HashMap, HashSet, Queue}
 import scala.concurrent.Future
 
 import org.apache.hadoop.security.UserGroupInformation
@@ -81,6 +81,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // manager, [[ExecutorAllocationManager]]
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   private val requestedTotalExecutorsPerResourceProfile = new HashMap[ResourceProfile, Int]
+
+  // Profile IDs to the times that executors were requested for.
+  @GuardedBy("CoarseGrainedSchedulerBackend.this")
+  private val execRequestTimes = new HashMap[Int, Queue[(Int, Long)]]
 
   private val listenerBus = scheduler.sc.listenerBus
 
@@ -742,6 +746,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       val numExisting = requestedTotalExecutorsPerResourceProfile.getOrElse(defaultProf, 0)
       requestedTotalExecutorsPerResourceProfile(defaultProf) = numExisting + numAdditionalExecutors
       // Account for executors pending to be added or removed
+      updateExecRequestTime(defaultProf.id, numAdditionalExecutors)
       doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
     }
 
@@ -779,14 +784,49 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     val resourceProfileToNumExecutors = resourceProfileIdToNumExecutors.map { case (rpid, num) =>
       (scheduler.sc.resourceProfileManager.resourceProfileFromId(rpid), num)
     }
+    val oldResourceProfileToNumExecutors = requestedTotalExecutorsPerResourceProfile.map {
+      case (rp, num) =>
+        (rp.id, num)
+    }.toMap
     val response = synchronized {
       this.requestedTotalExecutorsPerResourceProfile.clear()
       this.requestedTotalExecutorsPerResourceProfile ++= resourceProfileToNumExecutors
       this.numLocalityAwareTasksPerResourceProfileId = numLocalityAwareTasksPerResourceProfileId
       this.rpHostToLocalTaskCount = hostToLocalTaskCount
+      updateExecRequestTimes(oldResourceProfileToNumExecutors, resourceProfileIdToNumExecutors)
       doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
     }
     defaultAskTimeout.awaitResult(response)
+  }
+
+  private def updateExecRequestTimes(oldProfile: Map[Int, Int], newProfile: Map[Int, Int]): Unit = {
+    newProfile.map {
+      case (k, v) =>
+        val delta = v - oldProfile.getOrElse(k, 0)
+        if (delta != 0) {
+          updateExecRequestTime(k, delta)
+        }
+    }
+  }
+
+  private def updateExecRequestTime(profileId: Int, delta: Int) = {
+    val times = execRequestTimes.getOrElseUpdate(profileId, Queue[(Int, Long)]())
+    if (delta > 0) {
+      // Add the request to the end, constant time op
+      times += ((delta, System.currentTimeMillis()))
+    } else if (delta < 0) {
+      // Consume as if |delta| had been allocated
+      var c = -delta
+      while (c > 0) {
+        val h = times.dequeue
+        if (h._1 > c) {
+          // Prepend updated first req to times, constant time op
+          ((h._1 - c, h._2)) +=: times
+        } else {
+          c = c - h._1
+        }
+      }
+    }
   }
 
   /**
