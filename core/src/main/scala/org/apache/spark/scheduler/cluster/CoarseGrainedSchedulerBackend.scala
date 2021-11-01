@@ -264,6 +264,21 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               .resourceProfileFromId(resourceProfileId).getNumSlotsPerAddress(rName, conf)
             (info.name, new ExecutorResourceInfo(info.name, info.addresses, numParts))
           }
+          // If we've requested the executor figure out when we did.
+          val reqTs: Option[Long] = {
+            execRequestTimes.get(resourceProfileId).flatMap {
+              times =>
+              times.headOption.map {
+                h =>
+                times.dequeue()
+                if (h._1 > 1) {
+                  ((h._1 - 1, h._2)) +=: times
+                }
+                h._2
+              }
+            }
+          }
+
           val data = new ExecutorData(executorRef, executorAddress, hostname,
             0, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
             resourcesInfo, resourceProfileId, registrationTs = System.currentTimeMillis())
@@ -817,14 +832,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     } else if (delta < 0) {
       // Consume as if |delta| had been allocated
       var c = -delta
-      while (c > 0) {
-        val h = times.dequeue
-        if (h._1 > c) {
-          // Prepend updated first req to times, constant time op
-          ((h._1 - c, h._2)) +=: times
-        } else {
-          c = c - h._1
+      try {
+        while (c > 0) {
+          val h = times.dequeue
+          if (h._1 > c) {
+            // Prepend updated first req to times, constant time op
+            ((h._1 - c, h._2)) +=: times
+          } else {
+            c = c - h._1
+          }
         }
+      } catch {
+        case e: Exception => // Ignore
       }
     }
   }
