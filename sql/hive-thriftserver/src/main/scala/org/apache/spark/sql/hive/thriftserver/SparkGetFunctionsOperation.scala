@@ -82,7 +82,6 @@ private[hive] class SparkGetFunctionsOperation(
       parentSession.getUsername)
 
     try {
-      val builtInFunctions = FunctionRegistry.functionSet ++ TableFunctionRegistry.functionSet
       var matchedBuiltInFunctions = if (matchingDbs.nonEmpty && functionPattern == "*") {
         FunctionRegistry.functionSet ++ TableFunctionRegistry.functionSet
       } else {
@@ -90,14 +89,15 @@ private[hive] class SparkGetFunctionsOperation(
       }
       matchingDbs.foreach { db =>
         catalog.listFunctions(db, functionPattern).foreach {
-          case (functionIdentifier, _) if builtInFunctions.contains(functionIdentifier) &&
-            !matchedBuiltInFunctions.contains(functionIdentifier) =>
-            matchedBuiltInFunctions += functionIdentifier
-          case (funcIdentifier, _) if !builtInFunctions.contains(funcIdentifier) =>
+          case (funcIdentifier, "SYSTEM") =>
+            if (!matchedBuiltInFunctions.contains(funcIdentifier)) {
+              matchedBuiltInFunctions += funcIdentifier
+            }
+          case (funcIdentifier, _) =>
             val info = catalog.lookupFunctionInfo(funcIdentifier)
             val rowData = Array[AnyRef](
               DEFAULT_HIVE_CATALOG, // FUNCTION_CAT
-              db, // FUNCTION_SCHEM
+              db, // FUNCTION_SCHEMA
               funcIdentifier.funcName, // FUNCTION_NAME
               s"Usage: ${info.getUsage}\nExtended Usage:${info.getExtended}", // REMARKS
               DatabaseMetaData.functionResultUnknown.asInstanceOf[AnyRef], // FUNCTION_TYPE
@@ -109,7 +109,7 @@ private[hive] class SparkGetFunctionsOperation(
         val info = catalog.lookupFunctionInfo(functionIdentifier)
         val rowData = Array[AnyRef](
           DEFAULT_HIVE_CATALOG, // FUNCTION_CAT
-          "builtin", // FUNCTION_SCHEM
+          "SYSTEM", // FUNCTION_SCHEMA
           functionIdentifier.funcName, // FUNCTION_NAME
           s"Usage: ${info.getUsage}\nExtended Usage:${info.getExtended}", // REMARKS
           DatabaseMetaData.functionResultUnknown.asInstanceOf[AnyRef], // FUNCTION_TYPE
