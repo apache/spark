@@ -29,6 +29,8 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 
 /**
  * Spark's own GetFunctionsOperation
@@ -80,9 +82,18 @@ private[hive] class SparkGetFunctionsOperation(
       parentSession.getUsername)
 
     try {
+      val builtInFunctions = FunctionRegistry.functionSet ++ TableFunctionRegistry.functionSet
+      var matchedBuiltInFunctions = if (matchingDbs.nonEmpty && functionPattern == "*") {
+        FunctionRegistry.functionSet ++ TableFunctionRegistry.functionSet
+      } else {
+        Set.empty[FunctionIdentifier]
+      }
       matchingDbs.foreach { db =>
         catalog.listFunctions(db, functionPattern).foreach {
-          case (funcIdentifier, _) =>
+          case (functionIdentifier, _) if builtInFunctions.contains(functionIdentifier) &&
+            !matchedBuiltInFunctions.contains(functionIdentifier) =>
+            matchedBuiltInFunctions += functionIdentifier
+          case (funcIdentifier, _) if !builtInFunctions.contains(funcIdentifier) =>
             val info = catalog.lookupFunctionInfo(funcIdentifier)
             val rowData = Array[AnyRef](
               DEFAULT_HIVE_CATALOG, // FUNCTION_CAT
@@ -93,6 +104,17 @@ private[hive] class SparkGetFunctionsOperation(
               info.getClassName) // SPECIFIC_NAME
             rowSet.addRow(rowData);
         }
+      }
+      matchedBuiltInFunctions.foreach { functionIdentifier =>
+        val info = catalog.lookupFunctionInfo(functionIdentifier)
+        val rowData = Array[AnyRef](
+          DEFAULT_HIVE_CATALOG, // FUNCTION_CAT
+          "builtin", // FUNCTION_SCHEM
+          functionIdentifier.funcName, // FUNCTION_NAME
+          s"Usage: ${info.getUsage}\nExtended Usage:${info.getExtended}", // REMARKS
+          DatabaseMetaData.functionResultUnknown.asInstanceOf[AnyRef], // FUNCTION_TYPE
+          info.getClassName) // SPECIFIC_NAME
+        rowSet.addRow(rowData);
       }
       setState(OperationState.FINISHED)
     } catch onError()
