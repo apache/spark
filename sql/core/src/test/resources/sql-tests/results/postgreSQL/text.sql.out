@@ -277,7 +277,7 @@ select format_string('%0$s', 'Hello')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-requirement failed: Illegal format argument index = 0; line 1 pos 7
+Illegal format argument index = 0; line 1 pos 7
 
 
 -- !query

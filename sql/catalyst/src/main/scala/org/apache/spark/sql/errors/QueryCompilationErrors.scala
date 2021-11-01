@@ -66,6 +66,12 @@ object QueryCompilationErrors {
       messageParameters = Array(sizeLimit.toString))
   }
 
+  def illegalFormatArgumentIndexError(index: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "ILLEGAL_FORMAT_ARGUMENT_INDEX",
+      messageParameters = Array(index.toString))
+  }
+
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
