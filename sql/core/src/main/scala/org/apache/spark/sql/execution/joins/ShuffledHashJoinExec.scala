@@ -349,7 +349,7 @@ case class ShuffledHashJoinExec(
     // Generate variables and related code from streamed side
     val streamedVars = genOneSideJoinVars(ctx, streamedRow, streamedPlan, setDefaultValue = false)
     val streamedKeyVariables = evaluateRequiredVariables(streamedOutput, streamedVars,
-      AttributeSet.fromAttributeSets(HashJoin.rewriteKeyExpr(streamedKeys).map(_.references)))
+      AttributeSet.fromAttributeSets(streamedKeys.map(_.references)))
     ctx.currentVars = streamedVars
     val streamedKeyExprCode = GenerateUnsafeProjection.createCode(ctx, streamedBoundKeys)
     val streamedKeyEv =
@@ -381,14 +381,13 @@ case class ShuffledHashJoinExec(
          |  ${consume(ctx, resultVars)}
          |}
        """.stripMargin)
-    val stopCheck = "if (shouldStop()) return;"
 
     val joinWithUniqueKey = codegenFullOuterJoinWithUniqueKey(
       ctx, (streamedRow, buildRow), (streamedInput, buildInput), streamedKeyEv, streamedKeyAnyNull,
-      streamedKeyExprCode.value, relationTerm, conditionCheck, stopCheck, consumeFullOuterJoinRow)
+      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeFullOuterJoinRow)
     val joinWithNonUniqueKey = codegenFullOuterJoinWithNonUniqueKey(
       ctx, (streamedRow, buildRow), (streamedInput, buildInput), streamedKeyEv, streamedKeyAnyNull,
-      streamedKeyExprCode.value, relationTerm, conditionCheck, stopCheck, consumeFullOuterJoinRow)
+      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeFullOuterJoinRow)
 
     s"""
        |if ($keyIsUnique) {
@@ -412,7 +411,6 @@ case class ShuffledHashJoinExec(
       streamedKeyValue: ExprValue,
       relationTerm: String,
       conditionCheck: String,
-      stopCheck: String,
       consumeFullOuterJoinRow: String): String = {
     // Inline mutable state since not many join operations in a task
     val matchedKeySetClsName = classOf[BitSet].getName
@@ -453,7 +451,7 @@ case class ShuffledHashJoinExec(
          |  }
          |
          |  $consumeFullOuterJoinRow();
-         |  $stopCheck
+         |  if (shouldStop()) return;
          |}
        """.stripMargin
 
@@ -471,7 +469,7 @@ case class ShuffledHashJoinExec(
          |    $consumeFullOuterJoinRow();
          |  }
          |
-         |  $stopCheck
+         |  if (shouldStop()) return;
          |}
        """.stripMargin
 
@@ -494,7 +492,6 @@ case class ShuffledHashJoinExec(
       streamedKeyValue: ExprValue,
       relationTerm: String,
       conditionCheck: String,
-      stopCheck: String,
       consumeFullOuterJoinRow: String): String = {
     // Inline mutable state since not many join operations in a task
     val matchedRowSetClsName = classOf[OpenHashSet[_]].getName
@@ -514,8 +511,6 @@ case class ShuffledHashJoinExec(
     val (streamedInput, buildInput) = inputs
 
     val rowIndex = s"(((long)$keyIndex) << 32) | $valueIndex"
-    val markRowMatched = s"$matchedRowSet.add($rowIndex);"
-    val isRowMatched = s"$matchedRowSet.contains($rowIndex)"
 
     val joinStreamSide =
       s"""
@@ -541,7 +536,7 @@ case class ShuffledHashJoinExec(
          |    // check join condition
          |    $conditionCheck {
          |      // set row index in matched row set
-         |      $markRowMatched
+         |      $matchedRowSet.add($rowIndex);
          |      $foundMatch = true;
          |      $consumeFullOuterJoinRow();
          |    }
@@ -552,7 +547,7 @@ case class ShuffledHashJoinExec(
          |    $consumeFullOuterJoinRow();
          |  }
          |
-         |  $stopCheck
+         |  if (shouldStop()) return;
          |}
        """.stripMargin
 
@@ -572,12 +567,12 @@ case class ShuffledHashJoinExec(
          |  }
          |
          |  // check if row index is not in matched row set
-         |  if (!$isRowMatched) {
+         |  if (!$matchedRowSet.contains($rowIndex)) {
          |    $buildRow = $rowWithIndex.getValue();
          |    $consumeFullOuterJoinRow();
          |  }
          |
-         |  $stopCheck
+         |  if (shouldStop()) return;
          |}
        """.stripMargin
 
