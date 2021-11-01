@@ -21,4 +21,15 @@
 # Jupyter notebook.
 
 VERSION=$(python -c "exec(open('python/pyspark/version.py').read()); print(__version__)")
-pip install plotly "pyspark[sql,ml,mllib,pandas_on_spark]<=$VERSION"
+TAG=$(git describe --tags --exact-match 2>/dev/null)
+
+# If a commit is tagged, exactly specified version of pyspark should be installed to avoid
+# a kind of accident that an old version of pyspark is installed in the live notebook environment.
+# See SPARK-37170
+if [ -n "$TAG" ]; then
+  SPECIFIER="=="
+else
+  SPECIFIER="<="
+fi
+
+pip install plotly "pyspark[sql,ml,mllib,pandas_on_spark]$SPECIFIER$VERSION"
