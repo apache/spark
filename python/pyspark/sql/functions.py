@@ -2139,9 +2139,12 @@ def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") 
 
     Parameters
     ----------
-    year : :class:`ColumnOrName` with the year to build the date
-    month : :class:`ColumnOrName` with the month to build the date
-    day : :class:`ColumnOrName` with the day to build the date
+    year : :class:`~pyspark.sql.Column` or str
+        The year to build the date
+    month : :class:`~pyspark.sql.Column` or str
+        The month to build the date
+    day : :class:`~pyspark.sql.Column` or str
+        The day to build the date
 
     Examples
     --------
