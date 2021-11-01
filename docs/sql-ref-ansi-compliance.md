@@ -83,10 +83,10 @@ The `CAST` clause of Spark ANSI mode follows the syntax rules of section 6.13 "c
 
 | Source\Target | Numeric | String | Date | Timestamp | Interval | Boolean | Binary | Array | Map | Struct |
 |-----------|---------|--------|------|-----------|----------|---------|--------|-------|-----|--------|
-| Numeric   | <span style="color:red">**Y**</span> | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| Numeric   | <span style="color:red">**Y**</span> | Y      | N    | <span style="color:red">**Y**</span> | N        | Y       | N      | N     | N   | N      |
 | String    | <span style="color:red">**Y**</span> | Y | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | Y | N     | N   | N      |
 | Date      | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
-| Timestamp | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Timestamp | <span style="color:red">**Y**</span> | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
 | Interval  | N       | Y      | N    | N         | Y        | N       | N      | N     | N   | N      |
 | Boolean   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
 | Binary    | N       | Y      | N    | N         | N        | N       | Y      | N     | N   | N      |
@@ -96,6 +96,8 @@ The `CAST` clause of Spark ANSI mode follows the syntax rules of section 6.13 "c
 
 In the table above, all the `CAST`s that can cause runtime exceptions are marked as red <span style="color:red">**Y**</span>:
 * CAST(Numeric AS Numeric): raise an overflow exception if the value is out of the target data type's range.
+* CAST(Numeric AS Timestamp): raise an overflow exception if the value is out of the target data type's range, or DateTime exception if the value is Nan or infinite.
+* CAST(Timestamp AS Numeric): raise an overflow exception if the value is out of the target data type's range.
 * CAST(String AS (Numeric/Date/Timestamp/Interval/Boolean)): raise a runtime exception if the value can't be parsed as the target data type.
 * CAST(Array AS Array): raise an exception if there is any on the conversion of the elements.
 * CAST(Map AS Map): raise an exception if there is any on the conversion of the keys and the values.

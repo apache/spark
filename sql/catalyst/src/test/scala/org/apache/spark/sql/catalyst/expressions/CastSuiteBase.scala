@@ -102,6 +102,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkNullCast(StringType, CalendarIntervalType)
     numericTypes.foreach(dt => checkNullCast(StringType, dt))
     numericTypes.foreach(dt => checkNullCast(BooleanType, dt))
+    numericTypes.foreach(dt => checkNullCast(dt, TimestampType))
+    numericTypes.foreach(dt => checkNullCast(TimestampType, dt))
     for (from <- numericTypes; to <- numericTypes) checkNullCast(from, to)
   }
 
@@ -214,6 +216,37 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("cast from timestamp") {
+    val millis = 15 * 1000 + 3
+    val seconds = millis * 1000 + 3
+    val ts = new Timestamp(millis)
+    val tss = new Timestamp(seconds)
+    checkEvaluation(cast(ts, ShortType), 15.toShort)
+    checkEvaluation(cast(ts, IntegerType), 15)
+    checkEvaluation(cast(ts, LongType), 15.toLong)
+    checkEvaluation(cast(ts, FloatType), 15.003f)
+    checkEvaluation(cast(ts, DoubleType), 15.003)
+
+    checkEvaluation(cast(cast(tss, ShortType), TimestampType),
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+    checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+    checkEvaluation(cast(cast(tss, LongType), TimestampType),
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+    checkEvaluation(
+      cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimestampType), FloatType),
+      millis.toFloat / MILLIS_PER_SECOND)
+    checkEvaluation(
+      cast(cast(millis.toDouble / MILLIS_PER_SECOND, TimestampType), DoubleType),
+      millis.toDouble / MILLIS_PER_SECOND)
+    checkEvaluation(
+      cast(cast(Decimal(1), TimestampType), DecimalType.SYSTEM_DEFAULT),
+      Decimal(1))
+
+    // A test for higher precision than millis
+    checkEvaluation(cast(cast(0.000001, TimestampType), DoubleType), 0.000001)
+  }
+
   test("cast from boolean") {
     checkEvaluation(cast(true, IntegerType), 1)
     checkEvaluation(cast(false, IntegerType), 0)
@@ -238,6 +271,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
     checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))
     checkEvaluation(cast(1, LongType), 1.toLong)
+
+    checkEvaluation(cast(cast(1000, TimestampType), LongType), 1000.toLong)
+    checkEvaluation(cast(cast(-1200, TimestampType), LongType), -1200.toLong)
   }
 
   test("cast from long") {
@@ -266,6 +302,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(1.5f, 1.toLong)
     checkCast(1.5f, 1.5)
     checkCast(1.5f, "1.5")
+    checkCast(16777215.0f, java.time.Instant.ofEpochSecond(16777215))
   }
 
   test("cast from double") {
@@ -278,6 +315,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(1.5, 1.toLong)
     checkCast(1.5, 1.5f)
     checkCast(1.5, "1.5")
+    checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
   }
 
   test("cast from string") {
@@ -352,6 +390,24 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(123, IntegerType), 123)
 
     checkEvaluation(cast(Literal.create(null, IntegerType), ShortType), null)
+
+    checkEvaluation(
+      cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
+        DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
+      5.toShort)
+
+    checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
+      ByteType), TimestampType), LongType), StringType), ShortType),
+      5.toShort)
+  }
+
+  test("cast a timestamp before the epoch 1970-01-01 00:00:00Z") {
+    withDefaultTimeZone(UTC) {
+      val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
+      assert(negativeTs.getTime < 0)
+      val expectedSecs = Math.floorDiv(negativeTs.getTime, MILLIS_PER_SECOND)
+      checkEvaluation(cast(negativeTs, LongType), expectedSecs)
+    }
   }
 
   test("cast and add") {

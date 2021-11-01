@@ -971,6 +971,10 @@ object QueryExecutionErrors {
     new DateTimeException(s"Cannot cast $s to $to.")
   }
 
+  def cannotCastDoubleToTimestampError(d: Double, to: DataType): Throwable = {
+    new DateTimeException(s"Cannot cast $d to $to.")
+  }
+
   def registeringStreamingQueryListenerError(e: Exception): Throwable = {
     new SparkException("Exception when registering StreamingQueryListener", e)
   }

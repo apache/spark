@@ -30,7 +30,7 @@ import sun.util.calendar.ZoneInfo
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{DateType, Decimal, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{DateType, Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
@@ -429,6 +429,14 @@ object DateTimeUtils {
   def stringToTimestampAnsi(s: UTF8String, timeZoneId: ZoneId): Long = {
     stringToTimestamp(s, timeZoneId).getOrElse {
       throw QueryExecutionErrors.cannotCastUTF8StringToDataTypeError(s, TimestampType)
+    }
+  }
+
+  def doubleToTimestampAnsi(d: Double): Long = {
+    if (d.isNaN || d.isInfinite) {
+      throw QueryExecutionErrors.cannotCastDoubleToTimestampError(d, TimestampType)
+    } else {
+      DoubleExactNumeric.toLong(d * MICROS_PER_SECOND)
     }
   }
 
