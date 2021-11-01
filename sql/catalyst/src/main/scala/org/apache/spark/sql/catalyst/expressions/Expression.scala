@@ -162,8 +162,7 @@ abstract class Expression extends TreeNode[Expression] {
   private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
     // TODO: support whole stage codegen too
     val splitThreshold = SQLConf.get.methodSplitThreshold
-    if (eval.code.length > splitThreshold && ctx.INPUT_ROW != null && ctx.currentVars == null
-        && ctx.currentLambdaVars.isEmpty) {
+    if (eval.code.length > splitThreshold && ctx.INPUT_ROW != null && ctx.currentVars == null) {
       val setIsNull = if (!eval.isNull.isInstanceOf[LiteralValue]) {
         val globalIsNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "globalIsNull")
         val localIsNull = eval.isNull

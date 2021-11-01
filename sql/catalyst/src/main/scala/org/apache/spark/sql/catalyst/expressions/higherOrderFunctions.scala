@@ -104,12 +104,26 @@ case class NamedLambdaVariable(
   // `UnresolvedNamedLambdaVariable.freshVarName`
   lazy val variableName = s"${name}_${exprId.id}"
 
-  override def genCode(ctx: CodegenContext): ExprCode = {
-    ctx.getLambdaVar(variableName)
-  }
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val atomicRef = ctx.addReferenceObj(variableName, value)
+    val tmpAtomic = ctx.freshName("tmpAtomic")
+    val boxedType = CodeGenerator.boxedType(dataType)
 
-  // This won't be called as `genCode` is overridden, just overriding it to make non-abstract.
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ev
+    if (nullable) {
+      ev.copy(code = code"""
+        Object $tmpAtomic = $atomicRef.get();
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        boolean ${ev.isNull} = $tmpAtomic == null;
+        if (!${ev.isNull}) {
+          ${ev.value} = ($boxedType)$tmpAtomic;
+        }
+      """)
+    } else {
+      ev.copy(code = code"""
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ($boxedType)$atomicRef.get();
+      """, isNull = FalseLiteral)
+    }
+  }
 }
 
 /**
@@ -253,6 +267,21 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
     val canonicalizedChildren = cleaned.children.map(_.canonicalized)
     Canonicalize.execute(withNewChildren(canonicalizedChildren))
   }
+
+  protected def assignAtomic(atomicRef: String, value: String, isNull: String = FalseLiteral,
+      nullable: Boolean = false) = {
+    if (nullable) {
+      s"""
+        if ($isNull) {
+          $atomicRef.set(null);
+        } else {
+          $atomicRef.set($value);
+        }
+      """
+    } else {
+      s"$atomicRef.set($value);"
+    }
+  }
 }
 
 /**
@@ -325,6 +354,22 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction with BinaryLike[Expr
 
 trait ArrayBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
   override def argumentType: AbstractDataType = ArrayType
+
+  protected def assignElement(ctx: CodegenContext, arrayName: String,
+      elementVar: NamedLambdaVariable, index: String): String = {
+    val elementType = elementVar.dataType
+    val elementAtomic = ctx.addReferenceObj(elementVar.variableName, elementVar.value)
+    val extractElement = CodeGenerator.getValue(arrayName, elementType, index)
+
+    assignAtomic(elementAtomic, extractElement, s"$arrayName.isNullAt($index)",
+      elementVar.nullable)
+  }
+
+   protected def assignIndex(ctx: CodegenContext, indexVar: NamedLambdaVariable,
+      index: String): String = {
+    val indexAtomic = ctx.addReferenceObj(indexVar.variableName, indexVar.value)
+    assignAtomic(indexAtomic, index)
+  }
 }
 
 trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
@@ -391,64 +436,39 @@ case class ArrayTransform(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ctx.withLambdaVar(elementVar, elementCode => {
-      ctx.withOptionalLambdaVar(indexVar, indexCode => {
-        nullSafeCodeGen(ctx, ev, arg => {
-          val numElements = ctx.freshName("numElements")
-          val arrayData = ctx.freshName("arrayData")
-          val i = ctx.freshName("i")
+    nullSafeCodeGen(ctx, ev, arg => {
+      val numElements = ctx.freshName("numElements")
+      val arrayData = ctx.freshName("arrayData")
+      val i = ctx.freshName("i")
 
-          val argumentType = argument.dataType.asInstanceOf[ArrayType]
-          val argumentElementJavaType = CodeGenerator.javaType(argumentType.elementType)
-          val initialization = CodeGenerator.createArrayData(
-            arrayData, dataType.elementType, numElements, s" $prettyName failed.")
-          val extractElement = CodeGenerator.getValue(arg, argumentType.elementType, i)
+      val initialization = CodeGenerator.createArrayData(
+        arrayData, dataType.elementType, numElements, s" $prettyName failed.")
 
-          val functionCode = function.genCode(ctx)
+      val functionCode = function.genCode(ctx)
 
-          val elementAtomic = ctx.addReferenceObj(elementVar.variableName, elementVar.value)
-          val elementAssignment = if (elementVar.nullable) {
-            s"""
-              $argumentElementJavaType ${elementCode.value} = $extractElement;
-              boolean ${elementCode.isNull} = ${arg}.isNullAt($i);
-              $elementAtomic.set(${elementCode.value});
-            """
-          } else {
-            s"""
-              $argumentElementJavaType ${elementCode.value} = $extractElement;
-              $elementAtomic.set(${elementCode.value});
-            """
-          }
-          val indexAssignment = indexCode.map(c => {
-            val indexAtomic = ctx.addReferenceObj(indexVar.get.variableName, indexVar.get.value)
-            s"""
-              int ${c.value} = $i;
-              $indexAtomic.set(${c.value});
-            """
-          })
-          val varAssignments = (Seq(elementAssignment) ++: indexAssignment).mkString("\n")
+      val elementAssignment = assignElement(ctx, arg, elementVar, i)
+      val indexAssignment = indexVar.map(c => assignIndex(ctx, c, i))
+      val varAssignments = (Seq(elementAssignment) ++: indexAssignment).mkString("\n")
 
-          // Some expressions return internal buffers that we have to copy
-          val copy = if (isPrimitive(function.dataType)) {
-            s"${functionCode.value}"
-          } else {
-            s"InternalRow.copyValue(${functionCode.value})"
-          }
-          val resultAssignment = CodeGenerator.setArrayElement(arrayData, dataType.elementType,
-            i, copy, isNull = Some(functionCode.isNull))
+      // Some expressions return internal buffers that we have to copy
+      val copy = if (isPrimitive(function.dataType)) {
+        s"${functionCode.value}"
+      } else {
+        s"InternalRow.copyValue(${functionCode.value})"
+      }
+      val resultAssignment = CodeGenerator.setArrayElement(arrayData, dataType.elementType,
+        i, copy, isNull = Some(functionCode.isNull))
 
-          s"""
-              |final int $numElements = ${arg}.numElements();
-              |$initialization
-              |for (int $i = 0; $i < $numElements; $i++) {
-              |  $varAssignments
-              |  ${functionCode.code}
-              |  $resultAssignment
-              |}
-              |${ev.value} = $arrayData;
-            """.stripMargin
-        })
-      })
+      s"""
+          |final int $numElements = ${arg}.numElements();
+          |$initialization
+          |for (int $i = 0; $i < $numElements; $i++) {
+          |  $varAssignments
+          |  ${functionCode.code}
+          |  $resultAssignment
+          |}
+          |${ev.value} = $arrayData;
+        """.stripMargin
     })
   }
 

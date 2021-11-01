@@ -172,45 +172,6 @@ class CodegenContext extends Logging {
   var currentVars: Seq[ExprCode] = null
 
   /**
-   * Holding a map of current lambda variables.
-   */
-  var currentLambdaVars: mutable.Map[String, ExprCode] = mutable.HashMap.empty
-
-  def withLambdaVar(namedLambda: NamedLambdaVariable, f: ExprCode => ExprCode): ExprCode = {
-    val name = namedLambda.variableName
-    if (currentLambdaVars.get(name).nonEmpty) {
-      throw QueryExecutionErrors.lambdaVariableAlreadyDefinedError(name)
-    }
-    val isNull = if (namedLambda.nullable) {
-      JavaCode.isNullVariable(s"lambda_${name}_isNull")
-    } else {
-      FalseLiteral
-    }
-    val lambdaVar = ExprCode(isNull, JavaCode.variable(s"lambda_$name", namedLambda.dataType))
-
-    currentLambdaVars.put(name, lambdaVar)
-    val result = f(lambdaVar)
-    currentLambdaVars.remove(name)
-    result
-  }
-
-  def withOptionalLambdaVar(namedLambda: Option[NamedLambdaVariable],
-      f: Option[ExprCode] => ExprCode): ExprCode = {
-    namedLambda.map { lambdaVar =>
-      def wrapperFunc(ev: ExprCode): ExprCode = f(Some(ev))
-      withLambdaVar(lambdaVar, wrapperFunc)
-    }.getOrElse {
-      f(None)
-    }
-  }
-
-  def getLambdaVar(name: String): ExprCode = {
-    currentLambdaVars.getOrElse(name, {
-      throw QueryExecutionErrors.lambdaVariableNotDefinedError(name)
-    })
-  }
-
-  /**
    * Holding expressions' inlined mutable states like `MonotonicallyIncreasingID.count` as a
    * 2-tuple: java type, variable name.
    * As an example, ("int", "count") will produce code:
