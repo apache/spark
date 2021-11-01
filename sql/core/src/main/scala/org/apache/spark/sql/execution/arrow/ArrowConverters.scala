@@ -71,6 +71,94 @@ private[sql] class ArrowBatchStreamWriter(
 private[sql] object ArrowConverters {
 
   /**
+   * Maps Iterator from InternalRow to ArrowRecordBatche. Limit ArrowRecordBatch size
+   * in a batch by setting maxRecordsPerBatch or use 0 to fully consume rowIter.
+   */
+  private[sql] def toArrowRecordBatchIterator(
+      rowIter: Iterator[InternalRow],
+      schema: StructType,
+      maxRecordsPerBatch: Int,
+      timeZoneId: String,
+      context: TaskContext): Iterator[ArrowRecordBatch] = {
+
+    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+    val allocator =
+      ArrowUtils.rootAllocator.newChildAllocator("toArrowRecordBatchIterator", 0, Long.MaxValue)
+
+    val root = VectorSchemaRoot.create(arrowSchema, allocator)
+    val unloader = new VectorUnloader(root)
+    val arrowWriter = ArrowWriter.create(root)
+
+
+    new Iterator[ArrowRecordBatch] {
+      private var holdArrowRecordBatch: ArrowRecordBatch = _
+      private var holdNext: Boolean = false
+      context.addTaskCompletionListener[Unit] { _ =>
+        if (holdArrowRecordBatch != null) {
+          holdArrowRecordBatch.close()
+          holdArrowRecordBatch = null
+        }
+        root.close()
+        allocator.close()
+      }
+
+      override def hasNext: Boolean = holdNext || {
+        if (holdArrowRecordBatch != null) {
+          holdArrowRecordBatch.close()
+          holdArrowRecordBatch = null
+        }
+        if(rowIter.hasNext) {
+          holdArrowRecordBatch = nextArrowRecordBatch()
+          holdNext = true
+          true
+        } else {
+          root.close()
+          allocator.close()
+          false
+        }
+      }
+
+      override def next(): ArrowRecordBatch = {
+        holdNext = false
+        holdArrowRecordBatch
+      }
+
+      private def nextArrowRecordBatch(): ArrowRecordBatch = {
+        try {
+          var rowCount = 0
+          arrowWriter.reset()
+          while (rowIter.hasNext && (maxRecordsPerBatch <= 0 || rowCount < maxRecordsPerBatch)) {
+            val row = rowIter.next()
+            arrowWriter.write(row)
+            rowCount += 1
+          }
+          arrowWriter.finish()
+          unloader.getRecordBatch()
+        } catch {
+          case t: Throwable =>
+            // Purposefully not using NonFatal, because even fatal exceptions
+            // we don't want to have our finallyBlock suppress
+            arrowWriter.reset()
+            throw t
+        }
+      }
+    }
+  }
+
+  /**
+   * Maps Iterator from ArrowRecordBatche to InternalRow.
+   * Path is ArrowRecordBatch -> ColumnarBatch -> InternalRow
+   */
+  private[sql] def fromArrowRecordBatchIterator(
+      arrowBatchIter: Iterator[ArrowRecordBatch],
+      schema: StructType,
+      timeZoneId: String,
+      context: TaskContext): Iterator[InternalRow] = {
+    val columnarBatchIter = toColumnarBatchIterator(arrowBatchIter, schema, timeZoneId, context)
+    columnarBatchIter.flatMap(_.rowIterator().asScala)
+  }
+
+  /**
    * Maps Iterator from InternalRow to serialized ArrowRecordBatches. Limit ArrowRecordBatch size
    * in a batch by setting maxRecordsPerBatch or use 0 to fully consume rowIter.
    */
@@ -81,50 +169,15 @@ private[sql] object ArrowConverters {
       timeZoneId: String,
       context: TaskContext): Iterator[Array[Byte]] = {
 
-    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
-    val allocator =
-      ArrowUtils.rootAllocator.newChildAllocator("toBatchIterator", 0, Long.MaxValue)
-
-    val root = VectorSchemaRoot.create(arrowSchema, allocator)
-    val unloader = new VectorUnloader(root)
-    val arrowWriter = ArrowWriter.create(root)
-
-    context.addTaskCompletionListener[Unit] { _ =>
-      root.close()
-      allocator.close()
-    }
-
-    new Iterator[Array[Byte]] {
-
-      override def hasNext: Boolean = rowIter.hasNext || {
-        root.close()
-        allocator.close()
-        false
-      }
-
-      override def next(): Array[Byte] = {
+      val arrowRecordBatchIter =
+        toArrowRecordBatchIterator(rowIter, schema, maxRecordsPerBatch, timeZoneId, context)
+      arrowRecordBatchIter.map(batch => {
         val out = new ByteArrayOutputStream()
         val writeChannel = new WriteChannel(Channels.newChannel(out))
-
-        Utils.tryWithSafeFinally {
-          var rowCount = 0
-          while (rowIter.hasNext && (maxRecordsPerBatch <= 0 || rowCount < maxRecordsPerBatch)) {
-            val row = rowIter.next()
-            arrowWriter.write(row)
-            rowCount += 1
-          }
-          arrowWriter.finish()
-          val batch = unloader.getRecordBatch()
-          MessageSerializer.serialize(writeChannel, batch)
-          batch.close()
-        } {
-          arrowWriter.reset()
-        }
-
+        MessageSerializer.serialize(writeChannel, batch)
         out.toByteArray
-      }
+      })
     }
-  }
 
   /**
    * Maps iterator from serialized ArrowRecordBatches to InternalRows.
@@ -136,21 +189,45 @@ private[sql] object ArrowConverters {
       context: TaskContext): Iterator[InternalRow] = {
     val allocator =
       ArrowUtils.rootAllocator.newChildAllocator("fromBatchIterator", 0, Long.MaxValue)
+    val arrowRecordBatchIter = arrowBatchIter.map(ArrowConverters.loadBatch(_, allocator))
+    fromArrowRecordBatchIterator(arrowRecordBatchIter, schema, timeZoneId, context)
+  }
+
+  /**
+   * Maps iterator from serialized ArrowRecordBatches to ColumnarBatchs.
+   */
+  private[sql] def toColumnarBatchIterator(
+      arrowBatchIter: Iterator[ArrowRecordBatch],
+      schema: StructType,
+      timeZoneId: String,
+      context: TaskContext): Iterator[ColumnarBatch] = {
+    val allocator =
+      ArrowUtils.rootAllocator.newChildAllocator("toColumnarBatchIterator", 0, Long.MaxValue)
 
     val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
     val root = VectorSchemaRoot.create(arrowSchema, allocator)
 
-    new Iterator[InternalRow] {
-      private var rowIter = if (arrowBatchIter.hasNext) nextBatch() else Iterator.empty
+    new Iterator[ColumnarBatch] {
+      private var nextColumnarBatch: ColumnarBatch = _
+      private var holdNext: Boolean = false
 
       context.addTaskCompletionListener[Unit] { _ =>
+        if (nextColumnarBatch != null) {
+          nextColumnarBatch.close()
+          nextColumnarBatch = null
+        }
         root.close()
         allocator.close()
       }
 
-      override def hasNext: Boolean = rowIter.hasNext || {
+      override def hasNext: Boolean = holdNext || {
+        if (nextColumnarBatch != null) {
+          nextColumnarBatch.close()
+          nextColumnarBatch = null
+        }
         if (arrowBatchIter.hasNext) {
-          rowIter = nextBatch()
+          nextColumnarBatch = nextBatch()
+          holdNext = true
           true
         } else {
           root.close()
@@ -159,10 +236,13 @@ private[sql] object ArrowConverters {
         }
       }
 
-      override def next(): InternalRow = rowIter.next()
+      override def next(): ColumnarBatch = {
+        holdNext = false
+        nextColumnarBatch
+      }
 
-      private def nextBatch(): Iterator[InternalRow] = {
-        val arrowRecordBatch = ArrowConverters.loadBatch(arrowBatchIter.next(), allocator)
+      private def nextBatch(): ColumnarBatch = {
+        val arrowRecordBatch = arrowBatchIter.next()
         val vectorLoader = new VectorLoader(root)
         vectorLoader.load(arrowRecordBatch)
         arrowRecordBatch.close()
@@ -173,15 +253,33 @@ private[sql] object ArrowConverters {
 
         val batch = new ColumnarBatch(columns)
         batch.setNumRows(root.getRowCount)
-        batch.rowIterator().asScala
+        batch
       }
     }
   }
 
   /**
+   * Maps iterator from serialized ColumnarBatchs to ArrowRecordBatches.
+   */
+  private[sql] def fromColumnarBatchIterator(
+      columnarBatchIter: Iterator[ColumnarBatch],
+      schema: StructType,
+      timeZoneId: String,
+      context: TaskContext): Iterator[ArrowRecordBatch] = {
+    columnarBatchIter.map(columnarBatch => {
+      val arrowVectors = (0 until columnarBatch.numCols).map(i => {
+        columnarBatch.column(i).asInstanceOf[ArrowColumnVector].getArrowVector()
+      }).map(_.asInstanceOf[FieldVector])
+      val root = new VectorSchemaRoot(arrowVectors.asJava)
+      val unloader = new VectorUnloader(root)
+      unloader.getRecordBatch()
+    })
+  }
+
+  /**
    * Load a serialized ArrowRecordBatch.
    */
-  private[arrow] def loadBatch(
+  private[sql] def loadBatch(
       batchBytes: Array[Byte],
       allocator: BufferAllocator): ArrowRecordBatch = {
     val in = new ByteArrayInputStream(batchBytes)

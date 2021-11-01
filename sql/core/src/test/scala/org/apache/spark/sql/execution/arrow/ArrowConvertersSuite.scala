@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BinaryType, Decimal, IntegerType, NullType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
 
@@ -1391,6 +1391,55 @@ class ArrowConvertersSuite extends SharedSparkSession {
     }
 
     assert(count == inputRows.length)
+  }
+
+  test("convert from ArrowRecordBatch to ColumnarBatch") {
+    val data = Seq(
+      Row(
+        "0", 0, 0.1f, 0.toShort, Decimal(3.14), List[Int](1, 2, 3),
+        Map[Int, String]((1, "a"), (2, "b")), Row("Bobby G. can't swim")))
+
+    val schema = StructType(
+      Seq(
+        StructField("string", StringType, true),
+        StructField("int", IntegerType, true),
+        StructField("float", FloatType, true),
+        StructField("short", ShortType, true),
+        StructField("decimal", DecimalType(10, 2), true),
+        StructField("array", ArrayType(IntegerType), true),
+        StructField("map", MapType(IntegerType, StringType), true),
+        StructField("struct", StructType(Seq(StructField("str", StringType, true))), true)))
+
+    val indexData =
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    val arrowBatches = indexData.toArrowBatchRdd.collect().toIterator
+    assert(arrowBatches.nonEmpty)
+    val allocator = ArrowUtils.getDefaultAllocator
+    val arrowRecordBatchIter =
+      arrowBatches.map(ArrowConverters.loadBatch(_, allocator))
+
+    val columnarBatchIter =
+      ArrowConverters.toColumnarBatchIterator(
+        arrowRecordBatchIter, schema, null, TaskContext.empty())
+
+    columnarBatchIter.foreach(columnarBatch => {
+      assert(columnarBatch.column(0).getUTF8String(0).toString == "0")
+      assert(columnarBatch.column(1).getInt(0) == 0)
+      assert(columnarBatch.column(2).getFloat(0) == 0.1f)
+      assert(columnarBatch.column(3).getShort(0) == 0)
+      assert(columnarBatch.column(4).getDecimal(0, 10, 2).compare(Decimal(3.14)) == 0)
+      val arr1 = columnarBatch.column(5).getArray(0)
+      assert(arr1.getInt(0) == 1)
+      assert(arr1.getInt(1) == 2)
+      assert(arr1.getInt(2) == 3)
+      val map1 = columnarBatch.column(6).getMap(0)
+      assert(map1.keyArray().getInt(0) == 1)
+      assert(map1.valueArray().getUTF8String(0).toString == "a")
+      assert(map1.keyArray().getInt(1) == 2)
+      assert(map1.valueArray().getUTF8String(1).toString == "b")
+      val struct1 = columnarBatch.column(7).getStruct(0)
+      assert(struct1.getUTF8String(0).toString == "Bobby G. can't swim")
+    })
   }
 
   test("ArrowBatchStreamWriter roundtrip") {

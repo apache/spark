@@ -133,6 +133,10 @@ public final class ArrowColumnVector extends ColumnVector {
   @Override
   public ArrowColumnVector getChild(int ordinal) { return childColumns[ordinal]; }
 
+  public ValueVector getArrowVector() {
+    return accessor.vector;
+  }
+
   public ArrowColumnVector(ValueVector vector) {
     super(ArrowUtils.fromArrowField(vector.getField()));
 

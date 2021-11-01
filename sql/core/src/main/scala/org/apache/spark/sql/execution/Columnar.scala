@@ -28,8 +28,10 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
@@ -450,6 +452,7 @@ case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     val enableOffHeapColumnVector = conf.offHeapColumnVectorEnabled
+    val enableArrowColumnVector = conf.arrowColumnVectorEnabled
     val numInputRows = longMetric("numInputRows")
     val numOutputBatches = longMetric("numOutputBatches")
     // Instead of creating a new config we are reusing columnBatchSize. In the future if we do
@@ -458,6 +461,24 @@ case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
     // This avoids calling `schema` in the RDD closure, so that we don't need to include the entire
     // plan (this) in the closure.
     val localSchema = this.schema
+    if (enableArrowColumnVector) {
+      val maxRecordsPerBatch = SQLConf.get.arrowMaxRecordsPerBatch
+      val timeZoneId = SQLConf.get.sessionLocalTimeZone
+      return child.execute().mapPartitionsInternal { rowIterator =>
+        val context = TaskContext.get()
+        ArrowConverters.toColumnarBatchIterator(
+          ArrowConverters
+            .toArrowRecordBatchIterator(
+              rowIterator,
+              localSchema,
+              maxRecordsPerBatch,
+              timeZoneId,
+              context),
+          localSchema,
+          timeZoneId,
+          context)
+      }
+    }
     child.execute().mapPartitionsInternal { rowIterator =>
       if (rowIterator.hasNext) {
         new Iterator[ColumnarBatch] {
