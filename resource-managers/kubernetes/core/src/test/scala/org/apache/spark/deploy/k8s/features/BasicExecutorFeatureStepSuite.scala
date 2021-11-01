@@ -149,13 +149,15 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("basic executor pod has reasonable defaults") {
-    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+    val conf = newExecutorConf()
+    val step = new BasicExecutorFeatureStep(conf, new SecurityManager(baseConf),
       defaultProfile)
     val executor = step.configurePod(SparkPod.initialPod())
 
     // The executor pod name and default labels.
     assert(executor.pod.getMetadata.getName === s"$RESOURCE_NAME_PREFIX-exec-1")
-    LABELS.foreach { case (k, v) =>
+    val DEFAULT_LABELS = Map(SPARK_APP_NAME_LABEL-> conf.appName)
+    (LABELS ++ DEFAULT_LABELS).foreach { case (k, v) =>
       assert(executor.pod.getMetadata.getLabels.get(k) === v)
     }
     assert(executor.pod.getSpec.getImagePullSecrets.asScala === TEST_IMAGE_PULL_SECRET_OBJECTS)

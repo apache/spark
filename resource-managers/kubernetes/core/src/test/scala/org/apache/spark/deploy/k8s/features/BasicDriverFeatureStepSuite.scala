@@ -116,7 +116,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
 
     val driverPodMetadata = configuredPod.pod.getMetadata
     assert(driverPodMetadata.getName === "spark-driver-pod")
-    DRIVER_LABELS.foreach { case (k, v) =>
+    val DEFAULT_LABELS = Map(SPARK_APP_NAME_LABEL-> kubernetesConf.appName)
+    (DRIVER_LABELS ++ DEFAULT_LABELS).foreach { case (k, v) =>
       assert(driverPodMetadata.getLabels.get(k) === v)
     }
     assert(driverPodMetadata.getAnnotations.asScala === DRIVER_ANNOTATIONS)

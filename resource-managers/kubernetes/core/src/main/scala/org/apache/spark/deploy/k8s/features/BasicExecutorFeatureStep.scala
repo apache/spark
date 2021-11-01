@@ -277,6 +277,7 @@ private[spark] class BasicExecutorFeatureStep(
         .withName(name)
         .addToLabels(kubernetesConf.labels.asJava)
         .addToLabels(SPARK_RESOURCE_PROFILE_ID_LABEL, resourceProfile.id.toString)
+        .addToLabels(SPARK_APP_NAME_LABEL, kubernetesConf.appName)
         .addToAnnotations(kubernetesConf.annotations.asJava)
         .addToOwnerReferences(ownerReference.toSeq: _*)
         .endMetadata()
