@@ -20,11 +20,11 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.expressions.TableSample
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
+import org.apache.spark.sql.execution.datasources.v2.TableSample
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
@@ -105,10 +105,14 @@ case class JDBCScanBuilder(
     }
   }
 
-  override def pushTableSample(sample: TableSample): Boolean = {
+  override def pushTableSample(
+      lowerBound: Double,
+      upperBound: Double,
+      withReplacement: Boolean,
+      seed: Long): Boolean = {
     if (jdbcOptions.pushDownTableSample &&
       JdbcDialects.get(jdbcOptions.url).supportsTableSample) {
-      this.tableSample = Some(sample)
+      this.tableSample = Some(TableSample(lowerBound, upperBound, withReplacement, seed))
       return true
     }
     false

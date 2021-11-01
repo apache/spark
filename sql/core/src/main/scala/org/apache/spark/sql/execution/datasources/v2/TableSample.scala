@@ -15,36 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions;
+package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.annotation.Experimental;
-
-/**
- * Represents a TableSample in the public expression API.
- *
- * @since 3.3.0
- */
-@Experimental
-public interface TableSample extends Expression {
-
-  /**
-   * Returns the lower-bound of the sampling probability (usually 0.0).
-   */
-  double lowerBound();
-
-  /**
-   * Returns the upper-bound of the sampling probability. The expected fraction sampled
-   * will be ub - lb.
-   */
-  double upperBound();
-
-  /**
-   * Returns whether to sample with replacement.
-   */
-  boolean withReplacement();
-
-  /**
-   * Returns the random seed.
-   */
-  long seed();
-}
+case class TableSample(
+    lowerBound: Double,
+    upperBound: Double,
+    withReplacement: Boolean,
+    seed: Long)

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.TableSample;
 
 /**
  * A mix-in interface for {@link Scan}. Data sources can implement this interface to
@@ -32,5 +31,9 @@ public interface SupportsPushDownTableSample extends ScanBuilder {
   /**
    * Pushes down SAMPLE to the data source.
    */
-  boolean pushTableSample(TableSample limit);
+  boolean pushTableSample(
+      double lowerBound,
+      double upperBound,
+      boolean withReplacement,
+      long seed);
 }

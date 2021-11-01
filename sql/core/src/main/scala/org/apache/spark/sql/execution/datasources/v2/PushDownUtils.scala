@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.expressions.{FieldReference, TableSample}
+import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownV2Filters}
@@ -144,7 +144,8 @@ object PushDownUtils extends PredicateHelper {
   def pushTableSample(scanBuilder: ScanBuilder, sample: TableSample): Boolean = {
     scanBuilder match {
       case s: SupportsPushDownTableSample =>
-        s.pushTableSample(sample)
+        s.pushTableSample(
+          sample.lowerBound, sample.upperBound, sample.withReplacement, sample.seed)
       case _ => false
     }
   }

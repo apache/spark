@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.connector.expressions.TableSample
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 
 /**

@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LogicalPlan, Project, Sample}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.expressions.{LogicalExpressions, TableSample}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -230,7 +229,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   def applySample(plan: LogicalPlan): LogicalPlan = plan.transform {
     case sample@Sample(_, _, _, _, child) => child match {
       case ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.length == 0 =>
-        val tableSample = LogicalExpressions.tableSample(
+        val tableSample = TableSample(
           sample.lowerBound,
           sample.upperBound,
           sample.withReplacement,
