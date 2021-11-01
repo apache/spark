@@ -41,7 +41,6 @@ private[ml] trait TargetEncoderParams extends HasInputCols with HasOutputCols
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
-
   setDefault(handleInvalid, TargetEncoder.ERROR_INVALID)
 
   protected def validateAndTransformSchema(schema: StructType): StructType = {
