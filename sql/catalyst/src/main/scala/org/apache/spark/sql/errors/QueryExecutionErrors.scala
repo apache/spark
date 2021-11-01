@@ -106,9 +106,14 @@ object QueryExecutionErrors {
         decimalPrecision.toString, decimalScale.toString, SQLConf.ANSI_ENABLED.key))
   }
 
+  def invalidInputSyntaxForNumericError(e: NumberFormatException): NumberFormatException = {
+    new NumberFormatException(s"${e.getMessage}. You can use 'try_cast' or " +
+      s"set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
+  }
+
   def invalidInputSyntaxForNumericError(s: UTF8String): NumberFormatException = {
     new SparkNumberFormatException(errorClass = "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE",
-      messageParameters = Array(s.toString))
+      messageParameters = Array(s.toString, SQLConf.ANSI_ENABLED.key))
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
@@ -1006,7 +1011,8 @@ object QueryExecutionErrors {
   }
 
   def cannotCastToDateTimeError(value: Any, to: DataType): Throwable = {
-    new DateTimeException(s"Cannot cast $value to $to.")
+    new DateTimeException(s"Cannot cast $value to $to. To return NULL instead, use 'try_cast'. " +
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
   }
 
   def registeringStreamingQueryListenerError(e: Exception): Throwable = {
@@ -1134,7 +1140,8 @@ object QueryExecutionErrors {
   }
 
   def invalidInputSyntaxForBooleanError(s: UTF8String): UnsupportedOperationException = {
-    new UnsupportedOperationException(s"invalid input syntax for type boolean: $s")
+    new UnsupportedOperationException(s"invalid input syntax for type boolean: $s. " +
+      s"You can use 'try_cast' or set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
   }
 
   def unsupportedOperandTypeForSizeFunctionError(dataType: DataType): Throwable = {

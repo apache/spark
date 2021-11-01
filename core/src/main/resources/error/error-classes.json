@@ -80,7 +80,7 @@
     "sqlState" : "22023"
   },
   "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE" : {
-    "message" : [ "invalid input syntax for type numeric: %s" ],
+    "message" : [ "invalid input syntax for type numeric: %s. You can use 'try_cast' or set %s to false to bypass this error." ],
     "sqlState" : "42000"
   },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
