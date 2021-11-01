@@ -40,6 +40,7 @@ import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{RpcUtils, SerializableBuffer, Utils}
 
 class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext
@@ -189,6 +190,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
   test("extra resources from executor") {
 
+    val testStartTime = System.currentTimeMillis()
+
     val execCores = 3
     val conf = new SparkConf()
       .set(EXECUTOR_CORES, execCores)
@@ -207,6 +210,10 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     sc.resourceProfileManager.addResourceProfile(rp)
     assert(rp.id > ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val backend = sc.schedulerBackend.asInstanceOf[TestCoarseGrainedSchedulerBackend]
+    // Note we get two in default profile and one in the new rp
+    // we need to put a req time in for all of them.
+    backend.requestTotalExecutors(Map((rp.id, 1)), Map(), Map())
+    backend.requestExecutors(3)
     val mockEndpointRef = mock[RpcEndpointRef]
     val mockAddress = mock[RpcAddress]
     when(mockEndpointRef.send(LaunchTask)).thenAnswer((_: InvocationOnMock) => {})
@@ -214,8 +221,12 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val resources = Map(GPU -> new ResourceInformation(GPU, Array("0", "1", "3")))
 
     var executorAddedCount: Int = 0
+    val infos = scala.collection.mutable.ArrayBuffer[ExecutorInfo]()
     val listener = new SparkListener() {
       override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
+        // Lets check that the exec allocation times "make sense"
+        val info = executorAdded.executorInfo
+        infos += info
         executorAddedCount += 1
       }
     }
@@ -271,6 +282,14 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     }
     sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
     assert(executorAddedCount === 3)
+    infos.foreach { info =>
+      assert(info.requestTime.get > 0,
+        "Exec allocation and request times don't make sense")
+      assert(info.requestTime.get > testStartTime,
+        "Exec allocation and request times don't make sense")
+      assert(info.registrationTime.get > info.requestTime.get,
+        "Exec allocation and request times don't make sense")
+    }
   }
 
   private def testSubmitJob(sc: SparkContext, rdd: RDD[Int]): Unit = {
