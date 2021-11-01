@@ -2463,7 +2463,6 @@ abstract class JsonSuite
     }
   }
 
-
   test("SPARK-23094: permissively parse a dataset contains JSON with leading nulls") {
     checkAnswer(
       spark.read.option("mode", "PERMISSIVE").option("encoding", "UTF-8").json(Seq(badJson).toDS()),
