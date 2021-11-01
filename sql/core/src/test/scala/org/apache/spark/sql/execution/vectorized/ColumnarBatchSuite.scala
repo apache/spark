@@ -1693,7 +1693,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
       val schema = new StructType().add(dt.typeName, dt)
       val converter = new RowToColumnConverter(schema)
       val columns = OnHeapColumnVector.allocateColumns(10, schema)
-      val batch = new ColumnarBatch(columns.toArray, 3)
       try {
         assert(columns(0).dataType() == dt)
         (0 until 9).foreach { i =>
@@ -1704,14 +1703,13 @@ class ColumnarBatchSuite extends SparkFunSuite {
         converter.convert(new GenericInternalRow(Array[Any](null)), columns.toArray)
         assert(columns(0).isNullAt(9))
       } finally {
-        batch.close()
+        columns.foreach(_.close())
       }
     }
     DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt =>
       val schema = new StructType().add(dt.typeName, dt)
       val converter = new RowToColumnConverter(schema)
       val columns = OnHeapColumnVector.allocateColumns(10, schema)
-      val batch = new ColumnarBatch(columns.toArray, 3)
       try {
         assert(columns(0).dataType() == dt)
         (0 until 9).foreach { i =>
@@ -1722,7 +1720,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
         converter.convert(new GenericInternalRow(Array[Any](null)), columns.toArray)
         assert(columns(0).isNullAt(9))
       } finally {
-        batch.close()
+        columns.foreach(_.close())
       }
     }
   }
