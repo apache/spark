@@ -46,4 +46,4 @@ private[cluster] class ExecutorData(
     val registrationTs: Long,
     val requestTs: Option[Long]
 ) extends ExecutorInfo(executorHost, totalCores, logUrlMap, attributes,
-  resourcesInfo, resourceProfileId)
+  resourcesInfo, resourceProfileId, Some(registrationTs), requestTs)

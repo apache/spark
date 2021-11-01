@@ -52,7 +52,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
   private var clock: ManualClock = _
 
   private val execInfo = new ExecutorInfo("host1", 1, Map.empty,
-    Map.empty, Map.empty, DEFAULT_RESOURCE_PROFILE_ID)
+    Map.empty, Map.empty, DEFAULT_RESOURCE_PROFILE_ID, None, None)
 
   // List of known executors. Allows easily mocking which executors are alive without
   // having to use mockito APIs directly in each test.
@@ -267,7 +267,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     knownExecs ++= Set("1", "2", "3")
 
     val execInfoRp1 = new ExecutorInfo("host1", 1, Map.empty,
-      Map.empty, Map.empty, 1)
+      Map.empty, Map.empty, 1, None, None)
 
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "2", execInfo))

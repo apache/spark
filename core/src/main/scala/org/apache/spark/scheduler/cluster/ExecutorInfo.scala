@@ -31,10 +31,13 @@ class ExecutorInfo(
     val logUrlMap: Map[String, String],
     val attributes: Map[String, String],
     val resourcesInfo: Map[String, ResourceInformation],
-    val resourceProfileId: Int) {
+    val resourceProfileId: Int,
+    val registrationTime: Option[Long],
+    val requestTime: Option[Long]) {
 
   def this(executorHost: String, totalCores: Int, logUrlMap: Map[String, String]) = {
-    this(executorHost, totalCores, logUrlMap, Map.empty, Map.empty, DEFAULT_RESOURCE_PROFILE_ID)
+    this(executorHost, totalCores, logUrlMap, Map.empty, Map.empty, DEFAULT_RESOURCE_PROFILE_ID,
+      None, None)
   }
 
   def this(
@@ -42,7 +45,8 @@ class ExecutorInfo(
       totalCores: Int,
       logUrlMap: Map[String, String],
       attributes: Map[String, String]) = {
-    this(executorHost, totalCores, logUrlMap, attributes, Map.empty, DEFAULT_RESOURCE_PROFILE_ID)
+    this(executorHost, totalCores, logUrlMap, attributes, Map.empty, DEFAULT_RESOURCE_PROFILE_ID,
+      None, None)
   }
 
   def this(
@@ -52,7 +56,7 @@ class ExecutorInfo(
       attributes: Map[String, String],
       resourcesInfo: Map[String, ResourceInformation]) = {
     this(executorHost, totalCores, logUrlMap, attributes, resourcesInfo,
-      DEFAULT_RESOURCE_PROFILE_ID)
+      DEFAULT_RESOURCE_PROFILE_ID, None, None)
   }
 
   def canEqual(other: Any): Boolean = other.isInstanceOf[ExecutorInfo]

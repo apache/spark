@@ -1731,7 +1731,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   }
 
   private val execInfo = new ExecutorInfo("host1", 1, Map.empty,
-    Map.empty, Map.empty, DEFAULT_RESOURCE_PROFILE_ID)
+    Map.empty, Map.empty, DEFAULT_RESOURCE_PROFILE_ID, None, None)
 
   private def onExecutorAddedDefaultProfile(
       manager: ExecutorAllocationManager,
@@ -1744,7 +1744,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       id: String,
       rp: ResourceProfile): Unit = {
     val cores = rp.getExecutorCores.getOrElse(1)
-    val execInfo = new ExecutorInfo("host1", cores, Map.empty, Map.empty, Map.empty, rp.id)
+    val execInfo = new ExecutorInfo("host1", cores, Map.empty, Map.empty, Map.empty, rp.id,
+      None, None)
     post(SparkListenerExecutorAdded(0L, id, execInfo))
   }
 
