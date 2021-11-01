@@ -214,7 +214,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       functionNames.foreach { func =>
         val exprInfo = FunctionRegistry.expressions(func)._1
         assert(rs.next())
-        assert(rs.getString("FUNCTION_SCHEM") === "default")
+        assert(rs.getString("FUNCTION_SCHEM") === "SYSTEM")
         assert(rs.getString("FUNCTION_NAME") === exprInfo.getName)
         assert(rs.getString("REMARKS") ===
           s"Usage: ${exprInfo.getUsage}\nExtended Usage:${exprInfo.getExtended}")
