@@ -23,7 +23,6 @@ import java.sql.{Date, Timestamp}
 import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException}
 import org.apache.spark.sql.{QueryTest, Row, SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
-import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, ParquetOutputTimestampType}
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.{CORRECTED, EXCEPTION, LEGACY}
@@ -165,13 +164,7 @@ abstract class ParquetRebaseDatetimeSuite
     def successInRead(path: String): Unit = spark.read.parquet(path).collect()
     def failInRead(path: String): Unit = {
       val e = intercept[SparkException](spark.read.parquet(path).collect())
-      // If SparkUpgradeException is thrown while reading file,
-      // it will be wrapped by QueryExecutionException.
-      if (e.getCause.isInstanceOf[QueryExecutionException]) {
-        assert(e.getCause.getCause.isInstanceOf[SparkUpgradeException])
-      } else {
-        assert(e.getCause.isInstanceOf[SparkUpgradeException])
-      }
+      assert(e.getCause.isInstanceOf[SparkUpgradeException])
     }
     Seq(
       // By default we should fail to read ancient datetime values when parquet files don't
@@ -416,7 +409,7 @@ abstract class ParquetRebaseDatetimeSuite
       val e = intercept[SparkException] {
         spark.read.parquet(getResourceParquetFilePath("test-data/" + fileName)).collect()
       }
-      val errMsg = e.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+      val errMsg = e.getCause.asInstanceOf[SparkUpgradeException].getMessage
       assert(errMsg.contains("You may get a different result due to the upgrading"))
     }
     withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {

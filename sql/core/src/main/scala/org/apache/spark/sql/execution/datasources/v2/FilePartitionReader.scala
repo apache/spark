@@ -70,10 +70,10 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
         logWarning(
           s"Skipped the rest of the content in the corrupted file: $currentReader", e)
         false
+      case sue: SparkUpgradeException => throw sue
       case NonFatal(e) =>
         e.getCause match {
-          case sue: SparkUpgradeException =>
-            throw sue
+          case sue: SparkUpgradeException => throw sue
           case _ => throw QueryExecutionErrors.cannotReadFilesError(e, currentReader.file.filePath)
         }
     }

@@ -170,10 +170,10 @@ class FileScanRDD(
             case e: SchemaColumnConvertNotSupportedException =>
               throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
                 currentFile.filePath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
+            case sue: SparkUpgradeException => throw sue
             case NonFatal(e) =>
               e.getCause match {
-                case sue: SparkUpgradeException =>
-                  throw sue
+                case sue: SparkUpgradeException => throw sue
                 case _ => throw QueryExecutionErrors.cannotReadFilesError(e, currentFile.filePath)
               }
           }

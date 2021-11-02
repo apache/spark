@@ -40,7 +40,7 @@ import org.apache.spark.sql.TestingUDT.IntervalData
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
-import org.apache.spark.sql.execution.{FormattedMode, QueryExecutionException, SparkPlan}
+import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.functions.col
@@ -1923,13 +1923,7 @@ abstract class AvroSuite
 
     def failInRead(path: String): Unit = {
       val e = intercept[SparkException](spark.read.format("avro").load(path).collect())
-      // If SparkUpgradeException is thrown while reading file,
-      // it will be wrapped by QueryExecutionException.
-      if (e.getCause.isInstanceOf[QueryExecutionException]) {
-        assert(e.getCause.getCause.isInstanceOf[SparkUpgradeException])
-      } else {
-        assert(e.getCause.isInstanceOf[SparkUpgradeException])
-      }
+      assert(e.getCause.isInstanceOf[SparkUpgradeException])
     }
     def successInRead(path: String): Unit = spark.read.format("avro").load(path).collect()
     Seq(
@@ -2158,7 +2152,7 @@ abstract class AvroSuite
         val e = intercept[SparkException] {
           spark.read.format("avro").load(getResourceAvroFilePath(fileName)).collect()
         }
-        val errMsg = e.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        val errMsg = e.getCause.asInstanceOf[SparkUpgradeException].getMessage
         assert(errMsg.contains("You may get a different result due to the upgrading"))
       }
     }
