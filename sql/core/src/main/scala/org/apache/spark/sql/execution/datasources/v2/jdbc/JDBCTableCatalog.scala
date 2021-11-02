@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-import java.sql.{Connection, SQLException}
+import java.sql.SQLException
 import java.util
 
 import scala.collection.JavaConverters._
@@ -57,7 +57,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
 
   override def listTables(namespace: Array[String]): Array[Identifier] = {
     checkNamespace(namespace)
-    withConnection { conn =>
+    JdbcUtils.withConnection(options) { conn =>
       val schemaPattern = if (namespace.length == 1) namespace.head else null
       val rs = conn.getMetaData
         .getTables(null, schemaPattern, "%", Array("TABLE"));
@@ -72,14 +72,14 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
     checkNamespace(ident.namespace())
     val writeOptions = new JdbcOptionsInWrite(
       options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
-    classifyException(s"Failed table existence check: $ident") {
-      withConnection(JdbcUtils.tableExists(_, writeOptions))
+    JdbcUtils.classifyException(s"Failed table existence check: $ident", dialect) {
+      JdbcUtils.withConnection(options)(JdbcUtils.tableExists(_, writeOptions))
     }
   }
 
   override def dropTable(ident: Identifier): Boolean = {
     checkNamespace(ident.namespace())
-    withConnection { conn =>
+    JdbcUtils.withConnection(options) { conn =>
       try {
         JdbcUtils.dropTable(conn, getTableName(ident), options)
         true
@@ -91,8 +91,8 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
 
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
     checkNamespace(oldIdent.namespace())
-    withConnection { conn =>
-      classifyException(s"Failed table renaming from $oldIdent to $newIdent") {
+    JdbcUtils.withConnection(options) { conn =>
+      JdbcUtils.classifyException(s"Failed table renaming from $oldIdent to $newIdent", dialect) {
         JdbcUtils.renameTable(conn, getTableName(oldIdent), getTableName(newIdent), options)
       }
     }
@@ -151,8 +151,8 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
 
     val writeOptions = new JdbcOptionsInWrite(tableOptions)
     val caseSensitive = SQLConf.get.caseSensitiveAnalysis
-    withConnection { conn =>
-      classifyException(s"Failed table creation: $ident") {
+    JdbcUtils.withConnection(options) { conn =>
+      JdbcUtils.classifyException(s"Failed table creation: $ident", dialect) {
         JdbcUtils.createTable(conn, getTableName(ident), schema, caseSensitive, writeOptions)
       }
     }
@@ -162,8 +162,8 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     checkNamespace(ident.namespace())
-    withConnection { conn =>
-      classifyException(s"Failed table altering: $ident") {
+    JdbcUtils.withConnection(options) { conn =>
+      JdbcUtils.classifyException(s"Failed table altering: $ident", dialect) {
         JdbcUtils.alterTable(conn, getTableName(ident), changes, options)
       }
       loadTable(ident)
@@ -172,7 +172,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
 
   override def namespaceExists(namespace: Array[String]): Boolean = namespace match {
     case Array(db) =>
-      withConnection { conn =>
+      JdbcUtils.withConnection(options) { conn =>
         val rs = conn.getMetaData.getSchemas(null, db)
         while (rs.next()) {
           if (rs.getString(1) == db) return true;
@@ -183,7 +183,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
   }
 
   override def listNamespaces(): Array[Array[String]] = {
-    withConnection { conn =>
+    JdbcUtils.withConnection(options) { conn =>
       val schemaBuilder = ArrayBuilder.make[Array[String]]
       val rs = conn.getMetaData.getSchemas()
       while (rs.next()) {
@@ -234,8 +234,8 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
           }
         }
       }
-      withConnection { conn =>
-        classifyException(s"Failed create name space: $db") {
+      JdbcUtils.withConnection(options) { conn =>
+        JdbcUtils.classifyException(s"Failed create name space: $db", dialect) {
           JdbcUtils.createNamespace(conn, options, db, comment)
         }
       }
@@ -253,7 +253,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
         changes.foreach {
           case set: NamespaceChange.SetProperty =>
             if (set.property() == SupportsNamespaces.PROP_COMMENT) {
-              withConnection { conn =>
+              JdbcUtils.withConnection(options) { conn =>
                 JdbcUtils.createNamespaceComment(conn, options, db, set.value)
               }
             } else {
@@ -262,7 +262,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
 
           case unset: NamespaceChange.RemoveProperty =>
             if (unset.property() == SupportsNamespaces.PROP_COMMENT) {
-              withConnection { conn =>
+              JdbcUtils.withConnection(options) { conn =>
                 JdbcUtils.removeNamespaceComment(conn, options, db)
               }
             } else {
@@ -283,8 +283,8 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
       if (listTables(Array(db)).nonEmpty) {
         throw QueryExecutionErrors.namespaceNotEmptyError(namespace)
       }
-      withConnection { conn =>
-        classifyException(s"Failed drop name space: $db") {
+      JdbcUtils.withConnection(options) { conn =>
+        JdbcUtils.classifyException(s"Failed drop name space: $db", dialect) {
           JdbcUtils.dropNamespace(conn, options, db)
           true
         }
@@ -301,24 +301,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
     }
   }
 
-  private def withConnection[T](f: Connection => T): T = {
-    val conn = JdbcUtils.createConnectionFactory(options)()
-    try {
-      f(conn)
-    } finally {
-      conn.close()
-    }
-  }
-
   private def getTableName(ident: Identifier): String = {
     (ident.namespace() :+ ident.name()).map(dialect.quoteIdentifier).mkString(".")
-  }
-
-  private def classifyException[T](message: String)(f: => T): T = {
-    try {
-      f
-    } catch {
-      case e: Throwable => throw dialect.classifyException(message, e)
-    }
   }
 }

@@ -188,6 +188,12 @@ class JDBCOptions(
   // An option to allow/disallow pushing down predicate into JDBC data source
   val pushDownPredicate = parameters.getOrElse(JDBC_PUSHDOWN_PREDICATE, "true").toBoolean
 
+  // An option to allow/disallow pushing down aggregate into JDBC data source
+  val pushDownAggregate = parameters.getOrElse(JDBC_PUSHDOWN_AGGREGATE, "false").toBoolean
+
+  // An option to allow/disallow pushing down LIMIT into JDBC data source
+  val pushDownLimit = parameters.getOrElse(JDBC_PUSHDOWN_LIMIT, "false").toBoolean
+
   // The local path of user's keytab file, which is assumed to be pre-uploaded to all nodes either
   // by --files option of spark-submit or manually
   val keytab = {
@@ -207,6 +213,9 @@ class JDBCOptions(
   val tableComment = parameters.getOrElse(JDBC_TABLE_COMMENT, "").toString
 
   val refreshKrb5Config = parameters.getOrElse(JDBC_REFRESH_KRB5_CONFIG, "false").toBoolean
+
+  // User specified JDBC connection provider name
+  val connectionProviderName = parameters.get(JDBC_CONNECTION_PROVIDER)
 }
 
 class JdbcOptionsInWrite(
@@ -259,8 +268,11 @@ object JDBCOptions {
   val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
   val JDBC_SESSION_INIT_STATEMENT = newOption("sessionInitStatement")
   val JDBC_PUSHDOWN_PREDICATE = newOption("pushDownPredicate")
+  val JDBC_PUSHDOWN_AGGREGATE = newOption("pushDownAggregate")
+  val JDBC_PUSHDOWN_LIMIT = newOption("pushDownLimit")
   val JDBC_KEYTAB = newOption("keytab")
   val JDBC_PRINCIPAL = newOption("principal")
   val JDBC_TABLE_COMMENT = newOption("tableComment")
   val JDBC_REFRESH_KRB5_CONFIG = newOption("refreshKrb5Config")
+  val JDBC_CONNECTION_PROVIDER = newOption("connectionProvider")
 }

@@ -19,23 +19,13 @@ package org.apache.spark.storage
 
 import java.io.{File, IOException}
 
-import org.scalatest.BeforeAndAfter
-
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{LocalRootDirsTest, SparkConf, SparkFunSuite}
 import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
 /**
  * Tests for the spark.local.dir and SPARK_LOCAL_DIRS configuration options.
  */
-class LocalDirsSuite extends SparkFunSuite with BeforeAndAfter {
-
-  before {
-    Utils.clearLocalRootDirs()
-  }
-
-  after {
-    Utils.clearLocalRootDirs()
-  }
+class LocalDirsSuite extends SparkFunSuite with LocalRootDirsTest {
 
   private def assumeNonExistentAndNotCreatable(f: File): Unit = {
     try {

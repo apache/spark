@@ -370,6 +370,32 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       }
     }
   }
+
+  test("SPARK-35673: user-defined hint and unrecognized hint in subquery") {
+    withSession(Seq(_.injectPostHocResolutionRule(MyHintRule))) { session =>
+      // unrecognized hint
+      QueryTest.checkAnswer(
+        session.sql(
+          """
+            |SELECT *
+            |FROM (
+            |    SELECT /*+ some_random_hint_that_does_not_exist */ 42
+            |)
+            |""".stripMargin),
+        Row(42) :: Nil)
+
+      // user-defined hint
+      QueryTest.checkAnswer(
+        session.sql(
+          """
+            |SELECT *
+            |FROM (
+            |    SELECT /*+ CONVERT_TO_EMPTY */ 42
+            |)
+            |""".stripMargin),
+        Nil)
+    }
+  }
 }
 
 case class MyRule(spark: SparkSession) extends Rule[LogicalPlan] {
@@ -424,7 +450,8 @@ object MyExtensions {
       "3.0.0",
       """
        deprecated
-      """),
+      """,
+      ""),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
@@ -802,7 +829,7 @@ case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleE
     delegate.shuffleOrigin
   }
   override def mapOutputStatisticsFuture: Future[MapOutputStatistics] =
-    delegate.mapOutputStatisticsFuture
+    delegate.submitShuffleJob
   override def getShuffleRDD(partitionSpecs: Array[ShufflePartitionSpec]): RDD[_] =
     delegate.getShuffleRDD(partitionSpecs)
   override def runtimeStatistics: Statistics = delegate.runtimeStatistics
@@ -821,7 +848,7 @@ case class MyBroadcastExchangeExec(delegate: BroadcastExchangeExec) extends Broa
   override def runId: UUID = delegate.runId
   override def relationFuture: java.util.concurrent.Future[Broadcast[Any]] =
     delegate.relationFuture
-  override def completionFuture: Future[Broadcast[Any]] = delegate.completionFuture
+  override def completionFuture: Future[Broadcast[Any]] = delegate.submitBroadcastJob
   override def runtimeStatistics: Statistics = delegate.runtimeStatistics
   override def child: SparkPlan = delegate.child
   override protected def doPrepare(): Unit = delegate.prepare()
@@ -932,7 +959,8 @@ object MyExtensions2 {
       "3.0.0",
       """
        deprecated
-      """),
+      """,
+      ""),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
@@ -965,7 +993,8 @@ object MyExtensions2Duplicate {
       "3.0.0",
       """
        deprecated
-      """),
+      """,
+      ""),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 

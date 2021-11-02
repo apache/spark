@@ -188,9 +188,9 @@ class SparkContext(object):
 
         # Check that we have at least the required parameters
         if not self._conf.contains("spark.master"):
-            raise Exception("A master URL must be set in your configuration")
+            raise RuntimeError("A master URL must be set in your configuration")
         if not self._conf.contains("spark.app.name"):
-            raise Exception("An application name must be set in your configuration")
+            raise RuntimeError("An application name must be set in your configuration")
 
         # Read back our properties from the conf in case we loaded some of them from
         # the classpath or an external config file
@@ -229,6 +229,14 @@ class SparkContext(object):
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python3')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
+
+        if sys.version_info[:2] < (3, 7):
+            with warnings.catch_warnings():
+                warnings.simplefilter("once")
+                warnings.warn(
+                    "Python 3.6 support is deprecated in Spark 3.2.",
+                    FutureWarning
+                )
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have
@@ -350,7 +358,7 @@ class SparkContext(object):
 
     def __getnewargs__(self):
         # This method is called when attempting to pickle SparkContext, which is always an error:
-        raise Exception(
+        raise RuntimeError(
             "It appears that you are attempting to reference SparkContext from a broadcast "
             "variable, action, or transformation. SparkContext can only be used on the driver, "
             "not in code that it run on workers. For more information, see SPARK-5063."
@@ -747,7 +755,7 @@ class SparkContext(object):
 
             1. A Java RDD is created from the SequenceFile or other InputFormat, and the key
                and value Writable classes
-            2. Serialization is attempted via Pyrolite pickling
+            2. Serialization is attempted via Pickle pickling
             3. If this fails, the fallback is to call 'toString' on each key and value
             4. :class:`PickleSerializer` is used to deserialize pickled objects on the Python side
 
@@ -1076,7 +1084,7 @@ class SparkContext(object):
         Returns a Java StorageLevel based on a pyspark.StorageLevel.
         """
         if not isinstance(storageLevel, StorageLevel):
-            raise Exception("storageLevel must be of type pyspark.StorageLevel")
+            raise TypeError("storageLevel must be of type pyspark.StorageLevel")
 
         newStorageLevel = self._jvm.org.apache.spark.storage.StorageLevel
         return newStorageLevel(storageLevel.useDisk,
@@ -1104,23 +1112,19 @@ class SparkContext(object):
         ensure that the tasks are actually stopped in a timely manner, but is off by default due
         to HDFS-1208, where HDFS may respond to Thread.interrupt() by marking nodes as dead.
 
-        Currently, setting a group ID (set to local properties) with multiple threads
-        does not properly work. Internally threads on PVM and JVM are not synced, and JVM
-        thread can be reused for multiple threads on PVM, which fails to isolate local
-        properties for each thread on PVM.
-
-        To avoid this, enable the pinned thread mode by setting ``PYSPARK_PIN_THREAD``
-        environment variable to ``true`` and uses :class:`pyspark.InheritableThread`.
+        If you run jobs in parallel, use :class:`pyspark.InheritableThread` for thread
+        local inheritance, and preventing resource leak.
 
         Examples
         --------
         >>> import threading
         >>> from time import sleep
+        >>> from pyspark import InheritableThread
         >>> result = "Not Set"
         >>> lock = threading.Lock()
         >>> def map_func(x):
         ...     sleep(100)
-        ...     raise Exception("Task should have been cancelled")
+        ...     raise RuntimeError("Task should have been cancelled")
         >>> def start_job(x):
         ...     global result
         ...     try:
@@ -1133,8 +1137,8 @@ class SparkContext(object):
         ...     sleep(5)
         ...     sc.cancelJobGroup("job_to_cancel")
         >>> suppress = lock.acquire()
-        >>> suppress = threading.Thread(target=start_job, args=(10,)).start()
-        >>> suppress = threading.Thread(target=stop_job).start()
+        >>> suppress = InheritableThread(target=start_job, args=(10,)).start()
+        >>> suppress = InheritableThread(target=stop_job).start()
         >>> suppress = lock.acquire()
         >>> print(result)
         Cancelled
@@ -1148,13 +1152,8 @@ class SparkContext(object):
 
         Notes
         -----
-        Currently, setting a local property with multiple threads does not properly work.
-        Internally threads on PVM and JVM are not synced, and JVM thread
-        can be reused for multiple threads on PVM, which fails to isolate local properties
-        for each thread on PVM.
-
-        To avoid this, enable the pinned thread mode by setting ``PYSPARK_PIN_THREAD``
-        environment variable to ``true`` and uses :class:`pyspark.InheritableThread`.
+        If you run jobs in parallel, use :class:`pyspark.InheritableThread` for thread
+        local inheritance, and preventing resource leak.
         """
         self._jsc.setLocalProperty(key, value)
 
@@ -1171,13 +1170,8 @@ class SparkContext(object):
 
         Notes
         -----
-        Currently, setting a job description (set to local properties) with multiple
-        threads does not properly work. Internally threads on PVM and JVM are not synced,
-        and JVM thread can be reused for multiple threads on PVM, which fails to isolate
-        local properties for each thread on PVM.
-
-        To avoid this, enable the pinned thread mode by setting ``PYSPARK_PIN_THREAD``
-        environment variable to ``true`` and uses :class:`pyspark.InheritableThread`.
+        If you run jobs in parallel, use :class:`pyspark.InheritableThread` for thread
+        local inheritance, and preventing resource leak.
         """
         self._jsc.setJobDescription(value)
 
@@ -1274,7 +1268,7 @@ class SparkContext(object):
         Throws an exception if a SparkContext is about to be created in executors.
         """
         if TaskContext.get() is not None:
-            raise Exception("SparkContext should only be created and accessed on the driver.")
+            raise RuntimeError("SparkContext should only be created and accessed on the driver.")
 
 
 def _test():

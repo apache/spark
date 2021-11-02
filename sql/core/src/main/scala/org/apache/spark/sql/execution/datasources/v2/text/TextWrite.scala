@@ -18,9 +18,9 @@ package org.apache.spark.sql.execution.datasources.v2.text
 
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.connector.write.LogicalWriteInfo
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.execution.datasources.text.{TextOptions, TextOutputWriter}
 import org.apache.spark.sql.execution.datasources.v2.FileWrite
@@ -34,8 +34,7 @@ case class TextWrite(
     info: LogicalWriteInfo) extends FileWrite {
   private def verifySchema(schema: StructType): Unit = {
     if (schema.size != 1) {
-      throw new AnalysisException(
-        s"Text data source supports only a single column, and you have ${schema.size} columns.")
+      throw QueryCompilationErrors.textDataSourceWithMultiColumnsError(schema)
     }
   }
 

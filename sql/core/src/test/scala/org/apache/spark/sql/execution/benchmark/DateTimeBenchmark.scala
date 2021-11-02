@@ -61,7 +61,8 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     withDefaultTimeZone(LA) {
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> LA.getId) {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> LA.getId,
+        SQLConf.LEGACY_INTERVAL_ENABLED.key -> true.toString) {
         val N = 10000000
         runBenchmark("datetime +/- interval") {
           val benchmark = new Benchmark("datetime +/- interval", N, output = output)

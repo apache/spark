@@ -26,10 +26,14 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
+import org.scalatest.time.Span
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, TestUtils}
+import org.apache.spark.deploy.SparkSubmitTestUtils
 import org.apache.spark.internal.config.MASTER_REST_SERVER_ENABLED
 import org.apache.spark.internal.config.UI.UI_ENABLED
+import org.apache.spark.launcher.JavaModuleOptions
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
@@ -52,6 +56,7 @@ import org.apache.spark.util.Utils
 @ExtendedHiveTest
 class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   import HiveExternalCatalogVersionsSuite._
+  override protected val defaultSparkSubmitTimeout: Span = 5.minutes
   private val wareHousePath = Utils.createTempDir(namePrefix = "warehouse")
   private val tmpDataDir = Utils.createTempDir(namePrefix = "test-data")
   // For local test, you can set `spark.test.cache-dir` to a static value like `/tmp/test-spark`, to
@@ -203,18 +208,23 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
       }
 
+      // Extract major.minor for testing Spark 3.1.x and 3.0.x with metastore 2.3.9 and Java 11.
+      val hiveMetastoreVersion = """^\d+\.\d+""".r.findFirstIn(hiveVersion).get
       val args = Seq(
         "--name", "prepare testing tables",
         "--master", "local[2]",
         "--conf", s"${UI_ENABLED.key}=false",
         "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
-        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveVersion",
+        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveMetastoreVersion",
         "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
         "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",
-        "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
+        "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath} " +
+          // TODO SPARK-37159 Consider to remove the following
+          // JVM module options once the Spark 3.2 line is EOL.
+          JavaModuleOptions.defaultModuleOptions(),
         tempPyFile.getCanonicalPath)
-      runSparkSubmit(args, Some(sparkHome.getCanonicalPath), false)
+      runSparkSubmit(args, Some(sparkHome.getCanonicalPath), isSparkTesting = false)
     }
 
     tempPyFile.delete()
@@ -257,6 +267,8 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
     versions
       .filter(v => v.startsWith("3") || !TestUtils.isPythonVersionAtLeast38())
       .filter(v => v.startsWith("3") || !SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
+      .filter(v => !((v.startsWith("3.0") || v.startsWith("3.1")) &&
+        SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17)))
   }
 
   protected var spark: SparkSession = _

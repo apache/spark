@@ -57,13 +57,22 @@ class WorkerTests(ReusedPySparkTestCase):
         t.start()
 
         daemon_pid, worker_pid = 0, 0
+        cnt = 0
         while True:
             if os.path.exists(path):
                 with open(path) as f:
                     data = f.read().split(' ')
-                daemon_pid, worker_pid = map(int, data)
-                break
-            time.sleep(0.1)
+                try:
+                    daemon_pid, worker_pid = map(int, data)
+                except ValueError:
+                    pass
+                    # In case the value is not written yet.
+                    cnt += 1
+                    if cnt == 10:
+                        raise
+                else:
+                    break
+            time.sleep(1)
 
         # cancel jobs
         self.sc.cancelAllJobs()
@@ -89,10 +98,10 @@ class WorkerTests(ReusedPySparkTestCase):
 
     def test_after_exception(self):
         def raise_exception(_):
-            raise Exception()
+            raise RuntimeError()
         rdd = self.sc.parallelize(range(100), 1)
         with QuietTest(self.sc):
-            self.assertRaises(Exception, lambda: rdd.foreach(raise_exception))
+            self.assertRaises(Py4JJavaError, lambda: rdd.foreach(raise_exception))
         self.assertEqual(100, rdd.map(str).count())
 
     def test_after_non_exception_error(self):
@@ -161,7 +170,7 @@ class WorkerTests(ReusedPySparkTestCase):
         # SPARK-21045: exceptions with no ascii encoding shall not hanging PySpark.
         try:
             def f():
-                raise Exception("exception with 中 and \xd6\xd0")
+                raise RuntimeError("exception with 中 and \xd6\xd0")
 
             self.sc.parallelize([1]).map(lambda x: f()).count()
         except Py4JJavaError as e:
@@ -205,6 +214,39 @@ class WorkerMemoryTest(unittest.TestCase):
 
     def tearDown(self):
         self.sc.stop()
+
+
+class WorkerSegfaultTest(ReusedPySparkTestCase):
+
+    @classmethod
+    def conf(cls):
+        _conf = super(WorkerSegfaultTest, cls).conf()
+        _conf.set("spark.python.worker.faulthandler.enabled", "true")
+        return _conf
+
+    def test_python_segfault(self):
+        try:
+            def f():
+                import ctypes
+                ctypes.string_at(0)
+
+            self.sc.parallelize([1]).map(lambda x: f()).count()
+        except Py4JJavaError as e:
+            self.assertRegex(str(e), "Segmentation fault")
+
+
+@unittest.skipIf(
+    "COVERAGE_PROCESS_START" in os.environ,
+    "Flaky with coverage enabled, skipping for now."
+)
+class WorkerSegfaultNonDaemonTest(WorkerSegfaultTest):
+
+    @classmethod
+    def conf(cls):
+        _conf = super(WorkerSegfaultNonDaemonTest, cls).conf()
+        _conf.set("spark.python.use.daemon", "false")
+        return _conf
+
 
 if __name__ == "__main__":
     import unittest

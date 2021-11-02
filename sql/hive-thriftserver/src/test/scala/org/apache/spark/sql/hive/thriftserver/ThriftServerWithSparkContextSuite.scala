@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.thriftserver
 import java.sql.SQLException
 import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.hive.service.cli.HiveSQLException
+import org.apache.hive.service.cli.{HiveSQLException, OperationHandle}
 
 import org.apache.spark.TaskKilled
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
@@ -57,7 +57,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
   test("Full stack traces as error message for jdbc or thrift client") {
     val sql = "select date_sub(date'2011-11-11', '1.2')"
-    withCLIServiceClient { client =>
+    withCLIServiceClient() { client =>
       val sessionHandle = client.openSession(user, "")
 
       val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
@@ -72,6 +72,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
         .contains("The second argument of 'date_sub' function needs to be an integer."))
       assert(!e.getMessage.contains("" +
         "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+      assert(e.getSQLState == "22023")
     }
 
     withJdbcStatement { statement =>
@@ -80,8 +81,10 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       }
       assert(e.getMessage
         .contains("The second argument of 'date_sub' function needs to be an integer."))
+      assert(e.getMessage.contains("[SECOND_FUNCTION_ARGUMENT_NOT_INTEGER]"))
       assert(e.getMessage.contains("" +
         "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+      assert(e.getSQLState == "22023")
     }
   }
 
@@ -117,8 +120,34 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       }
     }
   }
-}
 
+  test("SPARK-21957: get current_user through thrift server") {
+    val clientUser = "storm_earth_fire_heed_my_call"
+    val sql = "select current_user()"
+
+    withCLIServiceClient(clientUser) { client =>
+      val sessionHandle = client.openSession(clientUser, "")
+      val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+      val exec: String => OperationHandle = client.executeStatement(sessionHandle, _, confOverlay)
+
+      exec(s"set ${SQLConf.ANSI_ENABLED.key}=false")
+
+      val opHandle1 = exec("select current_user(), current_user")
+      val rowSet1 = client.fetchResults(opHandle1)
+      rowSet1.toTRowSet.getColumns.forEach { col =>
+        assert(col.getStringVal.getValues.get(0) === clientUser)
+      }
+
+      exec(s"set ${SQLConf.ANSI_ENABLED.key}=true")
+      val opHandle2 = exec("select current_user")
+      assert(client.fetchResults(opHandle2).toTRowSet.getColumns.get(0)
+        .getStringVal.getValues.get(0) === clientUser)
+
+      val e = intercept[HiveSQLException](exec("select current_user()"))
+      assert(e.getMessage.contains("current_user"))
+    }
+  }
+}
 
 class ThriftServerWithSparkContextInBinarySuite extends ThriftServerWithSparkContextSuite {
   override def mode: ServerMode.Value = ServerMode.binary

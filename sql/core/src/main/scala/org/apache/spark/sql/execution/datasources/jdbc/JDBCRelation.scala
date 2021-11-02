@@ -23,10 +23,11 @@ import scala.math.BigDecimal.RoundingMode
 import org.apache.spark.Partition
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
@@ -176,16 +177,13 @@ private[sql] object JDBCRelation extends Logging {
       resolver(f.name, columnName) || resolver(dialect.quoteIdentifier(f.name), columnName)
     }.getOrElse {
       val maxNumToStringFields = SQLConf.get.maxToStringFields
-      throw new AnalysisException(s"User-defined partition column $columnName not " +
-        s"found in the JDBC relation: ${schema.simpleString(maxNumToStringFields)}")
+      throw QueryCompilationErrors.userDefinedPartitionNotFoundInJDBCRelationError(
+        columnName, schema.simpleString(maxNumToStringFields))
     }
     column.dataType match {
       case _: NumericType | DateType | TimestampType =>
       case _ =>
-        throw new AnalysisException(
-          s"Partition column type should be ${NumericType.simpleString}, " +
-            s"${DateType.catalogString}, or ${TimestampType.catalogString}, but " +
-            s"${column.dataType.catalogString} found.")
+        throw QueryCompilationErrors.invalidPartitionColumnTypeError(column)
     }
     (dialect.quoteIdentifier(column.name), column.dataType)
   }
@@ -202,7 +200,7 @@ private[sql] object JDBCRelation extends Logging {
     }
     columnType match {
       case _: NumericType => value.toLong
-      case DateType => parse(stringToDate(_, getZoneId(timeZoneId))).toLong
+      case DateType => parse(stringToDate).toLong
       case TimestampType => parse(stringToTimestamp(_, getZoneId(timeZoneId)))
     }
   }
@@ -214,8 +212,7 @@ private[sql] object JDBCRelation extends Logging {
     def dateTimeToString(): String = {
       val dateTimeStr = columnType match {
         case DateType =>
-          val dateFormatter = DateFormatter(DateTimeUtils.getZoneId(timeZoneId))
-          dateFormatter.format(value.toInt)
+          DateFormatter().format(value.toInt)
         case TimestampType =>
           val timestampFormatter = TimestampFormatter.getFractionFormatter(
             DateTimeUtils.getZoneId(timeZoneId))
@@ -281,6 +278,28 @@ private[sql] case class JDBCRelation(
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
+    // When pushDownPredicate is false, all Filters that need to be pushed down should be ignored
+    val pushedFilters = if (jdbcOptions.pushDownPredicate) {
+      filters
+    } else {
+      Array.empty[Filter]
+    }
+    // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
+    JDBCRDD.scanTable(
+      sparkSession.sparkContext,
+      schema,
+      requiredColumns,
+      pushedFilters,
+      parts,
+      jdbcOptions).asInstanceOf[RDD[Row]]
+  }
+
+  def buildScan(
+      requiredColumns: Array[String],
+      finalSchema: StructType,
+      filters: Array[Filter],
+      groupByColumns: Option[Array[String]],
+      limit: Int): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sparkSession.sparkContext,
@@ -288,7 +307,10 @@ private[sql] case class JDBCRelation(
       requiredColumns,
       filters,
       parts,
-      jdbcOptions).asInstanceOf[RDD[Row]]
+      jdbcOptions,
+      Some(finalSchema),
+      groupByColumns,
+      limit).asInstanceOf[RDD[Row]]
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {

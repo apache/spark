@@ -29,8 +29,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PipelineStage, PredictorParams}
 import org.apache.spark.ml.feature._
-import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.linalg.BLAS._
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.optim.WeightedLeastSquares
 import org.apache.spark.ml.optim.aggregator._
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
@@ -384,8 +383,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val featuresMean = summarizer.mean.toArray
     val featuresStd = summarizer.std.toArray
 
-    if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
-      featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
+    if (!$(fitIntercept) &&
+      (0 until numFeatures).exists(i => featuresStd(i) == 0.0 && featuresMean(i) != 0.0)) {
       instr.logWarning("Fitting LinearRegressionModel without intercept on dataset with " +
         "constant nonzero column, Spark MLlib outputs zero coefficients for constant nonzero " +
         "columns. This behavior is the same as R glmnet but different from LIBSVM.")
@@ -410,17 +409,17 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val optimizer = createOptimizer(effectiveRegParam, effectiveL1RegParam,
       numFeatures, featuresStd)
 
-    val initialValues = $(loss) match {
+    val initialSolution = $(loss) match {
       case SquaredError =>
-        Vectors.zeros(numFeatures)
+        Array.ofDim[Double](numFeatures)
       case Huber =>
         val dim = if ($(fitIntercept)) numFeatures + 2 else numFeatures + 1
-        Vectors.dense(Array.fill(dim)(1.0))
+        Array.fill(dim)(1.0)
     }
 
     val (parameters, objectiveHistory) =
       trainImpl(instances, actualBlockSizeInMB, yMean, yStd,
-        featuresMean, featuresStd, initialValues, regularization, optimizer)
+        featuresMean, featuresStd, initialSolution, regularization, optimizer)
 
     if (parameters == null) {
       val msg = s"${optimizer.getClass.getName} failed."
@@ -535,35 +534,48 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       yStd: Double,
       featuresMean: Array[Double],
       featuresStd: Array[Double],
-      initialValues: Vector,
+      initialSolution: Array[Double],
       regularization: Option[L2Regularization],
       optimizer: FirstOrderMinimizer[BDV[Double], DiffFunction[BDV[Double]]]) = {
-    val bcFeaturesMean = instances.context.broadcast(featuresMean)
-    val bcFeaturesStd = instances.context.broadcast(featuresStd)
+    val numFeatures = featuresStd.length
+    val inverseStd = featuresStd.map(std => if (std != 0) 1.0 / std else 0.0)
+    val scaledMean = Array.tabulate(numFeatures)(i => inverseStd(i) * featuresMean(i))
+    val bcInverseStd = instances.context.broadcast(inverseStd)
+    val bcScaledMean = instances.context.broadcast(scaledMean)
 
     val standardized = instances.mapPartitions { iter =>
-      val inverseStd = bcFeaturesStd.value.map { std => if (std != 0) 1.0 / std else 0.0 }
-      val func = StandardScalerModel.getTransformFunc(Array.empty, inverseStd, false, true)
+      val func = StandardScalerModel.getTransformFunc(Array.empty, bcInverseStd.value, false, true)
       iter.map { case Instance(label, weight, vec) => Instance(label, weight, func(vec)) }
     }
 
     val maxMemUsage = (actualBlockSizeInMB * 1024L * 1024L).ceil.toLong
     val blocks = InstanceBlock.blokifyWithMaxMemUsage(standardized, maxMemUsage)
       .persist(StorageLevel.MEMORY_AND_DISK)
-      .setName(s"training blocks (blockSizeInMB=$actualBlockSizeInMB)")
+      .setName(s"$uid: training blocks (blockSizeInMB=$actualBlockSizeInMB)")
+
+    if ($(fitIntercept) && $(loss) == Huber) {
+      // orginal `initialSolution` is for problem:
+      // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
+      // we should adjust it to the initial solution for problem:
+      // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
+      // NOTE: this is NOOP before we finally support model initialization
+      val adapt = BLAS.javaBLAS.ddot(numFeatures, initialSolution, 1, scaledMean, 1)
+      initialSolution(numFeatures) += adapt
+    }
 
     val costFun = $(loss) match {
       case SquaredError =>
-        val getAggregatorFunc = new BlockLeastSquaresAggregator(yStd, yMean, $(fitIntercept),
-          bcFeaturesStd, bcFeaturesMean)(_)
+        val getAggregatorFunc = new LeastSquaresBlockAggregator(bcInverseStd, bcScaledMean,
+          $(fitIntercept), yStd, yMean)(_)
         new RDDLossFunction(blocks, getAggregatorFunc, regularization, $(aggregationDepth))
       case Huber =>
-        val getAggregatorFunc = new BlockHuberAggregator($(fitIntercept), $(epsilon))(_)
+        val getAggregatorFunc = new HuberBlockAggregator(bcInverseStd, bcScaledMean,
+          $(fitIntercept), $(epsilon))(_)
         new RDDLossFunction(blocks, getAggregatorFunc, regularization, $(aggregationDepth))
     }
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialValues.asBreeze.toDenseVector)
+      new BDV(initialSolution))
 
     /*
        Note that in Linear Regression, the objective history (loss + regularization) returned
@@ -583,14 +595,23 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     }
 
     blocks.unpersist()
-    bcFeaturesMean.destroy()
-    bcFeaturesStd.destroy()
+    bcInverseStd.destroy()
+    bcScaledMean.destroy()
 
-    (if (state == null) null else state.x.toArray, arrayBuilder.result)
+    val solution = if (state == null) null else state.x.toArray
+    if ($(fitIntercept) && $(loss) == Huber && solution != null) {
+      // the final solution is for problem:
+      // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
+      // we should adjust it back for original problem:
+      // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
+      val adapt = BLAS.javaBLAS.ddot(numFeatures, solution, 1, scaledMean, 1)
+      solution(numFeatures) -= adapt
+    }
+    (solution, arrayBuilder.result)
   }
 
   private def createModel(
-      parameters: Array[Double],
+      solution: Array[Double],
       yMean: Double,
       yStd: Double,
       featuresMean: Array[Double],
@@ -600,20 +621,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
        The coefficients are trained in the scaled space; we're converting them back to
        the original space.
      */
-    val rawCoefficients = $(loss) match {
-      case SquaredError => parameters.clone()
-      case Huber => parameters.take(numFeatures)
-    }
-
-    var i = 0
-    val len = rawCoefficients.length
-    val multiplier = $(loss) match {
-      case SquaredError => yStd
-      case Huber => 1.0
-    }
-    while (i < len) {
-      rawCoefficients(i) *= { if (featuresStd(i) != 0.0) multiplier / featuresStd(i) else 0.0 }
-      i += 1
+    val multiplier = if ($(loss) == Huber) 1.0 else yStd
+    val rawCoefficients = Array.tabulate(numFeatures) { i =>
+      if (featuresStd(i) != 0) solution(i) * multiplier / featuresStd(i) else 0.0
     }
 
     val intercept = if ($(fitIntercept)) {
@@ -624,18 +634,13 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
           after the coefficients are converged. See the following discussion for detail.
           http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
           */
-          yMean - dot(Vectors.dense(rawCoefficients), Vectors.dense(featuresMean))
-        case Huber => parameters(numFeatures)
+          yMean - BLAS.dot(Vectors.dense(rawCoefficients), Vectors.dense(featuresMean))
+        case Huber => solution(numFeatures)
       }
     } else 0.0
 
-    val scale = $(loss) match {
-      case SquaredError => 1.0
-      case Huber => parameters.last
-    }
-
     val coefficients = Vectors.dense(rawCoefficients).compressed
-
+    val scale = if ($(loss) == Huber) solution.last else 1.0
     copyValues(new LinearRegressionModel(uid, coefficients, intercept, scale))
   }
 
@@ -733,7 +738,7 @@ class LinearRegressionModel private[ml] (
 
 
   override def predict(features: Vector): Double = {
-    dot(features, coefficients) + intercept
+    BLAS.dot(features, coefficients) + intercept
   }
 
   @Since("1.4.0")

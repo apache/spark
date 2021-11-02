@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s
 
-import java.util.Locale
+import java.util.{Locale, UUID}
 
 import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferenceBuilder, Pod}
 
@@ -41,6 +41,7 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
   def secretEnvNamesToKeyRefs: Map[String, String]
   def secretNamesToMountPaths: Map[String, String]
   def volumes: Seq[KubernetesVolumeSpec]
+  def schedulerName: String
 
   def appName: String = get("spark.app.name", "spark")
 
@@ -81,6 +82,9 @@ private[spark] class KubernetesDriverConf(
     val appArgs: Array[String],
     val proxyUser: Option[String])
   extends KubernetesConf(sparkConf) {
+
+  def driverNodeSelector: Map[String, String] =
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_DRIVER_NODE_SELECTOR_PREFIX)
 
   override val resourceNamePrefix: String = {
     val custom = if (Utils.isTesting) get(KUBERNETES_DRIVER_POD_NAME_PREFIX) else None
@@ -127,6 +131,8 @@ private[spark] class KubernetesDriverConf(
   override def volumes: Seq[KubernetesVolumeSpec] = {
     KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, KUBERNETES_DRIVER_VOLUMES_PREFIX)
   }
+
+  override def schedulerName: String = get(KUBERNETES_DRIVER_SCHEDULER_NAME).getOrElse("")
 }
 
 private[spark] class KubernetesExecutorConf(
@@ -136,6 +142,9 @@ private[spark] class KubernetesExecutorConf(
     val driverPod: Option[Pod],
     val resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID)
   extends KubernetesConf(sparkConf) with Logging {
+
+  def executorNodeSelector: Map[String, String] =
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_EXECUTOR_NODE_SELECTOR_PREFIX)
 
   override val resourceNamePrefix: String = {
     get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX).getOrElse(
@@ -179,6 +188,8 @@ private[spark] class KubernetesExecutorConf(
   override def volumes: Seq[KubernetesVolumeSpec] = {
     KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX)
   }
+
+  override def schedulerName: String = get(KUBERNETES_EXECUTOR_SCHEDULER_NAME).getOrElse("")
 
   private def checkExecutorEnvKey(key: String): Boolean = {
     // Pattern for matching an executorEnv key, which meets certain naming rules.
@@ -225,14 +236,15 @@ private[spark] object KubernetesConf {
     new KubernetesExecutorConf(sparkConf.clone(), appId, executorId, driverPod, resourceProfileId)
   }
 
+  def getKubernetesAppId(): String =
+    s"spark-${UUID.randomUUID().toString.replaceAll("-", "")}"
+
   def getResourceNamePrefix(appName: String): String = {
     val id = KubernetesUtils.uniqueID()
     s"$appName-$id"
       .trim
       .toLowerCase(Locale.ROOT)
-      .replaceAll("\\s+", "-")
-      .replaceAll("\\.", "-")
-      .replaceAll("[^a-z0-9\\-]", "")
+      .replaceAll("[^a-z0-9\\-]", "-")
       .replaceAll("-+", "-")
   }
 

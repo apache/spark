@@ -20,7 +20,8 @@ import itertools
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.namespace import _get_index_map
+from pyspark.pandas.namespace import _get_index_map, read_delta
+from pyspark.pandas.utils import spark_column_equals
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -69,6 +70,119 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
             pd.to_datetime([1, 2, 3], unit="D", origin=pd.Timestamp("1960-01-01")),
             ps.to_datetime([1, 2, 3], unit="D", origin=pd.Timestamp("1960-01-01")),
         )
+
+        pdf = pd.DataFrame({"years": [2015, 2016], "month": [2, 3], "day": [4, 5]})
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame({"years": [2015, 2016], "months": [2, 3], "day": [4, 5]})
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame({"years": [2015, 2016], "months": [2, 3], "days": [4, 5]})
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        # SPARK-36946: Support time for ps.to_datetime
+        pdf = pd.DataFrame(
+            {
+                "year": [2015, 2016],
+                "month": [2, 3],
+                "day": [4, 5],
+                "hour": [2, 3],
+                "minute": [10, 30],
+                "second": [21, 25],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame(
+            {
+                "year": [2015, 2016],
+                "month": [2, 3],
+                "day": [4, 5],
+                "hour": [2, 3],
+                "minute": [10, 30],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame({"year": [2015, 2016], "month": [2, 3], "day": [4, 5], "hour": [2, 3]})
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame(
+            {
+                "year": [2015, 2016],
+                "month": [2, 3],
+                "day": [4, 5],
+                "hour": [2, 3],
+                "minute": [10, 30],
+                "second": [21, 25],
+                "ms": [50, 69],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame(
+            {
+                "year": [2015, 2016],
+                "month": [2, 3],
+                "day": [4, 5],
+                "hour": [2, 3],
+                "minute": [10, 30],
+                "second": [21, 25],
+                "ms": [50, 69],
+                "millisecond": [123, 678],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame(
+            {
+                "Year": [2015, 2016],
+                "Month": [2, 3],
+                "Day": [4, 5],
+                "Hour": [2, 3],
+                "Minute": [10, 30],
+                "Second": [21, 25],
+                "ms": [50, 69],
+                "millisecond": [123, 678],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
 
     def test_date_range(self):
         self.assert_eq(
@@ -265,7 +379,10 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
 
         objs = [
             ([psdf1.A, psdf1.A.rename("B")], [pdf1.A, pdf1.A.rename("B")]),
-            ([psdf3[("X", "A")], psdf3[("X", "B")]], [pdf3[("X", "A")], pdf3[("X", "B")]],),
+            (
+                [psdf3[("X", "A")], psdf3[("X", "B")]],
+                [pdf3[("X", "A")], pdf3[("X", "B")]],
+            ),
             (
                 [psdf3[("X", "A")], psdf3[("X", "B")].rename("ABC")],
                 [pdf3[("X", "A")], pdf3[("X", "B")].rename("ABC")],
@@ -317,13 +434,68 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assertEqual(len(actual_scols), len(expected_column_names))
             for actual_scol, expected_column_name in zip(actual_scols, expected_column_names):
                 expected_scol = sdf[expected_column_name]
-                self.assertTrue(actual_scol._jc.equals(expected_scol._jc))
+                self.assertTrue(spark_column_equals(actual_scol, expected_scol))
             self.assertEqual(actual_labels, expected_labels)
 
         check(_get_index_map(sdf, "year"), (["year"], [("year",)]))
         check(_get_index_map(sdf, ["year", "month"]), (["year", "month"], [("year",), ("month",)]))
 
         self.assertRaises(KeyError, lambda: _get_index_map(sdf, ["year", "hour"]))
+
+    def test_read_delta_with_wrong_input(self):
+        self.assertRaisesRegex(
+            ValueError,
+            "version and timestamp cannot be used together",
+            lambda: read_delta("fake_path", version="0", timestamp="2021-06-22"),
+        )
+
+    def test_to_numeric(self):
+        pser = pd.Series(["1", "2", None, "4", "hello"])
+        psser = ps.from_pandas(pser)
+
+        # "coerce" and "raise" with Series that contains un-parsable data.
+        self.assert_eq(
+            pd.to_numeric(pser, errors="coerce"), ps.to_numeric(psser, errors="coerce"), almost=True
+        )
+
+        # "raise" with Series that contains parsable data only.
+        pser = pd.Series(["1", "2", None, "4", "5.0"])
+        psser = ps.from_pandas(pser)
+
+        self.assert_eq(
+            pd.to_numeric(pser, errors="raise"), ps.to_numeric(psser, errors="raise"), almost=True
+        )
+
+        # "coerce", "ignore" and "raise" with non-Series.
+        data = ["1", "2", None, "4", "hello"]
+        self.assert_eq(pd.to_numeric(data, errors="coerce"), ps.to_numeric(data, errors="coerce"))
+        self.assert_eq(pd.to_numeric(data, errors="ignore"), ps.to_numeric(data, errors="ignore"))
+
+        self.assertRaisesRegex(
+            ValueError,
+            'Unable to parse string "hello"',
+            lambda: ps.to_numeric(data, errors="raise"),
+        )
+
+        # "raise" with non-Series that contains parsable data only.
+        data = ["1", "2", None, "4", "5.0"]
+
+        self.assert_eq(
+            pd.to_numeric(data, errors="raise"), ps.to_numeric(data, errors="raise"), almost=True
+        )
+
+        # Wrong string for `errors` parameter.
+        self.assertRaisesRegex(
+            ValueError,
+            "invalid error value specified",
+            lambda: ps.to_numeric(psser, errors="errors"),
+        )
+        # NotImplementedError
+        self.assertRaisesRegex(
+            NotImplementedError,
+            "'ignore' is not implemented yet, when the `arg` is Series.",
+            lambda: ps.to_numeric(psser, errors="ignore"),
+        )
 
 
 if __name__ == "__main__":

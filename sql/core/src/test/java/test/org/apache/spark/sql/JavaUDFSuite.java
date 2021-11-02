@@ -21,6 +21,8 @@ import java.io.Serializable;
 import java.time.LocalDate;
 import java.util.List;
 
+import org.apache.spark.sql.catalyst.FunctionIdentifier;
+import org.apache.spark.sql.catalyst.expressions.ExpressionInfo;
 import org.apache.spark.sql.internal.SQLConf;
 import org.junit.After;
 import org.junit.Assert;
@@ -138,5 +140,14 @@ public class JavaUDFSuite implements Serializable {
     } finally {
       spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), originConf);
     }
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void sourceTest() {
+    spark.udf().register("stringLengthTest", (String str) -> str.length(), DataTypes.IntegerType);
+    ExpressionInfo info = spark.sessionState().catalog().lookupFunctionInfo(
+            FunctionIdentifier.apply("stringLengthTest"));
+    Assert.assertEquals("java_udf", info.getSource());
   }
 }

@@ -15,20 +15,27 @@
 # limitations under the License.
 #
 
-from typing import TYPE_CHECKING, Union
+from typing import Any, Union, cast
 
+import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark.sql import functions as F
 from pyspark.sql.types import IntegralType, StringType
 
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin
-from pyspark.pandas.data_type_ops.base import DataTypeOps
+from pyspark.pandas.data_type_ops.base import (
+    DataTypeOps,
+    _as_categorical_type,
+    _as_other_type,
+    _as_string_type,
+    _sanitize_list_like,
+)
 from pyspark.pandas.spark import functions as SF
-
-if TYPE_CHECKING:
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+from pyspark.pandas.typedef import extension_dtypes, pandas_on_spark_type
+from pyspark.sql import Column
+from pyspark.sql.types import BooleanType
 
 
 class StringOps(DataTypeOps):
@@ -38,67 +45,118 @@ class StringOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return 'strings'
+        return "strings"
 
-    def add(self, left, right) -> Union["Series", "Index"]:
-        if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType):
-            return column_op(F.concat)(left, right)
-        elif isinstance(right, str):
-            return column_op(F.concat)(left, F.lit(right))
-        else:
-            raise TypeError("string addition can only be applied to string series or literals.")
-
-    def sub(self, left, right):
-        raise TypeError("subtraction can not be applied to string series or literals.")
-
-    def mul(self, left, right) -> Union["Series", "Index"]:
+    def add(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if isinstance(right, str):
-            raise TypeError("multiplication can not be applied to a string literal.")
+            return cast(
+                SeriesOrIndex,
+                left._with_new_scol(
+                    F.concat(left.spark.column, SF.lit(right)), field=left._internal.data_fields[0]
+                ),
+            )
+        elif isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType):
+            return column_op(F.concat)(left, right)
+        else:
+            raise TypeError("Addition can not be applied to given types.")
 
-        if (
+    def mul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+        if isinstance(right, int):
+            return cast(
+                SeriesOrIndex,
+                left._with_new_scol(
+                    SF.repeat(left.spark.column, right), field=left._internal.data_fields[0]
+                ),
+            )
+        elif (
             isinstance(right, IndexOpsMixin)
             and isinstance(right.spark.data_type, IntegralType)
             and not isinstance(right.dtype, CategoricalDtype)
-        ) or isinstance(right, int):
+        ):
             return column_op(SF.repeat)(left, right)
         else:
-            raise TypeError("a string series can only be multiplied to an int series or literal")
+            raise TypeError("Multiplication can not be applied to given types.")
 
-    def truediv(self, left, right):
-        raise TypeError("division can not be applied on string series or literals.")
-
-    def floordiv(self, left, right):
-        raise TypeError("division can not be applied on string series or literals.")
-
-    def mod(self, left, right):
-        raise TypeError("modulo can not be applied on string series or literals.")
-
-    def pow(self, left, right):
-        raise TypeError("exponentiation can not be applied on string series or literals.")
-
-    def radd(self, left, right) -> Union["Series", "Index"]:
+    def radd(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if isinstance(right, str):
-            return left._with_new_scol(F.concat(F.lit(right), left.spark.column))  # TODO: dtype?
+            return cast(
+                SeriesOrIndex,
+                left._with_new_scol(
+                    F.concat(SF.lit(right), left.spark.column), field=left._internal.data_fields[0]
+                ),
+            )
         else:
-            raise TypeError("string addition can only be applied to string series or literals.")
+            raise TypeError("Addition can not be applied to given types.")
 
-    def rsub(self, left, right):
-        raise TypeError("subtraction can not be applied to string series or literals.")
-
-    def rmul(self, left, right) -> Union["Series", "Index"]:
+    def rmul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if isinstance(right, int):
-            return column_op(SF.repeat)(left, right)
+            return cast(
+                SeriesOrIndex,
+                left._with_new_scol(
+                    SF.repeat(left.spark.column, right), field=left._internal.data_fields[0]
+                ),
+            )
         else:
-            raise TypeError("a string series can only be multiplied to an int series or literal")
+            raise TypeError("Multiplication can not be applied to given types.")
 
-    def rtruediv(self, left, right):
-        raise TypeError("division can not be applied on string series or literals.")
+    def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
 
-    def rfloordiv(self, left, right):
-        raise TypeError("division can not be applied on string series or literals.")
+        _sanitize_list_like(right)
+        return column_op(Column.__lt__)(left, right)
 
-    def rpow(self, left, right):
-        raise TypeError("exponentiation can not be applied on string series or literals.")
+    def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
 
-    def rmod(self, left, right):
-        raise TypeError("modulo can not be applied on string series or literals.")
+        _sanitize_list_like(right)
+        return column_op(Column.__le__)(left, right)
+
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        _sanitize_list_like(right)
+        return column_op(Column.__ge__)(left, right)
+
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        _sanitize_list_like(right)
+        return column_op(Column.__gt__)(left, right)
+
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
+        dtype, spark_type = pandas_on_spark_type(dtype)
+
+        if isinstance(dtype, CategoricalDtype):
+            return _as_categorical_type(index_ops, dtype, spark_type)
+
+        if isinstance(spark_type, BooleanType):
+            if isinstance(dtype, extension_dtypes):
+                scol = index_ops.spark.column.cast(spark_type)
+            else:
+                scol = F.when(index_ops.spark.column.isNull(), SF.lit(False)).otherwise(
+                    F.length(index_ops.spark.column) > 0
+                )
+            return index_ops._with_new_scol(
+                scol,
+                field=index_ops._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type),
+            )
+        elif isinstance(spark_type, StringType):
+            null_str = str(pd.NA) if isinstance(self, StringExtensionOps) else str(None)
+            return _as_string_type(index_ops, dtype, null_str=null_str)
+        else:
+            return _as_other_type(index_ops, dtype, spark_type)
+
+
+class StringExtensionOps(StringOps):
+    """
+    The class for binary operations of pandas-on-Spark objects with spark type StringType,
+    and dtype StringDtype.
+    """
+
+    def restore(self, col: pd.Series) -> pd.Series:
+        """Restore column when to_pandas."""
+        return col.astype(self.dtype)

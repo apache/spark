@@ -25,6 +25,7 @@ This page describes the migration guide specific to PySpark.
 .. toctree::
    :maxdepth: 2
 
+   pyspark_3.2_to_3.3
    pyspark_3.1_to_3.2
    pyspark_2.4_to_3.0
    pyspark_2.3_to_2.4
@@ -33,6 +34,12 @@ This page describes the migration guide specific to PySpark.
    pyspark_1.4_to_1.5
    pyspark_1.0_1.2_to_1.3
 
+The guide below is for those who are from `Koalas <https://koalas.readthedocs.io/en/latest>`_.
+
+.. toctree::
+   :maxdepth: 2
+
+   koalas_to_pyspark
 
 Many items of other migration guides can also be applied when migrating PySpark to higher versions because PySpark internally shares other components.
 Please also refer other migration guides:

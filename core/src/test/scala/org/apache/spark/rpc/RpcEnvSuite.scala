@@ -901,6 +901,15 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
           }
         }
 
+        // Try registering directories that have different
+        // absolute path but have same canonical path
+        intercept[IllegalArgumentException] {
+          env.fileServer.addDirectory("/dir1/././", dir1)
+        }
+        intercept[IllegalArgumentException] {
+          env.fileServer.addDirectory("/dir2/../dir2/", dir2)
+        }
+
         val hc = SparkHadoopUtil.get.conf
 
         val files = Seq(

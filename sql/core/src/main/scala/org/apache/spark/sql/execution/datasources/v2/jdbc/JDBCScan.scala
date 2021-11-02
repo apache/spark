@@ -26,7 +26,10 @@ import org.apache.spark.sql.types.StructType
 case class JDBCScan(
     relation: JDBCRelation,
     prunedSchema: StructType,
-    pushedFilters: Array[Filter]) extends V1Scan {
+    pushedFilters: Array[Filter],
+    pushedAggregateColumn: Array[String] = Array(),
+    groupByColumns: Option[Array[String]],
+    pushedLimit: Int) extends V1Scan {
 
   override def readSchema(): StructType = prunedSchema
 
@@ -36,14 +39,27 @@ case class JDBCScan(
       override def schema: StructType = prunedSchema
       override def needConversion: Boolean = relation.needConversion
       override def buildScan(): RDD[Row] = {
-        relation.buildScan(prunedSchema.map(_.name).toArray, pushedFilters)
+        val columnList = if (groupByColumns.isEmpty) {
+          prunedSchema.map(_.name).toArray
+        } else {
+          pushedAggregateColumn
+        }
+        relation.buildScan(columnList, prunedSchema, pushedFilters, groupByColumns, pushedLimit)
       }
     }.asInstanceOf[T]
   }
 
   override def description(): String = {
+    val (aggString, groupByString) = if (groupByColumns.nonEmpty) {
+      val groupByColumnsLength = groupByColumns.get.length
+      (seqToString(pushedAggregateColumn.drop(groupByColumnsLength)),
+        seqToString(pushedAggregateColumn.take(groupByColumnsLength)))
+    } else {
+      ("[]", "[]")
+    }
     super.description()  + ", prunedSchema: " + seqToString(prunedSchema) +
-      ", PushedFilters: " + seqToString(pushedFilters)
+      ", PushedFilters: " + seqToString(pushedFilters) +
+      ", PushedAggregates: " + aggString + ", PushedGroupBy: " + groupByString
   }
 
   private def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")

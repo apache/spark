@@ -27,7 +27,8 @@ class CollapseWindowSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("CollapseWindow", FixedPoint(10),
-        CollapseWindow) :: Nil
+        CollapseWindow,
+        CollapseProject) :: Nil
   }
 
   val testRelation = LocalRelation('a.double, 'b.double, 'c.string)
@@ -99,5 +100,52 @@ class CollapseWindowSuite extends PlanTest {
     val correctAnswer = query.analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-34565: collapse two windows with the same partition/order " +
+    "and a Project between them") {
+
+    val query = testRelation
+      .window(Seq(min(a).as("_we0")), partitionSpec1, orderSpec1)
+      .select($"a", $"b", $"c", $"_we0" as "min_a")
+      .window(Seq(max(a).as("_we1")), partitionSpec1, orderSpec1)
+      .select($"a", $"b", $"c", $"min_a", $"_we1" as "max_a")
+      .window(Seq(sum(b).as("_we2")), partitionSpec1, orderSpec1)
+      .select($"a", $"b", $"c", $"min_a", $"max_a", $"_we2" as "sum_b")
+      .window(Seq(avg(b).as("_we3")), partitionSpec1, orderSpec1)
+      .select($"a", $"b", $"c", $"min_a", $"max_a", $"sum_b", $"_we3" as "avg_b")
+      .analyze
+
+    val optimized = Optimize.execute(query)
+    assert(query.output === optimized.output)
+
+    val correctAnswer = testRelation
+      .window(Seq(
+        min(a).as("_we0"),
+        max(a).as("_we1"),
+        sum(b).as("_we2"),
+        avg(b).as("_we3")
+      ), partitionSpec1, orderSpec1)
+      .select(
+        a, b, c,
+        $"_we0" as "min_a", $"_we1" as "max_a", $"_we2" as "sum_b", $"_we3" as "avg_b")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-34565: do not collapse two windows if project between them " +
+    "generates an input column") {
+
+    val query = testRelation
+      .window(Seq(min(a).as("min_a")), partitionSpec1, orderSpec1)
+      .select($"a", $"b", $"c", $"min_a", ($"a" + $"b").as("d"))
+      .window(Seq(max($"d").as("max_d")), partitionSpec1, orderSpec1)
+      .analyze
+
+    val optimized = Optimize.execute(query)
+    assert(query.output === optimized.output)
+
+    comparePlans(optimized, query)
   }
 }

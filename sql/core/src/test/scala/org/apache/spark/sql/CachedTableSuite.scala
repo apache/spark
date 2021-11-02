@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.io.{File, FilenameFilter}
 import java.nio.file.{Files, Paths}
-import java.time.{Duration, Period}
+import java.time.{Duration, LocalDateTime, Period}
 
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
@@ -1535,6 +1535,19 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     withGlobalTempView("global_tv") {
       val db = spark.sharedState.globalTempViewManager.database
       testCreateTemporaryViewUsingWithCache(TableIdentifier("global_tv", Some(db)))
+    }
+  }
+
+  test("SPARK-36120: Support cache/uncache table with TimestampNTZ type") {
+    val tableName = "ntzCache"
+    withTable(tableName) {
+      sql(s"CACHE TABLE $tableName AS SELECT TIMESTAMP_NTZ'2021-01-01 00:00:00'")
+      checkAnswer(spark.table(tableName), Row(LocalDateTime.parse("2021-01-01T00:00:00")))
+      spark.table(tableName).queryExecution.withCachedData.collect {
+        case cached: InMemoryRelation =>
+          assert(cached.stats.sizeInBytes === 8)
+      }
+      sql(s"UNCACHE TABLE $tableName")
     }
   }
 

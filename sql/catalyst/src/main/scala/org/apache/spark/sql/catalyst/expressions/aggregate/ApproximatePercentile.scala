@@ -49,15 +49,16 @@ import org.apache.spark.sql.types._
  *                           yields better accuracy, the default value is
  *                           DEFAULT_PERCENTILE_ACCURACY.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(col, percentage [, accuracy]) - Returns the approximate `percentile` of the numeric
-      column `col` which is the smallest value in the ordered `col` values (sorted from least to
-      greatest) such that no more than `percentage` of `col` values is less than the value
-      or equal to that value. The value of percentage must be between 0.0 and 1.0. The `accuracy`
-      parameter (default: 10000) is a positive numeric literal which controls approximation accuracy
-      at the cost of memory. Higher value of `accuracy` yields better accuracy, `1.0/accuracy` is
-      the relative error of the approximation.
+    _FUNC_(col, percentage [, accuracy]) - Returns the approximate `percentile` of the numeric or
+      ansi interval column `col` which is the smallest value in the ordered `col` values (sorted
+      from least to greatest) such that no more than `percentage` of `col` values is less than
+      the value or equal to that value. The value of percentage must be between 0.0 and 1.0.
+      The `accuracy` parameter (default: 10000) is a positive numeric literal which controls
+      approximation accuracy at the cost of memory. Higher value of `accuracy` yields better
+      accuracy, `1.0/accuracy` is the relative error of the approximation.
       When `percentage` is an array, each value of the percentage array must be between 0.0 and 1.0.
       In this case, returns the approximate percentile array of column `col` at the given
       percentage array.
@@ -68,9 +69,14 @@ import org.apache.spark.sql.types._
        [1,1,0]
       > SELECT _FUNC_(col, 0.5, 100) FROM VALUES (0), (6), (7), (9), (10) AS tab(col);
        7
+      > SELECT _FUNC_(col, 0.5, 100) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '1' MONTH), (INTERVAL '2' MONTH), (INTERVAL '10' MONTH) AS tab(col);
+       0-1
+      > SELECT _FUNC_(col, array(0.5, 0.7), 100) FROM VALUES (INTERVAL '0' SECOND), (INTERVAL '1' SECOND), (INTERVAL '2' SECOND), (INTERVAL '10' SECOND) AS tab(col);
+       [0 00:00:01.000000000,0 00:00:02.000000000]
   """,
   group = "agg_funcs",
   since = "2.1.0")
+// scalastyle:on line.size.limit
 case class ApproximatePercentile(
     child: Expression,
     percentageExpression: Expression,
@@ -92,9 +98,10 @@ case class ApproximatePercentile(
   private lazy val accuracy: Long = accuracyExpression.eval().asInstanceOf[Number].longValue
 
   override def inputTypes: Seq[AbstractDataType] = {
-    // Support NumericType, DateType and TimestampType since their internal types are all numeric,
-    // and can be easily cast to double for processing.
-    Seq(TypeCollection(NumericType, DateType, TimestampType),
+    // Support NumericType, DateType, TimestampType and TimestampNTZType since their internal types
+    // are all numeric, and can be easily cast to double for processing.
+    Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType,
+      YearMonthIntervalType, DayTimeIntervalType),
       TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)), IntegralType)
   }
 
@@ -138,8 +145,9 @@ case class ApproximatePercentile(
     if (value != null) {
       // Convert the value to a double value
       val doubleValue = child.dataType match {
-        case DateType => value.asInstanceOf[Int].toDouble
-        case TimestampType => value.asInstanceOf[Long].toDouble
+        case DateType | _: YearMonthIntervalType => value.asInstanceOf[Int].toDouble
+        case TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+          value.asInstanceOf[Long].toDouble
         case n: NumericType => n.numeric.toDouble(value.asInstanceOf[n.InternalType])
         case other: DataType =>
           throw QueryExecutionErrors.dataTypeUnexpectedError(other)
@@ -157,8 +165,8 @@ case class ApproximatePercentile(
   override def eval(buffer: PercentileDigest): Any = {
     val doubleResult = buffer.getPercentiles(percentages)
     val result = child.dataType match {
-      case DateType => doubleResult.map(_.toInt)
-      case TimestampType => doubleResult.map(_.toLong)
+      case DateType | _: YearMonthIntervalType => doubleResult.map(_.toInt)
+      case TimestampType | TimestampNTZType | _: DayTimeIntervalType => doubleResult.map(_.toLong)
       case ByteType => doubleResult.map(_.toByte)
       case ShortType => doubleResult.map(_.toShort)
       case IntegerType => doubleResult.map(_.toInt)
@@ -261,19 +269,12 @@ object ApproximatePercentile {
      *   val Array(p25, median, p75) = percentileDigest.getPercentiles(Array(0.25, 0.5, 0.75))
      * }}}
      */
-    def getPercentiles(percentages: Array[Double]): Array[Double] = {
+    def getPercentiles(percentages: Array[Double]): Seq[Double] = {
       if (!isCompressed) compress()
       if (summaries.count == 0 || percentages.length == 0) {
         Array.emptyDoubleArray
       } else {
-        val result = new Array[Double](percentages.length)
-        var i = 0
-        while (i < percentages.length) {
-          // Since summaries.count != 0, the query here never return None.
-          result(i) = summaries.query(percentages(i)).get
-          i += 1
-        }
-        result
+        summaries.query(percentages).get
       }
     }
 

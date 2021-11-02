@@ -73,7 +73,7 @@ trait DateTimeFormatterHelper {
     }
   }
 
-  private def toLocalTime(accessor: TemporalAccessor): LocalTime = {
+  protected def toLocalTime(accessor: TemporalAccessor): LocalTime = {
     val localTime = accessor.query(TemporalQueries.localTime())
     // If all the time fields are specified, return the local time directly.
     if (localTime != null) return localTime
@@ -184,7 +184,12 @@ trait DateTimeFormatterHelper {
       } catch {
         case _: Throwable => throw e
       }
-      throw QueryExecutionErrors.failToRecognizePatternInDateTimeFormatterError(pattern, e)
+      throw QueryExecutionErrors.failToRecognizePatternAfterUpgradeError(pattern, e)
+  }
+
+  protected def checkInvalidPattern(pattern: String): PartialFunction[Throwable, Nothing] = {
+    case e: IllegalArgumentException =>
+      throw QueryExecutionErrors.failToRecognizePatternError(pattern, e)
   }
 }
 
@@ -274,7 +279,11 @@ private object DateTimeFormatterHelper {
   // localized, for the default Locale.US, it uses Sunday as the first day of week, while in Spark
   // 2.4, the SimpleDateFormat uses Monday as the first day of week.
   final val weekBasedLetters = Set('Y', 'W', 'w', 'u', 'e', 'c')
-  final val unsupportedLetters = Set('A', 'n', 'N', 'p')
+  // SPARK-36970: `select date_format('2018-11-17 13:33:33.333', 'B')` failed with Java 8,
+  // but use Java 17 will return `in the afternoon` because 'B' is used to represent
+  // `Pattern letters to output a day period` in Java 17. So there manual disabled `B` for
+  // compatibility with Java 8 behavior.
+  final val unsupportedLetters = Set('A', 'B', 'n', 'N', 'p')
   // The quarter fields will also be parsed strangely, e.g. when the pattern contains `yMd` and can
   // be directly resolved then the `q` do check for whether the month is valid, but if the date
   // fields is incomplete, e.g. `yM`, the checking will be bypassed.

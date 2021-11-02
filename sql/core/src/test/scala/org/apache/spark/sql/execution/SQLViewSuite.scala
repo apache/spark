@@ -843,9 +843,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
         sql("CREATE VIEW v1 (c1) AS SELECT C1 FROM t")
         sql("CREATE VIEW v2 (c1) AS SELECT c1 FROM t ORDER BY 1 ASC, c1 DESC")
-        sql("CREATE VIEW v3 (c1, count) AS SELECT c1, count(c1) FROM t GROUP BY 1")
-        sql("CREATE VIEW v4 (a, count) AS SELECT c1 as a, count(c1) FROM t GROUP BY a")
-        sql("CREATE VIEW v5 (c1) AS SELECT 1/0")
+        sql("CREATE VIEW v3 (c1, count) AS SELECT c1, count(c1) AS cnt FROM t GROUP BY 1")
+        sql("CREATE VIEW v4 (a, count) AS SELECT c1 as a, count(c1) AS cnt FROM t GROUP BY a")
+        sql("CREATE VIEW v5 (c1) AS SELECT 1/0 AS invalid")
 
         withSQLConf(CASE_SENSITIVE.key -> "true") {
           checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2), Row(3), Row(1)))
@@ -869,9 +869,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           withSQLConf(CASE_SENSITIVE.key -> "true") {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v1")
-            }.getMessage
-            assert(e.contains("cannot resolve 'C1' given input columns: " +
-              "[spark_catalog.default.t.c1]"))
+            }
+            assert(e.getErrorClass == "MISSING_COLUMN")
+            assert(e.messageParameters.sameElements(Array("C1", "spark_catalog.default.t.c1")))
           }
           withSQLConf(ORDER_BY_ORDINAL.key -> "false") {
             checkAnswer(sql("SELECT * FROM v2"), Seq(Row(3), Row(2), Row(1)))
@@ -888,9 +888,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           withSQLConf(GROUP_BY_ALIASES.key -> "false") {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v4")
-            }.getMessage
-            assert(e.contains("cannot resolve 'a' given input columns: " +
-              "[spark_catalog.default.t.c1]"))
+            }
+            assert(e.getErrorClass == "MISSING_COLUMN")
+            assert(e.messageParameters.sameElements(Array("a", "spark_catalog.default.t.c1")))
           }
           withSQLConf(ANSI_ENABLED.key -> "true") {
             val e = intercept[ArithmeticException] {
@@ -901,7 +901,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         }
 
         withSQLConf(ANSI_ENABLED.key -> "true") {
-          sql("ALTER VIEW v1 AS SELECT 1/0")
+          sql("ALTER VIEW v1 AS SELECT 1/0 AS invalid")
         }
         val e = intercept[ArithmeticException] {
           sql("SELECT * FROM v1").collect()

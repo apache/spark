@@ -31,6 +31,7 @@ import com.google.common.collect.Lists;
 
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
@@ -48,10 +49,13 @@ import org.apache.spark.network.util.TransportConf;
 public class ExternalBlockStoreClient extends BlockStoreClient {
   private static final ErrorHandler PUSH_ERROR_HANDLER = new ErrorHandler.BlockPushErrorHandler();
 
-  private final TransportConf conf;
   private final boolean authEnabled;
   private final SecretKeyHolder secretKeyHolder;
   private final long registrationTimeoutMs;
+  // Push based shuffle requires a comparable Id to distinguish the shuffle data among multiple
+  // application attempts. This variable is derived from the String typed appAttemptId. If no
+  // appAttemptId is set, the default comparableAppAttemptId is -1.
+  private int comparableAppAttemptId = -1;
 
   /**
    * Creates an external shuffle client, with SASL optionally enabled. If SASL is not enabled,
@@ -62,7 +66,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       SecretKeyHolder secretKeyHolder,
       boolean authEnabled,
       long registrationTimeoutMs) {
-    this.conf = conf;
+    this.transportConf = conf;
     this.secretKeyHolder = secretKeyHolder;
     this.authEnabled = authEnabled;
     this.registrationTimeoutMs = registrationTimeoutMs;
@@ -74,12 +78,33 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
    */
   public void init(String appId) {
     this.appId = appId;
-    TransportContext context = new TransportContext(conf, new NoOpRpcHandler(), true, true);
+    TransportContext context = new TransportContext(
+      transportConf, new NoOpRpcHandler(), true, true);
     List<TransportClientBootstrap> bootstraps = Lists.newArrayList();
     if (authEnabled) {
-      bootstraps.add(new AuthClientBootstrap(conf, appId, secretKeyHolder));
+      bootstraps.add(new AuthClientBootstrap(transportConf, appId, secretKeyHolder));
     }
     clientFactory = context.createClientFactory(bootstraps);
+  }
+
+  @Override
+  public void setAppAttemptId(String appAttemptId) {
+    super.setAppAttemptId(appAttemptId);
+    setComparableAppAttemptId(appAttemptId);
+  }
+
+  private void setComparableAppAttemptId(String appAttemptId) {
+    // For now, push based shuffle only supports running in YARN.
+    // Application attemptId in YARN is integer and it can be safely parsed
+    // to integer here. For the application attemptId from other cluster set up
+    // which is not numeric, it needs to generate this comparableAppAttemptId
+    // from the String typed appAttemptId through some other customized logic.
+    try {
+      this.comparableAppAttemptId = Integer.parseInt(appAttemptId);
+    } catch (NumberFormatException e) {
+      logger.warn("Push based shuffle requires comparable application attemptId, " +
+        "but the appAttemptId {} cannot be parsed to Integer", appAttemptId, e);
+    }
   }
 
   @Override
@@ -93,14 +118,16 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     checkInit();
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
-      int maxRetries = conf.maxIORetries();
-      RetryingBlockFetcher.BlockFetchStarter blockFetchStarter =
+      int maxRetries = transportConf.maxIORetries();
+      RetryingBlockTransferor.BlockTransferStarter blockFetchStarter =
           (inputBlockId, inputListener) -> {
             // Unless this client is closed.
             if (clientFactory != null) {
+              assert inputListener instanceof BlockFetchingListener :
+                "Expecting a BlockFetchingListener, but got " + inputListener.getClass();
               TransportClient client = clientFactory.createClient(host, port, maxRetries > 0);
-              new OneForOneBlockFetcher(client, appId, execId,
-                inputBlockId, inputListener, conf, downloadFileManager).start();
+              new OneForOneBlockFetcher(client, appId, execId, inputBlockId,
+                (BlockFetchingListener) inputListener, transportConf, downloadFileManager).start();
             } else {
               logger.info("This clientFactory was closed. Skipping further block fetch retries.");
             }
@@ -109,7 +136,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       if (maxRetries > 0) {
         // Note this Fetcher will correctly handle maxRetries == 0; we avoid it just in case there's
         // a bug in this code. We should remove the if statement once we're sure of the stability.
-        new RetryingBlockFetcher(conf, blockFetchStarter, blockIds, listener).start();
+        new RetryingBlockTransferor(transportConf, blockFetchStarter, blockIds, listener).start();
       } else {
         blockFetchStarter.createAndStart(blockIds, listener);
       }
@@ -127,7 +154,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       int port,
       String[] blockIds,
       ManagedBuffer[] buffers,
-      BlockFetchingListener listener) {
+      BlockPushingListener listener) {
     checkInit();
     assert blockIds.length == buffers.length : "Number of block ids and buffers do not match.";
 
@@ -137,23 +164,29 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     }
     logger.debug("Push {} shuffle blocks to {}:{}", blockIds.length, host, port);
     try {
-      RetryingBlockFetcher.BlockFetchStarter blockPushStarter =
+      RetryingBlockTransferor.BlockTransferStarter blockPushStarter =
           (inputBlockId, inputListener) -> {
-            TransportClient client = clientFactory.createClient(host, port);
-            new OneForOneBlockPusher(client, appId, inputBlockId, inputListener, buffersWithId)
-              .start();
+            if (clientFactory != null) {
+              assert inputListener instanceof BlockPushingListener :
+                "Expecting a BlockPushingListener, but got " + inputListener.getClass();
+              TransportClient client = clientFactory.createClient(host, port);
+              new OneForOneBlockPusher(client, appId, comparableAppAttemptId, inputBlockId,
+                (BlockPushingListener) inputListener, buffersWithId).start();
+            } else {
+              logger.info("This clientFactory was closed. Skipping further block push retries.");
+            }
           };
-      int maxRetries = conf.maxIORetries();
+      int maxRetries = transportConf.maxIORetries();
       if (maxRetries > 0) {
-        new RetryingBlockFetcher(
-          conf, blockPushStarter, blockIds, listener, PUSH_ERROR_HANDLER).start();
+        new RetryingBlockTransferor(
+          transportConf, blockPushStarter, blockIds, listener, PUSH_ERROR_HANDLER).start();
       } else {
         blockPushStarter.createAndStart(blockIds, listener);
       }
     } catch (Exception e) {
       logger.error("Exception while beginning pushBlocks", e);
       for (String blockId : blockIds) {
-        listener.onBlockFetchFailure(blockId, e);
+        listener.onBlockPushFailure(blockId, e);
       }
     }
   }
@@ -163,11 +196,14 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       String host,
       int port,
       int shuffleId,
+      int shuffleMergeId,
       MergeFinalizerListener listener) {
     checkInit();
     try {
       TransportClient client = clientFactory.createClient(host, port);
-      ByteBuffer finalizeShuffleMerge = new FinalizeShuffleMerge(appId, shuffleId).toByteBuffer();
+      ByteBuffer finalizeShuffleMerge =
+        new FinalizeShuffleMerge(
+          appId, comparableAppAttemptId, shuffleId, shuffleMergeId).toByteBuffer();
       client.sendRpc(finalizeShuffleMerge, new RpcResponseCallback() {
         @Override
         public void onSuccess(ByteBuffer response) {
@@ -184,6 +220,39 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       logger.error("Exception while sending finalizeShuffleMerge request to {}:{}",
         host, port, e);
       listener.onShuffleMergeFailure(e);
+    }
+  }
+
+  @Override
+  public void getMergedBlockMeta(
+      String host,
+      int port,
+      int shuffleId,
+      int shuffleMergeId,
+      int reduceId,
+      MergedBlocksMetaListener listener) {
+    checkInit();
+    logger.debug("Get merged blocks meta from {}:{} for shuffleId {} shuffleMergeId {}"
+      + " reduceId {}", host, port, shuffleId, shuffleMergeId, reduceId);
+    try {
+      TransportClient client = clientFactory.createClient(host, port);
+      client.sendMergedBlockMetaReq(appId, shuffleId, shuffleMergeId, reduceId,
+        new MergedBlockMetaResponseCallback() {
+          @Override
+          public void onSuccess(int numChunks, ManagedBuffer buffer) {
+            logger.trace("Successfully got merged block meta for shuffleId {} shuffleMergeId {}"
+              + " reduceId {}", shuffleId, shuffleMergeId, reduceId);
+            listener.onSuccess(shuffleId, shuffleMergeId, reduceId,
+              new MergedBlockMeta(numChunks, buffer));
+          }
+
+          @Override
+          public void onFailure(Throwable e) {
+            listener.onFailure(shuffleId, shuffleMergeId, reduceId, e);
+          }
+        });
+    } catch (Exception e) {
+      listener.onFailure(shuffleId, shuffleMergeId, reduceId, e);
     }
   }
 

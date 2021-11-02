@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.execution.UnaryExecNode
-import org.apache.spark.sql.types.{CalendarIntervalType, DateType, DayTimeIntervalType, IntegerType, TimestampType, YearMonthIntervalType}
+import org.apache.spark.sql.types._
 
 trait WindowExecBase extends UnaryExecNode {
   def windowExpression: Seq[NamedExpression]
@@ -95,11 +95,13 @@ trait WindowExecBase extends UnaryExecNode {
         // Create the projection which returns the current 'value' modified by adding the offset.
         val boundExpr = (expr.dataType, boundOffset.dataType) match {
           case (DateType, IntegerType) => DateAdd(expr, boundOffset)
-          case (DateType, YearMonthIntervalType) => DateAddYMInterval(expr, boundOffset)
-          case (TimestampType, CalendarIntervalType) => TimeAdd(expr, boundOffset, Some(timeZone))
-          case (TimestampType, YearMonthIntervalType) =>
+          case (DateType, _: YearMonthIntervalType) => DateAddYMInterval(expr, boundOffset)
+          case (TimestampType | TimestampNTZType, CalendarIntervalType) =>
+            TimeAdd(expr, boundOffset, Some(timeZone))
+          case (TimestampType | TimestampNTZType, _: YearMonthIntervalType) =>
             TimestampAddYMInterval(expr, boundOffset, Some(timeZone))
-          case (TimestampType, DayTimeIntervalType) => TimeAdd(expr, boundOffset, Some(timeZone))
+          case (TimestampType | TimestampNTZType, _: DayTimeIntervalType) =>
+            TimeAdd(expr, boundOffset, Some(timeZone))
           case (a, b) if a == b => Add(expr, boundOffset)
         }
         val bound = MutableProjection.create(boundExpr :: Nil, child.output)

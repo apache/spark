@@ -269,7 +269,7 @@ try:
             'pandas_on_spark': [
                 'pandas>=%s' % _minimum_pandas_version,
                 'pyarrow>=%s' % _minimum_pyarrow_version,
-                'numpy>=1.14,<1.20.0',
+                'numpy>=1.14',
             ],
         },
         python_requires='>=3.6',

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.trees.TreePattern.{GROUPING_ANALYTICS, TreePattern}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -44,6 +45,7 @@ trait BaseGroupingSets extends Expression with CodegenFallback {
   override def foldable: Boolean = false
   override def nullable: Boolean = true
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
+  final override val nodePatterns: Seq[TreePattern] = Seq(GROUPING_ANALYTICS)
 }
 
 object BaseGroupingSets {
@@ -195,6 +197,7 @@ case class Grouping(child: Expression) extends Expression with Unevaluable
     AttributeSet(VirtualColumn.groupingIdAttribute :: Nil)
   override def dataType: DataType = ByteType
   override def nullable: Boolean = false
+  final override val nodePatterns: Seq[TreePattern] = Seq(GROUPING_ANALYTICS)
   override protected def withNewChildInternal(newChild: Expression): Grouping =
     copy(child = newChild)
 }
@@ -214,9 +217,9 @@ case class Grouping(child: Expression) extends Expression with Unevaluable
     Examples:
       > SELECT name, _FUNC_(), sum(age), avg(height) FROM VALUES (2, 'Alice', 165), (5, 'Bob', 180) people(age, name, height) GROUP BY cube(name, height);
         Alice	0	2	165.0
-        Bob	0	5	180.0
         Alice	1	2	165.0
         NULL	3	7	172.5
+        Bob	0	5	180.0
         Bob	1	5	180.0
         NULL	2	2	165.0
         NULL	2	5	180.0
@@ -236,6 +239,7 @@ case class GroupingID(groupByExprs: Seq[Expression]) extends Expression with Une
   override def dataType: DataType = GroupingID.dataType
   override def nullable: Boolean = false
   override def prettyName: String = "grouping_id"
+  final override val nodePatterns: Seq[TreePattern] = Seq(GROUPING_ANALYTICS)
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): GroupingID =
     copy(groupByExprs = newChildren)
 }

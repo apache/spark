@@ -217,19 +217,27 @@ abstract class SparkFunSuite
    */
   protected def withLogAppender(
       appender: Appender,
-      loggerName: Option[String] = None,
+      loggerNames: Seq[String] = Seq.empty,
       level: Option[Level] = None)(
       f: => Unit): Unit = {
-    val logger = loggerName.map(Logger.getLogger).getOrElse(Logger.getRootLogger)
-    val restoreLevel = logger.getLevel
-    logger.addAppender(appender)
-    if (level.isDefined) {
-      logger.setLevel(level.get)
+    val loggers = if (loggerNames.nonEmpty) {
+      loggerNames.map(Logger.getLogger)
+    } else {
+      Seq(Logger.getRootLogger)
+    }
+    val restoreLevels = loggers.map(_.getLevel)
+    loggers.foreach { logger =>
+      logger.addAppender(appender)
+      if (level.isDefined) {
+        logger.setLevel(level.get)
+      }
     }
     try f finally {
-      logger.removeAppender(appender)
+      loggers.foreach(_.removeAppender(appender))
       if (level.isDefined) {
-        logger.setLevel(restoreLevel)
+        loggers.zipWithIndex.foreach { case (logger, i) =>
+          logger.setLevel(restoreLevels(i))
+        }
       }
     }
   }

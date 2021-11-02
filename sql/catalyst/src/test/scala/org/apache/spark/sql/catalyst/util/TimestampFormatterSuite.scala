@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.{DateTimeException, Instant, LocalDateTime, LocalTime}
-import java.util.concurrent.TimeUnit
+import java.time.{DateTimeException, LocalDateTime}
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
-import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -164,26 +162,6 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     withDefaultTimeZone(UTC) { // toJavaTimestamp depends on the default time zone
       assert(TimestampFormatter("yyyy-MM-dd HH:mm:SS G", UTC, isParsing = false)
         .format(toJavaTimestamp(micros)) === "0100-01-01 00:00:00 BC")
-    }
-  }
-
-  test("special timestamp values") {
-    testSpecialDatetimeValues { zoneId =>
-      val formatter = TimestampFormatter(zoneId)
-      val tolerance = TimeUnit.SECONDS.toMicros(30)
-
-      assert(formatter.parse("EPOCH") === 0)
-      val now = instantToMicros(Instant.now())
-      formatter.parse("now") should be(now +- tolerance)
-      val localToday = LocalDateTime.now(zoneId)
-        .`with`(LocalTime.MIDNIGHT)
-        .atZone(zoneId)
-      val yesterday = instantToMicros(localToday.minusDays(1).toInstant)
-      formatter.parse("yesterday CET") should be(yesterday +- tolerance)
-      val today = instantToMicros(localToday.toInstant)
-      formatter.parse(" TODAY ") should be(today +- tolerance)
-      val tomorrow = instantToMicros(localToday.plusDays(1).toInstant)
-      formatter.parse("Tomorrow ") should be(tomorrow +- tolerance)
     }
   }
 
@@ -452,5 +430,30 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     assert(e1.getMessage === "long overflow")
     val e2 = intercept[ArithmeticException](formatter.parse("-290308"))
     assert(e2.getMessage === "long overflow")
+  }
+
+  test("SPARK-36418: default parsing w/o pattern") {
+    outstandingZoneIds.foreach { zoneId =>
+      val formatter = new DefaultTimestampFormatter(
+        zoneId,
+        locale = DateFormatter.defaultLocale,
+        legacyFormat = LegacyDateFormats.SIMPLE_DATE_FORMAT,
+        isParsing = true)
+      Seq(
+        "-0042-3-4" -> LocalDateTime.of(-42, 3, 4, 0, 0, 0),
+        "1000" -> LocalDateTime.of(1000, 1, 1, 0, 0, 0),
+        "1582-10-4" -> LocalDateTime.of(1582, 10, 4, 0, 0, 0),
+        "1583-1-1 " -> LocalDateTime.of(1583, 1, 1, 0, 0, 0),
+        "1970-01-1 01:02:3" -> LocalDateTime.of(1970, 1, 1, 1, 2, 3),
+        "2021-8-12T18:31:50" -> LocalDateTime.of(2021, 8, 12, 18, 31, 50)
+      ).foreach { case (inputStr, ldt) =>
+        assert(formatter.parse(inputStr) === DateTimeTestUtils.localDateTimeToMicros(ldt, zoneId))
+      }
+
+      val errMsg = intercept[DateTimeException] {
+        formatter.parse("x123")
+      }.getMessage
+      assert(errMsg.contains("Cannot cast x123 to TimestampType"))
+    }
   }
 }

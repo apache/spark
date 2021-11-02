@@ -29,8 +29,9 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
@@ -39,9 +40,10 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
-import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.QueryExecutionErrors.hiveTableWithAnsiIntervalsError
+import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitioningUtils
@@ -189,7 +191,7 @@ case class DescribeDatabaseCommand(
         if (properties.isEmpty) {
           ""
         } else {
-          properties.toSeq.mkString("(", ", ", ")")
+          properties.toSeq.sortBy(_._1).mkString("(", ", ", ")")
         }
       result :+ Row("Properties", propertiesStr)
     } else {
@@ -222,11 +224,9 @@ case class DropTableCommand(
       // issue an exception.
       catalog.getTableMetadata(tableName).tableType match {
         case CatalogTableType.VIEW if !isView =>
-          throw new AnalysisException(
-            "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
+          throw QueryCompilationErrors.cannotDropViewWithDropTableError()
         case o if o != CatalogTableType.VIEW && isView =>
-          throw new AnalysisException(
-            s"Cannot drop a table with DROP VIEW. Please use DROP TABLE instead")
+          throw QueryCompilationErrors.cannotDropViewWithDropTableError()
         case _ =>
       }
     }
@@ -245,7 +245,7 @@ case class DropTableCommand(
     } else if (ifExists) {
       // no-op
     } else {
-      throw new AnalysisException(s"Table or view not found: ${tableName.identifier}")
+      throw QueryCompilationErrors.tableOrViewNotFoundError(tableName.identifier)
     }
     Seq.empty[Row]
   }
@@ -276,6 +276,7 @@ case class AlterTableSetPropertiesCommand(
       properties = table.properties ++ properties,
       comment = properties.get(TableCatalog.PROP_COMMENT).orElse(table.comment))
     catalog.alterTable(newTable)
+    catalog.invalidateCachedTable(tableName)
     Seq.empty[Row]
   }
 
@@ -303,8 +304,7 @@ case class AlterTableUnsetPropertiesCommand(
     if (!ifExists) {
       propKeys.foreach { k =>
         if (!table.properties.contains(k) && k != TableCatalog.PROP_COMMENT) {
-          throw new AnalysisException(
-            s"Attempted to unset non-existent property '$k' in table '${table.identifier}'")
+          throw QueryCompilationErrors.unsetNonExistentPropertyError(k, table.identifier)
         }
       }
     }
@@ -313,6 +313,7 @@ case class AlterTableUnsetPropertiesCommand(
     val newProperties = table.properties.filter { case (k, _) => !propKeys.contains(k) }
     val newTable = table.copy(properties = newProperties, comment = tableComment)
     catalog.alterTable(newTable)
+    catalog.invalidateCachedTable(tableName)
     Seq.empty[Row]
   }
 
@@ -346,10 +347,8 @@ case class AlterTableChangeColumnCommand(
     val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
     // Throw an AnalysisException if the column name/dataType is changed.
     if (!columnEqual(originColumn, newColumn, resolver)) {
-      throw new AnalysisException(
-        "ALTER TABLE CHANGE COLUMN is not supported for changing column " +
-          s"'${originColumn.name}' with type '${originColumn.dataType}' to " +
-          s"'${newColumn.name}' with type '${newColumn.dataType}'")
+      throw QueryCompilationErrors.alterTableChangeColumnNotSupportedForColumnTypeError(
+        originColumn, newColumn)
     }
 
     val newDataSchema = table.dataSchema.fields.map { field =>
@@ -371,9 +370,7 @@ case class AlterTableChangeColumnCommand(
       schema: StructType, name: String, resolver: Resolver): StructField = {
     schema.fields.collectFirst {
       case field if resolver(field.name, name) => field
-    }.getOrElse(throw new AnalysisException(
-      s"Can't find column `$name` given table data columns " +
-        s"${schema.fieldNames.mkString("[`", "`, `", "`]")}"))
+    }.getOrElse(throw QueryCompilationErrors.cannotFindColumnError(name, schema.fieldNames))
   }
 
   // Add the comment to a column, if comment is empty, return the original column.
@@ -413,13 +410,10 @@ case class AlterTableSerDePropertiesCommand(
     val table = catalog.getTableRawMetadata(tableName)
     // For datasource tables, disallow setting serde or specifying partition
     if (partSpec.isDefined && DDLUtils.isDatasourceTable(table)) {
-      throw new AnalysisException("Operation not allowed: ALTER TABLE SET " +
-        "[SERDE | SERDEPROPERTIES] for a specific partition is not supported " +
-        "for tables created with the datasource API")
+      throw QueryCompilationErrors.alterTableSetSerdeForSpecificPartitionNotSupportedError()
     }
     if (serdeClassName.isDefined && DDLUtils.isDatasourceTable(table)) {
-      throw new AnalysisException("Operation not allowed: ALTER TABLE SET SERDE is " +
-        "not supported for tables created with the datasource API")
+      throw QueryCompilationErrors.alterTableSetSerdeNotSupportedError()
     }
     if (partSpec.isEmpty) {
       val newTable = table.withNewStorage(
@@ -629,13 +623,11 @@ case class RepairTableCommand(
     val table = catalog.getTableRawMetadata(tableName)
     val tableIdentWithDB = table.identifier.quotedString
     if (table.partitionColumnNames.isEmpty) {
-      throw new AnalysisException(
-        s"Operation not allowed: $cmd only works on partitioned tables: $tableIdentWithDB")
+      throw QueryCompilationErrors.cmdOnlyWorksOnPartitionedTablesError(cmd, tableIdentWithDB)
     }
 
     if (table.storage.locationUri.isEmpty) {
-      throw new AnalysisException(s"Operation not allowed: $cmd only works on table with " +
-        s"location provided: $tableIdentWithDB")
+      throw QueryCompilationErrors.cmdOnlyWorksOnTableWithLocationError(cmd, tableIdentWithDB)
     }
 
     val root = new Path(table.location)
@@ -675,7 +667,15 @@ case class RepairTableCommand(
     // This is always the case for Hive format tables, but is not true for Datasource tables created
     // before Spark 2.1 unless they are converted via `msck repair table`.
     spark.sessionState.catalog.alterTable(table.copy(tracksPartitionsInCatalog = true))
-    spark.catalog.refreshTable(tableIdentWithDB)
+    try {
+      spark.catalog.refreshTable(tableIdentWithDB)
+    } catch {
+      case NonFatal(e) =>
+        logError(s"Cannot refresh the table '$tableIdentWithDB'. A query of the table " +
+          "might return wrong result if the table was cached. To avoid such issue, you should " +
+          "uncache the table manually via the UNCACHE TABLE command after table recovering will " +
+          "complete fully.", e)
+    }
     logInfo(s"Recovered all partitions: added ($addedAmount), dropped ($droppedAmount).")
     Seq.empty[Row]
   }
@@ -863,7 +863,7 @@ case class AlterTableSetLocationCommand(
 }
 
 
-object DDLUtils {
+object DDLUtils extends Logging {
   val HIVE_PROVIDER = "hive"
 
   def isHiveTable(table: CatalogTable): Boolean = {
@@ -893,15 +893,12 @@ object DDLUtils {
       spark: SparkSession, table: CatalogTable, action: String): Unit = {
     val tableName = table.identifier.table
     if (!spark.sqlContext.conf.manageFilesourcePartitions && isDatasourceTable(table)) {
-      throw new AnalysisException(
-        s"$action is not allowed on $tableName since filesource partition management is " +
-          "disabled (spark.sql.hive.manageFilesourcePartitions = false).")
+      throw QueryCompilationErrors
+        .actionNotAllowedOnTableWithFilesourcePartitionManagementDisabledError(action, tableName)
     }
     if (!table.tracksPartitionsInCatalog && isDatasourceTable(table)) {
-      throw new AnalysisException(
-        s"$action is not allowed on $tableName since its partition metadata is not stored in " +
-          "the Hive metastore. To import this information into the metastore, run " +
-          s"`msck repair table $tableName`")
+      throw QueryCompilationErrors.actionNotAllowedOnTableSincePartitionMetadataNotStoredError(
+        action, tableName)
     }
   }
 
@@ -921,36 +918,56 @@ object DDLUtils {
     if (!catalog.isTempView(tableMetadata.identifier)) {
       tableMetadata.tableType match {
         case CatalogTableType.VIEW if !isView =>
-          throw new AnalysisException(
-            "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
+          throw QueryCompilationErrors.cannotAlterViewWithAlterTableError()
         case o if o != CatalogTableType.VIEW && isView =>
-          throw new AnalysisException(
-            s"Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
+          throw QueryCompilationErrors.cannotAlterTableWithAlterViewError()
         case _ =>
       }
     }
   }
 
-  private[sql] def checkDataColNames(table: CatalogTable): Unit = {
-    checkDataColNames(table, table.dataSchema.fieldNames)
+  private[sql] def checkTableColumns(table: CatalogTable): Unit = {
+    checkTableColumns(table, table.dataSchema)
   }
 
-  private[sql] def checkDataColNames(table: CatalogTable, colNames: Seq[String]): Unit = {
+  // Checks correctness of table's column names and types.
+  private[sql] def checkTableColumns(table: CatalogTable, schema: StructType): Unit = {
     table.provider.foreach {
       _.toLowerCase(Locale.ROOT) match {
         case HIVE_PROVIDER =>
           val serde = table.storage.serde
-          if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
-            OrcFileFormat.checkFieldNames(colNames)
+          if (schema.exists(_.dataType.isInstanceOf[AnsiIntervalType])) {
+            throw hiveTableWithAnsiIntervalsError(table.identifier.toString)
+          } else if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
+            checkDataColNames("orc", schema)
           } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde ||
             serde == Some("parquet.hive.serde.ParquetHiveSerDe") ||
             serde == Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")) {
-            ParquetSchemaConverter.checkFieldNames(colNames)
+            checkDataColNames("parquet", schema)
+          } else if (serde == HiveSerDe.sourceToSerDe("avro").get.serde) {
+            checkDataColNames("avro", schema)
           }
-        case "parquet" => ParquetSchemaConverter.checkFieldNames(colNames)
-        case "orc" => OrcFileFormat.checkFieldNames(colNames)
+        case "parquet" => checkDataColNames("parquet", schema)
+        case "orc" => checkDataColNames("orc", schema)
+        case "avro" => checkDataColNames("avro", schema)
         case _ =>
       }
+    }
+  }
+
+  def checkDataColNames(provider: String, schema: StructType): Unit = {
+    val source = try {
+      DataSource.lookupDataSource(provider, SQLConf.get).getConstructor().newInstance()
+    } catch {
+      case e: Throwable =>
+        logError(s"Failed to find data source: $provider when check data column names.", e)
+        return
+    }
+    source match {
+      case f: FileFormat => DataSourceUtils.checkFieldNames(f, schema)
+      case f: FileDataSourceV2 =>
+        DataSourceUtils.checkFieldNames(f.fallbackFileFormat.newInstance(), schema)
+      case _ =>
     }
   }
 
@@ -964,8 +981,7 @@ object DDLUtils {
     }.flatten
 
     if (inputPaths.contains(outputPath)) {
-      throw new AnalysisException(
-        "Cannot overwrite a path that is also being read from.")
+      throw QueryCompilationErrors.cannotOverwritePathBeingReadFromError()
     }
   }
 }

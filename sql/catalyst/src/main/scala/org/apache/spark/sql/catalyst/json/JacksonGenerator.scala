@@ -85,14 +85,19 @@ private[sql] class JacksonGenerator(
   private val lineSeparator: String = options.lineSeparatorInWrite
 
   private val timestampFormatter = TimestampFormatter(
-    options.timestampFormat,
+    options.timestampFormatInWrite,
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
-  private val dateFormatter = DateFormatter(
-    options.dateFormat,
+  private val timestampNTZFormatter = TimestampFormatter(
+    options.timestampFormatInWrite,
     options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = false,
+    forTimestampNTZ = true)
+  private val dateFormatter = DateFormatter(
+    options.dateFormatInWrite,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
@@ -139,6 +144,12 @@ private[sql] class JacksonGenerator(
         val timestampString = timestampFormatter.format(row.getLong(ordinal))
         gen.writeString(timestampString)
 
+    case TimestampNTZType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+      val timestampString =
+        timestampNTZFormatter.format(DateTimeUtils.microsToLocalDateTime(row.getLong(ordinal)))
+      gen.writeString(timestampString)
+
     case DateType =>
       (row: SpecializedGetters, ordinal: Int) =>
         val dateString = dateFormatter.format(row.getInt(ordinal))
@@ -147,6 +158,24 @@ private[sql] class JacksonGenerator(
     case CalendarIntervalType =>
       (row: SpecializedGetters, ordinal: Int) =>
         gen.writeString(row.getInterval(ordinal).toString)
+
+    case YearMonthIntervalType(start, end) =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        val ymString = IntervalUtils.toYearMonthIntervalString(
+          row.getInt(ordinal),
+          IntervalStringStyles.ANSI_STYLE,
+          start,
+          end)
+        gen.writeString(ymString)
+
+    case DayTimeIntervalType(start, end) =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        val dtString = IntervalUtils.toDayTimeIntervalString(
+          row.getLong(ordinal),
+          IntervalStringStyles.ANSI_STYLE,
+          start,
+          end)
+        gen.writeString(dtString)
 
     case BinaryType =>
       (row: SpecializedGetters, ordinal: Int) =>

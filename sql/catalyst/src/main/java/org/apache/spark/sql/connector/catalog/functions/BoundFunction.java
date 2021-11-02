@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog.functions;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.IntegerType;
 import org.apache.spark.sql.types.StructType;
@@ -25,7 +26,10 @@ import java.util.UUID;
 
 /**
  * Represents a function that is bound to an input type.
+ *
+ * @since 3.2.0
  */
+@Evolving
 public interface BoundFunction extends Function {
 
   /**

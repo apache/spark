@@ -208,8 +208,8 @@ case class CachedRDDBuilder(
 
   @transient @volatile private var _cachedColumnBuffers: RDD[CachedBatch] = null
 
-  val sizeInBytesStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
-  val rowCountStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
+  val sizeInBytesStats: LongAccumulator = cachedPlan.session.sparkContext.longAccumulator
+  val rowCountStats: LongAccumulator = cachedPlan.session.sparkContext.longAccumulator
 
   val cachedName = tableName.map(n => s"In-memory table $n")
     .getOrElse(StringUtils.abbreviate(cachedPlan.toString, 1024))

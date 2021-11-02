@@ -599,7 +599,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("SPARK-28551: CTAS Hive Table should be with non-existent or empty location") {
-    def executeCTASWithNonEmptyLocation(tempLocation: String) {
+    def executeCTASWithNonEmptyLocation(tempLocation: String): Unit = {
       sql(s"CREATE TABLE ctas1(id string) stored as rcfile LOCATION '$tempLocation/ctas1'")
       sql("INSERT INTO TABLE ctas1 SELECT 'A' ")
       sql(s"""CREATE TABLE ctas_with_existing_location stored as rcfile LOCATION
@@ -2614,10 +2614,43 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
   }
+
+  test("SPARK-36197: Use PartitionDesc instead of TableDesc for reading hive partitioned tables") {
+    withTempDir { dir =>
+      val t1Loc = s"file:///$dir/t1"
+      val t2Loc = s"file:///$dir/t2"
+      withTable("t1", "t2") {
+        hiveClient.runSqlHive(
+          s"create table t1(id int) partitioned by(pid int) stored as avro location '$t1Loc'")
+        hiveClient.runSqlHive("insert into t1 partition(pid=1) select 2")
+        hiveClient.runSqlHive(
+          s"create table t2(id int) partitioned by(pid int) stored as textfile location '$t2Loc'")
+        hiveClient.runSqlHive("insert into t2 partition(pid=2) select 2")
+        hiveClient.runSqlHive(s"alter table t1 add partition (pid=2) location '$t2Loc/pid=2'")
+        hiveClient.runSqlHive("alter table t1 partition(pid=2) SET FILEFORMAT textfile")
+        checkAnswer(sql("select pid, id from t1 order by pid"), Seq(Row(1, 2), Row(2, 2)))
+      }
+    }
+  }
+
+  test("SPARK-36905: read hive views without without explicit column names") {
+    withTable("t1") {
+      withView("test_view") {
+        hiveClient.runSqlHive("create table t1 stored as avro as select 2 as id")
+        hiveClient.runSqlHive("create view test_view as select 1, id + 1 from t1")
+        checkAnswer(sql("select * from test_view"), Seq(Row(1, 3)))
+      }
+    }
+  }
 }
 
 @SlowHiveTest
-class SQLQuerySuite extends SQLQuerySuiteBase with DisableAdaptiveExecutionSuite
+class SQLQuerySuite extends SQLQuerySuiteBase with DisableAdaptiveExecutionSuite {
+  test("SPARK-36421: Validate all SQL configs to prevent from wrong use for ConfigEntry") {
+    val df = spark.sql("set -v").select("Meaning")
+    assert(df.collect().forall(!_.getString(0).contains("ConfigEntry")))
+  }
+}
 @SlowHiveTest
 class SQLQuerySuiteAE extends SQLQuerySuiteBase with EnableAdaptiveExecutionSuite
 

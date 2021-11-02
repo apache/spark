@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time._
 import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
@@ -31,7 +30,7 @@ import sun.util.calendar.ZoneInfo
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{DateType, Decimal, TimestampType}
+import org.apache.spark.sql.types.{DateType, Decimal, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
@@ -52,8 +51,13 @@ object DateTimeUtils {
   val TIMEZONE_OPTION = "timeZone"
 
   def getZoneId(timeZoneId: String): ZoneId = {
-    // To support the (+|-)h:mm format because it was supported before Spark 3.0.
-    ZoneId.of(timeZoneId.replaceFirst("(\\+|\\-)(\\d):", "$10$2:"), ZoneId.SHORT_IDS)
+    val formattedZoneId = timeZoneId
+      // To support the (+|-)h:mm format because it was supported before Spark 3.0.
+      .replaceFirst("(\\+|\\-)(\\d):", "$10$2:")
+      // To support the (+|-)hh:m format because it was supported before Spark 3.0.
+      .replaceFirst("(\\+|\\-)(\\d\\d):(\\d)$", "$1$2:0$3")
+
+    ZoneId.of(formattedZoneId, ZoneId.SHORT_IDS)
   }
   def getTimeZone(timeZoneId: String): TimeZone = TimeZone.getTimeZone(getZoneId(timeZoneId))
 
@@ -70,6 +74,14 @@ object DateTimeUtils {
   def daysToMicros(days: Int, zoneId: ZoneId): Long = {
     val instant = daysToLocalDate(days).atStartOfDay(zoneId).toInstant
     instantToMicros(instant)
+  }
+
+  def microsToLocalDateTime(micros: Long): LocalDateTime = {
+    getLocalDateTime(micros, ZoneOffset.UTC)
+  }
+
+  def localDateTimeToMicros(localDateTime: LocalDateTime): Long = {
+    instantToMicros(localDateTime.toInstant(ZoneOffset.UTC))
   }
 
   /**
@@ -212,16 +224,17 @@ object DateTimeUtils {
   def cleanLegacyTimestampStr(s: UTF8String): UTF8String = s.replace(gmtUtf8, UTF8String.EMPTY_UTF8)
 
   /**
-   * Trims and parses a given UTF8 timestamp string to the corresponding a corresponding [[Long]]
+   * Trims and parses a given UTF8 timestamp string to the corresponding timestamp segments,
+   * time zone id and whether it is just time without a date.
    * value. The return type is [[Option]] in order to distinguish between 0L and null. The following
    * formats are allowed:
    *
-   * `yyyy`
-   * `yyyy-[m]m`
-   * `yyyy-[m]m-[d]d`
-   * `yyyy-[m]m-[d]d `
-   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
-   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `[+-]yyyy*`
+   * `[+-]yyyy*-[m]m`
+   * `[+-]yyyy*-[m]m-[d]d`
+   * `[+-]yyyy*-[m]m-[d]d `
+   * `[+-]yyyy*-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `[+-]yyyy*-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
    * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
    *
@@ -236,21 +249,37 @@ object DateTimeUtils {
    *     - +|-hh:mm:ss
    *     - +|-hhmmss
    *  - Region-based zone IDs in the form `area/city`, such as `Europe/Paris`
+   *
+   * @return timestamp segments, time zone id and whether the input is just time without a date. If
+   *         the input string can't be parsed as timestamp, the result timestamp segments are empty.
    */
-  def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[Long] = {
-    if (s == null) {
-      return None
+  def parseTimestampString(s: UTF8String): (Array[Int], Option[ZoneId], Boolean) = {
+    def isValidDigits(segment: Int, digits: Int): Boolean = {
+      // A Long is able to represent a timestamp within [+-]200 thousand years
+      val maxDigitsYear = 6
+      // For the nanosecond part, more than 6 digits is allowed, but will be truncated.
+      segment == 6 || (segment == 0 && digits >= 4 && digits <= maxDigitsYear) ||
+        // For the zoneId segment(7), it's could be zero digits when it's a region-based zone ID
+        (segment == 7 && digits <= 2) ||
+        (segment != 0 && segment != 6 && segment != 7 && digits > 0 && digits <= 2)
+    }
+    if (s == null || s.trimAll().numBytes() == 0) {
+      return (Array.empty, None, false)
     }
     var tz: Option[String] = None
     val segments: Array[Int] = Array[Int](1, 1, 1, 0, 0, 0, 0, 0, 0)
     var i = 0
     var currentSegmentValue = 0
+    var currentSegmentDigits = 0
     val bytes = s.trimAll().getBytes
-    val specialTimestamp = convertSpecialTimestamp(bytes, timeZoneId)
-    if (specialTimestamp.isDefined) return specialTimestamp
     var j = 0
     var digitsMilli = 0
     var justTime = false
+    var yearSign: Option[Int] = None
+    if (bytes(j) == '-' || bytes(j) == '+') {
+      yearSign = if (bytes(j) == '-') Some(-1) else Some(1)
+      j += 1
+    }
     while (j < bytes.length) {
       val b = bytes(j)
       val parsedValue = b - '0'.toByte
@@ -260,50 +289,65 @@ object DateTimeUtils {
           i += 3
         } else if (i < 2) {
           if (b == '-') {
-            if (i == 0 && j != 4) {
-              // year should have exact four digits
-              return None
+            if (!isValidDigits(i, currentSegmentDigits)) {
+              return (Array.empty, None, false)
             }
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
+            currentSegmentDigits = 0
             i += 1
-          } else if (i == 0 && b == ':') {
+          } else if (i == 0 && b == ':' && yearSign.isEmpty) {
             justTime = true
+            if (!isValidDigits(3, currentSegmentDigits)) {
+              return (Array.empty, None, false)
+            }
             segments(3) = currentSegmentValue
             currentSegmentValue = 0
+            currentSegmentDigits = 0
             i = 4
           } else {
-            return None
+            return (Array.empty, None, false)
           }
         } else if (i == 2) {
           if (b == ' ' || b == 'T') {
+            if (!isValidDigits(i, currentSegmentDigits)) {
+              return (Array.empty, None, false)
+            }
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
+            currentSegmentDigits = 0
             i += 1
           } else {
-            return None
+            return (Array.empty, None, false)
           }
         } else if (i == 3 || i == 4) {
           if (b == ':') {
+            if (!isValidDigits(i, currentSegmentDigits)) {
+              return (Array.empty, None, false)
+            }
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
+            currentSegmentDigits = 0
             i += 1
           } else {
-            return None
+            return (Array.empty, None, false)
           }
         } else if (i == 5 || i == 6) {
-          if (b == '-' || b == '+') {
+          if (b == '.' && i == 5) {
+            if (!isValidDigits(i, currentSegmentDigits)) {
+              return (Array.empty, None, false)
+            }
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
-            i += 1
-            tz = Some(new String(bytes, j, 1))
-          } else if (b == '.' && i == 5) {
-            segments(i) = currentSegmentValue
-            currentSegmentValue = 0
+            currentSegmentDigits = 0
             i += 1
           } else {
+            if (!isValidDigits(i, currentSegmentDigits)) {
+              return (Array.empty, None, false)
+            }
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
+            currentSegmentDigits = 0
             i += 1
             tz = Some(new String(bytes, j, bytes.length - j))
             j = bytes.length - 1
@@ -313,45 +357,59 @@ object DateTimeUtils {
           }
         } else {
           if (i < segments.length && (b == ':' || b == ' ')) {
+            if (!isValidDigits(i, currentSegmentDigits)) {
+              return (Array.empty, None, false)
+            }
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
+            currentSegmentDigits = 0
             i += 1
           } else {
-            return None
+            return (Array.empty, None, false)
           }
         }
       } else {
         if (i == 6) {
           digitsMilli += 1
         }
-        currentSegmentValue = currentSegmentValue * 10 + parsedValue
+        // We will truncate the nanosecond part if there are more than 6 digits, which results
+        // in loss of precision
+        if (i != 6 || currentSegmentDigits < 6) {
+          currentSegmentValue = currentSegmentValue * 10 + parsedValue
+        }
+        currentSegmentDigits += 1
       }
       j += 1
     }
 
-    segments(i) = currentSegmentValue
-    if (!justTime && i == 0 && j != 4) {
-      // year should have exact four digits
-      return None
+    if (!isValidDigits(i, currentSegmentDigits)) {
+      return (Array.empty, None, false)
     }
+    segments(i) = currentSegmentValue
 
     while (digitsMilli < 6) {
       segments(6) *= 10
       digitsMilli += 1
     }
 
-    // We are truncating the nanosecond part, which results in loss of precision
-    while (digitsMilli > 6) {
-      segments(6) /= 10
-      digitsMilli -= 1
-    }
+    // This step also validates time zone part
+    val zoneId = tz.map(zoneName => getZoneId(zoneName.trim))
+    segments(0) *= yearSign.getOrElse(1)
+    (segments, zoneId, justTime)
+  }
+
+  /**
+   * Trims and parses a given UTF8 timestamp string to the corresponding a corresponding [[Long]]
+   * value. The return type is [[Option]] in order to distinguish between 0L and null. Please
+   * refer to `parseTimestampString` for the allowed formats
+   */
+  def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[Long] = {
     try {
-      val zoneId = tz match {
-        case None => timeZoneId
-        case Some("+") => ZoneOffset.ofHoursMinutes(segments(7), segments(8))
-        case Some("-") => ZoneOffset.ofHoursMinutes(-segments(7), -segments(8))
-        case Some(zoneName: String) => getZoneId(zoneName.trim)
+      val (segments, parsedZoneId, justTime) = parseTimestampString(s)
+      if (segments.isEmpty) {
+        return None
       }
+      val zoneId = parsedZoneId.getOrElse(timeZoneId)
       val nanoseconds = MICROSECONDS.toNanos(segments(6))
       val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
       val localDate = if (justTime) {
@@ -375,14 +433,54 @@ object DateTimeUtils {
   }
 
   /**
+   * Trims and parses a given UTF8 string to a corresponding [[Long]] value which representing the
+   * number of microseconds since the epoch. The result is independent of time zones,
+   * which means that zone ID in the input string will be ignored.
+   * The return type is [[Option]] in order to distinguish between 0L and null. Please
+   * refer to `parseTimestampString` for the allowed formats.
+   */
+  def stringToTimestampWithoutTimeZone(s: UTF8String): Option[Long] = {
+    try {
+      val (segments, _, justTime) = parseTimestampString(s)
+      // If the input string can't be parsed as a timestamp, or it contains only the time part of a
+      // timestamp and we can't determine its date, return None.
+      if (segments.isEmpty || justTime) {
+        return None
+      }
+      val nanoseconds = MICROSECONDS.toNanos(segments(6))
+      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
+      val localDate = LocalDate.of(segments(0), segments(1), segments(2))
+      val localDateTime = LocalDateTime.of(localDate, localTime)
+      Some(localDateTimeToMicros(localDateTime))
+    } catch {
+      case NonFatal(_) => None
+    }
+  }
+
+  def stringToTimestampWithoutTimeZoneAnsi(s: UTF8String): Long = {
+    stringToTimestampWithoutTimeZone(s).getOrElse {
+      throw QueryExecutionErrors.cannotCastUTF8StringToDataTypeError(s, TimestampNTZType)
+    }
+  }
+
+  // See issue SPARK-35679
+  // min second cause overflow in instant to micro
+  private val MIN_SECONDS = Math.floorDiv(Long.MinValue, MICROS_PER_SECOND)
+
+  /**
    * Gets the number of microseconds since the epoch of 1970-01-01 00:00:00Z from the given
    * instance of `java.time.Instant`. The epoch microsecond count is a simple incrementing count of
    * microseconds where microsecond 0 is 1970-01-01 00:00:00Z.
    */
   def instantToMicros(instant: Instant): Long = {
-    val us = Math.multiplyExact(instant.getEpochSecond, MICROS_PER_SECOND)
-    val result = Math.addExact(us, NANOSECONDS.toMicros(instant.getNano))
-    result
+    val secs = instant.getEpochSecond
+    if (secs == MIN_SECONDS) {
+      val us = Math.multiplyExact(secs + 1, MICROS_PER_SECOND)
+      Math.addExact(us, NANOSECONDS.toMicros(instant.getNano) - MICROS_PER_SECOND)
+    } else {
+      val us = Math.multiplyExact(secs, MICROS_PER_SECOND)
+      Math.addExact(us, NANOSECONDS.toMicros(instant.getNano))
+    }
   }
 
   /**
@@ -412,33 +510,43 @@ object DateTimeUtils {
    * The return type is [[Option]] in order to distinguish between 0 and null. The following
    * formats are allowed:
    *
-   * `yyyy`
-   * `yyyy-[m]m`
-   * `yyyy-[m]m-[d]d`
-   * `yyyy-[m]m-[d]d `
-   * `yyyy-[m]m-[d]d *`
-   * `yyyy-[m]m-[d]dT*`
+   * `[+-]yyyy*`
+   * `[+-]yyyy*-[m]m`
+   * `[+-]yyyy*-[m]m-[d]d`
+   * `[+-]yyyy*-[m]m-[d]d `
+   * `[+-]yyyy*-[m]m-[d]d *`
+   * `[+-]yyyy*-[m]m-[d]dT*`
    */
-  def stringToDate(s: UTF8String, zoneId: ZoneId): Option[Int] = {
-    if (s == null) {
+  def stringToDate(s: UTF8String): Option[Int] = {
+    def isValidDigits(segment: Int, digits: Int): Boolean = {
+      // An integer is able to represent a date within [+-]5 million years.
+      var maxDigitsYear = 7
+      (segment == 0 && digits >= 4 && digits <= maxDigitsYear) ||
+        (segment != 0 && digits > 0 && digits <= 2)
+    }
+    if (s == null || s.trimAll().numBytes() == 0) {
       return None
     }
     val segments: Array[Int] = Array[Int](1, 1, 1)
+    var sign = 1
     var i = 0
     var currentSegmentValue = 0
+    var currentSegmentDigits = 0
     val bytes = s.trimAll().getBytes
-    val specialDate = convertSpecialDate(bytes, zoneId)
-    if (specialDate.isDefined) return specialDate
     var j = 0
+    if (bytes(j) == '-' || bytes(j) == '+') {
+      sign = if (bytes(j) == '-') -1 else 1
+      j += 1
+    }
     while (j < bytes.length && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
       val b = bytes(j)
       if (i < 2 && b == '-') {
-        if (i == 0 && j != 4) {
-          // year should have exact four digits
+        if (!isValidDigits(i, currentSegmentDigits)) {
           return None
         }
         segments(i) = currentSegmentValue
         currentSegmentValue = 0
+        currentSegmentDigits = 0
         i += 1
       } else {
         val parsedValue = b - '0'.toByte
@@ -446,12 +554,12 @@ object DateTimeUtils {
           return None
         } else {
           currentSegmentValue = currentSegmentValue * 10 + parsedValue
+          currentSegmentDigits += 1
         }
       }
       j += 1
     }
-    if (i == 0 && j != 4) {
-      // year should have exact four digits
+    if (!isValidDigits(i, currentSegmentDigits)) {
       return None
     }
     if (i < 2 && j < bytes.length) {
@@ -460,15 +568,15 @@ object DateTimeUtils {
     }
     segments(i) = currentSegmentValue
     try {
-      val localDate = LocalDate.of(segments(0), segments(1), segments(2))
+      val localDate = LocalDate.of(sign * segments(0), segments(1), segments(2))
       Some(localDateToDays(localDate))
     } catch {
       case NonFatal(_) => None
     }
   }
 
-  def stringToDateAnsi(s: UTF8String, zoneId: ZoneId): Int = {
-    stringToDate(s, zoneId).getOrElse {
+  def stringToDateAnsi(s: UTF8String): Int = {
+    stringToDate(s).getOrElse {
       throw QueryExecutionErrors.cannotCastUTF8StringToDataTypeError(s, DateType)
     }
   }
@@ -615,7 +723,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Adds a full interval (months, days, microseconds) a timestamp represented as the number of
+   * Adds a full interval (months, days, microseconds) to a timestamp represented as the number of
    * microseconds since 1970-01-01 00:00:00Z.
    * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
    */
@@ -631,6 +739,25 @@ object DateTimeUtils {
       .plusDays(days)
       .plus(microseconds, ChronoUnit.MICROS)
     instantToMicros(resultTimestamp.toInstant)
+  }
+
+  /**
+   * Adds a full interval (months, days, microseconds) to a timestamp without time zone
+   * represented as a local time in microsecond precision, which is independent of time zone.
+   * @return A timestamp without time zone value, expressed in range
+   *         [0001-01-01T00:00:00.000000, 9999-12-31T23:59:59.999999].
+   */
+  def timestampNTZAddInterval(
+      start: Long,
+      months: Int,
+      days: Int,
+      microseconds: Long,
+      zoneId: ZoneId): Long = {
+    val localDateTime = microsToLocalDateTime(start)
+      .plusMonths(months)
+      .plusDays(days)
+      .plus(microseconds, ChronoUnit.MICROS)
+    localDateTimeToMicros(localDateTime)
   }
 
   /**
@@ -879,10 +1006,9 @@ object DateTimeUtils {
    * Extracts special values from an input string ignoring case.
    *
    * @param input A trimmed string
-   * @param zoneId Zone identifier used to get the current date.
    * @return Some special value in lower case or None.
    */
-  private def extractSpecialValue(input: String, zoneId: ZoneId): Option[String] = {
+  private def extractSpecialValue(input: String): Option[String] = {
     def isValid(value: String, timeZoneId: String): Boolean = {
       // Special value can be without any time zone
       if (timeZoneId.isEmpty) return true
@@ -908,13 +1034,13 @@ object DateTimeUtils {
   /**
    * Converts notational shorthands that are converted to ordinary timestamps.
    *
-   * @param input A trimmed string
-   * @param zoneId Zone identifier used to get the current date.
+   * @param input A string to parse. It can contain trailing or leading whitespaces.
+   * @param zoneId Zone identifier used to get the current timestamp.
    * @return Some of microseconds since the epoch if the conversion completed
    *         successfully otherwise None.
    */
   def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[Long] = {
-    extractSpecialValue(input, zoneId).flatMap {
+    extractSpecialValue(input.trim).flatMap {
       case "epoch" => Some(0)
       case "now" => Some(currentTimestamp())
       case "today" => Some(instantToMicros(today(zoneId).toInstant))
@@ -924,36 +1050,43 @@ object DateTimeUtils {
     }
   }
 
-  private def convertSpecialTimestamp(bytes: Array[Byte], zoneId: ZoneId): Option[Long] = {
-    if (bytes.length > 0 && Character.isAlphabetic(bytes(0))) {
-      convertSpecialTimestamp(new String(bytes, StandardCharsets.UTF_8), zoneId)
-    } else {
-      None
+
+  /**
+   * Converts notational shorthands that are converted to ordinary timestamps without time zone.
+   *
+   * @param input A string to parse. It can contain trailing or leading whitespaces.
+   * @param zoneId Zone identifier used to get the current local timestamp.
+   * @return Some of microseconds since the epoch if the conversion completed
+   *         successfully otherwise None.
+   */
+  def convertSpecialTimestampNTZ(input: String, zoneId: ZoneId): Option[Long] = {
+    val localDateTime = extractSpecialValue(input.trim).flatMap {
+      case "epoch" => Some(LocalDateTime.of(1970, 1, 1, 0, 0))
+      case "now" => Some(LocalDateTime.now(zoneId))
+      case "today" => Some(LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT))
+      case "tomorrow" =>
+        Some(LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT).plusDays(1))
+      case "yesterday" =>
+        Some(LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT).minusDays(1))
+      case _ => None
     }
+    localDateTime.map(localDateTimeToMicros)
   }
 
   /**
    * Converts notational shorthands that are converted to ordinary dates.
    *
-   * @param input A trimmed string
+   * @param input A string to parse. It can contain trailing or leading whitespaces.
    * @param zoneId Zone identifier used to get the current date.
    * @return Some of days since the epoch if the conversion completed successfully otherwise None.
    */
   def convertSpecialDate(input: String, zoneId: ZoneId): Option[Int] = {
-    extractSpecialValue(input, zoneId).flatMap {
+    extractSpecialValue(input.trim).flatMap {
       case "epoch" => Some(0)
       case "now" | "today" => Some(currentDate(zoneId))
       case "tomorrow" => Some(Math.addExact(currentDate(zoneId), 1))
       case "yesterday" => Some(Math.subtractExact(currentDate(zoneId), 1))
       case _ => None
-    }
-  }
-
-  private def convertSpecialDate(bytes: Array[Byte], zoneId: ZoneId): Option[Int] = {
-    if (bytes.length > 0 && Character.isAlphabetic(bytes(0))) {
-      convertSpecialDate(new String(bytes, StandardCharsets.UTF_8), zoneId)
-    } else {
-      None
     }
   }
 

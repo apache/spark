@@ -19,12 +19,14 @@ package org.apache.spark.sql.execution.streaming.continuous
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
+import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 
 /**
  * The logical plan for writing data in a continuous stream.
  */
-case class WriteToContinuousDataSource(write: StreamingWrite, query: LogicalPlan)
+case class WriteToContinuousDataSource(write: StreamingWrite, query: LogicalPlan,
+    customMetrics: Seq[CustomMetric])
   extends UnaryNode {
   override def child: LogicalPlan = query
   override def output: Seq[Attribute] = Nil

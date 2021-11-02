@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql
 
-import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
+import java.time.{Duration, LocalDateTime, Period}
 import java.util.Locale
 
 import collection.JavaConverters._
@@ -28,6 +28,8 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
+import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 
 class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -388,11 +390,15 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-24027: from_json of a map with unsupported key type") {
     val schema = MapType(StructType(StructField("f", IntegerType) :: Nil), StringType)
-
-    checkAnswer(Seq("""{{"f": 1}: "a"}""").toDS().select(from_json($"value", schema)),
-      Row(null))
-    checkAnswer(Seq("""{"{"f": 1}": "a"}""").toDS().select(from_json($"value", schema)),
-      Row(null))
+    val startMsg = "cannot resolve 'entries' due to data type mismatch:"
+    val exception1 = intercept[AnalysisException] {
+      Seq("""{{"f": 1}: "a"}""").toDS().select(from_json($"value", schema))
+    }.getMessage
+    assert(exception1.contains(startMsg))
+    val exception2 = intercept[AnalysisException] {
+      Seq("""{{"f": 1}: "a"}""").toDS().select(from_json($"value", schema))
+    }.getMessage
+    assert(exception2.contains(startMsg))
   }
 
   test("SPARK-24709: infers schemas of json strings and pass them to from_json") {
@@ -593,6 +599,31 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-36069: from_json invalid json schema - check field name and field value") {
+    withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
+      val schema = new StructType()
+        .add("a", IntegerType)
+        .add("b", IntegerType)
+        .add("_unparsed", StringType)
+      val badRec = """{"a": "1", "b": 11}"""
+      val df = Seq(badRec, """{"a": 2, "b": 12}""").toDS()
+
+      checkAnswer(
+        df.select(from_json($"value", schema, Map("mode" -> "PERMISSIVE"))),
+        Row(Row(null, 11, badRec)) :: Row(Row(2, 12, null)) :: Nil)
+
+      val errMsg = intercept[SparkException] {
+        df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))).collect()
+      }.getMessage
+
+      assert(errMsg.contains(
+        "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+      assert(errMsg.contains(
+        "Failed to parse field name a, field value 1, " +
+          "[VALUE_STRING] to target spark data type [IntegerType]."))
+    }
+  }
+
   test("corrupt record column in the middle") {
     val schema = new StructType()
       .add("a", IntegerType)
@@ -617,24 +648,6 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       val df = input.select(from_json($"value", "time timestamp", options))
 
       checkAnswer(df, Row(Row(java.sql.Timestamp.valueOf("2018-11-06 18:00:00.0"))))
-    }
-  }
-
-  test("special timestamp values") {
-    Seq("now", "today", "epoch", "tomorrow", "yesterday").foreach { specialValue =>
-      val input = Seq(s"""{"t": "$specialValue"}""").toDS()
-      val readback = input.select(from_json($"value", lit("t timestamp"),
-        Map.empty[String, String].asJava)).collect()
-      assert(readback(0).getAs[Row](0).getAs[Timestamp](0).getTime >= 0)
-    }
-  }
-
-  test("special date values") {
-    Seq("now", "today", "epoch", "tomorrow", "yesterday").foreach { specialValue =>
-      val input = Seq(s"""{"d": "$specialValue"}""").toDS()
-      val readback = input.select(from_json($"value", lit("d date"),
-        Map.empty[String, String].asJava)).collect()
-      assert(readback(0).getAs[Row](0).getAs[Date](0).getTime >= 0)
     }
   }
 
@@ -839,5 +852,82 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         checkAnswer(df, Seq(Row("""{"a" 1, "b": 11}"""), Row(null)))
       }
     }
+  }
+
+  test("SPARK-35982: from_json/to_json for map types where value types are year-month intervals") {
+    val ymDF = Seq(Period.of(1, 2, 0)).toDF
+    Seq(
+      (YearMonthIntervalType(), """{"key":"INTERVAL '1-2' YEAR TO MONTH"}""", Period.of(1, 2, 0)),
+      (YearMonthIntervalType(YEAR), """{"key":"INTERVAL '1' YEAR"}""", Period.of(1, 0, 0)),
+      (YearMonthIntervalType(MONTH), """{"key":"INTERVAL '14' MONTH"}""", Period.of(1, 2, 0))
+    ).foreach { case (toJsonDtype, toJsonExpected, fromJsonExpected) =>
+      val toJsonDF = ymDF.select(to_json(map(lit("key"), $"value" cast toJsonDtype)) as "json")
+      checkAnswer(toJsonDF, Row(toJsonExpected))
+
+      DataTypeTestUtils.yearMonthIntervalTypes.foreach { fromJsonDtype =>
+        val fromJsonDF = toJsonDF
+          .select(
+            from_json($"json", StructType(StructField("key", fromJsonDtype) :: Nil)) as "value")
+          .selectExpr("value['key']")
+        if (toJsonDtype == fromJsonDtype) {
+          checkAnswer(fromJsonDF, Row(fromJsonExpected))
+        } else {
+          checkAnswer(fromJsonDF, Row(null))
+        }
+      }
+    }
+  }
+
+  test("SPARK-35983: from_json/to_json for map types where value types are day-time intervals") {
+    val dtDF = Seq(Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)).toDF
+    Seq(
+      (DayTimeIntervalType(), """{"key":"INTERVAL '1 02:03:04' DAY TO SECOND"}""",
+        Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)),
+      (DayTimeIntervalType(DAY, MINUTE), """{"key":"INTERVAL '1 02:03' DAY TO MINUTE"}""",
+        Duration.ofDays(1).plusHours(2).plusMinutes(3)),
+      (DayTimeIntervalType(DAY, HOUR), """{"key":"INTERVAL '1 02' DAY TO HOUR"}""",
+        Duration.ofDays(1).plusHours(2)),
+      (DayTimeIntervalType(DAY), """{"key":"INTERVAL '1' DAY"}""",
+        Duration.ofDays(1)),
+      (DayTimeIntervalType(HOUR, SECOND), """{"key":"INTERVAL '26:03:04' HOUR TO SECOND"}""",
+        Duration.ofHours(26).plusMinutes(3).plusSeconds(4)),
+      (DayTimeIntervalType(HOUR, MINUTE), """{"key":"INTERVAL '26:03' HOUR TO MINUTE"}""",
+        Duration.ofHours(26).plusMinutes(3)),
+      (DayTimeIntervalType(HOUR), """{"key":"INTERVAL '26' HOUR"}""",
+        Duration.ofHours(26)),
+      (DayTimeIntervalType(MINUTE, SECOND), """{"key":"INTERVAL '1563:04' MINUTE TO SECOND"}""",
+        Duration.ofMinutes(1563).plusSeconds(4)),
+      (DayTimeIntervalType(MINUTE), """{"key":"INTERVAL '1563' MINUTE"}""",
+        Duration.ofMinutes(1563)),
+      (DayTimeIntervalType(SECOND), """{"key":"INTERVAL '93784' SECOND"}""",
+        Duration.ofSeconds(93784))
+    ).foreach { case (toJsonDtype, toJsonExpected, fromJsonExpected) =>
+      val toJsonDF = dtDF.select(to_json(map(lit("key"), $"value" cast toJsonDtype)) as "json")
+      checkAnswer(toJsonDF, Row(toJsonExpected))
+
+      DataTypeTestUtils.dayTimeIntervalTypes.foreach { fromJsonDtype =>
+        val fromJsonDF = toJsonDF
+          .select(
+            from_json($"json", StructType(StructField("key", fromJsonDtype) :: Nil)) as "value")
+          .selectExpr("value['key']")
+        if (toJsonDtype == fromJsonDtype) {
+          checkAnswer(fromJsonDF, Row(fromJsonExpected))
+        } else {
+          checkAnswer(fromJsonDF, Row(null))
+        }
+      }
+    }
+  }
+
+  test("SPARK-36491: Make from_json/to_json to handle timestamp_ntz type properly") {
+    val localDT = LocalDateTime.parse("2021-08-12T15:16:23")
+    val df = Seq(localDT).toDF
+    val toJsonDF = df.select(to_json(map(lit("key"), $"value")) as "json")
+    checkAnswer(toJsonDF, Row("""{"key":"2021-08-12T15:16:23.000"}"""))
+    val fromJsonDF = toJsonDF
+      .select(
+        from_json($"json", StructType(StructField("key", TimestampNTZType) :: Nil)) as "value")
+      .selectExpr("value['key']")
+    checkAnswer(fromJsonDF, Row(localDT))
   }
 }

@@ -515,14 +515,15 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     try {
       val lines = readLines(logData)
       val logStart = SparkListenerLogStart(SPARK_VERSION)
-      assert(lines.size === 22)
+      assert(lines.size === 25)
       assert(lines(0).contains("SparkListenerLogStart"))
       assert(lines(1).contains("SparkListenerApplicationStart"))
       assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
       var logIdx = 1
       events.foreach { event =>
         event match {
-          case metricsUpdate: SparkListenerExecutorMetricsUpdate =>
+          case metricsUpdate: SparkListenerExecutorMetricsUpdate
+            if metricsUpdate.execId != SparkContext.DRIVER_IDENTIFIER =>
           case stageCompleted: SparkListenerStageCompleted =>
             val execIds = Set[String]()
             (1 to 3).foreach { _ =>
@@ -618,6 +619,10 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
         assert(expected.stageInfo.stageId === actual.stageInfo.stageId)
       case (expected: SparkListenerTaskEnd, actual: SparkListenerTaskEnd) =>
         assert(expected.stageId === actual.stageId)
+      case (expected: SparkListenerExecutorMetricsUpdate,
+          actual: SparkListenerExecutorMetricsUpdate) =>
+        assert(expected.execId == actual.execId)
+        assert(expected.execId == SparkContext.DRIVER_IDENTIFIER)
       case (expected: SparkListenerEvent, actual: SparkListenerEvent) =>
         assert(expected === actual)
     }

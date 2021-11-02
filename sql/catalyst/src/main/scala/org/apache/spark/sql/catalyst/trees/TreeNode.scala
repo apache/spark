@@ -550,6 +550,44 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   /**
+   * Returns a copy of this node where `rule` has been recursively applied first to all of its
+   * children and then itself (post-order). When `rule` does not apply to a given node, it is left
+   * unchanged.
+   *
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param rule   the function use to transform this node and its descendant nodes. The function
+   *               takes a tuple as its input, where the first/second field is the before/after
+   *               image of applying the rule on the node's children.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on a TreeNode T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   */
+  def transformUpWithBeforeAndAfterRuleOnChildren(
+      cond: BaseType => Boolean, ruleId: RuleId = UnknownRuleId)(
+    rule: PartialFunction[(BaseType, BaseType), BaseType]): BaseType = {
+    if (!cond.apply(this) || isRuleIneffective(ruleId)) {
+      return this
+    }
+    val afterRuleOnChildren =
+      mapChildren(_.transformUpWithBeforeAndAfterRuleOnChildren(cond, ruleId)(rule))
+    val newNode = CurrentOrigin.withOrigin(origin) {
+      rule.applyOrElse((this, afterRuleOnChildren), { t: (BaseType, BaseType) => t._2 })
+    }
+    if (this eq newNode) {
+      this.markRuleAsIneffective(ruleId)
+      this
+    } else {
+      // If the transform function replaces this node with a new one, carry over the tags.
+      newNode.copyTagsFrom(this)
+      newNode
+    }
+  }
+
+  /**
    * Returns a copy of this node where `f` has been applied to all the nodes in `children`.
    */
   def mapChildren(f: BaseType => BaseType): BaseType = {
@@ -1030,7 +1068,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     case p: Product if shouldConvertToJson(p) =>
       try {
         val fieldNames = getConstructorParameterNames(p.getClass)
-        val fieldValues = p.productIterator.toSeq
+        val fieldValues = {
+          if (p.productArity == fieldNames.length) {
+            p.productIterator.toSeq
+          } else {
+            val clazz = p.getClass
+            // Fallback to use reflection if length of product elements do not match
+            // constructor params.
+            fieldNames.map { fieldName =>
+              val field = clazz.getDeclaredField(fieldName)
+              field.setAccessible(true)
+              field.get(p)
+            }
+          }
+        }
         assert(fieldNames.length == fieldValues.length, s"$simpleClassName fields: " +
           fieldNames.mkString(", ") + s", values: " + fieldValues.mkString(", "))
         ("product-class" -> JString(p.getClass.getName)) :: fieldNames.zip(fieldValues).map {
@@ -1038,6 +1089,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
         }.toList
       } catch {
         case _: RuntimeException => null
+        case _: ReflectiveOperationException => null
       }
     case _ => JNull
   }

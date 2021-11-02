@@ -22,7 +22,7 @@ from typing import Any, Dict, Iterable, List, NoReturn, Optional, Tuple, Type, U
 from pyspark.ml import linalg as newlinalg  # noqa: F401
 from pyspark.sql.types import StructType, UserDefinedType
 
-from numpy import float64, ndarray  # type: ignore[import]
+from numpy import float64, ndarray
 
 class VectorUDT(UserDefinedType):
     @classmethod
@@ -164,7 +164,7 @@ class Matrix:
     def __init__(
         self, numRows: int, numCols: int, isTransposed: bool = ...
     ) -> None: ...
-    def toArray(self) -> NoReturn: ...
+    def toArray(self) -> ndarray: ...
 
 class DenseMatrix(Matrix):
     values: Any

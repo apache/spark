@@ -241,6 +241,9 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.sql.Timestamp]) =>
         createDeserializerForSqlTimestamp(path)
 
+      case t if isSubtype(t, localTypeOf[java.time.LocalDateTime]) =>
+        createDeserializerForLocalDateTime(path)
+
       case t if isSubtype(t, localTypeOf[java.time.Duration]) =>
         createDeserializerForDuration(path)
 
@@ -524,6 +527,9 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.sql.Timestamp]) =>
         createSerializerForSqlTimestamp(inputObject)
 
+      case t if isSubtype(t, localTypeOf[java.time.LocalDateTime]) =>
+        createSerializerForLocalDateTime(inputObject)
+
       case t if isSubtype(t, localTypeOf[java.time.LocalDate]) =>
         createSerializerForJavaLocalDate(inputObject)
 
@@ -746,14 +752,16 @@ object ScalaReflection extends ScalaReflection {
         Schema(TimestampType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.sql.Timestamp]) =>
         Schema(TimestampType, nullable = true)
+      case t if isSubtype(t, localTypeOf[java.time.LocalDateTime]) =>
+        Schema(TimestampNTZType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.time.LocalDate]) => Schema(DateType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.sql.Date]) => Schema(DateType, nullable = true)
       case t if isSubtype(t, localTypeOf[CalendarInterval]) =>
         Schema(CalendarIntervalType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.time.Duration]) =>
-        Schema(DayTimeIntervalType, nullable = true)
+        Schema(DayTimeIntervalType(), nullable = true)
       case t if isSubtype(t, localTypeOf[java.time.Period]) =>
-        Schema(YearMonthIntervalType, nullable = true)
+        Schema(YearMonthIntervalType(), nullable = true)
       case t if isSubtype(t, localTypeOf[BigDecimal]) =>
         Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if isSubtype(t, localTypeOf[java.math.BigDecimal]) =>
@@ -801,7 +809,7 @@ object ScalaReflection extends ScalaReflection {
    */
   def findConstructor[T](cls: Class[T], paramTypes: Seq[Class[_]]): Option[Seq[AnyRef] => T] = {
     Option(ConstructorUtils.getMatchingAccessibleConstructor(cls, paramTypes: _*)) match {
-      case Some(c) => Some(x => c.newInstance(x: _*).asInstanceOf[T])
+      case Some(c) => Some(x => c.newInstance(x: _*))
       case None =>
         val companion = mirror.staticClass(cls.getName).companion
         val moduleMirror = mirror.reflectModule(companion.asModule)
@@ -850,10 +858,9 @@ object ScalaReflection extends ScalaReflection {
     StringType -> classOf[UTF8String],
     DateType -> classOf[DateType.InternalType],
     TimestampType -> classOf[TimestampType.InternalType],
+    TimestampNTZType -> classOf[TimestampNTZType.InternalType],
     BinaryType -> classOf[BinaryType.InternalType],
-    CalendarIntervalType -> classOf[CalendarInterval],
-    DayTimeIntervalType -> classOf[DayTimeIntervalType.InternalType],
-    YearMonthIntervalType -> classOf[YearMonthIntervalType.InternalType]
+    CalendarIntervalType -> classOf[CalendarInterval]
   )
 
   val typeBoxedJavaMapping = Map[DataType, Class[_]](
@@ -866,13 +873,14 @@ object ScalaReflection extends ScalaReflection {
     DoubleType -> classOf[java.lang.Double],
     DateType -> classOf[java.lang.Integer],
     TimestampType -> classOf[java.lang.Long],
-    DayTimeIntervalType -> classOf[java.lang.Long],
-    YearMonthIntervalType -> classOf[java.lang.Integer]
+    TimestampNTZType -> classOf[java.lang.Long]
   )
 
   def dataTypeJavaClass(dt: DataType): Class[_] = {
     dt match {
       case _: DecimalType => classOf[Decimal]
+      case it: DayTimeIntervalType => classOf[it.InternalType]
+      case it: YearMonthIntervalType => classOf[it.InternalType]
       case _: StructType => classOf[InternalRow]
       case _: ArrayType => classOf[ArrayData]
       case _: MapType => classOf[MapData]
@@ -883,6 +891,8 @@ object ScalaReflection extends ScalaReflection {
 
   def javaBoxedType(dt: DataType): Class[_] = dt match {
     case _: DecimalType => classOf[Decimal]
+    case _: DayTimeIntervalType => classOf[java.lang.Long]
+    case _: YearMonthIntervalType => classOf[java.lang.Integer]
     case BinaryType => classOf[Array[Byte]]
     case StringType => classOf[UTF8String]
     case CalendarIntervalType => classOf[CalendarInterval]
@@ -946,6 +956,19 @@ trait ScalaReflection extends Logging {
     tag.in(mirror).tpe.dealias
   }
 
+  private def isValueClass(tpe: Type): Boolean = {
+    tpe.typeSymbol.asClass.isDerivedValueClass
+  }
+
+  private def isTypeParameter(tpe: Type): Boolean = {
+    tpe.typeSymbol.isParameter
+  }
+
+  /** Returns the name and type of the underlying parameter of value class `tpe`. */
+  private def getUnderlyingTypeOfValueClass(tpe: `Type`): Type = {
+    getConstructorParameters(tpe).head._2
+  }
+
   /**
    * Returns the parameter names and types for the primary constructor of this type.
    *
@@ -957,15 +980,17 @@ trait ScalaReflection extends Logging {
     val formalTypeArgs = dealiasedTpe.typeSymbol.asClass.typeParams
     val TypeRef(_, _, actualTypeArgs) = dealiasedTpe
     val params = constructParams(dealiasedTpe)
-    // if there are type variables to fill in, do the substitution (SomeClass[T] -> SomeClass[Int])
-    if (actualTypeArgs.nonEmpty) {
-      params.map { p =>
-        p.name.decodedName.toString ->
-          p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
-      }
-    } else {
-      params.map { p =>
-        p.name.decodedName.toString -> p.typeSignature
+    params.map { p =>
+      val paramTpe = p.typeSignature
+      if (isTypeParameter(paramTpe)) {
+        // if there are type variables to fill in, do the substitution
+        // (SomeClass[T] -> SomeClass[Int])
+        p.name.decodedName.toString -> paramTpe.substituteTypes(formalTypeArgs, actualTypeArgs)
+      } else if (isValueClass(paramTpe)) {
+        // Replace value class with underlying type
+        p.name.decodedName.toString -> getUnderlyingTypeOfValueClass(paramTpe)
+      } else {
+        p.name.decodedName.toString -> paramTpe
       }
     }
   }

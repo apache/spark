@@ -451,6 +451,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
  * 1) Replace '<=>' with 'true' literal.
  * 2) Replace '=', '<=', and '>=' with 'true' literal if both operands are non-nullable.
  * 3) Replace '<' and '>' with 'false' literal if both operands are non-nullable.
+ * 4) Unwrap '=', '<=>' if one side is a boolean literal
  */
 object SimplifyBinaryComparison
   extends Rule[LogicalPlan] with PredicateHelper with ConstraintHelper {
@@ -488,6 +489,16 @@ object SimplifyBinaryComparison
         // False with inequality
         case a GreaterThan b if canSimplifyComparison(a, b, notNullExpressions) => FalseLiteral
         case a LessThan b if canSimplifyComparison(a, b, notNullExpressions) => FalseLiteral
+
+        // Optimize equalities when one side is Literal in order to help pushing down the filters
+        case a EqualTo TrueLiteral => a
+        case TrueLiteral EqualTo b => b
+        case a EqualTo FalseLiteral => Not(a)
+        case FalseLiteral EqualTo b => Not(b)
+        case a EqualNullSafe TrueLiteral if !a.nullable => a
+        case TrueLiteral EqualNullSafe b if !b.nullable => b
+        case a EqualNullSafe FalseLiteral if !a.nullable => Not(a)
+        case FalseLiteral EqualNullSafe b if !b.nullable => Not(b)
       }
   }
 }
@@ -752,12 +763,12 @@ object NullPropagation extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    t => t.containsAnyPattern(NULL_CHECK, NULL_LITERAL, COUNT)
+    t => t.containsAnyPattern(NULL_CHECK, NULL_LITERAL, COUNT, COALESCE)
       || t.containsAllPatterns(WINDOW_EXPRESSION, CAST, LITERAL), ruleId) {
     case q: LogicalPlan => q.transformExpressionsUpWithPruning(
-      t => t.containsAnyPattern(NULL_CHECK, NULL_LITERAL, COUNT)
+      t => t.containsAnyPattern(NULL_CHECK, NULL_LITERAL, COUNT, COALESCE)
         || t.containsAllPatterns(WINDOW_EXPRESSION, CAST, LITERAL), ruleId) {
-      case e @ WindowExpression(Cast(Literal(0L, _), _, _), _) =>
+      case e @ WindowExpression(Cast(Literal(0L, _), _, _, _), _) =>
         Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
       case e @ AggregateExpression(Count(exprs), _, _, _, _) if exprs.forall(isNullLiteral) =>
         Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
@@ -781,7 +792,12 @@ object NullPropagation extends Rule[LogicalPlan] {
         } else if (newChildren.length == 1) {
           newChildren.head
         } else {
-          Coalesce(newChildren)
+          val nonNullableIndex = newChildren.indexWhere(e => !e.nullable)
+          if (nonNullableIndex > -1) {
+            Coalesce(newChildren.take(nonNullableIndex + 1))
+          } else {
+            Coalesce(newChildren)
+          }
         }
 
       // If the value expression is NULL then transform the In expression to null literal.
@@ -934,8 +950,8 @@ object FoldablePropagation extends Rule[LogicalPlan] {
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
     _.containsPattern(CAST), ruleId) {
-    case Cast(e, dataType, _) if e.dataType == dataType => e
-    case c @ Cast(e, dataType, _) => (e.dataType, dataType) match {
+    case Cast(e, dataType, _, _) if e.dataType == dataType => e
+    case c @ Cast(e, dataType, _, _) => (e.dataType, dataType) match {
       case (ArrayType(from, false), ArrayType(to, true)) if from == to => e
       case (MapType(fromKey, fromValue, false), MapType(toKey, toValue, true))
         if fromKey == toKey && fromValue == toValue => e
@@ -989,7 +1005,7 @@ object CombineConcats extends Rule[LogicalPlan] {
         // If `spark.sql.function.concatBinaryAsString` is false, nested `Concat` exprs possibly
         // have `Concat`s with binary output. Since `TypeCoercion` casts them into strings,
         // we need to handle the case to combine all nested `Concat`s.
-        case c @ Cast(Concat(children), StringType, _) =>
+        case c @ Cast(Concat(children), StringType, _, _) =>
           val newChildren = children.map { e => c.copy(child = e) }
           stack.pushAll(newChildren.reverse)
         case child =>
@@ -1001,7 +1017,7 @@ object CombineConcats extends Rule[LogicalPlan] {
 
   private def hasNestedConcats(concat: Concat): Boolean = concat.children.exists {
     case c: Concat => true
-    case c @ Cast(Concat(children), StringType, _) => true
+    case c @ Cast(Concat(children), StringType, _, _) => true
     case _ => false
   }
 

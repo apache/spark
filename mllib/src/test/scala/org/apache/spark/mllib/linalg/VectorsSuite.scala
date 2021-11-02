@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuilder
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import breeze.linalg.{squaredDistance => breezeSquaredDistance, DenseMatrix => BDM}
+import breeze.linalg.{DenseMatrix => BDM}
 import org.json4s.jackson.JsonMethods.{parse => parseJson}
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
@@ -295,7 +295,9 @@ class VectorsSuite extends SparkFunSuite with Logging {
       val denseVector1 = Vectors.dense(sparseVector1.toArray)
       val denseVector2 = Vectors.dense(sparseVector2.toArray)
 
-      val squaredDist = breezeSquaredDistance(sparseVector1.asBreeze, sparseVector2.asBreeze)
+      val squaredDist = sparseVector1.toArray.zip(sparseVector2.toArray).map {
+        case (a, b) => (a - b) * (a - b)
+      }.sum
 
       // SparseVector vs. SparseVector
       assert(Vectors.sqdist(sparseVector1, sparseVector2) ~== squaredDist relTol 1E-8)

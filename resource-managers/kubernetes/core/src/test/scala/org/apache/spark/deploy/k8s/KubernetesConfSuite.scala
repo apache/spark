@@ -28,6 +28,15 @@ import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 class KubernetesConfSuite extends SparkFunSuite {
 
   private val APP_ARGS = Array("arg1", "arg2")
+  private val CUSTOM_NODE_SELECTOR = Map(
+    "nodeSelectorKey1" -> "nodeSelectorValue1",
+    "nodeSelectorKey2" -> "nodeSelectorValue2")
+  private val CUSTOM_DRIVER_NODE_SELECTOR = Map(
+    "driverNodeSelectorKey1" -> "driverNodeSelectorValue1",
+    "driverNodeSelectorKey2" -> "driverNodeSelectorValue2")
+  private val CUSTOM_EXECUTOR_NODE_SELECTOR = Map(
+    "execNodeSelectorKey1" -> "execNodeSelectorValue1",
+    "execNodeSelectorKey2" -> "execNodeSelectorValue2")
   private val CUSTOM_LABELS = Map(
     "customLabel1Key" -> "customLabel1Value",
     "customLabel2Key" -> "customLabel2Value")
@@ -169,5 +178,39 @@ class KubernetesConfSuite extends SparkFunSuite {
         "executorEnvVars3_var3" -> "executorEnvVars3",
         "executorEnvVars4-var4" -> "executorEnvVars4",
         "executorEnvVars5-var5" -> "executorEnvVars5/var5"))
+  }
+
+  test("SPARK-36075: Set nodeSelector, driverNodeSelector, executorNodeSelect") {
+    val sparkConf = new SparkConf(false)
+    CUSTOM_NODE_SELECTOR.foreach { case (key, value) =>
+      sparkConf.set(s"$KUBERNETES_NODE_SELECTOR_PREFIX$key", value)
+    }
+    CUSTOM_DRIVER_NODE_SELECTOR.foreach { case (key, value) =>
+      sparkConf.set(s"$KUBERNETES_DRIVER_NODE_SELECTOR_PREFIX$key", value)
+    }
+    CUSTOM_EXECUTOR_NODE_SELECTOR.foreach { case (key, value) =>
+      sparkConf.set(s"$KUBERNETES_EXECUTOR_NODE_SELECTOR_PREFIX$key", value)
+    }
+    val execConf = KubernetesTestConf.createExecutorConf(sparkConf)
+    assert(execConf.nodeSelector === CUSTOM_NODE_SELECTOR)
+    assert(execConf.executorNodeSelector === CUSTOM_EXECUTOR_NODE_SELECTOR)
+    val driverConf = KubernetesTestConf.createDriverConf(sparkConf)
+    assert(driverConf.nodeSelector === CUSTOM_NODE_SELECTOR)
+    assert(driverConf.driverNodeSelector === CUSTOM_DRIVER_NODE_SELECTOR)
+  }
+
+  test("SPARK-36059: Set driver.scheduler and executor.scheduler") {
+    val sparkConf = new SparkConf(false)
+    val execUnsetConf = KubernetesTestConf.createExecutorConf(sparkConf)
+    val driverUnsetConf = KubernetesTestConf.createExecutorConf(sparkConf)
+    assert(execUnsetConf.schedulerName === "")
+    assert(driverUnsetConf.schedulerName === "")
+
+    sparkConf.set(KUBERNETES_DRIVER_SCHEDULER_NAME, "driverScheduler")
+    sparkConf.set(KUBERNETES_EXECUTOR_SCHEDULER_NAME, "executorScheduler")
+    val execConf = KubernetesTestConf.createExecutorConf(sparkConf)
+    assert(execConf.schedulerName === "executorScheduler")
+    val driverConf = KubernetesTestConf.createDriverConf(sparkConf)
+    assert(driverConf.schedulerName === "driverScheduler")
   }
 }

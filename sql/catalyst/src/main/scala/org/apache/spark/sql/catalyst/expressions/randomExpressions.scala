@@ -78,9 +78,9 @@ trait ExpressionWithRandomSeed extends Expression {
       > SELECT _FUNC_();
        0.9629742951434543
       > SELECT _FUNC_(0);
-       0.8446490682263027
+       0.7604953758285915
       > SELECT _FUNC_(null);
-       0.8446490682263027
+       0.7604953758285915
   """,
   note = """
     The function is non-deterministic in general case.
@@ -131,9 +131,9 @@ object Rand {
       > SELECT _FUNC_();
        -0.3254147983080288
       > SELECT _FUNC_(0);
-       1.1164209726833079
+       1.6034991609278433
       > SELECT _FUNC_(null);
-       1.1164209726833079
+       1.6034991609278433
   """,
   note = """
     The function is non-deterministic in general case.

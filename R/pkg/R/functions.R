@@ -47,10 +47,13 @@ NULL
 #'               \item \code{to_date} and \code{to_timestamp}: it is the string to use to parse
 #'                    Column \code{x} to DateType or TimestampType.
 #'               \item \code{trunc}: it is the string to use to specify the truncation method.
-#'                    For example, "year", "yyyy", "yy" for truncate by year, or "month", "mon",
-#'                    "mm" for truncate by month.
+#'                    'year', 'yyyy', 'yy' to truncate by year,
+#'                    or 'month', 'mon', 'mm' to truncate by month
+#'                    Other options are: 'week', 'quarter'
 #'               \item \code{date_trunc}: it is similar with \code{trunc}'s but additionally
-#'                    supports "day", "dd", "second", "minute", "hour", "week" and "quarter".
+#'                    supports
+#'                    'day', 'dd' to truncate by day,
+#'                    'microsecond', 'millisecond', 'second', 'minute' and 'hour'
 #'               }
 #' @param ... additional argument(s).
 #' @name column_datetime_functions
@@ -258,11 +261,19 @@ NULL
 #'          \item \code{to_json}, \code{from_json} and \code{schema_of_json}: this contains
 #'              additional named properties to control how it is converted and accepts the
 #'              same options as the JSON data source.
+#'              You can find the JSON-specific options for reading/writing JSON files in
+#'              \url{
+#'              https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
+#'              Data Source Option} in the version you use.
 #'          \item \code{to_json}: it supports the "pretty" option which enables pretty
 #'              JSON generation.
 #'          \item \code{to_csv}, \code{from_csv} and \code{schema_of_csv}: this contains
 #'              additional named properties to control how it is converted and accepts the
 #'              same options as the CSV data source.
+#'              You can find the CSV-specific options for reading/writing CSV files in
+#'              \url{
+#'              https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option}{
+#'              Data Source Option} in the version you use.
 #'          \item \code{arrays_zip}, this contains additional Columns of arrays to be merged.
 #'          \item \code{map_concat}, this contains additional Columns of maps to be unioned.
 #'          }
@@ -636,6 +647,19 @@ setMethod("bin",
           })
 
 #' @details
+#' \code{bit_length}: Calculates the bit length for the specified string column.
+#'
+#' @rdname column_string_functions
+#' @aliases bit_length bit_length,Column-method
+#' @note length since 3.3.0
+setMethod("bit_length",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "bit_length", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{bitwise_not}: Computes bitwise NOT.
 #'
 #' @rdname column_nonaggregate_functions
@@ -859,6 +883,19 @@ setMethod("cosh",
             column(jc)
           })
 
+#' @details
+#' \code{cot}: Returns the cotangent of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases cot cot,Column-method
+#' @note cot since 3.3.0
+setMethod("cot",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "cot", x@jc)
+            column(jc)
+          })
+
 #' Returns the number of items in a group
 #'
 #' This can be used as a column aggregate function with \code{Column} as input,
@@ -888,6 +925,19 @@ setMethod("crc32",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "crc32", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{csc}: Returns the cosecant of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases csc csc,Column-method
+#' @note csc since 3.3.0
+setMethod("csc",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "csc", x@jc)
             column(jc)
           })
 
@@ -1003,6 +1053,7 @@ setMethod("dayofmonth",
 #' @details
 #' \code{dayofweek}: Extracts the day of the week as an integer from a
 #' given date/timestamp/string.
+#' Ranges from 1 for a Sunday through to 7 for a Saturday
 #'
 #' @rdname column_datetime_functions
 #' @aliases dayofweek dayofweek,Column-method
@@ -1429,6 +1480,29 @@ setMethod("max",
           })
 
 #' @details
+#' \code{max_by}: Returns the value associated with the maximum value of ord.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases max_by max_by,Column-method
+#' @note max_by since 3.3.0
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(
+#'   list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
+#'        list("dotNET", 2013, 48000), list("Java", 2013, 30000)),
+#'   list("course", "year", "earnings")
+#' )
+#' tmp <- agg(groupBy(df, df$"course"), "max_by" = max_by(df$"year", df$"earnings"))
+#' head(tmp)}
+setMethod("max_by",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "max_by", x@jc, y@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{md5}: Calculates the MD5 digest of a binary column and returns the value
 #' as a 32 character hex string.
 #'
@@ -1477,6 +1551,29 @@ setMethod("min",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "min", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{min_by}: Returns the value associated with the minimum value of ord.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases min_by min_by,Column-method
+#' @note min_by since 3.3.0
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(
+#'   list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
+#'        list("dotNET", 2013, 48000), list("Java", 2013, 30000)),
+#'   list("course", "year", "earnings")
+#' )
+#' tmp <- agg(groupBy(df, df$"course"), "min_by" = min_by(df$"year", df$"earnings"))
+#' head(tmp)}
+setMethod("min_by",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "min_by", x@jc, y@jc)
             column(jc)
           })
 
@@ -1541,6 +1638,19 @@ setMethod("negate",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "negate", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{octet_length}: Calculates the byte length for the specified string column.
+#'
+#' @rdname column_string_functions
+#' @aliases octet_length octet_length,Column-method
+#' @note length since 3.3.0
+setMethod("octet_length",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "octet_length", x@jc)
             column(jc)
           })
 
@@ -2325,6 +2435,8 @@ setMethod("var_samp",
 
 #' @details
 #' \code{weekofyear}: Extracts the week number as an integer from a given date/timestamp/string.
+#' A week is considered to start on a Monday and week 1 is the first week with more than 3 days,
+#' as defined by ISO 8601
 #'
 #' @rdname column_datetime_functions
 #' @aliases weekofyear weekofyear,Column-method
@@ -3334,6 +3446,19 @@ setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "rpad",
                               x@jc, as.integer(len), pad)
+            column(jc)
+          })
+
+#' @details
+#' \code{sec}: Returns the secant of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases sec sec,Column-method
+#' @note sec since 3.3.0
+setMethod("sec",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "sec", x@jc)
             column(jc)
           })
 

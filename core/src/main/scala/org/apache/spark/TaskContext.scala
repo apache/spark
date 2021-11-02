@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io.Serializable
 import java.util.Properties
 
-import org.apache.spark.annotation.{DeveloperApi, Evolving}
+import org.apache.spark.annotation.{DeveloperApi, Evolving, Since}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
@@ -67,7 +67,8 @@ object TaskContext {
    * An empty task context that does not represent an actual task.  This is only used in tests.
    */
   private[spark] def empty(): TaskContextImpl = {
-    new TaskContextImpl(0, 0, 0, 0, 0, null, new Properties, null)
+    new TaskContextImpl(0, 0, 0, 0, 0,
+      null, new Properties, null, TaskMetrics.empty, 1)
   }
 }
 
@@ -101,6 +102,11 @@ abstract class TaskContext extends Serializable {
    * Adds a (Java friendly) listener to be executed on task completion.
    * This will be called in all situations - success, failure, or cancellation. Adding a listener
    * to an already completed task will result in that listener being called immediately.
+   *
+   * Two listeners registered in the same thread will be invoked in reverse order of registration if
+   * the task completes after both are registered. There are no ordering guarantees for listeners
+   * registered in different threads, or for listeners registered after the task completes.
+   * Listeners are guaranteed to execute sequentially.
    *
    * An example use is for HadoopRDD to register a callback to close the input stream.
    *
@@ -176,6 +182,12 @@ abstract class TaskContext extends Serializable {
    * `org.apache.spark.SparkContext.setLocalProperty`.
    */
   def getLocalProperty(key: String): String
+
+  /**
+   * CPUs allocated to the task.
+   */
+  @Since("3.3.0")
+  def cpus(): Int
 
   /**
    * Resources allocated to the task. The key is the resource name and the value is information

@@ -21,7 +21,13 @@ TakeOrderedAndProject [ca_zip,ca_city,sum(ws_sales_price)]
                                         InputAdapter
                                           Scan parquet default.web_sales [ws_item_sk,ws_bill_customer_sk,ws_sales_price,ws_sold_date_sk]
                                             SubqueryBroadcast [d_date_sk] #1
-                                              ReusedExchange [d_date_sk] #2
+                                              BroadcastExchange #2
+                                                WholeStageCodegen (1)
+                                                  Project [d_date_sk]
+                                                    Filter [d_qoy,d_year,d_date_sk]
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]
                                     InputAdapter
                                       BroadcastExchange #3
                                         WholeStageCodegen (1)
@@ -37,13 +43,7 @@ TakeOrderedAndProject [ca_zip,ca_city,sum(ws_sales_price)]
                                           InputAdapter
                                             Scan parquet default.customer_address [ca_address_sk,ca_city,ca_zip]
                             InputAdapter
-                              BroadcastExchange #2
-                                WholeStageCodegen (3)
-                                  Project [d_date_sk]
-                                    Filter [d_qoy,d_year,d_date_sk]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]
+                              ReusedExchange [d_date_sk] #2
                         InputAdapter
                           BroadcastExchange #5
                             WholeStageCodegen (4)

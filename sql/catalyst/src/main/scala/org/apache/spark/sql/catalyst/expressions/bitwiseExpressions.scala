@@ -233,10 +233,10 @@ object BitwiseGetUtil {
 
 @ExpressionDescription(
   usage = """
-            |_FUNC_(expr, pos) - Returns the value of the bit (0 or 1) at the specified position.
-            |  The positions are numbered from right to left, starting at zero.
-            |  The position argument cannot be negative.
-          """,
+    _FUNC_(expr, pos) - Returns the value of the bit (0 or 1) at the specified position.
+      The positions are numbered from right to left, starting at zero.
+      The position argument cannot be negative.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(11, 0);

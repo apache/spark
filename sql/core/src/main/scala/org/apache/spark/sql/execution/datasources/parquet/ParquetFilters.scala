@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.lang.{Boolean => JBoolean, Double => JDouble, Float => JFloat, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Duration, Instant, LocalDate, Period}
 import java.util.Locale
 
 import scala.collection.JavaConverters.asScalaBufferConverter
@@ -34,7 +34,9 @@ import org.apache.parquet.schema.LogicalTypeAnnotation.{DecimalLogicalTypeAnnota
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros}
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -48,7 +50,8 @@ class ParquetFilters(
     pushDownDecimal: Boolean,
     pushDownStartWith: Boolean,
     pushDownInFilterThreshold: Int,
-    caseSensitive: Boolean) {
+    caseSensitive: Boolean,
+    datetimeRebaseMode: LegacyBehaviorPolicy.Value) {
   // A map which contains parquet field name and data type, if predicate push down applies.
   //
   // Each key in `nameToParquetField` represents a column; `dots` are used as separators for
@@ -129,14 +132,26 @@ class ParquetFilters(
   private val ParquetTimestampMillisType =
     ParquetSchemaType(LogicalTypeAnnotation.timestampType(true, TimeUnit.MILLIS), INT64, 0)
 
-  private def dateToDays(date: Any): Int = date match {
-    case d: Date => DateTimeUtils.fromJavaDate(d)
-    case ld: LocalDate => DateTimeUtils.localDateToDays(ld)
+  private def dateToDays(date: Any): Int = {
+    val gregorianDays = date match {
+      case d: Date => DateTimeUtils.fromJavaDate(d)
+      case ld: LocalDate => DateTimeUtils.localDateToDays(ld)
+    }
+    datetimeRebaseMode match {
+      case LegacyBehaviorPolicy.LEGACY => rebaseGregorianToJulianDays(gregorianDays)
+      case _ => gregorianDays
+    }
   }
 
-  private def timestampToMicros(v: Any): JLong = v match {
-    case i: Instant => DateTimeUtils.instantToMicros(i)
-    case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
+  private def timestampToMicros(v: Any): JLong = {
+    val gregorianMicros = v match {
+      case i: Instant => DateTimeUtils.instantToMicros(i)
+      case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
+    }
+    datetimeRebaseMode match {
+      case LegacyBehaviorPolicy.LEGACY => rebaseGregorianToJulianMicros(gregorianMicros)
+      case _ => gregorianMicros
+    }
   }
 
   private def decimalToInt32(decimal: JBigDecimal): Integer = decimal.unscaledValue().intValue()
@@ -164,16 +179,26 @@ class ParquetFilters(
     millis.asInstanceOf[JLong]
   }
 
+  private def toIntValue(v: Any): Integer = {
+    Option(v).map {
+      case p: Period => IntervalUtils.periodToMonths(p)
+      case n => n.asInstanceOf[Number].intValue
+    }.map(_.asInstanceOf[Integer]).orNull
+  }
+
+  private def toLongValue(v: Any): JLong = v match {
+    case d: Duration => IntervalUtils.durationToMicros(d)
+    case l => l.asInstanceOf[JLong]
+  }
+
   private val makeEq:
     PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetBooleanType =>
       (n: Array[String], v: Any) => FilterApi.eq(booleanColumn(n), v.asInstanceOf[JBoolean])
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
-      (n: Array[String], v: Any) => FilterApi.eq(
-        intColumn(n),
-        Option(v).map(_.asInstanceOf[Number].intValue.asInstanceOf[Integer]).orNull)
+      (n: Array[String], v: Any) => FilterApi.eq(intColumn(n), toIntValue(v))
     case ParquetLongType =>
-      (n: Array[String], v: Any) => FilterApi.eq(longColumn(n), v.asInstanceOf[JLong])
+      (n: Array[String], v: Any) => FilterApi.eq(longColumn(n), toLongValue(v))
     case ParquetFloatType =>
       (n: Array[String], v: Any) => FilterApi.eq(floatColumn(n), v.asInstanceOf[JFloat])
     case ParquetDoubleType =>
@@ -221,11 +246,9 @@ class ParquetFilters(
     case ParquetBooleanType =>
       (n: Array[String], v: Any) => FilterApi.notEq(booleanColumn(n), v.asInstanceOf[JBoolean])
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
-      (n: Array[String], v: Any) => FilterApi.notEq(
-        intColumn(n),
-        Option(v).map(_.asInstanceOf[Number].intValue.asInstanceOf[Integer]).orNull)
+      (n: Array[String], v: Any) => FilterApi.notEq(intColumn(n), toIntValue(v))
     case ParquetLongType =>
-      (n: Array[String], v: Any) => FilterApi.notEq(longColumn(n), v.asInstanceOf[JLong])
+      (n: Array[String], v: Any) => FilterApi.notEq(longColumn(n), toLongValue(v))
     case ParquetFloatType =>
       (n: Array[String], v: Any) => FilterApi.notEq(floatColumn(n), v.asInstanceOf[JFloat])
     case ParquetDoubleType =>
@@ -270,10 +293,9 @@ class ParquetFilters(
   private val makeLt:
     PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
-      (n: Array[String], v: Any) =>
-        FilterApi.lt(intColumn(n), v.asInstanceOf[Number].intValue.asInstanceOf[Integer])
+      (n: Array[String], v: Any) => FilterApi.lt(intColumn(n), toIntValue(v))
     case ParquetLongType =>
-      (n: Array[String], v: Any) => FilterApi.lt(longColumn(n), v.asInstanceOf[JLong])
+      (n: Array[String], v: Any) => FilterApi.lt(longColumn(n), toLongValue(v))
     case ParquetFloatType =>
       (n: Array[String], v: Any) => FilterApi.lt(floatColumn(n), v.asInstanceOf[JFloat])
     case ParquetDoubleType =>
@@ -308,10 +330,9 @@ class ParquetFilters(
   private val makeLtEq:
     PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
-      (n: Array[String], v: Any) =>
-        FilterApi.ltEq(intColumn(n), v.asInstanceOf[Number].intValue.asInstanceOf[Integer])
+      (n: Array[String], v: Any) => FilterApi.ltEq(intColumn(n), toIntValue(v))
     case ParquetLongType =>
-      (n: Array[String], v: Any) => FilterApi.ltEq(longColumn(n), v.asInstanceOf[JLong])
+      (n: Array[String], v: Any) => FilterApi.ltEq(longColumn(n), toLongValue(v))
     case ParquetFloatType =>
       (n: Array[String], v: Any) => FilterApi.ltEq(floatColumn(n), v.asInstanceOf[JFloat])
     case ParquetDoubleType =>
@@ -346,10 +367,9 @@ class ParquetFilters(
   private val makeGt:
     PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
-      (n: Array[String], v: Any) =>
-        FilterApi.gt(intColumn(n), v.asInstanceOf[Number].intValue.asInstanceOf[Integer])
+      (n: Array[String], v: Any) => FilterApi.gt(intColumn(n), toIntValue(v))
     case ParquetLongType =>
-      (n: Array[String], v: Any) => FilterApi.gt(longColumn(n), v.asInstanceOf[JLong])
+      (n: Array[String], v: Any) => FilterApi.gt(longColumn(n), toLongValue(v))
     case ParquetFloatType =>
       (n: Array[String], v: Any) => FilterApi.gt(floatColumn(n), v.asInstanceOf[JFloat])
     case ParquetDoubleType =>
@@ -384,10 +404,9 @@ class ParquetFilters(
   private val makeGtEq:
     PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
-      (n: Array[String], v: Any) =>
-        FilterApi.gtEq(intColumn(n), v.asInstanceOf[Number].intValue.asInstanceOf[Integer])
+      (n: Array[String], v: Any) => FilterApi.gtEq(intColumn(n), toIntValue(v))
     case ParquetLongType =>
-      (n: Array[String], v: Any) => FilterApi.gtEq(longColumn(n), v.asInstanceOf[JLong])
+      (n: Array[String], v: Any) => FilterApi.gtEq(longColumn(n), toLongValue(v))
     case ParquetFloatType =>
       (n: Array[String], v: Any) => FilterApi.gtEq(floatColumn(n), v.asInstanceOf[JFloat])
     case ParquetDoubleType =>
@@ -424,14 +443,14 @@ class ParquetFilters(
       (Array[String], Array[Any], ParquetStatistics[_]) => FilterPredicate] = {
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], v: Array[Any], statistics: ParquetStatistics[_]) =>
-        v.map(_.asInstanceOf[Number].intValue).foreach(statistics.updateStats)
+        v.map(toIntValue(_).toInt).foreach(statistics.updateStats)
         FilterApi.and(
           FilterApi.gtEq(intColumn(n), statistics.genericGetMin().asInstanceOf[Integer]),
           FilterApi.ltEq(intColumn(n), statistics.genericGetMax().asInstanceOf[Integer]))
 
     case ParquetLongType =>
       (n: Array[String], v: Array[Any], statistics: ParquetStatistics[_]) =>
-        v.map(_.asInstanceOf[JLong]).foreach(statistics.updateStats(_))
+        v.map(toLongValue).foreach(statistics.updateStats(_))
         FilterApi.and(
           FilterApi.gtEq(longColumn(n), statistics.genericGetMin().asInstanceOf[JLong]),
           FilterApi.ltEq(longColumn(n), statistics.genericGetMax().asInstanceOf[JLong]))
@@ -562,8 +581,9 @@ class ParquetFilters(
   private def valueCanMakeFilterOn(name: String, value: Any): Boolean = {
     value == null || (nameToParquetField(name).fieldType match {
       case ParquetBooleanType => value.isInstanceOf[JBoolean]
+      case ParquetIntegerType if value.isInstanceOf[Period] => true
       case ParquetByteType | ParquetShortType | ParquetIntegerType => value.isInstanceOf[Number]
-      case ParquetLongType => value.isInstanceOf[JLong]
+      case ParquetLongType => value.isInstanceOf[JLong] || value.isInstanceOf[Duration]
       case ParquetFloatType => value.isInstanceOf[JFloat]
       case ParquetDoubleType => value.isInstanceOf[JDouble]
       case ParquetStringType => value.isInstanceOf[String]
@@ -710,7 +730,7 @@ class ParquetFilters(
           values.distinct.flatMap { v =>
             makeEq.lift(fieldType).map(_(fieldNames, v))
           }.reduceLeftOption(FilterApi.or)
-        } else {
+        } else if (canPartialPushDownConjuncts) {
           val primitiveType = schema.getColumnDescription(fieldNames).getPrimitiveType
           val statistics: ParquetStatistics[_] = ParquetStatistics.createStats(primitiveType)
           if (values.contains(null)) {
@@ -721,6 +741,8 @@ class ParquetFilters(
           } else {
             makeInPredicate.lift(fieldType).map(_(fieldNames, values, statistics))
           }
+        } else {
+          None
         }
 
       case sources.StringStartsWith(name, prefix)

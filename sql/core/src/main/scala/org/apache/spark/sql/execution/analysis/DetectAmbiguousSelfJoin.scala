@@ -65,7 +65,7 @@ object DetectAmbiguousSelfJoin extends Rule[LogicalPlan] {
 
   object AttrWithCast {
     def unapply(expr: Expression): Option[AttributeReference] = expr match {
-      case Cast(child, _, _) => unapply(child)
+      case Cast(child, _, _, _) => unapply(child)
       case a: AttributeReference => Some(a)
       case _ => None
     }

@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - name: "Update build status"
-        uses: actions/github-script@v3
+        uses: actions/github-script@f05a81df23035049204b043b50c3322045ce7eb3 # pin@v3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -63,7 +63,15 @@ jobs:
                       const params = JSON.parse(cr.output.text)
 
                       // Get the workflow run in the forked repository
-                      const run = await github.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}', params)
+                      let run
+                      try {
+                        run = await github.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}', params)
+                      } catch (error) {
+                        console.error(error)
+                        // Run not found. This can happen when the PR author removes GitHub Actions runs or
+                        // disalbes GitHub Actions.
+                        continue
+                      }
 
                       // Keep syncing the status of the checks
                       if (run.data.status == 'completed') {
