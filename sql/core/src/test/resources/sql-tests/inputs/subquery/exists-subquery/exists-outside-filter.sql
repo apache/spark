@@ -83,8 +83,38 @@ SELECT
                                     WHERE  emp.emp_name = bonus.emp_name))
 FROM   emp;
 
--- uncorrelated exist in window
+-- correlated exist in DISTINCT aggregate filter
 -- TC.01.06
+SELECT
+    sum(DISTINCT salary),
+    count(DISTINCT hiredate) FILTER (WHERE EXISTS (SELECT 1
+                                    FROM   dept
+                                    WHERE  emp.dept_id = dept.dept_id))
+FROM   emp;
+
+-- correlated exist in group by of an aggregate
+-- TC.01.07
+SELECT
+    count(hiredate),
+    sum(salary)
+FROM   emp
+GROUP BY EXISTS (SELECT 1
+                FROM   dept
+                WHERE  emp.dept_id = dept.dept_id);
+
+-- correlated exist in group by of a distinct aggregate
+-- TC.01.08
+SELECT
+    count(DISTINCT hiredate),
+    sum(DISTINCT salary)
+FROM   emp
+GROUP BY EXISTS (SELECT 1
+                 FROM   dept
+                 WHERE  emp.dept_id = dept.dept_id);
+
+
+-- uncorrelated exist in window
+-- TC.01.09
 SELECT
     emp_name,
     sum(salary) OVER (PARTITION BY EXISTS (SELECT 1
@@ -94,7 +124,7 @@ SELECT
 FROM   emp;
 
 -- correlated exist in window
--- TC.01.07
+-- TC.01.10
 SELECT
     emp_name,
     sum(salary) OVER (PARTITION BY EXISTS (SELECT 1
