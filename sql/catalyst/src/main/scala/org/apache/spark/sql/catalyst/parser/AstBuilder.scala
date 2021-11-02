@@ -4429,7 +4429,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
 
     val columns = ctx.columns.multipartIdentifierProperty.asScala
-      .map(_.multipartIdentifier).map(typedVisit[Seq[String]])
+      .map(_.multipartIdentifier).map(typedVisit[Seq[String]]).toSeq
     val columnsProperties = ctx.columns.multipartIdentifierProperty.asScala
       .map(x => (Option(x.options).map(visitPropertyKeyValues).getOrElse(Map.empty))).toSeq
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
