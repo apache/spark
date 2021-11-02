@@ -94,7 +94,7 @@ private[spark] class KubernetesDriverConf(
   override def labels: Map[String, String] = {
     val presetLabels = Map(
       SPARK_APP_ID_LABEL -> appId,
-      SPARK_APP_NAME_LABEL -> appName,
+      SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(appName),
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
     val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_DRIVER_LABEL_PREFIX)
@@ -156,7 +156,7 @@ private[spark] class KubernetesExecutorConf(
     val presetLabels = Map(
       SPARK_EXECUTOR_ID_LABEL -> executorId,
       SPARK_APP_ID_LABEL -> appId,
-      SPARK_APP_NAME_LABEL -> appName,
+      SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(appName),
       SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE,
       SPARK_RESOURCE_PROFILE_ID_LABEL -> resourceProfileId.toString)
 
@@ -244,6 +244,14 @@ private[spark] object KubernetesConf {
   def getResourceNamePrefix(appName: String): String = {
     val id = KubernetesUtils.uniqueID()
     s"$appName-$id"
+      .trim
+      .toLowerCase(Locale.ROOT)
+      .replaceAll("[^a-z0-9\\-]", "-")
+      .replaceAll("-+", "-")
+  }
+
+  def getAppNameLabel(appName: String): String = {
+    s"$appName"
       .trim
       .toLowerCase(Locale.ROOT)
       .replaceAll("[^a-z0-9\\-]", "-")
