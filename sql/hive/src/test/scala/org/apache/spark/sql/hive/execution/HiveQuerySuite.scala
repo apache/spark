@@ -1424,10 +1424,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     assertUnsupportedFeature { sql("UNLOCK DATABASE my_db") }
   }
 
-  test("create/drop/alter index commands are not supported") {
+  test("alter index commands are not supported") {
     assertUnsupportedFeature {
-      sql("CREATE INDEX my_index ON TABLE my_table(a) as 'COMPACT' WITH DEFERRED REBUILD")}
-    assertUnsupportedFeature { sql("DROP INDEX my_index ON my_table") }
     assertUnsupportedFeature { sql("ALTER INDEX my_index ON my_table REBUILD")}
     assertUnsupportedFeature {
       sql("ALTER INDEX my_index ON my_table set IDXPROPERTIES (\"prop1\"=\"val1_new\")")}
