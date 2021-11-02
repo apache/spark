@@ -32,8 +32,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
  * {{{
  *   SELECT * FROM t1 JOIN t2 ON t1.a + 10 = t2.x ==>
  *   Project [a#0, b#1, x#2, y#3]
- *   +- Join Inner, ((spark_catalog.default.t1.a + 10)#8 = x#2)
- *      :- Project [a#0, b#1, (a#0 + 10) AS (spark_catalog.default.t1.a + 10)#8]
+ *   +- Join Inner, ((a#0 + 10)#8 = x#2)
+ *      :- Project [a#0, b#1, (a#0 + 10) AS (a#0 + 10)#8]
  *      :  +- Filter isnotnull((a#0 + 10))
  *      :     +- Relation default.t1[a#0,b#1] parquet
  *      +- Filter isnotnull(x#2)
@@ -44,7 +44,7 @@ object PullOutJoinCondition extends Rule[LogicalPlan]
   with JoinSelectionHelper with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(_.containsPattern(JOIN)) {
-    case j @ Join(left, right, _, Some(condition), _) if j.resolved && !j.isStreaming =>
+    case j @ Join(left, right, _, Some(condition), _) if j.resolved =>
       val complexExpressions = splitConjunctivePredicates(condition).flatMap(_.children).flatMap {
         case e: Expression if !e.foldable && e.children.nonEmpty => Seq(e)
         case _ => Nil
@@ -54,9 +54,9 @@ object PullOutJoinCondition extends Rule[LogicalPlan]
       val rightComplexExpressions = complexExpressions.filter(canEvaluate(_, right))
 
       val leftComplexExpressionMap =
-        leftComplexExpressions.map(e => e.canonicalized -> Alias(e, e.sql)()).toMap
+        leftComplexExpressions.map(e => e.canonicalized -> Alias(e, e.toString)()).toMap
       val rightComplexExpressionMap =
-        rightComplexExpressions.map(e => e.canonicalized -> Alias(e, e.sql)()).toMap
+        rightComplexExpressions.map(e => e.canonicalized -> Alias(e, e.toString)()).toMap
       val allComplexExpressionMap = leftComplexExpressionMap ++ rightComplexExpressionMap
 
       if (allComplexExpressionMap.nonEmpty) {

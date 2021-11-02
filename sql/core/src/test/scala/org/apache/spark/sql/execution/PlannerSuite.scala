@@ -999,6 +999,14 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
         assert(sortNodes.size == 3)
         val exchangeNodes = collect(planned) { case e: ShuffleExchangeExec => e }
         assert(exchangeNodes.size == 3)
+
+        val projects = collect(planned) { case p: ProjectExec => p }
+        assert(projects.exists(_.outputPartitioning match {
+          case HashPartitioning(Seq(Multiply(ar1: AttributeReference, _, _)), _) =>
+            ar1.name == "t1id"
+          case _ =>
+            false
+        }))
       }
     }
   }
