@@ -56,7 +56,6 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
 
   // The memory overhead factor to use. If the user has not set it, then use a different
   // value for non-JVM apps. This value is propagated to executors.
-  //
   private val overheadFactor =
     if (conf.mainAppResource.isInstanceOf[PythonMainAppResource] ||
       conf.mainAppResource.isInstanceOf[RMainAppResource]) {
