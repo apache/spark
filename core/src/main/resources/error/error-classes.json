@@ -69,14 +69,14 @@
     "message" : [ "%s" ]
   },
   "INVALID_ARRAY_INDEX" : {
-    "message" : [ "Invalid index: %s, numElements: %s" ]
+    "message" : [ "Invalid index: %s, numElements: %s. If necessary set %s to false to bypass this error." ]
   },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name %s is invalid: %s is not a struct." ],
     "sqlState" : "42000"
   },
   "INVALID_FRACTION_OF_SECOND" : {
-    "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]." ],
+    "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set %s to false to bypass this error. " ],
     "sqlState" : "22023"
   },
   "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE" : {
@@ -87,7 +87,7 @@
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
-    "message" : [ "Key %s does not exist." ]
+    "message" : [ "Key %s does not exist. If necessary set %s to false to bypass this error." ]
   },
   "MISSING_COLUMN" : {
     "message" : [ "Column '%s' does not exist. Did you mean one of the following? [%s]" ],

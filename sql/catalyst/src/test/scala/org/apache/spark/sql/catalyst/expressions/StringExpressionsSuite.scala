@@ -956,7 +956,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         evaluateWithoutCodegen(
           ParseUrl(Seq("https://a.b.c/index.php?params1=a|b&params2=x", "HOST")))
       }.getMessage
-      assert(msg.contains("Find an invaild url string"))
+      assert(msg.contains("Find an invalid url string"))
     }
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       checkEvaluation(

@@ -323,7 +323,12 @@ case class MakeInterval(
         min.asInstanceOf[Int],
         sec.map(_.asInstanceOf[Decimal]).getOrElse(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
     } catch {
-      case _: ArithmeticException if !failOnError => null
+      case e: ArithmeticException =>
+        if (failOnError) {
+          throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage)
+        } else {
+          null
+        }
     }
   }
 
@@ -331,7 +336,11 @@ case class MakeInterval(
     nullSafeCodeGen(ctx, ev, (year, month, week, day, hour, min, sec) => {
       val iu = IntervalUtils.getClass.getName.stripSuffix("$")
       val secFrac = sec.getOrElse("0")
-      val failOnErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
+      val failOnErrorBranch = if (failOnError) {
+        "throw QueryExecutionErrors.arithmeticOverflowError(e);"
+      } else {
+        s"${ev.isNull} = true;"
+      }
       s"""
         try {
           ${ev.value} = $iu.makeInterval($year, $month, $week, $day, $hour, $min, $secFrac);
