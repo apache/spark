@@ -1075,9 +1075,10 @@ case class CreateIndex(
  * The logical plan of the DROP INDEX command.
  */
 case class DropIndex(
-    child: LogicalPlan,
+    table: LogicalPlan,
     indexName: String,
     ignoreIfNotExists: Boolean) extends UnaryCommand {
+  override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): DropIndex =
-    copy(child = newChild)
+    copy(table = newChild)
 }
