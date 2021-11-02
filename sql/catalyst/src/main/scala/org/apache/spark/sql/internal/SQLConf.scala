@@ -4078,7 +4078,7 @@ class SQLConf extends Serializable with Logging {
   def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
 
   def allowCastBetweenDatetimeAndNumericInAnsi: Boolean =
-    ansiEnabled && getConf(ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI)
+    getConf(ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>
