@@ -457,10 +457,10 @@ object OrcUtils extends Logging {
       }
     }
 
-    // if there are group by columns, we will build result set row first,
-    // and then append group by columns values (partition col values) to the result set row.
+    // if there are group by columns, we will build result row first,
+    // and then append group by columns values (partition columns values) to the result row.
     val schemaWithoutGroupby =
-      AggregatePushDownUtils.aggSchemaWithOutGroupBy(aggregation, aggSchema)
+      AggregatePushDownUtils.getSchemaWithoutGroupingExpression(aggregation, aggSchema)
 
     val aggORCValues: Seq[WritableComparable[_]] =
       aggregation.aggregateExpressions.zipWithIndex.map {
@@ -497,10 +497,11 @@ object OrcUtils extends Logging {
 
     val orcValuesDeserializer = new OrcDeserializer(schemaWithoutGroupby,
       (0 until schemaWithoutGroupby.length).toArray)
+    val resultRow = orcValuesDeserializer.deserializeFromValues(aggORCValues)
     if (aggregation.groupByColumns.length > 0) {
-      new JoinedRow(partitionValues, orcValuesDeserializer.deserializeFromValues(aggORCValues))
+      new JoinedRow(partitionValues, resultRow)
     } else {
-      orcValuesDeserializer.deserializeFromValues(aggORCValues)
+      resultRow
     }
   }
 }

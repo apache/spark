@@ -167,10 +167,10 @@ object ParquetUtils {
     primitiveTypes.foreach(t => builder.addField(t))
     val parquetSchema = builder.named("root")
 
-    // if there are group by columns, we will build result set row first,
-    // and then append group by columns values (partition col values) to the result set row.
+    // if there are group by columns, we will build result row first,
+    // and then append group by columns values (partition columns values) to the result row.
     val schemaWithoutGroupby =
-      AggregatePushDownUtils.aggSchemaWithOutGroupBy(aggregation, aggSchema)
+      AggregatePushDownUtils.getSchemaWithoutGroupingExpression(aggregation, aggSchema)
 
     val schemaConverter = new ParquetToSparkSchemaConverter
     val converter = new ParquetRowConverter(schemaConverter, parquetSchema, schemaWithoutGroupby,

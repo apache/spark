@@ -142,7 +142,12 @@ object AggregatePushDownUtils {
     new ColumnarBatch(columnVectors.asInstanceOf[Array[ColumnVector]], 1)
   }
 
-  def aggSchemaWithOutGroupBy(aggregation: Aggregation, aggSchema: StructType): StructType = {
+  /**
+   * Return the schema for aggregates only (exclude group by columns)
+   */
+  def getSchemaWithoutGroupingExpression(
+      aggregation: Aggregation,
+      aggSchema: StructType): StructType = {
     val groupByColNums = aggregation.groupByColumns.length
     if (groupByColNums > 0) {
       new StructType(aggSchema.fields.drop(groupByColNums))

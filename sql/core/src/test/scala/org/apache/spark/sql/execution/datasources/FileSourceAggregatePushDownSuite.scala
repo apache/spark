@@ -270,17 +270,17 @@ trait FileSourceAggregatePushDownSuite
         Seq("false", "true").foreach { enableVectorizedReader =>
           withSQLConf(aggPushDownEnabledKey -> "true",
             vectorizedReaderEnabledKey -> enableVectorizedReader) {
-            val df = sql("SELECT count(*), count(id), p, max(id), p, p, max(id), min(id), p" +
-              " FROM tmp group by p")
+            val df = sql("SELECT count(*), count(id), p, max(id), p, count(p), max(id)," +
+              "  min(id), p FROM tmp group by p")
             df.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>
                 val expected_plan_fragment =
-                  "PushedAggregation: [COUNT(*), COUNT(id), MAX(id), MIN(id)], " +
+                  "PushedAggregation: [COUNT(*), COUNT(id), MAX(id), COUNT(p), MIN(id)], " +
                     "PushedFilters: [], PushedGroupBy: [p]"
                 checkKeywordsExistsInExplain(df, expected_plan_fragment)
             }
-            checkAnswer(df, Seq(Row(3, 3, 1, 7, 1, 1, 7, 1, 1), Row(3, 3, 2, 8, 2, 2, 8, 2, 2),
-              Row(4, 4, 0, 9, 0, 0, 9, 0, 0)))
+            checkAnswer(df, Seq(Row(3, 3, 1, 7, 1, 3, 7, 1, 1), Row(3, 3, 2, 8, 2, 3, 8, 2, 2),
+              Row(4, 4, 0, 9, 0, 4, 9, 0, 0)))
           }
         }
       }
