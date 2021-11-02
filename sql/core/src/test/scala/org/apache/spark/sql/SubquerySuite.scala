@@ -1946,7 +1946,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("Add jira: deterministic in QueryPlan considers subquery") {
+  test("SPARK-37199: deterministic in QueryPlan considers subquery") {
     val deterministicQueryPlan = sql("select (select 1 as b) as b")
       .queryExecution.executedPlan
     assert(deterministicQueryPlan.deterministic)

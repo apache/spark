@@ -102,7 +102,7 @@ class QueryPlanSuite extends SparkFunSuite {
     assert(testRule(plan).resolved)
   }
 
-  test("Add jira: add a deterministic field to QueryPlan") {
+  test("SPARK-37199: add a deterministic field to QueryPlan") {
     val a: NamedExpression = AttributeReference("a", IntegerType)()
     val aRand: NamedExpression = Alias(a + Rand(1), "aRand")()
     val deterministicPlan = Project(
