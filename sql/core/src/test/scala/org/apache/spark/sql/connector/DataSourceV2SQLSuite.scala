@@ -2937,10 +2937,15 @@ class DataSourceV2SQLSuite
     val t = "testcat.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string COMMENT 'hello') USING foo")
-      val ex = intercept[AnalysisException] {
-        sql(s"CREATE index i1 ON $t(col1)")
+      val e1 = intercept[AnalysisException] {
+        sql(s"CREATE index i1 ON $t(non_exist)")
       }
-      assert(ex.getMessage.contains(s"CreateIndex is not supported in this table $t."))
+      assert(e1.getMessage.contains(s"Missing field non_exist in table $t"))
+
+      val e2 = intercept[AnalysisException] {
+        sql(s"CREATE index i1 ON $t(id)")
+      }
+      assert(e2.getMessage.contains(s"CreateIndex is not supported in this table $t."))
     }
   }
 
