@@ -34,15 +34,23 @@ import org.apache.spark.sql.types.{NumericType, StringType, StructType}
 private[ml] trait TargetEncoderParams extends HasInputCols with HasOutputCols
   with HasLabelCol with HasHandleInvalid {
 
+  /** @group setParam */
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)
 
+  /** @group setParam */
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
+  /** @group setParam */
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
+  /** @group setParam */
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
   setDefault(handleInvalid, TargetEncoder.ERROR_INVALID)
 
+
+  /**
+   * validates and transforms data schema
+   */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
 
     $(inputCols).foreach(inputColName => {
@@ -201,5 +209,4 @@ object TargetEncoderModel extends MLReadable[TargetEncoderModel] {
   override def read: MLReader[TargetEncoderModel] = new TargetEncoderModelReader
 
   override def load(path: String): TargetEncoderModel = super.load(path)
-
 }
