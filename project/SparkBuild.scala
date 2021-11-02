@@ -250,7 +250,9 @@ object SparkBuild extends PomBuild {
           "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
           "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s",
           // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
-          "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e"
+          "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
+          // SPARK-35496 Suppress `The outer reference in this type test cannot be checked at run time`
+          "-Wconf:msg=cat=unchecked&outer reference:s"
         )
       }
     }
