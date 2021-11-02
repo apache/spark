@@ -162,7 +162,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     assert(jdbcTable.indexExists("i1") == true)
     assert(jdbcTable.indexExists("i2") == true)
 
-    // This should pass without Exception
+    // This should pass without exception
     sql(s"CREATE index IF NOT EXISTS i1 ON $catalogName.new_table (col1)")
 
     m = intercept[IndexAlreadyExistsException] {
@@ -176,7 +176,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     assert(jdbcTable.indexExists("i1") == false)
     assert(jdbcTable.indexExists("i2") == false)
 
-    // This should pass without Exception
+    // This should pass without exception
     sql(s"DROP index IF EXISTS i1 ON $catalogName.new_table")
 
     m = intercept[NoSuchIndexException] {

@@ -34,7 +34,7 @@ case class DropIndexExec(
       table.dropIndex(indexName)
     } catch {
       case _: NoSuchIndexException if ignoreIfNotExists =>
-        logWarning(s"Index $indexName not exists. Ignoring.")
+        logWarning(s"Index $indexName does not exist. Ignoring.")
     }
     Seq.empty
   }
