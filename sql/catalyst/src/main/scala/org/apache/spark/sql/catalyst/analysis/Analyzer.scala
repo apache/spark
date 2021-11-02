@@ -272,7 +272,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveInsertInto ::
       ResolveRelations ::
       ResolvePartitionSpec ::
-      ResolveAlterTableCommands ::
+      ResolveFieldNameAndPosition ::
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveReferences ::
@@ -3529,11 +3529,18 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   /**
-   * Rule to mostly resolve, normalize and rewrite column names based on case sensitivity
-   * for alter table column commands.
+   * Rule to resolve, normalize and rewrite field names based on case sensitivity for commands.
    */
-  object ResolveAlterTableCommands extends Rule[LogicalPlan] {
+  object ResolveFieldNameAndPosition extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case cmd: CreateIndex if cmd.table.resolved &&
+          cmd.columns.exists(_._1.isInstanceOf[UnresolvedFieldName]) =>
+        val table = cmd.table.asInstanceOf[ResolvedTable]
+        cmd.copy(columns = cmd.columns.map {
+          case (u: UnresolvedFieldName, prop) => resolveFieldNames(table, u.name, u) -> prop
+          case other => other
+        })
+
       case a: AlterTableCommand if a.table.resolved && hasUnresolvedFieldName(a) =>
         val table = a.table.asInstanceOf[ResolvedTable]
         a.transformExpressions {

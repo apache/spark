@@ -4429,7 +4429,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
 
     val columns = ctx.columns.multipartIdentifierProperty.asScala
-      .map(_.multipartIdentifier.getText).toSeq
+      .map(_.multipartIdentifier).map(typedVisit[Seq[String]]).toSeq
     val columnsProperties = ctx.columns.multipartIdentifierProperty.asScala
       .map(x => (Option(x.options).map(visitPropertyKeyValues).getOrElse(Map.empty))).toSeq
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
@@ -4439,7 +4439,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       indexName,
       indexType,
       ctx.EXISTS != null,
-      columns.map(FieldReference(_).asInstanceOf[FieldReference]).zip(columnsProperties),
+      columns.map(UnresolvedFieldName(_)).zip(columnsProperties),
       options)
   }
 
