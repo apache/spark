@@ -17,7 +17,8 @@
 
 package org.apache.spark
 
-import java.io.{ByteArrayInputStream, IOException, ObjectInputStream, ObjectOutputStream}
+import java.io.{ByteArrayInputStream, InputStream, IOException, ObjectInputStream, ObjectOutputStream}
+import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
@@ -38,8 +39,9 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{MapStatus, MergeStatus, ShuffleOutputStatus}
 import org.apache.spark.shuffle.MetadataFetchFailedException
-import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
+import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId, ShuffleMergedBlockId}
 import org.apache.spark.util._
+import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 /**
  * Helper class used by the [[MapOutputTrackerMaster]] to perform bookkeeping for a single
@@ -121,14 +123,14 @@ private class ShuffleStatus(
    * broadcast variable in order to keep it from being garbage collected and to allow for it to be
    * explicitly destroyed later on when the ShuffleMapStage is garbage-collected.
    */
-  private[spark] var cachedSerializedBroadcast: Broadcast[Array[Byte]] = _
+  private[spark] var cachedSerializedBroadcast: Broadcast[Array[Array[Byte]]] = _
 
   /**
    * Similar to cachedSerializedMapStatus and cachedSerializedBroadcast, but for MergeStatus.
    */
   private[this] var cachedSerializedMergeStatus: Array[Byte] = _
 
-  private[this] var cachedSerializedBroadcastMergeStatus: Broadcast[Array[Byte]] = _
+  private[this] var cachedSerializedBroadcastMergeStatus: Broadcast[Array[Array[Byte]]] = _
 
   /**
    * Counter tracking the number of partitions that have output. This is a performance optimization
@@ -434,6 +436,8 @@ private[spark] case class GetMapOutputMessage(shuffleId: Int,
   context: RpcCallContext) extends MapOutputTrackerMasterMessage
 private[spark] case class GetMapAndMergeOutputMessage(shuffleId: Int,
   context: RpcCallContext) extends MapOutputTrackerMasterMessage
+private[spark] case class MapSizesByExecutorId(
+  iter: Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])], enableBatchFetch: Boolean)
 
 /** RpcEndpoint class for MapOutputTrackerMaster */
 private[spark] class MapOutputTrackerMasterEndpoint(
@@ -510,12 +514,19 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     getMapSizesByExecutorId(shuffleId, 0, Int.MaxValue, reduceId, reduceId + 1)
   }
 
+  // For testing
+  def getPushBasedShuffleMapSizesByExecutorId(shuffleId: Int, reduceId: Int)
+      : MapSizesByExecutorId = {
+    getPushBasedShuffleMapSizesByExecutorId(shuffleId, 0, Int.MaxValue, reduceId, reduceId + 1)
+  }
+
   /**
    * Called from executors to get the server URIs and output sizes for each shuffle block that
    * needs to be read from a given range of map output partitions (startPartition is included but
    * endPartition is excluded from the range) within a range of mappers (startMapIndex is included
-   * but endMapIndex is excluded). If endMapIndex=Int.MaxValue, the actual endMapIndex will be
-   * changed to the length of total map outputs.
+   * but endMapIndex is excluded) when push based shuffle is not enabled for the specific shuffle
+   * dependency. If endMapIndex=Int.MaxValue, the actual endMapIndex will be changed to the length
+   * of total map outputs.
    *
    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
    *         and the second item is a sequence of (shuffle block id, shuffle block size, map index)
@@ -527,7 +538,34 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       startMapIndex: Int,
       endMapIndex: Int,
       startPartition: Int,
-      endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])]
+      endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+    val mapSizesByExecutorId = getPushBasedShuffleMapSizesByExecutorId(
+      shuffleId, startMapIndex, endMapIndex, startPartition, endPartition)
+    assert(mapSizesByExecutorId.enableBatchFetch == true)
+    mapSizesByExecutorId.iter
+  }
+
+  /**
+   * Called from executors to get the server URIs and output sizes for each shuffle block that
+   * needs to be read from a given range of map output partitions (startPartition is included but
+   * endPartition is excluded from the range) within a range of mappers (startMapIndex is included
+   * but endMapIndex is excluded) when push based shuffle is enabled for the specific shuffle
+   * dependency. If endMapIndex=Int.MaxValue, the actual endMapIndex will be changed to the length
+   * of total map outputs.
+   *
+   * @return A case class object which includes two attributes. The first attribute is a sequence
+   *         of 2-item tuples, where the first item in the tuple is a BlockManagerId, and the
+   *         second item is a sequence of (shuffle block id, shuffle block size, map index) tuples
+   *         tuples describing the shuffle blocks that are stored at that block manager. Note that
+   *         zero-sized blocks are excluded in the result. The second attribute is a boolean flag,
+   *         indicating whether batch fetch can be enabled.
+   */
+  def getPushBasedShuffleMapSizesByExecutorId(
+      shuffleId: Int,
+      startMapIndex: Int,
+      endMapIndex: Int,
+      startPartition: Int,
+      endPartition: Int): MapSizesByExecutorId
 
   /**
    * Called from executors upon fetch failure on an entire merged shuffle reduce partition.
@@ -615,7 +653,7 @@ private[spark] class MapOutputTrackerMaster(
   private val mapOutputTrackerMasterMessages =
     new LinkedBlockingQueue[MapOutputTrackerMasterMessage]
 
-  private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(conf)
+  private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(conf, isDriver = true)
 
   // Thread pool used for handling map output status requests. This is a separate thread pool
   // to ensure we don't block the normal dispatcher threads.
@@ -1058,12 +1096,12 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   // This method is only called in local-mode.
-  def getMapSizesByExecutorId(
+  def getPushBasedShuffleMapSizesByExecutorId(
       shuffleId: Int,
       startMapIndex: Int,
       endMapIndex: Int,
       startPartition: Int,
-      endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+      endPartition: Int): MapSizesByExecutorId = {
     logDebug(s"Fetching outputs for shuffle $shuffleId")
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
@@ -1075,7 +1113,7 @@ private[spark] class MapOutputTrackerMaster(
             shuffleId, startPartition, endPartition, statuses, startMapIndex, actualEndMapIndex)
         }
       case None =>
-        Iterator.empty
+        MapSizesByExecutorId(Iterator.empty, true)
     }
   }
 
@@ -1124,7 +1162,11 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   val mergeStatuses: Map[Int, Array[MergeStatus]] =
     new ConcurrentHashMap[Int, Array[MergeStatus]]().asScala
 
-  private val fetchMergeResult = Utils.isPushBasedShuffleEnabled(conf)
+  // This must be lazy to ensure that it is initialized when the first task is run and not at
+  // executor startup time. At startup time, user-added libraries may not have been
+  // downloaded to the executor, causing `isPushBasedShuffleEnabled` to fail when it tries to
+  // instantiate a serializer. See the followup to SPARK-36705 for more details.
+  private lazy val fetchMergeResult = Utils.isPushBasedShuffleEnabled(conf, isDriver = false)
 
   /**
    * A [[KeyLock]] whose key is a shuffle id to ensure there is only one thread fetching
@@ -1132,12 +1174,12 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
    */
   private val fetchingLock = new KeyLock[Int]
 
-  override def getMapSizesByExecutorId(
+  override def getPushBasedShuffleMapSizesByExecutorId(
       shuffleId: Int,
       startMapIndex: Int,
       endMapIndex: Int,
       startPartition: Int,
-      endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+      endPartition: Int): MapSizesByExecutorId = {
     logDebug(s"Fetching outputs for shuffle $shuffleId")
     val (mapOutputStatuses, mergedOutputStatuses) = getStatuses(shuffleId, conf)
     try {
@@ -1318,12 +1360,9 @@ private[spark] object MapOutputTracker extends Logging {
       broadcastManager: BroadcastManager,
       isLocal: Boolean,
       minBroadcastSize: Int,
-      conf: SparkConf): (Array[Byte], Broadcast[Array[Byte]]) = {
-    // Using `org.apache.commons.io.output.ByteArrayOutputStream` instead of the standard one
-    // This implementation doesn't reallocate the whole memory block but allocates
-    // additional buffers. This way no buffers need to be garbage collected and
-    // the contents don't have to be copied to the new buffer.
-    val out = new ApacheByteArrayOutputStream()
+      conf: SparkConf): (Array[Byte], Broadcast[Array[Array[Byte]]]) = {
+    // ByteArrayOutputStream has the 2GB limit so use ChunkedByteBufferOutputStream instead
+    val out = new ChunkedByteBufferOutputStream(1024 * 1024, ByteBuffer.allocate)
     out.write(DIRECT)
     val codec = CompressionCodec.createCodec(conf, conf.get(MAP_STATUS_COMPRESSION_CODEC))
     val objOut = new ObjectOutputStream(codec.compressedOutputStream(out))
@@ -1335,13 +1374,19 @@ private[spark] object MapOutputTracker extends Logging {
     } {
       objOut.close()
     }
-    val arr = out.toByteArray
-    if (arr.length >= minBroadcastSize) {
+    val chunkedByteBuf = out.toChunkedByteBuffer
+    val arrSize = out.size
+    if (arrSize >= minBroadcastSize) {
       // Use broadcast instead.
       // Important arr(0) is the tag == DIRECT, ignore that while deserializing !
+      // arr is a nested Array so that it can handle over 2GB serialized data
+      val arr = chunkedByteBuf.getChunks().map(_.array())
       val bcast = broadcastManager.newBroadcast(arr, isLocal)
-      // toByteArray creates copy, so we can reuse out
-      out.reset()
+      // Using `org.apache.commons.io.output.ByteArrayOutputStream` instead of the standard one
+      // This implementation doesn't reallocate the whole memory block but allocates
+      // additional buffers. This way no buffers need to be garbage collected and
+      // the contents don't have to be copied to the new buffer.
+      val out = new ApacheByteArrayOutputStream()
       out.write(BROADCAST)
       val oos = new ObjectOutputStream(codec.compressedOutputStream(out))
       Utils.tryWithSafeFinally {
@@ -1350,10 +1395,10 @@ private[spark] object MapOutputTracker extends Logging {
         oos.close()
       }
       val outArr = out.toByteArray
-      logInfo("Broadcast outputstatuses size = " + outArr.length + ", actual size = " + arr.length)
+      logInfo("Broadcast outputstatuses size = " + outArr.length + ", actual size = " + arrSize)
       (outArr, bcast)
     } else {
-      (arr, null)
+      (chunkedByteBuf.toArray, null)
     }
   }
 
@@ -1362,13 +1407,12 @@ private[spark] object MapOutputTracker extends Logging {
       bytes: Array[Byte], conf: SparkConf): Array[T] = {
     assert (bytes.length > 0)
 
-    def deserializeObject(arr: Array[Byte], off: Int, len: Int): AnyRef = {
+    def deserializeObject(in: InputStream): AnyRef = {
       val codec = CompressionCodec.createCodec(conf, conf.get(MAP_STATUS_COMPRESSION_CODEC))
       // The ZStd codec is wrapped in a `BufferedInputStream` which avoids overhead excessive
       // of JNI call while trying to decompress small amount of data for each element
       // of `MapStatuses`
-      val objIn = new ObjectInputStream(codec.compressedInputStream(
-        new ByteArrayInputStream(arr, off, len)))
+      val objIn = new ObjectInputStream(codec.compressedInputStream(in))
       Utils.tryWithSafeFinally {
         objIn.readObject()
       } {
@@ -1376,18 +1420,20 @@ private[spark] object MapOutputTracker extends Logging {
       }
     }
 
+    val in = new ByteArrayInputStream(bytes, 1, bytes.length - 1)
     bytes(0) match {
       case DIRECT =>
-        deserializeObject(bytes, 1, bytes.length - 1).asInstanceOf[Array[T]]
+        deserializeObject(in).asInstanceOf[Array[T]]
       case BROADCAST =>
         try {
           // deserialize the Broadcast, pull .value array out of it, and then deserialize that
-          val bcast = deserializeObject(bytes, 1, bytes.length - 1).
-            asInstanceOf[Broadcast[Array[Byte]]]
+          val bcast = deserializeObject(in).asInstanceOf[Broadcast[Array[Array[Byte]]]]
           logInfo("Broadcast outputstatuses size = " + bytes.length +
-            ", actual size = " + bcast.value.length)
+            ", actual size = " + bcast.value.foldLeft(0L)(_ + _.length))
+          val bcastIn = new ChunkedByteBuffer(bcast.value.map(ByteBuffer.wrap)).toInputStream()
           // Important - ignore the DIRECT tag ! Start from offset 1
-          deserializeObject(bcast.value, 1, bcast.value.length - 1).asInstanceOf[Array[T]]
+          bcastIn.skip(1)
+          deserializeObject(bcastIn).asInstanceOf[Array[T]]
         } catch {
           case e: IOException =>
             logWarning("Exception encountered during deserializing broadcasted" +
@@ -1429,10 +1475,10 @@ private[spark] object MapOutputTracker extends Logging {
       mapStatuses: Array[MapStatus],
       startMapIndex : Int,
       endMapIndex: Int,
-      mergeStatuses: Option[Array[MergeStatus]] = None):
-      Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+      mergeStatuses: Option[Array[MergeStatus]] = None): MapSizesByExecutorId = {
     assert (mapStatuses != null)
     val splitsByAddress = new HashMap[BlockManagerId, ListBuffer[(BlockId, Long, Int)]]
+    var enableBatchFetch = true
     // Only use MergeStatus for reduce tasks that fetch all map outputs. Since a merged shuffle
     // partition consists of blocks merged in random order, we are unable to serve map index
     // subrange requests. However, when a reduce task needs to fetch blocks from a subrange of
@@ -1441,8 +1487,10 @@ private[spark] object MapOutputTracker extends Logging {
     // TODO: SPARK-35036: Instead of reading map blocks in case of AQE with Push based shuffle,
     // TODO: improve push based shuffle to read partial merged blocks satisfying the start/end
     // TODO: map indexes
-    if (mergeStatuses.exists(_.nonEmpty) && startMapIndex == 0
+    if (mergeStatuses.exists(_.exists(_ != null)) && startMapIndex == 0
       && endMapIndex == mapStatuses.length) {
+      enableBatchFetch = false
+      logDebug(s"Disable shuffle batch fetch as Push based shuffle is enabled for $shuffleId.")
       // We have MergeStatus and full range of mapIds are requested so return a merged block.
       val numMaps = mapStatuses.length
       mergeStatuses.get.zipWithIndex.slice(startPartition, endPartition).foreach {
@@ -1450,11 +1498,10 @@ private[spark] object MapOutputTracker extends Logging {
           val remainingMapStatuses = if (mergeStatus != null && mergeStatus.totalSize > 0) {
             // If MergeStatus is available for the given partition, add location of the
             // pre-merged shuffle partition for this partition ID. Here we create a
-            // ShuffleBlockId with mapId being SHUFFLE_PUSH_MAP_ID to indicate this is
-            // a merged shuffle block.
+            // ShuffleMergedBlockId to indicate this is a merged shuffle block.
             splitsByAddress.getOrElseUpdate(mergeStatus.location, ListBuffer()) +=
-              ((ShuffleBlockId(shuffleId, SHUFFLE_PUSH_MAP_ID, partId), mergeStatus.totalSize,
-                SHUFFLE_PUSH_MAP_ID))
+              ((ShuffleMergedBlockId(shuffleId, mergeStatus.shuffleMergeId, partId),
+                mergeStatus.totalSize, SHUFFLE_PUSH_MAP_ID))
             // For the "holes" in this pre-merged shuffle partition, i.e., unmerged mapper
             // shuffle partition blocks, fetch the original map produced shuffle partition blocks
             val mapStatusesWithIndex = mapStatuses.zipWithIndex
@@ -1488,7 +1535,7 @@ private[spark] object MapOutputTracker extends Logging {
       }
     }
 
-    splitsByAddress.mapValues(_.toSeq).iterator
+    MapSizesByExecutorId(splitsByAddress.mapValues(_.toSeq).iterator, enableBatchFetch)
   }
 
   /**

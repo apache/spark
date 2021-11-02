@@ -26,7 +26,6 @@ import pandas as pd
 import pyspark.pandas as ps
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.indexes import (
-    MissingPandasLikeCategoricalIndex,
     MissingPandasLikeDatetimeIndex,
     MissingPandasLikeIndex,
     MissingPandasLikeMultiIndex,
@@ -406,6 +405,14 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             (psidx1 + 1).symmetric_difference(psidx2).sort_values(),
             (pidx1 + 1).symmetric_difference(pidx2).sort_values(),
         )
+        self.assert_eq(
+            (psidx1 ^ psidx2).sort_values(),
+            (pidx1 ^ pidx2).sort_values(),
+        )
+        self.assert_eq(
+            psidx1.symmetric_difference(psidx2, result_name="result").sort_values(),
+            pidx1.symmetric_difference(pidx2, result_name="result").sort_values(),
+        )
 
         pmidx1 = pd.MultiIndex(
             [["lama", "cow", "falcon"], ["speed", "weight", "length"]],
@@ -515,29 +522,6 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             ):
                 getattr(psdf.set_index("c").index, name)()
 
-        # CategoricalIndex functions
-        missing_functions = inspect.getmembers(
-            MissingPandasLikeCategoricalIndex, inspect.isfunction
-        )
-        unsupported_functions = [
-            name for (name, type_) in missing_functions if type_.__name__ == "unsupported_function"
-        ]
-        for name in unsupported_functions:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError,
-                "method.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
-            ):
-                getattr(psdf.set_index("d").index, name)()
-
-        deprecated_functions = [
-            name for (name, type_) in missing_functions if type_.__name__ == "deprecated_function"
-        ]
-        for name in deprecated_functions:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError, "method.*Index.*{}.*is deprecated".format(name)
-            ):
-                getattr(psdf.set_index("d").index, name)()
-
         # Index properties
         missing_properties = inspect.getmembers(
             MissingPandasLikeIndex, lambda o: isinstance(o, property)
@@ -607,22 +591,6 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
                 "property.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
                 getattr(psdf.set_index("c").index, name)
-
-        # CategoricalIndex properties
-        missing_properties = inspect.getmembers(
-            MissingPandasLikeCategoricalIndex, lambda o: isinstance(o, property)
-        )
-        unsupported_properties = [
-            name
-            for (name, type_) in missing_properties
-            if type_.fget.__name__ == "unsupported_property"
-        ]
-        for name in unsupported_properties:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError,
-                "property.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
-            ):
-                getattr(psdf.set_index("d").index, name)
 
     def test_index_has_duplicates(self):
         indexes = [("a", "b", "c"), ("a", "a", "c"), (1, 3, 3), (1, 2, 3)]
@@ -1410,6 +1378,11 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(psmidx.unique().sort_values(), pmidx.unique().sort_values())
         self.assert_eq(psmidx.unique().sort_values(), pmidx.unique().sort_values())
 
+        with self.assertRaisesRegex(
+            IndexError, "Too many levels: Index has only 1 level, -2 is not a valid level number"
+        ):
+            psidx.unique(level=-2)
+
     def test_asof(self):
         # Increasing values
         pidx = pd.Index(["2013-12-31", "2014-01-02", "2014-01-03"])
@@ -1518,23 +1491,27 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             psidx2 = ps.from_pandas(pidx2)
 
             self.assert_eq(psidx1.union(psidx2), pidx1.union(pidx2))
-            self.assert_eq(psidx2.union(psidx1), pidx2.union(pidx1))
             self.assert_eq(
                 psidx1.union([3, 4, 3, 3, 5, 6]), pidx1.union([3, 4, 3, 4, 5, 6]), almost=True
-            )
-            self.assert_eq(
-                psidx2.union([1, 2, 3, 4, 3, 4, 3, 4]),
-                pidx2.union([1, 2, 3, 4, 3, 4, 3, 4]),
-                almost=True,
             )
             self.assert_eq(
                 psidx1.union(ps.Series([3, 4, 3, 3, 5, 6])),
                 pidx1.union(pd.Series([3, 4, 3, 4, 5, 6])),
                 almost=True,
             )
+
+            # Manually create the expected result here since there is a bug in Index.union
+            # dropping duplicated values in pandas < 1.3.
+            expected = pd.Index([1, 2, 3, 3, 3, 4, 4, 4, 5, 6])
+            self.assert_eq(psidx2.union(psidx1), expected)
+            self.assert_eq(
+                psidx2.union([1, 2, 3, 4, 3, 4, 3, 4]),
+                expected,
+                almost=True,
+            )
             self.assert_eq(
                 psidx2.union(ps.Series([1, 2, 3, 4, 3, 4, 3, 4])),
-                pidx2.union(pd.Series([1, 2, 3, 4, 3, 4, 3, 4])),
+                expected,
                 almost=True,
             )
 
@@ -1548,73 +1525,85 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         psmidx3 = ps.from_pandas(pmidx3)
         psmidx4 = ps.from_pandas(pmidx4)
 
-        self.assert_eq(psmidx1.union(psmidx2), pmidx1.union(pmidx2))
-        self.assert_eq(psmidx2.union(psmidx1), pmidx2.union(pmidx1))
-        self.assert_eq(psmidx3.union(psmidx4), pmidx3.union(pmidx4))
-        self.assert_eq(psmidx4.union(psmidx3), pmidx4.union(pmidx3))
+        # Manually create the expected result here since there is a bug in MultiIndex.union
+        # dropping duplicated values in pandas < 1.3.
+        expected = pd.MultiIndex.from_tuples(
+            [("x", "a"), ("x", "a"), ("x", "b"), ("x", "b"), ("x", "c"), ("x", "d")]
+        )
+        self.assert_eq(psmidx1.union(psmidx2), expected)
+        self.assert_eq(psmidx2.union(psmidx1), expected)
         self.assert_eq(
             psmidx1.union([("x", "a"), ("x", "b"), ("x", "c"), ("x", "d")]),
-            pmidx1.union([("x", "a"), ("x", "b"), ("x", "c"), ("x", "d")]),
+            expected,
         )
         self.assert_eq(
             psmidx2.union([("x", "a"), ("x", "b"), ("x", "a"), ("x", "b")]),
-            pmidx2.union([("x", "a"), ("x", "b"), ("x", "a"), ("x", "b")]),
+            expected,
         )
+
+        expected = pd.MultiIndex.from_tuples(
+            [(1, 1), (1, 2), (1, 3), (1, 3), (1, 4), (1, 4), (1, 5), (1, 6)]
+        )
+        self.assert_eq(psmidx3.union(psmidx4), expected)
+        self.assert_eq(psmidx4.union(psmidx3), expected)
         self.assert_eq(
             psmidx3.union([(1, 3), (1, 4), (1, 5), (1, 6)]),
-            pmidx3.union([(1, 3), (1, 4), (1, 5), (1, 6)]),
+            expected,
         )
         self.assert_eq(
             psmidx4.union([(1, 1), (1, 2), (1, 3), (1, 4), (1, 3), (1, 4)]),
-            pmidx4.union([(1, 1), (1, 2), (1, 3), (1, 4), (1, 3), (1, 4)]),
+            expected,
         )
 
         # Testing if the result is correct after sort=False.
         # The `sort` argument is added in pandas 0.24.
         if LooseVersion(pd.__version__) >= LooseVersion("0.24"):
+            # Manually create the expected result here since there is a bug in MultiIndex.union
+            # dropping duplicated values in pandas < 1.3.
+            expected = pd.MultiIndex.from_tuples(
+                [("x", "a"), ("x", "a"), ("x", "b"), ("x", "b"), ("x", "c"), ("x", "d")]
+            )
             self.assert_eq(
                 psmidx1.union(psmidx2, sort=False).sort_values(),
-                pmidx1.union(pmidx2, sort=False).sort_values(),
+                expected,
             )
             self.assert_eq(
                 psmidx2.union(psmidx1, sort=False).sort_values(),
-                pmidx2.union(pmidx1, sort=False).sort_values(),
-            )
-            self.assert_eq(
-                psmidx3.union(psmidx4, sort=False).sort_values(),
-                pmidx3.union(pmidx4, sort=False).sort_values(),
-            )
-            self.assert_eq(
-                psmidx4.union(psmidx3, sort=False).sort_values(),
-                pmidx4.union(pmidx3, sort=False).sort_values(),
+                expected,
             )
             self.assert_eq(
                 psmidx1.union(
                     [("x", "a"), ("x", "b"), ("x", "c"), ("x", "d")], sort=False
                 ).sort_values(),
-                pmidx1.union(
-                    [("x", "a"), ("x", "b"), ("x", "c"), ("x", "d")], sort=False
-                ).sort_values(),
+                expected,
             )
             self.assert_eq(
                 psmidx2.union(
                     [("x", "a"), ("x", "b"), ("x", "a"), ("x", "b")], sort=False
                 ).sort_values(),
-                pmidx2.union(
-                    [("x", "a"), ("x", "b"), ("x", "a"), ("x", "b")], sort=False
-                ).sort_values(),
+                expected,
+            )
+
+            expected = pd.MultiIndex.from_tuples(
+                [(1, 1), (1, 2), (1, 3), (1, 3), (1, 4), (1, 4), (1, 5), (1, 6)]
+            )
+            self.assert_eq(
+                psmidx3.union(psmidx4, sort=False).sort_values(),
+                expected,
+            )
+            self.assert_eq(
+                psmidx4.union(psmidx3, sort=False).sort_values(),
+                expected,
             )
             self.assert_eq(
                 psmidx3.union([(1, 3), (1, 4), (1, 5), (1, 6)], sort=False).sort_values(),
-                pmidx3.union([(1, 3), (1, 4), (1, 5), (1, 6)], sort=False).sort_values(),
+                expected,
             )
             self.assert_eq(
                 psmidx4.union(
                     [(1, 1), (1, 2), (1, 3), (1, 4), (1, 3), (1, 4)], sort=False
                 ).sort_values(),
-                pmidx4.union(
-                    [(1, 1), (1, 2), (1, 3), (1, 4), (1, 3), (1, 4)], sort=False
-                ).sort_values(),
+                expected,
             )
 
         self.assertRaises(NotImplementedError, lambda: psidx1.union(psmidx1))
@@ -1766,6 +1755,11 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.hasnans, psser.hasnans)
 
+        # empty
+        pidx = pd.Index([])
+        psidx = ps.from_pandas(pidx)
+        self.assert_eq(pidx.hasnans, psidx.hasnans)
+
         # Not supported for MultiIndex
         psmidx = ps.Index([("a", 1), ("b", 2)])
         self.assertRaises(NotImplementedError, lambda: psmidx.hasnans())
@@ -1914,6 +1908,8 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             psmidx.intersection(4)
         with self.assertRaisesRegex(TypeError, "other must be a MultiIndex or a list of tuples"):
             psmidx.intersection(ps.Series([3, 4, 5, 6]))
+        with self.assertRaisesRegex(TypeError, "other must be a MultiIndex or a list of tuples"):
+            psmidx.intersection([("c", "z"), ["d", "w"]])
         with self.assertRaisesRegex(ValueError, "Index data must be 1-dimensional"):
             psidx.intersection(ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]}))
         with self.assertRaisesRegex(ValueError, "Index data must be 1-dimensional"):
@@ -2205,6 +2201,10 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         with self.assertRaisesRegex(IndexError, err_msg):
             psmidx.insert(4, ("b", "y"))
 
+        err_msg = "index -4 is out of bounds for axis 0 with size 3"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psmidx.insert(-4, ("b", "y"))
+
     def test_astype(self):
         pidx = pd.Index([10, 20, 15, 30, 45], name="x")
         psidx = ps.Index(pidx)
@@ -2243,12 +2243,23 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
 
         pidx = pd.Index([10, 20, 15, 30, 45, None], name="x")
         psidx = ps.Index(pidx)
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            self.assert_eq(psidx.astype(bool), pidx.astype(bool))
+            self.assert_eq(psidx.astype(str), pidx.astype(str))
+        else:
+            self.assert_eq(
+                psidx.astype(bool), ps.Index([True, True, True, True, True, True], name="x")
+            )
+            self.assert_eq(
+                psidx.astype(str),
+                ps.Index(["10.0", "20.0", "15.0", "30.0", "45.0", "nan"], name="x"),
+            )
 
         pidx = pd.Index(["hi", "hi ", " ", " \t", "", None], name="x")
         psidx = ps.Index(pidx)
 
         self.assert_eq(psidx.astype(bool), pidx.astype(bool))
-        self.assert_eq(psidx.astype(str).to_numpy(), ["hi", "hi ", " ", " \t", "", "None"])
+        self.assert_eq(psidx.astype(str), pidx.astype(str))
 
         pidx = pd.Index([True, False, None], name="x")
         psidx = ps.Index(pidx)
@@ -2313,6 +2324,131 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         psmidx = ps.from_pandas(pmidx)
 
         self.assertRaises(PandasNotImplementedError, lambda: psmidx.factorize())
+
+    def test_map(self):
+        pidx = pd.Index([1, 2, 3])
+        psidx = ps.from_pandas(pidx)
+
+        # Apply dict
+        self.assert_eq(
+            pidx.map({1: "one", 2: "two", 3: "three"}),
+            psidx.map({1: "one", 2: "two", 3: "three"}),
+        )
+        self.assert_eq(
+            pidx.map({1: "one", 2: "two"}),
+            psidx.map({1: "one", 2: "two"}),
+        )
+        self.assert_eq(
+            pidx.map({1: "one", 2: "two"}, na_action="ignore"),
+            psidx.map({1: "one", 2: "two"}, na_action="ignore"),
+        )
+        self.assert_eq(
+            pidx.map({1: 10, 2: 20}),
+            psidx.map({1: 10, 2: 20}),
+        )
+        self.assert_eq(
+            (pidx + 1).map({1: 10, 2: 20}),
+            (psidx + 1).map({1: 10, 2: 20}),
+        )
+
+        # Apply lambda
+        self.assert_eq(
+            pidx.map(lambda id: id + 1),
+            psidx.map(lambda id: id + 1),
+        )
+        self.assert_eq(
+            pidx.map(lambda id: id + 1.1),
+            psidx.map(lambda id: id + 1.1),
+        )
+        self.assert_eq(
+            pidx.map(lambda id: "{id} + 1".format(id=id)),
+            psidx.map(lambda id: "{id} + 1".format(id=id)),
+        )
+        self.assert_eq(
+            (pidx + 1).map(lambda id: "{id} + 1".format(id=id)),
+            (psidx + 1).map(lambda id: "{id} + 1".format(id=id)),
+        )
+
+        # Apply series
+        pser = pd.Series(["one", "two", "three"], index=[1, 2, 3])
+        self.assert_eq(
+            pidx.map(pser),
+            psidx.map(pser),
+        )
+        pser = pd.Series(["one", "two", "three"])
+        self.assert_eq(
+            pidx.map(pser),
+            psidx.map(pser),
+        )
+        self.assert_eq(
+            pidx.map(pser, na_action="ignore"),
+            psidx.map(pser, na_action="ignore"),
+        )
+        pser = pd.Series([1, 2, 3])
+        self.assert_eq(
+            pidx.map(pser),
+            psidx.map(pser),
+        )
+        self.assert_eq(
+            (pidx + 1).map(pser),
+            (psidx + 1).map(pser),
+        )
+
+        self.assertRaises(
+            TypeError,
+            lambda: psidx.map({1: 1, 2: 2.0, 3: "three"}),
+        )
+
+    def test_multiindex_equal_levels(self):
+        pmidx1 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        pmidx2 = pd.MultiIndex.from_tuples([("b", "y"), ("a", "x"), ("c", "z")])
+        psmidx1 = ps.from_pandas(pmidx1)
+        psmidx2 = ps.from_pandas(pmidx2)
+        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
+
+        pmidx2 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "j")])
+        psmidx2 = ps.from_pandas(pmidx2)
+        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
+
+        pmidx2 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("a", "x")])
+        psmidx2 = ps.from_pandas(pmidx2)
+        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
+
+        pmidx2 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y")])
+        psmidx2 = ps.from_pandas(pmidx2)
+        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
+
+        pmidx2 = pd.MultiIndex.from_tuples([("a", "y"), ("b", "x"), ("c", "z")])
+        psmidx2 = ps.from_pandas(pmidx2)
+        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
+
+        pmidx1 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z"), ("a", "y")])
+        pmidx2 = pd.MultiIndex.from_tuples([("a", "y"), ("b", "x"), ("c", "z"), ("c", "x")])
+        psmidx1 = ps.from_pandas(pmidx1)
+        psmidx2 = ps.from_pandas(pmidx2)
+        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
+
+        pmidx1 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        pmidx2 = pd.MultiIndex.from_tuples([("a", "x", "q"), ("b", "y", "w"), ("c", "z", "e")])
+        psmidx1 = ps.from_pandas(pmidx1)
+        psmidx2 = ps.from_pandas(pmidx2)
+        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
+
+    def test_to_numpy(self):
+        pidx = pd.Index([1, 2, 3, 4])
+        psidx = ps.from_pandas(pidx)
+
+        self.assert_eq(pidx.to_numpy(copy=True), psidx.to_numpy(copy=True))
+
+    def test_drop_level(self):
+        tuples = [(1, "red"), (1, "blue"), (2, "red"), (2, "green")]
+        pmidx = pd.MultiIndex.from_tuples(tuples)
+        psmidx = ps.from_pandas(pmidx)
+
+        with self.assertRaisesRegex(
+            IndexError, "Too many levels: Index has only 2 levels, -3 is not a valid level number"
+        ):
+            psmidx.droplevel(-3)
 
 
 if __name__ == "__main__":

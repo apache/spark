@@ -42,12 +42,11 @@ import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCod
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
-import org.apache.spark.sql.test.SQLTestData.{DecimalData, TestData2}
+import org.apache.spark.sql.test.SQLTestData.{ArrayStringWrapper, ContainerStringWrapper, DecimalData, StringWrapper, TestData2}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
@@ -703,6 +702,18 @@ class DataFrameSuite extends QueryTest
       "The size of column names: 2 isn't equal to the size of metadata elements: 1"))
   }
 
+  test("SPARK-36642: withMetadata: replace metadata of a column") {
+    val metadata = new MetadataBuilder().putLong("key", 1L).build()
+    val df1 = sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
+    val df2 = df1.withMetadata("x", metadata)
+    assert(df2.schema(0).metadata === metadata)
+
+    val err = intercept[AnalysisException] {
+      df1.withMetadata("x1", metadata)
+    }
+    assert(err.getMessage.contains("Cannot resolve column name"))
+  }
+
   test("replace column using withColumn") {
     val df2 = sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
     val df3 = df2.withColumn("x", df2("x") + 1)
@@ -833,6 +844,56 @@ class DataFrameSuite extends QueryTest
         Row(key, value, key + 1)
       }.toSeq)
     assert(df.schema.map(_.name) === Seq("key", "valueRenamed", "newCol"))
+  }
+
+  test("SPARK-20384: Value class filter") {
+    val df = spark.sparkContext
+      .parallelize(Seq(StringWrapper("a"), StringWrapper("b"), StringWrapper("c")))
+      .toDF()
+    val filtered = df.where("s = \"a\"")
+    checkAnswer(filtered, spark.sparkContext.parallelize(Seq(StringWrapper("a"))).toDF)
+  }
+
+  test("SPARK-20384: Tuple2 of value class filter") {
+    val df = spark.sparkContext
+      .parallelize(Seq(
+        (StringWrapper("a1"), StringWrapper("a2")),
+        (StringWrapper("b1"), StringWrapper("b2"))))
+      .toDF()
+    val filtered = df.where("_2.s = \"a2\"")
+    checkAnswer(filtered,
+      spark.sparkContext.parallelize(Seq((StringWrapper("a1"), StringWrapper("a2")))).toDF)
+  }
+
+  test("SPARK-20384: Tuple3 of value class filter") {
+    val df = spark.sparkContext
+      .parallelize(Seq(
+        (StringWrapper("a1"), StringWrapper("a2"), StringWrapper("a3")),
+        (StringWrapper("b1"), StringWrapper("b2"), StringWrapper("b3"))))
+      .toDF()
+    val filtered = df.where("_3.s = \"a3\"")
+    checkAnswer(filtered,
+      spark.sparkContext.parallelize(
+        Seq((StringWrapper("a1"), StringWrapper("a2"), StringWrapper("a3")))).toDF)
+  }
+
+  test("SPARK-20384: Array value class filter") {
+    val ab = ArrayStringWrapper(Seq(StringWrapper("a"), StringWrapper("b")))
+    val cd = ArrayStringWrapper(Seq(StringWrapper("c"), StringWrapper("d")))
+
+    val df = spark.sparkContext.parallelize(Seq(ab, cd)).toDF
+    val filtered = df.where(array_contains(col("wrappers.s"), "b"))
+    checkAnswer(filtered, spark.sparkContext.parallelize(Seq(ab)).toDF)
+  }
+
+  test("SPARK-20384: Nested value class filter") {
+    val a = ContainerStringWrapper(StringWrapper("a"))
+    val b = ContainerStringWrapper(StringWrapper("b"))
+
+    val df = spark.sparkContext.parallelize(Seq(a, b)).toDF
+    // flat value class, `s` field is not in schema
+    val filtered = df.where("wrapper = \"a\"")
+    checkAnswer(filtered, spark.sparkContext.parallelize(Seq(a)).toDF)
   }
 
   private lazy val person2: DataFrame = Seq(
@@ -2383,49 +2444,6 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("SPARK-34806: observation on datasets") {
-    val namedObservation = Observation("named")
-    val unnamedObservation = Observation()
-
-    val df = spark
-      .range(100)
-      .observe(
-        namedObservation,
-        min($"id").as("min_val"),
-        max($"id").as("max_val"),
-        sum($"id").as("sum_val"),
-        count(when($"id" % 2 === 0, 1)).as("num_even")
-      )
-      .observe(
-        unnamedObservation,
-        avg($"id").cast("int").as("avg_val")
-      )
-
-    def checkMetrics(namedMetric: Row, unnamedMetric: Row): Unit = {
-      assert(namedMetric === Row(0L, 99L, 4950L, 50L))
-      assert(unnamedMetric === Row(49))
-    }
-
-    df.collect()
-    // we can get the result multiple times
-    checkMetrics(namedObservation.get, unnamedObservation.get)
-    checkMetrics(namedObservation.get, unnamedObservation.get)
-
-    // an observation can be used only once
-    val err = intercept[IllegalArgumentException] {
-      spark.range(100).observe(namedObservation, sum($"id").as("sum_val"))
-    }
-    assert(err.getMessage.contains("An Observation can be used with a Dataset only once"))
-
-    // streaming datasets are not supported
-    val streamDf = new MemoryStream[Int](0, sqlContext).toDF()
-    val streamObservation = Observation("stream")
-    val streamErr = intercept[IllegalArgumentException] {
-      streamDf.observe(streamObservation, avg($"value").cast("int").as("avg_val"))
-    }
-    assert(streamErr.getMessage.contains("Observation does not support streaming Datasets"))
-  }
-
   test("SPARK-25159: json schema inference should only trigger one job") {
     withTempPath { path =>
       // This test is to prove that the `JsonInferSchema` does not use `RDD#toLocalIterator` which
@@ -2605,7 +2623,8 @@ class DataFrameSuite extends QueryTest
     val err = intercept[AnalysisException] {
       df.groupBy($"d", $"b").as[GroupByKey, Row]
     }
-    assert(err.getMessage.contains("cannot resolve 'd'"))
+    assert(err.getErrorClass == "MISSING_COLUMN")
+    assert(err.messageParameters.head == "d")
   }
 
   test("emptyDataFrame should be foldable") {
@@ -2979,6 +2998,39 @@ class DataFrameSuite extends QueryTest
           |""".stripMargin)
       sql("INSERT INTO tbl SELECT 1, 1, 1")
       checkAnswer(sql("SELECT sum(c1 * c3) + sum(c2 * c3) FROM tbl"), Row(2.00000000000) :: Nil)
+    }
+  }
+
+  test("SPARK-36338: DataFrame.withSequenceColumn should append unique sequence IDs") {
+    val ids = spark.range(10).repartition(5)
+      .withSequenceColumn("default_index").collect().map(_.getLong(0))
+    assert(ids.toSet === Range(0, 10).toSet)
+  }
+
+  test("SPARK-35320: Reading JSON with key type different to String in a map should fail") {
+    Seq(
+      (MapType(IntegerType, StringType), """{"1": "test"}"""),
+      (StructType(Seq(StructField("test", MapType(IntegerType, StringType)))),
+        """"test": {"1": "test"}"""),
+      (ArrayType(MapType(IntegerType, StringType)), """[{"1": "test"}]"""),
+      (MapType(StringType, MapType(IntegerType, StringType)), """{"key": {"1" : "test"}}""")
+    ).foreach { case (schema, jsonData) =>
+      withTempDir { dir =>
+        val colName = "col"
+        val msg = "can only contain StringType as a key type for a MapType"
+
+        val thrown1 = intercept[AnalysisException](
+          spark.read.schema(StructType(Seq(StructField(colName, schema))))
+            .json(Seq(jsonData).toDS()).collect())
+        assert(thrown1.getMessage.contains(msg))
+
+        val jsonDir = new File(dir, "json").getCanonicalPath
+        Seq(jsonData).toDF(colName).write.json(jsonDir)
+        val thrown2 = intercept[AnalysisException](
+          spark.read.schema(StructType(Seq(StructField(colName, schema))))
+            .json(jsonDir).collect())
+        assert(thrown2.getMessage.contains(msg))
+      }
     }
   }
 }

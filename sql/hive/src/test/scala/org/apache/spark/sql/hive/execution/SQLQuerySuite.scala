@@ -2632,10 +2632,25 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
   }
+
+  test("SPARK-36905: read hive views without without explicit column names") {
+    withTable("t1") {
+      withView("test_view") {
+        hiveClient.runSqlHive("create table t1 stored as avro as select 2 as id")
+        hiveClient.runSqlHive("create view test_view as select 1, id + 1 from t1")
+        checkAnswer(sql("select * from test_view"), Seq(Row(1, 3)))
+      }
+    }
+  }
 }
 
 @SlowHiveTest
-class SQLQuerySuite extends SQLQuerySuiteBase with DisableAdaptiveExecutionSuite
+class SQLQuerySuite extends SQLQuerySuiteBase with DisableAdaptiveExecutionSuite {
+  test("SPARK-36421: Validate all SQL configs to prevent from wrong use for ConfigEntry") {
+    val df = spark.sql("set -v").select("Meaning")
+    assert(df.collect().forall(!_.getString(0).contains("ConfigEntry")))
+  }
+}
 @SlowHiveTest
 class SQLQuerySuiteAE extends SQLQuerySuiteBase with EnableAdaptiveExecutionSuite
 

@@ -437,6 +437,7 @@ pyspark_sql = Module(
         "pyspark.sql.pandas.serializers",
         "pyspark.sql.pandas.typehints",
         "pyspark.sql.pandas.utils",
+        "pyspark.sql.observation",
         # unittests
         "pyspark.sql.tests.test_arrow",
         "pyspark.sql.tests.test_catalog",

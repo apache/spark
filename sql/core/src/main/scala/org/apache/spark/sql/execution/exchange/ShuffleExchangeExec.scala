@@ -123,7 +123,8 @@ case class ShuffleExchangeExec(
   private[sql] lazy val readMetrics =
     SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
   override lazy val metrics = Map(
-    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size")
+    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
+    "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions")
   ) ++ readMetrics ++ writeMetrics
 
   override def nodeName: String = "Exchange"
@@ -164,12 +165,17 @@ case class ShuffleExchangeExec(
    */
   @transient
   lazy val shuffleDependency : ShuffleDependency[Int, InternalRow, InternalRow] = {
-    ShuffleExchangeExec.prepareShuffleDependency(
+    val dep = ShuffleExchangeExec.prepareShuffleDependency(
       inputRDD,
       child.output,
       outputPartitioning,
       serializer,
       writeMetrics)
+    metrics("numPartitions").set(dep.partitioner.numPartitions)
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(
+      sparkContext, executionId, metrics("numPartitions") :: Nil)
+    dep
   }
 
   /**

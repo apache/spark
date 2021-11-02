@@ -27,6 +27,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 import org.apache.spark.SparkConf
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.shuffle.ExecutorDiskUtils
@@ -44,7 +45,10 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
  *
  * ShuffleDataIO also can change the behavior of deleteFilesOnStop.
  */
-private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Boolean)
+private[spark] class DiskBlockManager(
+    conf: SparkConf,
+    var deleteFilesOnStop: Boolean,
+    isDriver: Boolean)
   extends Logging {
 
   private[spark] val subDirsPerLocalDir = conf.get(config.DISKSTORE_SUB_DIRECTORIES)
@@ -207,7 +211,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
    * permission to create directories under application local directories.
    */
   private def createLocalDirsForMergedShuffleBlocks(): Unit = {
-    if (Utils.isPushBasedShuffleEnabled(conf)) {
+    if (Utils.isPushBasedShuffleEnabled(conf, isDriver = isDriver, checkSerializer = false)) {
       // Will create the merge_manager directory only if it doesn't exist under the local dir.
       Utils.getConfiguredLocalDirs(conf).foreach { rootDir =>
         try {
@@ -251,9 +255,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
     while (created == null) {
       attempts += 1
       if (attempts > maxAttempts) {
-        throw new IOException(
-          s"Failed to create directory ${dirToCreate.getAbsolutePath} with permission " +
-            s"770 after $maxAttempts attempts!")
+        throw SparkCoreErrors.failToCreateDirectoryError(dirToCreate.getAbsolutePath, maxAttempts)
       }
       try {
         val builder = new ProcessBuilder().command(

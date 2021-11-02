@@ -26,6 +26,7 @@ from pyspark.pandas.data_type_ops.base import (
     _as_categorical_type,
     _as_other_type,
     _as_string_type,
+    _sanitize_list_like,
 )
 from pyspark.pandas._typing import SeriesOrIndex
 from pyspark.pandas.typedef import pandas_on_spark_type
@@ -45,21 +46,25 @@ class NullOps(DataTypeOps):
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
+        _sanitize_list_like(right)
         return column_op(Column.__lt__)(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
+        _sanitize_list_like(right)
         return column_op(Column.__le__)(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
+        _sanitize_list_like(right)
         return column_op(Column.__ge__)(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
+        _sanitize_list_like(right)
         return column_op(Column.__gt__)(left, right)
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:

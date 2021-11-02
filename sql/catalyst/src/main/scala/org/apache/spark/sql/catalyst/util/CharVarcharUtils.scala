@@ -149,7 +149,7 @@ object CharVarcharUtils extends Logging {
     }.getOrElse(expr)
   }
 
-  private def stringLengthCheck(expr: Expression, dt: DataType): Expression = {
+  def stringLengthCheck(expr: Expression, dt: DataType): Expression = {
     dt match {
       case CharType(length) =>
         StaticInvoke(

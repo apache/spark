@@ -38,7 +38,8 @@ import org.apache.spark.sql.internal.SQLConf
  * ShuffleQueryStageExec.
  */
 object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
-  override def supportedShuffleOrigins: Seq[ShuffleOrigin] =
+
+  override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
     Seq(REBALANCE_PARTITIONS_BY_NONE, REBALANCE_PARTITIONS_BY_COL)
 
   /**
@@ -92,9 +93,8 @@ object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
     }
 
     plan match {
-      case shuffle: ShuffleQueryStageExec
-          if supportedShuffleOrigins.contains(shuffle.shuffle.shuffleOrigin) =>
-        tryOptimizeSkewedPartitions(shuffle)
+      case stage: ShuffleQueryStageExec if isSupported(stage.shuffle) =>
+        tryOptimizeSkewedPartitions(stage)
       case _ => plan
     }
   }

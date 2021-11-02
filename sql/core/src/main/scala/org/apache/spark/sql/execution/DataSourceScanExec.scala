@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.expressions.Aggregation
+import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -104,6 +104,7 @@ case class RowDataSourceScanExec(
     filters: Set[Filter],
     handledFilters: Set[Filter],
     aggregation: Option[Aggregation],
+    limit: Option[Int],
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     tableIdentifier: Option[TableIdentifier])
@@ -153,7 +154,8 @@ case class RowDataSourceScanExec(
       "ReadSchema" -> requiredSchema.catalogString,
       "PushedFilters" -> seqToString(markedFilters.toSeq),
       "PushedAggregates" -> aggString,
-      "PushedGroupby" -> groupByString)
+      "PushedGroupby" -> groupByString) ++
+      limit.map(value => "PushedLimit" -> s"LIMIT $value")
   }
 
   // Don't care about `rdd` and `tableIdentifier` when canonicalizing.
@@ -370,21 +372,26 @@ case class FileSourceScanExec(
         "DataFilters" -> seqToString(dataFilters),
         "Location" -> locationDesc)
 
-    // TODO(SPARK-32986): Add bucketed scan info in explain output of FileSourceScanExec
-    if (bucketedScan) {
-      relation.bucketSpec.map { spec =>
+    relation.bucketSpec.map { spec =>
+      val bucketedKey = "Bucketed"
+      if (bucketedScan) {
         val numSelectedBuckets = optionalBucketSet.map { b =>
           b.cardinality()
         } getOrElse {
           spec.numBuckets
         }
-        metadata + ("SelectedBucketsCount" ->
-          (s"$numSelectedBuckets out of ${spec.numBuckets}" +
+        metadata ++ Map(
+          bucketedKey -> "true",
+          "SelectedBucketsCount" -> (s"$numSelectedBuckets out of ${spec.numBuckets}" +
             optionalNumCoalescedBuckets.map { b => s" (Coalesced to $b)"}.getOrElse("")))
-      } getOrElse {
-        metadata
+      } else if (!relation.sparkSession.sessionState.conf.bucketingEnabled) {
+        metadata + (bucketedKey -> "false (disabled by configuration)")
+      } else if (disableBucketedScan) {
+        metadata + (bucketedKey -> "false (disabled by query planner)")
+      } else {
+        metadata + (bucketedKey -> "false (bucket column(s) not read)")
       }
-    } else {
+    } getOrElse {
       metadata
     }
   }

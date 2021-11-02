@@ -26,7 +26,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Future, TimeoutException}
 import scala.concurrent.duration._
-import scala.language.{implicitConversions, postfixOps}
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.RandomUtils
@@ -98,11 +98,11 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .set(IS_TESTING, true)
       .set(MEMORY_FRACTION, 1.0)
       .set(MEMORY_STORAGE_FRACTION, 0.999)
+      .set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
       .set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
       .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
       .set(Network.RPC_ASK_TIMEOUT, "5s")
       .set(PUSH_BASED_SHUFFLE_ENABLED, true)
-      .set(STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT.key, "5s")
   }
 
   private def makeSortShuffleManager(conf: Option[SparkConf] = None): SortShuffleManager = {
@@ -186,7 +186,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     liveListenerBus = spy(new LiveListenerBus(conf))
     master = spy(new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        liveListenerBus, None, blockManagerInfo, mapOutputTracker)),
+        liveListenerBus, None, blockManagerInfo, mapOutputTracker, isDriver = true)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true))
   }
@@ -645,7 +645,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       mc.eq(StorageLevel.NONE), mc.anyInt(), mc.anyInt())
   }
 
-  test("no reregistration on heart beat until executor timeout") {
+  test("reregistration on heart beat") {
     val store = makeBlockManager(2000)
     val a1 = new Array[Byte](400)
 
@@ -656,15 +656,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     master.removeExecutor(store.blockManagerId.executorId)
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
+
     val reregister = !master.driverHeartbeatEndPoint.askSync[Boolean](
       BlockManagerHeartbeat(store.blockManagerId))
-    assert(reregister == false, "master told to re-register")
-
-    eventually(timeout(10 seconds), interval(1 seconds)) {
-      val reregister = !master.driverHeartbeatEndPoint.askSync[Boolean](
-        BlockManagerHeartbeat(store.blockManagerId))
-      assert(reregister, "master did not tell to re-register")
-    }
+    assert(reregister)
   }
 
   test("reregistration on block update") {
@@ -677,12 +672,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     master.removeExecutor(store.blockManagerId.executorId)
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
-
-    eventually(timeout(10 seconds), interval(1 seconds)) {
-      val reregister = !master.driverHeartbeatEndPoint.askSync[Boolean](
-        BlockManagerHeartbeat(store.blockManagerId))
-      assert(reregister, "master did not tell to re-register")
-    }
 
     store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY)
     store.waitForAsyncReregister()
@@ -2084,7 +2073,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     makeBlockManager(100, "execE",
       transferService = Some(new MockBlockTransferService(10, "hostA")))
     assert(master.getShufflePushMergerLocations(5, Set.empty).size == 4)
-
+    assert(master.getExecutorEndpointRef(SparkContext.DRIVER_IDENTIFIER).isEmpty)
+    makeBlockManager(100, SparkContext.DRIVER_IDENTIFIER,
+      transferService = Some(new MockBlockTransferService(10, "host-driver")))
+    assert(master.getExecutorEndpointRef(SparkContext.DRIVER_IDENTIFIER).isDefined)
     master.removeExecutor("execA")
     master.removeExecutor("execE")
 
@@ -2093,6 +2085,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       Seq("hostC", "hostB", "hostD").sorted)
     assert(master.getShufflePushMergerLocations(4, Set.empty).map(_.host).sorted ===
       Seq("hostB", "hostA", "hostC", "hostD").sorted)
+    master.removeShufflePushMergerLocation("hostA")
+    assert(master.getShufflePushMergerLocations(4, Set.empty).map(_.host).sorted ===
+      Seq("hostB", "hostC", "hostD").sorted)
   }
 
   test("SPARK-33387 Support ordered shuffle block migration") {

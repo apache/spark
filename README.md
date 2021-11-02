@@ -4,15 +4,15 @@ Spark is a unified analytics engine for large-scale data processing. It provides
 high-level APIs in Scala, Java, Python, and R, and an optimized engine that
 supports general computation graphs for data analysis. It also supports a
 rich set of higher-level tools including Spark SQL for SQL and DataFrames,
-MLlib for machine learning, GraphX for graph processing,
+pandas API on Spark for pandas workloads, MLlib for machine learning, GraphX for graph processing,
 and Structured Streaming for stream processing.
 
 <https://spark.apache.org/>
 
-[![GitHub Action Build](https://github.com/apache/spark/actions/workflows/build_and_test.yml/badge.svg?branch=master)](https://github.com/apache/spark/actions/workflows/build_and_test.yml?query=branch%3Amaster)
+[![GitHub Action Build](https://github.com/apache/spark/actions/workflows/build_and_test.yml/badge.svg?branch=master&event=push)](https://github.com/apache/spark/actions/workflows/build_and_test.yml?query=branch%3Amaster+event%3Apush)
 [![Jenkins Build](https://amplab.cs.berkeley.edu/jenkins/job/spark-master-test-sbt-hadoop-3.2/badge/icon)](https://amplab.cs.berkeley.edu/jenkins/job/spark-master-test-sbt-hadoop-3.2)
 [![AppVeyor Build](https://img.shields.io/appveyor/ci/ApacheSoftwareFoundation/spark/master.svg?style=plastic&logo=appveyor)](https://ci.appveyor.com/project/ApacheSoftwareFoundation/spark)
-[![PySpark Coverage](https://img.shields.io/badge/dynamic/xml.svg?label=pyspark%20coverage&url=https%3A%2F%2Fspark-test.github.io%2Fpyspark-coverage-site&query=%2Fhtml%2Fbody%2Fdiv%5B1%5D%2Fdiv%2Fh1%2Fspan&colorB=brightgreen&style=plastic)](https://spark-test.github.io/pyspark-coverage-site)
+[![PySpark Coverage](https://codecov.io/gh/apache/spark/branch/master/graph/badge.svg)](https://codecov.io/gh/apache/spark)
 
 
 ## Online Documentation

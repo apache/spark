@@ -24,14 +24,10 @@ from itertools import chain
 from typing import Any, Callable, Optional, Sequence, Tuple, Union, cast, TYPE_CHECKING
 
 import numpy as np
-import pandas as pd  # noqa: F401
+import pandas as pd
 from pandas.api.types import is_list_like, CategoricalDtype
 from pyspark.sql import functions as F, Column, Window
-from pyspark.sql.types import (
-    DoubleType,
-    FloatType,
-    LongType,
-)
+from pyspark.sql.types import LongType, BooleanType
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex
@@ -55,10 +51,10 @@ from pyspark.pandas.utils import (
 from pyspark.pandas.frame import DataFrame
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import ColumnOrName  # noqa: F401 (SPARK-34943)
+    from pyspark.sql._typing import ColumnOrName
 
-    from pyspark.pandas.data_type_ops.base import DataTypeOps  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.data_type_ops.base import DataTypeOps
+    from pyspark.pandas.series import Series
 
 
 def should_alignment_for_column_op(self: SeriesOrIndex, other: SeriesOrIndex) -> bool:
@@ -398,7 +394,11 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     # comparison operators
     def __eq__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
-        return self._dtype_op.eq(self, other)
+        # pandas always returns False for all items with dict and set.
+        if isinstance(other, (dict, set)):
+            return self != self
+        else:
+            return self._dtype_op.eq(self, other)
 
     def __ne__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
         return self._dtype_op.ne(self, other)
@@ -431,6 +431,12 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     def __ror__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.ror(self, other)
+
+    def __xor__(self, other: Any) -> SeriesOrIndex:
+        return self._dtype_op.xor(self, other)
+
+    def __rxor__(self, other: Any) -> SeriesOrIndex:
+        return self._dtype_op.rxor(self, other)
 
     def __len__(self) -> int:
         return len(self._psdf)
@@ -522,13 +528,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> ps.Series([1, 2, 3]).rename("a").to_frame().set_index("a").index.hasnans
         False
         """
-        sdf = self._internal.spark_frame
-        scol = self.spark.column
-
-        if isinstance(self.spark.data_type, (DoubleType, FloatType)):
-            return sdf.select(F.max(scol.isNull() | F.isnan(scol))).collect()[0][0]
-        else:
-            return sdf.select(F.max(scol.isNull())).collect()[0][0]
+        return self.isnull().any()
 
     @property
     def is_monotonic(self) -> bool:
@@ -877,7 +877,13 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             )
 
         values = values.tolist() if isinstance(values, np.ndarray) else list(values)
-        return self._with_new_scol(self.spark.column.isin([SF.lit(v) for v in values]))
+
+        other = [SF.lit(v) for v in values]
+        scol = self.spark.column.isin(other)
+        field = self._internal.data_fields[0].copy(
+            dtype=np.dtype("bool"), spark_type=BooleanType(), nullable=False
+        )
+        return self._with_new_scol(scol=F.coalesce(scol, F.lit(False)), field=field)
 
     def isnull(self: IndexOpsLike) -> IndexOpsLike:
         """
@@ -953,7 +959,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         if isinstance(self, MultiIndex):
             raise NotImplementedError("notna is not defined for MultiIndex")
-        return (~self.isnull()).rename(self.name)  # type: ignore
+        return (~self.isnull()).rename(self.name)  # type: ignore[attr-defined]
 
     notna = notnull
 
@@ -1628,15 +1634,9 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         if len(kvs) == 0:  # uniques are all missing values
             new_scol = SF.lit(na_sentinel_code)
         else:
-            scol = self.spark.column
-            if isinstance(self.spark.data_type, (FloatType, DoubleType)):
-                cond = scol.isNull() | F.isnan(scol)
-            else:
-                cond = scol.isNull()
             map_scol = F.create_map(*kvs)
-
-            null_scol = F.when(cond, SF.lit(na_sentinel_code))
-            new_scol = null_scol.otherwise(map_scol[scol])
+            null_scol = F.when(self.isnull().spark.column, SF.lit(na_sentinel_code))
+            new_scol = null_scol.otherwise(map_scol[self.spark.column])
 
         codes = self._with_new_scol(new_scol.alias(self._internal.data_spark_column_names[0]))
 

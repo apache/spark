@@ -55,8 +55,8 @@ public class MergedBlockMetaSuccessSuite {
     chunk2.add(4);
     RoaringBitmap[] expectedChunks = new RoaringBitmap[]{chunk1, chunk2};
     try (DataOutputStream metaOutput = new DataOutputStream(new FileOutputStream(chunkMetaFile))) {
-      for (int i = 0; i < expectedChunks.length; i++) {
-        expectedChunks[i].serialize(metaOutput);
+      for (RoaringBitmap expectedChunk : expectedChunks) {
+        expectedChunk.serialize(metaOutput);
       }
     }
     TransportConf conf = mock(TransportConf.class);

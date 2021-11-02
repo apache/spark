@@ -51,8 +51,13 @@ object DateTimeUtils {
   val TIMEZONE_OPTION = "timeZone"
 
   def getZoneId(timeZoneId: String): ZoneId = {
-    // To support the (+|-)h:mm format because it was supported before Spark 3.0.
-    ZoneId.of(timeZoneId.replaceFirst("(\\+|\\-)(\\d):", "$10$2:"), ZoneId.SHORT_IDS)
+    val formattedZoneId = timeZoneId
+      // To support the (+|-)h:mm format because it was supported before Spark 3.0.
+      .replaceFirst("(\\+|\\-)(\\d):", "$10$2:")
+      // To support the (+|-)hh:m format because it was supported before Spark 3.0.
+      .replaceFirst("(\\+|\\-)(\\d\\d):(\\d)$", "$1$2:0$3")
+
+    ZoneId.of(formattedZoneId, ZoneId.SHORT_IDS)
   }
   def getTimeZone(timeZoneId: String): TimeZone = TimeZone.getTimeZone(getZoneId(timeZoneId))
 
@@ -254,7 +259,9 @@ object DateTimeUtils {
       val maxDigitsYear = 6
       // For the nanosecond part, more than 6 digits is allowed, but will be truncated.
       segment == 6 || (segment == 0 && digits >= 4 && digits <= maxDigitsYear) ||
-        (segment != 0 && segment != 6 && digits <= 2)
+        // For the zoneId segment(7), it's could be zero digits when it's a region-based zone ID
+        (segment == 7 && digits <= 2) ||
+        (segment != 0 && segment != 6 && segment != 7 && digits > 0 && digits <= 2)
     }
     if (s == null || s.trimAll().numBytes() == 0) {
       return (Array.empty, None, false)
@@ -326,16 +333,7 @@ object DateTimeUtils {
             return (Array.empty, None, false)
           }
         } else if (i == 5 || i == 6) {
-          if (b == '-' || b == '+') {
-            if (!isValidDigits(i, currentSegmentDigits)) {
-              return (Array.empty, None, false)
-            }
-            segments(i) = currentSegmentValue
-            currentSegmentValue = 0
-            currentSegmentDigits = 0
-            i += 1
-            tz = Some(new String(bytes, j, 1))
-          } else if (b == '.' && i == 5) {
+          if (b == '.' && i == 5) {
             if (!isValidDigits(i, currentSegmentDigits)) {
               return (Array.empty, None, false)
             }
@@ -395,11 +393,7 @@ object DateTimeUtils {
     }
 
     // This step also validates time zone part
-    val zoneId = tz.map {
-      case "+" => ZoneOffset.ofHoursMinutes(segments(7), segments(8))
-      case "-" => ZoneOffset.ofHoursMinutes(-segments(7), -segments(8))
-      case zoneName: String => getZoneId(zoneName.trim)
-    }
+    val zoneId = tz.map(zoneName => getZoneId(zoneName.trim))
     segments(0) *= yearSign.getOrElse(1)
     (segments, zoneId, justTime)
   }
@@ -527,7 +521,8 @@ object DateTimeUtils {
     def isValidDigits(segment: Int, digits: Int): Boolean = {
       // An integer is able to represent a date within [+-]5 million years.
       var maxDigitsYear = 7
-      (segment == 0 && digits >= 4 && digits <= maxDigitsYear) || (segment != 0 && digits <= 2)
+      (segment == 0 && digits >= 4 && digits <= maxDigitsYear) ||
+        (segment != 0 && digits > 0 && digits <= 2)
     }
     if (s == null || s.trimAll().numBytes() == 0) {
       return None
@@ -1040,7 +1035,7 @@ object DateTimeUtils {
    * Converts notational shorthands that are converted to ordinary timestamps.
    *
    * @param input A string to parse. It can contain trailing or leading whitespaces.
-   * @param zoneId Zone identifier used to get the current date.
+   * @param zoneId Zone identifier used to get the current timestamp.
    * @return Some of microseconds since the epoch if the conversion completed
    *         successfully otherwise None.
    */
@@ -1060,18 +1055,19 @@ object DateTimeUtils {
    * Converts notational shorthands that are converted to ordinary timestamps without time zone.
    *
    * @param input A string to parse. It can contain trailing or leading whitespaces.
+   * @param zoneId Zone identifier used to get the current local timestamp.
    * @return Some of microseconds since the epoch if the conversion completed
    *         successfully otherwise None.
    */
-  def convertSpecialTimestampNTZ(input: String): Option[Long] = {
+  def convertSpecialTimestampNTZ(input: String, zoneId: ZoneId): Option[Long] = {
     val localDateTime = extractSpecialValue(input.trim).flatMap {
       case "epoch" => Some(LocalDateTime.of(1970, 1, 1, 0, 0))
-      case "now" => Some(LocalDateTime.now())
-      case "today" => Some(LocalDateTime.now().`with`(LocalTime.MIDNIGHT))
+      case "now" => Some(LocalDateTime.now(zoneId))
+      case "today" => Some(LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT))
       case "tomorrow" =>
-        Some(LocalDateTime.now().`with`(LocalTime.MIDNIGHT).plusDays(1))
+        Some(LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT).plusDays(1))
       case "yesterday" =>
-        Some(LocalDateTime.now().`with`(LocalTime.MIDNIGHT).minusDays(1))
+        Some(LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT).minusDays(1))
       case _ => None
     }
     localDateTime.map(localDateTimeToMicros)

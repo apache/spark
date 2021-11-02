@@ -33,6 +33,7 @@ from pyspark.pandas.data_type_ops.base import (
     _as_categorical_type,
     _as_other_type,
     _as_string_type,
+    _sanitize_list_like,
 )
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import pandas_on_spark_type
@@ -48,6 +49,7 @@ class DateOps(DataTypeOps):
         return "dates"
 
     def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' in days from date's subtraction.
         msg = (
@@ -65,6 +67,7 @@ class DateOps(DataTypeOps):
             raise TypeError("Date subtraction can only be applied to date series.")
 
     def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' in days from date's subtraction.
         msg = (
@@ -81,21 +84,25 @@ class DateOps(DataTypeOps):
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
+        _sanitize_list_like(right)
         return column_op(Column.__lt__)(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
+        _sanitize_list_like(right)
         return column_op(Column.__le__)(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
+        _sanitize_list_like(right)
         return column_op(Column.__ge__)(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
+        _sanitize_list_like(right)
         return column_op(Column.__gt__)(left, right)
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:

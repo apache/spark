@@ -235,8 +235,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     val df = sql("select ifnull(id, 'x'), nullif(id, 'x'), nvl(id, 'x'), nvl2(id, 'x', 'y') " +
       "from range(2)")
     checkKeywordsExistsInExplain(df,
-      "Project [coalesce(cast(id#xL as string), x) AS ifnull(id, x)#x, " +
-        "id#xL AS nullif(id, x)#xL, coalesce(cast(id#xL as string), x) AS nvl(id, x)#x, " +
+      "Project [cast(id#xL as string) AS ifnull(id, x)#x, " +
+        "id#xL AS nullif(id, x)#xL, cast(id#xL as string) AS nvl(id, x)#x, " +
         "x AS nvl2(id, x, y)#x]")
   }
 
@@ -460,7 +460,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
           "parquet" ->
             "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "orc" ->
-            "|PushedFilters: \\[.*\\(id\\), .*\\(value\\), .*\\(id,1\\), .*\\(value,2\\)\\]",
+            "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "csv" ->
             "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "json" ->
@@ -572,6 +572,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
       """
         |(11) AQEShuffleRead
         |Input [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
+        |Arguments: coalesced
         |""".stripMargin,
       """
         |(16) BroadcastHashJoin
@@ -674,6 +675,52 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
           assert(normalizedOutput.contains(expectedCodegenText))
         }
       }
+    }
+  }
+
+  test("SPARK-32986: Bucketed scan info should be a part of explain string") {
+    withTable("t1", "t2") {
+      Seq((1, 2), (2, 3)).toDF("i", "j").write.bucketBy(8, "i").saveAsTable("t1")
+      Seq(2, 3).toDF("i").write.bucketBy(8, "i").saveAsTable("t2")
+      val df1 = spark.table("t1")
+      val df2 = spark.table("t2")
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+        checkKeywordsExistsInExplain(
+          df1.join(df2, df1("i") === df2("i")),
+          "Bucketed: true")
+      }
+
+      withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
+        checkKeywordsExistsInExplain(
+          df1.join(df2, df1("i") === df2("i")),
+          "Bucketed: false (disabled by configuration)")
+      }
+
+      checkKeywordsExistsInExplain(df1, "Bucketed: false (disabled by query planner)" )
+
+      checkKeywordsExistsInExplain(
+        df1.select("j"),
+        "Bucketed: false (bucket column(s) not read)")
+    }
+  }
+
+  test("SPARK-36795: Node IDs should not be duplicated when InMemoryRelation present") {
+    withTempView("t1", "t2") {
+      Seq(1).toDF("k").write.saveAsTable("t1")
+      Seq(1).toDF("key").write.saveAsTable("t2")
+      spark.sql("SELECT * FROM t1").persist()
+      val query = "SELECT * FROM (SELECT * FROM t1) join t2 " +
+        "ON k = t2.key"
+      val df = sql(query).toDF()
+
+      val inMemoryRelationRegex = """InMemoryRelation \(([0-9]+)\)""".r
+      val columnarToRowRegex = """ColumnarToRow \(([0-9]+)\)""".r
+      val explainString = getNormalizedExplain(df, FormattedMode)
+      val inMemoryRelationNodeId = inMemoryRelationRegex.findAllIn(explainString).group(1)
+      val columnarToRowNodeId = columnarToRowRegex.findAllIn(explainString).group(1)
+
+      assert(inMemoryRelationNodeId != columnarToRowNodeId)
     }
   }
 }

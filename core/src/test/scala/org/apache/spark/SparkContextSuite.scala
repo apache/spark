@@ -990,8 +990,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         """{"name": "gpu","addresses":["0", "1", "2"]}""")
 
       val conf = new SparkConf()
-        .setMaster("local-cluster[3, 1, 1024]")
+        .setMaster("local-cluster[3, 2, 1024]")
         .setAppName("test-cluster")
+        .set(CPUS_PER_TASK, 2)
         .set(WORKER_GPU_ID.amountConf, "3")
         .set(WORKER_GPU_ID.discoveryScriptConf, discoveryScript)
         .set(TASK_GPU_ID.amountConf, "3")
@@ -1002,11 +1003,18 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       // Ensure all executors has started
       TestUtils.waitUntilExecutorsUp(sc, 3, 60000)
 
-      val rdd = sc.makeRDD(1 to 10, 3).mapPartitions { it =>
+      val rdd1 = sc.makeRDD(1 to 10, 3).mapPartitions { it =>
+        val context = TaskContext.get()
+        Iterator(context.cpus())
+      }
+      val cpus = rdd1.collect()
+      assert(cpus === Array(2, 2, 2))
+
+      val rdd2 = sc.makeRDD(1 to 10, 3).mapPartitions { it =>
         val context = TaskContext.get()
         context.resources().get(GPU).get.addresses.iterator
       }
-      val gpus = rdd.collect()
+      val gpus = rdd2.collect()
       assert(gpus.sorted === Seq("0", "0", "0", "1", "1", "1", "2", "2", "2"))
 
       eventually(timeout(10.seconds)) {
@@ -1317,6 +1325,18 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       }
     }
   }
+
+  test("SPARK-36772: Store application attemptId in BlockStoreClient for push based shuffle") {
+    val conf = new SparkConf().setAppName("testAppAttemptId")
+      .setMaster("pushbasedshuffleclustermanager")
+    conf.set(PUSH_BASED_SHUFFLE_ENABLED.key, "true")
+    conf.set(IS_TESTING.key, "true")
+    conf.set(SHUFFLE_SERVICE_ENABLED.key, "true")
+    sc = new SparkContext(conf)
+    val env = SparkEnv.get
+    assert(env.blockManager.blockStoreClient.getAppAttemptId.equals("1"))
+  }
+
 }
 
 object SparkContextSuite {

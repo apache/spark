@@ -57,13 +57,22 @@ class WorkerTests(ReusedPySparkTestCase):
         t.start()
 
         daemon_pid, worker_pid = 0, 0
+        cnt = 0
         while True:
             if os.path.exists(path):
                 with open(path) as f:
                     data = f.read().split(' ')
-                daemon_pid, worker_pid = map(int, data)
-                break
-            time.sleep(0.1)
+                try:
+                    daemon_pid, worker_pid = map(int, data)
+                except ValueError:
+                    pass
+                    # In case the value is not written yet.
+                    cnt += 1
+                    if cnt == 10:
+                        raise
+                else:
+                    break
+            time.sleep(1)
 
         # cancel jobs
         self.sc.cancelAllJobs()
@@ -226,6 +235,10 @@ class WorkerSegfaultTest(ReusedPySparkTestCase):
             self.assertRegex(str(e), "Segmentation fault")
 
 
+@unittest.skipIf(
+    "COVERAGE_PROCESS_START" in os.environ,
+    "Flaky with coverage enabled, skipping for now."
+)
 class WorkerSegfaultNonDaemonTest(WorkerSegfaultTest):
 
     @classmethod

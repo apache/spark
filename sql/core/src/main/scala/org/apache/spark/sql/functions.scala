@@ -674,6 +674,14 @@ object functions {
   def max(columnName: String): Column = max(Column(columnName))
 
   /**
+   * Aggregate function: returns the value associated with the maximum value of ord.
+   *
+   * @group agg_funcs
+   * @since 3.3.0
+   */
+  def max_by(e: Column, ord: Column): Column = withAggregateFunction { MaxBy(e.expr, ord.expr) }
+
+  /**
    * Aggregate function: returns the average of the values in a group.
    * Alias for avg.
    *
@@ -706,6 +714,14 @@ object functions {
    * @since 1.3.0
    */
   def min(columnName: String): Column = min(Column(columnName))
+
+  /**
+   * Aggregate function: returns the value associated with the minimum value of ord.
+   *
+   * @group agg_funcs
+   * @since 3.3.0
+   */
+  def min_by(e: Column, ord: Column): Column = withAggregateFunction { MinBy(e.expr, ord.expr) }
 
   /**
    * Aggregate function: returns the approximate `percentile` of the numeric column `col` which
@@ -1801,6 +1817,24 @@ object functions {
   def cosh(columnName: String): Column = cosh(Column(columnName))
 
   /**
+   * @param e angle in radians
+   * @return cotangent of the angle
+   *
+   * @group math_funcs
+   * @since 3.3.0
+   */
+  def cot(e: Column): Column = withExpr { Cot(e.expr) }
+
+  /**
+   * @param e angle in radians
+   * @return cosecant of the angle
+   *
+   * @group math_funcs
+   * @since 3.3.0
+   */
+  def csc(e: Column): Column = withExpr { Csc(e.expr) }
+
+  /**
    * Computes the exponential of the given value.
    *
    * @group math_funcs
@@ -2189,6 +2223,15 @@ object functions {
   def bround(e: Column, scale: Int): Column = withExpr { BRound(e.expr, Literal(scale)) }
 
   /**
+   * @param e angle in radians
+   * @return secant of the angle
+   *
+   * @group math_funcs
+   * @since 3.3.0
+   */
+  def sec(e: Column): Column = withExpr { Sec(e.expr) }
+
+  /**
    * Shift the given value numBits left. If the given value is a long value, this function
    * will return a long value else it will return an integer value.
    *
@@ -2533,6 +2576,14 @@ object functions {
   def base64(e: Column): Column = withExpr { Base64(e.expr) }
 
   /**
+   * Calculates the bit length for the specified string column.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def bit_length(e: Column): Column = withExpr { BitLength(e.expr) }
+
+  /**
    * Concatenates multiple input string columns together into a single string column,
    * using the given separator.
    *
@@ -2681,6 +2732,17 @@ object functions {
   }
 
   /**
+   * Left-pad the binary column with pad to a byte length of len. If the binary column is longer
+   * than len, the return value is shortened to len bytes.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def lpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
+    StringLPad(str.expr, lit(len).expr, lit(pad).expr)
+  }
+
+  /**
    * Trim the spaces from left end for the specified string value.
    *
    * @group string_funcs
@@ -2696,6 +2758,14 @@ object functions {
   def ltrim(e: Column, trimString: String): Column = withExpr {
     StringTrimLeft(e.expr, Literal(trimString))
   }
+
+  /**
+   * Calculates the byte length for the specified string column.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def octet_length(e: Column): Column = withExpr { OctetLength(e.expr) }
 
   /**
    * Extract a specific group matched by a Java regex, from the specified string column.
@@ -2747,6 +2817,17 @@ object functions {
    * @since 1.5.0
    */
   def rpad(str: Column, len: Int, pad: String): Column = withExpr {
+    StringRPad(str.expr, lit(len).expr, lit(pad).expr)
+  }
+
+  /**
+   * Right-pad the binary column with pad to a byte length of len. If the binary column is longer
+   * than len, the return value is shortened to len bytes.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def rpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
     StringRPad(str.expr, lit(len).expr, lit(pad).expr)
   }
 
@@ -3662,6 +3743,43 @@ object functions {
   }
 
   /**
+   * Generates session window given a timestamp specifying column.
+   *
+   * Session window is one of dynamic windows, which means the length of window is varying
+   * according to the given inputs. For static gap duration, the length of session window
+   * is defined as "the timestamp of latest input of the session + gap duration", so when
+   * the new inputs are bound to the current session window, the end time of session window
+   * can be expanded according to the new inputs.
+   *
+   * Besides a static gap duration value, users can also provide an expression to specify
+   * gap duration dynamically based on the input row. With dynamic gap duration, the closing
+   * of a session window does not depend on the latest input anymore. A session window's range
+   * is the union of all events' ranges which are determined by event start time and evaluated
+   * gap duration during the query execution. Note that the rows with negative or zero gap
+   * duration will be filtered out from the aggregation.
+   *
+   * Windows can support microsecond precision. gapDuration in the order of months are not
+   * supported.
+   *
+   * For a streaming query, you may use the function `current_timestamp` to generate windows on
+   * processing time.
+   *
+   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
+   *                   The time column must be of TimestampType.
+   * @param gapDuration A column specifying the timeout of the session. It could be static value,
+   *                    e.g. `10 minutes`, `1 second`, or an expression/UDF that specifies gap
+   *                    duration dynamically based on the input row.
+   *
+   * @group datetime_funcs
+   * @since 3.2.0
+   */
+  def session_window(timeColumn: Column, gapDuration: Column): Column = {
+    withExpr {
+      SessionWindow(timeColumn.expr, gapDuration.expr)
+    }.as("session_window")
+  }
+
+  /**
    * Creates timestamp from the number of seconds since UTC epoch.
    * @group datetime_funcs
    * @since 3.1.0
@@ -3779,6 +3897,7 @@ object functions {
 
   /**
    * Sorts the input array in ascending order. The elements of the input array must be orderable.
+   * NaN is greater than any non-NaN elements for double/float type.
    * Null elements will be placed at the end of the returned array.
    *
    * @group collection_funcs
@@ -4488,8 +4607,9 @@ object functions {
 
   /**
    * Sorts the input array for the given column in ascending or descending order,
-   * according to the natural ordering of the array elements.
-   * Null elements will be placed at the beginning of the returned array in ascending order or
+   * according to the natural ordering of the array elements. NaN is greater than any non-NaN
+   * elements for double/float type. Null elements will be placed at the beginning of the returned
+   * array in ascending order or
    * at the end of the returned array in descending order.
    *
    * @group collection_funcs
@@ -4498,7 +4618,8 @@ object functions {
   def sort_array(e: Column, asc: Boolean): Column = withExpr { SortArray(e.expr, lit(asc).expr) }
 
   /**
-   * Returns the minimum value in the array.
+   * Returns the minimum value in the array. NaN is greater than any non-NaN elements for
+   * double/float type. NULL elements are skipped.
    *
    * @group collection_funcs
    * @since 2.4.0
@@ -4506,7 +4627,8 @@ object functions {
   def array_min(e: Column): Column = withExpr { ArrayMin(e.expr) }
 
   /**
-   * Returns the maximum value in the array.
+   * Returns the maximum value in the array. NaN is greater than any non-NaN elements for
+   * double/float type. NULL elements are skipped.
    *
    * @group collection_funcs
    * @since 2.4.0

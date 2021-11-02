@@ -34,7 +34,7 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
-  // Exclude rules for 3.3.x from 3.2.0 after 3.2.0 release
+  // Exclude rules for 3.3.x from 3.2.0
   lazy val v33excludes = v32excludes ++ Seq(
   )
 
@@ -60,6 +60,9 @@ object MimaExcludes {
     // [SPARK-34488][CORE] Support task Metrics Distributions and executor Metrics Distributions
     // in the REST API call for a specified stage
     ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.StageData.this"),
+
+    // [SPARK-36173][CORE] Support getting CPU number in TaskContext
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.cpus"),
 
     // [SPARK-35896] Include more granular metrics for stateful operators in StreamingQueryProgress
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StateOperatorProgress.this"),

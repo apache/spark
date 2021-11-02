@@ -42,7 +42,7 @@ import org.apache.spark.sql.types.DayTimeIntervalType.fieldToString
  * @since 3.2.0
  */
 @Unstable
-case class DayTimeIntervalType(startField: Byte, endField: Byte) extends AtomicType {
+case class DayTimeIntervalType(startField: Byte, endField: Byte) extends AnsiIntervalType {
   /**
    * Internally, values of day-time intervals are stored in `Long` values as amount of time in terms
    * of microseconds that are calculated by the formula:

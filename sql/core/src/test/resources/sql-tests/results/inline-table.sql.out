@@ -49,7 +49,7 @@ two	2
 -- !query
 select * from values ("one", null), ("two", null) as data(a, b)
 -- !query schema
-struct<a:string,b:null>
+struct<a:string,b:void>
 -- !query output
 one	NULL
 two	NULL

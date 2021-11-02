@@ -28,9 +28,10 @@ import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedFieldName, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
+import org.apache.spark.sql.catalyst.expressions.{AnsiCast, AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, V1Table}
@@ -75,6 +76,13 @@ class PlanResolutionSuite extends AnalysisTest {
     t
   }
 
+  private val charVarcharTable: Table = {
+    val t = mock(classOf[Table])
+    when(t.schema()).thenReturn(new StructType().add("c1", "char(5)").add("c2", "varchar(5)"))
+    when(t.partitioning()).thenReturn(Array.empty[Transform])
+    t
+  }
+
   private val v1Table: V1Table = {
     val t = mock(classOf[CatalogTable])
     when(t.schema).thenReturn(new StructType()
@@ -109,6 +117,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case "tab" => table
         case "tab1" => table1
         case "tab2" => table2
+        case "charvarchar" => charVarcharTable
         case name => throw new NoSuchTableException(name)
       }
     })
@@ -1058,12 +1067,33 @@ class PlanResolutionSuite extends AnalysisTest {
       }
     }
 
-    val sql = "UPDATE non_existing SET id=1"
-    val parsed = parseAndResolve(sql)
-    parsed match {
+    val sql1 = "UPDATE non_existing SET id=1"
+    val parsed1 = parseAndResolve(sql1)
+    parsed1 match {
       case u: UpdateTable =>
         assert(u.table.isInstanceOf[UnresolvedRelation])
-      case _ => fail("Expect UpdateTable, but got:\n" + parsed.treeString)
+      case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
+    }
+
+    val sql2 = "UPDATE testcat.charvarchar SET c1='a', c2=1"
+    val parsed2 = parseAndResolve(sql2)
+    parsed2 match {
+      case u: UpdateTable =>
+        assert(u.assignments.length == 2)
+        u.assignments(0).value match {
+          case s: StaticInvoke =>
+            assert(s.arguments.length == 2)
+            assert(s.functionName == "charTypeWriteSideCheck")
+          case other => fail("Expect StaticInvoke, but got: " + other)
+        }
+        u.assignments(1).value match {
+          case s: StaticInvoke =>
+            assert(s.arguments.length == 2)
+            assert(s.arguments.head.isInstanceOf[AnsiCast])
+            assert(s.functionName == "varcharTypeWriteSideCheck")
+          case other => fail("Expect StaticInvoke, but got: " + other)
+        }
+      case _ => fail("Expect UpdateTable, but got:\n" + parsed2.treeString)
     }
   }
 
@@ -1102,7 +1132,7 @@ class PlanResolutionSuite extends AnalysisTest {
             "ALTER COLUMN with qualified column is only supported with v2 tables"))
         } else {
           parsed1 match {
-            case AlterTableAlterColumn(
+            case AlterColumn(
                 _: ResolvedTable,
                 column: ResolvedFieldName,
                 Some(LongType),
@@ -1114,7 +1144,7 @@ class PlanResolutionSuite extends AnalysisTest {
           }
 
           parsed2 match {
-            case AlterTableAlterColumn(
+            case AlterColumn(
                 _: ResolvedTable,
                 column: ResolvedFieldName,
                 None,
@@ -1168,14 +1198,14 @@ class PlanResolutionSuite extends AnalysisTest {
   test("alter table: hive style change column") {
     Seq("v2Table", "testcat.tab").foreach { tblName =>
       parseAndResolve(s"ALTER TABLE $tblName CHANGE COLUMN i i int COMMENT 'an index'") match {
-        case AlterTableAlterColumn(
+        case AlterColumn(
             _: ResolvedTable, _: ResolvedFieldName, None, None, Some(comment), None) =>
           assert(comment == "an index")
         case _ => fail("expect AlterTableAlterColumn with comment change only")
       }
 
       parseAndResolve(s"ALTER TABLE $tblName CHANGE COLUMN i i long COMMENT 'an index'") match {
-        case AlterTableAlterColumn(
+        case AlterColumn(
             _: ResolvedTable, _: ResolvedFieldName, Some(dataType), None, Some(comment), None) =>
           assert(comment == "an index")
           assert(dataType == LongType)
@@ -1211,7 +1241,7 @@ class PlanResolutionSuite extends AnalysisTest {
       val catalog = if (isSessionCatalog) v2SessionCatalog else testCat
       val tableIdent = if (isSessionCatalog) "v2Table" else "tab"
       parsed match {
-        case AlterTableAlterColumn(r: ResolvedTable, _, _, _, _, _) =>
+        case AlterColumn(r: ResolvedTable, _, _, _, _, _) =>
           assert(r.catalog == catalog)
           assert(r.identifier.name() == tableIdent)
         case Project(_, AsDataSourceV2Relation(r)) =>
@@ -1568,6 +1598,42 @@ class PlanResolutionSuite extends AnalysisTest {
     val e3 = intercept[AnalysisException](parseAndResolve(sql3))
     assert(e3.message.contains(
       "cannot resolve s in MERGE command given columns [testcat.tab2.i, testcat.tab2.x]"))
+
+    val sql4 =
+      """
+        |MERGE INTO testcat.charvarchar
+        |USING testcat.tab2
+        |ON 1 = 1
+        |WHEN MATCHED THEN UPDATE SET c1='a', c2=1
+        |WHEN NOT MATCHED THEN INSERT (c1, c2) VALUES ('b', 2)
+        |""".stripMargin
+    val parsed4 = parseAndResolve(sql4)
+    parsed4 match {
+      case m: MergeIntoTable =>
+        assert(m.matchedActions.length == 1)
+        m.matchedActions.head match {
+          case UpdateAction(_, Seq(
+          Assignment(_, s1: StaticInvoke), Assignment(_, s2: StaticInvoke))) =>
+            assert(s1.arguments.length == 2)
+            assert(s1.functionName == "charTypeWriteSideCheck")
+            assert(s2.arguments.length == 2)
+            assert(s2.arguments.head.isInstanceOf[AnsiCast])
+            assert(s2.functionName == "varcharTypeWriteSideCheck")
+          case other => fail("Expect UpdateAction, but got: " + other)
+        }
+        assert(m.notMatchedActions.length == 1)
+        m.notMatchedActions.head match {
+          case InsertAction(_, Seq(
+          Assignment(_, s1: StaticInvoke), Assignment(_, s2: StaticInvoke))) =>
+            assert(s1.arguments.length == 2)
+            assert(s1.functionName == "charTypeWriteSideCheck")
+            assert(s2.arguments.length == 2)
+            assert(s2.arguments.head.isInstanceOf[AnsiCast])
+            assert(s2.functionName == "varcharTypeWriteSideCheck")
+          case other => fail("Expect UpdateAction, but got: " + other)
+        }
+      case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
+    }
   }
 
   test("MERGE INTO TABLE - skip resolution on v2 tables that accept any schema") {

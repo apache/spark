@@ -25,12 +25,12 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
@@ -133,20 +133,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
         write.table.failAnalysis(s"Table or view not found: ${tblName.quoted}")
 
-      case u: UnresolvedV2Relation if isView(u.originalNameParts) =>
-        u.failAnalysis(
-          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
-
-      case u: UnresolvedV2Relation =>
-        u.failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
-
-      case AlterTable(_, _, u: UnresolvedV2Relation, _) if isView(u.originalNameParts) =>
-        u.failAnalysis(
-          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
-
-      case AlterTable(_, _, u: UnresolvedV2Relation, _) =>
-        failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
-
       case command: V2PartitionCommand =>
         command.table match {
           case r @ ResolvedTable(_, _, table, _) => table match {
@@ -179,15 +165,25 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             }
         }
 
-        operator transformExpressionsUp {
+        val exprs = operator match {
+          // `groupingExpressions` may rely on `aggregateExpressions`, due to the GROUP BY alias
+          // feature. We should check errors in `aggregateExpressions` first.
+          case a: Aggregate => a.aggregateExpressions ++ a.groupingExpressions
+          case _ => operator.expressions
+        }
+
+        exprs.foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
-            val from = operator.inputSet.toSeq.map(_.qualifiedName).mkString(", ")
-            // cannot resolve '${a.sql}' given input columns: [$from]
-            a.failAnalysis(errorClass = "MISSING_COLUMN", messageParameters = Array(a.sql, from))
+            val missingCol = a.sql
+            val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
+            val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates)
+            a.failAnalysis(
+              errorClass = "MISSING_COLUMN",
+              messageParameters = Array(missingCol, orderedCandidates.mkString(", ")))
 
           case s: Star =>
             withPosition(s) {
-              throw QueryCompilationErrors.invalidStarUsageError(operator.nodeName)
+              throw QueryCompilationErrors.invalidStarUsageError(operator.nodeName, Seq(s))
             }
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
@@ -220,27 +216,26 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis(s"${wf.prettyName} function can only be evaluated in an ordered " +
               s"row-based window frame with a single offset: $w")
 
-          case w @ WindowExpression(e, s) =>
+          case w: WindowExpression =>
             // Only allow window functions with an aggregate expression or an offset window
             // function or a Pandas window UDF.
-            e match {
+            w.windowFunction match {
               case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
-                  _: AggregateWindowFunction =>
-                w
-              case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) =>
-                w
-              case _ =>
-                failAnalysis(s"Expression '$e' not supported within a window function.")
+                  _: AggregateWindowFunction => // OK
+              case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) => // OK
+              case other =>
+                failAnalysis(s"Expression '$other' not supported within a window function.")
             }
 
           case s: SubqueryExpression =>
             checkSubqueryExpression(operator, s)
-            s
 
           case e: ExpressionWithRandomSeed if !e.seedExpression.foldable =>
             failAnalysis(
               s"Input argument to ${e.prettyName} must be a constant.")
-        }
+
+          case _ =>
+        })
 
         operator match {
           case etw: EventTimeWatermark =>
@@ -262,6 +257,20 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis(
               s"join condition '${condition.sql}' " +
                 s"of type ${condition.dataType.catalogString} is not a boolean.")
+
+          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _)
+              if condition.dataType != BooleanType =>
+            failAnalysis(
+              s"join condition '${condition.sql}' " +
+                s"of type ${condition.dataType.catalogString} is not a boolean.")
+
+          case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion)) =>
+            if (!toleranceAssertion.foldable) {
+              failAnalysis("Input argument tolerance must be a constant.")
+            }
+            if (!toleranceAssertion.eval().asInstanceOf[Boolean]) {
+              failAnalysis("Input argument tolerance must be non-negative.")
+            }
 
           case a @ Aggregate(groupingExprs, aggregateExprs, child) =>
             def isAggregateExpression(expr: Expression): Boolean = {
@@ -415,15 +424,26 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                     |the ${ordinalNumber(ti + 1)} table has ${child.output.length} columns
                   """.stripMargin.replace("\n", " ").trim())
               }
+              val isUnion = operator.isInstanceOf[Union]
+              val dataTypesAreCompatibleFn = if (isUnion) {
+                (dt1: DataType, dt2: DataType) =>
+                  !DataType.equalsStructurally(dt1, dt2, true)
+              } else {
+                // SPARK-18058: we shall not care about the nullability of columns
+                (dt1: DataType, dt2: DataType) =>
+                  TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty
+              }
+
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
-                if (TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty) {
+                if (dataTypesAreCompatibleFn(dt1, dt2)) {
                   failAnalysis(
                     s"""
-                      |${operator.nodeName} can only be performed on tables with the compatible
-                      |column types. ${dt1.catalogString} <> ${dt2.catalogString} at the
-                      |${ordinalNumber(ci)} column of the ${ordinalNumber(ti + 1)} table
+                       |${operator.nodeName} can only be performed on tables with the compatible
+                       |column types. The ${ordinalNumber(ci)} column of the
+                       |${ordinalNumber(ti + 1)} table is ${dt1.catalogString} type which is not
+                       |compatible with ${dt2.catalogString} at same column of first table
                     """.stripMargin.replace("\n", " ").trim())
                 }
               }
@@ -449,87 +469,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
-          case alter: AlterTableCommand if alter.table.resolved =>
+          case alter: AlterTableCommand =>
             checkAlterTableCommand(alter)
-
-          case alter: AlterTable if alter.table.resolved =>
-            val table = alter.table
-            def findField(operation: String, fieldName: Array[String]): StructField = {
-              // include collections because structs nested in maps and arrays may be altered
-              val field = table.schema.findNestedField(fieldName, includeCollections = true)
-              if (field.isEmpty) {
-                alter.failAnalysis(
-                  s"Cannot $operation missing field ${fieldName.quoted} in ${table.name} schema: " +
-                  table.schema.treeString)
-              }
-              field.get._2
-            }
-            def positionArgumentExists(
-                position: ColumnPosition,
-                struct: StructType,
-                fieldsAdded: Seq[String]): Unit = {
-              position match {
-                case after: After =>
-                  val allFields = struct.fieldNames ++ fieldsAdded
-                  if (!allFields.contains(after.column())) {
-                    alter.failAnalysis(s"Couldn't resolve positional argument $position amongst " +
-                      s"${allFields.mkString("[", ", ", "]")}")
-                  }
-                case _ =>
-              }
-            }
-            def findParentStruct(operation: String, fieldNames: Array[String]): StructType = {
-              val parent = fieldNames.init
-              val field = if (parent.nonEmpty) {
-                findField(operation, parent).dataType
-              } else {
-                table.schema
-              }
-              field match {
-                case s: StructType => s
-                case o => alter.failAnalysis(s"Cannot $operation ${fieldNames.quoted}, because " +
-                  s"its parent is not a StructType. Found $o")
-              }
-            }
-            def checkColumnNotExists(
-                operation: String,
-                fieldNames: Array[String],
-                struct: StructType): Unit = {
-              if (struct.findNestedField(fieldNames, includeCollections = true).isDefined) {
-                alter.failAnalysis(s"Cannot $operation column, because ${fieldNames.quoted} " +
-                  s"already exists in ${struct.treeString}")
-              }
-            }
-
-            val colsToDelete = mutable.Set.empty[Seq[String]]
-            // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a parent
-            // name of fields to field names that belong to the parent. For example, if we add
-            // columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
-            // Map(Seq("a", "b") -> Seq("c", "d"), Seq("a") -> Seq("c")).
-            val colsToAdd = mutable.Map.empty[Seq[String], Seq[String]]
-
-            alter.changes.foreach {
-              case add: AddColumn =>
-                // If a column to add is a part of columns to delete, we don't need to check
-                // if column already exists - applies to REPLACE COLUMNS scenario.
-                if (!colsToDelete.contains(add.fieldNames())) {
-                  checkColumnNotExists("add", add.fieldNames(), table.schema)
-                }
-                val parent = findParentStruct("add", add.fieldNames())
-                val parentName = add.fieldNames().init
-                val fieldsAdded = colsToAdd.getOrElse(parentName, Nil)
-                positionArgumentExists(add.position(), parent, fieldsAdded)
-                TypeUtils.failWithIntervalType(add.dataType())
-                colsToAdd(parentName) = fieldsAdded :+ add.fieldNames().last
-              case delete: DeleteColumn =>
-                findField("delete", delete.fieldNames)
-                // REPLACE COLUMNS has deletes followed by adds. Remember the deleted columns
-                // so that add operations do not fail when the columns to add exist and they
-                // are to be deleted.
-                colsToDelete += delete.fieldNames
-              case _ =>
-              // no validation needed for set and remove property
-            }
 
           case _ => // Falls back to the following checks
         }
@@ -587,6 +528,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                """.stripMargin)
+
+          case j: AsOfJoin if !j.duplicateResolved =>
+            val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
+            failAnalysis(
+              s"""
+                 |Failure when resolving conflicting references in AsOfJoin:
+                 |$plan
+                 |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+                 |""".stripMargin)
 
           // TODO: although map type is not orderable, technically map type should be able to be
           // used in equality comparison, remove this type check once we support it.
@@ -1026,17 +976,35 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
    * Validates the options used for alter table commands after table and columns are resolved.
    */
   private def checkAlterTableCommand(alter: AlterTableCommand): Unit = {
-    def checkColumnNotExists(fieldNames: Seq[String], struct: StructType): Unit = {
-      if (struct.findNestedField(fieldNames, includeCollections = true).isDefined) {
-        alter.failAnalysis(s"Cannot ${alter.operation} column, because ${fieldNames.quoted} " +
+    def checkColumnNotExists(op: String, fieldNames: Seq[String], struct: StructType): Unit = {
+      if (struct.findNestedField(
+          fieldNames, includeCollections = true, alter.conf.resolver).isDefined) {
+        alter.failAnalysis(s"Cannot $op column, because ${fieldNames.quoted} " +
           s"already exists in ${struct.treeString}")
       }
     }
 
+    def checkColumnNameDuplication(colsToAdd: Seq[QualifiedColType]): Unit = {
+      SchemaUtils.checkColumnNameDuplication(
+        colsToAdd.map(_.name.quoted),
+        "in the user specified columns",
+        alter.conf.resolver)
+    }
+
     alter match {
-      case AlterTableRenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
-        checkColumnNotExists(col.path :+ newName, table.schema)
-      case a @ AlterTableAlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _) =>
+      case AddColumns(table: ResolvedTable, colsToAdd) =>
+        colsToAdd.foreach { colToAdd =>
+          checkColumnNotExists("add", colToAdd.name, table.schema)
+        }
+        checkColumnNameDuplication(colsToAdd)
+
+      case ReplaceColumns(_: ResolvedTable, colsToAdd) =>
+        checkColumnNameDuplication(colsToAdd)
+
+      case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
+        checkColumnNotExists("rename", col.path :+ newName, table.schema)
+
+      case a @ AlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _) =>
         val fieldName = col.name.quoted
         if (a.dataType.isDefined) {
           val field = CharVarcharUtils.getRawType(col.field.metadata)
@@ -1056,7 +1024,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             case u: UserDefinedType[_] =>
               alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
                 s"update a UserDefinedType[${u.sql}] by updating its fields")
-            case _: CalendarIntervalType | _: YearMonthIntervalType | _: DayTimeIntervalType =>
+            case _: CalendarIntervalType | _: AnsiIntervalType =>
               alter.failAnalysis(s"Cannot update ${table.name} field $fieldName to interval type")
             case _ => // update is okay
           }

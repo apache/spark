@@ -36,7 +36,10 @@ import org.apache.spark.network.buffer.NettyManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.server.BlockPushNonFatalFailure;
+import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
+import org.apache.spark.network.shuffle.protocol.BlockPushReturnCode;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
 
 
@@ -45,77 +48,78 @@ public class OneForOneBlockPusherSuite {
   @Test
   public void testPushOne() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
-    blocks.put("shufflePush_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[1])));
+    blocks.put("shufflePush_0_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[1])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
-    BlockFetchingListener listener = pushBlocks(
+    BlockPushingListener listener = pushBlocks(
       blocks,
       blockIds,
-      Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0, 0)));
+      Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0, 0, 0)));
 
-    verify(listener).onBlockFetchSuccess(eq("shufflePush_0_0_0"), any());
+    verify(listener).onBlockPushSuccess(eq("shufflePush_0_0_0_0"), any());
   }
 
   @Test
   public void testPushThree() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
-    blocks.put("shufflePush_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
-    blocks.put("shufflePush_0_1_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));
-    blocks.put("shufflePush_0_2_0", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
+    blocks.put("shufflePush_0_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
+    blocks.put("shufflePush_0_0_1_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));
+    blocks.put("shufflePush_0_0_2_0",
+      new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
-    BlockFetchingListener listener = pushBlocks(
+    BlockPushingListener listener = pushBlocks(
       blocks,
       blockIds,
-      Arrays.asList(new PushBlockStream("app-id",0,  0, 0, 0, 0),
-        new PushBlockStream("app-id", 0, 0, 1, 0, 1),
-        new PushBlockStream("app-id", 0, 0, 2, 0, 2)));
+      Arrays.asList(new PushBlockStream("app-id",0,  0, 0, 0, 0, 0),
+        new PushBlockStream("app-id", 0, 0, 0, 1, 0, 1),
+        new PushBlockStream("app-id", 0, 0, 0, 2, 0, 2)));
 
-    verify(listener, times(1)).onBlockFetchSuccess(eq("shufflePush_0_0_0"), any());
-    verify(listener, times(1)).onBlockFetchSuccess(eq("shufflePush_0_1_0"), any());
-    verify(listener, times(1)).onBlockFetchSuccess(eq("shufflePush_0_2_0"), any());
+    verify(listener, times(1)).onBlockPushSuccess(eq("shufflePush_0_0_0_0"), any());
+    verify(listener, times(1)).onBlockPushSuccess(eq("shufflePush_0_0_1_0"), any());
+    verify(listener, times(1)).onBlockPushSuccess(eq("shufflePush_0_0_2_0"), any());
   }
 
   @Test
   public void testServerFailures() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
-    blocks.put("shufflePush_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
-    blocks.put("shufflePush_0_1_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
-    blocks.put("shufflePush_0_2_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
+    blocks.put("shufflePush_0_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
+    blocks.put("shufflePush_0_0_1_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
+    blocks.put("shufflePush_0_0_2_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
-    BlockFetchingListener listener = pushBlocks(
+    BlockPushingListener listener = pushBlocks(
       blocks,
       blockIds,
-      Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0, 0),
-        new PushBlockStream("app-id", 0, 0, 1, 0, 1),
-        new PushBlockStream("app-id", 0, 0, 2, 0, 2)));
+      Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0, 0, 0),
+        new PushBlockStream("app-id", 0, 0, 0, 1, 0, 1),
+        new PushBlockStream("app-id", 0, 0, 0, 2, 0, 2)));
 
-    verify(listener, times(1)).onBlockFetchSuccess(eq("shufflePush_0_0_0"), any());
-    verify(listener, times(1)).onBlockFetchFailure(eq("shufflePush_0_1_0"), any());
-    verify(listener, times(1)).onBlockFetchFailure(eq("shufflePush_0_2_0"), any());
+    verify(listener, times(1)).onBlockPushSuccess(eq("shufflePush_0_0_0_0"), any());
+    verify(listener, times(1)).onBlockPushFailure(eq("shufflePush_0_0_1_0"), any());
+    verify(listener, times(1)).onBlockPushFailure(eq("shufflePush_0_0_2_0"), any());
   }
 
   @Test
   public void testHandlingRetriableFailures() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
-    blocks.put("shufflePush_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
-    blocks.put("shufflePush_0_1_0", null);
-    blocks.put("shufflePush_0_2_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
+    blocks.put("shufflePush_0_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
+    blocks.put("shufflePush_0_0_1_0", null);
+    blocks.put("shufflePush_0_0_2_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
-    BlockFetchingListener listener = pushBlocks(
+    BlockPushingListener listener = pushBlocks(
       blocks,
       blockIds,
-      Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0, 0),
-        new PushBlockStream("app-id", 0, 0, 1, 0, 1),
-        new PushBlockStream("app-id", 0, 0, 2, 0, 2)));
+      Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0, 0, 0),
+        new PushBlockStream("app-id", 0, 0, 0, 1, 0, 1),
+        new PushBlockStream("app-id", 0, 0, 0, 2, 0, 2)));
 
-    verify(listener, times(1)).onBlockFetchSuccess(eq("shufflePush_0_0_0"), any());
-    verify(listener, times(0)).onBlockFetchSuccess(not(eq("shufflePush_0_0_0")), any());
-    verify(listener, times(0)).onBlockFetchFailure(eq("shufflePush_0_0_0"), any());
-    verify(listener, times(1)).onBlockFetchFailure(eq("shufflePush_0_1_0"), any());
-    verify(listener, times(2)).onBlockFetchFailure(eq("shufflePush_0_2_0"), any());
+    verify(listener, times(1)).onBlockPushSuccess(eq("shufflePush_0_0_0_0"), any());
+    verify(listener, times(0)).onBlockPushSuccess(not(eq("shufflePush_0_0_0_0")), any());
+    verify(listener, times(0)).onBlockPushFailure(eq("shufflePush_0_0_0_0"), any());
+    verify(listener, times(1)).onBlockPushFailure(eq("shufflePush_0_0_1_0"), any());
+    verify(listener, times(2)).onBlockPushFailure(eq("shufflePush_0_0_2_0"), any());
   }
 
   /**
@@ -123,12 +127,12 @@ public class OneForOneBlockPusherSuite {
    * If a block is an empty byte, a server side retriable exception will be thrown.
    * If a block is null, a non-retriable exception will be thrown.
    */
-  private static BlockFetchingListener pushBlocks(
+  private static BlockPushingListener pushBlocks(
       LinkedHashMap<String, ManagedBuffer> blocks,
       String[] blockIds,
       Iterable<BlockTransferMessage> expectMessages) {
     TransportClient client = mock(TransportClient.class);
-    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+    BlockPushingListener listener = mock(BlockPushingListener.class);
     OneForOneBlockPusher pusher =
       new OneForOneBlockPusher(client, "app-id", 0, blockIds, listener, blocks);
 
@@ -139,15 +143,16 @@ public class OneForOneBlockPusherSuite {
       BlockTransferMessage message = BlockTransferMessage.Decoder.fromByteBuffer(header);
       RpcResponseCallback callback = (RpcResponseCallback) invocation.getArguments()[2];
       Map.Entry<String, ManagedBuffer> entry = blockIterator.next();
+      String blockId = entry.getKey();
       ManagedBuffer block = entry.getValue();
       if (block != null && block.nioByteBuffer().capacity() > 0) {
-        callback.onSuccess(header);
+        callback.onSuccess(new BlockPushReturnCode(ReturnCode.SUCCESS.id(), "").toByteBuffer());
       } else if (block != null) {
-        callback.onFailure(new RuntimeException("Failed " + entry.getKey()
-          + ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX));
+        callback.onSuccess(new BlockPushReturnCode(
+          ReturnCode.BLOCK_APPEND_COLLISION_DETECTED.id(), blockId).toByteBuffer());
       } else {
-        callback.onFailure(new RuntimeException("Quick fail " + entry.getKey()
-          + ErrorHandler.BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX));
+        callback.onFailure(new BlockPushNonFatalFailure(
+          ReturnCode.TOO_LATE_BLOCK_PUSH, ""));
       }
       assertEquals(msgIterator.next(), message);
       return null;

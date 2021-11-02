@@ -21,15 +21,16 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, PartitioningCollection}
 import org.apache.spark.sql.execution.{DummySparkPlan, SortExec}
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class EnsureRequirementsSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
+class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprA = Literal(1)
   private val exprB = Literal(2)
   private val exprC = Literal(3)
+
+  private val EnsureRequirements = new EnsureRequirements()
 
   test("reorder should handle PartitioningCollection") {
     val plan1 = DummySparkPlan(
@@ -132,28 +133,6 @@ class EnsureRequirementsSuite extends SharedSparkSession with AdaptiveSparkPlanH
       assert(res.queryExecution.executedPlan.collect {
         case s: ShuffleExchangeLike => s
       }.size == 2)
-    }
-  }
-
-  test("SPARK-35989: Do not remove REPARTITION_BY_NUM shuffle if AQE is enabled") {
-    import testImplicits._
-    Seq(true, false).foreach { enableAqe =>
-      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAqe.toString,
-          SQLConf.SHUFFLE_PARTITIONS.key -> "3",
-          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-        val df1 = Seq((1, 2)).toDF("c1", "c2")
-        val df2 = Seq((1, 3)).toDF("c3", "c4")
-        val res = df1.join(df2, $"c1" === $"c3").repartition(3, $"c1")
-        val num = collect(res.queryExecution.executedPlan) {
-          case shuffle: ShuffleExchangeExec if shuffle.shuffleOrigin == REPARTITION_BY_NUM =>
-            shuffle
-        }.size
-        if (enableAqe) {
-          assert(num == 1)
-        } else {
-          assert(num == 0)
-        }
-      }
     }
   }
 }

@@ -1,0 +1,113 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+- case: createDataFrameStructsValid
+  main: |
+    from pyspark.sql import SparkSession
+    from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+
+    spark = SparkSession.builder.getOrCreate()
+
+    data = [('Alice', 1)]
+    schema = StructType([
+        StructField("name", StringType(), True),
+        StructField("age", IntegerType(), True)
+    ])
+
+    # Valid structs
+    spark.createDataFrame(data)
+    spark.createDataFrame(data, samplingRatio=0.1)
+    spark.createDataFrame(data, ("name", "age"))
+    spark.createDataFrame(data, schema)
+    spark.createDataFrame(data, "name string, age integer")
+    spark.createDataFrame([(1, ("foo", "bar"))], ("_1", "_2"))
+    spark.createDataFrame(data, ("name", "age"), samplingRatio=0.1)  # type: ignore
+
+
+- case: createDataFrameScalarsValid
+  main: |
+
+    from pyspark.sql import SparkSession
+    from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+
+    spark = SparkSession.builder.getOrCreate()
+
+    # Scalars
+    spark.createDataFrame([1, 2, 3], IntegerType())
+    spark.createDataFrame(["foo", "bar"], "string")
+
+
+- case: createDataFrameScalarsInvalid
+  main: |
+    from pyspark.sql import SparkSession
+    from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+
+    spark = SparkSession.builder.getOrCreate()
+
+    schema = StructType([
+        StructField("name", StringType(), True),
+        StructField("age", IntegerType(), True)
+    ])
+
+    # Invalid - scalars require schema
+    spark.createDataFrame(["foo", "bar"]) # E: Value of type variable "RowLike" of "createDataFrame" of "SparkSession" cannot be "str"  [type-var]
+
+    # Invalid - data has to match schema (either product -> struct or scalar -> atomic)
+    spark.createDataFrame([1, 2, 3], schema) # E: Value of type variable "RowLike" of "createDataFrame" of "SparkSession" cannot be "int"  [type-var]
+
+
+- case: createDataFrameStructsInvalid
+  main: |
+    from pyspark.sql import SparkSession
+    from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+
+    spark = SparkSession.builder.getOrCreate()
+
+    data = [('Alice', 1)]
+
+    schema = StructType([
+        StructField("name", StringType(), True),
+        StructField("age", IntegerType(), True)
+    ])
+
+    # Invalid product should have StructType schema
+    spark.createDataFrame(data, IntegerType())
+
+    # This shouldn't type check, though is technically speaking valid
+    # because  samplingRatio is ignored
+    spark.createDataFrame(data, schema, samplingRatio=0.1)
+
+  out: |
+    main:14: error: Argument 1 to "createDataFrame" of "SparkSession" has incompatible type "List[Tuple[str, int]]"; expected "Union[RDD[Union[Union[datetime, date], Union[bool, float, int, str], Decimal]], Iterable[Union[Union[datetime, date], Union[bool, float, int, str], Decimal]]]"  [arg-type]
+    main:18: error: No overload variant of "createDataFrame" of "SparkSession" matches argument types "List[Tuple[str, int]]", "StructType", "float"  [call-overload]
+    main:18: note: Possible overload variants:
+    main:18: note:     def [RowLike in (List[Any], Tuple[Any, ...], Row)] createDataFrame(self, data: Union[RDD[RowLike], Iterable[RowLike]], samplingRatio: Optional[float] = ...) -> DataFrame
+    main:18: note:     def [RowLike in (List[Any], Tuple[Any, ...], Row)] createDataFrame(self, data: Union[RDD[RowLike], Iterable[RowLike]], schema: Union[List[str], Tuple[str, ...]] = ..., verifySchema: bool = ...) -> DataFrame
+    main:18: note:     <4 more similar overloads not shown, out of 6 total overloads>
+
+
+- case: createDataFrameFromEmptyRdd
+  main: |
+    from pyspark.sql import SparkSession
+    from pyspark.sql.types import StructType
+
+    spark = SparkSession.builder.getOrCreate()
+
+    spark.createDataFrame(
+        spark.sparkContext.emptyRDD(),
+        schema=StructType(),
+    )

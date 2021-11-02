@@ -25,11 +25,14 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE, IntervalStyle}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.{DayTimeIntervalType => DT, Decimal, YearMonthIntervalType => YM}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -433,6 +436,24 @@ object IntervalUtils {
     }
   }
 
+  /**
+   * Parse all kinds of interval literals including unit-to-unit form and unit list form
+   */
+  def fromIntervalString(input: String): CalendarInterval = try {
+    if (input.toLowerCase(Locale.ROOT).trim.startsWith("interval")) {
+      CatalystSqlParser.parseExpression(input) match {
+        case Literal(months: Int, _: YearMonthIntervalType) => new CalendarInterval(months, 0, 0)
+        case Literal(micros: Long, _: DayTimeIntervalType) => new CalendarInterval(0, 0, micros)
+        case Literal(cal: CalendarInterval, CalendarIntervalType) => cal
+      }
+    } else {
+      stringToInterval(UTF8String.fromString(input))
+    }
+  } catch {
+    case NonFatal(e) =>
+      throw QueryCompilationErrors.cannotParseIntervalError(input, e)
+  }
+
   private val dayTimePatternLegacy =
     "^([+|-])?((\\d+) )?((\\d+):)?(\\d+):(\\d+)(\\.(\\d+))?$".r
 
@@ -595,8 +616,8 @@ object IntervalUtils {
       monthsWithFraction: Double,
       daysWithFraction: Double,
       microsWithFraction: Double): CalendarInterval = {
-    val truncatedMonths = Math.toIntExact(monthsWithFraction.toLong)
-    val truncatedDays = Math.toIntExact(daysWithFraction.toLong)
+    val truncatedMonths = MathUtils.toIntExact(monthsWithFraction.toLong)
+    val truncatedDays = MathUtils.toIntExact(daysWithFraction.toLong)
     val micros = microsWithFraction + MICROS_PER_DAY * (daysWithFraction - truncatedDays)
     new CalendarInterval(truncatedMonths, truncatedDays, micros.round)
   }
@@ -623,9 +644,9 @@ object IntervalUtils {
    * @throws ArithmeticException if the result overflows any field value
    */
   def negateExact(interval: CalendarInterval): CalendarInterval = {
-    val months = Math.negateExact(interval.months)
-    val days = Math.negateExact(interval.days)
-    val microseconds = Math.negateExact(interval.microseconds)
+    val months = MathUtils.negateExact(interval.months)
+    val days = MathUtils.negateExact(interval.days)
+    val microseconds = MathUtils.negateExact(interval.microseconds)
     new CalendarInterval(months, days, microseconds)
   }
 
@@ -642,9 +663,9 @@ object IntervalUtils {
    * @throws ArithmeticException if the result overflows any field value
    */
   def addExact(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
-    val months = Math.addExact(left.months, right.months)
-    val days = Math.addExact(left.days, right.days)
-    val microseconds = Math.addExact(left.microseconds, right.microseconds)
+    val months = MathUtils.addExact(left.months, right.months)
+    val days = MathUtils.addExact(left.days, right.days)
+    val microseconds = MathUtils.addExact(left.microseconds, right.microseconds)
     new CalendarInterval(months, days, microseconds)
   }
 
@@ -664,9 +685,9 @@ object IntervalUtils {
    * @throws ArithmeticException if the result overflows any field value
    */
   def subtractExact(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
-    val months = Math.subtractExact(left.months, right.months)
-    val days = Math.subtractExact(left.days, right.days)
-    val microseconds = Math.subtractExact(left.microseconds, right.microseconds)
+    val months = MathUtils.subtractExact(left.months, right.months)
+    val days = MathUtils.subtractExact(left.days, right.days)
+    val microseconds = MathUtils.subtractExact(left.microseconds, right.microseconds)
     new CalendarInterval(months, days, microseconds)
   }
 

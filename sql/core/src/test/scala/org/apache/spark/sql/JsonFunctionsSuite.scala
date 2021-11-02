@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.text.SimpleDateFormat
-import java.time.{Duration, Period}
+import java.time.{Duration, LocalDateTime, Period}
 import java.util.Locale
 
 import collection.JavaConverters._
@@ -390,11 +390,15 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-24027: from_json of a map with unsupported key type") {
     val schema = MapType(StructType(StructField("f", IntegerType) :: Nil), StringType)
-
-    checkAnswer(Seq("""{{"f": 1}: "a"}""").toDS().select(from_json($"value", schema)),
-      Row(null))
-    checkAnswer(Seq("""{"{"f": 1}": "a"}""").toDS().select(from_json($"value", schema)),
-      Row(null))
+    val startMsg = "cannot resolve 'entries' due to data type mismatch:"
+    val exception1 = intercept[AnalysisException] {
+      Seq("""{{"f": 1}: "a"}""").toDS().select(from_json($"value", schema))
+    }.getMessage
+    assert(exception1.contains(startMsg))
+    val exception2 = intercept[AnalysisException] {
+      Seq("""{{"f": 1}: "a"}""").toDS().select(from_json($"value", schema))
+    }.getMessage
+    assert(exception2.contains(startMsg))
   }
 
   test("SPARK-24709: infers schemas of json strings and pass them to from_json") {
@@ -913,5 +917,17 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("SPARK-36491: Make from_json/to_json to handle timestamp_ntz type properly") {
+    val localDT = LocalDateTime.parse("2021-08-12T15:16:23")
+    val df = Seq(localDT).toDF
+    val toJsonDF = df.select(to_json(map(lit("key"), $"value")) as "json")
+    checkAnswer(toJsonDF, Row("""{"key":"2021-08-12T15:16:23.000"}"""))
+    val fromJsonDF = toJsonDF
+      .select(
+        from_json($"json", StructType(StructField("key", TimestampNTZType) :: Nil)) as "value")
+      .selectExpr("value['key']")
+    checkAnswer(fromJsonDF, Row(localDT))
   }
 }

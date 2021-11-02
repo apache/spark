@@ -161,4 +161,6 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
       sizeInBytes = EstimationUtils.getOutputSize(p.output, rowCount, childStats.attributeStats),
       rowCount = Some(rowCount))
   }
+
+  override def visitWithCTE(p: WithCTE): Statistics = p.plan.stats
 }

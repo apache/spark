@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CreateTablePartitioningValidationSuite, ResolvedTable, TestRelation2, UnresolvedFieldName}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AlterTableAlterColumn, AlterTableCommand, AlterTableDropColumns, AlterTableRenameColumn, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CreateTablePartitioningValidationSuite, ResolvedTable, TestRelation2, TestTable2, UnresolvedFieldName, UnresolvedFieldPosition}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterTableCommand, CreateTableAsSelect, DropColumns, LogicalPlan, QualifiedColType, RenameColumn, ReplaceColumns, ReplaceTableAsSelect}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.Expressions
 import org.apache.spark.sql.execution.datasources.PreprocessTableCreation
@@ -35,7 +35,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   private val table = ResolvedTable(
     catalog,
     Identifier.of(Array(), "table_name"),
-    null,
+    TestTable2,
     schema.toAttributes)
 
   override protected def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = {
@@ -140,8 +140,11 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     Seq("POINT.Z", "poInt.z", "poInt.Z").foreach { ref =>
       val field = ref.split("\\.")
       alterTableTest(
-        TableChange.addColumn(field, LongType),
-        Seq("add", field.head)
+        AddColumns(
+          table,
+          Seq(QualifiedColType(
+            Some(UnresolvedFieldName(field.init)), field.last, LongType, true, None, None))),
+        Seq("Missing field " + field.head)
       )
     }
   }
@@ -149,8 +152,15 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: add column resolution - positional") {
     Seq("ID", "iD").foreach { ref =>
       alterTableTest(
-        TableChange.addColumn(
-          Array("f"), LongType, true, null, ColumnPosition.after(ref)),
+        AddColumns(
+          table,
+          Seq(QualifiedColType(
+            None,
+            "f",
+            LongType,
+            true,
+            None,
+            Some(UnresolvedFieldPosition(ColumnPosition.after(ref)))))),
         Seq("reference column", ref)
       )
     }
@@ -158,11 +168,22 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
 
   test("AlterTable: add column resolution - column position referencing new column") {
     alterTableTest(
-      Seq(
-        TableChange.addColumn(
-          Array("x"), LongType, true, null, ColumnPosition.after("id")),
-        TableChange.addColumn(
-          Array("y"), LongType, true, null, ColumnPosition.after("X"))),
+      AddColumns(
+        table,
+        Seq(QualifiedColType(
+          None,
+          "x",
+          LongType,
+          true,
+          None,
+          Some(UnresolvedFieldPosition(ColumnPosition.after("id")))),
+        QualifiedColType(
+          None,
+          "y",
+          LongType,
+          true,
+          None,
+          Some(UnresolvedFieldPosition(ColumnPosition.after("X")))))),
       Seq("Couldn't find the reference column for AFTER X at root")
     )
   }
@@ -170,8 +191,15 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: add column resolution - nested positional") {
     Seq("X", "Y").foreach { ref =>
       alterTableTest(
-        TableChange.addColumn(
-          Array("point", "z"), LongType, true, null, ColumnPosition.after(ref)),
+        AddColumns(
+          table,
+          Seq(QualifiedColType(
+            Some(UnresolvedFieldName(Seq("point"))),
+            "z",
+            LongType,
+            true,
+            None,
+            Some(UnresolvedFieldPosition(ColumnPosition.after(ref)))))),
         Seq("reference column", ref)
       )
     }
@@ -179,19 +207,74 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
 
   test("AlterTable: add column resolution - column position referencing new nested column") {
     alterTableTest(
-      Seq(
-        TableChange.addColumn(
-          Array("point", "z"), LongType, true, null),
-        TableChange.addColumn(
-          Array("point", "zz"), LongType, true, null, ColumnPosition.after("Z"))),
+      AddColumns(
+        table,
+        Seq(QualifiedColType(
+          Some(UnresolvedFieldName(Seq("point"))),
+          "z",
+          LongType,
+          true,
+          None,
+          None),
+        QualifiedColType(
+          Some(UnresolvedFieldName(Seq("point"))),
+          "zz",
+          LongType,
+          true,
+          None,
+          Some(UnresolvedFieldPosition(ColumnPosition.after("Z")))))),
       Seq("Couldn't find the reference column for AFTER Z at point")
     )
+  }
+
+  test("SPARK-36372: Adding duplicate columns should not be allowed") {
+    alterTableTest(
+      AddColumns(
+        table,
+        Seq(QualifiedColType(
+          Some(UnresolvedFieldName(Seq("point"))),
+          "z",
+          LongType,
+          true,
+          None,
+          None),
+        QualifiedColType(
+          Some(UnresolvedFieldName(Seq("point"))),
+          "Z",
+          LongType,
+          true,
+          None,
+          None))),
+      Seq("Found duplicate column(s) in the user specified columns: `point.z`"),
+      expectErrorOnCaseSensitive = false)
+  }
+
+  test("SPARK-36381: Check column name exist case sensitive and insensitive when add column") {
+    alterTableTest(
+      AddColumns(
+        table,
+        Seq(QualifiedColType(
+          None,
+          "ID",
+          LongType,
+          true,
+          None,
+          Some(UnresolvedFieldPosition(ColumnPosition.after("id")))))),
+      Seq("Cannot add column, because ID already exists in root"),
+      expectErrorOnCaseSensitive = false)
+  }
+
+  test("SPARK-36381: Check column name exist case sensitive and insensitive when rename column") {
+    alterTableTest(
+      RenameColumn(table, UnresolvedFieldName(Array("id")), "DATA"),
+      Seq("Cannot rename column, because DATA already exists in root"),
+      expectErrorOnCaseSensitive = false)
   }
 
   test("AlterTable: drop column resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterTableDropColumns(table, Seq(UnresolvedFieldName(ref))),
+        DropColumns(table, Seq(UnresolvedFieldName(ref))),
         Seq("Missing field " + ref.quoted)
       )
     }
@@ -200,7 +283,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: rename column resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterTableRenameColumn(table, UnresolvedFieldName(ref), "newName"),
+        RenameColumn(table, UnresolvedFieldName(ref), "newName"),
         Seq("Missing field " + ref.quoted)
       )
     }
@@ -209,7 +292,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: drop column nullability resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterTableAlterColumn(table, UnresolvedFieldName(ref), None, Some(true), None, None),
+        AlterColumn(table, UnresolvedFieldName(ref), None, Some(true), None, None),
         Seq("Missing field " + ref.quoted)
       )
     }
@@ -218,7 +301,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: change column type resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterTableAlterColumn(table, UnresolvedFieldName(ref), Some(StringType), None, None, None),
+        AlterColumn(table, UnresolvedFieldName(ref), Some(StringType), None, None, None),
         Seq("Missing field " + ref.quoted)
       )
     }
@@ -227,39 +310,30 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: change column comment resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterTableAlterColumn(table, UnresolvedFieldName(ref), None, None, Some("comment"), None),
+        AlterColumn(table, UnresolvedFieldName(ref), None, None, Some("comment"), None),
         Seq("Missing field " + ref.quoted)
       )
     }
   }
 
-  private def alterTableTest(change: TableChange, error: Seq[String]): Unit = {
-    alterTableTest(Seq(change), error)
+  test("SPARK-36449: Replacing columns with duplicate name should not be allowed") {
+    alterTableTest(
+      ReplaceColumns(
+        table,
+        Seq(QualifiedColType(None, "f", LongType, true, None, None),
+          QualifiedColType(None, "F", LongType, true, None, None))),
+      Seq("Found duplicate column(s) in the user specified columns: `f`"),
+      expectErrorOnCaseSensitive = false)
   }
 
-  private def alterTableTest(changes: Seq[TableChange], error: Seq[String]): Unit = {
+  private def alterTableTest(
+      alter: => AlterTableCommand,
+      error: Seq[String],
+      expectErrorOnCaseSensitive: Boolean = true): Unit = {
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        val plan = AlterTable(
-          catalog,
-          Identifier.of(Array(), "table_name"),
-          TestRelation2,
-          changes
-        )
-
-        if (caseSensitive) {
-          assertAnalysisError(plan, error, caseSensitive)
-        } else {
-          assertAnalysisSuccess(plan, caseSensitive)
-        }
-      }
-    }
-  }
-
-  private def alterTableTest(alter: AlterTableCommand, error: Seq[String]): Unit = {
-    Seq(true, false).foreach { caseSensitive =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        if (caseSensitive) {
+        val expectError = if (expectErrorOnCaseSensitive) caseSensitive else !caseSensitive
+        if (expectError) {
           assertAnalysisError(alter, error, caseSensitive)
         } else {
           assertAnalysisSuccess(alter, caseSensitive)

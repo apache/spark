@@ -33,8 +33,9 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockStoreClient}
-import org.apache.spark.network.shuffle.ErrorHandler.BlockPushErrorHandler
+import org.apache.spark.network.server.BlockPushNonFatalFailure
+import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode
+import org.apache.spark.network.shuffle.{BlockPushingListener, BlockStoreClient}
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.ShuffleBlockPusher.PushRequest
@@ -75,9 +76,9 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
         val blocks = invocation.getArguments()(2).asInstanceOf[Array[String]]
         pushedBlocks ++= blocks
         val managedBuffers = invocation.getArguments()(3).asInstanceOf[Array[ManagedBuffer]]
-        val blockFetchListener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
+        val blockPushListener = invocation.getArguments()(4).asInstanceOf[BlockPushingListener]
         (blocks, managedBuffers).zipped.foreach((blockId, buffer) => {
-          blockFetchListener.onBlockFetchSuccess(blockId, buffer)
+          blockPushListener.onBlockPushSuccess(blockId, buffer)
         })
       })
   }
@@ -96,7 +97,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     val blockPusher = new TestShuffleBlockPusher(conf)
     val mergerLocs = dependency.getMergerLocs.map(loc => BlockManagerId("", loc.host, loc.port))
     val largeBlockSize = 2 * 1024 * 1024
-    val pushRequests = blockPusher.prepareBlockPushRequests(5, 0, 0,
+    val pushRequests = blockPusher.prepareBlockPushRequests(5, 0, 0, 0,
       mock(classOf[File]), Array(2, 2, 2, largeBlockSize, largeBlockSize), mergerLocs,
       mock(classOf[TransportConf]))
     assert(pushRequests.length == 3)
@@ -107,7 +108,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     conf.set("spark.shuffle.push.maxBlockSizeToPush", "1k")
     val blockPusher = new TestShuffleBlockPusher(conf)
     val mergerLocs = dependency.getMergerLocs.map(loc => BlockManagerId("", loc.host, loc.port))
-    val pushRequests = blockPusher.prepareBlockPushRequests(5, 0, 0,
+    val pushRequests = blockPusher.prepareBlockPushRequests(5, 0, 0, 0,
       mock(classOf[File]), Array(2, 2, 2, 1028, 1024), mergerLocs, mock(classOf[TransportConf]))
     assert(pushRequests.length == 2)
     verifyPushRequests(pushRequests, Seq(6, 1024))
@@ -117,7 +118,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     conf.set("spark.reducer.maxBlocksInFlightPerAddress", "1")
     val blockPusher = new TestShuffleBlockPusher(conf)
     val mergerLocs = dependency.getMergerLocs.map(loc => BlockManagerId("", loc.host, loc.port))
-    val pushRequests = blockPusher.prepareBlockPushRequests(5, 0, 0,
+    val pushRequests = blockPusher.prepareBlockPushRequests(5, 0, 0, 0,
       mock(classOf[File]), Array(2, 2, 2, 2, 2), mergerLocs, mock(classOf[TransportConf]))
     assert(pushRequests.length == 5)
     verifyPushRequests(pushRequests, Seq(2, 2, 2, 2, 2))
@@ -164,24 +165,24 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
   test("Hit maxBlocksInFlightPerAddress limit so that the blocks are deferred") {
     conf.set("spark.reducer.maxBlocksInFlightPerAddress", "2")
     var blockPendingResponse : String = null
-    var listener : BlockFetchingListener = null
+    var listener : BlockPushingListener = null
     when(shuffleClient.pushBlocks(any(), any(), any(), any(), any()))
       .thenAnswer((invocation: InvocationOnMock) => {
         val blocks = invocation.getArguments()(2).asInstanceOf[Array[String]]
         pushedBlocks ++= blocks
         val managedBuffers = invocation.getArguments()(3).asInstanceOf[Array[ManagedBuffer]]
-        val blockFetchListener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
+        val blockPushListener = invocation.getArguments()(4).asInstanceOf[BlockPushingListener]
         // Expecting 2 blocks
         assert(blocks.length == 2)
         if (blockPendingResponse == null) {
           blockPendingResponse = blocks(1)
-          listener = blockFetchListener
+          listener = blockPushListener
           // Respond with success only for the first block which will cause all the rest of the
           // blocks to be deferred
-          blockFetchListener.onBlockFetchSuccess(blocks(0), managedBuffers(0))
+          blockPushListener.onBlockPushSuccess(blocks(0), managedBuffers(0))
         } else {
           (blocks, managedBuffers).zipped.foreach((blockId, buffer) => {
-            blockFetchListener.onBlockFetchSuccess(blockId, buffer)
+            blockPushListener.onBlockPushSuccess(blockId, buffer)
           })
         }
       })
@@ -193,7 +194,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
       .pushBlocks(any(), any(), any(), any(), any())
     assert(pushedBlocks.length == 2)
     // this will trigger push of deferred blocks
-    listener.onBlockFetchSuccess(blockPendingResponse, mock(classOf[ManagedBuffer]))
+    listener.onBlockPushSuccess(blockPendingResponse, mock(classOf[ManagedBuffer]))
     pusher.runPendingTasks()
     verify(shuffleClient, times(4))
       .pushBlocks(any(), any(), any(), any(), any())
@@ -219,12 +220,18 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     val pusher = new ShuffleBlockPusher(conf)
     val errorHandler = pusher.createErrorHandler()
     assert(
-      !errorHandler.shouldRetryError(new RuntimeException(
-        new IllegalArgumentException(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX))))
+      !errorHandler.shouldRetryError(new BlockPushNonFatalFailure(
+        ReturnCode.TOO_LATE_BLOCK_PUSH, "")))
+    assert(
+      !errorHandler.shouldRetryError(new BlockPushNonFatalFailure(
+        ReturnCode.TOO_OLD_ATTEMPT_PUSH, "")))
+    assert(
+      !errorHandler.shouldRetryError(new BlockPushNonFatalFailure(
+        ReturnCode.STALE_BLOCK_PUSH, "")))
     assert(errorHandler.shouldRetryError(new RuntimeException(new ConnectException())))
     assert(
-      errorHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
-        BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))))
+      errorHandler.shouldRetryError(new BlockPushNonFatalFailure(
+        ReturnCode.BLOCK_APPEND_COLLISION_DETECTED, "")))
     assert (errorHandler.shouldRetryError(new Throwable()))
   }
 
@@ -232,11 +239,16 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     val pusher = new ShuffleBlockPusher(conf)
     val errorHandler = pusher.createErrorHandler()
     assert(
-      !errorHandler.shouldLogError(new RuntimeException(
-        new IllegalArgumentException(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX))))
-    assert(!errorHandler.shouldLogError(new RuntimeException(
-      new IllegalArgumentException(
-        BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))))
+      !errorHandler.shouldLogError(new BlockPushNonFatalFailure(
+        ReturnCode.TOO_LATE_BLOCK_PUSH, "")))
+    assert(
+      !errorHandler.shouldLogError(new BlockPushNonFatalFailure(
+        ReturnCode.TOO_OLD_ATTEMPT_PUSH, "")))
+    assert(
+      !errorHandler.shouldLogError(new BlockPushNonFatalFailure(
+        ReturnCode.STALE_BLOCK_PUSH, "")))
+    assert(!errorHandler.shouldLogError(new BlockPushNonFatalFailure(
+      ReturnCode.BLOCK_APPEND_COLLISION_DETECTED, "")))
     assert(errorHandler.shouldLogError(new Throwable()))
   }
 
@@ -248,17 +260,16 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     when(shuffleClient.pushBlocks(any(), any(), any(), any(), any()))
       .thenAnswer((invocation: InvocationOnMock) => {
         val blocks = invocation.getArguments()(2).asInstanceOf[Array[String]]
-        val blockFetchListener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
+        val blockPushListener = invocation.getArguments()(4).asInstanceOf[BlockPushingListener]
         blocks.foreach(blockId => {
           if (failBlock) {
             failBlock = false
             // Fail the first block with the collision exception.
-            blockFetchListener.onBlockFetchFailure(blockId, new RuntimeException(
-              new IllegalArgumentException(
-                BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX)))
+            blockPushListener.onBlockPushFailure(blockId, new BlockPushNonFatalFailure(
+              ReturnCode.BLOCK_APPEND_COLLISION_DETECTED, ""))
           } else {
             pushedBlocks += blockId
-            blockFetchListener.onBlockFetchSuccess(blockId, mock(classOf[ManagedBuffer]))
+            blockPushListener.onBlockPushSuccess(blockId, mock(classOf[ManagedBuffer]))
           }
         })
       })
@@ -278,16 +289,16 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     when(shuffleClient.pushBlocks(any(), any(), any(), any(), any()))
       .thenAnswer((invocation: InvocationOnMock) => {
         val blocks = invocation.getArguments()(2).asInstanceOf[Array[String]]
-        val blockFetchListener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
+        val blockPushListener = invocation.getArguments()(4).asInstanceOf[BlockPushingListener]
         blocks.foreach(blockId => {
           if (failBlock) {
             failBlock = false
             // Fail the first block with the too late exception.
-            blockFetchListener.onBlockFetchFailure(blockId, new RuntimeException(
-              new IllegalArgumentException(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX)))
+            blockPushListener.onBlockPushFailure(blockId, new BlockPushNonFatalFailure(
+              ReturnCode.TOO_LATE_BLOCK_PUSH, ""))
           } else {
             pushedBlocks += blockId
-            blockFetchListener.onBlockFetchSuccess(blockId, mock(classOf[ManagedBuffer]))
+            blockPushListener.onBlockPushSuccess(blockId, mock(classOf[ManagedBuffer]))
           }
         })
       })
@@ -307,9 +318,9 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
       .thenAnswer((invocation: InvocationOnMock) => {
         val blocks = invocation.getArguments()(2).asInstanceOf[Array[String]]
         pushedBlocks ++= blocks
-        val blockFetchListener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
+        val blockPushListener = invocation.getArguments()(4).asInstanceOf[BlockPushingListener]
         blocks.foreach(blockId => {
-          blockFetchListener.onBlockFetchFailure(
+          blockPushListener.onBlockPushFailure(
             blockId, new RuntimeException(new ConnectException()))
         })
       })
@@ -332,9 +343,9 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     when(shuffleClient.pushBlocks(any(), any(), any(), any(), any()))
       .thenAnswer((invocation: InvocationOnMock) => {
         val pushedBlocks = invocation.getArguments()(2).asInstanceOf[Array[String]]
-        val blockFetchListener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
+        val blockPushListener = invocation.getArguments()(4).asInstanceOf[BlockPushingListener]
         pushedBlocks.foreach(blockId => {
-          blockFetchListener.onBlockFetchFailure(
+          blockPushListener.onBlockPushFailure(
             blockId, new IOException("Failed to send RPC",
               new FileNotFoundException("file not found")))
         })

@@ -208,7 +208,7 @@ object SparkBuild extends PomBuild {
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies ++= {
       if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = "1.7.5"
+        val silencerVersion = "1.7.6"
         Seq(
           "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
           compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),
@@ -917,7 +917,8 @@ object SparkR {
   val buildRPackage = taskKey[Unit]("Build the R package")
   lazy val settings = Seq(
     buildRPackage := {
-      val command = baseDirectory.value / ".." / "R" / "install-dev.sh"
+      val postfix = if (File.separator == "\\") ".bat" else ".sh"
+      val command = baseDirectory.value / ".." / "R" / s"install-dev$postfix"
       Process(command.toString).!!
     },
     (Compile / compile) := (Def.taskDyn {
@@ -967,6 +968,8 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalog/v2/utils")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org.apache.spark.errors")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org.apache.spark.sql.errors")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hive")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/v2/avro")))
       .map(_.filterNot(_.getCanonicalPath.contains("SSLOptions")))
@@ -1125,12 +1128,30 @@ object TestSettings {
     // SPARK-29282 This is for consistency between JDK8 and JDK11.
     (Test / javaOptions) ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
-      s"-Xmx3200m -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads -XX:ReservedCodeCacheSize=128m"
+      val extraTestJavaArgs = Array("-XX:+IgnoreUnrecognizedVMOptions",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.nio=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
+        "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
+        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+        // SPARK-37070 In order to enable the UTs in `mllib-local` and `mllib` to use `mockito`
+        // to mock `j.u.Random`, "-add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED"
+        // is added. Should remove it when `mockito` can mock `j.u.Random` directly.
+        "--add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED").mkString(" ")
+      s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads -XX:ReservedCodeCacheSize=128m $extraTestJavaArgs"
         .split(" ").toSeq
     },
     javaOptions ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
-      s"-Xmx3200m -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
+      s"-Xmx4g -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
     },
     (Test / javaOptions) ++= {
       val jdwpEnabled = sys.props.getOrElse("test.jdwp.enabled", "false").toBoolean

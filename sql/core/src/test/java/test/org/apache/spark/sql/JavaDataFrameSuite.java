@@ -34,7 +34,6 @@ import org.junit.*;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.Observation;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.expressions.UserDefinedFunction;
@@ -523,51 +522,5 @@ public class JavaDataFrameSuite {
     String[] expected = spark.table("testData").collectAsList().stream()
       .map(row -> row.get(0).toString() + row.getString(1)).toArray(String[]::new);
     Assert.assertArrayEquals(expected, result);
-  }
-
-  /**
-   * Tests the Java API of Observation and Dataset.observe(Observation, Column, Column*).
-   */
-  @Test
-  public void testObservation() {
-    Observation namedObservation = new Observation("named");
-    Observation unnamedObservation = new Observation();
-
-    Dataset<Long> df = spark
-      .range(100)
-      .observe(
-        namedObservation,
-        min(col("id")).as("min_val"),
-        max(col("id")).as("max_val"),
-        sum(col("id")).as("sum_val"),
-        count(when(pmod(col("id"), lit(2)).$eq$eq$eq(0), 1)).as("num_even")
-      )
-      .observe(
-        unnamedObservation,
-        avg(col("id")).cast("int").as("avg_val")
-      );
-
-    df.collect();
-    List<?> namedMetrics = null;
-    List<?> unnamedMetrics = null;
-
-    try {
-      namedMetrics = JavaConverters.seqAsJavaList(namedObservation.get().toSeq());
-      unnamedMetrics = JavaConverters.seqAsJavaList(unnamedObservation.get().toSeq());
-    } catch (InterruptedException e) {
-      Assert.fail();
-    }
-    Assert.assertEquals(Arrays.asList(0L, 99L, 4950L, 50L), namedMetrics);
-    Assert.assertEquals(Arrays.asList(49), unnamedMetrics);
-
-    // we can get the result multiple times
-    try {
-      namedMetrics = JavaConverters.seqAsJavaList(namedObservation.get().toSeq());
-      unnamedMetrics = JavaConverters.seqAsJavaList(unnamedObservation.get().toSeq());
-    } catch (InterruptedException e) {
-      Assert.fail();
-    }
-    Assert.assertEquals(Arrays.asList(0L, 99L, 4950L, 50L), namedMetrics);
-    Assert.assertEquals(Arrays.asList(49), unnamedMetrics);
   }
 }

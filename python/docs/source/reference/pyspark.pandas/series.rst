@@ -1,3 +1,21 @@
+..  Licensed to the Apache Software Foundation (ASF) under one
+    or more contributor license agreements.  See the NOTICE file
+    distributed with this work for additional information
+    regarding copyright ownership.  The ASF licenses this file
+    to you under the Apache License, Version 2.0 (the
+    "License"); you may not use this file except in compliance
+    with the License.  You may obtain a copy of the License at
+
+..    http://www.apache.org/licenses/LICENSE-2.0
+
+..  Unless required by applicable law or agreed to in writing,
+    software distributed under the License is distributed on an
+    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, either express or implied.  See the License for the
+    specific language governing permissions and limitations
+    under the License.
+
+
 .. _api.series:
 
 ======
@@ -120,6 +138,7 @@ Computations / Descriptive Stats
    Series.clip
    Series.corr
    Series.count
+   Series.cov
    Series.cummax
    Series.cummin
    Series.cumsum
@@ -399,13 +418,14 @@ the ``Series.cat`` accessor.
    Series.cat.categories
    Series.cat.ordered
    Series.cat.codes
+   Series.cat.rename_categories
    Series.cat.reorder_categories
    Series.cat.add_categories
    Series.cat.remove_categories
    Series.cat.remove_unused_categories
+   Series.cat.set_categories
    Series.cat.as_ordered
    Series.cat.as_unordered
-   Series.cat.rename_categories
 
 .. _api.series.plot:
 

@@ -20,24 +20,21 @@ An internal immutable DataFrame with some metadata to manage indexes.
 """
 import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, TYPE_CHECKING, cast
-from itertools import accumulate
-import py4j
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype  # noqa: F401
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame, Window
-from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (  # noqa: F401
     BooleanType,
     DataType,
-    IntegralType,
     LongType,
     StructField,
     StructType,
     StringType,
 )
+from pyspark.sql.utils import is_timestamp_ntz_preferred
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps
@@ -45,7 +42,7 @@ from pyspark.pandas._typing import Label
 
 if TYPE_CHECKING:
     # This is required in old Python 3.5 to prevent circular reference.
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.series import Series
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.typedef import (
@@ -64,7 +61,6 @@ from pyspark.pandas.utils import (
     name_like_string,
     scol_for,
     spark_column_equals,
-    verify_temp_column_name,
 )
 
 
@@ -636,7 +632,7 @@ class InternalFrame(object):
             )
 
             # Create default index.
-            spark_frame, force_nullable = InternalFrame.attach_default_index(spark_frame)
+            spark_frame = InternalFrame.attach_default_index(spark_frame)
             index_spark_columns = [scol_for(spark_frame, SPARK_DEFAULT_INDEX_NAME)]
 
             index_fields = [
@@ -658,7 +654,6 @@ class InternalFrame(object):
                     data_fields = [
                         field.copy(
                             name=name_like_string(struct_field.name),
-                            nullable=(force_nullable or field.nullable),
                         )
                         for field, struct_field in zip(data_fields, data_struct_fields)
                     ]
@@ -668,14 +663,14 @@ class InternalFrame(object):
                 NATURAL_ORDER_COLUMN_NAME, F.monotonically_increasing_id()
             )
 
-        self._sdf = spark_frame  # type: SparkDataFrame
+        self._sdf: SparkDataFrame = spark_frame
 
         # index_spark_columns
         assert all(
             isinstance(index_scol, Column) for index_scol in index_spark_columns
         ), index_spark_columns
 
-        self._index_spark_columns = index_spark_columns  # type: List[Column]
+        self._index_spark_columns: List[Column] = index_spark_columns
 
         # data_spark_columns
         if data_spark_columns is None:
@@ -688,10 +683,10 @@ class InternalFrame(object):
                 )
                 and col not in HIDDEN_COLUMNS
             ]
-            self._data_spark_columns = data_spark_columns  # type: List[Column]
         else:
             assert all(isinstance(scol, Column) for scol in data_spark_columns)
-            self._data_spark_columns = data_spark_columns
+
+        self._data_spark_columns: List[Column] = data_spark_columns
 
         # fields
         if index_fields is None:
@@ -744,7 +739,7 @@ class InternalFrame(object):
             ]
 
         assert all(
-            isinstance(ops.dtype, Dtype.__args__)  # type: ignore
+            isinstance(ops.dtype, Dtype.__args__)  # type: ignore[attr-defined]
             and (
                 ops.dtype == np.dtype("object")
                 or as_spark_type(ops.dtype, raise_error=False) is not None
@@ -759,10 +754,10 @@ class InternalFrame(object):
                 for index_field, struct_field in zip(index_fields, struct_fields)
             ), (index_fields, struct_fields)
 
-        self._index_fields = index_fields  # type: List[InternalField]
+        self._index_fields: List[InternalField] = index_fields
 
         assert all(
-            isinstance(ops.dtype, Dtype.__args__)  # type: ignore
+            isinstance(ops.dtype, Dtype.__args__)  # type: ignore[attr-defined]
             and (
                 ops.dtype == np.dtype("object")
                 or as_spark_type(ops.dtype, raise_error=False) is not None
@@ -777,7 +772,7 @@ class InternalFrame(object):
                 for data_field, struct_field in zip(data_fields, struct_fields)
             ), (data_fields, struct_fields)
 
-        self._data_fields = data_fields  # type: List[InternalField]
+        self._data_fields: List[InternalField] = data_fields
 
         # index_names
         if not index_names:
@@ -791,13 +786,11 @@ class InternalFrame(object):
             is_name_like_tuple(index_name, check_type=True) for index_name in index_names
         ), index_names
 
-        self._index_names = index_names  # type: List[Optional[Label]]
+        self._index_names: List[Optional[Label]] = index_names
 
         # column_labels
         if column_labels is None:
-            self._column_labels = [
-                (col,) for col in spark_frame.select(self._data_spark_columns).columns
-            ]  # type: List[Label]
+            column_labels = [(col,) for col in spark_frame.select(self._data_spark_columns).columns]
         else:
             assert len(column_labels) == len(self._data_spark_columns), (
                 len(column_labels),
@@ -812,13 +805,12 @@ class InternalFrame(object):
                     for column_label in column_labels
                 ), column_labels
                 assert len(set(len(label) for label in column_labels)) <= 1, column_labels
-            self._column_labels = column_labels
+
+        self._column_labels: List[Label] = column_labels
 
         # column_label_names
         if column_label_names is None:
-            self._column_label_names = [None] * column_labels_level(
-                self._column_labels
-            )  # type: List[Optional[Label]]
+            column_label_names = [None] * column_labels_level(self._column_labels)
         else:
             if len(self._column_labels) > 0:
                 assert len(column_label_names) == column_labels_level(self._column_labels), (
@@ -831,12 +823,13 @@ class InternalFrame(object):
                 is_name_like_tuple(column_label_name, check_type=True)
                 for column_label_name in column_label_names
             ), column_label_names
-            self._column_label_names = column_label_names
+
+        self._column_label_names: List[Optional[Label]] = column_label_names
 
     @staticmethod
     def attach_default_index(
         sdf: SparkDataFrame, default_index_type: Optional[str] = None
-    ) -> Tuple[SparkDataFrame, bool]:
+    ) -> SparkDataFrame:
         """
         This method attaches a default index to Spark DataFrame. Spark does not have the index
         notion so corresponding column should be generated.
@@ -848,13 +841,13 @@ class InternalFrame(object):
 
         It adds the default index column '__index_level_0__'.
 
-        >>> spark_frame = InternalFrame.attach_default_index(spark_frame)[0]
+        >>> spark_frame = InternalFrame.attach_default_index(spark_frame)
         >>> spark_frame
         DataFrame[__index_level_0__: bigint, id: bigint]
 
         It throws an exception if the given column name already exists.
 
-        >>> InternalFrame.attach_default_index(spark_frame)[0]
+        >>> InternalFrame.attach_default_index(spark_frame)
         ... # doctest: +ELLIPSIS
         Traceback (most recent call last):
           ...
@@ -881,34 +874,26 @@ class InternalFrame(object):
             )
 
     @staticmethod
-    def attach_sequence_column(
-        sdf: SparkDataFrame, column_name: str
-    ) -> Tuple[SparkDataFrame, bool]:
+    def attach_sequence_column(sdf: SparkDataFrame, column_name: str) -> SparkDataFrame:
         scols = [scol_for(sdf, column) for column in sdf.columns]
         sequential_index = (
             F.row_number().over(Window.orderBy(F.monotonically_increasing_id())).cast("long") - 1
         )
-        return sdf.select(sequential_index.alias(column_name), *scols), False
+        return sdf.select(sequential_index.alias(column_name), *scols)
 
     @staticmethod
-    def attach_distributed_column(
-        sdf: SparkDataFrame, column_name: str
-    ) -> Tuple[SparkDataFrame, bool]:
+    def attach_distributed_column(sdf: SparkDataFrame, column_name: str) -> SparkDataFrame:
         scols = [scol_for(sdf, column) for column in sdf.columns]
-        return sdf.select(F.monotonically_increasing_id().alias(column_name), *scols), False
+        return sdf.select(F.monotonically_increasing_id().alias(column_name), *scols)
 
     @staticmethod
-    def attach_distributed_sequence_column(
-        sdf: SparkDataFrame, column_name: str
-    ) -> Tuple[SparkDataFrame, bool]:
+    def attach_distributed_sequence_column(sdf: SparkDataFrame, column_name: str) -> SparkDataFrame:
         """
         This method attaches a Spark column that has a sequence in a distributed manner.
         This is equivalent to the column assigned when default index type 'distributed-sequence'.
 
         >>> sdf = ps.DataFrame(['a', 'b', 'c']).to_spark()
-        >>> sdf, force_nullable = (
-        ...     InternalFrame.attach_distributed_sequence_column(sdf, column_name="sequence")
-        ... )
+        >>> sdf = InternalFrame.attach_distributed_sequence_column(sdf, column_name="sequence")
         >>> sdf.show()  # doctest: +NORMALIZE_WHITESPACE
         +--------+---+
         |sequence|  0|
@@ -917,123 +902,20 @@ class InternalFrame(object):
         |       1|  b|
         |       2|  c|
         +--------+---+
-        >>> force_nullable
-        True
         """
         if len(sdf.columns) > 0:
-            try:
-                jdf = sdf._jdf.toDF()  # type: ignore
-
-                sql_ctx = sdf.sql_ctx
-                encoders = sql_ctx._jvm.org.apache.spark.sql.Encoders  # type: ignore
-                encoder = encoders.tuple(jdf.exprEnc(), encoders.scalaLong())
-
-                jrdd = jdf.localCheckpoint(False).rdd().zipWithIndex()
-
-                df = SparkDataFrame(
-                    sql_ctx.sparkSession._jsparkSession.createDataset(  # type: ignore
-                        jrdd, encoder
-                    ).toDF(),
-                    sql_ctx,
-                )
-                columns = df.columns
-                return (
-                    df.selectExpr(
-                        "`{}` as `{}`".format(columns[1], column_name), "`{}`.*".format(columns[0])
-                    ),
-                    True,
-                )
-            except py4j.protocol.Py4JError:
-                if is_testing():
-                    raise
-                return InternalFrame._attach_distributed_sequence_column(sdf, column_name)
+            return SparkDataFrame(
+                sdf._jdf.toDF().withSequenceColumn(column_name),  # type: ignore[operator]
+                sdf.sql_ctx,
+            )
         else:
             cnt = sdf.count()
             if cnt > 0:
-                return default_session().range(cnt).toDF(column_name), False
+                return default_session().range(cnt).toDF(column_name)
             else:
-                return (
-                    default_session().createDataFrame(
-                        [],
-                        schema=StructType().add(column_name, data_type=LongType(), nullable=False),
-                    ),
-                    False,
+                return default_session().createDataFrame(
+                    [], schema=StructType().add(column_name, data_type=LongType(), nullable=False)
                 )
-
-    @staticmethod
-    def _attach_distributed_sequence_column(
-        sdf: SparkDataFrame, column_name: str
-    ) -> Tuple[SparkDataFrame, bool]:
-        """
-        >>> sdf = ps.DataFrame(['a', 'b', 'c']).to_spark()
-        >>> sdf, force_nullable = (
-        ...     InternalFrame._attach_distributed_sequence_column(sdf, column_name="sequence")
-        ... )
-        >>> sdf.sort("sequence").show()  # doctest: +NORMALIZE_WHITESPACE
-        +--------+---+
-        |sequence|  0|
-        +--------+---+
-        |       0|  a|
-        |       1|  b|
-        |       2|  c|
-        +--------+---+
-        >>> force_nullable
-        False
-        """
-        scols = [scol_for(sdf, column) for column in sdf.columns]
-
-        spark_partition_column = verify_temp_column_name(sdf, "__spark_partition_id__")
-        offset_column = verify_temp_column_name(sdf, "__offset__")
-        row_number_column = verify_temp_column_name(sdf, "__row_number__")
-
-        # 1. Calculates counts per each partition ID. `counts` here is, for instance,
-        #     {
-        #         1: 83,
-        #         6: 83,
-        #         3: 83,
-        #         ...
-        #     }
-        sdf = sdf.withColumn(spark_partition_column, F.spark_partition_id())
-
-        # Checkpoint the DataFrame to fix the partition ID.
-        sdf = sdf.localCheckpoint(eager=False)
-
-        counts = map(
-            lambda x: (x["key"], x["count"]),
-            sdf.groupby(sdf[spark_partition_column].alias("key")).count().collect(),
-        )
-
-        # 2. Calculates cumulative sum in an order of partition id.
-        #     Note that it does not matter if partition id guarantees its order or not.
-        #     We just need a one-by-one sequential id.
-
-        # sort by partition key.
-        sorted_counts = sorted(counts, key=lambda x: x[0])
-        # get cumulative sum in an order of partition key.
-        cumulative_counts = [0] + list(accumulate(map(lambda count: count[1], sorted_counts)))
-        # zip it with partition key.
-        sums = dict(zip(map(lambda count: count[0], sorted_counts), cumulative_counts))
-
-        # 3. Attach offset for each partition.
-        @pandas_udf(returnType=LongType())  # type: ignore
-        def offset(id: pd.Series) -> pd.Series:
-            current_partition_offset = sums[id.iloc[0]]
-            return pd.Series(current_partition_offset).repeat(len(id))
-
-        sdf = sdf.withColumn(offset_column, offset(spark_partition_column))
-
-        # 4. Calculate row_number in each partition.
-        w = Window.partitionBy(spark_partition_column).orderBy(F.monotonically_increasing_id())
-        row_number = F.row_number().over(w)
-        sdf = sdf.withColumn(row_number_column, row_number)
-
-        # 5. Calculate the index.
-        return (
-            sdf.select(
-                (sdf[offset_column] + sdf[row_number_column] - 1).alias(column_name), *scols
-            ),
-            False,
-        )
 
     def spark_column_for(self, label: Label) -> Column:
         """Return Spark Column for the given column label."""
@@ -1554,18 +1436,22 @@ class InternalFrame(object):
         :return: the created immutable DataFrame
         """
 
-        index_names = [
+        index_names: List[Optional[Label]] = [
             name if name is None or isinstance(name, tuple) else (name,) for name in pdf.index.names
-        ]  # type: List[Optional[Label]]
+        ]
 
         columns = pdf.columns
+        column_labels: List[Label]
         if isinstance(columns, pd.MultiIndex):
-            column_labels = columns.tolist()  # type: List[Label]
+            column_labels = columns.tolist()
         else:
             column_labels = [(col,) for col in columns]
-        column_label_names = [
+
+        column_label_names: List[Optional[Label]] = [
             name if name is None or isinstance(name, tuple) else (name,) for name in columns.names
-        ]  # type: List[Optional[Label]]
+        ]
+
+        prefer_timestamp_ntz = is_timestamp_ntz_preferred()
 
         (
             pdf,
@@ -1573,7 +1459,7 @@ class InternalFrame(object):
             index_fields,
             data_columns,
             data_fields,
-        ) = InternalFrame.prepare_pandas_frame(pdf)
+        ) = InternalFrame.prepare_pandas_frame(pdf, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
         schema = StructType([field.struct_field for field in index_fields + data_fields])
 
@@ -1591,7 +1477,7 @@ class InternalFrame(object):
 
     @staticmethod
     def prepare_pandas_frame(
-        pdf: pd.DataFrame, *, retain_index: bool = True
+        pdf: pd.DataFrame, *, retain_index: bool = True, prefer_timestamp_ntz: bool = False
     ) -> Tuple[pd.DataFrame, List[str], List[InternalField], List[str], List[InternalField]]:
         """
         Prepare pandas DataFrame for creating Spark DataFrame.
@@ -1626,6 +1512,18 @@ class InternalFrame(object):
         >>> data_fields  # doctest: +NORMALIZE_WHITESPACE
         [InternalField(dtype=object,struct_field=StructField((x, a),StringType,false)),
          InternalField(dtype=category,struct_field=StructField((y, b),ByteType,false))]
+
+        >>> import datetime
+        >>> pdf = pd.DataFrame({
+        ...     "dt": [datetime.datetime(1970, 1, 1)], "dt_obj": [datetime.datetime(1970, 1, 1)]
+        ... })
+        >>> pdf.dt_obj = pdf.dt_obj.astype("object")
+        >>> _, _, _, _, data_fields = (
+        ...     InternalFrame.prepare_pandas_frame(pdf, prefer_timestamp_ntz=True)
+        ... )
+        >>> data_fields
+        [InternalField(dtype=datetime64[ns],struct_field=StructField(dt,TimestampNTZType,false)),
+         InternalField(dtype=object,struct_field=StructField(dt_obj,TimestampNTZType,false))]
         """
         pdf = pdf.copy()
 
@@ -1646,7 +1544,7 @@ class InternalFrame(object):
         data_dtypes = list(reset_index.dtypes)[index_nlevels:]
 
         for col, dtype in zip(reset_index.columns, reset_index.dtypes):
-            spark_type = infer_pd_series_spark_type(reset_index[col], dtype)
+            spark_type = infer_pd_series_spark_type(reset_index[col], dtype, prefer_timestamp_ntz)
             reset_index[col] = DataTypeOps(dtype, spark_type).prepare(reset_index[col])
 
         fields = [
@@ -1654,7 +1552,7 @@ class InternalFrame(object):
                 dtype=dtype,
                 struct_field=StructField(
                     name=name,
-                    dataType=infer_pd_series_spark_type(col, dtype),
+                    dataType=infer_pd_series_spark_type(col, dtype, prefer_timestamp_ntz),
                     nullable=bool(col.isnull().any()),
                 ),
             )

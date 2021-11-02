@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from decimal import Decimal
 import os
 import pydoc
 import shutil
@@ -23,8 +24,9 @@ import time
 import unittest
 
 from pyspark.sql import SparkSession, Row
+from pyspark.sql.functions import col, lit, count, sum, mean
 from pyspark.sql.types import StringType, IntegerType, DoubleType, StructType, StructField, \
-    BooleanType, DateType, TimestampType, FloatType
+    BooleanType, DateType, TimestampType, TimestampNTZType, FloatType
 from pyspark.sql.utils import AnalysisException, IllegalArgumentException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils, have_pyarrow, have_pandas, \
     pandas_requirement_message, pyarrow_requirement_message
@@ -66,6 +68,24 @@ class DataFrameTests(ReusedSQLTestCase):
         pydoc.render_doc(df)
         pydoc.render_doc(df.foo)
         pydoc.render_doc(df.take(1))
+
+    def test_drop_duplicates(self):
+        # SPARK-36034 test that drop duplicates throws a type error when in correct type provided
+        df = self.spark.createDataFrame(
+            [("Alice", 50), ("Alice", 60)],
+            ["name", "age"]
+        )
+
+        # shouldn't drop a non-null row
+        self.assertEqual(df.dropDuplicates().count(), 2)
+
+        self.assertEqual(df.dropDuplicates(["name"]).count(), 1)
+
+        self.assertEqual(df.dropDuplicates(["name", "age"]).count(), 2)
+
+        type_error_msg = "Parameter 'subset' must be a list of columns"
+        with self.assertRaisesRegex(TypeError, type_error_msg):
+            df.dropDuplicates("name")
 
     def test_dropna(self):
         schema = StructType([
@@ -389,6 +409,54 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(1, logical_plan.toString().count("what"))
         self.assertEqual(3, logical_plan.toString().count("itworks"))
 
+    def test_observe(self):
+        # SPARK-36263: tests the DataFrame.observe(Observation, *Column) method
+        from pyspark.sql import Observation
+
+        df = SparkSession(self.sc).createDataFrame([
+            (1, 1.0, 'one'),
+            (2, 2.0, 'two'),
+            (3, 3.0, 'three'),
+        ], ['id', 'val', 'label'])
+
+        unnamed_observation = Observation()
+        named_observation = Observation("metric")
+        observed = df.orderBy('id').observe(
+            named_observation,
+            count(lit(1)).alias('cnt'),
+            sum(col("id")).alias('sum'),
+            mean(col("val")).alias('mean')
+        ).observe(unnamed_observation, count(lit(1)).alias('rows'))
+
+        # test that observe works transparently
+        actual = observed.collect()
+        self.assertEqual([
+            {'id': 1, 'val': 1.0, 'label': 'one'},
+            {'id': 2, 'val': 2.0, 'label': 'two'},
+            {'id': 3, 'val': 3.0, 'label': 'three'},
+        ], [row.asDict() for row in actual])
+
+        # test that we retrieve the metrics
+        self.assertEqual(named_observation.get, dict(cnt=3, sum=6, mean=2.0))
+        self.assertEqual(unnamed_observation.get, dict(rows=3))
+
+        # observation requires name (if given) to be non empty string
+        with self.assertRaisesRegex(TypeError, 'name should be a string'):
+            Observation(123)
+        with self.assertRaisesRegex(ValueError, 'name should not be empty'):
+            Observation('')
+
+        # dataframe.observe requires at least one expr
+        with self.assertRaisesRegex(AssertionError, 'exprs should not be empty'):
+            df.observe(Observation())
+
+        # dataframe.observe requires non-None Columns
+        for args in [(None,), ('id',),
+                     (lit(1), None), (lit(1), 'id')]:
+            with self.subTest(args=args):
+                with self.assertRaisesRegex(AssertionError, 'all exprs should be Column'):
+                    df.observe(Observation(), *args)
+
     def test_sample(self):
         self.assertRaisesRegex(
             TypeError,
@@ -508,12 +576,16 @@ class DataFrameTests(ReusedSQLTestCase):
         from datetime import datetime, date
         schema = StructType().add("a", IntegerType()).add("b", StringType())\
                              .add("c", BooleanType()).add("d", FloatType())\
-                             .add("dt", DateType()).add("ts", TimestampType())
+                             .add("dt", DateType()).add("ts", TimestampType())\
+                             .add("ts_ntz", TimestampNTZType())
         data = [
-            (1, "foo", True, 3.0, date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
-            (2, "foo", True, 5.0, None, None),
-            (3, "bar", False, -1.0, date(2012, 3, 3), datetime(2012, 3, 3, 3, 3, 3)),
-            (4, "bar", False, 6.0, date(2100, 4, 4), datetime(2100, 4, 4, 4, 4, 4)),
+            (1, "foo", True, 3.0, date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1),
+             datetime(1969, 1, 1, 1, 1, 1)),
+            (2, "foo", True, 5.0, None, None, None),
+            (3, "bar", False, -1.0, date(2012, 3, 3), datetime(2012, 3, 3, 3, 3, 3),
+             datetime(2012, 3, 3, 3, 3, 3)),
+            (4, "bar", False, 6.0, date(2100, 4, 4), datetime(2100, 4, 4, 4, 4, 4),
+             datetime(2100, 4, 4, 4, 4, 4)),
         ]
         df = self.spark.createDataFrame(data, schema)
         return df.toPandas()
@@ -529,6 +601,7 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(types[3], np.float32)
         self.assertEqual(types[4], np.object)  # datetime.date
         self.assertEqual(types[5], 'datetime64[ns]')
+        self.assertEqual(types[6], 'datetime64[ns]')
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_with_duplicated_column_names(self):
@@ -595,7 +668,8 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST(0 AS DOUBLE) AS double,
             CAST(1 AS BOOLEAN) AS boolean,
             CAST('foo' AS STRING) AS string,
-            CAST('2019-01-01' AS TIMESTAMP) AS timestamp
+            CAST('2019-01-01' AS TIMESTAMP) AS timestamp,
+            CAST('2019-01-01' AS TIMESTAMP_NTZ) AS timestamp_ntz
             """
             dtypes_when_nonempty_df = self.spark.sql(sql).toPandas().dtypes
             dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
@@ -615,7 +689,8 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST(NULL AS DOUBLE) AS double,
             CAST(NULL AS BOOLEAN) AS boolean,
             CAST(NULL AS STRING) AS string,
-            CAST(NULL AS TIMESTAMP) AS timestamp
+            CAST(NULL AS TIMESTAMP) AS timestamp,
+            CAST(NULL AS TIMESTAMP_NTZ) AS timestamp_ntz
             """
             pdf = self.spark.sql(sql).toPandas()
             types = pdf.dtypes
@@ -628,6 +703,7 @@ class DataFrameTests(ReusedSQLTestCase):
             self.assertEqual(types[6], np.object)
             self.assertEqual(types[7], np.object)
             self.assertTrue(np.can_cast(np.datetime64, types[8]))
+            self.assertTrue(np.can_cast(np.datetime64, types[9]))
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_mixed_dataframe(self):
@@ -643,9 +719,10 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST(col6 AS DOUBLE) AS double,
             CAST(col7 AS BOOLEAN) AS boolean,
             CAST(col8 AS STRING) AS string,
-            timestamp_seconds(col9) AS timestamp
-            FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1),
-                        (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
+            timestamp_seconds(col9) AS timestamp,
+            timestamp_seconds(col10) AS timestamp_ntz
+            FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+                        (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
             """
             pdf_with_some_nulls = self.spark.sql(sql).toPandas()
             pdf_with_only_nulls = self.spark.sql(sql).filter('tinyint is null').toPandas()
@@ -670,6 +747,9 @@ class DataFrameTests(ReusedSQLTestCase):
         # test with schema will accept pdf as input
         df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp")
         self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampType))
+        self.assertTrue(isinstance(df.schema['d'].dataType, DateType))
+        df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp_ntz")
+        self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampNTZType))
         self.assertTrue(isinstance(df.schema['d'].dataType, DateType))
 
     @unittest.skipIf(have_pandas, "Required Pandas was found.")
@@ -870,6 +950,13 @@ class DataFrameTests(ReusedSQLTestCase):
 
         assert_frame_equal(pdf, psdf_from_sdf.to_pandas())
         assert_frame_equal(pdf_with_index, psdf_from_sdf_with_index.to_pandas())
+
+    # test for SPARK-36337
+    def test_create_nan_decimal_dataframe(self):
+        self.assertEqual(
+            self.spark.createDataFrame(data=[Decimal('NaN')], schema='decimal').collect(),
+            [Row(value=None)]
+        )
 
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):

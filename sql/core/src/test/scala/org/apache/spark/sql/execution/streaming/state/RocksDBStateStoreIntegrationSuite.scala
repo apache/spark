@@ -19,10 +19,14 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
 
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import scala.collection.JavaConverters
+
+import org.scalatest.time.{Minute, Span}
+
+import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
+import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
-
 
 class RocksDBStateStoreIntegrationSuite extends StreamTest {
   import testImplicits._
@@ -45,6 +49,121 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
           new File(storeCheckpointFile).exists()
         }
       )
+    }
+  }
+
+  test("SPARK-36236: query progress contains only the expected RocksDB store custom metrics") {
+    // fails if any new custom metrics are added to remind the author of API changes
+    import testImplicits._
+
+    withTempDir { dir =>
+      withSQLConf(
+        (SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10"),
+        (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName),
+        (SQLConf.CHECKPOINT_LOCATION.key -> dir.getCanonicalPath),
+        (SQLConf.SHUFFLE_PARTITIONS.key, "1")) {
+        val inputData = MemoryStream[Int]
+
+        val query = inputData.toDS().toDF("value")
+          .select('value)
+          .groupBy($"value")
+          .agg(count("*"))
+          .writeStream
+          .format("console")
+          .outputMode("complete")
+          .start()
+        try {
+          inputData.addData(1, 2)
+          inputData.addData(2, 3)
+          query.processAllAvailable()
+
+          val progress = query.lastProgress
+          assert(progress.stateOperators.length > 0)
+          // Should emit new progresses every 10 ms, but we could be facing a slow Jenkins
+          eventually(timeout(Span(1, Minute))) {
+            val nextProgress = query.lastProgress
+            assert(nextProgress != null, "progress is not yet available")
+            assert(nextProgress.stateOperators.length > 0, "state operators are missing in metrics")
+            val stateOperatorMetrics = nextProgress.stateOperators(0)
+            assert(JavaConverters.asScalaSet(stateOperatorMetrics.customMetrics.keySet) === Set(
+              "rocksdbGetLatency", "rocksdbCommitCompactLatency", "rocksdbBytesCopied",
+              "rocksdbPutLatency", "rocksdbCommitPauseLatency", "rocksdbFilesReused",
+              "rocksdbCommitWriteBatchLatency", "rocksdbFilesCopied", "rocksdbSstFileSize",
+              "rocksdbCommitCheckpointLatency", "rocksdbZipFileBytesUncompressed",
+              "rocksdbCommitFlushLatency", "rocksdbCommitFileSyncLatencyMs", "rocksdbGetCount",
+              "rocksdbPutCount", "rocksdbTotalBytesRead", "rocksdbTotalBytesWritten",
+              "rocksdbReadBlockCacheHitCount", "rocksdbReadBlockCacheMissCount",
+              "rocksdbTotalBytesReadByCompaction", "rocksdbTotalBytesWrittenByCompaction",
+              "rocksdbTotalCompactionLatencyMs", "rocksdbWriterStallLatencyMs",
+              "rocksdbTotalBytesReadThroughIterator"))
+          }
+        } finally {
+          query.stop()
+        }
+      }
+    }
+  }
+
+  testQuietly("SPARK-36519: store RocksDB format version in the checkpoint") {
+    def getFormatVersion(query: StreamingQuery): Int = {
+      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.sparkSession
+        .sessionState.conf.getConf(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION)
+    }
+
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
+      withTempDir { dir =>
+        val inputData = MemoryStream[Int]
+
+        def startQuery(): StreamingQuery = {
+          inputData.toDS().toDF("value")
+            .select('value)
+            .groupBy($"value")
+            .agg(count("*"))
+            .writeStream
+            .format("console")
+            .option("checkpointLocation", dir.getCanonicalPath)
+            .outputMode("complete")
+            .start()
+        }
+
+        // The format version should be 5 by default
+        var query = startQuery()
+        inputData.addData(1, 2)
+        query.processAllAvailable()
+        assert(getFormatVersion(query) == 5)
+        query.stop()
+
+        // Setting the format version manually should not overwrite the value in the checkpoint
+        withSQLConf(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION.key -> "4") {
+          query = startQuery()
+          inputData.addData(1, 2)
+          query.processAllAvailable()
+          assert(getFormatVersion(query) == 5)
+          query.stop()
+        }
+      }
+    }
+  }
+
+  testQuietly("SPARK-36519: RocksDB format version can be set by the SQL conf") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      // Set an unsupported RocksDB format version and the query should fail if it's passed down
+      // into RocksDB
+      SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION.key -> "100") {
+      val inputData = MemoryStream[Int]
+      val query = inputData.toDS().toDF("value")
+        .select('value)
+        .groupBy($"value")
+        .agg(count("*"))
+        .writeStream
+        .format("console")
+        .outputMode("complete")
+        .start()
+      inputData.addData(1, 2)
+      val e = intercept[StreamingQueryException](query.processAllAvailable())
+      assert(e.getCause.getCause.getMessage.contains("Unsupported BlockBasedTable format_version"))
     }
   }
 }

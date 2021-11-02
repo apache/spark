@@ -757,14 +757,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
         sql(s"CREATE DATABASE $dbName")
 
-        checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName").toDF("key", "value")
-            .where("key not like 'Owner%'"), // filter for consistency with in-memory catalog
-          Row("Database Name", dbNameWithoutBackTicks) ::
-            Row("Comment", "") ::
-            Row("Location", CatalogUtils.URIToString(location)) ::
-            Row("Properties", "") :: Nil)
-
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
 
         checkAnswer(
@@ -813,7 +805,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("Drop/Alter/Describe Database - database does not exists") {
+  test("Drop/Alter Database - database does not exists") {
     val databaseNames = Seq("db1", "`database`")
 
     databaseNames.foreach { dbName =>
@@ -829,13 +821,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
       }.getMessage
       assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
-
-      message = intercept[AnalysisException] {
-        sql(s"DESCRIBE DATABASE EXTENDED $dbName")
-      }.getMessage
-      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
-
-      sql(s"DROP DATABASE IF EXISTS $dbName")
     }
   }
 
@@ -2305,7 +2290,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
       }
-      assert(e.message.contains("'tmp_v' is a view not a table"))
+      assert(e.message.contains(
+        "tmp_v is a temp view. 'ALTER TABLE ... ADD COLUMNS' expects a table."))
     }
   }
 
@@ -2315,7 +2301,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
       }
-      assert(e.message.contains("ALTER ADD COLUMNS does not support views"))
+      assert(e.message.contains(
+        "default.v1 is a view. 'ALTER TABLE ... ADD COLUMNS' expects a table."))
     }
   }
 

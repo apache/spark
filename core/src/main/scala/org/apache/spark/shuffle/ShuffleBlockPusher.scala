@@ -24,16 +24,15 @@ import java.util.concurrent.ExecutorService
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 
-import com.google.common.base.Throwables
-
-import org.apache.spark.{ShuffleDependency, SparkConf, SparkEnv}
+import org.apache.spark.{ShuffleDependency, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.shuffle.BlockFetchingListener
+import org.apache.spark.network.server.BlockPushNonFatalFailure
+import org.apache.spark.network.shuffle.BlockPushingListener
 import org.apache.spark.network.shuffle.ErrorHandler.BlockPushErrorHandler
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.shuffle.ShuffleBlockPusher._
@@ -51,9 +50,8 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
   private[this] val maxBlockSizeToPush = conf.get(SHUFFLE_MAX_BLOCK_SIZE_TO_PUSH)
   private[this] val maxBlockBatchSize = conf.get(SHUFFLE_MAX_BLOCK_BATCH_SIZE_FOR_PUSH)
-  private[this] val maxBytesInFlight =
-    conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024
-  private[this] val maxReqsInFlight = conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue)
+  private[this] val maxBytesInFlight = conf.get(REDUCER_MAX_SIZE_IN_FLIGHT) * 1024 * 1024
+  private[this] val maxReqsInFlight = conf.get(REDUCER_MAX_REQS_IN_FLIGHT)
   private[this] val maxBlocksInFlightPerAddress = conf.get(REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS)
   private[this] var bytesInFlight = 0L
   private[this] var reqsInFlight = 0
@@ -69,7 +67,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
     new BlockPushErrorHandler() {
       // For a connection exception against a particular host, we will stop pushing any
       // blocks to just that host and continue push blocks to other hosts. So, here push of
-      // all blocks will only stop when it is "Too Late". Also see updateStateAndCheckIfPushMore.
+      // all blocks will only stop when it is "Too Late" or "Invalid Block push.
+      // Also see updateStateAndCheckIfPushMore.
       override def shouldRetryError(t: Throwable): Boolean = {
         // If it is a FileNotFoundException originating from the client while pushing the shuffle
         // blocks to the server, then we stop pushing all the blocks because this indicates the
@@ -77,8 +76,11 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         if (t.getCause != null && t.getCause.isInstanceOf[FileNotFoundException]) {
           return false
         }
-        // If the block is too late, there is no need to retry it
-        !Throwables.getStackTraceAsString(t).contains(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX)
+        // If the block is too late or the invalid block push or the attempt is not the latest one,
+        // there is no need to retry it
+        !(t.isInstanceOf[BlockPushNonFatalFailure] &&
+          BlockPushNonFatalFailure.
+            shouldNotRetryErrorCode(t.asInstanceOf[BlockPushNonFatalFailure].getReturnCode));
       }
     }
   }
@@ -99,8 +101,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       mapIndex: Int): Unit = {
     val numPartitions = dep.partitioner.numPartitions
     val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
-    val requests = prepareBlockPushRequests(numPartitions, mapIndex, dep.shuffleId, dataFile,
-      partitionLengths, dep.getMergerLocs, transportConf)
+    val requests = prepareBlockPushRequests(numPartitions, mapIndex, dep.shuffleId,
+      dep.shuffleMergeId, dataFile, partitionLengths, dep.getMergerLocs, transportConf)
     // Randomize the orders of the PushRequest, so different mappers pushing blocks at the same
     // time won't be pushing the same ranges of shuffle partitions.
     pushRequests ++= Utils.randomize(requests)
@@ -205,11 +207,11 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
     val blockIds = request.blocks.map(_._1.toString)
     val remainingBlocks = new HashSet[String]() ++= blockIds
 
-    val blockPushListener = new BlockFetchingListener {
+    val blockPushListener = new BlockPushingListener {
       // Initiating a connection and pushing blocks to a remote shuffle service is always handled by
       // the block-push-threads. We should not initiate the connection creation in the
       // blockPushListener callbacks which are invoked by the netty eventloop because:
-      // 1. TrasportClient.createConnection(...) blocks for connection to be established and it's
+      // 1. TransportClient.createConnection(...) blocks for connection to be established and it's
       // recommended to avoid any blocking operations in the eventloop;
       // 2. The actual connection creation is a task that gets added to the task queue of another
       // eventloop which could have eventloops eventually blocking each other.
@@ -224,12 +226,12 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         })
       }
 
-      override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
+      override def onBlockPushSuccess(blockId: String, data: ManagedBuffer): Unit = {
         logTrace(s"Push for block $blockId to $address successful.")
         handleResult(PushResult(blockId, null))
       }
 
-      override def onBlockFetchFailure(blockId: String, exception: Throwable): Unit = {
+      override def onBlockPushFailure(blockId: String, exception: Throwable): Unit = {
         // check the message or it's cause to see it needs to be logged.
         if (!errorHandler.shouldLogError(exception)) {
           logTrace(s"Pushing block $blockId to $address failed.", exception)
@@ -239,10 +241,16 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         handleResult(PushResult(blockId, exception))
       }
     }
+    // In addition to randomizing the order of the push requests, further randomize the order
+    // of blocks within the push request to further reduce the likelihood of shuffle server side
+    // collision of pushed blocks. This does not increase the cost of reading unmerged shuffle
+    // files on the executor side, because we are still reading MB-size chunks and only randomize
+    // the in-memory sliced buffers post reading.
+    val (blockPushIds, blockPushBuffers) = Utils.randomize(blockIds.zip(
+      sliceReqBufferIntoBlockBuffers(request.reqBuffer, request.blocks.map(_._2)))).unzip
     SparkEnv.get.blockManager.blockStoreClient.pushBlocks(
-      address.host, address.port, blockIds.toArray,
-      sliceReqBufferIntoBlockBuffers(request.reqBuffer, request.blocks.map(_._2)),
-      blockPushListener)
+      address.host, address.port, blockPushIds.toArray,
+      blockPushBuffers.toArray, blockPushListener)
   }
 
   /**
@@ -332,9 +340,11 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
    * manner to make sure each target location receives shuffle blocks belonging to the same set
    * of partition ranges. 0-length blocks and blocks that are large enough will be skipped.
    *
-   * @param numPartitions sumber of shuffle partitions in the shuffle file
+   * @param numPartitions number of shuffle partitions in the shuffle file
    * @param partitionId map index of the current mapper
    * @param shuffleId shuffleId of current shuffle
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify merging process
+   *                       of shuffle by an indeterminate stage attempt.
    * @param dataFile shuffle data file
    * @param partitionLengths array of sizes of blocks in the shuffle data file
    * @param mergerLocs target locations to push blocks to
@@ -347,6 +357,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       numPartitions: Int,
       partitionId: Int,
       shuffleId: Int,
+      shuffleMergeId: Int,
       dataFile: File,
       partitionLengths: Array[Long],
       mergerLocs: Seq[BlockManagerId],
@@ -361,7 +372,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
     for (reduceId <- 0 until numPartitions) {
       val blockSize = partitionLengths(reduceId)
       logDebug(
-        s"Block ${ShufflePushBlockId(shuffleId, partitionId, reduceId)} is of size $blockSize")
+        s"Block ${ShufflePushBlockId(shuffleId, shuffleMergeId, partitionId,
+          reduceId)} is of size $blockSize")
       // Skip 0-length blocks and blocks that are large enough
       if (blockSize > 0) {
         val mergerId = math.min(math.floor(reduceId * 1.0 / numPartitions * numMergers),
@@ -394,7 +406,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         // Only push blocks under the size limit
         if (blockSize <= maxBlockSizeToPush) {
           val blockSizeInt = blockSize.toInt
-          blocks += ((ShufflePushBlockId(shuffleId, partitionId, reduceId), blockSizeInt))
+          blocks += ((ShufflePushBlockId(shuffleId, shuffleMergeId, partitionId,
+            reduceId), blockSizeInt))
           // Only update currentReqOffset if the current block is the first in the request
           if (currentReqOffset == -1) {
             currentReqOffset = offset
@@ -449,7 +462,8 @@ private[spark] object ShuffleBlockPusher {
 
   private val BLOCK_PUSHER_POOL: ExecutorService = {
     val conf = SparkEnv.get.conf
-    if (Utils.isPushBasedShuffleEnabled(conf)) {
+    if (Utils.isPushBasedShuffleEnabled(conf,
+        isDriver = SparkContext.DRIVER_IDENTIFIER == SparkEnv.get.executorId)) {
       val numThreads = conf.get(SHUFFLE_NUM_PUSH_THREADS)
         .getOrElse(conf.getInt(SparkLauncher.EXECUTOR_CORES, 1))
       ThreadUtils.newDaemonFixedThreadPool(numThreads, "shuffle-block-push-thread")
