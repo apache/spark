@@ -61,6 +61,8 @@ case class InsertIntoHadoopFsRelationCommand(
 
   private lazy val parameters = CaseInsensitiveMap(options)
 
+  private lazy val dynamicPartition: Boolean = staticPartitions.size < partitionColumns.length
+
   private[sql] lazy val dynamicPartitionOverwrite: Boolean = {
     val partitionOverwriteMode = parameters.get("partitionOverwriteMode")
       // scalastyle:off caselocale
@@ -70,8 +72,7 @@ case class InsertIntoHadoopFsRelationCommand(
     val enableDynamicOverwrite = partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
     // This config only makes sense when we are overwriting a partitioned dataset with dynamic
     // partition columns.
-    enableDynamicOverwrite && mode == SaveMode.Overwrite &&
-      staticPartitions.size < partitionColumns.length
+    enableDynamicOverwrite && mode == SaveMode.Overwrite && dynamicPartition
   }
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
@@ -181,6 +182,7 @@ case class InsertIntoHadoopFsRelationCommand(
             committerOutputPath.toString, customPartitionLocations, outputColumns),
           hadoopConf = hadoopConf,
           partitionColumns = partitionColumns,
+          dynamicPartition = dynamicPartition,
           bucketSpec = bucketSpec,
           statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
           options = options)

@@ -187,6 +187,7 @@ case class InsertIntoHiveTable(
       fileSinkConf = fileSinkConf,
       outputLocation = tmpLocation.toString,
       partitionAttributes = partitionAttributes,
+      dynamicPartition = numDynamicPartitions > 0,
       bucketSpec = table.bucketSpec)
 
     if (partition.nonEmpty) {

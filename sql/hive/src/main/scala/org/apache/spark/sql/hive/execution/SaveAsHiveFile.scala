@@ -55,6 +55,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       outputLocation: String,
       customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty,
       partitionAttributes: Seq[Attribute] = Nil,
+      dynamicPartition: Boolean = false,
       bucketSpec: Option[BucketSpec] = None): Set[String] = {
 
     val isCompressed =
@@ -99,6 +100,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
         FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations, outputColumns),
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
+      dynamicPartition = dynamicPartition,
       bucketSpec = bucketSpec,
       statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
       options = options)

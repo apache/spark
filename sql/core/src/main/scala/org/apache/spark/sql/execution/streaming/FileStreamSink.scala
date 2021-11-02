@@ -176,6 +176,7 @@ class FileStreamSink(
         outputSpec = FileFormatWriter.OutputSpec(path, Map.empty, qe.analyzed.output),
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
+        dynamicPartition = true,
         bucketSpec = None,
         statsTrackers = Seq(basicWriteJobStatsTracker),
         options = options)
