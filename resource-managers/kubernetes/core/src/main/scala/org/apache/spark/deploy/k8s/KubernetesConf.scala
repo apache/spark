@@ -19,6 +19,7 @@ package org.apache.spark.deploy.k8s
 import java.util.{Locale, UUID}
 
 import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferenceBuilder, Pod}
+import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
@@ -251,11 +252,18 @@ private[spark] object KubernetesConf {
   }
 
   def getAppNameLabel(appName: String): String = {
-    s"$appName"
-      .trim
-      .toLowerCase(Locale.ROOT)
-      .replaceAll("[^a-z0-9\\-]", "-")
-      .replaceAll("-+", "-")
+    // According to https://kubernetes.io/docs/concepts/overview/working-with-objects/labels,
+    // must be 63 characters or less to follow the DNS label standard, so take the 63 characters
+    // of the appName name as the label.
+    StringUtils.abbreviate(
+      s"$appName"
+        .trim
+        .toLowerCase(Locale.ROOT)
+        .replaceAll("[^a-z0-9\\-]", "-")
+        .replaceAll("-+", "-"),
+      "",
+      KUBERNETES_DNSNAME_MAX_LENGTH
+    )
   }
 
   /**

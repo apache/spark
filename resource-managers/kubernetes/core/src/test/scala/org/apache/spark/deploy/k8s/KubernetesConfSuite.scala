@@ -218,5 +218,8 @@ class KubernetesConfSuite extends SparkFunSuite {
 
   test("SPARK-36566: get app name label") {
     assert(KubernetesConf.getAppNameLabel(" Job+Spark-Pi 2021") === "job-spark-pi-2021")
+    assert(KubernetesConf.getAppNameLabel("a" * 63) === "a" * 63)
+    assert(KubernetesConf.getAppNameLabel("a" * 64) === "a" * 63)
+    assert(KubernetesConf.getAppNameLabel("a" * 253) === "a" * 63)
   }
 }
