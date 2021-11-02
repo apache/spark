@@ -184,24 +184,24 @@ object QueryExecutionErrors {
 
   def ansiDateTimeParseError(e: DateTimeParseException): DateTimeParseException = {
     val newMessage = s"${e.getMessage}. " +
-      s"You can set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
     new DateTimeParseException(newMessage, e.getParsedString, e.getErrorIndex, e.getCause)
   }
 
   def ansiDateTimeError(e: DateTimeException): DateTimeException = {
     val newMessage = s"${e.getMessage}. " +
-      s"You can set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
     new DateTimeException(newMessage, e.getCause)
   }
 
   def ansiParseError(e: JavaParseException): JavaParseException = {
     val newMessage = s"${e.getMessage}. " +
-      s"You can set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
     new JavaParseException(newMessage, e.getErrorOffset)
   }
 
   def ansiIllegalArgumentError(message: String): IllegalArgumentException = {
-    val newMessage = s"$message. You can set ${SQLConf.ANSI_ENABLED.key} " +
+    val newMessage = s"$message. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
       s"to false to bypass this error."
     new IllegalArgumentException(newMessage)
   }
@@ -257,7 +257,7 @@ object QueryExecutionErrors {
 
   def invalidUrlError(url: UTF8String, e: URISyntaxException): Throwable = {
     new IllegalArgumentException(s"Find an invalid url string ${url.toString}. " +
-      s"You can set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.", e)
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.", e)
   }
 
   def dataTypeOperationUnsupportedError(): Throwable = {
@@ -426,8 +426,8 @@ object QueryExecutionErrors {
   }
 
   def arithmeticOverflowError(e: ArithmeticException): ArithmeticException = {
-    new ArithmeticException(s"${e.getMessage}. You can set ${SQLConf.ANSI_ENABLED.key} to false " +
-      s"to bypass this error.")
+    new ArithmeticException(s"${e.getMessage}. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
+      s"to false to bypass this error.")
   }
 
   def arithmeticOverflowError(
@@ -901,7 +901,7 @@ object QueryExecutionErrors {
 
   def unscaledValueTooLargeForPrecisionError(): Throwable = {
     new ArithmeticException("Unscaled value too large for precision. " +
-      s"You can set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
   }
 
   def decimalPrecisionExceedsMaxPrecisionError(precision: Int, maxPrecision: Int): Throwable = {
