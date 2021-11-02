@@ -2068,7 +2068,6 @@ object AnsiCast {
    * Spark's ANSI mode follows the syntax rules, except it specially allow the following
    * straightforward type conversions which are disallowed as per the SQL standard:
    *   - Numeric <=> Boolean
-   *   - Numeric <=> Timestamp
    *   - String <=> Binary
    */
   def canCast(from: DataType, to: DataType): Boolean = (from, to) match {
@@ -2086,8 +2085,7 @@ object AnsiCast {
     case (StringType, TimestampType) => true
     case (DateType, TimestampType) => true
     case (TimestampNTZType, TimestampType) => true
-    case (_: NumericType, TimestampType) if SQLConf.get.allowCastBetweenDatetimeAndNumericInAnsi =>
-      true
+    case (_: NumericType, TimestampType) => SQLConf.get.allowCastBetweenDatetimeAndNumericInAnsi
 
     case (StringType, TimestampNTZType) => true
     case (DateType, TimestampNTZType) => true
@@ -2107,10 +2105,8 @@ object AnsiCast {
     case (_: NumericType, _: NumericType) => true
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
-    case (TimestampType, _: NumericType) if SQLConf.get.allowCastBetweenDatetimeAndNumericInAnsi =>
-      true
-    case (DateType, _: NumericType) if SQLConf.get.allowCastBetweenDatetimeAndNumericInAnsi =>
-      true
+    case (TimestampType, _: NumericType) => SQLConf.get.allowCastBetweenDatetimeAndNumericInAnsi
+    case (DateType, _: NumericType) => SQLConf.get.allowCastBetweenDatetimeAndNumericInAnsi
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canCast(fromType, toType) &&
