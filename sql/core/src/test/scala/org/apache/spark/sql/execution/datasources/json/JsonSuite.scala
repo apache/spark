@@ -2692,7 +2692,7 @@ abstract class JsonSuite
   }
 
   test("exception mode for parsing date/timestamp string") {
-    val ds = Seq("{'t': '2020-01-27T20:06:11.847-0800'}").toDS()
+    val ds = Seq("{'t': '2020-01-27T20:06:11.847-08000'}").toDS()
     val json = spark.read
       .schema("t timestamp")
       .option("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSz")

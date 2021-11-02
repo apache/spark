@@ -209,6 +209,44 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
+  DataTypeTestUtils.yearMonthIntervalTypes.foreach {
+    dt =>
+      testVectors(dt.typeName,
+        10,
+        dt) { testVector =>
+        (0 until 10).foreach { i =>
+          testVector.appendInt(i)
+        }
+
+        val array = new ColumnarArray(testVector, 0, 10)
+        val arrayCopy = array.copy()
+
+        (0 until 10).foreach { i =>
+          assert(array.get(i, dt) === i)
+          assert(arrayCopy.get(i, dt) === i)
+        }
+      }
+  }
+
+  DataTypeTestUtils.dayTimeIntervalTypes.foreach {
+    dt =>
+      testVectors(dt.typeName,
+        10,
+        dt) { testVector =>
+        (0 until 10).foreach { i =>
+          testVector.appendLong(i)
+        }
+
+        val array = new ColumnarArray(testVector, 0, 10)
+        val arrayCopy = array.copy()
+
+        (0 until 10).foreach { i =>
+          assert(array.get(i, dt) === i)
+          assert(arrayCopy.get(i, dt) === i)
+        }
+      }
+  }
+
   testVectors("mutable ColumnarRow", 10, IntegerType) { testVector =>
     val mutableRow = new MutableColumnarRow(Array(testVector))
     (0 until 10).foreach { i =>
@@ -533,6 +571,37 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       for (i <- 1 until 16) {
         assert(testVector.isNullAt(i) == false)
         assert(testVector.getDouble(i) == i.toDouble)
+      }
+    }
+  }
+
+  DataTypeTestUtils.yearMonthIntervalTypes.foreach { dt =>
+    val structType = new StructType().add(dt.typeName, dt)
+    testVectors("ColumnarRow " + dt.typeName, 10, structType) { v =>
+      val column = v.getChild(0)
+      (0 until 10).foreach { i =>
+        column.putInt(i, i)
+      }
+      (0 until 10).foreach { i =>
+        val row = v.getStruct(i)
+        val rowCopy = row.copy()
+        assert(row.get(0, dt) === i)
+        assert(rowCopy.get(0, dt) === i)
+      }
+    }
+  }
+  DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt =>
+    val structType = new StructType().add(dt.typeName, dt)
+    testVectors("ColumnarRow " + dt.typeName, 10, structType) { v =>
+      val column = v.getChild(0)
+      (0 until 10).foreach { i =>
+        column.putLong(i, i)
+      }
+      (0 until 10).foreach { i =>
+        val row = v.getStruct(i)
+        val rowCopy = row.copy()
+        assert(row.get(0, dt) === i)
+        assert(rowCopy.get(0, dt) === i)
       }
     }
   }

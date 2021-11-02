@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.connector.write.Write
 import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
 
@@ -1055,4 +1055,18 @@ case class UncacheTable(
   override def childrenToAnalyze: Seq[LogicalPlan] = table :: Nil
 
   override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
+}
+
+/**
+ * The logical plan of the CREATE INDEX command.
+ */
+case class CreateIndex(
+    child: LogicalPlan,
+    indexName: String,
+    indexType: String,
+    ignoreIfExists: Boolean,
+    columns: Seq[(NamedReference, Map[String, String])],
+    properties: Map[String, String]) extends UnaryCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): CreateIndex =
+    copy(child = newChild)
 }

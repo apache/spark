@@ -211,7 +211,7 @@ class PandasGroupedOpsMixin(object):
 
         udf = pandas_udf(
             func, returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
-        df = self._df  # type: ignore[attr-defined]
+        df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
         jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())  # type: ignore[attr-defined]
         return DataFrame(jdf, self.sql_ctx)
@@ -352,7 +352,7 @@ class PandasCogroupedOps(object):
 
     @staticmethod
     def _extract_cols(gd: "GroupedData") -> List[Column]:
-        df = gd._df  # type: ignore[attr-defined]
+        df = gd._df
         return [df[col] for col in df.columns]
 
 

@@ -15,63 +15,66 @@
 # limitations under the License.
 #
 
+from typing import Any
+
+
 __all__ = ["StreamingListener"]
 
 
 class StreamingListener(object):
 
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
-    def onStreamingStarted(self, streamingStarted):
+    def onStreamingStarted(self, streamingStarted: Any) -> None:
         """
         Called when the streaming has been started.
         """
         pass
 
-    def onReceiverStarted(self, receiverStarted):
+    def onReceiverStarted(self, receiverStarted: Any) -> None:
         """
         Called when a receiver has been started
         """
         pass
 
-    def onReceiverError(self, receiverError):
+    def onReceiverError(self, receiverError: Any) -> None:
         """
         Called when a receiver has reported an error
         """
         pass
 
-    def onReceiverStopped(self, receiverStopped):
+    def onReceiverStopped(self, receiverStopped: Any) -> None:
         """
         Called when a receiver has been stopped
         """
         pass
 
-    def onBatchSubmitted(self, batchSubmitted):
+    def onBatchSubmitted(self, batchSubmitted: Any) -> None:
         """
         Called when a batch of jobs has been submitted for processing.
         """
         pass
 
-    def onBatchStarted(self, batchStarted):
+    def onBatchStarted(self, batchSubmitted: Any) -> None:
         """
         Called when processing of a batch of jobs has started.
         """
         pass
 
-    def onBatchCompleted(self, batchCompleted):
+    def onBatchCompleted(self, batchCompleted: Any) -> None:
         """
         Called when processing of a batch of jobs has completed.
         """
         pass
 
-    def onOutputOperationStarted(self, outputOperationStarted):
+    def onOutputOperationStarted(self, outputOperationStarted: Any) -> None:
         """
         Called when processing of a job of a batch has started.
         """
         pass
 
-    def onOutputOperationCompleted(self, outputOperationCompleted):
+    def onOutputOperationCompleted(self, outputOperationCompleted: Any) -> None:
         """
         Called when processing of a job of a batch has completed
         """

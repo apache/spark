@@ -31,7 +31,7 @@ from typing import (
 )
 from pyspark.ml import linalg as newlinalg
 from pyspark.sql.types import StructType, UserDefinedType
-from numpy import float64, ndarray  # type: ignore[import]
+from numpy import float64, ndarray
 
 QT = TypeVar("QT")
 RT = TypeVar("RT")

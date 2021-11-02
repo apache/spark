@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PushableColumnWithoutNestedColumn}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
@@ -135,6 +135,17 @@ object PushDownUtils extends PredicateHelper {
         val agg = new Aggregation(translatedAggregates.toArray, translatedGroupBys.toArray)
         Some(agg).filter(r.pushAggregation)
       case _ => None
+    }
+  }
+
+  /**
+   * Pushes down LIMIT to the data source Scan
+   */
+  def pushLimit(scanBuilder: ScanBuilder, limit: Int): Boolean = {
+    scanBuilder match {
+      case s: SupportsPushDownLimit =>
+        s.pushLimit(limit)
+      case _ => false
     }
   }
 

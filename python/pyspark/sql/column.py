@@ -31,7 +31,7 @@ from typing import (
     Union
 )
 
-from py4j.java_gateway import JavaObject
+from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark import copy_func
 from pyspark.context import SparkContext

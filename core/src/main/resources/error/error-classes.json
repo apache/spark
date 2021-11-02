@@ -8,7 +8,7 @@
     "sqlState" : "22005"
   },
   "CANNOT_CHANGE_DECIMAL_PRECISION" : {
-    "message" : [ "%s cannot be represented as Decimal(%s, %s)." ],
+    "message" : [ "%s cannot be represented as Decimal(%s, %s). You can set %s to false to bypass this error." ],
     "sqlState" : "22005"
   },
   "CANNOT_PARSE_DECIMAL" : {
@@ -16,14 +16,14 @@
     "sqlState" : "42000"
   },
   "CAST_CAUSES_OVERFLOW" : {
-    "message" : [ "Casting %s to %s causes overflow" ],
+    "message" : [ "Casting %s to %s causes overflow. You can use 'try_cast' or set %s to false to bypass this error." ],
     "sqlState" : "22005"
   },
   "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
   "DIVIDE_BY_ZERO" : {
-    "message" : [ "divide by zero" ],
+    "message" : [ "divide by zero. You can use 'try_divide' or set %s to false (except for ANSI interval type) to bypass this error." ],
     "sqlState" : "22012"
   },
   "DUPLICATE_KEY" : {

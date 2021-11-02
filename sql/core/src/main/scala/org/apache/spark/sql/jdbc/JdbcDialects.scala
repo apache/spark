@@ -306,8 +306,8 @@ abstract class JdbcDialect extends Serializable with Logging{
       indexType: String,
       tableName: String,
       columns: Array[NamedReference],
-      columnsProperties: Array[util.Map[NamedReference, util.Properties]],
-      properties: util.Properties): String = {
+      columnsProperties: util.Map[NamedReference, util.Map[String, String]],
+      properties: util.Map[String, String]): String = {
     throw new UnsupportedOperationException("createIndex is not supported")
   }
 
@@ -358,6 +358,18 @@ abstract class JdbcDialect extends Serializable with Logging{
   def classifyException(message: String, e: Throwable): AnalysisException = {
     new AnalysisException(message, cause = Some(e))
   }
+
+  /**
+   * returns the LIMIT clause for the SELECT statement
+   */
+  def getLimitClause(limit: Integer): String = {
+    if (limit > 0 ) s"LIMIT $limit" else ""
+  }
+
+  /**
+   * returns whether the dialect supports limit or not
+   */
+  def supportsLimit(): Boolean = true
 }
 
 /**

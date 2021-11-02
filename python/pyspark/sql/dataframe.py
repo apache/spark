@@ -38,13 +38,12 @@ from pyspark.serializers import BatchedSerializer, PickleSerializer, \
     UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.sql.types import _parse_datatype_json_string  # type: ignore[attr-defined]
-from pyspark.sql.column import (  # type: ignore[attr-defined]
-    Column, _to_seq, _to_list, _to_java_column
-)
+from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.streaming import DataStreamWriter
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType, Row
+from pyspark.sql.types import (
+    StructType, StructField, StringType, IntegerType, Row, _parse_datatype_json_string
+)
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
@@ -90,10 +89,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def __init__(self, jdf: JavaObject, sql_ctx: "SQLContext"):
         self._jdf = jdf
         self.sql_ctx = sql_ctx
-        self._sc: SparkContext = cast(
-            SparkContext,
-            sql_ctx and sql_ctx._sc  # type: ignore[attr-defined]
-        )
+        self._sc: SparkContext = cast(SparkContext, sql_ctx and sql_ctx._sc)
         self.is_cached = False
         # initialized lazily
         self._schema: Optional[StructType] = None
@@ -109,10 +105,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if self._lazy_rdd is None:
             jrdd = self._jdf.javaToPython()
-            self._lazy_rdd = RDD(
-                jrdd, self.sql_ctx._sc,  # type: ignore[attr-defined]
-                BatchedSerializer(PickleSerializer())
-            )
+            self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
         return self._lazy_rdd
 
     @property  # type: ignore[misc]
@@ -1280,10 +1273,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 raise ValueError("Weights must be positive. Found weight value: %s" % w)
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
         rdd_array = self._jdf.randomSplit(
-            _to_list(
-                self.sql_ctx._sc,  # type: ignore[attr-defined]
-                cast(List["ColumnOrName"], weights)
-            ),
+            _to_list(self.sql_ctx._sc, cast(List["ColumnOrName"], weights)),
             int(seed)
         )
         return [DataFrame(rdd, self.sql_ctx) for rdd in rdd_array]
@@ -1655,11 +1645,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         converter: Optional[Callable[..., Union["PrimitiveType", JavaObject]]] = None
     ) -> JavaObject:
         """Return a JVM Seq of Columns from a list of Column or names"""
-        return _to_seq(self.sql_ctx._sc, cols, converter)  # type: ignore[attr-defined]
+        return _to_seq(self.sql_ctx._sc, cols, converter)
 
     def _jmap(self, jm: Dict) -> JavaObject:
         """Return a JVM Scala Map from a dict"""
-        return _to_scala_map(self.sql_ctx._sc, jm)  # type: ignore[attr-defined]
+        return _to_scala_map(self.sql_ctx._sc, jm)
 
     def _jcols(self, *cols: "ColumnOrName") -> JavaObject:
         """Return a JVM Seq of Columns from a list of Column or column names
