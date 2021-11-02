@@ -25,7 +25,6 @@ import scala.util.control.Exception.allCatch
 
 import com.fasterxml.jackson.core._
 
-import org.apache.spark.SparkUpgradeException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
@@ -83,7 +82,6 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
             Some(inferField(parser))
           }
         } catch {
-          case e: SparkUpgradeException => throw e
           case e @ (_: RuntimeException | _: JsonProcessingException |
                     _: MalformedInputException) =>
             handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, e)
