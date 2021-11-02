@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import scala.collection.mutable
-
 import org.apache.parquet.column.ColumnDescriptor
-import org.apache.parquet.io.{ColumnIOUtil, GroupColumnIO, PrimitiveColumnIO}
+import org.apache.parquet.io.ColumnIOUtil
+import org.apache.parquet.io.GroupColumnIO
+import org.apache.parquet.io.PrimitiveColumnIO
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.types.DataType
@@ -38,19 +38,6 @@ case class ParquetColumn(
     children: Seq[ParquetColumn]) {
 
   def isPrimitive: Boolean = descriptor.nonEmpty
-
-  /**
-   * Returns all the leaves (i.e., primitive columns) of this, in depth-first order.
-   */
-  def leaves: Seq[ParquetColumn] = {
-    val buffer = mutable.ArrayBuffer[ParquetColumn]()
-    leaves0(buffer)
-    buffer.toSeq
-  }
-
-  private def leaves0(buffer: mutable.ArrayBuffer[ParquetColumn]): Unit = {
-    children.foreach(_.leaves0(buffer))
-  }
 }
 
 object ParquetColumn {

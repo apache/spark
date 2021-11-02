@@ -139,8 +139,8 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
         s"actual = ${actual.sparkType}, expected = ${expected.sparkType}")
     assert(actual.descriptor === expected.descriptor, "column descriptor mismatch: " +
         s"actual = ${actual.descriptor}, expected = ${expected.descriptor})")
-    // Parquet ColumnDescriptor equals only compare path so we'll need to compare other fields
-    // explicitly here
+    // since Parquet ColumnDescriptor equals only compares path, we'll need to compare other
+    // fields explicitly here
     if (actual.descriptor.isDefined && expected.descriptor.isDefined) {
       val actualDesc = actual.descriptor.get
       val expectedDesc = expected.descriptor.get
@@ -156,9 +156,9 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
     assert(actual.required == expected.required, "required mismatch: " +
         s"actual = ${actual.required}, expected = ${expected.required}")
     assert(actual.path == expected.path, "path mismatch: " +
-        s"actual = $actual.path, expected = ${expected.path}")
+        s"actual = ${actual.path}, expected = ${expected.path}")
 
-    assert(actual.children.size == expected.children.size, "number of children mismatch: " +
+    assert(actual.children.size == expected.children.size, "size of children mismatch: " +
         s"actual = ${actual.children.size}, expected = ${expected.children.size}")
     actual.children.zip(expected.children).foreach { case (actualChild, expectedChild) =>
       compareParquetColumn(actualChild, expectedChild)
@@ -169,8 +169,8 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       sparkType: DataType,
       parquetTypeName: PrimitiveTypeName,
       repetition: Repetition,
-      repLevel: Int,
-      defLevel: Int,
+      repetitionLevel: Int,
+      definitionLevel: Int,
       path: Seq[String],
       logicalTypeAnnotation: Option[LogicalTypeAnnotation] = None): ParquetColumn = {
     var typeBuilder = repetition match {
@@ -184,9 +184,9 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
     ParquetColumn(
       sparkType = sparkType,
       descriptor = Some(new ColumnDescriptor(path.toArray,
-        typeBuilder.named(path.last), repLevel, defLevel)),
-      repetitionLevel = repLevel,
-      definitionLevel = defLevel,
+        typeBuilder.named(path.last), repetitionLevel, definitionLevel)),
+      repetitionLevel = repetitionLevel,
+      definitionLevel = definitionLevel,
       required = repetition != Repetition.OPTIONAL,
       path = path,
       children = Seq.empty)
@@ -1896,7 +1896,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """message root {
       |  optional int32 f1;
       |}
-      |""".stripMargin,
+    """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
     sparkReadSchema = Some(StructType(Seq(StructField("F1", ShortType)))),
@@ -1919,7 +1919,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """message root {
       |  optional int32 f1;
       |}
-      |""".stripMargin,
+    """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
     caseSensitive = true,

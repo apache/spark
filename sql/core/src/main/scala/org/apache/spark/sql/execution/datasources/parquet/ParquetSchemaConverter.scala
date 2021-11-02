@@ -30,7 +30,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
- * This converter class is used to convert Parquet [[MessageType]] to Spark SQL [[StructType]].
+ * This converter class is used to convert Parquet [[MessageType]] to Spark SQL [[StructType]]
+ * (via the `convert` method) as well as [[ParquetColumn]] (via the `convertParquetColumn`
+ * method). The latter contains richer information about the Parquet type, including its
+ * associated repetition & definition level, column path, column descriptor etc.
  *
  * Parquet format backwards-compatibility rules are respected when converting Parquet
  * [[MessageType]] schemas.
@@ -148,7 +151,9 @@ class ParquetToSparkSchemaConverter(
     else left == right
 
   /**
-   * Converts a Parquet [[Type]] to a Spark SQL [[DataType]].
+   * Converts a Parquet [[Type]] to a [[ParquetColumn]] which wraps a Spark SQL [[DataType]] with
+   * additional information such as the Parquet column's repetition & definition level, column
+   * path, column descriptor etc.
    */
   def convertField(
       field: ColumnIO,
@@ -322,10 +327,9 @@ class ParquetToSparkSchemaConverter(
             groupColumn, Seq(converted))
         } else {
           val element = repeated.asInstanceOf[GroupColumnIO].getChild(0)
-          val elementType = element.getType
-          val optional = elementType.isRepetition(OPTIONAL)
           val converted = convertField(element, sparkReadElementType)
           val convertedType = sparkReadElementType.getOrElse(converted.sparkType)
+          val optional = element.getType.isRepetition(OPTIONAL)
           ParquetColumn(ArrayType(convertedType, containsNull = optional),
             groupColumn, Seq(converted))
         }
@@ -352,12 +356,11 @@ class ParquetToSparkSchemaConverter(
         val value = keyValue.getChild(1)
         val sparkReadKeyType = sparkReadType.map(_.asInstanceOf[MapType].keyType)
         val sparkReadValueType = sparkReadType.map(_.asInstanceOf[MapType].valueType)
-        val valueType = value.getType
-        val valueOptional = valueType.isRepetition(OPTIONAL)
         val convertedKey = convertField(key, sparkReadKeyType)
         val convertedValue = convertField(value, sparkReadValueType)
         val convertedKeyType = sparkReadKeyType.getOrElse(convertedKey.sparkType)
         val convertedValueType = sparkReadValueType.getOrElse(convertedValue.sparkType)
+        val valueOptional = value.getType.isRepetition(OPTIONAL)
         ParquetColumn(
           MapType(convertedKeyType, convertedValueType,
             valueContainsNull = valueOptional),
