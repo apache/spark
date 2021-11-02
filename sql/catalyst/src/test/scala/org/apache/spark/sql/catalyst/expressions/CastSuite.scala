@@ -23,8 +23,9 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercionSuite
 import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -49,6 +50,8 @@ class CastSuite extends CastSuiteBase {
     checkNullCast(DateType, BooleanType)
     checkNullCast(TimestampType, BooleanType)
     checkNullCast(BooleanType, TimestampType)
+    numericTypes.foreach(dt => checkNullCast(dt, TimestampType))
+    numericTypes.foreach(dt => checkNullCast(TimestampType, dt))
     numericTypes.foreach(dt => checkNullCast(DateType, dt))
   }
 
@@ -58,6 +61,9 @@ class CastSuite extends CastSuiteBase {
   }
 
   test("cast from int #2") {
+    checkEvaluation(cast(cast(1000, TimestampType), LongType), 1000.toLong)
+    checkEvaluation(cast(cast(-1200, TimestampType), LongType), -1200.toLong)
+
     checkEvaluation(cast(123, DecimalType(3, 1)), null)
     checkEvaluation(cast(123, DecimalType(2, 0)), null)
   }
@@ -445,21 +451,43 @@ class CastSuite extends CastSuiteBase {
       "1970-01-01 00:00:00")
   }
 
-  test("cast from timestamp II") {
+  test("cast from timestamp") {
+    val millis = 15 * 1000 + 3
+    val seconds = millis * 1000 + 3
+    val ts = new Timestamp(millis)
+    val tss = new Timestamp(seconds)
+    checkEvaluation(cast(ts, ShortType), 15.toShort)
+    checkEvaluation(cast(ts, IntegerType), 15)
+    checkEvaluation(cast(ts, LongType), 15.toLong)
+    checkEvaluation(cast(ts, FloatType), 15.003f)
+    checkEvaluation(cast(ts, DoubleType), 15.003)
+
+    checkEvaluation(cast(cast(tss, ShortType), TimestampType),
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+    checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+    checkEvaluation(cast(cast(tss, LongType), TimestampType),
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+    checkEvaluation(
+      cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimestampType), FloatType),
+      millis.toFloat / MILLIS_PER_SECOND)
+    checkEvaluation(
+      cast(cast(millis.toDouble / MILLIS_PER_SECOND, TimestampType), DoubleType),
+      millis.toDouble / MILLIS_PER_SECOND)
+    checkEvaluation(
+      cast(cast(Decimal(1), TimestampType), DecimalType.SYSTEM_DEFAULT),
+      Decimal(1))
+
+    // A test for higher precision than millis
+    checkEvaluation(cast(cast(0.000001, TimestampType), DoubleType), 0.000001)
+
     checkEvaluation(cast(Double.NaN, TimestampType), null)
     checkEvaluation(cast(1.0 / 0.0, TimestampType), null)
     checkEvaluation(cast(Float.NaN, TimestampType), null)
     checkEvaluation(cast(1.0f / 0.0f, TimestampType), null)
   }
 
-  test("data type casting II") {
-    checkEvaluation(
-      cast(cast(cast(cast(cast(cast("5", TimestampType, UTC_OPT), ByteType),
-        DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
-      null)
-  }
-
-  test("cast a timestamp before the epoch 1970-01-01 00:00:00Z II") {
+  test("cast a timestamp before the epoch 1970-01-01 00:00:00Z") {
     withDefaultTimeZone(UTC) {
       val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
       assert(negativeTs.getTime < 0)
@@ -467,6 +495,7 @@ class CastSuite extends CastSuiteBase {
       checkEvaluation(cast(negativeTs, ByteType), expectedSecs.toByte)
       checkEvaluation(cast(negativeTs, ShortType), expectedSecs.toShort)
       checkEvaluation(cast(negativeTs, IntegerType), expectedSecs.toInt)
+      checkEvaluation(cast(negativeTs, LongType), expectedSecs)
     }
   }
 
@@ -496,6 +525,28 @@ class CastSuite extends CastSuiteBase {
     checkEvaluation(cast("6E+37", DecimalType(38, 1)), null)
 
     checkEvaluation(cast("abcd", DecimalType(38, 1)), null)
+  }
+
+  test("data type casting II") {
+    checkEvaluation(
+      cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
+        DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
+        5.toShort)
+      checkEvaluation(
+        cast(cast(cast(cast(cast(cast("5", TimestampType, UTC_OPT), ByteType),
+          DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
+        null)
+      checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
+        ByteType), TimestampType), LongType), StringType), ShortType),
+        5.toShort)
+  }
+
+  test("Cast from double II") {
+    checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
+  }
+
+  test("SPARK-34727: cast from float II") {
+    checkCast(16777215.0f, java.time.Instant.ofEpochSecond(16777215))
   }
 
   test("SPARK-34744: Improve error message for casting cause overflow error") {
