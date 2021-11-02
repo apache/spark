@@ -3236,6 +3236,15 @@ object functions {
   def minute(e: Column): Column = withExpr { Minute(e.expr) }
 
   /**
+   * @return A date created from year, month and day fields.
+   * @group datetime_funcs
+   * @since 3.3.0
+   */
+  def make_date(year: Column, month: Column, day: Column): Column = withExpr {
+    MakeDate(year.expr, month.expr, day.expr)
+  }
+
+  /**
    * Returns number of months between dates `start` and `end`.
    *
    * A whole number is returned if both inputs have the same day of month or both are the last day
