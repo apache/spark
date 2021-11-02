@@ -252,7 +252,8 @@ object SparkBuild extends PomBuild {
           // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
           "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
           // SPARK-35496 Suppress `The outer reference in this type test cannot be checked at run time`
-          "-Wconf:cat=unchecked&msg=outer reference:s"
+          "-Wconf:cat=unchecked&msg=outer reference:s",
+          "-Wconf:cat=unchecked&msg=eliminated by erasure:s"
         )
       }
     }

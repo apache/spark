@@ -25,7 +25,7 @@
     <version>18</version>
   </parent>
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-parent_2.12</artifactId>
+  <artifactId>spark-parent_2.13</artifactId>
   <version>3.3.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
@@ -160,8 +160,8 @@
     <commons.math3.version>3.4.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
-    <scala.version>2.12.15</scala.version>
-    <scala.binary.version>2.12</scala.binary.version>
+    <scala.version>2.13.7</scala.version>
+    <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.0.2</scalatest-maven-plugin.version>
     <scalafmt.parameters>--test</scalafmt.parameters>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
@@ -431,13 +431,13 @@
         <version>${project.version}</version>
         <type>test-jar</type>
       </dependency>
-      <!-- #if scala-2.13 --><!--
+      <!-- #if scala-2.13 -->
       <dependency>
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
         <version>1.0.3</version>
       </dependency>
-      --><!-- #endif scala-2.13 -->
+      <!-- #endif scala-2.13 -->
       <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill_${scala.binary.version}</artifactId>
@@ -3469,8 +3469,17 @@
                     `procedure syntax is deprecated`
                   -->
                   <arg>-Wconf:cat=deprecation&amp;msg=procedure syntax is deprecated:e</arg>
-                  <!-- SPARK-35496 Suppress `The outer reference in this type test cannot be checked at run time` -->
+                  <!--
+                    SPARK-35496 Upgrade Scala to 2.13.7 and suppress:
+                    1. `the type test for pattern TypeA cannot be checked at runtime because it
+                     has type parameters eliminated by erasure`
+                    2. `abstract type TypeA in type pattern Seq[TypeA] (the underlying of Seq[TypeA])
+                    is unchecked since it is eliminated by erasure`
+                    3. `The outer reference in this type test cannot be checked at run time`
+                  -->
+                  <arg>-Wconf:cat=unchecked&amp;msg=eliminated by erasure:s</arg>
                   <arg>-Wconf:cat=unchecked&amp;msg=outer reference:s</arg>
+                  <arg>-Wconf:cat=unchecked&amp;msg=fruitless type test:s</arg>
                 </args>
                 <compilerPlugins combine.self="override">
                 </compilerPlugins>
