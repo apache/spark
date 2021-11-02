@@ -428,13 +428,13 @@ object DateTimeUtils {
 
   def stringToTimestampAnsi(s: UTF8String, timeZoneId: ZoneId): Long = {
     stringToTimestamp(s, timeZoneId).getOrElse {
-      throw QueryExecutionErrors.cannotCastUTF8StringToDataTypeError(s, TimestampType)
+      throw QueryExecutionErrors.cannotCastToDateTimeError(s, TimestampType)
     }
   }
 
   def doubleToTimestampAnsi(d: Double): Long = {
     if (d.isNaN || d.isInfinite) {
-      throw QueryExecutionErrors.cannotCastDoubleToTimestampError(d, TimestampType)
+      throw QueryExecutionErrors.cannotCastToDateTimeError(d, TimestampType)
     } else {
       DoubleExactNumeric.toLong(d * MICROS_PER_SECOND)
     }
@@ -467,7 +467,7 @@ object DateTimeUtils {
 
   def stringToTimestampWithoutTimeZoneAnsi(s: UTF8String): Long = {
     stringToTimestampWithoutTimeZone(s).getOrElse {
-      throw QueryExecutionErrors.cannotCastUTF8StringToDataTypeError(s, TimestampNTZType)
+      throw QueryExecutionErrors.cannotCastToDateTimeError(s, TimestampNTZType)
     }
   }
 
@@ -585,7 +585,7 @@ object DateTimeUtils {
 
   def stringToDateAnsi(s: UTF8String): Int = {
     stringToDate(s).getOrElse {
-      throw QueryExecutionErrors.cannotCastUTF8StringToDataTypeError(s, DateType)
+      throw QueryExecutionErrors.cannotCastToDateTimeError(s, DateType)
     }
   }
 
