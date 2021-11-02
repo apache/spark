@@ -65,11 +65,7 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
       }
       context.sparkContext.setJobDescription(substitutorCommand)
       val execution = context.sessionState.executePlan(context.sql(command).logicalPlan)
-      val queryExecutionName = execution.executedPlan match {
-        case _: CommandResultExec => None
-        case _ => Some("cli")
-      }
-      hiveResponse = SQLExecution.withNewExecutionId(execution, queryExecutionName) {
+      hiveResponse = SQLExecution.withNewExecutionId(execution, Some("cli")) {
         hiveResultString(execution.executedPlan)
       }
       tableSchema = getResultSetSchema(execution)
