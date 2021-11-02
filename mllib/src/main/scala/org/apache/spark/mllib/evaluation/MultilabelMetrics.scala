@@ -178,11 +178,7 @@ private[evaluation] class MultilabelSummarizer extends Serializable {
    * @return This MultilabelSummarizer object.
    */
   def add(predictions: Array[Double], labels: Array[Double]): this.type = {
-    val intersection = if (predictions.isEmpty || labels.isEmpty) {
-      Array.empty[Double]
-    } else {
-      predictions.intersect(labels)
-    }
+    val intersection = predictions.intersect(labels)
 
     docCnt += 1L
 
