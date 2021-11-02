@@ -1090,6 +1090,7 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
+  // This method is only called in local-mode.
   override def getMapSizesByExecutorId(
       shuffleId: Int,
       startMapIndex: Int,
@@ -1182,11 +1183,11 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   private val fetchingLock = new KeyLock[Int]
 
   override def getMapSizesByExecutorId(
-    shuffleId: Int,
-    startMapIndex: Int,
-    endMapIndex: Int,
-    startPartition: Int,
-    endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+      shuffleId: Int,
+      startMapIndex: Int,
+      endMapIndex: Int,
+      startPartition: Int,
+      endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
     val mapSizesByExecutorId = getMapSizesByExecutorIdImpl(
       shuffleId, startMapIndex, endMapIndex, startPartition, endPartition, useMergeResult = false)
     assert(mapSizesByExecutorId.enableBatchFetch == true)
@@ -1209,10 +1210,13 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       endMapIndex: Int,
       startPartition: Int,
       endPartition: Int,
-    useMergeResult: Boolean): MapSizesByExecutorId = {
+      useMergeResult: Boolean): MapSizesByExecutorId = {
     logDebug(s"Fetching outputs for shuffle $shuffleId")
     val (mapOutputStatuses, mergedOutputStatuses) = getStatuses(shuffleId, conf,
-      // The boolean check helps to insure that unnecessary merge status won't be fetched, and thus
+      // EnableBatchFetch can be unexpectedly set to false during stage retry when the
+      // shuffleDependency.shuffleMergeEnabled is set to false, and Driver has already
+      // collected the mergedStatus for its shuffle dependency. In this case, boolean
+      // check helps to insure that the unnecessary mergeStatus won't be fetched, thus
       // mergedOutputStatuses won't be passed to convertMapStatuses. See details in [SPARK-37023].
       if (useMergeResult) fetchMergeResult else false)
     try {
