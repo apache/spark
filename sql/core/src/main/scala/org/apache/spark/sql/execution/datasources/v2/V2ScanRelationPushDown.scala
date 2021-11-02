@@ -37,7 +37,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     applyColumnPruning(
-      applyLimit(applySample(pushDownAggregates(pushDownFilters(createScanBuilder(plan))))))
+      applyLimit(pushDownAggregates(pushDownFilters(applySample(createScanBuilder(plan))))))
   }
 
   private def createScanBuilder(plan: LogicalPlan) = plan.transform {
@@ -229,15 +229,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   def applySample(plan: LogicalPlan): LogicalPlan = plan.transform {
     case sample@Sample(_, _, _, _, child) => child match {
       case ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.length == 0 =>
-        val tableSample = TableSample(
+        val tableSample = TableSampleInfo(
           sample.lowerBound,
           sample.upperBound,
           sample.withReplacement,
           sample.seed)
         val pushed = PushDownUtils.pushTableSample(sHolder.builder, tableSample)
         if (pushed) {
-          sHolder.setSample(Some(tableSample))
-          sample.child
+          sHolder.pushedSample = Some(tableSample)
+          child
         } else {
           sample
         }
@@ -252,7 +252,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         case ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.length == 0 =>
           val limitPushed = PushDownUtils.pushLimit(sHolder.builder, limitValue)
           if (limitPushed) {
-            sHolder.setLimit(Some(limitValue))
+            sHolder.pushedLimit = Some(limitValue)
           }
           globalLimit
         case _ => globalLimit
@@ -283,10 +283,8 @@ case class ScanBuilderHolder(
     relation: DataSourceV2Relation,
     builder: ScanBuilder) extends LeafNode {
   var pushedLimit: Option[Int] = None
-  private[sql] def setLimit(limit: Option[Int]): Unit = pushedLimit = limit
 
-  var pushedSample: Option[TableSample] = None
-  private[sql] def setSample(sample: Option[TableSample]): Unit = pushedSample = sample
+  var pushedSample: Option[TableSampleInfo] = None
 }
 
 

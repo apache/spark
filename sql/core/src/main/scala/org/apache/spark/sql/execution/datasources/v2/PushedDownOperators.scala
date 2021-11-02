@@ -24,5 +24,5 @@ import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
  */
 case class PushedDownOperators(
     aggregation: Option[Aggregation],
-    sample: Option[TableSample],
+    sample: Option[TableSampleInfo],
     limit: Option[Int])

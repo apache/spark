@@ -21,7 +21,7 @@ import java.sql.{Connection, Types}
 import java.util.Locale
 
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
-import org.apache.spark.sql.execution.datasources.v2.TableSample
+import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
 
 
@@ -158,7 +158,7 @@ private object PostgresDialect extends JdbcDialect {
 
   override def supportsTableSample: Boolean = true
 
-  override def getTableSample(sample: Option[TableSample]): String = {
+  override def getTableSample(sample: Option[TableSampleInfo]): String = {
     if (sample.nonEmpty) {
       // hard-coded to BERNOULLI for now because Spark doesn't have a way to specify sample
       // method name

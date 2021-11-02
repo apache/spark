@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Count, CountStar, Max, Min, Sum}
-import org.apache.spark.sql.execution.datasources.v2.TableSample
+import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -195,7 +195,7 @@ object JDBCRDD extends Logging {
       options: JDBCOptions,
       outputSchema: Option[StructType] = None,
       groupByColumns: Option[Array[String]] = None,
-      sample: Option[TableSample] = None,
+      sample: Option[TableSampleInfo] = None,
       limit: Int = 0): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
@@ -235,7 +235,7 @@ private[jdbc] class JDBCRDD(
     url: String,
     options: JDBCOptions,
     groupByColumns: Option[Array[String]],
-    sample: Option[TableSample],
+    sample: Option[TableSampleInfo],
     limit: Int)
   extends RDD[InternalRow](sc, Nil) {
 
@@ -363,8 +363,8 @@ private[jdbc] class JDBCRDD(
 
     val myLimitClause: String = dialect.getLimitClause(limit)
 
-    val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myWhereClause" +
-      s" $getGroupByClause $myTableSampleClause $myLimitClause"
+    val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myTableSampleClause" +
+      s" $myWhereClause $getGroupByClause $myLimitClause"
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)

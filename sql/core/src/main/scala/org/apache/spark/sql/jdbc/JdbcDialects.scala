@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
-import org.apache.spark.sql.execution.datasources.v2.TableSample
+import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -374,7 +374,7 @@ abstract class JdbcDialect extends Serializable with Logging{
 
   def supportsTableSample: Boolean = false
 
-  def getTableSample(sample: Option[TableSample]): String = ""
+  def getTableSample(sample: Option[TableSampleInfo]): String = ""
 }
 
 /**

@@ -327,8 +327,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       df3.queryExecution.optimizedPlan.collectFirst {
         case s@DataSourceV2ScanRelation(_, scan, _) => scan match {
           case v1: V1ScanWrapper =>
-            assert(v1.pushedDownOperators.limit.nonEmpty &&
-              v1.pushedDownOperators.limit.get === 2)
+            assert(v1.pushedDownOperators.limit == Some(2))
             s.schema.names.sameElements(Seq("col1"))
         }
       }
@@ -343,14 +342,13 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       df4.queryExecution.optimizedPlan.collect {
         case s@DataSourceV2ScanRelation(_, scan, _) => scan match {
           case v1: V1ScanWrapper =>
-            assert(v1.pushedDownOperators.limit.nonEmpty &&
-              v1.pushedDownOperators.limit.get === 2)
+            assert(v1.pushedDownOperators.limit == Some(2))
             s.schema.names.sameElements(Seq("col1"))
         }
       }
       assert(df4.collect().length == 2)
 
-      // Push down order is filter -> sample -> limit
+      // Push down order is sample -> filter -> limit
       // in this test only limit is pushed down because sample is after limit
       // Filter in combination with sample is not allowed so no need to test
       val df5 = spark.read.table(s"$catalogName.new_table").limit(2).sample(0.5)
@@ -361,8 +359,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       df5.queryExecution.optimizedPlan.collect {
         case DataSourceV2ScanRelation(_, scan, _) => scan match {
           case v1: V1ScanWrapper =>
-            assert(v1.pushedDownOperators.limit.nonEmpty &&
-              v1.pushedDownOperators.limit.get === 2)
+            assert(v1.pushedDownOperators.limit == Some(2))
         }
       }
     }

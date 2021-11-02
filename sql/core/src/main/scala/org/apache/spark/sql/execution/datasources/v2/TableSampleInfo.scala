@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-case class TableSample(
+case class TableSampleInfo(
     lowerBound: Double,
     upperBound: Double,
     withReplacement: Boolean,

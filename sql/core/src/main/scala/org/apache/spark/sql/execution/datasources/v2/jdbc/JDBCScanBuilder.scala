@@ -24,7 +24,7 @@ import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
-import org.apache.spark.sql.execution.datasources.v2.TableSample
+import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
@@ -47,7 +47,7 @@ case class JDBCScanBuilder(
 
   private var finalSchema = schema
 
-  private var tableSample: Option[TableSample] = None
+  private var tableSample: Option[TableSampleInfo] = None
 
   private var pushedLimit = 0
 
@@ -112,7 +112,7 @@ case class JDBCScanBuilder(
       seed: Long): Boolean = {
     if (jdbcOptions.pushDownTableSample &&
       JdbcDialects.get(jdbcOptions.url).supportsTableSample) {
-      this.tableSample = Some(TableSample(lowerBound, upperBound, withReplacement, seed))
+      this.tableSample = Some(TableSampleInfo(lowerBound, upperBound, withReplacement, seed))
       return true
     }
     false
