@@ -41,6 +41,8 @@ NULL
 #' @param x Column to compute on. In \code{window}, it must be a time Column of
 #'          \code{TimestampType}. This is not used with \code{current_date} and
 #'          \code{current_timestamp}
+#' @param y Column to compute on.
+#' @param z Column to compute on.
 #' @param format The format for the given dates or timestamps in Column \code{x}. See the
 #'               format used in the following methods:
 #'               \itemize{
@@ -1469,9 +1471,6 @@ setMethod("ltrim",
 #' @details
 #' \code{make_date}: Create date from year, month and day fields.
 #'
-#' @param year a source number for year
-#' @param month a source number for month
-#' @param day a source number for day
 #' @rdname column_datetime_functions
 #' @aliases make_date make_date,Column-method
 #' @note make_date since 3.3.0
@@ -1486,10 +1485,10 @@ setMethod("ltrim",
 #' tmp <- head(select(df, make_date(df$year, df$month, df$day)))
 #' head(tmp)}
 setMethod("make_date",
-          signature(year = "Column", month = "Column", day = "Column"),
-          function(year, month, day) {
+          signature(x = "Column", y = "Column", z = "Column"),
+          function(x, y, z) {
             jc <- callJStatic("org.apache.spark.sql.functions", "make_date",
-                              year@jc, month@jc, day@jc)
+                              x@jc, y@jc, z@jc)
             column(jc)
           })
 

@@ -1160,7 +1160,7 @@ setGeneric("ltrim", function(x, trimString) { standardGeneric("ltrim") })
 
 #' @rdname column_datetime_functions
 #' @name NULL
-setGeneric("make_date", function(year, month, day) { standardGeneric("make_date") })
+setGeneric("make_date", function(x, y, z) { standardGeneric("make_date") })
 
 #' @rdname column_collection_functions
 #' @name NULL
