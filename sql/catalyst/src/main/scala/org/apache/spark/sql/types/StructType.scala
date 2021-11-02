@@ -641,16 +641,11 @@ object StructType extends AbstractDataType {
 
       case (DecimalType.Fixed(leftPrecision, leftScale),
         DecimalType.Fixed(rightPrecision, rightScale)) =>
-        if ((leftPrecision == rightPrecision) && (leftScale == rightScale)) {
-          DecimalType(leftPrecision, leftScale)
-        } else if ((leftPrecision != rightPrecision) && (leftScale == rightScale)) {
-          DecimalType(Math.max(leftPrecision, rightPrecision), leftScale)
-        } else if ((leftPrecision == rightPrecision) && (leftScale != rightScale)) {
+        if (leftScale == rightScale) {
+          DecimalType(leftPrecision.max(rightPrecision), leftScale)
+        } else {
           throw QueryExecutionErrors.cannotMergeDecimalTypesWithIncompatibleScaleError(
             leftScale, rightScale)
-        } else {
-          throw QueryExecutionErrors.cannotMergeDecimalTypesWithIncompatiblePrecisionAndScaleError(
-            leftPrecision, rightPrecision, leftScale, rightScale)
         }
 
       case (leftUdt: UserDefinedType[_], rightUdt: UserDefinedType[_])

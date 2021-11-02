@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.math.BigDecimal
-
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
@@ -26,7 +24,6 @@ import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
@@ -388,27 +385,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       assert(a.name == b.name)
       assert(a.dataType === b.dataType)
       assert(a.nullable === b.nullable)
-    }
-  }
-
-  test("SPARK-37191: Schema merging for DecimalType with different precision but the same scale") {
-    import testImplicits._
-
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-
-      val data1 = spark.sparkContext.parallelize(Seq(Row(new BigDecimal("123456789.11"))), 1)
-      val schema1 = StructType(StructField("col", DecimalType(12, 2)) :: Nil)
-
-      val data2 = spark.sparkContext.parallelize(Seq(Row(new BigDecimal("1234567890000.11"))), 1)
-      val schema2 = StructType(StructField("col", DecimalType(17, 2)) :: Nil)
-
-      spark.createDataFrame(data1, schema1).write.parquet(path)
-      spark.createDataFrame(data2, schema2).write.mode("append").parquet(path)
-
-      val res = spark.read.option("mergeSchema", "true").parquet(path)
-      assert(res.schema("col").dataType == DecimalType(17, 2))
-      res.foreach(_ => ()) // must not throw exception
     }
   }
 
