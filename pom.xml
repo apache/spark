@@ -3470,7 +3470,7 @@
                   -->
                   <arg>-Wconf:cat=deprecation&amp;msg=procedure syntax is deprecated:e</arg>
                   <!-- SPARK-35496 Suppress `The outer reference in this type test cannot be checked at run time` -->
-                  <arg>-Wconf:msg=cat=unchecked&amp;outer reference:s</arg>
+                  <arg>-Wconf:cat=unchecked&amp;msg=outer reference:s</arg>
                 </args>
                 <compilerPlugins combine.self="override">
                 </compilerPlugins>
