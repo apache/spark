@@ -257,8 +257,10 @@ object SparkBuild extends PomBuild {
           //    has type parameters eliminated by erasure`
           // 3. `abstract type TypeA in type pattern Seq[TypeA] (the underlying of
           //    Seq[TypeA]) is unchecked since it is eliminated by erasure`
+          // 4. `fruitless type test: a value of TypeA cannot also be a TypeB`
           "-Wconf:cat=unchecked&msg=outer reference:s",
-          "-Wconf:cat=unchecked&msg=eliminated by erasure:s"
+          "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
+          "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s"
         )
       }
     }

@@ -3476,9 +3476,11 @@
                      has type parameters eliminated by erasure`
                     3. `abstract type TypeA in type pattern Seq[TypeA] (the underlying of
                     Seq[TypeA]) is unchecked since it is eliminated by erasure`
+                    4. `fruitless type test: a value of TypeA cannot also be a TypeB`
                   -->
                   <arg>-Wconf:cat=unchecked&amp;msg=outer reference:s</arg>
                   <arg>-Wconf:cat=unchecked&amp;msg=eliminated by erasure:s</arg>
+                  <arg>-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s</arg>
                 </args>
                 <compilerPlugins combine.self="override">
                 </compilerPlugins>
