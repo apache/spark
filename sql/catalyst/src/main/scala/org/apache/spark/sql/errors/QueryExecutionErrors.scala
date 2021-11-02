@@ -588,8 +588,7 @@ object QueryExecutionErrors {
 
   def cannotReadFilesError(
       e: Throwable,
-      path: String,
-      reason: Option[String] = None): Throwable = {
+      path: String): Throwable = {
     val message = s"Encountered error while reading file $path. Details: "
     new QueryExecutionException(message, e)
   }
