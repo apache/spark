@@ -107,8 +107,8 @@ object QueryExecutionErrors {
   }
 
   def invalidInputSyntaxForNumericError(e: NumberFormatException): NumberFormatException = {
-    new NumberFormatException(s"${e.getMessage}. You can use 'try_cast' or " +
-      s"set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
+    new NumberFormatException(s"${e.getMessage}. To return NULL instead, use 'try_cast'. " +
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
   }
 
   def invalidInputSyntaxForNumericError(s: UTF8String): NumberFormatException = {
@@ -1141,7 +1141,8 @@ object QueryExecutionErrors {
 
   def invalidInputSyntaxForBooleanError(s: UTF8String): UnsupportedOperationException = {
     new UnsupportedOperationException(s"invalid input syntax for type boolean: $s. " +
-      s"You can use 'try_cast' or set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
+      s"To return NULL instead, use 'try_cast'. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
+      "to false to bypass this error.")
   }
 
   def unsupportedOperandTypeForSizeFunctionError(dataType: DataType): Throwable = {
