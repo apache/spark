@@ -179,6 +179,8 @@ object JDBCRDD extends Logging {
    * @param options - JDBC options that contains url, table and other information.
    * @param outputSchema - The schema of the columns or aggregate columns to SELECT.
    * @param groupByColumns - The pushed down group by columns.
+   * @param limit - The pushed down limit. If the value is 0, it means no limit or limit
+   *                is not pushed down.
    *
    * @return An RDD representing "SELECT requiredColumns FROM fqTable".
    */
@@ -190,7 +192,8 @@ object JDBCRDD extends Logging {
       parts: Array[Partition],
       options: JDBCOptions,
       outputSchema: Option[StructType] = None,
-      groupByColumns: Option[Array[String]] = None): RDD[InternalRow] = {
+      groupByColumns: Option[Array[String]] = None,
+      limit: Int = 0): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = if (groupByColumns.isEmpty) {
@@ -208,7 +211,8 @@ object JDBCRDD extends Logging {
       parts,
       url,
       options,
-      groupByColumns)
+      groupByColumns,
+      limit)
   }
 }
 
@@ -226,7 +230,8 @@ private[jdbc] class JDBCRDD(
     partitions: Array[Partition],
     url: String,
     options: JDBCOptions,
-    groupByColumns: Option[Array[String]])
+    groupByColumns: Option[Array[String]],
+    limit: Int)
   extends RDD[InternalRow](sc, Nil) {
 
   /**
@@ -349,8 +354,10 @@ private[jdbc] class JDBCRDD(
 
     val myWhereClause = getWhereClause(part)
 
+    val myLimitClause: String = dialect.getLimitClause(limit)
+
     val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myWhereClause" +
-      s" $getGroupByClause"
+      s" $getGroupByClause $myLimitClause"
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)

@@ -1193,15 +1193,6 @@ class DDLParserSuite extends AnalysisTest {
         "DESC TABLE COLUMN for a specific partition is not supported"))
   }
 
-  test("describe database") {
-    val sql1 = "DESCRIBE DATABASE EXTENDED a.b"
-    val sql2 = "DESCRIBE DATABASE a.b"
-    comparePlans(parsePlan(sql1),
-      DescribeNamespace(UnresolvedNamespace(Seq("a", "b")), extended = true))
-    comparePlans(parsePlan(sql2),
-      DescribeNamespace(UnresolvedNamespace(Seq("a", "b")), extended = false))
-  }
-
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
     comparePlans(parsePlan("describe t"),
       DescribeRelation(
@@ -2280,6 +2271,24 @@ class DDLParserSuite extends AnalysisTest {
       RefreshFunction(UnresolvedFunc(Seq("b", "c"))))
     parseCompare("REFRESH FUNCTION a.b.c",
       RefreshFunction(UnresolvedFunc(Seq("a", "b", "c"))))
+  }
+
+  test("CREATE INDEX") {
+    parseCompare("CREATE index i1 ON a.b.c USING BTREE (col1)",
+      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", "BTREE", false,
+        Array(FieldReference("col1")).toSeq.zip(Seq(Map.empty[String, String])), Map.empty))
+
+    parseCompare("CREATE index IF NOT EXISTS i1 ON TABLE a.b.c USING BTREE" +
+      " (col1 OPTIONS ('k1'='v1'), col2 OPTIONS ('k2'='v2')) ",
+      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", "BTREE", true,
+        Array(FieldReference("col1"), FieldReference("col2")).toSeq
+          .zip(Seq(Map("k1" -> "v1"), Map("k2" -> "v2"))), Map.empty))
+
+    parseCompare("CREATE index i1 ON a.b.c" +
+      " (col1 OPTIONS ('k1'='v1'), col2 OPTIONS ('k2'='v2')) OPTIONS ('k3'='v3', 'k4'='v4')",
+      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", "", false,
+        Array(FieldReference("col1"), FieldReference("col2")).toSeq
+          .zip(Seq(Map("k1" -> "v1"), Map("k2" -> "v2"))), Map("k3" -> "v3", "k4" -> "v4")))
   }
 
   private case class TableSpec(

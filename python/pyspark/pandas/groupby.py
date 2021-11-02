@@ -90,6 +90,7 @@ from pyspark.pandas.utils import (
     same_anchor,
     scol_for,
     verify_temp_column_name,
+    log_advice,
 )
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.exceptions import DataError
@@ -1199,6 +1200,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
+            log_advice(
+                "If the type hints is not specified for `grouby.apply`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = get_option("compute.shortcut_limit")
             pdf = psdf.head(limit + 1)._to_internal_pandas()
             groupkeys = [
@@ -2264,6 +2269,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified for `grouby.transform`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = get_option("compute.shortcut_limit")
             pdf = psdf.head(limit + 1)._to_internal_pandas()
             pdf = pdf.groupby(groupkey_names).transform(func, *args, **kwargs)

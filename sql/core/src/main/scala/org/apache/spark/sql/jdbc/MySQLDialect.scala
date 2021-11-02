@@ -118,13 +118,12 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       indexType: String,
       tableName: String,
       columns: Array[NamedReference],
-      columnsProperties: Array[util.Map[NamedReference, util.Properties]],
-      properties: util.Properties): String = {
+      columnsProperties: util.Map[NamedReference, util.Map[String, String]],
+      properties: util.Map[String, String]): String = {
     val columnList = columns.map(col => quoteIdentifier(col.fieldNames.head))
     var indexProperties: String = ""
-    val scalaProps = properties.asScala
     if (!properties.isEmpty) {
-      scalaProps.foreach { case (k, v) =>
+      properties.asScala.foreach { case (k, v) =>
         indexProperties = indexProperties + " " + s"$k $v"
       }
     }

@@ -32,12 +32,9 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
-import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
-import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, PARQUET_AGGREGATE_PUSHDOWN_ENABLED}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
 object ParquetUtils {
   def inferSchema(
@@ -199,44 +196,6 @@ object ParquetUtils {
         throw new SparkException("Unexpected parquet type name: " + primitiveTypeNames(i))
     }
     converter.currentRecord
-  }
-
-  /**
-   * When the aggregates (Max/Min/Count) are pushed down to Parquet, in the case of
-   * PARQUET_VECTORIZED_READER_ENABLED sets to true, we don't need buildColumnarReader
-   * to read data from Parquet and aggregate at Spark layer. Instead we want
-   * to get the aggregates (Max/Min/Count) result using the statistics information
-   * from Parquet footer file, and then construct a ColumnarBatch from these aggregate results.
-   *
-   * @return Aggregate results in the format of ColumnarBatch
-   */
-  private[sql] def createAggColumnarBatchFromFooter(
-      footer: ParquetMetadata,
-      filePath: String,
-      dataSchema: StructType,
-      partitionSchema: StructType,
-      aggregation: Aggregation,
-      aggSchema: StructType,
-      offHeap: Boolean,
-      datetimeRebaseMode: LegacyBehaviorPolicy.Value,
-      isCaseSensitive: Boolean): ColumnarBatch = {
-    val row = createAggInternalRowFromFooter(
-      footer,
-      filePath,
-      dataSchema,
-      partitionSchema,
-      aggregation,
-      aggSchema,
-      datetimeRebaseMode,
-      isCaseSensitive)
-    val converter = new RowToColumnConverter(aggSchema)
-    val columnVectors = if (offHeap) {
-      OffHeapColumnVector.allocateColumns(1, aggSchema)
-    } else {
-      OnHeapColumnVector.allocateColumns(1, aggSchema)
-    }
-    converter.convert(row, columnVectors.toArray)
-    new ColumnarBatch(columnVectors.asInstanceOf[Array[ColumnVector]], 1)
   }
 
   /**

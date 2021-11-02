@@ -189,6 +189,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   def supportsIndex: Boolean = false
   def testIndexProperties(jdbcTable: SupportsIndex): Unit = {}
+  def testIndexUsingSQL(tbl: String): Unit = {}
 
   test("SPARK-36913: Test INDEX") {
     if (supportsIndex) {
@@ -202,28 +203,28 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(jdbcTable.indexExists("i1") == false)
         assert(jdbcTable.indexExists("i2") == false)
 
-        val properties = new util.Properties();
+        val properties = new util.HashMap[String, String]();
         val indexType = "DUMMY"
         var m = intercept[UnsupportedOperationException] {
           jdbcTable.createIndex("i1", indexType, Array(FieldReference("col1")),
-            Array.empty[util.Map[NamedReference, util.Properties]], properties)
+            new util.HashMap[NamedReference, util.Map[String, String]](), properties)
         }.getMessage
         assert(m.contains(s"Index Type $indexType is not supported." +
           s" The supported Index Types are: BTREE and HASH"))
 
         jdbcTable.createIndex("i1", "BTREE", Array(FieldReference("col1")),
-          Array.empty[util.Map[NamedReference, util.Properties]], properties)
+          new util.HashMap[NamedReference, util.Map[String, String]](), properties)
 
         jdbcTable.createIndex("i2", "",
           Array(FieldReference("col2"), FieldReference("col3"), FieldReference("col5")),
-          Array.empty[util.Map[NamedReference, util.Properties]], properties)
+          new util.HashMap[NamedReference, util.Map[String, String]](), properties)
 
         assert(jdbcTable.indexExists("i1") == true)
         assert(jdbcTable.indexExists("i2") == true)
 
         m = intercept[IndexAlreadyExistsException] {
           jdbcTable.createIndex("i1", "", Array(FieldReference("col1")),
-            Array.empty[util.Map[NamedReference, util.Properties]], properties)
+            new util.HashMap[NamedReference, util.Map[String, String]](), properties)
         }.getMessage
         assert(m.contains("Failed to create index: i1 in new_table"))
 
@@ -276,5 +277,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       }
     }
   }
-}
 
+  test("SPARK-36895: Test INDEX Using SQL") {
+    withTable(s"$catalogName.new_table") {
+      sql(s"CREATE TABLE $catalogName.new_table(col1 INT, col2 INT, col3 INT, col4 INT, col5 INT)")
+      testIndexUsingSQL(s"$catalogName.new_table")
+    }
+  }
+}

@@ -98,23 +98,56 @@ trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
     }
   }
 
-  def checkTableSchemaTypeStr(expected: Seq[Row]): Unit = {
-    checkAnswer(sql("desc t").selectExpr("data_type").where("data_type like '%char%'"), expected)
+  def checkTableSchemaTypeStr(table: String, expected: Seq[Row]): Unit = {
+    checkAnswer(
+      sql(s"desc $table").selectExpr("data_type").where("data_type like '%char%'"),
+      expected)
   }
 
   test("SPARK-33901: alter table add columns should not change original table's schema") {
     withTable("t") {
       sql(s"CREATE TABLE t(i CHAR(5), c VARCHAR(4)) USING $format")
       sql("ALTER TABLE t ADD COLUMNS (d VARCHAR(5))")
-      checkTableSchemaTypeStr(Seq(Row("char(5)"), Row("varchar(4)"), Row("varchar(5)")))
+      checkTableSchemaTypeStr("t", Seq(Row("char(5)"), Row("varchar(4)"), Row("varchar(5)")))
     }
   }
 
   test("SPARK-33901: ctas should should not change table's schema") {
-    withTable("t", "tt") {
-      sql(s"CREATE TABLE tt(i CHAR(5), c VARCHAR(4)) USING $format")
-      sql(s"CREATE TABLE t USING $format AS SELECT * FROM tt")
-      checkTableSchemaTypeStr(Seq(Row("char(5)"), Row("varchar(4)")))
+    withTable("t1", "t2") {
+      sql(s"CREATE TABLE t1(i CHAR(5), c VARCHAR(4)) USING $format")
+      sql(s"CREATE TABLE t2 USING $format AS SELECT * FROM t1")
+      checkTableSchemaTypeStr("t2", Seq(Row("char(5)"), Row("varchar(4)")))
+    }
+  }
+
+  test("SPARK-37160: CREATE TABLE with CHAR_AS_VARCHAR") {
+    withSQLConf(SQLConf.CHAR_AS_VARCHAR.key -> "true") {
+      withTable("t") {
+        sql(s"CREATE TABLE t(col CHAR(5)) USING $format")
+        checkTableSchemaTypeStr("t", Seq(Row("varchar(5)")))
+      }
+    }
+  }
+
+  test("SPARK-37160: CREATE TABLE AS SELECT with CHAR_AS_VARCHAR") {
+    withTable("t1", "t2") {
+      sql(s"CREATE TABLE t1(col CHAR(5)) USING $format")
+      checkTableSchemaTypeStr("t1", Seq(Row("char(5)")))
+      withSQLConf(SQLConf.CHAR_AS_VARCHAR.key -> "true") {
+        sql(s"CREATE TABLE t2 USING $format AS SELECT * FROM t1")
+        checkTableSchemaTypeStr("t2", Seq(Row("varchar(5)")))
+      }
+    }
+  }
+
+  test("SPARK-37160: ALTER TABLE ADD COLUMN with CHAR_AS_VARCHAR") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(col CHAR(5)) USING $format")
+      checkTableSchemaTypeStr("t", Seq(Row("char(5)")))
+      withSQLConf(SQLConf.CHAR_AS_VARCHAR.key -> "true") {
+        sql("ALTER TABLE t ADD COLUMN c2 CHAR(10)")
+        checkTableSchemaTypeStr("t", Seq(Row("char(5)"), Row("varchar(10)")))
+      }
     }
   }
 }
@@ -130,7 +163,7 @@ class FileSourceCharVarcharDDLTestSuite extends CharVarcharDDLTestBase with Shar
     withTable("t", "tt") {
       sql(s"CREATE TABLE tt(i CHAR(5), c VARCHAR(4)) USING $format")
       sql("CREATE TABLE t LIKE tt")
-      checkTableSchemaTypeStr(Seq(Row("char(5)"), Row("varchar(4)")))
+      checkTableSchemaTypeStr("t", Seq(Row("char(5)"), Row("varchar(4)")))
     }
   }
 
@@ -140,7 +173,19 @@ class FileSourceCharVarcharDDLTestSuite extends CharVarcharDDLTestBase with Shar
       sql(s"CREATE TABLE tt(i CHAR(5), c VARCHAR(4)) USING $format")
       withView("t") {
         sql("CREATE VIEW t AS SELECT * FROM tt")
-        checkTableSchemaTypeStr(Seq(Row("char(5)"), Row("varchar(4)")))
+        checkTableSchemaTypeStr("t", Seq(Row("char(5)"), Row("varchar(4)")))
+      }
+    }
+  }
+
+  // TODO(SPARK-33902): MOVE TO SUPER CLASS AFTER THE TARGET TICKET RESOLVED
+  test("SPARK-37160: CREATE TABLE LIKE with CHAR_AS_VARCHAR") {
+    withTable("t1", "t2") {
+      sql(s"CREATE TABLE t1(col CHAR(5)) USING $format")
+      checkTableSchemaTypeStr("t1", Seq(Row("char(5)")))
+      withSQLConf(SQLConf.CHAR_AS_VARCHAR.key -> "true") {
+        sql(s"CREATE TABLE t2 LIKE t1")
+        checkTableSchemaTypeStr("t2", Seq(Row("varchar(5)")))
       }
     }
   }
@@ -194,6 +239,42 @@ class DSV2CharVarcharDDLTestSuite extends CharVarcharDDLTestBase
         sql("ALTER TABLE t CHANGE COLUMN c TYPE VARCHAR(3)")
       }
       assert(e.getMessage contains "char(4) cannot be cast to varchar(3)")
+    }
+  }
+
+  test("SPARK-37160: REPLACE TABLE with CHAR_AS_VARCHAR") {
+    withSQLConf(SQLConf.CHAR_AS_VARCHAR.key -> "true") {
+      withTable("t") {
+        sql(s"CREATE TABLE t(col INT) USING $format")
+        sql(s"REPLACE TABLE t(col CHAR(5)) USING $format")
+        checkTableSchemaTypeStr("t", Seq(Row("varchar(5)")))
+      }
+    }
+  }
+
+  test("SPARK-37160: REPLACE TABLE AS SELECT with CHAR_AS_VARCHAR") {
+    withTable("t1", "t2") {
+      sql(s"CREATE TABLE t1(col CHAR(5)) USING $format")
+      checkTableSchemaTypeStr("t1", Seq(Row("char(5)")))
+      withSQLConf(SQLConf.CHAR_AS_VARCHAR.key -> "true") {
+        sql(s"CREATE TABLE t2(col INT) USING $format")
+        sql(s"REPLACE TABLE t2 AS SELECT * FROM t1")
+        checkTableSchemaTypeStr("t2", Seq(Row("varchar(5)")))
+      }
+    }
+  }
+
+  test("SPARK-37160: ALTER TABLE ALTER/REPLACE COLUMN with CHAR_AS_VARCHAR") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(col CHAR(5), c2 VARCHAR(10)) USING $format")
+      checkTableSchemaTypeStr("t", Seq(Row("char(5)"), Row("varchar(10)")))
+      withSQLConf(SQLConf.CHAR_AS_VARCHAR.key -> "true") {
+        sql("ALTER TABLE t ALTER c2 TYPE CHAR(20)")
+        checkTableSchemaTypeStr("t", Seq(Row("char(5)"), Row("varchar(20)")))
+
+        sql("ALTER TABLE t REPLACE COLUMNS (col CHAR(5))")
+        checkTableSchemaTypeStr("t", Seq(Row("varchar(5)")))
+      }
     }
   }
 }

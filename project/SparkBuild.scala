@@ -917,7 +917,8 @@ object SparkR {
   val buildRPackage = taskKey[Unit]("Build the R package")
   lazy val settings = Seq(
     buildRPackage := {
-      val command = baseDirectory.value / ".." / "R" / "install-dev.sh"
+      val postfix = if (File.separator == "\\") ".bat" else ".sh"
+      val command = baseDirectory.value / ".." / "R" / s"install-dev$postfix"
       Process(command.toString).!!
     },
     (Compile / compile) := (Def.taskDyn {
@@ -1130,11 +1131,13 @@ object TestSettings {
       val extraTestJavaArgs = Array("-XX:+IgnoreUnrecognizedVMOptions",
         "--add-opens=java.base/java.lang=ALL-UNNAMED",
         "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
         "--add-opens=java.base/java.io=ALL-UNNAMED",
         "--add-opens=java.base/java.net=ALL-UNNAMED",
         "--add-opens=java.base/java.nio=ALL-UNNAMED",
         "--add-opens=java.base/java.util=ALL-UNNAMED",
         "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
         "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
         "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
         "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
