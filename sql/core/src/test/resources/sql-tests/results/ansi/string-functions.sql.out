@@ -543,39 +543,39 @@ AABB
 
 
 -- !query
-SELECT lpad('abc', 5, x'12')
+SELECT lpad('abc', 5, x'57')
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'lpad('abc', 5, X'12')' due to data type mismatch: Arguments 'str' and 'pad' of function 'lpad' must be the same type.; line 1 pos 7
+cannot resolve 'lpad('abc', 5, X'57')' due to data type mismatch: argument 3 requires string type, however, 'X'57'' is of binary type.; line 1 pos 7
 
 
 -- !query
-SELECT lpad(x'12', 5, 'abc')
+SELECT lpad(x'57', 5, 'abc')
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'lpad(X'12', 5, 'abc')' due to data type mismatch: Arguments 'str' and 'pad' of function 'lpad' must be the same type.; line 1 pos 7
+cannot resolve 'lpad(X'57', 5, 'abc')' due to data type mismatch: argument 1 requires string type, however, 'X'57'' is of binary type.; line 1 pos 7
 
 
 -- !query
-SELECT rpad('abc', 5, x'12')
+SELECT rpad('abc', 5, x'57')
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'rpad('abc', 5, X'12')' due to data type mismatch: Arguments 'str' and 'pad' of function 'rpad' must be the same type.; line 1 pos 7
+cannot resolve 'rpad('abc', 5, X'57')' due to data type mismatch: argument 3 requires string type, however, 'X'57'' is of binary type.; line 1 pos 7
 
 
 -- !query
-SELECT rpad(x'12', 5, 'abc')
+SELECT rpad(x'57', 5, 'abc')
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'rpad(X'12', 5, 'abc')' due to data type mismatch: Arguments 'str' and 'pad' of function 'rpad' must be the same type.; line 1 pos 7
+cannot resolve 'rpad(X'57', 5, 'abc')' due to data type mismatch: argument 1 requires string type, however, 'X'57'' is of binary type.; line 1 pos 7
 
 
 -- !query
