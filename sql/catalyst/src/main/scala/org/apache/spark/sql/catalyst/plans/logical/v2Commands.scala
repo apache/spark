@@ -1070,3 +1070,14 @@ case class CreateIndex(
   override protected def withNewChildInternal(newChild: LogicalPlan): CreateIndex =
     copy(child = newChild)
 }
+
+/**
+ * The logical plan of the DROP INDEX command.
+ */
+case class DropIndex(
+    child: LogicalPlan,
+    indexName: String,
+    ignoreIfNotExists: Boolean) extends UnaryCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): DropIndex =
+    copy(child = newChild)
+}

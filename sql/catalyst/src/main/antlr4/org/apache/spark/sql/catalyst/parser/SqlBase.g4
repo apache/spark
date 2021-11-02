@@ -251,6 +251,7 @@ statement
         multipartIdentifier (USING indexType=identifier)?
         '(' columns=multipartIdentifierPropertyList ')'
         (OPTIONS options=propertyList)?                                #createIndex
+    | DROP INDEX (IF EXISTS)? identifier ON TABLE? multipartIdentifier #dropIndex
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 

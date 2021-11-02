@@ -4436,6 +4436,21 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       options)
   }
 
+  /**
+   * Drop an index, returning a [[DropIndex]] logical plan.
+   * For example:
+   * {{{
+   *   DROP INDEX [IF EXISTS] index_name ON [TABLE] table_name
+   * }}}
+   */
+  override def visitDropIndex(ctx: DropIndexContext): LogicalPlan = withOrigin(ctx) {
+    val indexName = ctx.identifier.getText
+    DropIndex(
+      createUnresolvedTable(ctx.multipartIdentifier(), "DROP INDEX"),
+      indexName,
+      ctx.EXISTS != null)
+  }
+
   private def alterViewTypeMismatchHint: Option[String] = Some("Please use ALTER TABLE instead.")
 
   private def alterTableTypeMismatchHint: Option[String] = Some("Please use ALTER VIEW instead.")
