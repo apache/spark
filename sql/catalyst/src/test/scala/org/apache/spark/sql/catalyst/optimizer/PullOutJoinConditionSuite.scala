@@ -70,6 +70,22 @@ class PullOutJoinConditionSuite extends PlanTest {
     }
   }
 
+  test("Push down non-equality join condition") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val joinType = Inner
+      val udf = "x.b".attr + 1
+      val originalQuery = x.join(y, joinType, Option(udf > "y.e".attr))
+        .select("x.a".attr, "y.e".attr)
+      val correctAnswer =
+        x.select("x.a".attr, "x.b".attr, "x.c".attr, Alias(udf, udf.sql)()).join(
+          y.select("y.d".attr, "y.e".attr),
+          joinType, Option(s"`${udf.sql}`".attr > "y.e".attr))
+          .select("x.a".attr, "y.e".attr)
+
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
   test("Negative case: all children are Attributes") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val condition = Option("x.a".attr === "y.d".attr)
@@ -87,6 +103,14 @@ class PullOutJoinConditionSuite extends PlanTest {
       val correctAnswer = x.join(y, Inner, condition)
 
       comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
+  test("Negative case: BroadcastHashJoin") {
+    Seq(Upper("y.d".attr), Substring("y.d".attr, 1, 5)).foreach { udf =>
+      val originalQuery = x.join(y, Inner, Option("x.a".attr === udf))
+        .select("x.a".attr, "y.e".attr)
+      comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
     }
   }
 }

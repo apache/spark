@@ -143,10 +143,9 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     val schema = new StructType().add("k", IntegerType).add("v", StringType)
     val smallDF = spark.createDataFrame(rdd, schema)
     val df = spark.range(10).join(broadcast(smallDF), col("k") === col("id"))
-    val broadcastHashJoin = df.queryExecution.executedPlan.find {
-      case WholeStageCodegenExec(ProjectExec(_, _: BroadcastHashJoinExec)) => true
-    }
-    assert(broadcastHashJoin.isDefined)
+    assert(df.queryExecution.executedPlan.find(p =>
+      p.isInstanceOf[WholeStageCodegenExec] &&
+        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[BroadcastHashJoinExec]).isDefined)
     assert(df.collect() === Array(Row(1, 1, "1"), Row(1, 1, "1"), Row(2, 2, "2")))
   }
 
@@ -318,7 +317,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           .join(df3, $"k1" <= $"k3", "left_outer")
         hasJoinInCodegen = twoJoinsDF.queryExecution.executedPlan.collect {
           case WholeStageCodegenExec(BroadcastNestedLoopJoinExec(
-              ProjectExec(_, _: BroadcastNestedLoopJoinExec), _, _, _, _)) => true
+            _: BroadcastNestedLoopJoinExec, _, _, _, _)) => true
         }.size === 1
         assert(hasJoinInCodegen == codegenEnabled)
         checkAnswer(twoJoinsDF,

@@ -1057,7 +1057,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     val pythonEvals = collect(joinNode.get) {
       case p: BatchEvalPythonExec => p
     }
-    assert(pythonEvals.size == 4)
+    assert(pythonEvals.size == 2)
 
     checkAnswer(df, Row(1, 2, 1, 2) :: Nil)
   }
