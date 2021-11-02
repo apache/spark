@@ -1467,8 +1467,11 @@ setMethod("ltrim",
           })
 
 #' @details
-#' \code{make_date}:
+#' \code{make_date}: Create date from year, month and day fields.
 #'
+#' @param year a source number for year
+#' @param month a source number for month
+#' @param day a source number for day
 #' @rdname column_datetime_functions
 #' @aliases make_date make_date,Column-method
 #' @note make_date since 3.3.0
