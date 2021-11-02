@@ -538,12 +538,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       startMapIndex: Int,
       endMapIndex: Int,
       startPartition: Int,
-      endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
-    val mapSizesByExecutorId = getPushBasedShuffleMapSizesByExecutorId(
-      shuffleId, startMapIndex, endMapIndex, startPartition, endPartition)
-    assert(mapSizesByExecutorId.enableBatchFetch == true)
-    mapSizesByExecutorId.iter
-  }
+      endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])]
 
   /**
    * Called from executors to get the server URIs and output sizes for each shuffle block that
@@ -1095,8 +1090,20 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
+  override def getMapSizesByExecutorId(
+      shuffleId: Int,
+      startMapIndex: Int,
+      endMapIndex: Int,
+      startPartition: Int,
+      endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+    val mapSizesByExecutorId = getPushBasedShuffleMapSizesByExecutorId(
+      shuffleId, startMapIndex, endMapIndex, startPartition, endPartition)
+    assert(mapSizesByExecutorId.enableBatchFetch == true)
+    mapSizesByExecutorId.iter
+  }
+
   // This method is only called in local-mode.
-  def getPushBasedShuffleMapSizesByExecutorId(
+  override def getPushBasedShuffleMapSizesByExecutorId(
       shuffleId: Int,
       startMapIndex: Int,
       endMapIndex: Int,
@@ -1174,17 +1181,29 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
    */
   private val fetchingLock = new KeyLock[Int]
 
+  override def getMapSizesByExecutorId(
+    shuffleId: Int,
+    startMapIndex: Int,
+    endMapIndex: Int,
+    startPartition: Int,
+    endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+    val mapSizesByExecutorId = getMapSizesByExecutorIdImpl(
+      shuffleId, startMapIndex, endMapIndex, startPartition, endPartition, useMergeResult = false)
+    assert(mapSizesByExecutorId.enableBatchFetch == true)
+    mapSizesByExecutorId.iter
+  }
+
   override def getPushBasedShuffleMapSizesByExecutorId(
       shuffleId: Int,
       startMapIndex: Int,
       endMapIndex: Int,
       startPartition: Int,
       endPartition: Int): MapSizesByExecutorId = {
-    getShuffleMapSizesByExecutorIdImpl(
+    getMapSizesByExecutorIdImpl(
       shuffleId, startMapIndex, endMapIndex, startPartition, endPartition, useMergeResult = true)
   }
 
-  private def getShuffleMapSizesByExecutorIdImpl(
+  private def getMapSizesByExecutorIdImpl(
       shuffleId: Int,
       startMapIndex: Int,
       endMapIndex: Int,
