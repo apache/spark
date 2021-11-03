@@ -2291,6 +2291,14 @@ class DDLParserSuite extends AnalysisTest {
           .zip(Seq(Map("k1" -> "v1"), Map("k2" -> "v2"))), Map("k3" -> "v3", "k4" -> "v4")))
   }
 
+  test("DROP INDEX") {
+    parseCompare("DROP index i1 ON a.b.c",
+      DropIndex(UnresolvedTable(Seq("a", "b", "c"), "DROP INDEX", None), "i1", false))
+
+    parseCompare("DROP index IF EXISTS i1 ON a.b.c",
+      DropIndex(UnresolvedTable(Seq("a", "b", "c"), "DROP INDEX", None), "i1", true))
+  }
+
   private case class TableSpec(
       name: Seq[String],
       schema: Option[StructType],
