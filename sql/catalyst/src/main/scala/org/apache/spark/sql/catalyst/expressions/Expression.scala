@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -1087,4 +1087,12 @@ trait ComplexTypeMergingExpression extends Expression {
  */
 trait UserDefinedExpression {
   def name: String
+}
+
+case class RegisteredSimpleFunction(
+    name: FunctionIdentifier, child: Expression) extends RuntimeReplaceable {
+  override def exprsReplaced: Seq[Expression] = Seq(child)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
 }

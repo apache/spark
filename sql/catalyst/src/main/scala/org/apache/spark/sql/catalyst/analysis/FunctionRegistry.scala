@@ -26,7 +26,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{RegisteredSimpleFunction, _}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range}
@@ -296,6 +296,19 @@ trait FunctionRegistry extends FunctionRegistryBase[Expression] {
 class SimpleFunctionRegistry
     extends SimpleFunctionRegistryBase[Expression]
     with FunctionRegistry {
+
+  override def registerFunction(
+      name: FunctionIdentifier,
+      info: ExpressionInfo,
+      builder: FunctionBuilder): Unit = {
+    // We wrap all the functions to `RegisteredFunction`, so that during the analysis,
+    // we can identify the functions among the expressions. It will get replaced at
+    // runtime (currently by the optimizer) to the actual function.
+    def wrappedBuilder: FunctionBuilder = (e: Seq[Expression]) => {
+      RegisteredSimpleFunction(name, builder(e))
+    }
+    super.registerFunction(name, info, wrappedBuilder)
+  }
 
   override def clone(): SimpleFunctionRegistry = synchronized {
     val registry = new SimpleFunctionRegistry

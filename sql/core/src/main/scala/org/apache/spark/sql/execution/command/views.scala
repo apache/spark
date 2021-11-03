@@ -24,10 +24,10 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog, TemporaryViewRelation}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, RegisteredSimpleFunction, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, LogicalPlan, Project, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
@@ -570,9 +570,14 @@ object ViewHelper extends SQLConfHelper with Logging {
         case plan =>
           plan.expressions.flatMap(_.flatMap {
             case e: SubqueryExpression => collectTempFunctions(e.plan)
-            case e: UserDefinedExpression
-                if catalog.isTemporaryFunction(FunctionIdentifier(e.name)) =>
-              Seq(e.name)
+            // There are two ways to create a temporary function.
+            // 1. CREATE TEMP FUNCTION xxx
+            // 2. sparkSession.sessionState.catalog.registerFunction
+            // The second one is not a `UserDefinedExpression` and can be any kind of `Expression`.
+            // So we wrap all functions to `RegisteredSimpleFunction` in order to collect them both.
+            case RegisteredSimpleFunction(name, _)
+                if catalog.isTemporaryFunction(name) =>
+              Seq(name.funcName)
             case _ => Seq.empty
           })
       }.distinct
