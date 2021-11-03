@@ -2303,6 +2303,9 @@ class DDLParserSuite extends AnalysisTest {
   test("DROP INDEX") {
     parseCompare("DROP index i1 ON a.b.c",
       DropIndex(UnresolvedTable(Seq("a", "b", "c"), "DROP INDEX", None), "i1", false))
+
+    parseCompare("DROP index IF EXISTS i1 ON a.b.c",
+      DropIndex(UnresolvedTable(Seq("a", "b", "c"), "DROP INDEX", None), "i1", true))
   }
 
   private case class TableSpec(
