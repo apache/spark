@@ -189,6 +189,7 @@ class JDBCOptions(
   val pushDownPredicate = parameters.getOrElse(JDBC_PUSHDOWN_PREDICATE, "true").toBoolean
 
   // An option to allow/disallow pushing down aggregate into JDBC data source
+  // This only applies to Data Source V2 JDBC
   val pushDownAggregate = parameters.getOrElse(JDBC_PUSHDOWN_AGGREGATE, "false").toBoolean
 
   // The local path of user's keytab file, which is assumed to be pre-uploaded to all nodes either
