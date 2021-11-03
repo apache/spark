@@ -48,11 +48,13 @@ from pyspark.conf import SparkConf
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import (
-        AtomicValue,
-        RowLike,
         UserDefinedFunctionLike,
+        RowLike,
+        DateTimeLiteral,
+        LiteralType,
+        DecimalLiteral
     )
-    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
+    from pyspark.sql.pandas._typing import DataFrameLike
 
 __all__ = ["SQLContext", "HiveContext"]
 
@@ -321,8 +323,7 @@ class SQLContext(object):
     @overload
     def createDataFrame(
         self,
-        data: Union["RDD[RowLike]", Iterable["RowLike"]],
-        schema: Union[List[str], Tuple[str, ...]] = ...,
+        data: Iterable["RowLike"],
         samplingRatio: Optional[float] = ...,
     ) -> DataFrame:
         ...
@@ -330,9 +331,8 @@ class SQLContext(object):
     @overload
     def createDataFrame(
         self,
-        data: Union["RDD[RowLike]", Iterable["RowLike"]],
-        schema: Union[StructType, str],
-        *,
+        data: Iterable["RowLike"],
+        schema: Union[List[str], Tuple[str, ...]] = ...,
         verifySchema: bool = ...,
     ) -> DataFrame:
         ...
@@ -340,10 +340,7 @@ class SQLContext(object):
     @overload
     def createDataFrame(
         self,
-        data: Union[
-            "RDD[AtomicValue]",
-            Iterable["AtomicValue"],
-        ],
+        data: Iterable[Union["DateTimeLiteral", "LiteralType", "DecimalLiteral"]],
         schema: Union[AtomicType, str],
         verifySchema: bool = ...,
     ) -> DataFrame:
@@ -351,14 +348,23 @@ class SQLContext(object):
 
     @overload
     def createDataFrame(
-        self, data: "PandasDataFrameLike", samplingRatio: Optional[float] = ...
+        self,
+        data: Iterable["RowLike"],
+        schema: Union[StructType, str],
+        verifySchema: bool = ...,
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def createDataFrame(
+        self, data: "DataFrameLike", samplingRatio: Optional[float] = ...
     ) -> DataFrame:
         ...
 
     @overload
     def createDataFrame(
         self,
-        data: "PandasDataFrameLike",
+        data: "DataFrameLike",
         schema: Union[StructType, str],
         verifySchema: bool = ...,
     ) -> DataFrame:
@@ -366,8 +372,8 @@ class SQLContext(object):
 
     def createDataFrame(  # type: ignore[misc]
         self,
-        data: Union["RDD[Any]", Iterable[Any], "PandasDataFrameLike"],
-        schema: Optional[Union[AtomicType, StructType, str]] = None,
+        data: Iterable["RowLike"],
+        schema: Optional[Union[List[str], Tuple[str, ...]]] = None,
         samplingRatio: Optional[float] = None,
         verifySchema: bool = True
     ) -> DataFrame:
