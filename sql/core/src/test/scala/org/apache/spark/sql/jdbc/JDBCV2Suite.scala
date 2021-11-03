@@ -159,11 +159,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
   private def checkPushedLimit(df: DataFrame, pushed: Boolean, limit: Int): Unit = {
     df.queryExecution.optimizedPlan.collect {
-      case DataSourceV2ScanRelation(_, scan, _) => scan match {
+      case relation: DataSourceV2ScanRelation => relation.scan match {
         case v1: V1ScanWrapper =>
           if (pushed) {
-            assert(v1.pushedDownOperators.limit.nonEmpty &&
-              v1.pushedDownOperators.limit.get === limit)
+            assert(v1.pushedDownOperators.limit === Some(limit))
           } else {
             assert(v1.pushedDownOperators.limit.isEmpty)
           }

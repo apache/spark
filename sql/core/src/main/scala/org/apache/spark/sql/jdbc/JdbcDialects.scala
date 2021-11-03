@@ -374,7 +374,8 @@ abstract class JdbcDialect extends Serializable with Logging{
 
   def supportsTableSample: Boolean = false
 
-  def getTableSample(sample: TableSampleInfo): String = ""
+  def getTableSample(sample: TableSampleInfo): String =
+    throw new UnsupportedOperationException("TableSample is not supported by this data source")
 }
 
 /**

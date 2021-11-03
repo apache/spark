@@ -37,7 +37,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     applyColumnPruning(
-      applyLimit(pushDownAggregates(pushDownFilters(applySample(createScanBuilder(plan))))))
+      applyLimit(pushDownAggregates(pushDownFilters(pushDownSample(createScanBuilder(plan))))))
   }
 
   private def createScanBuilder(plan: LogicalPlan) = plan.transform {
@@ -226,7 +226,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       withProjection
   }
 
-  def applySample(plan: LogicalPlan): LogicalPlan = plan.transform {
+  def pushDownSample(plan: LogicalPlan): LogicalPlan = plan.transform {
     case sample: Sample => sample.child match {
       case ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.length == 0 =>
         val tableSample = TableSampleInfo(
