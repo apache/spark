@@ -215,7 +215,7 @@ object QueryExecutionErrors {
   }
 
   def overflowInIntegralDivideError(): ArithmeticException = {
-    arithmeticOverflowError("Overflow in integral divide", Some("try_divide"))
+    arithmeticOverflowError("Overflow in integral divide", "try_divide")
   }
 
   def mapSizeExceedArraySizeWhenZipMapError(size: Int): RuntimeException = {
@@ -430,11 +430,10 @@ object QueryExecutionErrors {
       s"to false to bypass this error.")
   }
 
-  def arithmeticOverflowError(
-      message: String, hint: Option[String] = None): ArithmeticException = {
-    new ArithmeticException(s"$message. You can ${hint.map(x => s"use '$x' or ").getOrElse("")}" +
-      s"set ${SQLConf.ANSI_ENABLED.key} to false (except for ANSI interval type) " +
-      "to bypass this error.")
+  def arithmeticOverflowError(message: String, hint: String = ""): ArithmeticException = {
+    val alternative = if (hint.nonEmpty) s"To return NULL instead, use '$hint'." else ""
+    new ArithmeticException(s"$message.$alternative If necessary set " +
+      s"${SQLConf.ANSI_ENABLED.key} to false (except for ANSI interval type) to bypass this error.")
   }
 
   def unaryMinusCauseOverflowError(originValue: AnyVal): ArithmeticException = {
