@@ -1213,11 +1213,12 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       useMergeResult: Boolean): MapSizesByExecutorId = {
     logDebug(s"Fetching outputs for shuffle $shuffleId")
     val (mapOutputStatuses, mergedOutputStatuses) = getStatuses(shuffleId, conf,
-      // EnableBatchFetch can be unexpectedly set to false during stage retry when the
-      // shuffleDependency.shuffleMergeEnabled is set to false, and Driver has already
-      // collected the mergedStatus for its shuffle dependency. In this case, boolean
-      // check helps to insure that the unnecessary mergeStatus won't be fetched, thus
-      // mergedOutputStatuses won't be passed to convertMapStatuses. See details in [SPARK-37023].
+      // EnableBatchFetch can be set to false during stage retry when the
+      // shuffleDependency.shuffleMergeEnabled is set to false, and Driver
+      // has already collected the mergedStatus for its shuffle dependency.
+      // In this case, boolean check helps to insure that the unnecessary
+      // mergeStatus won't be fetched, thus mergedOutputStatuses won't be
+      // passed to convertMapStatuses. See details in [SPARK-37023].
       if (useMergeResult) fetchMergeResult else false)
     try {
       val actualEndMapIndex =
