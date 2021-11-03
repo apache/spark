@@ -754,6 +754,17 @@ class DatasetSuite extends QueryTest
     assert(err2.getMessage.contains("Name must not be empty"))
   }
 
+  test("SPARK-37203: Fix NotSerializableException when observe with percentile_approx") {
+    val namedObservation = Observation("named")
+
+    val df = spark.range(100)
+    val observed_df = df.observe(
+      namedObservation, percentile_approx($"id", lit(0.5), lit(100)).as("percentile_approx_val"))
+
+    observed_df.collect()
+    assert(namedObservation.get === Map("percentile_approx_val" -> 49))
+  }
+
   test("sample with replacement") {
     val n = 100
     val data = sparkContext.parallelize(1 to n, 2).toDS()
