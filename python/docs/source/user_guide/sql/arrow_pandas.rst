@@ -343,7 +343,7 @@ Supported SQL Types
 
 Currently, all Spark SQL data types are supported by Arrow-based conversion except
 :class:`ArrayType` of :class:`TimestampType`, and nested :class:`StructType`.
-:class: `MapType` is only supported when using PyArrow 2.0.0 and above.
+:class:`MapType` is only supported when using PyArrow 2.0.0 and above.
 
 Setting Arrow Batch Size
 ~~~~~~~~~~~~~~~~~~~~~~~~
