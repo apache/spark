@@ -39,7 +39,7 @@ class PullOutJoinConditionSuite extends PlanTest {
   private val x = testRelation.subquery('x)
   private val y = testRelation1.subquery('y)
 
-  test("Push down join condition evaluation(String expressions)") {
+  test("Push down join keys evaluation(String expressions)") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val joinType = Inner
       Seq(Upper("y.d".attr), Substring("y.d".attr, 1, 5)).foreach { udf =>
@@ -54,7 +54,7 @@ class PullOutJoinConditionSuite extends PlanTest {
     }
   }
 
-  test("Push down join condition evaluation(null expressions)") {
+  test("Push down join keys evaluation(null expressions)") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val joinType = Inner
       val udf = Coalesce(Seq("x.b".attr, "x.c".attr))
@@ -70,7 +70,23 @@ class PullOutJoinConditionSuite extends PlanTest {
     }
   }
 
-  test("Push down non-equality join condition") {
+  test("Push down EqualNullSafe join condition") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val joinType = Inner
+      val udf = "x.b".attr + 1
+      val originalQuery = x.join(y, joinType, Option(udf <=> "y.e".attr))
+        .select("x.a".attr, "y.e".attr)
+      val correctAnswer =
+        x.select("x.a".attr, "x.b".attr, "x.c".attr, Alias(udf, udf.sql)()).join(
+          y.select("y.d".attr, "y.e".attr),
+          joinType, Option(s"`${udf.sql}`".attr <=> "y.e".attr))
+          .select("x.a".attr, "y.e".attr)
+
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
+  test("Push down non-equality join keys") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val joinType = Inner
       val udf = "x.b".attr + 1

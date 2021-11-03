@@ -17,16 +17,16 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Predicate, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
 
 /**
- * This rule ensures that [[Join]] condition doesn't contain complex expressions in the
+ * This rule ensures that [[Join]] keys doesn't contain complex expressions in the
  * optimization phase.
  *
- * Complex condition expressions are pulled out to a [[Project]] node under [[Join]] and are
+ * Complex expressions are pulled out to a [[Project]] node under [[Join]] and are
  * referenced in join condition.
  *
  * {{{
@@ -46,8 +46,8 @@ object PullOutJoinCondition extends Rule[LogicalPlan]
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(_.containsPattern(JOIN)) {
     case j @ Join(left, right, _, Some(condition), _)
         if j.resolved && !canPlanAsBroadcastHashJoin(j, conf) =>
-      val complexExpressions = splitConjunctivePredicates(condition).flatMap(_.children).flatMap {
-        case e: Expression if !e.foldable && e.children.nonEmpty => Seq(e)
+      val complexExpressions = splitConjunctivePredicates(condition).flatMap {
+        case p: Predicate => p.children.filter(e => !e.foldable && e.children.nonEmpty)
         case _ => Nil
       }
 
