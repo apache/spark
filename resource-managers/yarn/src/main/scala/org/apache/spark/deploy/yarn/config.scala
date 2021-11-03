@@ -78,6 +78,20 @@ package object config extends Logging {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val AM_SEND_TOKEN_CONF =
+    ConfigBuilder("spark.yarn.am.sendTokenConf")
+        .doc("The value of this config is a regex expression used to grep a list of " +
+          "config entries from the job's configuration file (e.g., hdfs-site.xml) and send to " +
+          "RM, which will then use them when renewing delegation tokens. A typical use case of " +
+          "this feature is to support delegation tokens in a multi-cluster environment, where " +
+          "the RM may not have configs for all the (HDFS) clusters a YARN job wants to talk to, " +
+          "e.g., dfs.nameservices, dfs.ha.namenodes.x, dfs.namenode.rpc-address.x, and so on. " +
+          "This config mirrors 'mapreduce.job.send-token-conf'. For more details, please check " +
+          "YARN-5910.")
+        .version("3.3.0")
+        .stringConf
+        .createWithDefault("")
+
   private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
     ConfigBuilder("spark.yarn.executor.failuresValidityInterval")
       .doc("Interval after which Executor failures will be considered independent and not " +

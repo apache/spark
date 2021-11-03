@@ -34,7 +34,7 @@ import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
-import org.apache.hadoop.io.Text
+import org.apache.hadoop.io.{DataOutputBuffer, Text}
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.StringUtils
@@ -60,7 +60,7 @@ import org.apache.spark.internal.config.Python._
 import org.apache.spark.launcher.{JavaModuleOptions, LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.util.{CallerContext, Utils, YarnContainerInfoHelper}
+import org.apache.spark.util.{CallerContext, Utils, VersionUtils, YarnContainerInfoHelper}
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -338,6 +338,28 @@ private[spark] class Client(
 
     val serializedCreds = SparkHadoopUtil.get.serialize(credentials)
     amContainer.setTokens(ByteBuffer.wrap(serializedCreds))
+  }
+
+  /**
+   * Set configurations sent from AM to RM for renewing delegation tokens.
+   */
+  private def setTokenConf(amContainer: ContainerLaunchContext): Unit = {
+    // SPARK-37205: this regex is used to grep a list of configurations and send them to YARN RM
+    // for fetching delegation tokens. See YARN-5910 for more details.
+    // The feature is only supported in Hadoop 3.x and up, hence the check below.
+    val regex = sparkConf.get(config.AM_SEND_TOKEN_CONF)
+    if (regex != null && regex.nonEmpty && VersionUtils.isHadoop3) {
+      val dob = new DataOutputBuffer();
+      val copy = new Configuration(false);
+      copy.clear();
+      hadoopConf.asScala.foreach { entry =>
+        if (entry.getKey.matches(regex)) {
+          copy.set(entry.getKey, entry.getValue)
+        }
+      }
+      copy.write(dob);
+      amContainer.setTokensConf(ByteBuffer.wrap(dob.getData))
+    }
   }
 
   /** Get the application report from the ResourceManager for an application we have submitted. */
@@ -1084,6 +1106,7 @@ private[spark] class Client(
     amContainer.setApplicationACLs(
       YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager).asJava)
     setupSecurityToken(amContainer)
+    setTokenConf(amContainer)
     amContainer
   }
 
