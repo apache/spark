@@ -227,7 +227,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def applySample(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case sample@Sample(_, _, _, _, child) => child match {
+    case sample: Sample => sample.child match {
       case ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.length == 0 =>
         val tableSample = TableSampleInfo(
           sample.lowerBound,
@@ -237,7 +237,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         val pushed = PushDownUtils.pushTableSample(sHolder.builder, tableSample)
         if (pushed) {
           sHolder.pushedSample = Some(tableSample)
-          child
+          sample.child
         } else {
           sample
         }

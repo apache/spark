@@ -301,8 +301,7 @@ private[sql] case class JDBCRelation(
       filters: Array[Filter],
       groupByColumns: Option[Array[String]],
       tableSample: Option[TableSampleInfo],
-      limit: Int
-      ): RDD[Row] = {
+      limit: Int): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sparkSession.sparkContext,

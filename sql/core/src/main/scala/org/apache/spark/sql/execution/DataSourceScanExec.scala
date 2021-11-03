@@ -156,7 +156,7 @@ case class RowDataSourceScanExec(
       "PushedGroupby" -> groupByString) ++
       pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value") ++
       pushedDownOperators.sample.map(v => "PushedSample" ->
-        s"SAMPLE ${v.lowerBound} ${v.upperBound} ${v.withReplacement} ${v.seed}"
+        s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
       )
   }
 

@@ -23,7 +23,7 @@ import org.apache.log4j.Level
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
-import org.apache.spark.sql.catalyst.plans.logical.Sample
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Sample}
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
@@ -291,14 +291,14 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   def supportsTableSample: Boolean = false
 
-  test("Test TABLESAMPLE") {
+  test("SPARK-37038: Test TABLESAMPLE") {
     require(supportsTableSample)
     withTable(s"$catalogName.new_table") {
       sql(s"CREATE TABLE $catalogName.new_table (col1 INT, col2 INT)")
       spark.range(10).select($"id" * 2, $"id" * 2 + 1).write.insertInto(s"$catalogName.new_table")
 
       val df1 = sql(s"SELECT col1 FROM $catalogName.new_table TABLESAMPLE (BUCKET 6 OUT OF 10)" +
-        s" REPEATABLE (12345)")
+        " REPEATABLE (12345)")
       val scan1 = df1.queryExecution.optimizedPlan.collectFirst {
         case s: DataSourceV2ScanRelation => s
       }.get
@@ -311,7 +311,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(df1.collect().length <= 7)
 
       val df2 = sql(s"SELECT * FROM $catalogName.new_table TABLESAMPLE (50 PERCENT)" +
-        s" REPEATABLE (12345)")
+        " REPEATABLE (12345)")
       val sample2 = df2.queryExecution.optimizedPlan.collect {
         case s: Sample => s
       }
@@ -319,49 +319,110 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(df2.collect().length <= 7)
 
       val df3 = sql(s"SELECT col1 FROM $catalogName.new_table TABLESAMPLE (BUCKET 6 OUT OF 10)" +
-        s" LIMIT 2")
+        " LIMIT 2")
+
       val sample3 = df3.queryExecution.optimizedPlan.collect {
         case s: Sample => s
       }
       assert(sample3.isEmpty)
+
       df3.queryExecution.optimizedPlan.collectFirst {
-        case s@DataSourceV2ScanRelation(_, scan, _) => scan match {
+        case relation: DataSourceV2ScanRelation => relation.scan match {
           case v1: V1ScanWrapper =>
             assert(v1.pushedDownOperators.limit == Some(2))
-            s.schema.names.sameElements(Seq("col1"))
+            relation.schema.names.sameElements(Seq("col1"))
         }
       }
       assert(df3.collect().length == 2)
 
       val df4 = sql(s"SELECT col1 FROM $catalogName.new_table" +
-        s" TABLESAMPLE (50 PERCENT) REPEATABLE (12345) LIMIT 2")
+        " TABLESAMPLE (50 PERCENT) REPEATABLE (12345) LIMIT 2")
+
       val sample4 = df4.queryExecution.optimizedPlan.collect {
         case s: Sample => s
       }
       assert(sample4.isEmpty)
+
       df4.queryExecution.optimizedPlan.collect {
-        case s@DataSourceV2ScanRelation(_, scan, _) => scan match {
+        case relation: DataSourceV2ScanRelation => relation.scan match {
           case v1: V1ScanWrapper =>
             assert(v1.pushedDownOperators.limit == Some(2))
-            s.schema.names.sameElements(Seq("col1"))
+            relation.schema.names.sameElements(Seq("col1"))
         }
       }
       assert(df4.collect().length == 2)
 
-      // Push down order is sample -> filter -> limit
-      // in this test only limit is pushed down because sample is after limit
-      // Filter in combination with sample is not allowed so no need to test
-      val df5 = spark.read.table(s"$catalogName.new_table").limit(2).sample(0.5)
+      val df5 = sql(s"SELECT * FROM $catalogName.new_table" +
+        " TABLESAMPLE (BUCKET 6 OUT OF 10) WHERE col1 > 0 LIMIT 2")
+
+      // sample/filter/limit all pushed down
       val sample5 = df5.queryExecution.optimizedPlan.collect {
         case s: Sample => s
       }
-      assert(sample5.nonEmpty)
+      assert(sample5.isEmpty)
+
+      val filter5 = df5.queryExecution.optimizedPlan.collect {
+        case f: Filter => f
+      }
+      assert(filter5.isEmpty)
+
       df5.queryExecution.optimizedPlan.collect {
+        case relation: DataSourceV2ScanRelation => relation.scan match {
+          case v1: V1ScanWrapper =>
+            assert(v1.pushedDownOperators.limit == Some(2))
+        }
+      }
+
+      val df6 = sql(s"SELECT col1 FROM $catalogName.new_table" +
+        " TABLESAMPLE (BUCKET 6 OUT OF 10) WHERE col1 > 0 LIMIT 2")
+
+      // sample pushed down, filer/limit not pushed down
+      // Todo: push down filter/limit
+      val sample6 = df6.queryExecution.optimizedPlan.collect {
+        case s: Sample => s
+      }
+      assert(sample6.isEmpty)
+
+      val filter6 = df6.queryExecution.optimizedPlan.collect {
+        case f: Filter => f
+      }
+      assert(filter6.nonEmpty)
+
+      df6.queryExecution.optimizedPlan.collect {
+        case relation: DataSourceV2ScanRelation => relation.scan match {
+          case v1: V1ScanWrapper =>
+            assert(v1.pushedDownOperators.limit == None)
+            relation.schema.names.sameElements(Seq("col1"))
+        }
+      }
+
+      // Push down order is sample -> filter -> limit
+      // in this test only limit is pushed down because sample is after limit
+      val df7 = spark.read.table(s"$catalogName.new_table").limit(2).sample(0.5)
+
+      val sample7 = df7.queryExecution.optimizedPlan.collect {
+        case s: Sample => s
+      }
+      assert(sample7.nonEmpty)
+
+      df7.queryExecution.optimizedPlan.collect {
         case DataSourceV2ScanRelation(_, scan, _) => scan match {
           case v1: V1ScanWrapper =>
             assert(v1.pushedDownOperators.limit == Some(2))
         }
       }
+
+      val df8 = spark.read.table(s"$catalogName.new_table").where($"col1" > 1).sample(0.5)
+
+      val sample8 = df8.queryExecution.optimizedPlan.collect {
+        case s: Sample => s
+      }
+      assert(sample8.nonEmpty)
+
+      val filter8 = df8.queryExecution.optimizedPlan.collect {
+        case f: Filter => f
+      }
+      assert(filter8.isEmpty)
     }
   }
 }
