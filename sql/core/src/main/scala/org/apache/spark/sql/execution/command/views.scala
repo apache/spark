@@ -571,8 +571,8 @@ object ViewHelper extends SQLConfHelper with Logging {
           plan.expressions.flatMap(_.flatMap {
             case e: SubqueryExpression => collectTempFunctions(e.plan)
             // There are two ways to create a temporary function.
-            // 1. CREATE TEMP FUNCTION xxx
-            // 2. sparkSession.sessionState.catalog.registerFunction
+            // SQL API: CREATE TEMP FUNCTION xxx
+            // Catalog API: sparkSession.sessionState.catalog.registerFunction
             // The second one is not a `UserDefinedExpression` and can be any kind of `Expression`.
             // So we wrap all functions to `RegisteredSimpleFunction` in order to collect them both.
             case RegisteredSimpleFunction(name, _)
