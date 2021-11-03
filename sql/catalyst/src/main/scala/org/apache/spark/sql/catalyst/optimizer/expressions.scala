@@ -865,14 +865,14 @@ object NullPropagation extends Rule[LogicalPlan] {
  * E.g. IsNull(Not(null)) == IsNull(null)
  */
 object NullDownPropagation extends Rule[LogicalPlan] {
-  // Not all NullIntolerant can be propagated
-  // Return false if the expression may return null without non-null inputs.
-  // E.g. Cast is NullIntolerant; however, cast('Infinity' as integer) returns null.
-  // Cannot apply to `ExtractValue` as the query planner uses the trait to resolve the columns.
-  // E.g. the planner may resolve column `a` to `a#123`, then IsNull(a#123) cannot be optimized
-  // Applying to `EqualTo` is too disruptive for [SPARK-32290] test cases
-  // e with multiple children requires the deterministic check because optimizing IsNull(a > b) to
-  // Or(IsNull(a), IsNull(b)), for example, may cause skipping the evaluation of b
+  // Return true iff the expression returns non-null result for all non-null inputs.
+  // Not all `NullIntolerant` can be propagated. E.g. `Cast` is `NullIntolerant`; however,
+  // cast('Infinity' as integer) is null. Hence, `Cast` is not supported `NullIntolerant`.
+  // `ExtractValue` is also not supported. E.g. the planner may resolve column `a` to `a#123`,
+  // then IsNull(a#123) cannot be optimized.
+  // Applying to `EqualTo` is too disruptive for [SPARK-32290] optimization, not supported for now.
+  // If e has multiple children, the deterministic check is required because optimizing
+  // IsNull(a > b) to Or(IsNull(a), IsNull(b)), for example, may cause skipping the evaluation of b
   private def supportedNullIntolerant(e: NullIntolerant): Boolean = (e match {
     case _: Not => true
     case _: GreaterThan | _: GreaterThanOrEqual | _: LessThan | _: LessThanOrEqual
