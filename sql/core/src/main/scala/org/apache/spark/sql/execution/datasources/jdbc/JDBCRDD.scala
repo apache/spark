@@ -359,7 +359,11 @@ private[jdbc] class JDBCRDD(
 
     val myWhereClause = getWhereClause(part)
 
-    val myTableSampleClause: String = JdbcDialects.get(url).getTableSample(sample)
+    val myTableSampleClause: String = if (sample.nonEmpty) {
+      JdbcDialects.get(url).getTableSample(sample.get)
+    } else {
+      ""
+    }
 
     val myLimitClause: String = dialect.getLimitClause(limit)
 

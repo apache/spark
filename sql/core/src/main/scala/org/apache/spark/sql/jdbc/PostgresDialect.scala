@@ -158,15 +158,10 @@ private object PostgresDialect extends JdbcDialect {
 
   override def supportsTableSample: Boolean = true
 
-  override def getTableSample(sample: Option[TableSampleInfo]): String = {
-    if (sample.nonEmpty) {
-      // hard-coded to BERNOULLI for now because Spark doesn't have a way to specify sample
-      // method name
-      val repeatable = "REPEATABLE (" + sample.get.seed + ")"
-      s"TABLESAMPLE BERNOULLI" +
-        s" ( ${(sample.get.upperBound - sample.get.lowerBound) * 100} ) $repeatable"
-    } else {
-      ""
-    }
+  override def getTableSample(sample: TableSampleInfo): String = {
+    // hard-coded to BERNOULLI for now because Spark doesn't have a way to specify sample
+    // method name
+    s"TABLESAMPLE BERNOULLI" +
+      s" (${(sample.upperBound - sample.lowerBound) * 100}) REPEATABLE (${sample.seed})"
   }
 }
