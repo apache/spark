@@ -2283,7 +2283,7 @@ class DDLParserSuite extends AnalysisTest {
       " (col1 OPTIONS ('k1'='v1'), col2 OPTIONS ('k2'='v2')) ",
       CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", true,
         Seq(UnresolvedFieldName(Seq("col1")), UnresolvedFieldName(Seq("col2")))
-          .zip(Seq(Map("k1" -> "v1"), Map("k2" -> "v2"))),  Map("indexType" -> "BTREE")))
+          .zip(Seq(Map("k1" -> "v1"), Map("k2" -> "v2"))), Map("indexType" -> "BTREE")))
 
     parseCompare("CREATE index i1 ON a.b.c" +
       " (col1 OPTIONS ('k1'='v1'), col2 OPTIONS ('k2'='v2')) OPTIONS ('k3'='v3', 'k4'='v4')",
