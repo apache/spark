@@ -28,10 +28,10 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
-import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.catalyst.expressions.{Cast, Coalesce, GenericRow, IsNotNull}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -4209,6 +4209,31 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
       "org.apache.spark.sql.catalyst.optimizer.RewriteLateralSubquery") {
       sql("SELECT * FROM testData, LATERAL (SELECT * FROM testData)").collect()
+    }
+  }
+
+  test("SPARK-36290: Pull out join condition can infer more filter conditions") {
+    import org.apache.spark.sql.catalyst.dsl.expressions.DslString
+
+    withTable("t1", "t2") {
+      spark.sql("CREATE TABLE t1(a int, b int) using parquet")
+      spark.sql("CREATE TABLE t2(a string, b string, c string) using parquet")
+
+      spark.sql("SELECT t1.* FROM t1 RIGHT JOIN t2 ON coalesce(t1.a, t1.b) = t2.a")
+        .queryExecution.optimizedPlan.find(_.isInstanceOf[Filter]) match {
+        case Some(Filter(condition, _)) =>
+          condition === IsNotNull(Coalesce(Seq("a".attr, "b".attr)))
+        case _ =>
+          fail("It should contains Filter")
+      }
+
+      spark.sql("SELECT t1.* FROM t1 LEFT JOIN t2 ON t1.a = t2.a")
+        .queryExecution.optimizedPlan.find(_.isInstanceOf[Filter]) match {
+        case Some(Filter(condition, _)) =>
+          condition === IsNotNull(Cast("a".attr, IntegerType))
+        case _ =>
+          fail("It should contains Filter")
+      }
     }
   }
 }

@@ -35,26 +35,25 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
  * {{{
  *   SELECT * FROM t1 JOIN t2 ON t1.a + 10 = t2.x ==>
  *   Project [a#0, b#1, x#2, y#3]
- *   +- Join Inner, (_left_complex_expr0#8 = x#2)
- *      :- Project [a#0, b#1, (a#0 + 10) AS _left_complex_expr0#8]
+ *   +- Join Inner, ((spark_catalog.default.t1.a + 10)#8 = x#2)
+ *      :- Project [a#0, b#1, (a#0 + 10) AS (spark_catalog.default.t1.a + 10)#8]
  *      :  +- Filter isnotnull((a#0 + 10))
  *      :     +- Relation default.t1[a#0,b#1] parquet
  *      +- Filter isnotnull(x#2)
  *         +- Relation default.t2[x#2,y#3] parquet
  * }}}
  */
-object PullOutJoinCondition extends Rule[LogicalPlan]
-  with JoinSelectionHelper with PredicateHelper {
+object PullOutJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(_.containsPattern(JOIN)) {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(_.containsPattern(JOIN)) {
     case j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, otherPredicates, _, left, right, _)
-        if j.resolved && !canPlanAsBroadcastHashJoin(j, conf) =>
+        if j.resolved =>
       val complexLeftJoinKeys = new ArrayBuffer[NamedExpression]()
       val complexRightJoinKeys = new ArrayBuffer[NamedExpression]()
 
-      val newLeftJoinKeys = leftKeys.zipWithIndex.map { case (expr, index) =>
+      val newLeftJoinKeys = leftKeys.map { expr =>
         if (!expr.foldable && expr.children.nonEmpty) {
-          val ne = Alias(expr, s"_left_complex_expr$index")()
+          val ne = Alias(expr, expr.sql)()
           complexLeftJoinKeys += ne
           ne.toAttribute
         } else {
@@ -62,9 +61,9 @@ object PullOutJoinCondition extends Rule[LogicalPlan]
         }
       }
 
-      val newRightJoinKeys = rightKeys.zipWithIndex.map { case (expr, index) =>
+      val newRightJoinKeys = rightKeys.map { expr =>
         if (!expr.foldable && expr.children.nonEmpty) {
-          val ne = Alias(expr, s"_right_complex_expr$index")()
+          val ne = Alias(expr, expr.sql)()
           complexRightJoinKeys += ne
           ne.toAttribute
         } else {
