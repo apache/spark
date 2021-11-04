@@ -34,6 +34,8 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.{DayTimeIntervalType => DT, Decimal, YearMonthIntervalType => YM}
+import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
+import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 // The style of textual representation of intervals
@@ -1252,5 +1254,48 @@ object IntervalUtils {
         f"$sign$days $hours%02d:$minutes%02d:$seconds%02d.$nanos%09d"
     }
     intervalString
+  }
+
+  def intToYearMonthInterval(v: Int, endField: Byte): Int = {
+    endField match {
+      case YEAR =>
+        try {
+          Math.multiplyExact(v, MONTHS_PER_YEAR)
+        } catch {
+          case _: ArithmeticException =>
+            throw QueryExecutionErrors.castingCauseOverflowError(v, YM(endField).catalogString)
+        }
+      case MONTH => v
+    }
+  }
+
+  def yearMonthIntervalToInt(v: Int, endFiled: Byte): Int = {
+    endFiled match {
+      case YEAR => v / MONTHS_PER_YEAR
+      case MONTH => v
+    }
+  }
+
+  def longToDayTimeInterval(v: Long, endField: Byte): Long = {
+    try {
+      endField match {
+        case DAY => Math.multiplyExact(v, MICROS_PER_DAY)
+        case HOUR => Math.multiplyExact(v, MICROS_PER_HOUR)
+        case MINUTE => Math.multiplyExact(v, MICROS_PER_MINUTE)
+        case SECOND => Math.multiplyExact(v, MICROS_PER_SECOND)
+      }
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.castingCauseOverflowError(v, DT(endField).catalogString)
+    }
+  }
+
+  def dayTimeIntervalToLong(v: Long, endFiled: Byte): Long = {
+    endFiled match {
+      case DAY => v / MICROS_PER_DAY
+      case HOUR => v / MICROS_PER_HOUR
+      case MINUTE => v / MICROS_PER_MINUTE
+      case SECOND => v / MICROS_PER_SECOND
+    }
   }
 }
