@@ -183,9 +183,9 @@ class AggregatingAccumulator private(
     }
   }
 
-  private def getOrCreateTempBuffer(): SpecificInternalRow = {
+  override def value: InternalRow = withSQLConf(false, InternalRow.empty) {
     // Either use the existing buffer or create a temporary one.
-    if (!isZero) {
+    val input = if (!isZero) {
       buffer
     } else {
       // Create a temporary buffer because we want to avoid changing the state of the accumulator
@@ -194,20 +194,15 @@ class AggregatingAccumulator private(
       // query execution).
       createBuffer()
     }
-  }
-
-  override def value: InternalRow = withSQLConf(false, InternalRow.empty) {
-    val input = getOrCreateTempBuffer()
     resultProjection(input)
   }
 
   override def withBufferSerialized(): AggregatingAccumulator = {
     if (!isAtDriverSide) {
-      val input = getOrCreateTempBuffer()
       var i = 0
       // AggregatingAccumulator runs on executor, we should serialize all TypedImperativeAggregate.
       while (i < typedImperatives.length) {
-        typedImperatives(i).serializeAggregateBufferInPlace(input)
+        typedImperatives(i).serializeAggregateBufferInPlace(buffer)
         i += 1
       }
     }
