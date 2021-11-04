@@ -33,7 +33,6 @@ import org.apache.spark.sql.connector.expressions.NamedReference
 case class CreateIndexExec(
     table: SupportsIndex,
     indexName: String,
-    indexType: String,
     ignoreIfExists: Boolean,
     columns: Seq[(NamedReference, Map[String, String])],
     properties: Map[String, String])
@@ -45,7 +44,7 @@ case class CreateIndexExec(
     }
     try {
       table.createIndex(
-        indexName, indexType, columns.unzip._1.toArray, colProperties, properties.asJava)
+        indexName, columns.unzip._1.toArray, colProperties, properties.asJava)
     } catch {
       case _: IndexAlreadyExistsException if ignoreIfExists =>
         logWarning(s"Index $indexName already exists in table ${table.name}. Ignoring.")

@@ -127,9 +127,10 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     val properties = new util.HashMap[String, String]();
     properties.put("KEY_BLOCK_SIZE", "10")
     properties.put("COMMENT", "'this is a comment'")
+    properties.put("indexType", "BTREE")
     // MySQL doesn't allow property set on individual column, so use empty Array for
     // column properties
-    jdbcTable.createIndex("i1", "BTREE", Array(FieldReference("col1")),
+    jdbcTable.createIndex("i1", Array(FieldReference("col1")),
       new util.HashMap[NamedReference, util.Map[String, String]](), properties)
 
     var index = jdbcTable.listIndexes()

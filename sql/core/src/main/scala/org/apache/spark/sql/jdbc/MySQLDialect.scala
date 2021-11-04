@@ -115,30 +115,29 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
   // https://dev.mysql.com/doc/refman/8.0/en/create-index.html
   override def createIndex(
       indexName: String,
-      indexType: String,
       tableName: String,
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
       properties: util.Map[String, String]): String = {
     val columnList = columns.map(col => quoteIdentifier(col.fieldNames.head))
     var indexProperties: String = ""
+    var indexType = ""
     if (!properties.isEmpty) {
       properties.asScala.foreach { case (k, v) =>
-        indexProperties = indexProperties + " " + s"$k $v"
+        if (k.equalsIgnoreCase("indexType")) {
+          if (v.equalsIgnoreCase("BTREE") || v.equalsIgnoreCase("HASH")) {
+            indexType = s"USING $v"
+          } else {
+            throw new UnsupportedOperationException(s"Index Type $v is not supported." +
+              " The supported Index Types are: BTREE and HASH")
+          }
+        } else {
+          indexProperties = indexProperties + " " + s"$k $v"
+        }
       }
-    }
-    val iType = if (indexType.isEmpty) {
-      ""
-    } else {
-      if (indexType.length > 1 && !indexType.equalsIgnoreCase("BTREE") &&
-        !indexType.equalsIgnoreCase("HASH")) {
-        throw new UnsupportedOperationException(s"Index Type $indexType is not supported." +
-          " The supported Index Types are: BTREE and HASH")
-      }
-      s"USING $indexType"
     }
     // columnsProperties doesn't apply to MySQL so it is ignored
-    s"CREATE INDEX ${quoteIdentifier(indexName)} $iType ON" +
+    s"CREATE INDEX ${quoteIdentifier(indexName)} $indexType ON" +
       s" ${quoteIdentifier(tableName)} (${columnList.mkString(", ")}) $indexProperties"
   }
 

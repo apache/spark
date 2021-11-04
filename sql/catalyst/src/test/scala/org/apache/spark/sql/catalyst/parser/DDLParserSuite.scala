@@ -2275,18 +2275,19 @@ class DDLParserSuite extends AnalysisTest {
 
   test("CREATE INDEX") {
     parseCompare("CREATE index i1 ON a.b.c USING BTREE (col1)",
-      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", "BTREE", false,
-        Seq(UnresolvedFieldName(Seq("col1"))).zip(Seq(Map.empty[String, String])), Map.empty))
+      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", false,
+        Seq(UnresolvedFieldName(Seq("col1"))).zip(Seq(Map.empty[String, String])),
+        Map("indexType" -> "BTREE")))
 
     parseCompare("CREATE index IF NOT EXISTS i1 ON TABLE a.b.c USING BTREE" +
       " (col1 OPTIONS ('k1'='v1'), col2 OPTIONS ('k2'='v2')) ",
-      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", "BTREE", true,
+      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", true,
         Seq(UnresolvedFieldName(Seq("col1")), UnresolvedFieldName(Seq("col2")))
-          .zip(Seq(Map("k1" -> "v1"), Map("k2" -> "v2"))), Map.empty))
+          .zip(Seq(Map("k1" -> "v1"), Map("k2" -> "v2"))),  Map("indexType" -> "BTREE")))
 
     parseCompare("CREATE index i1 ON a.b.c" +
       " (col1 OPTIONS ('k1'='v1'), col2 OPTIONS ('k2'='v2')) OPTIONS ('k3'='v3', 'k4'='v4')",
-      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", "", false,
+      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", false,
         Seq(UnresolvedFieldName(Seq("col1")), UnresolvedFieldName(Seq("col2")))
           .zip(Seq(Map("k1" -> "v1"), Map("k2" -> "v2"))), Map("k3" -> "v3", "k4" -> "v4")))
   }

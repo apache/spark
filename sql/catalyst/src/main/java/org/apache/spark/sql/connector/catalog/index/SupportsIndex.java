@@ -37,15 +37,13 @@ public interface SupportsIndex extends Table {
    * Creates an index.
    *
    * @param indexName the name of the index to be created
-   * @param indexType the type of the index to be created. If this is not specified, Spark
-   *                  will use empty String.
    * @param columns the columns on which index to be created
    * @param columnsProperties the properties of the columns on which index to be created
-   * @param properties the properties of the index to be created
+   * @param properties the properties of the index to be created. {@code indexType} is a special
+   *                   properties that is used to specify the type of the index to be created.
    * @throws IndexAlreadyExistsException If the index already exists.
    */
   void createIndex(String indexName,
-      String indexType,
       NamedReference[] columns,
       Map<NamedReference, Map<String, String>> columnsProperties,
       Map<String, String> properties)

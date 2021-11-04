@@ -431,14 +431,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val table = a.table.asInstanceOf[ResolvedTable]
       AlterTableExec(table.catalog, table.identifier, a.changes) :: Nil
 
-    case CreateIndex(ResolvedTable(_, _, table, _),
-        indexName, indexType, ifNotExists, columns, properties) =>
+    case CreateIndex(ResolvedTable(_, _, table, _), indexName, ifNotExists, columns, properties) =>
       table match {
         case s: SupportsIndex =>
           val namedRefs = columns.map { case (field, prop) =>
             FieldReference(field.name) -> prop
           }
-          CreateIndexExec(s, indexName, indexType, ifNotExists, namedRefs, properties) :: Nil
+          CreateIndexExec(s, indexName, ifNotExists, namedRefs, properties) :: Nil
         case _ => throw QueryCompilationErrors.tableIndexNotSupportedError(
           s"CreateIndex is not supported in this table ${table.name}.")
       }
