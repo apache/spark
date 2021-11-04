@@ -136,7 +136,8 @@ class SparkConf(object):
         if self._jconf is not None:
             self._jconf.set(key, str(value))
         else:
-            cast(Dict[str, str], self._conf)[key] = str(value)
+            assert self._conf is not None
+            self._conf[key] = str(value)
         return self
 
     def setIfMissing(self, key: str, value: str) -> "SparkConf":
@@ -201,28 +202,30 @@ class SparkConf(object):
                     return None
                 return self._jconf.get(key)
             else:
-                if key not in cast(Dict[str, str], self._conf):
-                    return None
-                return cast(Dict[str, str], self._conf)[key]
+                assert self._conf is not None
+                return self._conf.get(key, None)
         else:
             if self._jconf is not None:
                 return self._jconf.get(key, defaultValue)
             else:
-                return cast(Dict[str, str], self._conf).get(key, defaultValue)
+                assert self._conf is not None
+                return self._conf.get(key, defaultValue)
 
     def getAll(self) -> List[Tuple[str, str]]:
         """Get all values as a list of key-value pairs."""
         if self._jconf is not None:
             return [(elem._1(), elem._2()) for elem in cast(JavaObject, self._jconf).getAll()]
         else:
-            return list(cast(Dict[str, str], self._conf).items())
+            assert self._conf is not None
+            return list(self._conf.items())
 
     def contains(self, key: str) -> bool:
         """Does this configuration contain a given key?"""
         if self._jconf is not None:
             return self._jconf.contains(key)
         else:
-            return key in cast(Dict[str, str], self._conf)
+            assert self._conf is not None
+            return key in self._conf
 
     def toDebugString(self) -> str:
         """
@@ -232,7 +235,8 @@ class SparkConf(object):
         if self._jconf is not None:
             return self._jconf.toDebugString()
         else:
-            return '\n'.join('%s=%s' % (k, v) for k, v in cast(Dict[str, str], self._conf).items())
+            assert self._conf is not None
+            return '\n'.join('%s=%s' % (k, v) for k, v in self._conf.items())
 
 
 def _test() -> None:
