@@ -431,7 +431,7 @@ object QueryExecutionErrors {
   }
 
   def arithmeticOverflowError(message: String, hint: String = ""): ArithmeticException = {
-    val alternative = if (hint.nonEmpty) s"To return NULL instead, use '$hint'." else ""
+    val alternative = if (hint.nonEmpty) s" To return NULL instead, use '$hint'." else ""
     new ArithmeticException(s"$message.$alternative If necessary set " +
       s"${SQLConf.ANSI_ENABLED.key} to false (except for ANSI interval type) to bypass this error.")
   }
