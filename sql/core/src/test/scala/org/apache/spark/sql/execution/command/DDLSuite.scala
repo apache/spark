@@ -762,7 +762,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         checkAnswer(
           sql(s"DESCRIBE DATABASE EXTENDED $dbName").toDF("key", "value")
             .where("key not like 'Owner%'"), // filter for consistency with in-memory catalog
-          Row("Database Name", dbNameWithoutBackTicks) ::
+          Row("Namespace Name", dbNameWithoutBackTicks) ::
             Row("Comment", "") ::
             Row("Location", CatalogUtils.URIToString(location)) ::
             Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
@@ -772,7 +772,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         checkAnswer(
           sql(s"DESCRIBE DATABASE EXTENDED $dbName").toDF("key", "value")
             .where("key not like 'Owner%'"), // filter for consistency with in-memory catalog
-          Row("Database Name", dbNameWithoutBackTicks) ::
+          Row("Namespace Name", dbNameWithoutBackTicks) ::
             Row("Comment", "") ::
             Row("Location", CatalogUtils.URIToString(location)) ::
             Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)

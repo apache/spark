@@ -148,7 +148,7 @@
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
     <codahale.metrics.version>4.2.2</codahale.metrics.version>
-    <avro.version>1.10.2</avro.version>
+    <avro.version>1.11.0</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>

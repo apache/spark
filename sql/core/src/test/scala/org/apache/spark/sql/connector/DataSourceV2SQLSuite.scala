@@ -1079,7 +1079,8 @@ class DataSourceV2SQLSuite
           assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
             .toDF("k", "v")
             .where("k='Properties'")
-            .isEmpty, s"$key is a reserved namespace property and ignored")
+            .where("v=''")
+            .count == 1, s"$key is a reserved namespace property and ignored")
           val meta =
             catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("reservedTest"))
           assert(meta.get(key) == null || !meta.get(key).contains("foo"),
@@ -1244,7 +1245,7 @@ class DataSourceV2SQLSuite
         Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
         Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test"),
         Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
-        Row("Properties", "((a,b),(b,a),(c,c))"))
+        Row("Properties", "((a,b), (b,a), (c,c))"))
       )
     }
   }
@@ -1270,7 +1271,8 @@ class DataSourceV2SQLSuite
           assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
             .toDF("k", "v")
             .where("k='Properties'")
-            .isEmpty, s"$key is a reserved namespace property and ignored")
+            .where("v=''")
+            .count == 1, s"$key is a reserved namespace property and ignored")
           val meta =
             catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("reservedTest"))
           assert(meta.get(key) == null || !meta.get(key).contains("foo"),
@@ -1290,7 +1292,8 @@ class DataSourceV2SQLSuite
         Row("Namespace Name", "ns2"),
         Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
         Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test_2"),
-        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser))
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
+        Row("Properties", ""))
       )
     }
   }
@@ -2934,10 +2937,15 @@ class DataSourceV2SQLSuite
     val t = "testcat.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string COMMENT 'hello') USING foo")
-      val ex = intercept[AnalysisException] {
-        sql(s"CREATE index i1 ON $t(col1)")
+      val e1 = intercept[AnalysisException] {
+        sql(s"CREATE index i1 ON $t(non_exist)")
       }
-      assert(ex.getMessage.contains(s"CreateIndex is not supported in this table $t."))
+      assert(e1.getMessage.contains(s"Missing field non_exist in table $t"))
+
+      val e2 = intercept[AnalysisException] {
+        sql(s"CREATE index i1 ON $t(id)")
+      }
+      assert(e2.getMessage.contains(s"CreateIndex is not supported in this table $t."))
     }
   }
 

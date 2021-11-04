@@ -84,7 +84,7 @@ case class CreateTableAsSelectExec(
       throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
 
-    val schema = CharVarcharUtils.getRawSchema(query.schema).asNullable
+    val schema = CharVarcharUtils.getRawSchema(query.schema, conf).asNullable
     val table = catalog.createTable(ident, schema,
       partitioning.toArray, properties.asJava)
     writeToTable(catalog, table, writeOptions, ident)
@@ -121,7 +121,7 @@ case class AtomicCreateTableAsSelectExec(
 
       throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
-    val schema = CharVarcharUtils.getRawSchema(query.schema).asNullable
+    val schema = CharVarcharUtils.getRawSchema(query.schema, conf).asNullable
     val stagedTable = catalog.stageCreate(
       ident, schema, partitioning.toArray, properties.asJava)
     writeToTable(catalog, stagedTable, writeOptions, ident)
@@ -168,7 +168,7 @@ case class ReplaceTableAsSelectExec(
     } else if (!orCreate) {
       throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
     }
-    val schema = CharVarcharUtils.getRawSchema(query.schema).asNullable
+    val schema = CharVarcharUtils.getRawSchema(query.schema, conf).asNullable
     val table = catalog.createTable(
       ident, schema, partitioning.toArray, properties.asJava)
     writeToTable(catalog, table, writeOptions, ident)
@@ -202,7 +202,7 @@ case class AtomicReplaceTableAsSelectExec(
     invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends TableWriteExecHelper {
 
   override protected def run(): Seq[InternalRow] = {
-    val schema = CharVarcharUtils.getRawSchema(query.schema).asNullable
+    val schema = CharVarcharUtils.getRawSchema(query.schema, conf).asNullable
     if (catalog.tableExists(ident)) {
       val table = catalog.loadTable(ident)
       invalidateCache(catalog, table, ident)

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
+import java.math.BigDecimal
 import java.time.{Duration, Period}
 import java.util.concurrent.TimeUnit
 
@@ -899,6 +900,27 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
           }.getCause.getCause
           assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
         }
+      }
+    }
+  }
+
+  test("SPARK-37191: Merge schema for DecimalType with different precision") {
+    withTempPath { path =>
+      val data1 = Seq(Row(new BigDecimal("123456789.11")))
+      val schema1 = StructType(StructField("col", DecimalType(12, 2)) :: Nil)
+
+      val data2 = Seq(Row(new BigDecimal("1234567890000.11")))
+      val schema2 = StructType(StructField("col", DecimalType(17, 2)) :: Nil)
+
+      spark.createDataFrame(sparkContext.parallelize(data1, 1), schema1)
+        .write.parquet(path.toString)
+      spark.createDataFrame(sparkContext.parallelize(data2, 1), schema2)
+        .write.mode("append").parquet(path.toString)
+
+      withAllParquetReaders {
+        val res = spark.read.option("mergeSchema", "true").parquet(path.toString)
+        assert(res.schema("col").dataType == DecimalType(17, 2))
+        checkAnswer(res, data1 ++ data2)
       }
     }
   }

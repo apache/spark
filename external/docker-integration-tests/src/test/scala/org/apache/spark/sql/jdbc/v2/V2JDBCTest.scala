@@ -226,7 +226,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           jdbcTable.createIndex("i1", "", Array(FieldReference("col1")),
             new util.HashMap[NamedReference, util.Map[String, String]](), properties)
         }.getMessage
-        assert(m.contains("Failed to create index: i1 in new_table"))
+        assert(m.contains("Failed to create index i1 in new_table"))
 
         var index = jdbcTable.listIndexes()
         assert(index.length == 2)
@@ -271,7 +271,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         m = intercept[NoSuchIndexException] {
           jdbcTable.dropIndex("i2")
         }.getMessage
-        assert(m.contains("Failed to drop index: i2"))
+        assert(m.contains("Failed to drop index i2 in new_table"))
 
         testIndexProperties(jdbcTable)
       }
