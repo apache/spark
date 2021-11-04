@@ -552,6 +552,37 @@ class ClientSuite extends SparkFunSuite with Matchers {
     assert(allResourceInfo.get(yarnMadeupResource).get === 5)
   }
 
+  test("gpu/fpga spark resources mapped to custom yarn resources") {
+    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+    val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
+    val gpuCustomName = "custom/gpu"
+    val fpgaCustomName = "custom/fpga"
+    conf.set(YARN_GPU_DEVICE.key, gpuCustomName)
+    conf.set(YARN_FPGA_DEVICE.key, fpgaCustomName)
+    val resources = Map(gpuCustomName -> "gpu",
+      fpgaCustomName -> "fpga")
+
+    ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
+    resources.values.foreach { rName =>
+      conf.set(new ResourceID(SPARK_DRIVER_PREFIX, rName).amountConf, "3")
+    }
+    val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
+    val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
+    val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
+
+    val client = new Client(new ClientArguments(Array()), conf, null)
+    val newContext = client.createApplicationSubmissionContext(
+      new YarnClientApplication(getNewApplicationResponse, appContext),
+      containerLaunchContext)
+
+    val yarnRInfo = ResourceRequestTestHelper.getResources(newContext.getResource)
+    val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.name -> rInfo.value)).toMap
+    assert(allResourceInfo.get(gpuCustomName).nonEmpty)
+    assert(allResourceInfo.get(gpuCustomName).get === 3)
+    assert(allResourceInfo.get(fpgaCustomName).nonEmpty)
+    assert(allResourceInfo.get(fpgaCustomName).get === 3)
+  }
+
   test("test yarn jars path not exists") {
     withTempDir { dir =>
       val conf = new SparkConf().set(SPARK_JARS, Seq(dir.getAbsolutePath + "/test"))

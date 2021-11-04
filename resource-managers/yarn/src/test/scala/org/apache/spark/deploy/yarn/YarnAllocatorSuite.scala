@@ -316,6 +316,37 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     assert(allResourceInfo.get(yarnMadeupResource).get === 5)
   }
 
+  test("gpu/fpga spark resource mapped to custom yarn resource") {
+    assume(isYarnResourceTypesAvailable())
+    val gpuCustomName = "custom/gpu"
+    val fpgaCustomName = "custom/fpga"
+    val originalGpu = sparkConf.get(YARN_GPU_DEVICE)
+    val originalFpga = sparkConf.get(YARN_FPGA_DEVICE)
+    try {
+      sparkConf.set(YARN_GPU_DEVICE.key, gpuCustomName)
+      sparkConf.set(YARN_FPGA_DEVICE.key, fpgaCustomName)
+      val yarnResources = Seq(gpuCustomName, fpgaCustomName)
+      ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
+      val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
+      val sparkResources =
+        Map(EXECUTOR_GPU_ID.amountConf -> "3",
+          EXECUTOR_FPGA_ID.amountConf -> "2")
+      val (handler, _) = createAllocator(1, mockAmClient, sparkResources)
+
+      handler.updateResourceRequests()
+      val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+      val yarnRInfo = ResourceRequestTestHelper.getResources(defaultResource)
+      val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.name -> rInfo.value)).toMap
+      assert(allResourceInfo.get(gpuCustomName).nonEmpty)
+      assert(allResourceInfo.get(gpuCustomName).get === 3)
+      assert(allResourceInfo.get(fpgaCustomName).nonEmpty)
+      assert(allResourceInfo.get(fpgaCustomName).get === 2)
+    } finally {
+      sparkConf.set(YARN_GPU_DEVICE.key, originalGpu)
+      sparkConf.set(YARN_FPGA_DEVICE.key, originalFpga)
+    }
+  }
+
   test("container should not be created if requested number if met") {
     // request a single container and receive it
     val (handler, _) = createAllocator(1)
