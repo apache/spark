@@ -22,10 +22,13 @@ import java.util
 import org.apache.log4j.Level
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Sample}
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -33,6 +36,8 @@ import org.apache.spark.tags.DockerTest
 
 @DockerTest
 private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFunSuite {
+  import testImplicits._
+
   val catalogName: String
   // dialect specific update column type test
   def testUpdateColumnType(tbl: String): Unit
@@ -282,6 +287,111 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     withTable(s"$catalogName.new_table") {
       sql(s"CREATE TABLE $catalogName.new_table(col1 INT, col2 INT, col3 INT, col4 INT, col5 INT)")
       testIndexUsingSQL(s"$catalogName.new_table")
+    }
+  }
+
+  def supportsTableSample: Boolean = false
+
+  private def samplePushed(df: DataFrame): Boolean = {
+    val sample = df.queryExecution.optimizedPlan.collect {
+      case s: Sample => s
+    }
+    sample.isEmpty
+  }
+
+  private def filterPushed(df: DataFrame): Boolean = {
+    val filter = df.queryExecution.optimizedPlan.collect {
+      case f: Filter => f
+    }
+    filter.isEmpty
+  }
+
+  private def limitPushed(df: DataFrame, limit: Int): Boolean = {
+    val filter = df.queryExecution.optimizedPlan.collect {
+      case relation: DataSourceV2ScanRelation => relation.scan match {
+        case v1: V1ScanWrapper =>
+          return v1.pushedDownOperators.limit == Some(limit)
+      }
+    }
+    false
+  }
+
+  private def columnPruned(df: DataFrame, col: String): Boolean = {
+    val scan = df.queryExecution.optimizedPlan.collectFirst {
+      case s: DataSourceV2ScanRelation => s
+    }.get
+    scan.schema.names.sameElements(Seq(col))
+  }
+
+  test("SPARK-37038: Test TABLESAMPLE") {
+    if (supportsTableSample) {
+      withTable(s"$catalogName.new_table") {
+        sql(s"CREATE TABLE $catalogName.new_table (col1 INT, col2 INT)")
+        spark.range(10).select($"id" * 2, $"id" * 2 + 1).write.insertInto(s"$catalogName.new_table")
+
+        // sample push down + column pruning
+        val df1 = sql(s"SELECT col1 FROM $catalogName.new_table TABLESAMPLE (BUCKET 6 OUT OF 10)" +
+          " REPEATABLE (12345)")
+        assert(samplePushed(df1))
+        assert(columnPruned(df1, "col1"))
+        assert(df1.collect().length < 10)
+
+        // sample push down only
+        val df2 = sql(s"SELECT * FROM $catalogName.new_table TABLESAMPLE (50 PERCENT)" +
+          " REPEATABLE (12345)")
+        assert(samplePushed(df2))
+        assert(df2.collect().length < 10)
+
+        // sample(BUCKET ... OUT OF) push down + limit push down + column pruning
+        val df3 = sql(s"SELECT col1 FROM $catalogName.new_table TABLESAMPLE (BUCKET 6 OUT OF 10)" +
+          " LIMIT 2")
+        assert(samplePushed(df3))
+        assert(limitPushed(df3, 2))
+        assert(columnPruned(df3, "col1"))
+        assert(df3.collect().length == 2)
+
+        // sample(... PERCENT) push down + limit push down + column pruning
+        val df4 = sql(s"SELECT col1 FROM $catalogName.new_table" +
+          " TABLESAMPLE (50 PERCENT) REPEATABLE (12345) LIMIT 2")
+        assert(samplePushed(df4))
+        assert(limitPushed(df4, 2))
+        assert(columnPruned(df4, "col1"))
+        assert(df4.collect().length == 2)
+
+        // sample push down + filter push down + limit push down
+        val df5 = sql(s"SELECT * FROM $catalogName.new_table" +
+          " TABLESAMPLE (BUCKET 6 OUT OF 10) WHERE col1 > 0 LIMIT 2")
+        assert(samplePushed(df5))
+        assert(filterPushed(df5))
+        assert(limitPushed(df5, 2))
+        assert(df5.collect().length == 2)
+
+        // sample + filter + limit + column pruning
+        // sample pushed down, filer/limit not pushed down, column pruned
+        // Todo: push down filter/limit
+        val df6 = sql(s"SELECT col1 FROM $catalogName.new_table" +
+          " TABLESAMPLE (BUCKET 6 OUT OF 10) WHERE col1 > 0 LIMIT 2")
+        assert(samplePushed(df6))
+        assert(!filterPushed(df6))
+        assert(!limitPushed(df6, 2))
+        assert(columnPruned(df6, "col1"))
+        assert(df6.collect().length == 2)
+
+        // sample + limit
+        // Push down order is sample -> filter -> limit
+        // only limit is pushed down because in this test sample is after limit
+        val df7 = spark.read.table(s"$catalogName.new_table").limit(2).sample(0.5)
+        assert(!samplePushed(df7))
+        assert(limitPushed(df7, 2))
+
+        // sample + filter
+        // Push down order is sample -> filter -> limit
+        // only filter is pushed down because in this test sample is after filter
+        val df8 = spark.read.table(s"$catalogName.new_table").where($"col1" > 1).sample(0.5)
+        assert(!samplePushed(df8))
+        assert(filterPushed(df8))
+        assert(df8.collect().length < 10)
+      }
     }
   }
 }

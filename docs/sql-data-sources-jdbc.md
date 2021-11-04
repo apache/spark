@@ -250,7 +250,16 @@ logging into the data sources.
     <td><code>pushDownLimit</code></td>
     <td><code>false</code></td>
     <td>
-     The option to enable or disable LIMIT push-down into the JDBC data source. The default value is false, in which case Spark does not push down LIMIT to the JDBC data source. Otherwise, if value sets to true, LIMIT is pushed down to the JDBC data source. SPARK still applies LIMIT on the result from data source even if LIMIT is pushed down.
+     The option to enable or disable LIMIT push-down into V2 JDBC data source. The default value is false, in which case Spark does not push down LIMIT to the JDBC data source. Otherwise, if value sets to true, LIMIT is pushed down to the JDBC data source. SPARK still applies LIMIT on the result from data source even if LIMIT is pushed down.
+    </td>
+    <td>read</td>
+  </tr>
+
+  <tr>
+    <td><code>pushDownTableSample</code></td>
+    <td><code>false</code></td>
+    <td>
+     The option to enable or disable TABLESAMPLE push-down into V2 JDBC data source. The default value is false, in which case Spark does not push down TABLESAMPLE to the JDBC data source. Otherwise, if value sets to true, TABLESAMPLE is pushed down to the JDBC data source.
     </td>
     <td>read</td>
   </tr>

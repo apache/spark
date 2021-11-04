@@ -15,19 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.read;
+package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 
 /**
- * An interface for building the {@link Scan}. Implementations can mixin SupportsPushDownXYZ
- * interfaces to do operator push down, and keep the operator push down result in the returned
- * {@link Scan}. When pushing down operators, the push down order is:
- * sample -&gt; filter -&gt; aggregate -&gt; limit -&gt; column pruning.
- *
- * @since 3.0.0
+ * Pushed down operators
  */
-@Evolving
-public interface ScanBuilder {
-  Scan build();
-}
+case class PushedDownOperators(
+    aggregation: Option[Aggregation],
+    sample: Option[TableSampleInfo],
+    limit: Option[Int])
