@@ -4212,6 +4212,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("TABLE SAMPLE") {
+    withTable("test") {
+      sql("CREATE TABLE test(c int) USING PARQUET")
+      for (i <- 0 to 20) {
+        sql(s"INSERT INTO test VALUES ($i)")
+      }
+      val df1 = sql("SELECT * FROM test TABLESAMPLE (20 PERCENT) REPEATABLE (12345)")
+      val df2 = sql("SELECT * FROM test TABLESAMPLE (20 PERCENT) REPEATABLE (12345)")
+      checkAnswer(df1, df2)
+
+      val df3 = sql("SELECT * FROM test TABLESAMPLE (BUCKET 4 OUT OF 10) REPEATABLE (6789)")
+      val df4 = sql("SELECT * FROM test TABLESAMPLE (BUCKET 4 OUT OF 10) REPEATABLE (6789)")
+      checkAnswer(df3, df4)
+    }
+  }
+
   test("SPARK-36290: Pull out join condition can infer more filter conditions") {
     import org.apache.spark.sql.catalyst.dsl.expressions.DslString
 

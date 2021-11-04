@@ -581,7 +581,7 @@ select make_date(2013, 2, 30)
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid date 'FEBRUARY 30'
+Invalid date 'FEBRUARY 30'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -590,7 +590,7 @@ select make_date(2013, 13, 1)
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid value for MonthOfYear (valid values 1 - 12): 13
+Invalid value for MonthOfYear (valid values 1 - 12): 13. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -599,7 +599,7 @@ select make_date(2013, 11, -1)
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid value for DayOfMonth (valid values 1 - 28/31): -1
+Invalid value for DayOfMonth (valid values 1 - 28/31): -1. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query

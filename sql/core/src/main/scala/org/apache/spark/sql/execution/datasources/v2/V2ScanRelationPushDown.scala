@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeRefer
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LogicalPlan, Project, Sample}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
@@ -36,7 +36,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    applyColumnPruning(applyLimit(pushDownAggregates(pushDownFilters(createScanBuilder(plan)))))
+    applyColumnPruning(
+      applyLimit(pushDownAggregates(pushDownFilters(pushDownSample(createScanBuilder(plan))))))
   }
 
   private def createScanBuilder(plan: LogicalPlan) = plan.transform {
@@ -225,13 +226,33 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       withProjection
   }
 
+  def pushDownSample(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case sample: Sample => sample.child match {
+      case ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.length == 0 =>
+        val tableSample = TableSampleInfo(
+          sample.lowerBound,
+          sample.upperBound,
+          sample.withReplacement,
+          sample.seed)
+        val pushed = PushDownUtils.pushTableSample(sHolder.builder, tableSample)
+        if (pushed) {
+          sHolder.pushedSample = Some(tableSample)
+          sample.child
+        } else {
+          sample
+        }
+
+      case _ => sample
+    }
+  }
+
   def applyLimit(plan: LogicalPlan): LogicalPlan = plan.transform {
     case globalLimit @ Limit(IntegerLiteral(limitValue), child) =>
       child match {
         case ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.length == 0 =>
           val limitPushed = PushDownUtils.pushLimit(sHolder.builder, limitValue)
           if (limitPushed) {
-            sHolder.setLimit(Some(limitValue))
+            sHolder.pushedLimit = Some(limitValue)
           }
           globalLimit
         case _ => globalLimit
@@ -249,7 +270,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             f.pushedFilters()
           case _ => Array.empty[sources.Filter]
         }
-        V1ScanWrapper(v1, pushedFilters, aggregation, sHolder.pushedLimit)
+        val pushedDownOperators =
+          PushedDownOperators(aggregation, sHolder.pushedSample, sHolder.pushedLimit)
+        V1ScanWrapper(v1, pushedFilters, pushedDownOperators)
       case _ => scan
     }
   }
@@ -260,16 +283,16 @@ case class ScanBuilderHolder(
     relation: DataSourceV2Relation,
     builder: ScanBuilder) extends LeafNode {
   var pushedLimit: Option[Int] = None
-  private[sql] def setLimit(limit: Option[Int]): Unit = pushedLimit = limit
+
+  var pushedSample: Option[TableSampleInfo] = None
 }
 
 
-// A wrapper for v1 scan to carry the translated filters and the handled ones. This is required by
-// the physical v1 scan node.
+// A wrapper for v1 scan to carry the translated filters and the handled ones, along with
+// other pushed down operators. This is required by the physical v1 scan node.
 case class V1ScanWrapper(
     v1Scan: V1Scan,
     handledFilters: Seq[sources.Filter],
-    pushedAggregate: Option[Aggregation],
-    pushedLimit: Option[Int]) extends Scan {
+    pushedDownOperators: PushedDownOperators) extends Scan {
   override def readSchema(): StructType = v1Scan.readSchema()
 }

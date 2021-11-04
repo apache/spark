@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.{Closeable, FileNotFoundException, IOException}
 
-import org.apache.parquet.io.ParquetDecodingException
+import scala.util.control.NonFatal
 
 import org.apache.spark.{Partition => RDDPartition, SparkUpgradeException, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -193,13 +193,12 @@ class FileScanRDD(
             case e: SchemaColumnConvertNotSupportedException =>
               throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
                 currentFile.filePath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
-            case e: ParquetDecodingException =>
-              if (e.getCause.isInstanceOf[SparkUpgradeException]) {
-                throw e.getCause
-              } else if (e.getMessage.contains("Can not read value at")) {
-                throw QueryExecutionErrors.cannotReadParquetFilesError(e)
+            case sue: SparkUpgradeException => throw sue
+            case NonFatal(e) =>
+              e.getCause match {
+                case sue: SparkUpgradeException => throw sue
+                case _ => throw QueryExecutionErrors.cannotReadFilesError(e, currentFile.filePath)
               }
-              throw e
           }
         } else {
           currentFile = null
