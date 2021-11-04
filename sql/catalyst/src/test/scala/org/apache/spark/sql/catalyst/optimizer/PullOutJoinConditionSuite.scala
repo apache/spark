@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Coalesce, Substring, Upper}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Coalesce, IsNull, Literal, Substring, Upper}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -46,9 +46,9 @@ class PullOutJoinConditionSuite extends PlanTest {
         val originalQuery = x.join(y, joinType, Option("x.a".attr === udf))
           .select("x.a".attr, "y.e".attr)
         val correctAnswer = x.select("x.a".attr, "x.b".attr, "x.c".attr)
-          .join(y.select("y.d".attr, "y.e".attr, Alias(udf, udf.sql)()),
-            joinType, Option("x.a".attr === s"`${udf.sql}`".attr)).select("x.a".attr, "y.e".attr)
-
+          .join(y.select("y.d".attr, "y.e".attr, Alias(udf, "_right_complex_expr0")()),
+            joinType,
+            Option("x.a".attr === "_right_complex_expr0".attr)).select("x.a".attr, "y.e".attr)
         comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
       }
     }
@@ -61,12 +61,28 @@ class PullOutJoinConditionSuite extends PlanTest {
       val originalQuery = x.join(y, joinType, Option(udf === "y.e".attr))
         .select("x.a".attr, "y.e".attr)
       val correctAnswer =
-        x.select("x.a".attr, "x.b".attr, "x.c".attr, Alias(udf, udf.sql)()).join(
+        x.select("x.a".attr, "x.b".attr, "x.c".attr, Alias(udf, "_left_complex_expr0")()).join(
           y.select("y.d".attr, "y.e".attr),
-          joinType, Option(s"`${udf.sql}`".attr === "y.e".attr))
+          joinType, Option("_left_complex_expr0".attr === "y.e".attr))
           .select("x.a".attr, "y.e".attr)
 
       comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
+  test("Join condition contains other predicates") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val udf = Substring("y.d".attr, 1, 5)
+      val joinType = Inner
+      val originalQuery = x.join(y, joinType, Option("x.a".attr === udf && "x.b".attr > "y.e".attr))
+        .select("x.a".attr, "y.e".attr)
+      val correctAnswer =
+        x.select("x.a".attr, "x.b".attr, "x.c".attr).join(
+          y.select("y.d".attr, "y.e".attr, Alias(udf, "_right_complex_expr0")()),
+          joinType, Option("x.a".attr === "_right_complex_expr0".attr && "x.b".attr > "y.e".attr))
+          .select("x.a".attr, "y.e".attr)
+
+        comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
     }
   }
 
@@ -77,28 +93,28 @@ class PullOutJoinConditionSuite extends PlanTest {
       val originalQuery = x.join(y, joinType, Option(udf <=> "y.e".attr))
         .select("x.a".attr, "y.e".attr)
       val correctAnswer =
-        x.select("x.a".attr, "x.b".attr, "x.c".attr, Alias(udf, udf.sql)()).join(
-          y.select("y.d".attr, "y.e".attr),
-          joinType, Option(s"`${udf.sql}`".attr <=> "y.e".attr))
+        x.select("x.a".attr, "x.b".attr, "x.c".attr,
+          Alias(Coalesce(Seq(udf, Literal(0))), "_left_complex_expr0")(),
+          Alias(IsNull(udf), "_left_complex_expr1")()).join(
+          y.select("y.d".attr, "y.e".attr,
+            Alias(Coalesce(Seq("y.e".attr, Literal(0))), "_right_complex_expr0")(),
+            Alias(IsNull("y.e".attr), "_right_complex_expr1")()),
+          joinType, Option("_left_complex_expr0".attr === "_right_complex_expr0".attr &&
+            "_left_complex_expr1".attr === "_right_complex_expr1".attr))
           .select("x.a".attr, "y.e".attr)
 
       comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
     }
   }
 
-  test("Push down non-equality join keys") {
+  test("Negative case: non-equality join keys") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val joinType = Inner
       val udf = "x.b".attr + 1
       val originalQuery = x.join(y, joinType, Option(udf > "y.e".attr))
         .select("x.a".attr, "y.e".attr)
-      val correctAnswer =
-        x.select("x.a".attr, "x.b".attr, "x.c".attr, Alias(udf, udf.sql)()).join(
-          y.select("y.d".attr, "y.e".attr),
-          joinType, Option(s"`${udf.sql}`".attr > "y.e".attr))
-          .select("x.a".attr, "y.e".attr)
 
-      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+      comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
     }
   }
 
@@ -123,10 +139,12 @@ class PullOutJoinConditionSuite extends PlanTest {
   }
 
   test("Negative case: BroadcastHashJoin") {
-    Seq(Upper("y.d".attr), Substring("y.d".attr, 1, 5)).foreach { udf =>
-      val originalQuery = x.join(y, Inner, Option("x.a".attr === udf))
-        .select("x.a".attr, "y.e".attr)
-      comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      Seq(Upper("y.d".attr), Substring("y.d".attr, 1, 5)).foreach { udf =>
+        val originalQuery = x.join(y, Inner, Option("x.a".attr === udf))
+          .select("x.a".attr, "y.e".attr)
+        comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
+      }
     }
   }
 }

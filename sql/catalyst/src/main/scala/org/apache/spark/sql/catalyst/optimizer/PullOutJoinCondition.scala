@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Predicate, PredicateHelper}
-import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Project}
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, EqualTo, NamedExpression, PredicateHelper}
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
 
@@ -32,8 +35,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
  * {{{
  *   SELECT * FROM t1 JOIN t2 ON t1.a + 10 = t2.x ==>
  *   Project [a#0, b#1, x#2, y#3]
- *   +- Join Inner, ((spark_catalog.default.t1.a + 10)#8 = x#2)
- *      :- Project [a#0, b#1, (a#0 + 10) AS (spark_catalog.default.t1.a + 10)#8]
+ *   +- Join Inner, (_left_complex_expr0#8 = x#2)
+ *      :- Project [a#0, b#1, (a#0 + 10) AS _left_complex_expr0#8]
  *      :  +- Filter isnotnull((a#0 + 10))
  *      :     +- Relation default.t1[a#0,b#1] parquet
  *      +- Filter isnotnull(x#2)
@@ -44,31 +47,38 @@ object PullOutJoinCondition extends Rule[LogicalPlan]
   with JoinSelectionHelper with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(_.containsPattern(JOIN)) {
-    case j @ Join(left, right, _, Some(condition), _)
+    case j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, otherPredicates, _, left, right, _)
         if j.resolved && !canPlanAsBroadcastHashJoin(j, conf) =>
-      val complexExpressions = splitConjunctivePredicates(condition).flatMap {
-        case p: Predicate => p.children.filter(e => !e.foldable && e.children.nonEmpty)
-        case _ => Nil
+      val complexLeftJoinKeys = new ArrayBuffer[NamedExpression]()
+      val complexRightJoinKeys = new ArrayBuffer[NamedExpression]()
+
+      val newLeftJoinKeys = leftKeys.zipWithIndex.map { case (expr, index) =>
+        if (!expr.foldable && expr.children.nonEmpty) {
+          val ne = Alias(expr, s"_left_complex_expr$index")()
+          complexLeftJoinKeys += ne
+          ne.toAttribute
+        } else {
+          expr
+        }
       }
 
-      val leftComplexExpressions = complexExpressions.filter(canEvaluate(_, left))
-      val rightComplexExpressions = complexExpressions.filter(canEvaluate(_, right))
-
-      val leftComplexExpressionMap =
-        leftComplexExpressions.map(e => e.canonicalized -> Alias(e, e.sql)()).toMap
-      val rightComplexExpressionMap =
-        rightComplexExpressions.map(e => e.canonicalized -> Alias(e, e.sql)()).toMap
-      val allComplexExpressionMap = leftComplexExpressionMap ++ rightComplexExpressionMap
-
-      if (allComplexExpressionMap.nonEmpty) {
-        val newCondition = condition.transformDown {
-          case e: Expression
-              if e.children.nonEmpty && allComplexExpressionMap.contains(e.canonicalized) =>
-            allComplexExpressionMap.get(e.canonicalized).map(_.toAttribute).getOrElse(e)
+      val newRightJoinKeys = rightKeys.zipWithIndex.map { case (expr, index) =>
+        if (!expr.foldable && expr.children.nonEmpty) {
+          val ne = Alias(expr, s"_right_complex_expr$index")()
+          complexRightJoinKeys += ne
+          ne.toAttribute
+        } else {
+          expr
         }
-        val newLeft = Project(left.output ++ leftComplexExpressionMap.values, left)
-        val newRight = Project(right.output ++ rightComplexExpressionMap.values, right)
-        Project(j.output, j.copy(left = newLeft, right = newRight, condition = Some(newCondition)))
+      }
+
+      if (complexLeftJoinKeys.nonEmpty || complexRightJoinKeys.nonEmpty) {
+        val newLeft = Project(left.output ++ complexLeftJoinKeys, left)
+        val newRight = Project(right.output ++ complexRightJoinKeys, right)
+        val newCond = (newLeftJoinKeys.zip(newRightJoinKeys)
+          .map { case (l, r) => EqualTo(l, r) } ++ otherPredicates)
+          .reduceLeftOption(And)
+        Project(j.output, j.copy(left = newLeft, right = newRight, condition = newCond))
       } else {
         j
       }
