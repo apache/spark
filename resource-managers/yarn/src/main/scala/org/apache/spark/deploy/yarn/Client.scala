@@ -1280,7 +1280,7 @@ private[spark] class Client(
         diags.foreach { err =>
           logError(s"Application diagnostics message: $err")
         }
-        var amContainerSucceed =
+        val amContainerSucceed =
           Option(yarnClient.getApplicationReport(appId).getCurrentApplicationAttemptId)
             .flatMap(attemptId => Option(yarnClient.getApplicationAttemptReport(attemptId)))
             .flatMap(attemptReport => Option(attemptReport.getAMContainerId))
