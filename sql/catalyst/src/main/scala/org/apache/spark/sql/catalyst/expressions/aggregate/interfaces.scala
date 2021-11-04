@@ -622,17 +622,6 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
   }
 
   /**
-   * In-place replaces SparkSQL internally supported underlying storage format (BinaryType),
-   * with the aggregation buffer object stored at buffer's index `mutableAggBufferOffset`.
-   *
-   * This is only called when AggregatingAccumulator running on driver, after the framework
-   * shuffle in aggregate buffers.
-   */
-  final def deserializeAggregateBufferInPlace(buffer: InternalRow): Unit = {
-    buffer(mutableAggBufferOffset) = deserialize(buffer.getBinary(inputAggBufferOffset))
-  }
-
-  /**
    * Merge an input buffer into the aggregation buffer, where both buffers contain the deserialized
    * java object. This function is used by aggregating accumulators.
    *

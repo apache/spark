@@ -157,7 +157,8 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    */
   def value: OUT
 
-  // We assume that serialization of AccumulatorV2 runs on executor is not necessary.
+  // Serialize the buffer of this accumulator before sending back this accumulator to the driver.
+  // By default this method does nothing.
   protected def withBufferSerialized(): AccumulatorV2[IN, OUT] = this
 
   // Called by Java when serializing an object

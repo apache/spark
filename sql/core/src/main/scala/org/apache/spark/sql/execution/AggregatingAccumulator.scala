@@ -156,15 +156,6 @@ class AggregatingAccumulator private(
         case agg: AggregatingAccumulator =>
           val buffer = getOrCreateBuffer()
           val otherBuffer = agg.buffer
-          // If AggregatingAccumulator runs on driver,
-          // we should deserialize all TypedImperativeAggregate.
-          if (isAtDriverSide) {
-            var i = 0
-            while (i < typedImperatives.length) {
-              typedImperatives(i).deserializeAggregateBufferInPlace(otherBuffer)
-              i += 1
-            }
-          }
           mergeProjection.target(buffer)(joinedRow.withRight(otherBuffer))
           var i = 0
           while (i < imperatives.length) {
@@ -172,9 +163,18 @@ class AggregatingAccumulator private(
             i += 1
           }
           i = 0
-          while (i < typedImperatives.length) {
-            typedImperatives(i).mergeBuffersObjects(buffer, otherBuffer)
-            i += 1
+          if (isAtDriverSide) {
+            while (i < typedImperatives.length) {
+              // The input buffer stores serialized data
+              typedImperatives(i).merge(buffer, otherBuffer)
+              i += 1
+            }
+          } else {
+            while (i < typedImperatives.length) {
+              // The input buffer stores deserialized object
+              typedImperatives(i).mergeBuffersObjects(buffer, otherBuffer)
+              i += 1
+            }
           }
         case _ =>
           throw QueryExecutionErrors.cannotMergeClassWithOtherClassError(
@@ -198,13 +198,12 @@ class AggregatingAccumulator private(
   }
 
   override def withBufferSerialized(): AggregatingAccumulator = {
-    if (!isAtDriverSide) {
-      var i = 0
-      // AggregatingAccumulator runs on executor, we should serialize all TypedImperativeAggregate.
-      while (i < typedImperatives.length) {
-        typedImperatives(i).serializeAggregateBufferInPlace(buffer)
-        i += 1
-      }
+    assert(!isAtDriverSide)
+    var i = 0
+    // AggregatingAccumulator runs on executor, we should serialize all TypedImperativeAggregate.
+    while (i < typedImperatives.length) {
+      typedImperatives(i).serializeAggregateBufferInPlace(buffer)
+      i += 1
     }
     this
   }

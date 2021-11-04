@@ -754,7 +754,7 @@ class DatasetSuite extends QueryTest
     assert(err2.getMessage.contains("Name must not be empty"))
   }
 
-  test("SPARK-37203: Fix NotSerializableException when observe with percentile_approx") {
+  test("SPARK-37203: Fix NotSerializableException when observe with TypedImperativeAggregate") {
     val namedObservation = Observation("named")
 
     val df = spark.range(100)
