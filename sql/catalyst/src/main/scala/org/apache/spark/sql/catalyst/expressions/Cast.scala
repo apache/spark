@@ -603,7 +603,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // LongConverter
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, _.toLongExact())
+      buildCast[UTF8String](_, UTF8StringUtils.toLongExact)
     case StringType =>
       val result = new LongWrapper()
       buildCast[UTF8String](_, s => if (s.toLong(result)) result.value else null)
@@ -622,7 +622,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // IntConverter
   private[this] def castToInt(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, _.toIntExact())
+      buildCast[UTF8String](_, UTF8StringUtils.toIntExact)
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toInt(result)) result.value else null)
@@ -650,7 +650,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // ShortConverter
   private[this] def castToShort(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, _.toShortExact())
+      buildCast[UTF8String](_, UTF8StringUtils.toShortExact)
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toShort(result)) {
@@ -693,7 +693,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // ByteConverter
   private[this] def castToByte(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, _.toByteExact())
+      buildCast[UTF8String](_, UTF8StringUtils.toByteExact)
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toByte(result)) {
@@ -1638,7 +1638,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castToByteCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType if ansiEnabled =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toByteExact();"
+      val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, evNull) => code"$evPrim = $stringUtils.toByteExact($c);"
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
@@ -1669,7 +1670,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType if ansiEnabled =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toShortExact();"
+      val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, evNull) => code"$evPrim = $stringUtils.toShortExact($c);"
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
@@ -1698,7 +1700,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castToIntCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType if ansiEnabled =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toIntExact();"
+      val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, evNull) => code"$evPrim = $stringUtils.toIntExact($c);"
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
@@ -1727,7 +1730,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castToLongCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType if ansiEnabled =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toLongExact();"
+      val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, evNull) => code"$evPrim = $stringUtils.toLongExact($c);"
     case StringType =>
       val wrapper = ctx.freshVariable("longWrapper", classOf[UTF8String.LongWrapper])
       (c, evPrim, evNull) =>
