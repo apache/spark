@@ -197,6 +197,7 @@ DataFrame APIs
     DataFrame.selectExpr
     DataFrame.semanticHash
     DataFrame.show
+    DataFrame.isEmpty
     DataFrame.sort
     DataFrame.sortWithinPartitions
     DataFrame.stat

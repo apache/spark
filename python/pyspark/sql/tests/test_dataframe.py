@@ -935,6 +935,14 @@ class DataFrameTests(ReusedSQLTestCase):
         with self.assertRaisesRegex(TypeError, "Parameter 'truncate=foo'"):
             df.show(truncate='foo')
 
+    def test_df_is_empty(self):
+        # SPARK-37207: Checks isEmpty call on a dataframe.
+
+        df_empty = self.spark.createDataFrame([], 'a INT, b DOUBLE, c STRING')
+        self.assertTrue(df_empty.isEmpty())
+        df = self.spark.createDataFrame([(1, 2.5, "c")], 'a INT, b DOUBLE, c STRING')
+        self.assertFalse(df.isEmpty())
+
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
         pandas_requirement_message or pyarrow_requirement_message)  # type: ignore

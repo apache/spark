@@ -473,6 +473,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return self._jdf.isStreaming()
 
+    def isEmpty(self) -> bool:
+        """Returns ``True`` if this :class:`DataFrame` is empty.
+
+        .. versionadded:: 3.3.0
+        """
+        return self._jdf.isEmpty()
+
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         """Prints the first ``n`` rows to the console.
 
