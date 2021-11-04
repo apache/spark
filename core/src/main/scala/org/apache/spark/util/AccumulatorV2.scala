@@ -157,6 +157,9 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    */
   def value: OUT
 
+  // We assume that serialization of AccumulatorV2 runs on executor is not necessary.
+  protected def withBufferSerialized(): AccumulatorV2[IN, OUT] = this
+
   // Called by Java when serializing an object
   final protected def writeReplace(): Any = {
     if (atDriverSide) {
@@ -179,7 +182,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
       }
       copyAcc
     } else {
-      this
+      withBufferSerialized()
     }
   }
 

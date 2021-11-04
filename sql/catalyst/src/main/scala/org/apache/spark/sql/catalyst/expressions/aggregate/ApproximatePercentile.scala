@@ -226,7 +226,7 @@ object ApproximatePercentile {
    *
    * @param summaries underlying probabilistic data structure [[QuantileSummaries]].
    */
-  class PercentileDigest(private var summaries: QuantileSummaries) extends Serializable {
+  class PercentileDigest(private var summaries: QuantileSummaries) {
 
     def this(relativeError: Double) = {
       this(new QuantileSummaries(defaultCompressThreshold, relativeError, compressed = true))
