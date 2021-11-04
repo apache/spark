@@ -39,8 +39,9 @@ public interface SupportsIndex extends Table {
    * @param indexName the name of the index to be created
    * @param columns the columns on which index to be created
    * @param columnsProperties the properties of the columns on which index to be created
-   * @param properties the properties of the index to be created. {@code indexType} is a special
-   *                   property that is used to specify the type of the index to be created.
+   * @param properties the properties of the index to be created. <code>indexType</code> is a
+   *                   special property that is used to specify the type of the index to be
+   *                   created.
    * @throws IndexAlreadyExistsException If the index already exists.
    */
   void createIndex(String indexName,
