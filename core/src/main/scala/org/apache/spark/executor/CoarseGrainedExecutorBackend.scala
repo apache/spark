@@ -106,7 +106,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
-      SparkEnv.driverRpcEndpoint = Some(ref)
+      env.executorBackend = Option(this)
       ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls,
         extractAttributes, _resources, resourceProfile.id))
     }(ThreadUtils.sameThread).onComplete {
@@ -161,6 +161,11 @@ private[spark] class CoarseGrainedExecutorBackend(
     val prefix = "SPARK_EXECUTOR_ATTRIBUTE_"
     sys.env.filterKeys(_.startsWith(prefix))
       .map(e => (e._1.substring(prefix.length).toUpperCase(Locale.ROOT), e._2)).toMap
+  }
+
+  def notifyDriverAboutPushCompletion(shuffleId: Int, mapIndex: Int): Unit = {
+    val msg = ShufflePushCompletion(shuffleId, mapIndex)
+    driver.foreach(_.send(msg))
   }
 
   override def receive: PartialFunction[Any, Unit] = {

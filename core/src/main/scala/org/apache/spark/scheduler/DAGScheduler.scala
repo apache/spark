@@ -27,7 +27,6 @@ import scala.collection.Map
 import scala.collection.mutable
 import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 import scala.concurrent.duration._
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.{Futures, SettableFuture}
@@ -730,7 +729,7 @@ private[spark] class DAGScheduler(
                 // finalized with push based shuffle. If not, subsequent ShuffleMapStage won't
                 // read from merged output as the MergeStatuses are not available.
                 if (!mapStage.isAvailable ||
-                  (mapStage.numPartitions > 0 && mapStage.shuffleDep.shuffleMergeEnabled &&
+                  (mapStage.shuffleDep.shuffleMergeEnabled &&
                     !mapStage.shuffleDep.shuffleMergeFinalized)) {
                   missing += mapStage
                 }
@@ -1379,7 +1378,7 @@ private[spark] class DAGScheduler(
             // merger locations but the corresponding shuffle map stage did not complete
             // successfully, we would still enable push for its retry.
             s.shuffleDep.setShuffleMergeEnabled(false)
-            logInfo("Push-based shuffle disabled for $stage (${stage.name}) since it" +
+            logInfo(s"Push-based shuffle disabled for $stage (${stage.name}) since it" +
               " is already shuffle merge finalized")
           }
         }
@@ -1746,10 +1745,28 @@ private[spark] class DAGScheduler(
                 // events to DAGScheduler. This check prevents multiple attempts to schedule merge
                 // finalization get triggered due to this.
                 if (shuffleStage.shuffleDep.getFinalizeTask.isEmpty) {
-                  // If total shuffle size is smaller than the threshold, attempt to immediately
-                  // schedule shuffle merge finalization and process map stage completion.
-                  val totalSize = Try(mapOutputTracker
-                    .getStatistics(shuffleStage.shuffleDep).bytesByPartitionId.sum).getOrElse(0L)
+                  // 1. Stage indeterminate and some map outputs are not available - finalize
+                  // immediately without registering shuffle merge results.
+                  // 2. Stage determinate and some map outputs are not available - decide to
+                  // register merge results based on map outputs size available and
+                  // shuffleMergeWaitMinSizeThreshold.
+                  // 3. All shuffle outputs available - decide to register merge results based
+                  // on map outputs size available and shuffleMergeWaitMinSizeThreshold.
+                  val totalSize = {
+                    lazy val computedTotalSize =
+                      mapOutputTracker.getStatistics(shuffleStage.shuffleDep).
+                        bytesByPartitionId.filter(_ > 0).sum
+                    if (shuffleStage.isAvailable) {
+                      computedTotalSize
+                    } else {
+                      if (shuffleStage.isIndeterminate) {
+                        0L
+                      } else {
+                        computedTotalSize
+                      }
+                    }
+                  }
+
                   if (totalSize < shuffleMergeWaitMinSizeThreshold) {
                     // Check if we can process map stage completion. If shuffle merge finalization
                     // is already triggered because push completion ratio was reached earlier,
@@ -2075,7 +2092,11 @@ private[spark] class DAGScheduler(
    *
    * @param stage the stage to finalize shuffle merge
    * @param delay how long to wait before finalizing shuffle merge
-   * @param registerMergeResults whether to wait for merge results before scheduling the next stage
+   * @param registerMergeResults indicate whether DAGScheduler would register the received
+   *                             MergeStatus with MapOutputTracker and wait to schedule the reduce
+   *                             stage until MergeStatus have been received from all mergers or
+   *                             reaches timeout. For very small shuffle, this could be set to
+   *                             false to avoid impact to job runtime.
    * @return whether the caller is able to schedule a finalize task
    */
   private[scheduler] def scheduleShuffleMergeFinalize(
@@ -2091,8 +2112,7 @@ private[spark] class DAGScheduler(
         // one for immediate execution. Note that we should get here only when
         // handleShufflePushCompleted schedules a finalize task after the shuffle map stage
         // completed earlier and scheduled a task with default delay.
-        if (task.getDelay(TimeUnit.NANOSECONDS) > 0) {
-          task.cancel(false)
+        if (task.getDelay(TimeUnit.NANOSECONDS) > 0 && task.cancel(false)) {
           // The current task should be coming from handleShufflePushCompleted, thus the
           // delay should be 0 and registerMergeResults should be true.
           assert(delay == 0 && registerMergeResults)
@@ -2109,6 +2129,9 @@ private[spark] class DAGScheduler(
           )
           true
         } else {
+          logInfo(s"$stage (${stage.name}) existing scheduled task for finalizing shuffle merge" +
+            s"would either be in-progress or finished. No need to schedule shuffle merge" +
+            s" finalization again.")
           false
         }
       case None =>
@@ -2255,6 +2278,7 @@ private[spark] class DAGScheduler(
     if (runningStages.contains(stage)) {
       stage.shuffleDep.markShuffleMergeFinalized()
       processShuffleMapStageCompletion(stage)
+      logInfo(s"$stage (${stage.name}) shuffle merge is finalized")
     } else {
       // Unregister all merge results if the stage is currently not
       // active (i.e. the stage is cancelled)

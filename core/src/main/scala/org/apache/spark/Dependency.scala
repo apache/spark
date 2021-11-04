@@ -135,9 +135,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   def shuffleMergeId: Int = _shuffleMergeId
 
   def setMergerLocs(mergerLocs: Seq[BlockManagerId]): Unit = {
-    if (mergerLocs != null && mergerLocs.nonEmpty) {
-      this.mergerLocs = mergerLocs
-    }
+    this.mergerLocs = mergerLocs
   }
 
   def getMergerLocs: Seq[BlockManagerId] = mergerLocs
@@ -165,6 +163,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     mergerLocs = Nil
     _shuffleMergeId += 1
     finalizeTask = None
+    shufflePushCompleted.clear()
   }
 
   private def canShuffleMergeBeEnabled(): Boolean = {
@@ -172,7 +171,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     if (isPushShuffleEnabled && rdd.isBarrier()) {
       logWarning("Push-based shuffle is currently not supported for barrier stages")
     }
-    isPushShuffleEnabled &&
+    isPushShuffleEnabled && numPartitions > 0 &&
       // TODO: SPARK-35547: Push based shuffle is currently unsupported for Barrier stages
       !rdd.isBarrier()
   }
@@ -197,7 +196,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   def getFinalizeTask: Option[ScheduledFuture[_]] = finalizeTask
 
   def setFinalizeTask(task: ScheduledFuture[_]): Unit = {
-    finalizeTask = Some(task)
+    finalizeTask = Option(task)
   }
 
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))

@@ -66,7 +66,6 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     when(mockEnv.conf).thenReturn(conf)
     when(mockEnv.blockManager).thenReturn(blockManager)
     SparkEnv.set(mockEnv)
-    SparkEnv.driverRpcEndpoint = Some(driverRpcEndpoint)
     when(blockManager.blockStoreClient).thenReturn(shuffleClient)
   }
 

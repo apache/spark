@@ -2195,24 +2195,25 @@ package object config {
 
   private[spark] val PUSH_BASED_SHUFFLE_MERGE_FINALIZE_THREADS =
     ConfigBuilder("spark.shuffle.push.merge.finalizeThreads")
-      .doc("Specify the number of threads used by DAGScheduler to finalize shuffle merge. " +
-        "Since it could potentially take seconds for a large shuffle to finalize, having " +
-        "multiple threads helps DAGScheduler to handle multiple concurrent shuffle merge " +
-        "finalize requests when push-based shuffle is enabled.")
+      .doc("Number of threads used by driver to finalize shuffle merge. Since it could" +
+        " potentially take seconds for a large shuffle to finalize, having multiple threads helps" +
+        " driver to handle concurrent shuffle merge finalize requests when push-based" +
+        " shuffle is enabled.")
       .intConf
       .createWithDefault(3)
 
   private[spark] val PUSH_BASED_SHUFFLE_SIZE_MIN_SHUFFLE_SIZE_TO_WAIT =
     ConfigBuilder("spark.shuffle.push.minShuffleSizeToWait")
-      .doc("The min size of total shuffle size for DAGScheduler to actually wait for merge " +
-        "finalization when push based shuffle is enabled.")
+      .doc("Driver will wait for merge finalization to complete only if total shuffle size is" +
+        " more than this threshold. If total shuffle size is less, driver will immediately" +
+        " finalize the shuffle output")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("500m")
 
   private[spark] val PUSH_BASED_SHUFFLE_MIN_PUSH_RATIO =
     ConfigBuilder("spark.shuffle.push.minPushRatio")
-      .doc("The min percentage of map tasks that have completed pushing their shuffle output " +
-        "for DAGScheduler to start merge finalization.")
+      .doc("Fraction of map partitions that should be push complete before driver starts" +
+        " merge finalization during push based shuffle")
       .doubleConf
       .createWithDefault(1.0)
 
