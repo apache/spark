@@ -429,6 +429,16 @@ package object config extends Logging {
     .toSequence
     .createWithDefault(Nil)
 
+  private[spark] val YARN_GPU_DEVICE = ConfigBuilder("spark.yarn.resourceGpuDeviceName")
+    .version("3.2.1")
+    .stringConf
+    .createWithDefault("yarn.io/gpu")
+
+  private[spark] val YARN_FPGA_DEVICE = ConfigBuilder("spark.yarn.resourceFpgaDeviceName")
+    .version("3.2.1")
+    .stringConf
+    .createWithDefault("yarn.io/fpga")
+
   private[yarn] val YARN_EXECUTOR_RESOURCE_TYPES_PREFIX = "spark.yarn.executor.resource."
   private[yarn] val YARN_DRIVER_RESOURCE_TYPES_PREFIX = "spark.yarn.driver.resource."
   private[yarn] val YARN_AM_RESOURCE_TYPES_PREFIX = "spark.yarn.am.resource."

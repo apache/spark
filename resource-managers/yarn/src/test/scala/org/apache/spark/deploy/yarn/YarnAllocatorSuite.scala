@@ -181,7 +181,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   test("single container allocated with ResourceProfile") {
     assume(isYarnResourceTypesAvailable())
-    val yarnResources = Seq(YARN_GPU_RESOURCE_CONFIG)
+    val yarnResources = Seq(sparkConf.get(YARN_GPU_DEVICE))
     ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
     // create default profile so we get a different id to test below
     val defaultRProf = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
@@ -216,7 +216,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   test("multiple containers allocated with ResourceProfiles") {
     assume(isYarnResourceTypesAvailable())
-    val yarnResources = Seq(YARN_GPU_RESOURCE_CONFIG, YARN_FPGA_RESOURCE_CONFIG)
+    val yarnResources = Seq(sparkConf.get(YARN_GPU_DEVICE), sparkConf.get(YARN_FPGA_DEVICE))
     ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
     // create default profile so we get a different id to test below
     val defaultRProf = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
@@ -293,7 +293,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   test("custom spark resource mapped to yarn resource configs") {
     assume(isYarnResourceTypesAvailable())
     val yarnMadeupResource = "yarn.io/madeup"
-    val yarnResources = Seq(YARN_GPU_RESOURCE_CONFIG, YARN_FPGA_RESOURCE_CONFIG, yarnMadeupResource)
+    val yarnResources = Seq(sparkConf.get(YARN_GPU_DEVICE), sparkConf.get(YARN_FPGA_DEVICE),
+      yarnMadeupResource)
     ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
     val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
     val madeupConfigName = s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${yarnMadeupResource}.${AMOUNT}"
@@ -307,10 +308,10 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
     val yarnRInfo = ResourceRequestTestHelper.getResources(defaultResource)
     val allResourceInfo = yarnRInfo.map( rInfo => (rInfo.name -> rInfo.value) ).toMap
-    assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).nonEmpty)
-    assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).get === 3)
-    assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).nonEmpty)
-    assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).get === 2)
+    assert(allResourceInfo.get(sparkConf.get(YARN_GPU_DEVICE)).nonEmpty)
+    assert(allResourceInfo.get(sparkConf.get(YARN_GPU_DEVICE)).get === 3)
+    assert(allResourceInfo.get(sparkConf.get(YARN_FPGA_DEVICE)).nonEmpty)
+    assert(allResourceInfo.get(sparkConf.get(YARN_FPGA_DEVICE)).get === 2)
     assert(allResourceInfo.get(yarnMadeupResource).nonEmpty)
     assert(allResourceInfo.get(yarnMadeupResource).get === 5)
   }
