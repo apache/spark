@@ -15,19 +15,30 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.read;
+package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * An interface for building the {@link Scan}. Implementations can mixin SupportsPushDownXYZ
- * interfaces to do operator push down, and keep the operator push down result in the returned
- * {@link Scan}. When pushing down operators, the push down order is:
- * sample -&gt; filter -&gt; aggregate -&gt; limit -&gt; column pruning.
- *
- * @since 3.0.0
+ * Helper functions for casting string to numeric values.
  */
-@Evolving
-public interface ScanBuilder {
-  Scan build();
+object UTF8StringUtils {
+
+  def toLongExact(s: UTF8String): Long = withException(s.toLongExact)
+
+  def toIntExact(s: UTF8String): Int = withException(s.toIntExact)
+
+  def toShortExact(s: UTF8String): Short = withException(s.toShortExact)
+
+  def toByteExact(s: UTF8String): Byte = withException(s.toByteExact)
+
+  private def withException[A](f: => A): A = {
+    try {
+      f
+    } catch {
+      case e: NumberFormatException =>
+        throw QueryExecutionErrors.invalidInputSyntaxForNumericError(e)
+    }
+  }
 }

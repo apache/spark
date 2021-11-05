@@ -8,7 +8,7 @@ select element_at(map(1, 'a', 2, 'b'), 5)
 struct<>
 -- !query output
 org.apache.spark.SparkNoSuchElementException
-Key 5 does not exist.
+Key 5 does not exist. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -17,4 +17,4 @@ select map(1, 'a', 2, 'b')[5]
 struct<>
 -- !query output
 org.apache.spark.SparkNoSuchElementException
-Key 5 does not exist.
+Key 5 does not exist. If necessary set spark.sql.ansi.enabled to false to bypass this error.

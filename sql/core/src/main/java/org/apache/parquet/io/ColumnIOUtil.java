@@ -15,19 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.read;
-
-import org.apache.spark.annotation.Evolving;
+package org.apache.parquet.io;
 
 /**
- * An interface for building the {@link Scan}. Implementations can mixin SupportsPushDownXYZ
- * interfaces to do operator push down, and keep the operator push down result in the returned
- * {@link Scan}. When pushing down operators, the push down order is:
- * sample -&gt; filter -&gt; aggregate -&gt; limit -&gt; column pruning.
+ * This is a workaround since methods below are not public in {@link ColumnIO}.
  *
- * @since 3.0.0
+ * TODO(SPARK-36511): we should remove this once PARQUET-2050 and PARQUET-2083 are released with
+ *   Parquet 1.13.
  */
-@Evolving
-public interface ScanBuilder {
-  Scan build();
+public class ColumnIOUtil {
+  private ColumnIOUtil() {}
+
+  public static int getDefinitionLevel(ColumnIO column) {
+    return column.getDefinitionLevel();
+  }
+
+  public static int getRepetitionLevel(ColumnIO column) {
+    return column.getRepetitionLevel();
+  }
+
+  public static String[] getFieldPath(ColumnIO column) {
+    return column.getFieldPath();
+  }
 }

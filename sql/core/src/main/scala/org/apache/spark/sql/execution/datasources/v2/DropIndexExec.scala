@@ -15,19 +15,29 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.read;
+package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.NoSuchIndexException
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 
 /**
- * An interface for building the {@link Scan}. Implementations can mixin SupportsPushDownXYZ
- * interfaces to do operator push down, and keep the operator push down result in the returned
- * {@link Scan}. When pushing down operators, the push down order is:
- * sample -&gt; filter -&gt; aggregate -&gt; limit -&gt; column pruning.
- *
- * @since 3.0.0
+ * Physical plan node for dropping an index.
  */
-@Evolving
-public interface ScanBuilder {
-  Scan build();
+case class DropIndexExec(
+    table: SupportsIndex,
+    indexName: String,
+    ignoreIfNotExists: Boolean) extends LeafV2CommandExec {
+  override protected def run(): Seq[InternalRow] = {
+    try {
+      table.dropIndex(indexName)
+    } catch {
+      case _: NoSuchIndexException if ignoreIfNotExists =>
+        logWarning(s"Index $indexName does not exist. Ignoring.")
+    }
+    Seq.empty
+  }
+
+  override def output: Seq[Attribute] = Seq.empty
 }
