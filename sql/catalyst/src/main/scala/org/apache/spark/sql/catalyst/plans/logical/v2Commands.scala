@@ -1063,6 +1063,7 @@ case class UncacheTable(
 case class CreateIndex(
     table: LogicalPlan,
     indexName: String,
+    indexType: String,
     ignoreIfExists: Boolean,
     columns: Seq[(FieldName, Map[String, String])],
     properties: Map[String, String]) extends UnaryCommand {

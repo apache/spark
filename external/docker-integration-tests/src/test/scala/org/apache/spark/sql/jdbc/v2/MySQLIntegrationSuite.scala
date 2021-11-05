@@ -127,7 +127,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     val properties = new util.HashMap[String, String]();
     properties.put("KEY_BLOCK_SIZE", "10")
     properties.put("COMMENT", "'this is a comment'")
-    properties.put("indexType", "BTREE")
+    properties.put(SupportsIndex.INDEX_TYPE, "BTREE")
     // MySQL doesn't allow property set on individual column, so use empty Array for
     // column properties
     jdbcTable.createIndex("i1", Array(FieldReference("col1")),
@@ -151,7 +151,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
 
     val indexType = "DUMMY"
     var m = intercept[UnsupportedOperationException] {
-      sql(s"CREATE index i1 ON $catalogName.new_table USING DUMMY (col1)")
+      sql(s"CREATE index i1 ON $catalogName.new_table USING $indexType (col1)")
     }.getMessage
     assert(m.contains(s"Index Type $indexType is not supported." +
       s" The supported Index Types are: BTREE and HASH"))

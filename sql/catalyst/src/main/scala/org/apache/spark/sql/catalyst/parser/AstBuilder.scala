@@ -4432,14 +4432,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       .map(_.multipartIdentifier).map(typedVisit[Seq[String]]).toSeq
     val columnsProperties = ctx.columns.multipartIdentifierProperty.asScala
       .map(x => (Option(x.options).map(visitPropertyKeyValues).getOrElse(Map.empty))).toSeq
-    var options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    if (indexType.nonEmpty) {
-      options = options + ("indexType" -> indexType)
-    }
+    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
 
     CreateIndex(
       createUnresolvedTable(ctx.multipartIdentifier(), "CREATE INDEX"),
       indexName,
+      indexType,
       ctx.EXISTS != null,
       columns.map(UnresolvedFieldName(_)).zip(columnsProperties),
       options)
