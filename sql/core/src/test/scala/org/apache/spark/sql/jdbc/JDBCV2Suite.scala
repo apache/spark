@@ -87,17 +87,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     super.afterAll()
   }
 
-  test("AS OF") {
-//    val df1 = sql("SELECT * FROM h2.test.empty_table VERSION AS OF 12345")
-//    df1.show(false)
-//    df1.explain(true)
-
-    val df2 = sql("SELECT * FROM h2.test.empty_table TIMESTAMP AS OF '2019-01-29 00:37:58'")
-    df2.show(false)
-    df2.explain(true)
-
-  }
-
   test("simple scan") {
     checkAnswer(sql("SELECT * FROM h2.test.empty_table"), Seq())
     checkAnswer(sql("SELECT * FROM h2.test.people"), Seq(Row("fred", 1), Row("mary", 2)))
