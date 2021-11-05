@@ -370,6 +370,8 @@ private[parquet] class ParquetRowConverter(
           }
         }
 
+      // The converter doesn't support the TimestampLTZ Parquet type and TimestampNTZ Catalyst type.
+      // This is to avoid mistakes in reading the timestamp values.
       case TimestampNTZType
         if parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 &&
           parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&

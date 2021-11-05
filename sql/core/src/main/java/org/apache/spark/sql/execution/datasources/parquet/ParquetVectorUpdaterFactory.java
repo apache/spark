@@ -185,9 +185,11 @@ public class ParquetVectorUpdaterFactory {
 
   void validateTimestampType(DataType sparkType) {
     assert(logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation);
+    // Throw an exception if the Parquet type is TimestampLTZ and the Catalyst type is TimestampNTZ.
+    // This is to avoid mistakes in reading the timestamp values.
     if (((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).isAdjustedToUTC() &&
       sparkType == DataTypes.TimestampNTZType) {
-      converterErrorForTimestampNTZ("int64 time(" + logicalTypeAnnotation.toString() + ")");
+      converterErrorForTimestampNTZ("int64 time(" + logicalTypeAnnotation + ")");
     }
   }
 
