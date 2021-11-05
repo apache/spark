@@ -819,4 +819,16 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     (ctx.LOCAL != null, finalStorage, Some(DDLUtils.HIVE_PROVIDER))
   }
+
+  override def visitCreateMacro(ctx: CreateMacroContext): LogicalPlan = {
+    val macroName = ctx.IDENTIFIER().getText
+    val fields = createSchema(ctx.colTypeList()).fields
+    val body = visit(ctx.expression())
+    body match {
+      case expr: Expression =>
+        CreateMacroCommand(macroName, fields, ExpressionHolder(expr))
+      case _ =>
+        operationNotAllowed("macro only support a simple expression", ctx.expression())
+    }
+  }
 }

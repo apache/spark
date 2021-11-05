@@ -219,4 +219,12 @@ class UDFSuite
       assert(info.getSource == "hive")
     }
   }
+
+  test("macro function") {
+    spark.sql("CREATE  TEMPORARY macro macro1(name string) concat(name,'-suffix') ").collect()
+    val res = spark.sql("select macro1('this is a test')")
+      .collect().head.get(0).asInstanceOf[String]
+
+    assert("this is a test-suffix" equals res)
+  }
 }

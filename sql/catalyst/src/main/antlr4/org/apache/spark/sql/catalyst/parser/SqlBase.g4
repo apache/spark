@@ -252,6 +252,8 @@ statement
         '(' columns=multipartIdentifierPropertyList ')'
         (OPTIONS options=propertyList)?                                #createIndex
     | DROP INDEX (IF EXISTS)? identifier ON TABLE? multipartIdentifier #dropIndex
+    | CREATE TEMPORARY MACRO IDENTIFIER '(' colTypeList ')'
+      expression                                                       #createMacro
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
@@ -287,7 +289,6 @@ unsupportedHiveNativeCommands
     | kw1=LOCK kw2=DATABASE
     | kw1=UNLOCK kw2=TABLE
     | kw1=UNLOCK kw2=DATABASE
-    | kw1=CREATE kw2=TEMPORARY kw3=MACRO
     | kw1=DROP kw2=TEMPORARY kw3=MACRO
     | kw1=ALTER kw2=TABLE tableIdentifier kw3=NOT kw4=CLUSTERED
     | kw1=ALTER kw2=TABLE tableIdentifier kw3=CLUSTERED kw4=BY

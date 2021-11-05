@@ -35,7 +35,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionInfo, UpCast}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionInfo, Macro, UpCast}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
@@ -43,7 +43,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils}
 import org.apache.spark.util.Utils
 
@@ -1481,6 +1481,27 @@ class SessionCatalog(
         }
         makeFunctionBuilder(func.unquotedString, className)
       }
+    functionRegistry.registerFunction(func, info, builder)
+  }
+
+  /**
+   * Registers a temporary macro function into a session-specific [[FunctionRegistry]]
+   */
+
+  def registerMacroFunction(funcDefinition: CatalogFunction,
+                            body: Expression,
+                            fields: Seq[StructField],
+                            idxMapFields: Map[Int, UnresolvedAttribute]): Unit = {
+    val func = funcDefinition.identifier
+    if (functionRegistry.functionExists(func)) {
+      throw new AnalysisException(s"Macro or function $func already exists")
+    }
+    val info = new ExpressionInfo(funcDefinition.className, func.database.orNull, func.funcName)
+
+    val builder = (input: Seq[Expression]) => {
+      Macro(func.toString, body, fields, input, idxMapFields)
+    }
+
     functionRegistry.registerFunction(func, info, builder)
   }
 

@@ -17,16 +17,21 @@
 
 package org.apache.spark.sql.execution.command
 
+
 import java.util.Locale
 
-import org.apache.spark.sql.{Row, SparkSession}
+import scala.collection.mutable
+
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException}
-import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException, UnresolvedAttribute, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource, SessionCatalog}
+import org.apache.spark.sql.catalyst.expressions.{AggregateWindowFunction, Attribute, Expression, Literal, Macro}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
+
 
 
 /**
@@ -264,6 +269,69 @@ case class RefreshFunctionCommand(
     Seq.empty[Row]
   }
 }
+
+/**
+ * A command for users to create a macro.
+ * @param name the macro name
+ * @param fields the columns definition
+ * @param body the exrpession body
+ */
+case class CreateMacroCommand(name: String,
+                              fields: Seq[StructField],
+                              body: ExpressionHolder) extends LeafRunnableCommand {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val idxMapFields = resolveFunctions(body.body, sparkSession)
+    val catalog = sparkSession.sessionState.catalog
+    val func = CatalogFunction(FunctionIdentifier(name, None),
+      Macro.getClass.getName, Nil)
+
+    catalog.registerMacroFunction(func, transformFunction(body.body, catalog), fields, idxMapFields)
+    Seq.empty[Row]
+  }
+
+  private def resolveFunctions(expression: Expression,
+                               sparkSession: SparkSession): Map[Int, UnresolvedAttribute] = {
+    val catalog = sparkSession.sessionState.catalog
+    val idxMapFields = new mutable.HashMap[Int, UnresolvedAttribute]()
+    val filedNames = fields.map(_.name)
+    expression.foreachUp{
+      expr => {
+        expr match {
+          case UnresolvedFunction(Seq(name), children, _, _, _) =>
+
+            catalog.lookupFunction(FunctionIdentifier(name), children) match {
+              case wf: AggregateWindowFunction =>
+                throw new
+                    AnalysisException(s"macro function do not " +
+                      s"support AggregateWindowFunction '${wf.prettyName}'")
+              case agg: AggregateFunction =>
+                throw new AnalysisException(s"AggregateFunction ${agg.prettyName} " +
+                  s"does not support when using macro function!")
+              case _ =>
+            }
+          case attr: UnresolvedAttribute =>
+            val idx = filedNames.indexOf(attr.name)
+            idxMapFields(idx) = attr
+          case _: Literal =>
+          case _: Expression =>
+          case other =>
+            throw new AnalysisException(s"not resolved $other")
+        }
+      }
+    }
+    idxMapFields.toMap
+  }
+
+  def transformFunction(expression: Expression, catalog: SessionCatalog): Expression = {
+    expression.transformUp{
+      case UnresolvedFunction(Seq(name), children, _, _, _) =>
+        catalog.lookupFunction(FunctionIdentifier(name), children)
+    }
+  }
+
+}
+
+case class ExpressionHolder(body: Expression)
 
 object FunctionsCommand {
   // operators that do not have corresponding functions.

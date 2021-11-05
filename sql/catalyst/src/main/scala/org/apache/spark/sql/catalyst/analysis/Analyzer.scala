@@ -276,6 +276,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveReferences ::
+      ReplaceMacroFunction ::
       ResolveExpressionsWithNamePlaceholders ::
       ResolveDeserializer ::
       ResolveNewInstance ::
@@ -4163,5 +4164,18 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
 object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
     case t: TempResolvedColumn => UnresolvedAttribute(t.nameParts)
+  }
+}
+
+// replace all macro by child
+object ReplaceMacroFunction extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan resolveOperators {
+      case optPlan =>
+        optPlan transformExpressions{
+          case macroFunc: Macro =>
+            macroFunc.child
+        }
+    }
   }
 }
