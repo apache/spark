@@ -70,8 +70,7 @@ case class InsertIntoHadoopFsRelationCommand(
     val enableDynamicOverwrite = partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
     // This config only makes sense when we are overwriting a partitioned dataset with dynamic
     // partition columns.
-    enableDynamicOverwrite && mode == SaveMode.Overwrite &&
-      staticPartitions.size < partitionColumns.length
+    enableDynamicOverwrite && mode == SaveMode.Overwrite && !partitionColumns.isEmpty
   }
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
