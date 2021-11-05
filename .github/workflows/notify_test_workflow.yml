@@ -91,10 +91,12 @@ jobs:
                 git rebase upstream/master
                 git push origin YOUR_BRANCH --force
                 \`\`\``,
-                  images: {
-                    alt: 'enabling workflows button',
-                    image_url: 'img/workflow-enable-button.png'
-                  }
+                  images: [
+                    {
+                      alt: 'enabling workflows button',
+                      image_url: 'img/workflow-enable-button.png'
+                    }
+                  ]
                 }
               })
             } else {
