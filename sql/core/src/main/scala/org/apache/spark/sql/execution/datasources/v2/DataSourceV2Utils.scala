@@ -117,7 +117,7 @@ private[sql] object DataSourceV2Utils extends Logging {
           hasCatalog,
           catalogManager,
           dsOptions)
-        (catalog.loadTable(ident), Some(catalog), Some(ident))
+        (CatalogV2Util.loadTable(catalog, ident, dsOptions).get, Some(catalog), Some(ident))
       case _ =>
         // TODO: Non-catalog paths for DSV2 are currently not well defined.
         val tbl = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)

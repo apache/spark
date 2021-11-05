@@ -599,6 +599,11 @@ fromClause
     : FROM relation (',' relation)* lateralView* pivotClause?
     ;
 
+asOf
+    : VERSION AS OF version=INTEGER_VALUE
+    | TIMESTAMP AS OF timestamp=STRING
+    ;
+
 aggregationClause
     : GROUP BY groupingExpressionsWithGroupingAnalytics+=groupByClause
         (',' groupingExpressionsWithGroupingAnalytics+=groupByClause)*
@@ -711,7 +716,7 @@ identifierComment
     ;
 
 relationPrimary
-    : multipartIdentifier sample? tableAlias  #tableName
+    : multipartIdentifier asOf? sample? tableAlias  #tableName
     | '(' query ')' sample? tableAlias        #aliasedQuery
     | '(' relation ')' sample? tableAlias     #aliasedRelation
     | inlineTable                             #inlineTableDefault2
@@ -1234,6 +1239,7 @@ ansiNonReserved
     | TBLPROPERTIES
     | TEMPORARY
     | TERMINATED
+    | TIMESTAMP
     | TOUCH
     | TRANSACTION
     | TRANSACTIONS
@@ -1251,6 +1257,7 @@ ansiNonReserved
     | UPDATE
     | USE
     | VALUES
+    | VERSION
     | VIEW
     | VIEWS
     | WINDOW
@@ -1505,6 +1512,7 @@ nonReserved
     | TERMINATED
     | THEN
     | TIME
+    | TIMESTAMP
     | TO
     | TOUCH
     | TRAILING
@@ -1527,6 +1535,7 @@ nonReserved
     | USE
     | USER
     | VALUES
+    | VERSION
     | VIEW
     | VIEWS
     | WHEN
@@ -1775,6 +1784,7 @@ TEMPORARY: 'TEMPORARY' | 'TEMP';
 TERMINATED: 'TERMINATED';
 THEN: 'THEN';
 TIME: 'TIME';
+TIMESTAMP: 'TIMESTAMP';
 TO: 'TO';
 TOUCH: 'TOUCH';
 TRAILING: 'TRAILING';
@@ -1799,6 +1809,7 @@ USE: 'USE';
 USER: 'USER';
 USING: 'USING';
 VALUES: 'VALUES';
+VERSION: 'VERSION';
 VIEW: 'VIEW';
 VIEWS: 'VIEWS';
 WHEN: 'WHEN';

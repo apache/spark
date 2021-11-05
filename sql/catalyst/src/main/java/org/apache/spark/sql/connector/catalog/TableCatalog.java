@@ -72,6 +72,16 @@ public interface TableCatalog extends CatalogPlugin {
   String OPTION_PREFIX = "option.";
 
   /**
+   * A reserved property to specify the version of the table.
+   */
+  String PROP_VERSION = "versionAsOf";
+
+  /**
+   * A reserved property to specify the timestamp of the table.
+   */
+  String PROP_TIMESTAMP = "timestampAsOf";
+
+  /**
    * List the tables in a namespace from the catalog.
    * <p>
    * If the catalog supports views, this must return identifiers for only tables and not views.
@@ -93,6 +103,36 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws NoSuchTableException If the table doesn't exist or is a view
    */
   Table loadTable(Identifier ident) throws NoSuchTableException;
+
+  /**
+   * Load table metadata by {@link Identifier identifier} from the catalog.
+   * <p>
+   * If the catalog supports views and contains a view for the identifier and not a table, this
+   * must throw {@link NoSuchTableException}.
+   *
+   * @param ident a table identifier
+   * @param version version of the table
+   * @return the table's metadata
+   * @throws NoSuchTableException If the table doesn't exist or is a view
+   */
+  default Table loadTable(Identifier ident, String version) throws NoSuchTableException {
+    throw new UnsupportedOperationException("Load table with version is not supported.");
+  }
+
+  /**
+   * Load table metadata by {@link Identifier identifier} from the catalog.
+   * <p>
+   * If the catalog supports views and contains a view for the identifier and not a table, this
+   * must throw {@link NoSuchTableException}.
+   *
+   * @param ident a table identifier
+   * @param timestamp timestamp of the table
+   * @return the table's metadata
+   * @throws NoSuchTableException If the table doesn't exist or is a view
+   */
+  default Table loadTable(Identifier ident, long timestamp) throws NoSuchTableException {
+    throw new UnsupportedOperationException("Load table with timestamp is not supported.");
+  }
 
   /**
    * Invalidate cached table metadata for an {@link Identifier identifier}.

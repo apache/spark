@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.util
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, Set}
@@ -39,7 +40,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateFormatter, DateTimeUtils, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -47,6 +48,7 @@ import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransfo
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.random.RandomSampler
 
@@ -1257,7 +1259,38 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
     val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val table = mayApplyAliasPlan(ctx.tableAlias, UnresolvedRelation(tableId))
+    val properties = new util.HashMap[String, String]
+    if (ctx.asOf != null && ctx.asOf.version != null) {
+      properties.put(TableCatalog.PROP_VERSION, ctx.asOf.version.getText)
+    } else if (ctx.asOf != null && ctx.asOf.TIMESTAMP != null) {
+      val ts = ctx.asOf.timestamp.getText
+      if (ts.length == "'yyyy-MM-dd'".length) {
+        val df = DateFormatter()
+        try {
+          properties.put(
+            TableCatalog.PROP_TIMESTAMP,
+            df.parse(ts.substring(1, ts.length - 1)).toString)
+        } catch {
+          case _: Throwable =>
+            throw new IllegalArgumentException(s"Illegal timestamp value $ts in TIMESTAMP AS OF")
+        }
+      } else if (ts.length == "'yyyy-MM-dd HH:mm:ss'".length) {
+        val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", getZoneId("+00:00"), isParsing = false)
+        try {
+          properties.put(
+            TableCatalog.PROP_TIMESTAMP,
+            tf.parse(ts.substring(1, ts.length - 1)).toString)
+        } catch {
+          case _: Throwable =>
+            throw new IllegalArgumentException(s"Illegal timestamp value $ts in TIMESTAMP AS OF")
+        }
+      } else {
+        throw new IllegalArgumentException(s"Illegal timestamp value $ts in TIMESTAMP AS OF")
+      }
+    }
+
+    val table = mayApplyAliasPlan(ctx.tableAlias,
+      UnresolvedRelation(tableId, new CaseInsensitiveStringMap(properties)))
     table.optionalMap(ctx.sample)(withSample)
   }
 

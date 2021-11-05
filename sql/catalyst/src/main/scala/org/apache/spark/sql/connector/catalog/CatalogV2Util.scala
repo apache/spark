@@ -285,6 +285,26 @@ private[sql] object CatalogV2Util {
       case _: NoSuchNamespaceException => None
     }
 
+  def loadTable(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      options: CaseInsensitiveStringMap): Option[Table] =
+    try {
+      if (options.containsKey(TableCatalog.PROP_VERSION)) {
+        Option(catalog.asTableCatalog.loadTable(ident, options.get(TableCatalog.PROP_VERSION)))
+      } else if (options.containsKey(TableCatalog.PROP_TIMESTAMP)) {
+        Option(catalog.asTableCatalog.loadTable(
+          ident, options.get(TableCatalog.PROP_TIMESTAMP).toLong))
+      } else {
+        Option(catalog.asTableCatalog.loadTable(ident))
+      }
+
+    } catch {
+      case _: NoSuchTableException => None
+      case _: NoSuchDatabaseException => None
+      case _: NoSuchNamespaceException => None
+    }
+
   def loadRelation(catalog: CatalogPlugin, ident: Identifier): Option[NamedRelation] = {
     loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
   }
