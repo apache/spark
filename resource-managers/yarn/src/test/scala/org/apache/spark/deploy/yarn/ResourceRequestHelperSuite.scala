@@ -17,14 +17,14 @@
 
 package org.apache.spark.deploy.yarn
 
-import org.apache.hadoop.yarn.api.records.Resource
+import org.apache.hadoop.yarn.api.records.{ApplicationSubmissionContext, Resource}
 import org.apache.hadoop.yarn.util.Records
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
-import org.apache.spark.deploy.yarn.ResourceRequestTestHelper.ResourceInformation
+import org.apache.spark.deploy.yarn.ResourceRequestTestHelper.{getApplicationTimeouts, ResourceInformation}
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.config.{DRIVER_CORES, DRIVER_MEMORY, EXECUTOR_CORES, EXECUTOR_MEMORY}
 import org.apache.spark.resource.ResourceUtils.AMOUNT
@@ -181,5 +181,18 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
     resource.setMemory(512)
     resource.setVirtualCores(2)
     resource
+  }
+
+  test("set application timeouts") {
+    assume(isApplicationTimeoutAvailable)
+    val submissionContext = Records.newRecord(classOf[ApplicationSubmissionContext])
+    val to1 = getApplicationTimeouts(submissionContext)
+    assert(to1.isEmpty)
+
+    Seq(-1, 0, 1000).foreach { timeout =>
+      setApplicationTimeouts(submissionContext, timeout)
+      val to = getApplicationTimeouts(submissionContext)
+      assert(to.get === timeout)
+    }
   }
 }

@@ -19,13 +19,14 @@ package org.apache.spark.deploy.yarn
 
 import java.lang.{Long => JLong}
 import java.lang.reflect.InvocationTargetException
+import java.util.Collections
 
 import scala.collection.mutable
 import scala.util.Try
 
-import org.apache.hadoop.yarn.api.records.Resource
-
+import org.apache.hadoop.yarn.api.records.{ApplicationSubmissionContext, Resource}
 import org.apache.spark.{SparkConf, SparkException}
+
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -41,6 +42,9 @@ private object ResourceRequestHelper extends Logging {
   private val AMOUNT_AND_UNIT_REGEX = "([0-9]+)([A-Za-z]*)".r
   private val RESOURCE_INFO_CLASS = "org.apache.hadoop.yarn.api.records.ResourceInformation"
   private val RESOURCE_NOT_FOUND = "org.apache.hadoop.yarn.exceptions.ResourceNotFoundException"
+  private val APPLICATION_TIMEOUT_CLASS = "org.apache.hadoop.yarn.api.records.ApplicationTimeout"
+  private val APPLICATION_TIMEOUT_TYPE_CLASS =
+    "org.apache.hadoop.yarn.api.records.ApplicationTimeoutType"
   val YARN_GPU_RESOURCE_CONFIG = "yarn.io/gpu"
   val YARN_FPGA_RESOURCE_CONFIG = "yarn.io/fpga"
   private[yarn] val resourceNameMapping =
@@ -247,5 +251,31 @@ private object ResourceRequestHelper extends Logging {
    */
   def isYarnResourceTypesAvailable(): Boolean = {
     Try(Utils.classForName(RESOURCE_INFO_CLASS)).isSuccess
+  }
+
+  /**
+   * YARN support application timeout feature since 2.9.0/3.0.0
+   * https://issues.apache.org/jira/browse/YARN-3813
+   */
+  def isApplicationTimeoutAvailable: Boolean = {
+    Try {
+      Utils.classForName(APPLICATION_TIMEOUT_CLASS)
+      Utils.classForName(APPLICATION_TIMEOUT_TYPE_CLASS)
+    }.isSuccess
+  }
+
+  def setApplicationTimeouts(appContext: ApplicationSubmissionContext, timeout: Long): Unit = {
+    if (isApplicationTimeoutAvailable) {
+      // Currently, YARN only support an overall LIFETIME application timeout type
+      val timeoutType =
+        Utils.classForName[Enum[_]](APPLICATION_TIMEOUT_TYPE_CLASS, initialize = false)
+        .getEnumConstants.head
+      val timeouts = Collections.singletonMap(timeoutType, timeout)
+      val setTimeoutMethod =
+        appContext.getClass.getMethod("setApplicationTimeouts", classOf[java.util.Map[_, _]])
+      setTimeoutMethod.invoke(appContext, timeouts)
+    } else {
+      logWarning("Ignoring application timeouts because the version of YARN does not support it!")
+    }
   }
 }

@@ -263,6 +263,8 @@ private[spark] class Client(
     appContext.setQueue(sparkConf.get(QUEUE_NAME))
     appContext.setAMContainerSpec(containerContext)
     appContext.setApplicationType(sparkConf.get(APPLICATION_TYPE))
+    val timeout = sparkConf.get(APPLICATION_LIFETIME_TIMEOUT)
+    timeout.foreach(ResourceRequestHelper.setApplicationTimeouts(appContext, _))
 
     sparkConf.get(APPLICATION_TAGS).foreach { tags =>
       appContext.setApplicationTags(new java.util.HashSet[String](tags.asJava))

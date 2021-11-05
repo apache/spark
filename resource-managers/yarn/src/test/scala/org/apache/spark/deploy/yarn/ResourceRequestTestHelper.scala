@@ -19,7 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.yarn.api.records.Resource
+import org.apache.hadoop.yarn.api.records.{ApplicationSubmissionContext, Resource}
 
 import org.apache.spark.util.Utils
 
@@ -97,4 +97,12 @@ object ResourceRequestTestHelper {
   }
 
   case class ResourceInformation(name: String, value: Long, unit: String)
+
+  def getApplicationTimeouts(appContext: ApplicationSubmissionContext): Option[Long] = {
+    require(ResourceRequestHelper.isApplicationTimeoutAvailable, "Unsupported YARN version")
+    val setTimeoutMethod =
+      appContext.getClass.getMethod("getApplicationTimeouts")
+    setTimeoutMethod.invoke(appContext)
+      .asInstanceOf[java.util.Map[_, _]].values().asScala.headOption.map(_.asInstanceOf[Long])
+  }
 }

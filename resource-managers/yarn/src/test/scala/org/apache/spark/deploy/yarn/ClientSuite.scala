@@ -191,6 +191,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       .set("spark.app.name", "foo-test-app")
       .set(QUEUE_NAME, "staging-queue")
       .set(APPLICATION_PRIORITY, 1)
+      .set(APPLICATION_LIFETIME_TIMEOUT, 12345L)
     val args = new ClientArguments(Array())
 
     val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
@@ -213,6 +214,10 @@ class ClientSuite extends SparkFunSuite with Matchers {
     }
     appContext.getMaxAppAttempts should be (42)
     appContext.getPriority.getPriority should be (1)
+    if (isApplicationTimeoutAvailable) {
+      val maybeTimeouts = ResourceRequestTestHelper.getApplicationTimeouts(appContext)
+      assert(maybeTimeouts.get === 12345L)
+    }
   }
 
   test("specify a more specific type for the application") {

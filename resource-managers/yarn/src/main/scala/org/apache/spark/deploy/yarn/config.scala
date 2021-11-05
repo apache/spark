@@ -429,6 +429,13 @@ package object config extends Logging {
     .toSequence
     .createWithDefault(Nil)
 
+  private[spark] val APPLICATION_LIFETIME_TIMEOUT = ConfigBuilder("spark.yarn.app.lifetime.timeout")
+    .doc("Overall timeout for a spark application running on yarn from submitted time, " +
+      "by default it's unlimited.")
+    .version("3.3.0")
+    .timeConf(TimeUnit.SECONDS)
+    .createOptional
+
   private[yarn] val YARN_EXECUTOR_RESOURCE_TYPES_PREFIX = "spark.yarn.executor.resource."
   private[yarn] val YARN_DRIVER_RESOURCE_TYPES_PREFIX = "spark.yarn.driver.resource."
   private[yarn] val YARN_AM_RESOURCE_TYPES_PREFIX = "spark.yarn.am.resource."
