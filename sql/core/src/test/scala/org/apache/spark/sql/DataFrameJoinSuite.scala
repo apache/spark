@@ -280,9 +280,9 @@ class DataFrameJoinSuite extends QueryTest
       plan match {
         // SPARK-34178: we can't match the plan before the fix due to
         // the right side plan doesn't contains dataset id.
-        case Join(
-          LogicalPlanWithDatasetId(_, leftId),
-          LogicalPlanWithDatasetId(_, rightId), _, _, _) =>
+        case Project(_, Join(
+          Project(_, LogicalPlanWithDatasetId(_, leftId)),
+          Project(_, LogicalPlanWithDatasetId(_, rightId)), _, _, _)) =>
           assert(leftId === rightId)
       }
     }
