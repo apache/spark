@@ -183,7 +183,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
 
  test("unwrap cast should skip when expression is non-deterministic or foldable") {
    Seq(positiveLong, negativeLong).foreach (v => {
-     val e = Cast(SparkPartitionID(), LongType) <=> v
+     val e = Cast(Rand(0), LongType) <=> v
       assertEquivalent(e, e, evaluate = false)
       val e2 = Cast(Literal(30), LongType) >= v
       assertEquivalent(e2, e2, evaluate = false)

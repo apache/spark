@@ -47,7 +47,7 @@ class EliminateDistinctSuite extends PlanTest {
   ).foreach {
     aggBuilder =>
       val agg = aggBuilder('a)
-      test(s"Eliminate Distinct in ${agg.toString}") {
+      test(s"Eliminate Distinct in $agg") {
         val query = testRelation
           .select(agg.toAggregateExpression(isDistinct = true).as('result))
           .analyze
