@@ -1931,14 +1931,14 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         sql(
           """
             |SELECT c1, s, s * 10 FROM (
-            |  SELECT c1, (SELECT MIN(c2) FROM t2 WHERE t1.c1 = t2.c1) s FROM t1)
+            |  SELECT c1, (SELECT FIRST(c2) FROM t2 WHERE t1.c1 = t2.c1) s FROM t1)
             |""".stripMargin),
         correctAnswer)
       checkAnswer(
         sql(
           """
             |SELECT c1, s, s * 10 FROM (
-            |  SELECT c1, SUM((SELECT MIN(c2) FROM t2 WHERE t1.c1 = t2.c1)) s
+            |  SELECT c1, SUM((SELECT FIRST(c2) FROM t2 WHERE t1.c1 = t2.c1)) s
             |  FROM t1 GROUP BY c1
             |)
             |""".stripMargin),
