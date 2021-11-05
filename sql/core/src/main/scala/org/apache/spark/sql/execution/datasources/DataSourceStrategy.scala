@@ -711,7 +711,7 @@ object DataSourceStrategy
           Some(new Max(FieldReference(name)))
         case count: aggregate.Count if count.children.length == 1 =>
           count.children.head match {
-            // SELECT 1 FROM table is translated to SELECT COUNT(*) FROM table
+            // COUNT(any literal) is the same as COUNT(*)
             case Literal(_, _) => Some(new CountStar())
             case PushableColumnWithoutNestedColumn(name) =>
               Some(new Count(FieldReference(name), agg.isDistinct))
