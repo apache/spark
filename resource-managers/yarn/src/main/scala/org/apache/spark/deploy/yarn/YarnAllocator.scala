@@ -171,6 +171,8 @@ private[yarn] class YarnAllocator(
 
   private val labelExpression = sparkConf.get(EXECUTOR_NODE_LABEL_EXPRESSION)
 
+  private val resourceNameMapping = ResourceRequestHelper.getResourceNameMapping(sparkConf)
+
   // A container placement strategy based on pending tasks' locality preference
   private[yarn] val containerPlacementStrategy =
     new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resolver)
@@ -280,8 +282,7 @@ private[yarn] class YarnAllocator(
       logInfo(s"Resource profile ${rp.id} doesn't exist, adding it")
       val resourcesWithDefaults =
         ResourceProfile.getResourcesForClusterManager(rp.id, rp.executorResources,
-          MEMORY_OVERHEAD_FACTOR, sparkConf, isPythonApp,
-          ResourceRequestHelper.getResourceNameMapping(sparkConf))
+          MEMORY_OVERHEAD_FACTOR, sparkConf, isPythonApp, resourceNameMapping)
       val customSparkResources =
         resourcesWithDefaults.customResources.map { case (name, execReq) =>
           (name, execReq.amount.toString)
