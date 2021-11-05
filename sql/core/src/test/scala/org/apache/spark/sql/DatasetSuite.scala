@@ -755,14 +755,16 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-37203: Fix NotSerializableException when observe with TypedImperativeAggregate") {
-    val namedObservation = Observation("named")
+    def observe[T](df: Dataset[T], expected: Map[String, _]): Unit = {
+      val namedObservation = Observation("named")
+      val observed_df = df.observe(
+        namedObservation, percentile_approx($"id", lit(0.5), lit(100)).as("percentile_approx_val"))
+      observed_df.collect()
+      assert(namedObservation.get === expected)
+    }
 
-    val df = spark.range(100)
-    val observed_df = df.observe(
-      namedObservation, percentile_approx($"id", lit(0.5), lit(100)).as("percentile_approx_val"))
-
-    observed_df.collect()
-    assert(namedObservation.get === Map("percentile_approx_val" -> 49))
+    observe(spark.range(100), Map("percentile_approx_val" -> 49))
+    observe(spark.range(0), Map("percentile_approx_val" -> null))
   }
 
   test("sample with replacement") {
