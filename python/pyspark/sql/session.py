@@ -42,7 +42,7 @@ from pyspark.sql.types import (
 from pyspark.sql.utils import install_exception_handler, is_timestamp_ntz_preferred
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import DateTimeLiteral, LiteralType, DecimalLiteral, RowLike
+    from pyspark.sql._typing import AtomicValue, RowLike
     from pyspark.sql.catalog import Catalog
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
     from pyspark.sql.streaming import StreamingQueryManager
@@ -610,7 +610,7 @@ class SparkSession(SparkConversionMixin):
         try:
             # Try to access HiveConf, it will raise exception if Hive is not added
             conf = SparkConf()
-            if conf.get('spark.sql.catalogImplementation', 'hive').lower() == 'hive':
+            if cast(str, conf.get('spark.sql.catalogImplementation', 'hive')).lower() == 'hive':
                 (SparkContext._jvm  # type: ignore[attr-defined]
                  .org.apache.hadoop.hive.conf.HiveConf())
                 return SparkSession.builder\
@@ -619,7 +619,7 @@ class SparkSession(SparkConversionMixin):
             else:
                 return SparkSession.builder.getOrCreate()
         except (py4j.protocol.Py4JError, TypeError):
-            if conf.get('spark.sql.catalogImplementation', '').lower() == 'hive':
+            if cast(str, conf.get('spark.sql.catalogImplementation', '')).lower() == 'hive':
                 warnings.warn("Fall back to non-hive support because failing to access HiveConf, "
                               "please make sure you build spark with hive")
 
@@ -628,7 +628,8 @@ class SparkSession(SparkConversionMixin):
     @overload
     def createDataFrame(
         self,
-        data: Union["RDD[RowLike]", Iterable["RowLike"]],
+        data: Iterable["RowLike"],
+        schema: Union[List[str], Tuple[str, ...]] = ...,
         samplingRatio: Optional[float] = ...,
     ) -> DataFrame:
         ...
@@ -636,19 +637,36 @@ class SparkSession(SparkConversionMixin):
     @overload
     def createDataFrame(
         self,
-        data: Union["RDD[RowLike]", Iterable["RowLike"]],
+        data: "RDD[RowLike]",
         schema: Union[List[str], Tuple[str, ...]] = ...,
-        verifySchema: bool = ...,
+        samplingRatio: Optional[float] = ...,
     ) -> DataFrame:
         ...
 
     @overload
     def createDataFrame(
         self,
-        data: Union[
-            "RDD[Union[DateTimeLiteral, LiteralType, DecimalLiteral]]",
-            Iterable[Union["DateTimeLiteral", "LiteralType", "DecimalLiteral"]],
-        ],
+        data: Iterable["RowLike"],
+        schema: Union[StructType, str],
+        *,
+        verifySchema: bool = ...,
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def createDataFrame(
+            self,
+            data: "RDD[RowLike]",
+            schema: Union[StructType, str],
+            *,
+            verifySchema: bool = ...,
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def createDataFrame(
+        self,
+        data: "RDD[AtomicValue]",
         schema: Union[AtomicType, str],
         verifySchema: bool = ...,
     ) -> DataFrame:
@@ -656,10 +674,10 @@ class SparkSession(SparkConversionMixin):
 
     @overload
     def createDataFrame(
-        self,
-        data: Union["RDD[RowLike]", Iterable["RowLike"]],
-        schema: Union[StructType, str],
-        verifySchema: bool = ...,
+            self,
+            data: Iterable["AtomicValue"],
+            schema: Union[AtomicType, str],
+            verifySchema: bool = ...,
     ) -> DataFrame:
         ...
 

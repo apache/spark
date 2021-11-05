@@ -21,6 +21,7 @@ import java.sql.{Connection, Types}
 import java.util.Locale
 
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
 
 
@@ -153,5 +154,14 @@ private object PostgresDialect extends JdbcDialect {
       isNullable: Boolean): String = {
     val nullable = if (isNullable) "DROP NOT NULL" else "SET NOT NULL"
     s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} $nullable"
+  }
+
+  override def supportsTableSample: Boolean = true
+
+  override def getTableSample(sample: TableSampleInfo): String = {
+    // hard-coded to BERNOULLI for now because Spark doesn't have a way to specify sample
+    // method name
+    s"TABLESAMPLE BERNOULLI" +
+      s" (${(sample.upperBound - sample.lowerBound) * 100}) REPEATABLE (${sample.seed})"
   }
 }

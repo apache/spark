@@ -284,7 +284,7 @@ object ApproximatePercentile {
   }
 
   /**
-   * Serializer  for class [[PercentileDigest]]
+   * Serializer for class [[PercentileDigest]]
    *
    * This class is thread safe.
    */

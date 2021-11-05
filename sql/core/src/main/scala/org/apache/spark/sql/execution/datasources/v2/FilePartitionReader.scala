@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.io.{FileNotFoundException, IOException}
 
-import org.apache.parquet.io.ParquetDecodingException
+import scala.util.control.NonFatal
 
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
@@ -66,17 +66,16 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
       case e: SchemaColumnConvertNotSupportedException =>
         throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
           currentReader.file.filePath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
-      case e: ParquetDecodingException =>
-        if (e.getCause.isInstanceOf[SparkUpgradeException]) {
-          throw e.getCause
-        } else if (e.getMessage.contains("Can not read value at")) {
-          throw QueryExecutionErrors.cannotReadParquetFilesError(e)
-        }
-        throw e
       case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
         logWarning(
           s"Skipped the rest of the content in the corrupted file: $currentReader", e)
         false
+      case sue: SparkUpgradeException => throw sue
+      case NonFatal(e) =>
+        e.getCause match {
+          case sue: SparkUpgradeException => throw sue
+          case _ => throw QueryExecutionErrors.cannotReadFilesError(e, currentReader.file.filePath)
+        }
     }
     if (hasNext) {
       true

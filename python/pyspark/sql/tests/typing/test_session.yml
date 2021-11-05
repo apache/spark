@@ -92,12 +92,12 @@
     spark.createDataFrame(data, schema, samplingRatio=0.1)
 
   out: |
-    main:14: error: Argument 1 to "createDataFrame" of "SparkSession" has incompatible type "List[Tuple[str, int]]"; expected "Union[RDD[Union[Union[datetime, date], Union[bool, float, int, str], Decimal]], Iterable[Union[Union[datetime, date], Union[bool, float, int, str], Decimal]]]"  [arg-type]
+    main:14: error: Value of type variable "AtomicValue" of "createDataFrame" of "SparkSession" cannot be "Tuple[str, int]"  [type-var]
     main:18: error: No overload variant of "createDataFrame" of "SparkSession" matches argument types "List[Tuple[str, int]]", "StructType", "float"  [call-overload]
     main:18: note: Possible overload variants:
-    main:18: note:     def [RowLike in (List[Any], Tuple[Any, ...], Row)] createDataFrame(self, data: Union[RDD[RowLike], Iterable[RowLike]], samplingRatio: Optional[float] = ...) -> DataFrame
-    main:18: note:     def [RowLike in (List[Any], Tuple[Any, ...], Row)] createDataFrame(self, data: Union[RDD[RowLike], Iterable[RowLike]], schema: Union[List[str], Tuple[str, ...]] = ..., verifySchema: bool = ...) -> DataFrame
-    main:18: note:     <4 more similar overloads not shown, out of 6 total overloads>
+    main:18: note:     def [RowLike in (List[Any], Tuple[Any, ...], Row)] createDataFrame(self, data: Iterable[RowLike], schema: Union[List[str], Tuple[str, ...]] = ..., samplingRatio: Optional[float] = ...) -> DataFrame
+    main:18: note:     def [RowLike in (List[Any], Tuple[Any, ...], Row)] createDataFrame(self, data: RDD[RowLike], schema: Union[List[str], Tuple[str, ...]] = ..., samplingRatio: Optional[float] = ...) -> DataFrame
+    main:18: note:     <6 more non-matching overloads not shown>
 
 
 - case: createDataFrameFromEmptyRdd

@@ -419,7 +419,7 @@ object QueryCompilationErrors {
   }
 
   def invalidFunctionArgumentNumberError(
-      validParametersCount: Seq[Int], name: String, params: Seq[Class[Expression]]): Throwable = {
+      validParametersCount: Seq[Int], name: String, actualNumber: Int): Throwable = {
     if (validParametersCount.length == 0) {
       new AnalysisException(s"Invalid arguments for function $name")
     } else {
@@ -429,7 +429,7 @@ object QueryCompilationErrors {
         validParametersCount.init.mkString("one of ", ", ", " and ") +
           validParametersCount.last
       }
-      invalidFunctionArgumentsError(name, expectedNumberOfParameters, params.length)
+      invalidFunctionArgumentsError(name, expectedNumberOfParameters, actualNumber)
     }
   }
 

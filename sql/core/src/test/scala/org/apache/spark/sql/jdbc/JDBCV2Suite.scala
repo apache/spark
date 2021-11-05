@@ -93,6 +93,19 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(sql("SELECT name, id FROM h2.test.people"), Seq(Row("fred", 1), Row("mary", 2)))
   }
 
+  // TABLESAMPLE ({integer_expression | decimal_expression} PERCENT) and
+  // TABLESAMPLE (BUCKET integer_expression OUT OF integer_expression)
+  // are tested in JDBC dialect tests because TABLESAMPLE is not supported by all the DBMS
+  test("TABLESAMPLE (integer_expression ROWS) is the same as LIMIT") {
+    val df = sql("SELECT NAME FROM h2.test.employee TABLESAMPLE (3 ROWS)")
+    val scan = df.queryExecution.optimizedPlan.collectFirst {
+      case s: DataSourceV2ScanRelation => s
+    }.get
+    assert(scan.schema.names.sameElements(Seq("NAME")))
+    checkPushedLimit(df, true, 3)
+    checkAnswer(df, Seq(Row("amy"), Row("alex"), Row("cathy")))
+  }
+
   test("simple scan with LIMIT") {
     val df1 = spark.read.table("h2.test.employee")
       .where($"dept" === 1).limit(1)
@@ -146,12 +159,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
   private def checkPushedLimit(df: DataFrame, pushed: Boolean, limit: Int): Unit = {
     df.queryExecution.optimizedPlan.collect {
-      case DataSourceV2ScanRelation(_, scan, _) => scan match {
+      case relation: DataSourceV2ScanRelation => relation.scan match {
         case v1: V1ScanWrapper =>
           if (pushed) {
-            assert(v1.pushedLimit.nonEmpty && v1.pushedLimit.get === limit)
+            assert(v1.pushedDownOperators.limit === Some(limit))
           } else {
-            assert(v1.pushedLimit.isEmpty)
+            assert(v1.pushedDownOperators.limit.isEmpty)
           }
       }
     }
