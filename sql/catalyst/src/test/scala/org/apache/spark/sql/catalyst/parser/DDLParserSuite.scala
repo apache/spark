@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import java.util.Locale
 import java.util
+import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._

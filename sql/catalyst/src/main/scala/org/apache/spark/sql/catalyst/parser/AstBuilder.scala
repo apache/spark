@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import java.util
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-import java.util
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, Set}
