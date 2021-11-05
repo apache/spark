@@ -702,23 +702,23 @@ object DataSourceStrategy
     (nonconvertiblePredicates ++ unhandledPredicates, pushedFilters, handledFilters)
   }
 
-  protected[sql] def translateAggregate(aggregates: AggregateExpression): Option[AggregateFunc] = {
-    if (aggregates.filter.isEmpty) {
-      aggregates.aggregateFunction match {
+  protected[sql] def translateAggregate(agg: AggregateExpression): Option[AggregateFunc] = {
+    if (agg.filter.isEmpty) {
+      agg.aggregateFunction match {
         case aggregate.Min(PushableColumnWithoutNestedColumn(name)) =>
           Some(new Min(FieldReference(name)))
         case aggregate.Max(PushableColumnWithoutNestedColumn(name)) =>
           Some(new Max(FieldReference(name)))
         case count: aggregate.Count if count.children.length == 1 =>
           count.children.head match {
-            // SELECT COUNT(*) FROM table is translated to SELECT 1 FROM table
+            // COUNT(any literal) is the same as COUNT(*)
             case Literal(_, _) => Some(new CountStar())
             case PushableColumnWithoutNestedColumn(name) =>
-              Some(new Count(FieldReference(name), aggregates.isDistinct))
+              Some(new Count(FieldReference(name), agg.isDistinct))
             case _ => None
           }
         case sum @ aggregate.Sum(PushableColumnWithoutNestedColumn(name), _) =>
-          Some(new Sum(FieldReference(name), aggregates.isDistinct))
+          Some(new Sum(FieldReference(name), agg.isDistinct))
         case _ => None
       }
     } else {
