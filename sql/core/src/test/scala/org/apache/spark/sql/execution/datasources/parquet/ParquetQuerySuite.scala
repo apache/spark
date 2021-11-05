@@ -158,7 +158,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  test("writing and reading TimestampNTZType column") {
+  test("SPARK-36182: writing and reading TimestampNTZType column") {
     withTable("ts") {
       sql("create table ts (c1 timestamp_ntz) using parquet")
       sql("insert into ts values (timestamp_ntz'2016-01-01 10:11:12.123456')")
@@ -172,6 +172,31 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         ("1965-01-01 10:11:12.123456"))
         .toDS().select($"value".cast("timestamp_ntz"))
       checkAnswer(sql("select * from ts"), expected)
+    }
+  }
+
+  test("SPARK-36182: can't read TimestampLTZ as TimestampNTZ") {
+    val data = (1 to 10).map { i =>
+      val ts = new java.sql.Timestamp(i)
+      Row(ts)
+    }
+    val actualSchema = StructType(Seq(StructField("time", TimestampType, false)))
+    val providedSchema = StructType(Seq(StructField("time", TimestampNTZType, false)))
+
+    Seq("INT96", "TIMESTAMP_MICROS", "TIMESTAMP_MILLIS").foreach { tsType =>
+      withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsType) {
+        withTempPath { file =>
+          val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
+          df.write.parquet(file.getCanonicalPath)
+          withAllParquetReaders {
+            val msg = intercept[SparkException] {
+              spark.read.schema(providedSchema).parquet(file.getCanonicalPath).collect()
+            }.getMessage
+            assert(msg.contains(
+              "Unable to create Parquet converter for data type \"timestamp_ntz\""))
+          }
+        }
+      }
     }
   }
 

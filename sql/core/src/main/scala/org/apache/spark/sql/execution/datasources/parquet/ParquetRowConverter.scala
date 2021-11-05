@@ -371,13 +371,19 @@ private[parquet] class ParquetRowConverter(
         }
 
       case TimestampNTZType
-        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
+        if parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 &&
+          parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
+          !parquetType.getLogicalTypeAnnotation
+            .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC &&
           parquetType.getLogicalTypeAnnotation
             .asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MICROS =>
         new ParquetPrimitiveConverter(updater)
 
       case TimestampNTZType
-        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
+        if parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 &&
+          parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
+          !parquetType.getLogicalTypeAnnotation
+            .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC &&
           parquetType.getLogicalTypeAnnotation
             .asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MILLIS =>
         new ParquetPrimitiveConverter(updater) {

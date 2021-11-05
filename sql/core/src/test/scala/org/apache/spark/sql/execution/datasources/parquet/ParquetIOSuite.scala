@@ -119,7 +119,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "true")(checkParquetFile(data))
   }
 
-  test("TimestampNTZ") {
+  test("SPARK-36182: TimestampNTZ") {
     val data = Seq("2021-01-01T00:00:00", "1970-07-15T01:02:03.456789")
       .map(ts => Tuple1(LocalDateTime.parse(ts)))
     checkParquetFile(data)
