@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.execution.RowToColumnConverter
@@ -92,6 +92,10 @@ object AggregatePushDownUtils {
       return None
     }
 
+    if (aggregation.groupByColumns.nonEmpty &&
+      partitionNames.size != aggregation.groupByColumns.length) {
+      return None
+    }
     aggregation.groupByColumns.foreach { col =>
       if (col.fieldNames.length != 1 || !isPartitionCol(col)) return None
       finalSchema = finalSchema.add(getStructFieldForCol(col))
@@ -148,12 +152,32 @@ object AggregatePushDownUtils {
   def getSchemaWithoutGroupingExpression(
       aggregation: Aggregation,
       aggSchema: StructType): StructType = {
-    val groupByColNums = aggregation.groupByColumns.length
-    if (groupByColNums > 0) {
-      new StructType(aggSchema.fields.drop(groupByColNums))
+    val numOfGroupByColumns = aggregation.groupByColumns.length
+    if (numOfGroupByColumns > 0) {
+      new StructType(aggSchema.fields.drop(numOfGroupByColumns))
     } else {
       aggSchema
     }
   }
 
+  /**
+   * Reorder partition cols if they are not in the same order as group by columns
+   */
+  def reOrderPartitionCol(
+      partitionSchema: StructType,
+      aggregation: Aggregation,
+      partitionValues: InternalRow): InternalRow = {
+    val groupByColNames = aggregation.groupByColumns.map(_.fieldNames.head)
+    var reorderedPartColValues = Array.empty[Any]
+    if (!partitionSchema.names.sameElements(groupByColNames)) {
+      groupByColNames.foreach { col =>
+        val index = partitionSchema.names.indexOf(col)
+        val v = partitionValues.asInstanceOf[GenericInternalRow].values(index)
+        reorderedPartColValues = reorderedPartColValues :+ v
+      }
+      new GenericInternalRow(reorderedPartColValues)
+    } else {
+      partitionValues
+    }
+  }
 }

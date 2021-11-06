@@ -169,11 +169,11 @@ object ParquetUtils {
 
     // if there are group by columns, we will build result row first,
     // and then append group by columns values (partition columns values) to the result row.
-    val schemaWithoutGroupby =
+    val schemaWithoutGroupBy =
       AggregatePushDownUtils.getSchemaWithoutGroupingExpression(aggregation, aggSchema)
 
     val schemaConverter = new ParquetToSparkSchemaConverter
-    val converter = new ParquetRowConverter(schemaConverter, parquetSchema, schemaWithoutGroupby,
+    val converter = new ParquetRowConverter(schemaConverter, parquetSchema, schemaWithoutGroupBy,
       None, datetimeRebaseMode, LegacyBehaviorPolicy.CORRECTED, NoopUpdater)
     val primitiveTypeNames = primitiveTypes.map(_.getPrimitiveTypeName)
     primitiveTypeNames.zipWithIndex.foreach {
@@ -202,7 +202,7 @@ object ParquetUtils {
         throw new SparkException("Unexpected parquet type name: " + primitiveTypeNames(i))
     }
 
-    if (aggregation.groupByColumns.length > 0) {
+    if (aggregation.groupByColumns.nonEmpty) {
       new JoinedRow(partitionValues, converter.currentRecord)
     } else {
       converter.currentRecord

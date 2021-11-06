@@ -459,7 +459,7 @@ object OrcUtils extends Logging {
 
     // if there are group by columns, we will build result row first,
     // and then append group by columns values (partition columns values) to the result row.
-    val schemaWithoutGroupby =
+    val schemaWithoutGroupBy =
       AggregatePushDownUtils.getSchemaWithoutGroupingExpression(aggregation, aggSchema)
 
     val aggORCValues: Seq[WritableComparable[_]] =
@@ -467,12 +467,12 @@ object OrcUtils extends Logging {
         case (max: Max, index) =>
           val columnName = max.column.fieldNames.head
           val statistics = getColumnStatistics(columnName)
-          val dataType = schemaWithoutGroupby(index).dataType
+          val dataType = schemaWithoutGroupBy(index).dataType
           getMinMaxFromColumnStatistics(statistics, dataType, isMax = true)
         case (min: Min, index) =>
           val columnName = min.column.fieldNames.head
           val statistics = getColumnStatistics(columnName)
-          val dataType = schemaWithoutGroupby.apply(index).dataType
+          val dataType = schemaWithoutGroupBy.apply(index).dataType
           getMinMaxFromColumnStatistics(statistics, dataType, isMax = false)
         case (count: Count, _) =>
           val columnName = count.column.fieldNames.head
@@ -495,10 +495,10 @@ object OrcUtils extends Logging {
             s"createAggInternalRowFromFooter should not take $x as the aggregate expression")
       }
 
-    val orcValuesDeserializer = new OrcDeserializer(schemaWithoutGroupby,
-      (0 until schemaWithoutGroupby.length).toArray)
+    val orcValuesDeserializer = new OrcDeserializer(schemaWithoutGroupBy,
+      (0 until schemaWithoutGroupBy.length).toArray)
     val resultRow = orcValuesDeserializer.deserializeFromValues(aggORCValues)
-    if (aggregation.groupByColumns.length > 0) {
+    if (aggregation.groupByColumns.nonEmpty) {
       new JoinedRow(partitionValues, resultRow)
     } else {
       resultRow
