@@ -1105,7 +1105,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val msg = intercept[UnsupportedOperationException] {
           parquetDictionary.decodeToInt(0)
         }.getMessage
-        assert(msg.contains("Decoding to Int is not supported"))
+        assert(msg.contains("Decoding to Int is not supported by PlainIntegerDictionary " +
+          s"while reading file $file"))
       } finally {
         reader.close()
       }
