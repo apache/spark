@@ -2652,8 +2652,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
         withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false",
           "hive.exec.dynamic.partition.mode" -> "nonstrict") {
-          val insertSQL =
-            """
+          val insertSQL = """
               |INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2)
               |SELECT * FROM VALUES (1, 'n2'), (2, 'n3'), (3, 'n4') AS t(id, p2)
               """.stripMargin
