@@ -2206,6 +2206,18 @@ abstract class AvroSuite
         checkAnswer(df2, df.collect().toSeq)
       }
     }
+
+    // Tests for ANSI intervals in complex types.
+    withTempPath { file =>
+      val df = spark.sql(
+        """SELECT
+          |  named_struct('interval', interval '1-2' year to month) a,
+          |  array(interval '1 2:3' day to minute) b,
+          |  map('key', interval '10' year) c""".stripMargin)
+      df.write.format("avro").save(file.getCanonicalPath)
+      val df2 = spark.read.format("avro").load(file.getCanonicalPath)
+      checkAnswer(df2, df.collect().toSeq)
+    }
   }
 }
 
