@@ -429,6 +429,24 @@ package object config extends Logging {
     .toSequence
     .createWithDefault(Nil)
 
+  private[spark] val YARN_GPU_DEVICE = ConfigBuilder("spark.yarn.resourceGpuDeviceName")
+    .version("3.2.1")
+    .doc("Specify the mapping of the Spark resource type of gpu to the YARN resource "
+      + "representing a GPU. By default YARN uses yarn.io/gpu but if YARN has been "
+      + "configured with a custom resource type, this allows remapping it. "
+      + "Applies when using the <code>spark.{driver/executor}.resource.gpu.*</code> configs.")
+    .stringConf
+    .createWithDefault("yarn.io/gpu")
+
+  private[spark] val YARN_FPGA_DEVICE = ConfigBuilder("spark.yarn.resourceFpgaDeviceName")
+    .version("3.2.1")
+    .doc("Specify the mapping of the Spark resource type of fpga to the YARN resource "
+      + "representing a FPGA. By default YARN uses yarn.io/fpga but if YARN has been "
+      + "configured with a custom resource type, this allows remapping it. "
+      + "Applies when using the <code>spark.{driver/executor}.resource.fpga.*</code> configs.")
+    .stringConf
+    .createWithDefault("yarn.io/fpga")
+
   private[spark] val APPLICATION_LIFETIME_TIMEOUT = ConfigBuilder("spark.yarn.app.lifetime.timeout")
     .doc("Overall timeout for a spark application running on yarn from submitted time, " +
       "by default it's unlimited.")
