@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.File
 import java.time.{Duration, Period}
 import java.util.Locale
 
@@ -26,6 +27,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import com.google.common.primitives.UnsignedLong
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 import org.apache.parquet.column.{Encoding, ParquetProperties}
@@ -36,6 +38,7 @@ import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.parquet.hadoop.metadata.CompressionCodecName.GZIP
+import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
@@ -1081,6 +1084,30 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
             }
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-37035: Improve error message when use parquet vectorize reader") {
+    val data = (0 to 10).flatMap(n => Seq.fill(10)(n)).map(i => (i, i.toString))
+    withParquetFile(data) { dir =>
+      val file = SpecificParquetRecordReaderBase.listDirectory(new File(dir)).get(0)
+      val filePath = new Path(file)
+      val reader = ParquetFileReader.open(HadoopInputFile.fromPath(filePath, new Configuration))
+      try {
+        val descriptor = reader.getFileMetaData.getSchema.getColumns.get(0)
+        val pages = reader.readNextRowGroup().getPageReader(descriptor)
+
+        val dictionaryPage = pages.readDictionaryPage()
+        assert(dictionaryPage != null, "dictionaryPage shouldn't be null")
+        val dictionary = dictionaryPage.getEncoding.initDictionary(descriptor, dictionaryPage)
+        val parquetDictionary = new ParquetDictionary(dictionary, file, true)
+        val msg = intercept[UnsupportedOperationException] {
+          parquetDictionary.decodeToInt(0)
+        }.getMessage
+        assert(msg.contains("Decoding to Int is not supported"))
+      } finally {
+        reader.close()
       }
     }
   }
