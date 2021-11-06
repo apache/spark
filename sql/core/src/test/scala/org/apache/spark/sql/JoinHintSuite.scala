@@ -612,8 +612,8 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
 
         val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
           .filter(_.contains("is not supported in the query:"))
-        assert(logs.size == 2)
-        logs.forall(_.contains(s"build left for ${joinType.split("_").mkString(" ")} join."))
+        assert(logs.size == 2 &&
+          logs.forall(_.contains(s"build left for ${joinType.split("_").mkString(" ")} join.")))
       }
 
       Seq("left_outer", "left_semi", "left_anti").foreach { joinType =>
@@ -640,8 +640,8 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
         }
         val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
           .filter(_.contains("is not supported in the query:"))
-        assert(logs.size == 2)
-        logs.forall(_.contains(s"build right for ${joinType.split("_").mkString(" ")} join."))
+        assert(logs.size == 2 &&
+          logs.forall(_.contains(s"build right for ${joinType.split("_").mkString(" ")} join.")))
       }
 
       Seq("right_outer").foreach { joinType =>
@@ -689,8 +689,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
     }
     val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
       .filter(_.contains("is not supported in the query:"))
-    assert(logs.size == 2)
-    logs.forall(_.contains("no equi-join keys"))
+    assert(logs.size == 2 && logs.forall(_.contains("no equi-join keys")))
   }
 
   test("SPARK-36652: AQE dynamic join selection should not apply to non-equi join") {
