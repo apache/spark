@@ -587,7 +587,8 @@ case class DataSource(
   private def disallowWritingIntervals(
       dataTypes: Seq[DataType],
       forbidAnsiIntervals: Boolean): Unit = {
-    val isWriteAllowedSource = writeAllowedSources(providingClass)
+    val isWriteAllowedSource = writeAllowedSources(providingClass) ||
+      providingClass.getCanonicalName == "org.apache.spark.sql.avro.AvroFileFormat"
     dataTypes.foreach(
       TypeUtils.invokeOnceForInterval(_, forbidAnsiIntervals || !isWriteAllowedSource) {
       throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()

@@ -1172,20 +1172,22 @@ abstract class AvroSuite
   }
 
   test("error handling for unsupported Interval data types") {
-    withTempDir { dir =>
-      val tempDir = new File(dir, "files").getCanonicalPath
-      var msg = intercept[AnalysisException] {
-        sql("select interval 1 days").write.format("avro").mode("overwrite").save(tempDir)
-      }.getMessage
-      assert(msg.contains("Cannot save interval data type into external storage.") ||
-        msg.contains("AVRO data source does not support interval data type."))
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      withTempDir { dir =>
+        val tempDir = new File(dir, "files").getCanonicalPath
+        var msg = intercept[AnalysisException] {
+          sql("select interval 1 days").write.format("avro").mode("overwrite").save(tempDir)
+        }.getMessage
+        assert(msg.contains("Cannot save interval data type into external storage.") ||
+          msg.contains("AVRO data source does not support interval data type."))
 
-      msg = intercept[AnalysisException] {
-        spark.udf.register("testType", () => new IntervalData())
-        sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
-      }.getMessage
-      assert(msg.toLowerCase(Locale.ROOT)
-        .contains(s"avro data source does not support interval data type."))
+        msg = intercept[AnalysisException] {
+          spark.udf.register("testType", () => new IntervalData())
+          sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
+        }.getMessage
+        assert(msg.toLowerCase(Locale.ROOT)
+          .contains(s"avro data source does not support interval data type."))
+      }
     }
   }
 
@@ -2185,6 +2187,23 @@ abstract class AvroSuite
             StructField("A", LongType, true), StructField("B", LongType, true)))
           assert(spark.table("test_ddl").schema == expectedSchema)
         }
+      }
+    }
+  }
+
+  test("SPARK-37225: Support reading and writing ANSI intervals") {
+    Seq(
+      YearMonthIntervalType() -> ((i: Int) => java.time.Period.of(i, i, 0)),
+      DayTimeIntervalType() -> ((i: Int) => java.time.Duration.ofDays(i).plusSeconds(i))
+    ).foreach { case (it, f) =>
+      val data = (1 to 10).map(i => Row(i, f(i)))
+      val schema = StructType(Array(StructField("d", IntegerType, false),
+        StructField("i", it, false)))
+      withTempPath { file =>
+        val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+        df.write.format("avro").save(file.getCanonicalPath)
+        val df2 = spark.read.format("avro").load(file.getCanonicalPath)
+        checkAnswer(df2, df.collect().toSeq)
       }
     }
   }
