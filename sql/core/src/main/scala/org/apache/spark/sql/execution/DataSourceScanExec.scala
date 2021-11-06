@@ -134,13 +134,6 @@ case class RowDataSourceScanExec(
 
     def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
 
-    val (aggString, groupByString) = if (pushedDownOperators.aggregation.nonEmpty) {
-      (seqToString(pushedDownOperators.aggregation.get.aggregateExpressions),
-        seqToString(pushedDownOperators.aggregation.get.groupByColumns))
-    } else {
-      ("[]", "[]")
-    }
-
     val markedFilters = if (filters.nonEmpty) {
       for (filter <- filters) yield {
         if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
