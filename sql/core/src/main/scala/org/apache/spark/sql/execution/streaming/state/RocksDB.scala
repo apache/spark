@@ -576,7 +576,7 @@ object RocksDBConf {
   // The additional lookups bring non-trivial overhead on write-heavy workloads - if your query
   // does lots of writes on state, it would be encouraged to turn off the config and turn on
   // again when you really need the know the number for observability/debuggability.
-  private[sql] val TRACK_TOTAL_NUMBER_OF_ROWS = ConfEntry("trackTotalNumberOfRows", "true")
+  private val TRACK_TOTAL_NUMBER_OF_ROWS = ConfEntry("trackTotalNumberOfRows", "true")
 
   def apply(storeConf: StateStoreConf): RocksDBConf = {
     val confs = CaseInsensitiveMap[String](storeConf.confs)
