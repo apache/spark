@@ -44,7 +44,7 @@ case class OrcScan(
     dataFilters: Seq[Expression] = Seq.empty) extends FileScan {
   override def isSplitable(path: Path): Boolean = {
     // If aggregate is pushed down, only the file footer will be read once,
-    // so file should be not split across multiple tasks.
+    // so file should not be split across multiple tasks.
     pushedAggregate.isEmpty
   }
 
