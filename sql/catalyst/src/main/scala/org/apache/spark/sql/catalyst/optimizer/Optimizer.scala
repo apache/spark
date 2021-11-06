@@ -1528,7 +1528,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // 2. Deterministic.
     // 3. Placed before any non-deterministic predicates.
     case filter @ Filter(condition, w: Window)
-      if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
+      if w.partitionSpec.nonEmpty && w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
       val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references))
 
       val (candidates, nonDeterministic) =
@@ -1546,6 +1546,34 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         if (stayUp.isEmpty) newWindow else Filter(stayUp.reduce(And), newWindow)
       } else {
         filter
+      }
+
+    case filter @ Filter(condition, w: Window) if w.partitionSpec.isEmpty =>
+      w.windowExpressions match {
+        case Seq(alias @ Alias(WindowExpression(_: RowNumber, WindowSpecDefinition(Nil, orderSpec,
+            SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _)) =>
+          val aliasAttr = alias.toAttribute
+          val limitValue = splitConjunctivePredicates(condition) match {
+            case Seq(LessThanOrEqual(e, IntegerLiteral(v))) if e.semanticEquals(aliasAttr) =>
+              Some(v)
+            case Seq(EqualTo(e, IntegerLiteral(v))) if e.semanticEquals(aliasAttr) =>
+              Some(v)
+            case Seq(LessThan(e, IntegerLiteral(v))) if e.semanticEquals(aliasAttr) =>
+              Some(v - 1)
+            case _ =>
+              None
+          }
+
+          limitValue match {
+            case Some(lv)
+                if lv < conf.topKSortFallbackThreshold && w.child.maxRows.forall(_ > lv) =>
+              filter.copy(child =
+                w.copy(child = Limit(Literal(limitValue.get), Sort(orderSpec, true, w.child))))
+            case _ =>
+              filter
+          }
+        case _ =>
+          filter
       }
 
     case filter @ Filter(condition, union: Union) =>

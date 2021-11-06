@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -25,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -1383,5 +1385,58 @@ class FilterPushdownSuite extends PlanTest {
       condition = Some("x.b".attr === "y.b".attr && simpleDisjunctivePredicate)),
       condition = Some("x.a".attr === "z.a".attr)).analyze
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-37226: Filter push down through window") {
+    val data = (0 until 100).map(i => InternalRow(i, i, i))
+    val testRelation2 = LocalRelation(LocalRelation('a.int, 'b.int, 'c.int).output, data)
+
+    val winSpec = windowSpec(
+      partitionSpec = Nil,
+      orderSpec = 'b.asc :: Nil,
+      UnspecifiedFrame)
+    val winExpr = windowExpr(RowNumber(), winSpec)
+
+    val winSpecAnalyzed = windowSpec(
+      partitionSpec = Nil,
+      orderSpec = 'b.asc :: Nil,
+      UnspecifiedFrame)
+    val winExprAnalyzed = windowExpr(RowNumber(), winSpecAnalyzed)
+
+    comparePlans(
+      Optimize.execute(
+        testRelation2.window(winExprAnalyzed.as('rn) :: Nil, Nil, 'b.asc :: Nil)
+          .where('rn <= 5).analyze),
+      testRelation2.orderBy('b.asc).limit(Literal(5))
+        .window(winExprAnalyzed.as('rn) :: Nil, Nil, 'b.asc :: Nil)
+        .where('rn <= 5).analyze)
+
+    comparePlans(
+      Optimize.execute(
+        testRelation2.window(winExprAnalyzed.as('rn) :: Nil, Nil, 'b.asc :: Nil)
+          .where('rn === 5).analyze),
+      testRelation2.orderBy('b.asc).limit(Literal(5))
+        .window(winExprAnalyzed.as('rn) :: Nil, Nil, 'b.asc :: Nil)
+        .where('rn === 5).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation2.select('a, 'b, 'c, winExpr.as('rn)).where('rn < 5).analyze),
+      testRelation2.select('a, 'b, 'c).orderBy('b.asc).limit(Literal(4))
+        .window(winExprAnalyzed.as('rn) :: Nil, Nil, 'b.asc :: Nil)
+        .where('rn < 5)
+        .select('a, 'b, 'c, 'rn).analyze)
+
+    // Negative case
+    val originalQuery1 = testRelation2.window(winExprAnalyzed.as('rn) :: Nil, Nil, 'b.asc :: Nil)
+      .where('rn > 5)
+    comparePlans(Optimize.execute(originalQuery1.analyze), originalQuery1.analyze)
+
+    withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "3") {
+      val originalQuery = testRelation2.window(winExprAnalyzed.as('rn) :: Nil, Nil, 'b.asc :: Nil)
+        .where('rn < 5)
+      comparePlans(
+        Optimize.execute(originalQuery.analyze),
+        originalQuery.analyze)
+    }
   }
 }
