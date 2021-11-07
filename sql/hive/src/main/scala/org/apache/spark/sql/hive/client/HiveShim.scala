@@ -1109,7 +1109,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           // enabled.
           recordHiveCall()
           getPartitionsByFilterMethod.invoke(hive, table, filter)
-            .asInstanceOf[JArrayList[Partition]].asScala.toSeq
+            .asInstanceOf[JArrayList[Partition]]
         } catch {
           case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] &&
               shouldFallback =>
@@ -1130,14 +1130,14 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         }
       }
 
-    partitions
+    partitions.asScala.toSeq
   }
 
   private def prunePartitionsFastFallback(
       hive: Hive,
       table: Table,
       catalogTable: CatalogTable,
-      predicates: Seq[Expression]): Seq[Partition] = {
+      predicates: Seq[Expression]): java.util.Collection[Partition] = {
     val timeZoneId = SQLConf.get.sessionLocalTimeZone
 
     // Because there is no way to know whether the partition properties has timeZone,
@@ -1152,7 +1152,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         predicates.isEmpty ||
         predicates.exists(hasTimeZoneAwareExpression)) {
       recordHiveCall()
-      getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].asScala.toSeq
+      getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
     } else {
       try {
         val partitionSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
@@ -1178,13 +1178,13 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           boundPredicate.eval(toRow(spec))
         }
         recordHiveCall()
-        hive.getPartitionsByNames(table, partNames.asJava).asScala.toSeq
+        hive.getPartitionsByNames(table, partNames.asJava)
       } catch {
         case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] =>
           logWarning("Caught Hive MetaException attempting to get partition metadata by " +
             "filter from client side. Falling back to fetching all partition metadata", ex)
           recordHiveCall()
-          getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].asScala.toSeq
+          getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
       }
     }
   }
