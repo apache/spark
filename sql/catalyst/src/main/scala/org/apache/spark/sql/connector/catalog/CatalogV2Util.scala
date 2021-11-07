@@ -276,25 +276,16 @@ private[sql] object CatalogV2Util {
     new StructType(newFields)
   }
 
-  def loadTable(catalog: CatalogPlugin, ident: Identifier): Option[Table] =
-    try {
-      Option(catalog.asTableCatalog.loadTable(ident))
-    } catch {
-      case _: NoSuchTableException => None
-      case _: NoSuchDatabaseException => None
-      case _: NoSuchNamespaceException => None
-    }
-
   def loadTable(
       catalog: CatalogPlugin,
       ident: Identifier,
-      options: CaseInsensitiveStringMap): Option[Table] =
+      options: Option[CaseInsensitiveStringMap] = None): Option[Table] =
     try {
-      if (options.containsKey(TableCatalog.PROP_VERSION)) {
-        Option(catalog.asTableCatalog.loadTable(ident, options.get(TableCatalog.PROP_VERSION)))
-      } else if (options.containsKey(TableCatalog.PROP_TIMESTAMP)) {
+      if (options.get.containsKey(TableCatalog.PROP_VERSION)) {
+        Option(catalog.asTableCatalog.loadTable(ident, options.get.get(TableCatalog.PROP_VERSION)))
+      } else if (options.get.containsKey(TableCatalog.PROP_TIMESTAMP)) {
         Option(catalog.asTableCatalog.loadTable(
-          ident, options.get(TableCatalog.PROP_TIMESTAMP).toLong))
+          ident, options.get.get(TableCatalog.PROP_TIMESTAMP).toLong))
       } else {
         Option(catalog.asTableCatalog.loadTable(ident))
       }

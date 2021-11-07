@@ -1271,8 +1271,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
             TableCatalog.PROP_TIMESTAMP,
             df.parse(ts.substring(1, ts.length - 1)).toString)
         } catch {
-          case _: Throwable =>
-            throw new IllegalArgumentException(s"Illegal timestamp value $ts in TIMESTAMP AS OF")
+          case cause: Throwable =>
+            throw new IllegalArgumentException(
+              s"Illegal timestamp value $ts in TIMESTAMP AS OF", cause)
         }
       } else if (ts.length == "'yyyy-MM-dd HH:mm:ss'".length) {
         val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", getZoneId("+00:00"), isParsing = false)
@@ -1281,8 +1282,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
             TableCatalog.PROP_TIMESTAMP,
             tf.parse(ts.substring(1, ts.length - 1)).toString)
         } catch {
-          case _: Throwable =>
-            throw new IllegalArgumentException(s"Illegal timestamp value $ts in TIMESTAMP AS OF")
+          case cause: Throwable =>
+            throw new IllegalArgumentException(
+              s"Illegal timestamp value $ts in TIMESTAMP AS OF", cause)
         }
       } else {
         throw new IllegalArgumentException(s"Illegal timestamp value $ts in TIMESTAMP AS OF")
