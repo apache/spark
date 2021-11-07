@@ -473,6 +473,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return self._jdf.isStreaming()
 
+    def isEmpty(self) -> bool:
+        """Returns ``True`` if this :class:`DataFrame` is empty.
+
+        .. versionadded:: 3.3.0
+
+        Examples
+        --------
+        >>> df_empty = spark.createDataFrame([], 'a STRING')
+        >>> df_non_empty = spark.createDataFrame([("a")], 'STRING')
+        >>> df_empty.isEmpty()
+        True
+        >>> df_non_empty.isEmpty()
+        False
+        """
+        return self._jdf.isEmpty()
+
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         """Prints the first ``n`` rows to the console.
 
