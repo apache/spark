@@ -18,8 +18,6 @@ import os
 import time
 import unittest
 
-import pyarrow
-
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -29,12 +27,16 @@ from pyspark.testing.sqlutils import (
 )
 
 if have_pyarrow:
+    import pyarrow as pa
+
+if have_pandas:
     import pandas as pd
 
 
 @unittest.skipIf(
-    not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
-)  # type: ignore[arg-type]
+    not have_pandas or not have_pyarrow,
+    pandas_requirement_message or pyarrow_requirement_message,  # type: ignore[arg-type]
+)
 class MapInArrowTests(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
@@ -60,7 +62,7 @@ class MapInArrowTests(ReusedSQLTestCase):
     def test_map_in_arrow(self):
         def func(iterator):
             for batch in iterator:
-                assert isinstance(batch, pyarrow.RecordBatch)
+                assert isinstance(batch, pa.RecordBatch)
                 assert batch.schema.names == ["id"]
                 yield batch
 
@@ -75,8 +77,8 @@ class MapInArrowTests(ReusedSQLTestCase):
 
         def func(iterator):
             for batch in iterator:
-                assert isinstance(batch, pyarrow.RecordBatch)
-                assert batch.schema.names == ["int32", "object"]
+                assert isinstance(batch, pa.RecordBatch)
+                assert batch.schema.types == [pa.int32(), pa.string()]
                 yield batch
 
         actual = df.mapInArrow(func, df.schema).collect()
@@ -86,7 +88,7 @@ class MapInArrowTests(ReusedSQLTestCase):
     def test_different_output_length(self):
         def func(iterator):
             for _ in iterator:
-                yield pyarrow.RecordBatch.from_pandas(pd.DataFrame({"a": list(range(100))}))
+                yield pa.RecordBatch.from_pandas(pd.DataFrame({"a": list(range(100))}))
 
         df = self.spark.range(10)
         actual = df.repartition(1).mapInArrow(func, "a long").collect()
@@ -100,14 +102,14 @@ class MapInArrowTests(ReusedSQLTestCase):
 
     def test_empty_rows(self):
         def empty_rows(_):
-            return iter([pyarrow.RecordBatch.from_pandas(pd.DataFrame({"a": []}))])
+            return iter([pa.RecordBatch.from_pandas(pd.DataFrame({"a": []}))])
 
         self.assertEqual(self.spark.range(10).mapInArrow(empty_rows, "a int").count(), 0)
 
     def test_chain_map_in_arrow(self):
         def func(iterator):
             for batch in iterator:
-                assert isinstance(batch, pyarrow.RecordBatch)
+                assert isinstance(batch, pa.RecordBatch)
                 assert batch.schema.names == ["id"]
                 yield batch
 
