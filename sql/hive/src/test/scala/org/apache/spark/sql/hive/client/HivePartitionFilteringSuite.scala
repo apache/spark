@@ -582,7 +582,7 @@ class HivePartitionFilteringSuite(version: String)
       dateStrValue)
   }
 
-  test("SPARK-35437 getPartitionsByFilter: substr(chunk,0,1)=a") {
+  test("SPARK-35437: getPartitionsByFilter: substr(chunk,0,1)=a") {
     Seq("true" -> Seq("aa", "ab"), "false" -> chunkValue).foreach { t =>
       withSQLConf(pruningFastFallback -> t._1) {
         testMetastorePartitionFiltering(
@@ -596,7 +596,7 @@ class HivePartitionFilteringSuite(version: String)
     }
   }
 
-  test("SPARK-35437 getPartitionsByFilter: year(d)=2019") {
+  test("SPARK-35437: getPartitionsByFilter: year(d)=2019") {
     Seq("true" -> Seq("2019-01-01", "2019-01-02", "2019-01-03"),
       "false" -> dateValue).foreach { t =>
       withSQLConf(pruningFastFallback -> t._1) {
@@ -611,7 +611,7 @@ class HivePartitionFilteringSuite(version: String)
     }
   }
 
-  test("SPARK-35437 getPartitionsByFilter: datestr=concat(2020-,01-,01)") {
+  test("SPARK-35437: getPartitionsByFilter: datestr=concat(2020-,01-,01)") {
     Seq("true" -> Seq("2020-01-01"), "false" -> dateStrValue).foreach { t =>
       withSQLConf(pruningFastFallback -> t._1) {
         testMetastorePartitionFiltering(
@@ -625,7 +625,7 @@ class HivePartitionFilteringSuite(version: String)
     }
   }
 
-  test(s"SPARK-35437 getPartitionsByFilter: ds=20170101 when $fallbackKey=true") {
+  test(s"SPARK-35437: getPartitionsByFilter: ds=20170101 when $fallbackKey=true") {
     withSQLConf(fallbackKey -> "true", pruningFastFallback -> "true") {
       val filteredPartitions = clientWithoutDirectSql.getPartitionsByFilter(
         clientWithoutDirectSql.getTable("default", "test"),
