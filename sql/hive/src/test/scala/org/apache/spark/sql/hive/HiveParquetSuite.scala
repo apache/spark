@@ -19,11 +19,13 @@ package org.apache.spark.sql.hive
 
 import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
+import java.util.concurrent.Callable
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.ThreadUtils
 
 case class Cases(lower: String, UPPER: String)
 
@@ -166,6 +168,25 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
           assert(files2.length == 1)
         }
       }
+    }
+  }
+
+  test("SPARK-37210: Concurrent write to different static partitions") {
+    withTable("t") {
+      sql("CREATE TABLE t (c1 int, c2 int) PARTITIONED BY (c3 int, c4 int) STORED AS PARQUET")
+      val selectStatement = "SELECT 1 AS c1, 2 AS c2"
+      val tasks: Seq[Callable[Unit]] = (1 to 4).map(i => {
+        new Callable[Unit] {
+          override def call(): Unit = {
+            sql(s"INSERT OVERWRITE TABLE t PARTITION(c3=3$i, c4=4$i) $selectStatement")
+          }
+        }
+      })
+      import scala.collection.JavaConverters._
+      ThreadUtils.newForkJoinPool("test-thread-pool", 5).invokeAll(tasks.toList.asJava)
+      checkAnswer(
+        sql("SELECT c1, c2, c3, c4 FROM t order by c3, c4"),
+        (1 to 4).map(i => Row(1, 2, s"3$i".toInt, s"4$i".toInt)))
     }
   }
 }
