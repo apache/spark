@@ -2643,7 +2643,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
-  test("SPARK-37217 Dynamic partitions should fail quickly " +
+  test("SPARK-37217: Dynamic partitions should fail quickly " +
     "when writing to external tables to prevent data deletion") {
     withTable("test") {
       withTempDir { f =>
