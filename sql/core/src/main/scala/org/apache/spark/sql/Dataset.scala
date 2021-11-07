@@ -2964,6 +2964,20 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Applies a function to each partition in Arrow format. The user-defined function
+   * defines a transformation: `iter(pyarrow.RecordBatch)` -> `iter(pyarrow.RecordBatch)`.
+   * Each partition is each iterator consisting of `pyarrow.RecordBatch`s as batches.
+   */
+  private[sql] def pythonMapInArrow(func: PythonUDF): DataFrame = {
+    Dataset.ofRows(
+      sparkSession,
+      PythonMapInArrow(
+        func,
+        func.dataType.asInstanceOf[StructType].toAttributes,
+        logicalPlan))
+  }
+
+  /**
    * (Scala-specific)
    * Returns a new Dataset by first applying a function to all elements of this Dataset,
    * and then flattening the results.

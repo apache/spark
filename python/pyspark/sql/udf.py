@@ -157,7 +157,10 @@ class UserDefinedFunction(object):
                     "UDFs or at groupby.applyInPandas: return type must be a "
                     "StructType."
                 )
-        elif self.evalType == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
+        elif (
+            self.evalType == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
+            or self.evalType == PythonEvalType.SQL_MAP_ARROW_ITER_UDF
+        ):
             if isinstance(self._returnType_placeholder, StructType):
                 try:
                     to_arrow_type(self._returnType_placeholder)
@@ -168,7 +171,8 @@ class UserDefinedFunction(object):
                     )
             else:
                 raise TypeError(
-                    "Invalid return type in mapInPandas: " "return type must be a StructType."
+                    "Invalid return type in mapInPandas/mapInArrow: "
+                    "return type must be a StructType."
                 )
         elif self.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             if isinstance(self._returnType_placeholder, StructType):
@@ -405,12 +409,10 @@ class UDFRegistration(object):
                 PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                 PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                 PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-                PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
             ]:
                 raise ValueError(
                     "Invalid f: f must be SQL_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF, "
-                    "SQL_SCALAR_PANDAS_ITER_UDF, SQL_GROUPED_AGG_PANDAS_UDF or "
-                    "SQL_MAP_PANDAS_ITER_UDF."
+                    "SQL_SCALAR_PANDAS_ITER_UDF or SQL_GROUPED_AGG_PANDAS_UDF."
                 )
             register_udf = _create_udf(
                 f.func,

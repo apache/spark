@@ -22,20 +22,20 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 
 /**
- * A relation produced by applying a function that takes an iterator of pandas DataFrames
- * and outputs an iterator of pandas DataFrames.
+ * A relation produced by applying a function that takes an iterator of PyArrow's record batches
+ * and outputs an iterator of PyArrow's record batches.
  *
  * This is somewhat similar with [[FlatMapGroupsInPandasExec]] and
  * `org.apache.spark.sql.catalyst.plans.logical.MapPartitionsInRWithArrow`
  */
-case class MapInPandasExec(
+case class PythonMapInArrowExec(
     func: Expression,
     output: Seq[Attribute],
     child: SparkPlan)
   extends MapInBatchExec {
 
-  override protected val pythonEvalType: Int = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
+  override protected val pythonEvalType: Int = PythonEvalType.SQL_MAP_ARROW_ITER_UDF
 
-  override protected def withNewChildInternal(newChild: SparkPlan): MapInPandasExec =
+  override protected def withNewChildInternal(newChild: SparkPlan): PythonMapInArrowExec =
     copy(child = newChild)
 }

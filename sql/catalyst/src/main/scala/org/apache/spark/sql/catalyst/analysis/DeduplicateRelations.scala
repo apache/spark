@@ -241,6 +241,12 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
+      case oldVersion @ PythonMapInArrow(_, output, _)
+        if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+        val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
+
       case oldVersion @ AttachDistributedSequence(sequenceAttr, _)
         if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
         val newVersion = oldVersion.copy(sequenceAttr = sequenceAttr.newInstance())

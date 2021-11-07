@@ -43,6 +43,7 @@ from pyspark.sql.pandas._typing import (
     PandasCogroupedMapUDFType,
     PandasGroupedAggUDFType,
     PandasMapIterUDFType,
+    ArrowMapIterUDFType,
 )
 import pyspark.context
 from pyspark.resultiterable import ResultIterable
@@ -83,6 +84,7 @@ class PythonEvalType:
     SQL_SCALAR_PANDAS_ITER_UDF: PandasScalarIterUDFType
     SQL_MAP_PANDAS_ITER_UDF: PandasMapIterUDFType
     SQL_COGROUPED_MAP_PANDAS_UDF: PandasCogroupedMapUDFType
+    SQL_MAP_ARROW_ITER_UDF: ArrowMapIterUDFType
 
 class BoundedFloat(float):
     def __new__(cls, mean: float, confidence: float, low: float, high: float) -> BoundedFloat: ...

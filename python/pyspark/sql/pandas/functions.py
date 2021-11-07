@@ -366,6 +366,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         None,
     ]:  # None means it should infer the type from type hints.
@@ -400,12 +401,13 @@ def _create_pandas_udf(f, returnType, evalType):
     elif evalType in [
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
     ]:
-        # In case of 'SQL_GROUPED_MAP_PANDAS_UDF',  deprecation warning is being triggered
+        # In case of 'SQL_GROUPED_MAP_PANDAS_UDF', deprecation warning is being triggered
         # at `apply` instead.
-        # In case of 'SQL_MAP_PANDAS_ITER_UDF' and 'SQL_COGROUPED_MAP_PANDAS_UDF', the
-        # evaluation type will always be set.
+        # In case of 'SQL_MAP_PANDAS_ITER_UDF', 'SQL_MAP_ARROW_ITER_UDF' and
+        # 'SQL_COGROUPED_MAP_PANDAS_UDF', the evaluation type will always be set.
         pass
     elif len(argspec.annotations) > 0:
         evalType = infer_eval_type(signature(f))

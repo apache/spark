@@ -100,6 +100,52 @@ class ArrowStreamSerializer(Serializer):
         return "ArrowStreamSerializer"
 
 
+class ArrowStreamUDFSerializer(ArrowStreamSerializer):
+    """
+    Same as :class:`ArrowStreamSerializer` but it flattens the struct to Arrow record batch
+    for applying each function with the raw record arrow batch. See also `DataFrame.mapInArrow`.
+    """
+
+    def load_stream(self, stream):
+        """
+        Flatten the struct into Arrow's record batches.
+        """
+        import pyarrow as pa
+
+        batches = super(ArrowStreamUDFSerializer, self).load_stream(stream)
+        for batch in batches:
+            struct = batch.column(0)
+            yield [pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))]
+
+    def dump_stream(self, iterator, stream):
+        """
+        Override because Pandas UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
+        This should be sent after creating the first record batch so in case of an error, it can
+        be sent back to the JVM before the Arrow stream starts.
+        """
+        import pyarrow as pa
+
+        def init_stream_yield_batches():
+            should_write_start_length = True
+            for batch, _ in iterator:
+                # Wrap the root struct
+                assert isinstance(batch, pa.RecordBatch)
+                struct = pa.StructArray.from_arrays(
+                    batch.columns, fields=pa.struct(list(batch.schema))
+                )
+                batch = pa.RecordBatch.from_arrays([struct], ["_0"])
+
+                # Write the first record batch first.
+                if should_write_start_length:
+                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
+                    should_write_start_length = False
+                yield batch
+
+        return super(ArrowStreamUDFSerializer, self).dump_stream(
+            init_stream_yield_batches(), stream
+        )
+
+
 class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     """
     Serializes Pandas.Series as Arrow data with Arrow streaming format.

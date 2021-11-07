@@ -40,6 +40,9 @@ from pyspark.sql.pandas._typing import (
     PandasScalarToScalarFunction,
     PandasScalarToStructFunction,
     PandasScalarUDFType,
+    ArrowMapIterUDFType,
+    ArrowMapIterFunction,
+    MapIterArrowUserDefinedFunction,
 )
 
 from pyspark import since as since  # noqa: F401
@@ -148,6 +151,24 @@ def pandas_udf(
 def pandas_udf(
     f: Union[StructType, str], *, functionType: PandasMapIterUDFType
 ) -> Callable[[PandasMapIterFunction], MapIterPandasUserDefinedFunction]: ...
+@overload
+def pandas_udf(
+    f: ArrowMapIterFunction,
+    returnType: Union[StructType, str],
+    functionType: ArrowMapIterUDFType,
+) -> MapIterArrowUserDefinedFunction: ...
+@overload
+def pandas_udf(
+    f: Union[StructType, str], returnType: ArrowMapIterUDFType
+) -> Callable[[ArrowMapIterFunction], MapIterArrowUserDefinedFunction]: ...
+@overload
+def pandas_udf(
+    *, returnType: Union[StructType, str], functionType: ArrowMapIterUDFType
+) -> Callable[[ArrowMapIterFunction], MapIterArrowUserDefinedFunction]: ...
+@overload
+def pandas_udf(
+    f: Union[StructType, str], *, functionType: ArrowMapIterUDFType
+) -> Callable[[ArrowMapIterFunction], MapIterArrowUserDefinedFunction]: ...
 @overload
 def pandas_udf(
     f: PandasCogroupedMapFunction,
