@@ -281,15 +281,19 @@ private[sql] object CatalogV2Util {
       ident: Identifier,
       options: Option[CaseInsensitiveStringMap] = None): Option[Table] =
     try {
-      if (options.get.containsKey(TableCatalog.PROP_VERSION)) {
-        Option(catalog.asTableCatalog.loadTable(ident, options.get.get(TableCatalog.PROP_VERSION)))
-      } else if (options.get.containsKey(TableCatalog.PROP_TIMESTAMP)) {
-        Option(catalog.asTableCatalog.loadTable(
-          ident, options.get.get(TableCatalog.PROP_TIMESTAMP).toLong))
+      if (options.nonEmpty) {
+        if (options.get.containsKey(TableCatalog.PROP_VERSION)) {
+          Option(catalog.asTableCatalog
+            .loadTable(ident, options.get.get(TableCatalog.PROP_VERSION)))
+        } else if (options.get.containsKey(TableCatalog.PROP_TIMESTAMP)) {
+          Option(catalog.asTableCatalog.loadTable(
+            ident, options.get.get(TableCatalog.PROP_TIMESTAMP).toLong))
+        } else {
+          Option(catalog.asTableCatalog.loadTable(ident))
+        }
       } else {
         Option(catalog.asTableCatalog.loadTable(ident))
       }
-
     } catch {
       case _: NoSuchTableException => None
       case _: NoSuchDatabaseException => None
