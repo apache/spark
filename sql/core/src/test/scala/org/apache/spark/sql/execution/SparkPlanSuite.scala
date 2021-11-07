@@ -21,11 +21,12 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.Deduplicate
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class SparkPlanSuite extends QueryTest with SharedSparkSession {
@@ -115,8 +116,13 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-37221: The collect-like API in SparkPlan should support columnar output") {
-    val results = ColumnarOp(LocalTableScanExec(Nil, Nil)).executeCollect()
-    assert(results.isEmpty)
+    val emptyResults = ColumnarOp(LocalTableScanExec(Nil, Nil)).executeCollect()
+    assert(emptyResults.isEmpty)
+
+    val relation = LocalTableScanExec(
+      Seq(AttributeReference("val", IntegerType)()), Seq(InternalRow(1)))
+    val nonEmpty = ColumnarOp(relation).executeCollect()
+    assert(nonEmpty === relation.executeCollect())
   }
 }
 
