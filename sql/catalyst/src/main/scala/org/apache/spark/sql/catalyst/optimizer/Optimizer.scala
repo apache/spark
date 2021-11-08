@@ -1553,15 +1553,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         case Seq(alias @ Alias(WindowExpression(_: RowNumber, WindowSpecDefinition(Nil, orderSpec,
             SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _)) =>
           val aliasAttr = alias.toAttribute
-          val limitValue = splitConjunctivePredicates(condition) match {
-            case Seq(LessThanOrEqual(e, IntegerLiteral(v))) if e.semanticEquals(aliasAttr) =>
-              Some(v)
-            case Seq(EqualTo(e, IntegerLiteral(v))) if e.semanticEquals(aliasAttr) =>
-              Some(v)
-            case Seq(LessThan(e, IntegerLiteral(v))) if e.semanticEquals(aliasAttr) =>
-              Some(v - 1)
-            case _ =>
-              None
+          val limitValue = splitConjunctivePredicates(condition).collectFirst {
+            case LessThanOrEqual(e, IntegerLiteral(v)) if e.semanticEquals(aliasAttr) => v
+            case EqualTo(e, IntegerLiteral(v)) if e.semanticEquals(aliasAttr) => v
+            case LessThan(e, IntegerLiteral(v)) if e.semanticEquals(aliasAttr) => v - 1
           }
 
           limitValue match {

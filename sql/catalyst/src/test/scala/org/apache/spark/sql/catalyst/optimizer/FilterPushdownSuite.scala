@@ -1426,6 +1426,14 @@ class FilterPushdownSuite extends PlanTest {
         .where('rn < 5)
         .select('a, 'b, 'c, 'rn).analyze)
 
+    comparePlans(
+      Optimize.execute(testRelation2
+        .select('a, 'b, 'c, winExpr.as('rn)).where('rn > 2 && 'rn < 5).analyze),
+      testRelation2.select('a, 'b, 'c).orderBy('b.asc).limit(Literal(4))
+        .window(winExprAnalyzed.as('rn) :: Nil, Nil, 'b.asc :: Nil)
+        .where('rn > 2 && 'rn < 5)
+        .select('a, 'b, 'c, 'rn).analyze)
+
     // Negative case
     val originalQuery1 = testRelation2.window(winExprAnalyzed.as('rn) :: Nil, Nil, 'b.asc :: Nil)
       .where('rn > 5)
