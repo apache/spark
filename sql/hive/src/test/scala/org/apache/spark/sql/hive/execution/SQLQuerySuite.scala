@@ -2647,7 +2647,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     withTempDir { dir =>
       withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
         withTable("test_precision") {
-          val df = sql("SELECT 'dummy' AS name, 1000000000000000000010.7000000000000010 AS value")
+          val df = sql(s"SELECT 'dummy' AS name, ${"1" * 20}.${"2" * 18} AS value")
           df.write.mode("Overwrite").parquet(dir.getAbsolutePath)
           sql(
             s"""
