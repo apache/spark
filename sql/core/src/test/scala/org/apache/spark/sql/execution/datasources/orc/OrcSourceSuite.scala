@@ -844,6 +844,36 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
       }
     }
   }
+
+  test("struct in struct in array") {
+    withTempPath { file =>
+      val df = sql(
+        """SELECT
+          |  array(
+          |    named_struct(
+          |      'a', named_struct(
+          |        'a1', 1,
+          |        'a2', 2),
+          |      'b', named_struct(
+          |        'b1', 3,
+          |        'b2', 4)
+          |    ),
+          |    named_struct(
+          |      'a', named_struct(
+          |        'a1', 5,
+          |        'a2', 6),
+          |      'b', named_struct(
+          |        'b1', 7,
+          |        'b2', 8)
+          |    )
+          |  ) as col1
+          |
+          |""".stripMargin)
+      df.write.orc(file.getCanonicalPath)
+      val df2 = spark.read.orc(file.getCanonicalPath)
+      checkAnswer(df2, df.collect().toSeq)
+    }
+  }
 }
 
 class OrcSourceV1Suite extends OrcSourceSuite {
