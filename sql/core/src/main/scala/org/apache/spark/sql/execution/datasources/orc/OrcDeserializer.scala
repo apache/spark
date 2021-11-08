@@ -138,33 +138,24 @@ class OrcDeserializer(
         updater.set(ordinal, v)
 
       case st: StructType =>
-        val containedByStruct = if (updater.isInstanceOf[RowUpdater]) {
-          true
+        val result = new SpecificInternalRow(st)
+        val fieldUpdater = new RowUpdater(result)
+        val fieldConverters = st.map(_.dataType).map { dt =>
+          newWriter(dt, fieldUpdater)
+        }.toArray
+
+        val containerUpdater = if (updater.isInstanceOf[RowUpdater]) {
+          updater
         } else {
-          false
+          new CatalystDataUpdater {
+            override def set(ordinal: Int, value: Any) = {
+              updater.set(ordinal, value.asInstanceOf[SpecificInternalRow].copy())
+            }
+          }
         }
-        var result: SpecificInternalRow = null
-        var fieldUpdater: RowUpdater = null
-        var fieldConverters: Array[(Int, WritableComparable[_]) => Unit] = null
-        if (containedByStruct) {
-          result = new SpecificInternalRow(st)
-          fieldUpdater = new RowUpdater(result)
-          fieldConverters = st.map(_.dataType).map { dt =>
-            newWriter(dt, fieldUpdater)
-          }.toArray
-        }
+
         (ordinal, value) =>
           val orcStruct = value.asInstanceOf[OrcStruct]
-
-          if (!containedByStruct) {
-            // if parent container is a Map or an Array, we need to get a new instance of
-            // of the below for each value that needs conversion
-            result = new SpecificInternalRow(st)
-            fieldUpdater = new RowUpdater(result)
-            fieldConverters = st.map(_.dataType).map { dt =>
-              newWriter(dt, fieldUpdater)
-            }.toArray
-          }
           var i = 0
           while (i < st.length) {
             val value = orcStruct.getFieldValue(i)
@@ -175,8 +166,7 @@ class OrcDeserializer(
             }
             i += 1
           }
-
-          updater.set(ordinal, result)
+          containerUpdater.set(ordinal, result)
 
       case ArrayType(elementType, _) => (ordinal, value) =>
         val orcArray = value.asInstanceOf[OrcList[WritableComparable[_]]]
