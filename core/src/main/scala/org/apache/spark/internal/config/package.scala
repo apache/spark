@@ -2213,7 +2213,7 @@ package object config {
   private[spark] val PUSH_BASED_SHUFFLE_MIN_PUSH_RATIO =
     ConfigBuilder("spark.shuffle.push.minPushRatio")
       .doc("Fraction of map partitions that should be push complete before driver starts" +
-        " merge finalization during push based shuffle")
+        " shuffle merge finalization during push based shuffle")
       .doubleConf
       .createWithDefault(1.0)
 
