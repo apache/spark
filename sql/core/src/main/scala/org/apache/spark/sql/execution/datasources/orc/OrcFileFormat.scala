@@ -27,7 +27,7 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.orc.{OrcUtils => _, _}
-import org.apache.orc.OrcConf.{COMPRESS, MAPRED_OUTPUT_SCHEMA}
+import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce._
 
@@ -45,6 +45,8 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 private[sql] object OrcFileFormat {
 
   def getQuotedSchemaString(dataType: DataType): String = dataType match {
+    case _: DayTimeIntervalType => LongType.catalogString
+    case _: YearMonthIntervalType => IntegerType.catalogString
     case _: AtomicType => dataType.catalogString
     case StructType(fields) =>
       fields.map(f => s"`${f.name}`:${getQuotedSchemaString(f.dataType)}")
@@ -89,8 +91,6 @@ class OrcFileFormat
     val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
 
     val conf = job.getConfiguration
-
-    conf.set(MAPRED_OUTPUT_SCHEMA.getAttribute, OrcFileFormat.getQuotedSchemaString(dataSchema))
 
     conf.set(COMPRESS.getAttribute, orcOptions.compressionCodec)
 
@@ -233,8 +233,6 @@ class OrcFileFormat
   }
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
-    case _: AnsiIntervalType => false
-
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }

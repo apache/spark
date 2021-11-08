@@ -33,7 +33,7 @@ from typing import (
 )
 from typing_extensions import Literal
 
-from numpy import int32, int64, float32, float64, ndarray  # type: ignore[import]
+from numpy import int32, int64, float32, float64, ndarray
 
 from pyspark._typing import SupportsOrdering
 from pyspark.sql.pandas._typing import (
@@ -55,8 +55,8 @@ from pyspark.resource.requests import (  # noqa: F401
 from pyspark.resource.profile import ResourceProfile
 from pyspark.statcounter import StatCounter
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.types import StructType
-from pyspark.sql._typing import RowLike
+from pyspark.sql.types import AtomicType, StructType
+from pyspark.sql._typing import AtomicValue, RowLike
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 T = TypeVar("T")
@@ -445,11 +445,18 @@ class RDD(Generic[T]):
     @overload
     def toDF(
         self: RDD[RowLike],
-        schema: Optional[List[str]] = ...,
+        schema: Optional[Union[List[str], Tuple[str, ...]]] = ...,
         sampleRatio: Optional[float] = ...,
     ) -> DataFrame: ...
     @overload
-    def toDF(self: RDD[RowLike], schema: Optional[StructType] = ...) -> DataFrame: ...
+    def toDF(
+        self: RDD[RowLike], schema: Optional[Union[StructType, str]] = ...
+    ) -> DataFrame: ...
+    @overload
+    def toDF(
+        self: RDD[AtomicValue],
+        schema: Union[AtomicType, str],
+    ) -> DataFrame: ...
 
 class RDDBarrier(Generic[T]):
     rdd: RDD[T]

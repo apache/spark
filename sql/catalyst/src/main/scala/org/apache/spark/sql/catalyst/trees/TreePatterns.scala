@@ -91,6 +91,7 @@ object TreePattern extends Enumeration  {
 
   // Logical plan patterns (alphabetically ordered)
   val AGGREGATE: Value = Value
+  val AS_OF_JOIN: Value = Value
   val COMMAND: Value = Value
   val CTE: Value = Value
   val DISTINCT_LIKE: Value = Value
@@ -121,6 +122,7 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_ORDINAL: Value = Value
   val UNRESOLVED_FUNCTION: Value = Value
   val UNRESOLVED_HINT: Value = Value
+  val UNRESOLVED_WINDOW_EXPRESSION: Value = Value
 
   // Unresolved Plan patterns (Alphabetically ordered)
   val UNRESOLVED_SUBQUERY_COLUMN_ALIAS: Value = Value

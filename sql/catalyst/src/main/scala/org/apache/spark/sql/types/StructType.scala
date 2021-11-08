@@ -127,6 +127,10 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     }
   }
 
+  override def toString(): String = {
+    s"${getClass.getSimpleName}${fields.map(_.toString).mkString("(", ",", ")")}"
+  }
+
   private lazy val _hashCode: Int = java.util.Arrays.hashCode(fields.asInstanceOf[Array[AnyRef]])
   override def hashCode(): Int = _hashCode
 
@@ -559,63 +563,86 @@ object StructType extends AbstractDataType {
       case _ => dt
     }
 
+  /**
+   * This leverages `merge` to merge data types for UNION operator by specializing
+   * the handling of struct types to follow UNION semantics.
+   */
+  private[sql] def unionLikeMerge(left: DataType, right: DataType): DataType =
+    mergeInternal(left, right, (s1: StructType, s2: StructType) => {
+      val leftFields = s1.fields
+      val rightFields = s2.fields
+      require(leftFields.size == rightFields.size, "To merge nullability, " +
+        "two structs must have same number of fields.")
+
+      val newFields = leftFields.zip(rightFields).map {
+        case (leftField, rightField) =>
+          leftField.copy(
+            dataType = unionLikeMerge(leftField.dataType, rightField.dataType),
+            nullable = leftField.nullable || rightField.nullable)
+      }.toSeq
+      StructType(newFields)
+    })
+
   private[sql] def merge(left: DataType, right: DataType): DataType =
+    mergeInternal(left, right, (s1: StructType, s2: StructType) => {
+      val leftFields = s1.fields
+      val rightFields = s2.fields
+      val newFields = mutable.ArrayBuffer.empty[StructField]
+
+      val rightMapped = fieldsMap(rightFields)
+      leftFields.foreach {
+        case leftField @ StructField(leftName, leftType, leftNullable, _) =>
+          rightMapped.get(leftName)
+            .map { case rightField @ StructField(rightName, rightType, rightNullable, _) =>
+              try {
+                leftField.copy(
+                  dataType = merge(leftType, rightType),
+                  nullable = leftNullable || rightNullable)
+              } catch {
+                case NonFatal(e) =>
+                  throw QueryExecutionErrors.failedMergingFieldsError(leftName, rightName, e)
+              }
+            }
+            .orElse {
+              Some(leftField)
+            }
+            .foreach(newFields += _)
+      }
+
+      val leftMapped = fieldsMap(leftFields)
+      rightFields
+        .filterNot(f => leftMapped.get(f.name).nonEmpty)
+        .foreach { f =>
+          newFields += f
+        }
+
+      StructType(newFields.toSeq)
+    })
+
+  private def mergeInternal(
+      left: DataType,
+      right: DataType,
+      mergeStruct: (StructType, StructType) => StructType): DataType =
     (left, right) match {
       case (ArrayType(leftElementType, leftContainsNull),
       ArrayType(rightElementType, rightContainsNull)) =>
         ArrayType(
-          merge(leftElementType, rightElementType),
+          mergeInternal(leftElementType, rightElementType, mergeStruct),
           leftContainsNull || rightContainsNull)
 
       case (MapType(leftKeyType, leftValueType, leftContainsNull),
       MapType(rightKeyType, rightValueType, rightContainsNull)) =>
         MapType(
-          merge(leftKeyType, rightKeyType),
-          merge(leftValueType, rightValueType),
+          mergeInternal(leftKeyType, rightKeyType, mergeStruct),
+          mergeInternal(leftValueType, rightValueType, mergeStruct),
           leftContainsNull || rightContainsNull)
 
-      case (StructType(leftFields), StructType(rightFields)) =>
-        val newFields = mutable.ArrayBuffer.empty[StructField]
-
-        val rightMapped = fieldsMap(rightFields)
-        leftFields.foreach {
-          case leftField @ StructField(leftName, leftType, leftNullable, _) =>
-            rightMapped.get(leftName)
-              .map { case rightField @ StructField(rightName, rightType, rightNullable, _) =>
-                try {
-                  leftField.copy(
-                    dataType = merge(leftType, rightType),
-                    nullable = leftNullable || rightNullable)
-                } catch {
-                  case NonFatal(e) =>
-                    throw QueryExecutionErrors.failedMergingFieldsError(leftName, rightName, e)
-                }
-              }
-              .orElse {
-                Some(leftField)
-              }
-              .foreach(newFields += _)
-        }
-
-        val leftMapped = fieldsMap(leftFields)
-        rightFields
-          .filterNot(f => leftMapped.get(f.name).nonEmpty)
-          .foreach { f =>
-            newFields += f
-          }
-
-        StructType(newFields.toSeq)
+      case (s1: StructType, s2: StructType) => mergeStruct(s1, s2)
 
       case (DecimalType.Fixed(leftPrecision, leftScale),
         DecimalType.Fixed(rightPrecision, rightScale)) =>
-        if ((leftPrecision == rightPrecision) && (leftScale == rightScale)) {
-          DecimalType(leftPrecision, leftScale)
-        } else if ((leftPrecision != rightPrecision) && (leftScale != rightScale)) {
-          throw QueryExecutionErrors.cannotMergeDecimalTypesWithIncompatiblePrecisionAndScaleError(
-            leftPrecision, rightPrecision, leftScale, rightScale)
-        } else if (leftPrecision != rightPrecision) {
-          throw QueryExecutionErrors.cannotMergeDecimalTypesWithIncompatiblePrecisionError(
-            leftPrecision, rightPrecision)
+        if (leftScale == rightScale) {
+          DecimalType(leftPrecision.max(rightPrecision), leftScale)
         } else {
           throw QueryExecutionErrors.cannotMergeDecimalTypesWithIncompatibleScaleError(
             leftScale, rightScale)
@@ -623,6 +650,12 @@ object StructType extends AbstractDataType {
 
       case (leftUdt: UserDefinedType[_], rightUdt: UserDefinedType[_])
         if leftUdt.userClass == rightUdt.userClass => leftUdt
+
+      case (YearMonthIntervalType(lstart, lend), YearMonthIntervalType(rstart, rend)) =>
+        YearMonthIntervalType(Math.min(lstart, rstart).toByte, Math.max(lend, rend).toByte)
+
+      case (DayTimeIntervalType(lstart, lend), DayTimeIntervalType(rstart, rend)) =>
+        DayTimeIntervalType(Math.min(lstart, rstart).toByte, Math.max(lend, rend).toByte)
 
       case (leftType, rightType) if leftType == rightType =>
         leftType

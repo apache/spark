@@ -19,7 +19,6 @@ package org.apache.spark.deploy.yarn
 
 import java.io.{File, FileInputStream, FileNotFoundException, FileOutputStream}
 import java.net.URI
-import java.nio.file.Paths
 import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
 
@@ -475,10 +474,10 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
   test("custom driver resource request yarn config and spark config fails") {
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
-    val resources = Map(YARN_GPU_RESOURCE_CONFIG -> "gpu", YARN_FPGA_RESOURCE_CONFIG -> "fpga")
-    ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
 
     val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
+    val resources = Map(conf.get(YARN_GPU_DEVICE) -> "gpu", conf.get(YARN_FPGA_DEVICE) -> "fpga")
+    ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
     resources.keys.foreach { yarnName =>
       conf.set(s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${yarnName}.${AMOUNT}", "2")
     }
@@ -498,10 +497,9 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
   test("custom executor resource request yarn config and spark config fails") {
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
-    val resources = Map(YARN_GPU_RESOURCE_CONFIG -> "gpu", YARN_FPGA_RESOURCE_CONFIG -> "fpga")
-    ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
-
     val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
+    val resources = Map(conf.get(YARN_GPU_DEVICE) -> "gpu", conf.get(YARN_FPGA_DEVICE) -> "fpga")
+    ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
     resources.keys.foreach { yarnName =>
       conf.set(s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${yarnName}.${AMOUNT}", "2")
     }
@@ -522,13 +520,14 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
   test("custom resources spark config mapped to yarn config") {
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+    val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
     val yarnMadeupResource = "yarn.io/madeup"
-    val resources = Map(YARN_GPU_RESOURCE_CONFIG -> "gpu",
-      YARN_FPGA_RESOURCE_CONFIG -> "fpga",
+    val resources = Map(conf.get(YARN_GPU_DEVICE) -> "gpu",
+      conf.get(YARN_FPGA_DEVICE) -> "fpga",
       yarnMadeupResource -> "madeup")
+
     ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
 
-    val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
     resources.values.foreach { rName =>
       conf.set(new ResourceID(SPARK_DRIVER_PREFIX, rName).amountConf, "3")
     }
@@ -545,12 +544,43 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
     val yarnRInfo = ResourceRequestTestHelper.getResources(newContext.getResource)
     val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.name -> rInfo.value)).toMap
-    assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).nonEmpty)
-    assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).get === 3)
-    assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).nonEmpty)
-    assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).get === 3)
+    assert(allResourceInfo.get(conf.get(YARN_GPU_DEVICE)).nonEmpty)
+    assert(allResourceInfo.get(conf.get(YARN_GPU_DEVICE)).get === 3)
+    assert(allResourceInfo.get(conf.get(YARN_FPGA_DEVICE)).nonEmpty)
+    assert(allResourceInfo.get(conf.get(YARN_FPGA_DEVICE)).get === 3)
     assert(allResourceInfo.get(yarnMadeupResource).nonEmpty)
     assert(allResourceInfo.get(yarnMadeupResource).get === 5)
+  }
+
+  test("gpu/fpga spark resources mapped to custom yarn resources") {
+    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+    val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
+    val gpuCustomName = "custom/gpu"
+    val fpgaCustomName = "custom/fpga"
+    conf.set(YARN_GPU_DEVICE.key, gpuCustomName)
+    conf.set(YARN_FPGA_DEVICE.key, fpgaCustomName)
+    val resources = Map(gpuCustomName -> "gpu",
+      fpgaCustomName -> "fpga")
+
+    ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
+    resources.values.foreach { rName =>
+      conf.set(new ResourceID(SPARK_DRIVER_PREFIX, rName).amountConf, "3")
+    }
+    val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
+    val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
+    val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
+
+    val client = new Client(new ClientArguments(Array()), conf, null)
+    val newContext = client.createApplicationSubmissionContext(
+      new YarnClientApplication(getNewApplicationResponse, appContext),
+      containerLaunchContext)
+
+    val yarnRInfo = ResourceRequestTestHelper.getResources(newContext.getResource)
+    val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.name -> rInfo.value)).toMap
+    assert(allResourceInfo.get(gpuCustomName).nonEmpty)
+    assert(allResourceInfo.get(gpuCustomName).get === 3)
+    assert(allResourceInfo.get(fpgaCustomName).nonEmpty)
+    assert(allResourceInfo.get(fpgaCustomName).get === 3)
   }
 
   test("test yarn jars path not exists") {
@@ -582,40 +612,6 @@ class ClientSuite extends SparkFunSuite with Matchers {
         }
       }
     }
-  }
-
-  test("SPARK-35672: test Client.getUserClasspathUrls") {
-    val gatewayRootPath = "/local/matching/replace"
-    val replacementRootPath = "/replaced/path"
-    val conf = new SparkConf()
-        .set(SECONDARY_JARS, Seq(
-          s"local:$gatewayRootPath/foo.jar",
-          "local:/local/not/matching/replace/foo.jar",
-          "file:/absolute/file/path/foo.jar",
-          s"$gatewayRootPath/but-not-actually-local/foo.jar",
-          "/absolute/path/foo.jar",
-          "relative/path/foo.jar"
-        ))
-        .set(GATEWAY_ROOT_PATH, gatewayRootPath)
-        .set(REPLACEMENT_ROOT_PATH, replacementRootPath)
-
-    def assertUserClasspathUrls(cluster: Boolean, expectedReplacementPath: String): Unit = {
-      val expectedUrls = Seq(
-        Paths.get(APP_JAR_NAME).toAbsolutePath.toUri.toString,
-        s"file:$expectedReplacementPath/foo.jar",
-        "file:/local/not/matching/replace/foo.jar",
-        "file:/absolute/file/path/foo.jar",
-        // since this path wasn't a local URI, it should never be replaced
-        s"file:$gatewayRootPath/but-not-actually-local/foo.jar",
-        "file:/absolute/path/foo.jar",
-        Paths.get("relative/path/foo.jar").toAbsolutePath.toUri.toString
-      ).map(URI.create(_).toURL).toArray
-      assert(Client.getUserClasspathUrls(conf, cluster) === expectedUrls)
-    }
-    // assert that no replacement happens when cluster = false by expecting the replacement
-    // path to be the same as the original path
-    assertUserClasspathUrls(cluster = false, gatewayRootPath)
-    assertUserClasspathUrls(cluster = true, replacementRootPath)
   }
 
   private val matching = Seq(

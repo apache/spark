@@ -18,14 +18,12 @@
 package org.apache.spark.sql.avro
 
 import scala.collection.JavaConverters._
-import scala.util.Random
 
 import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.LogicalTypes.{Date, Decimal, LocalTimestampMicros, LocalTimestampMillis, TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.Decimal.minBytesForPrecision
 
@@ -35,8 +33,6 @@ import org.apache.spark.sql.types.Decimal.minBytesForPrecision
  */
 @DeveloperApi
 object SchemaConverters {
-  private lazy val uuidGenerator = RandomUUIDGenerator(new Random().nextLong())
-
   private lazy val nullSchema = Schema.create(Schema.Type.NULL)
 
   /**

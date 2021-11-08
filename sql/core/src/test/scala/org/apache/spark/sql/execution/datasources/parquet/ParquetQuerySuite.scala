@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
+import java.math.BigDecimal
+import java.time.{Duration, Period}
 import java.util.concurrent.TimeUnit
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -899,6 +901,41 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
           assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
         }
       }
+    }
+  }
+
+  test("SPARK-37191: Merge schema for DecimalType with different precision") {
+    withTempPath { path =>
+      val data1 = Seq(Row(new BigDecimal("123456789.11")))
+      val schema1 = StructType(StructField("col", DecimalType(12, 2)) :: Nil)
+
+      val data2 = Seq(Row(new BigDecimal("1234567890000.11")))
+      val schema2 = StructType(StructField("col", DecimalType(17, 2)) :: Nil)
+
+      spark.createDataFrame(sparkContext.parallelize(data1, 1), schema1)
+        .write.parquet(path.toString)
+      spark.createDataFrame(sparkContext.parallelize(data2, 1), schema2)
+        .write.mode("append").parquet(path.toString)
+
+      withAllParquetReaders {
+        val res = spark.read.option("mergeSchema", "true").parquet(path.toString)
+        assert(res.schema("col").dataType == DecimalType(17, 2))
+        checkAnswer(res, data1 ++ data2)
+      }
+    }
+  }
+
+  test("SPARK-36825, SPARK-36852: create table with ANSI intervals") {
+    withTable("tbl") {
+      sql("create table tbl (c1 interval day, c2 interval year to month) using parquet")
+      sql("insert into tbl values (interval '100' day, interval '1-11' year to month)")
+      sql("insert into tbl values (null, null)")
+      sql("insert into tbl values (interval '-100' day, interval -'1-11' year to month)")
+      val expected = Seq(
+        (Duration.ofDays(100), Period.ofYears(1).plusMonths(11)),
+        (null, null),
+        (Duration.ofDays(100).negated(), Period.ofYears(1).plusMonths(11).negated())).toDF()
+      checkAnswer(sql("select * from tbl"), expected)
     }
   }
 }

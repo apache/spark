@@ -127,8 +127,8 @@ SELECT double('N A N')
 -- !query schema
 struct<>
 -- !query output
-java.lang.NumberFormatException
-invalid input syntax for type numeric: N A N
+org.apache.spark.SparkNumberFormatException
+invalid input syntax for type numeric: N A N. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -136,8 +136,8 @@ SELECT double('NaN x')
 -- !query schema
 struct<>
 -- !query output
-java.lang.NumberFormatException
-invalid input syntax for type numeric: NaN x
+org.apache.spark.SparkNumberFormatException
+invalid input syntax for type numeric: NaN x. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -145,8 +145,8 @@ SELECT double(' INFINITY    x')
 -- !query schema
 struct<>
 -- !query output
-java.lang.NumberFormatException
-invalid input syntax for type numeric:  INFINITY    x
+org.apache.spark.SparkNumberFormatException
+invalid input syntax for type numeric:  INFINITY    x. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -178,8 +178,8 @@ SELECT double(decimal('nan'))
 -- !query schema
 struct<>
 -- !query output
-java.lang.NumberFormatException
-invalid input syntax for type numeric: nan
+org.apache.spark.SparkNumberFormatException
+invalid input syntax for type numeric: nan. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -832,8 +832,8 @@ SELECT bigint(double('-9223372036854780000'))
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-Casting -9.22337203685478E18 to long causes overflow
+org.apache.spark.SparkArithmeticException
+Casting -9.22337203685478E18 to long causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query

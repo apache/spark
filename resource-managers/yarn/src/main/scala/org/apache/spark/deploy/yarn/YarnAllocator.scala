@@ -171,6 +171,8 @@ private[yarn] class YarnAllocator(
 
   private val labelExpression = sparkConf.get(EXECUTOR_NODE_LABEL_EXPRESSION)
 
+  private val resourceNameMapping = ResourceRequestHelper.getResourceNameMapping(sparkConf)
+
   // A container placement strategy based on pending tasks' locality preference
   private[yarn] val containerPlacementStrategy =
     new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resolver)
@@ -280,8 +282,7 @@ private[yarn] class YarnAllocator(
       logInfo(s"Resource profile ${rp.id} doesn't exist, adding it")
       val resourcesWithDefaults =
         ResourceProfile.getResourcesForClusterManager(rp.id, rp.executorResources,
-          MEMORY_OVERHEAD_FACTOR, sparkConf, isPythonApp,
-          ResourceRequestHelper.resourceNameMapping)
+          MEMORY_OVERHEAD_FACTOR, sparkConf, isPythonApp, resourceNameMapping)
       val customSparkResources =
         resourcesWithDefaults.customResources.map { case (name, execReq) =>
           (name, execReq.amount.toString)
@@ -309,9 +310,11 @@ private[yarn] class YarnAllocator(
       // to YARN. We still convert GPU and FPGA to the YARN build in types as well. This requires
       // that the name of any custom resources you specify match what they are defined as in YARN.
       val customResources = if (rp.id == DEFAULT_RESOURCE_PROFILE_ID) {
+        val gpuResource = sparkConf.get(YARN_GPU_DEVICE)
+        val fpgaResource = sparkConf.get(YARN_FPGA_DEVICE)
         getYarnResourcesAndAmounts(sparkConf, config.YARN_EXECUTOR_RESOURCE_TYPES_PREFIX) ++
           customSparkResources.filterKeys { r =>
-            (r == YARN_GPU_RESOURCE_CONFIG || r == YARN_FPGA_RESOURCE_CONFIG)
+            (r == gpuResource || r == fpgaResource)
           }
       } else {
         customSparkResources

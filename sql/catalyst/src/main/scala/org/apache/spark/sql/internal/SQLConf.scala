@@ -341,18 +341,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO =
-    buildConf("spark.sql.optimizer.dynamicPartitionPruning.pruningSideExtraFilterRatio")
-      .internal()
-      .doc("When filtering side doesn't support broadcast by join type, and doing DPP means " +
-        "running an extra query that may have significant overhead. This config will be used " +
-        "as the extra filter ratio for computing the data size of the pruning side after DPP, " +
-        "in order to evaluate if it is worth adding an extra subquery as the pruning filter.")
-      .version("3.2.0")
-      .doubleConf
-      .checkValue(ratio => ratio > 0.0 && ratio <= 1.0, "The ratio value must be in (0.0, 1.0].")
-      .createWithDefault(0.04)
-
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
@@ -427,6 +415,14 @@ object SQLConf {
     .version("1.1.0")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10MB")
+
+  val SHUFFLE_HASH_JOIN_FACTOR = buildConf("spark.sql.shuffledHashJoinFactor")
+    .doc("The shuffle hash join can be selected if the data size of small" +
+      " side multiplied by this factor is still smaller than the large side.")
+    .version("3.3.0")
+    .intConf
+    .checkValue(_ >= 1, "The shuffle hash join factor cannot be negative.")
+    .createWithDefault(3)
 
   val LIMIT_SCALE_UP_FACTOR = buildConf("spark.sql.limit.scaleUpFactor")
     .internal()
@@ -666,6 +662,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN =
+    buildConf("spark.sql.adaptive.forceOptimizeSkewedJoin")
+      .doc("When true, force enable OptimizeSkewedJoin even if it introduces extra shuffle.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS =
     buildConf("spark.sql.adaptive.customCostEvaluatorClass")
       .doc("The custom cost evaluator class to be used for adaptive execution. If not being set," +
@@ -858,6 +861,14 @@ object SQLConf {
       .checkValue(threshold => threshold >= 0, "The threshold must not be negative.")
       .createWithDefault(10)
 
+  val PARQUET_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.aggregatePushdown")
+    .doc("If true, MAX/MIN/COUNT without filter and group by will be pushed" +
+      " down to Parquet for optimization. MAX/MIN/COUNT for complex types and timestamp" +
+      " can't be pushed down")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
     .doc("If true, data will be written in a way of Spark 1.4 and earlier. For example, decimal " +
       "values will be written in Apache Parquet's fixed-length byte array format, which other " +
@@ -948,6 +959,14 @@ object SQLConf {
     .version("1.4.0")
     .booleanConf
     .createWithDefault(true)
+
+  val ORC_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.aggregatePushdown")
+    .doc("If true, aggregates will be pushed down to ORC for optimization. Support MIN, MAX and " +
+      "COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date " +
+      "type. For COUNT, support all data types.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val ORC_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.orc.mergeSchema")
     .doc("When true, the Orc data source merges schemas collected from all data files, " +
@@ -1408,8 +1427,8 @@ object SQLConf {
       " bigger files (which is scheduled first). This configuration is effective only when using" +
       " file-based sources such as Parquet, JSON and ORC.")
     .version("2.0.0")
-    .longConf
-    .createWithDefault(4 * 1024 * 1024)
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefaultString("4MB")
 
   val FILES_MIN_PARTITION_NUM = buildConf("spark.sql.files.minPartitionNum")
     .doc("The suggested (not guaranteed) minimum number of split file partitions. " +
@@ -1707,6 +1726,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_TWOLEVEL_AGG_MAP_PARTIAL_ONLY =
+    buildConf("spark.sql.codegen.aggregate.map.twolevel.partialOnly")
+      .internal()
+      .doc("Enable two-level aggregate hash map for partial aggregate only, " +
+        "because final aggregate might get more distinct keys compared to partial aggregate. " +
+        "Overhead of looking up 1st-level map might dominate when having a lot of distinct keys.")
+      .version("3.2.1")
+      .booleanConf
+      .createWithDefault(true)
+
   val ENABLE_VECTORIZED_HASH_MAP =
     buildConf("spark.sql.codegen.aggregate.map.vectorized.enable")
       .internal()
@@ -1860,6 +1889,13 @@ object SQLConf {
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
+
+  val COLLAPSE_PROJECT_ALWAYS_INLINE = buildConf("spark.sql.optimizer.collapseProjectAlwaysInline")
+    .doc("Whether to always collapse two adjacent projections and inline expressions even if " +
+      "it causes extra duplication.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
@@ -2562,6 +2598,23 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ENFORCE_RESERVED_KEYWORDS = buildConf("spark.sql.ansi.enforceReservedKeywords")
+    .doc(s"When true and '${ANSI_ENABLED.key}' is true, the Spark SQL parser enforces the ANSI " +
+      "reserved keywords and forbids SQL queries that use reserved keywords as alias names " +
+      "and/or identifiers for table, view, function, etc.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(true)
+
+  val ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI =
+    buildConf("spark.sql.ansi.allowCastBetweenDatetimeAndNumeric")
+      .doc("When true, the data type conversions between datetime types and numeric types are " +
+        "allowed in ANSI SQL mode. This configuration is only effective when " +
+        s"'${ANSI_ENABLED.key}' is true.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
       .internal()
@@ -2647,7 +2700,6 @@ object SQLConf {
 
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
-      .internal()
       .doc("In SQL queries with a SORT followed by a LIMIT like " +
           "'SELECT x FROM t ORDER BY y LIMIT m', if m is under this threshold, do a top-K sort" +
           " in memory, otherwise do a global sort which spills to disk if necessary.")
@@ -3336,13 +3388,20 @@ object SQLConf {
   val LEGACY_CHAR_VARCHAR_AS_STRING =
     buildConf("spark.sql.legacy.charVarcharAsString")
       .internal()
-      .doc("When true, Spark will not fail if user uses char and varchar type directly in those" +
-        " APIs that accept or parse data types as parameters, e.g." +
-        " `SparkSession.read.schema(...)`, `SparkSession.udf.register(...)` but treat them as" +
-        " string type as Spark 3.0 and earlier.")
+      .doc("When true, Spark treats CHAR/VARCHAR type the same as STRING type, which is the " +
+        "behavior of Spark 3.0 and earlier. This means no length check for CHAR/VARCHAR type and " +
+        "no padding for CHAR type when writing data to the table.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
+
+  val CHAR_AS_VARCHAR = buildConf("spark.sql.charAsVarchar")
+    .doc("When true, Spark replaces CHAR type with VARCHAR type in CREATE/REPLACE/ALTER TABLE " +
+      "commands, so that newly created/updated tables will not have CHAR type columns/fields. " +
+      "Existing tables with CHAR type columns/fields are not affected by this config.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val CLI_PRINT_HEADER =
     buildConf("spark.sql.cli.print.header")
@@ -3355,7 +3414,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.keepCommandOutputSchema")
       .internal()
       .doc("When true, Spark will keep the output schema of commands such as SHOW DATABASES " +
-        "unchanged, for v1 catalog and/or table.")
+        "unchanged.")
       .version("3.0.2")
       .booleanConf
       .createWithDefault(false)
@@ -3384,6 +3443,14 @@ object SQLConf {
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
+
+  val LEGACY_USE_V1_COMMAND =
+    buildConf("spark.sql.legacy.useV1Command")
+      .internal()
+      .doc("When true, Spark will use legacy V1 SQL commands.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -3536,9 +3603,6 @@ class SQLConf extends Serializable with Logging {
   def dynamicPartitionPruningReuseBroadcastOnly: Boolean =
     getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
 
-  def dynamicPartitionPruningPruningSideExtraFilterRatio: Double =
-    getConf(DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO)
-
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
   def isStateSchemaCheckEnabled: Boolean = getConf(STATE_SCHEMA_CHECK_ENABLED)
@@ -3662,7 +3726,11 @@ class SQLConf extends Serializable with Logging {
   def parquetFilterPushDownInFilterThreshold: Int =
     getConf(PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD)
 
+  def parquetAggregatePushDown: Boolean = getConf(PARQUET_AGGREGATE_PUSHDOWN_ENABLED)
+
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
+
+  def orcAggregatePushDown: Boolean = getConf(ORC_AGGREGATE_PUSHDOWN_ENABLED)
 
   def isOrcSchemaMergingEnabled: Boolean = getConf(ORC_SCHEMA_MERGING_ENABLED)
 
@@ -4007,6 +4075,11 @@ class SQLConf extends Serializable with Logging {
 
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
+  def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
+
+  def allowCastBetweenDatetimeAndNumericInAnsi: Boolean =
+    getConf(ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI)
+
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>
       // For historical reason, the TimestampType maps to TIMESTAMP WITH LOCAL TIME ZONE
@@ -4106,6 +4179,8 @@ class SQLConf extends Serializable with Logging {
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
+
+  def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
 
   /** ********************** SQLConf functionality methods ************ */
 

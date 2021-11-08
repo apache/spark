@@ -138,6 +138,7 @@ Computations / Descriptive Stats
    Series.clip
    Series.corr
    Series.count
+   Series.cov
    Series.cummax
    Series.cummin
    Series.cumsum

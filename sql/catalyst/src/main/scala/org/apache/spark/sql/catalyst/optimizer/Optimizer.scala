@@ -99,6 +99,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeRepartition,
         TransposeWindow,
         NullPropagation,
+        NullDownPropagation,
         ConstantPropagation,
         FoldablePropagation,
         OptimizeIn,
@@ -106,6 +107,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         EliminateAggregateFilter,
         ReorderAssociativeOperator,
         LikeSimplification,
+        NotPropagation,
         BooleanSimplification,
         SimplifyConditionals,
         PushFoldableIntoBranches,
@@ -159,7 +161,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       PullOutGroupingExpressions,
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager),
-      SpecialDatetimeValues) ::
+      SpecialDatetimeValues,
+      RewriteAsOfJoin) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -282,7 +285,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewritePredicateSubquery.ruleName ::
       NormalizeFloatingNumbers.ruleName ::
       ReplaceUpdateFieldsExpression.ruleName ::
-      PullOutGroupingExpressions.ruleName :: Nil
+      PullOutGroupingExpressions.ruleName ::
+      RewriteAsOfJoin.ruleName ::
+      RewriteLateralSubquery.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
@@ -420,6 +425,8 @@ object EliminateDistinct extends Rule[LogicalPlan] {
     case _: BitAndAgg => true
     case _: BitOrAgg => true
     case _: CollectSet => true
+    case _: First => true
+    case _: Last => true
     case _ => false
   }
 }
@@ -917,43 +924,82 @@ object ColumnPruning extends Rule[LogicalPlan] {
  */
 object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsPattern(PROJECT), ruleId) {
-    case p1 @ Project(_, p2: Project) =>
-      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList)) {
-        p1
-      } else {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val alwaysInline = conf.getConf(SQLConf.COLLAPSE_PROJECT_ALWAYS_INLINE)
+    plan.transformUpWithPruning(_.containsPattern(PROJECT), ruleId) {
+      case p1 @ Project(_, p2: Project)
+          if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline) =>
         p2.copy(projectList = buildCleanedProjectList(p1.projectList, p2.projectList))
-      }
-    case p @ Project(_, agg: Aggregate) =>
-      if (haveCommonNonDeterministicOutput(p.projectList, agg.aggregateExpressions)) {
-        p
-      } else {
+      case p @ Project(_, agg: Aggregate)
+          if canCollapseExpressions(p.projectList, agg.aggregateExpressions, alwaysInline) &&
+             canCollapseAggregate(p, agg) =>
         agg.copy(aggregateExpressions = buildCleanedProjectList(
           p.projectList, agg.aggregateExpressions))
-      }
-    case Project(l1, g @ GlobalLimit(_, limit @ LocalLimit(_, p2 @ Project(l2, _))))
+      case Project(l1, g @ GlobalLimit(_, limit @ LocalLimit(_, p2 @ Project(l2, _))))
         if isRenaming(l1, l2) =>
-      val newProjectList = buildCleanedProjectList(l1, l2)
-      g.copy(child = limit.copy(child = p2.copy(projectList = newProjectList)))
-    case Project(l1, limit @ LocalLimit(_, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
-      val newProjectList = buildCleanedProjectList(l1, l2)
-      limit.copy(child = p2.copy(projectList = newProjectList))
-    case Project(l1, r @ Repartition(_, _, p @ Project(l2, _))) if isRenaming(l1, l2) =>
-      r.copy(child = p.copy(projectList = buildCleanedProjectList(l1, p.projectList)))
-    case Project(l1, s @ Sample(_, _, _, _, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
-      s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
+        val newProjectList = buildCleanedProjectList(l1, l2)
+        g.copy(child = limit.copy(child = p2.copy(projectList = newProjectList)))
+      case Project(l1, limit @ LocalLimit(_, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
+        val newProjectList = buildCleanedProjectList(l1, l2)
+        limit.copy(child = p2.copy(projectList = newProjectList))
+      case Project(l1, r @ Repartition(_, _, p @ Project(l2, _))) if isRenaming(l1, l2) =>
+        r.copy(child = p.copy(projectList = buildCleanedProjectList(l1, p.projectList)))
+      case Project(l1, s @ Sample(_, _, _, _, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
+        s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
+    }
   }
 
-  private def haveCommonNonDeterministicOutput(
-      upper: Seq[NamedExpression], lower: Seq[NamedExpression]): Boolean = {
-    val aliases = getAliasMap(lower)
+  /**
+   * Check if we can collapse expressions safely.
+   */
+  def canCollapseExpressions(
+      consumers: Seq[Expression],
+      producers: Seq[NamedExpression],
+      alwaysInline: Boolean): Boolean = {
+    canCollapseExpressions(consumers, getAliasMap(producers), alwaysInline)
+  }
 
-    // Collapse upper and lower Projects if and only if their overlapped expressions are all
-    // deterministic.
-    upper.exists(_.collect {
-      case a: Attribute if aliases.contains(a) => aliases(a).child
-    }.exists(!_.deterministic))
+  /**
+   * Check if we can collapse expressions safely.
+   */
+  def canCollapseExpressions(
+      consumers: Seq[Expression],
+      producerMap: Map[Attribute, Expression],
+      alwaysInline: Boolean = false): Boolean = {
+    // We can only collapse expressions if all input expressions meet the following criteria:
+    // - The input is deterministic.
+    // - The input is only consumed once OR the underlying input expression is cheap.
+    consumers.flatMap(collectReferences)
+      .groupBy(identity)
+      .mapValues(_.size)
+      .forall {
+        case (reference, count) =>
+          val producer = producerMap.getOrElse(reference, reference)
+          producer.deterministic && (count == 1 || alwaysInline || {
+            val relatedConsumers = consumers.filter(_.references.contains(reference))
+            val extractOnly = relatedConsumers.forall(isExtractOnly(_, reference))
+            shouldInline(producer, extractOnly)
+          })
+      }
+  }
+
+  private def isExtractOnly(expr: Expression, ref: Attribute): Boolean = expr match {
+    case a: Alias => isExtractOnly(a.child, ref)
+    case e: ExtractValue => isExtractOnly(e.children.head, ref)
+    case a: Attribute => a.semanticEquals(ref)
+    case _ => false
+  }
+
+  /**
+   * A project cannot be collapsed with an aggregate when there are correlated scalar
+   * subqueries in the project list, because currently we only allow correlated subqueries
+   * in aggregate if they are also part of the grouping expressions. Otherwise the plan
+   * after subquery rewrite will not be valid.
+   */
+  private def canCollapseAggregate(p: Project, a: Aggregate): Boolean = {
+    p.projectList.forall(_.collect {
+      case s: ScalarSubquery if s.outerAttrs.nonEmpty => s
+    }.isEmpty)
   }
 
   private def buildCleanedProjectList(
@@ -961,6 +1007,34 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       lower: Seq[NamedExpression]): Seq[NamedExpression] = {
     val aliases = getAliasMap(lower)
     upper.map(replaceAliasButKeepName(_, aliases))
+  }
+
+  /**
+   * Check if the given expression is cheap that we can inline it.
+   */
+  private def shouldInline(e: Expression, extractOnlyConsumer: Boolean): Boolean = e match {
+    case _: Attribute | _: OuterReference => true
+    case _ if e.foldable => true
+    // PythonUDF is handled by the rule ExtractPythonUDFs
+    case _: PythonUDF => true
+    // Alias and ExtractValue are very cheap.
+    case _: Alias | _: ExtractValue => e.children.forall(shouldInline(_, extractOnlyConsumer))
+    // These collection create functions are not cheap, but we have optimizer rules that can
+    // optimize them out if they are only consumed by ExtractValue, so we need to allow to inline
+    // them to avoid perf regression. As an example:
+    //   Project(s.a, s.b, Project(create_struct(a, b, c) as s, child))
+    // We should collapse these two projects and eventually get Project(a, b, child)
+    case _: CreateNamedStruct | _: CreateArray | _: CreateMap | _: UpdateFields =>
+      extractOnlyConsumer
+    case _ => false
+  }
+
+  /**
+   * Return all the references of the given expression without deduplication, which is different
+   * from `Expression.references`.
+   */
+  private def collectReferences(e: Expression): Seq[Attribute] = e.collect {
+    case a: Attribute => a
   }
 
   private def isRenaming(list1: Seq[NamedExpression], list2: Seq[NamedExpression]): Boolean = {
@@ -1099,7 +1173,8 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
     // like 'size([1, 2, 3]) > 0'. These do not show up in child's constraints and
     // then the idempotence will break.
     case generate @ Generate(e, _, _, _, _, _)
-      if !e.deterministic || e.children.forall(_.foldable) => generate
+      if !e.deterministic || e.children.forall(_.foldable) ||
+        e.children.exists(_.isInstanceOf[UserDefinedExpression]) => generate
 
     case generate @ Generate(g, _, false, _, _, _) if canInferFilters(g) =>
       // Exclude child's constraints to guarantee idempotency

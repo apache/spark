@@ -536,7 +536,7 @@ case class NoCloseColumnVector(wrapped: ColumnVector) extends ColumnVector(wrapp
 
   override def getBinary(rowId: Int): Array[Byte] = wrapped.getBinary(rowId)
 
-  override protected def getChild(ordinal: Int): ColumnVector = wrapped.getChild(ordinal)
+  override def getChild(ordinal: Int): ColumnVector = wrapped.getChild(ordinal)
 }
 
 trait ColumnarExpression extends Expression with Serializable {

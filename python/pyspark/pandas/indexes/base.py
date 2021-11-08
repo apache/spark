@@ -37,7 +37,7 @@ from pandas.api.types import CategoricalDtype, is_hashable
 from pandas._libs import lib
 
 from pyspark.sql import functions as F, Column
-from pyspark.sql.types import FractionalType, IntegralType, TimestampType
+from pyspark.sql.types import FractionalType, IntegralType, TimestampType, TimestampNTZType
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Dtype, Label, Name, Scalar
@@ -57,6 +57,7 @@ from pyspark.pandas.utils import (
     verify_temp_column_name,
     validate_bool_kwarg,
     ERROR_MESSAGE_CANNOT_COMBINE,
+    log_advice,
 )
 from pyspark.pandas.internal import (
     InternalField,
@@ -178,6 +179,7 @@ class Index(IndexOpsMixin):
         from pyspark.pandas.indexes.multi import MultiIndex
         from pyspark.pandas.indexes.numeric import Float64Index, Int64Index
 
+        instance: Index
         if anchor._internal.index_level > 1:
             instance = object.__new__(MultiIndex)
         elif isinstance(anchor._internal.index_fields[0].dtype, CategoricalDtype):
@@ -191,13 +193,14 @@ class Index(IndexOpsMixin):
         ):
             instance = object.__new__(Float64Index)
         elif isinstance(
-            anchor._internal.spark_type_for(anchor._internal.index_spark_columns[0]), TimestampType
+            anchor._internal.spark_type_for(anchor._internal.index_spark_columns[0]),
+            (TimestampType, TimestampNTZType),
         ):
             instance = object.__new__(DatetimeIndex)
         else:
             instance = object.__new__(Index)
 
-        instance._anchor = anchor
+        instance._anchor = anchor  # type: ignore[attr-defined]
         return instance
 
     @property
@@ -486,6 +489,10 @@ class Index(IndexOpsMixin):
         >>> df['dogs'].index.to_pandas()
         Index(['a', 'b', 'c', 'd'], dtype='object')
         """
+        log_advice(
+            "`to_pandas` loads all data into the driver's memory. "
+            "It should only be used if the resulting pandas Index is expected to be small."
+        )
         return self._to_internal_pandas().copy()
 
     def to_numpy(self, dtype: Optional[Union[str, Dtype]] = None, copy: bool = False) -> np.ndarray:
@@ -516,6 +523,10 @@ class Index(IndexOpsMixin):
         >>> ps.DataFrame({'a': ['a', 'b', 'c']}, index=[[1, 2, 3], [4, 5, 6]]).index.to_numpy()
         array([(1, 4), (2, 5), (3, 6)], dtype=object)
         """
+        log_advice(
+            "`to_numpy` loads all data into the driver's memory. "
+            "It should only be used if the resulting NumPy ndarray is expected to be small."
+        )
         result = np.asarray(self._to_internal_pandas()._values, dtype=dtype)
         if copy:
             result = result.copy()
@@ -617,7 +628,7 @@ class Index(IndexOpsMixin):
         warnings.warn("We recommend using `{}.to_numpy()` instead.".format(type(self).__name__))
         if isinstance(self.spark.data_type, IntegralType):
             return self.to_numpy()
-        elif isinstance(self.spark.data_type, TimestampType):
+        elif isinstance(self.spark.data_type, (TimestampType, TimestampNTZType)):
             return np.array(list(map(lambda x: x.astype(np.int64), self.to_numpy())))
         else:
             return None
@@ -908,9 +919,7 @@ class Index(IndexOpsMixin):
             field = field.copy(name=name_like_string(name))
         elif self._internal.index_level == 1:
             name = self.name
-        column_labels = [
-            name if is_name_like_tuple(name) else (name,)
-        ]  # type: List[Optional[Label]]
+        column_labels: List[Optional[Label]] = [name if is_name_like_tuple(name) else (name,)]
         internal = self._internal.copy(
             column_labels=column_labels,
             data_spark_columns=[scol],
@@ -1989,7 +1998,7 @@ class Index(IndexOpsMixin):
         if isinstance(self, MultiIndex):
             if level is not None:
                 self_names = self.names
-                self_names[level] = names  # type: ignore
+                self_names[level] = names  # type: ignore[index]
                 names = self_names
         return self.rename(name=names, inplace=inplace)
 
@@ -2059,9 +2068,7 @@ class Index(IndexOpsMixin):
                 [isinstance(item, tuple) for item in other]
             )
             if is_other_list_of_tuples:
-                other = MultiIndex.from_tuples(other)  # type: ignore
-            elif isinstance(other, Series):
-                other = Index(other)
+                other = MultiIndex.from_tuples(other)  # type: ignore[arg-type]
             else:
                 raise TypeError("other must be a MultiIndex or a list of tuples")
 
@@ -2123,7 +2130,7 @@ class Index(IndexOpsMixin):
         >>> idx.is_all_dates
         False
         """
-        return isinstance(self.spark.data_type, TimestampType)
+        return isinstance(self.spark.data_type, (TimestampType, TimestampNTZType))
 
     def repeat(self, repeats: int) -> "Index":
         """
@@ -2182,7 +2189,7 @@ class Index(IndexOpsMixin):
         elif repeats < 0:
             raise ValueError("negative dimensions are not allowed")
 
-        psdf = DataFrame(self._internal.resolved_copy)  # type: DataFrame
+        psdf: DataFrame = DataFrame(self._internal.resolved_copy)
         if repeats == 0:
             return DataFrame(psdf._internal.with_filter(SF.lit(False))).index
         else:
@@ -2316,9 +2323,10 @@ class Index(IndexOpsMixin):
 
         sort = True if sort is None else sort
         sort = validate_bool_kwarg(sort, "sort")
+        other_idx: Index
         if isinstance(self, MultiIndex):
             if isinstance(other, MultiIndex):
-                other_idx = other  # type: Index
+                other_idx = other
             elif isinstance(other, list) and all(isinstance(item, tuple) for item in other):
                 other_idx = MultiIndex.from_tuples(other)
             else:
@@ -2407,27 +2415,30 @@ class Index(IndexOpsMixin):
         """
         from pyspark.pandas.indexes.multi import MultiIndex
 
+        other_idx: Index
         if isinstance(other, DataFrame):
             raise ValueError("Index data must be 1-dimensional")
         elif isinstance(other, MultiIndex):
             # Always returns a no-named empty Index if `other` is MultiIndex.
             return self._psdf.head(0).index.rename(None)
         elif isinstance(other, Index):
-            spark_frame_other = other.to_frame().to_spark()
-            keep_name = self.name == other.name
+            other_idx = other
+            spark_frame_other = other_idx.to_frame().to_spark()
+            keep_name = self.name == other_idx.name
         elif isinstance(other, Series):
-            spark_frame_other = other.to_frame().to_spark()
+            other_idx = Index(other)
+            spark_frame_other = other_idx.to_frame().to_spark()
             keep_name = True
         elif is_list_like(other):
-            other = Index(other)
-            if isinstance(other, MultiIndex):
-                return other.to_frame().head(0).index
-            spark_frame_other = other.to_frame().to_spark()
+            other_idx = Index(other)
+            if isinstance(other_idx, MultiIndex):
+                return other_idx.to_frame().head(0).index
+            spark_frame_other = other_idx.to_frame().to_spark()
             keep_name = True
         else:
             raise TypeError("Input must be Index or array-like")
 
-        index_fields = self._index_fields_for_union_like(other, func_name="intersection")
+        index_fields = self._index_fields_for_union_like(other_idx, func_name="intersection")
 
         spark_frame_self = self.to_frame(name=SPARK_DEFAULT_INDEX_NAME).to_spark()
         spark_frame_intersected = spark_frame_self.intersect(spark_frame_other)
@@ -2547,6 +2558,10 @@ class Index(IndexOpsMixin):
         >>> midx.to_list()
         [(1, 'red'), (1, 'blue'), (2, 'red'), (2, 'green')]
         """
+        log_advice(
+            "`to_list` loads all data into the driver's memory. "
+            "It should only be used if the resulting list is expected to be small."
+        )
         return self._to_internal_pandas().tolist()
 
     tolist = to_list
@@ -2577,7 +2592,7 @@ class Index(IndexOpsMixin):
         if hasattr(MissingPandasLikeIndex, item):
             property_or_func = getattr(MissingPandasLikeIndex, item)
             if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
+                return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
         raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, item))
@@ -2600,8 +2615,35 @@ class Index(IndexOpsMixin):
     def __iter__(self) -> Iterator:
         return MissingPandasLikeIndex.__iter__(self)
 
+    def __and__(self, other: "Index") -> "Index":
+        warnings.warn(
+            "Index.__and__ operating as a set operation is deprecated, "
+            "in the future this will be a logical operation matching Series.__and__.  "
+            "Use index.intersection(other) instead",
+            FutureWarning,
+        )
+        return self.intersection(other)
+
+    def __or__(self, other: "Index") -> "Index":
+        warnings.warn(
+            "Index.__or__ operating as a set operation is deprecated, "
+            "in the future this will be a logical operation matching Series.__or__.  "
+            "Use index.union(other) instead",
+            FutureWarning,
+        )
+        return self.union(other)
+
     def __xor__(self, other: "Index") -> "Index":
+        warnings.warn(
+            "Index.__xor__ operating as a set operation is deprecated, "
+            "in the future this will be a logical operation matching Series.__xor__.  "
+            "Use index.symmetric_difference(other) instead",
+            FutureWarning,
+        )
         return self.symmetric_difference(other)
+
+    def __rxor__(self, other: Any) -> "Index":
+        return NotImplemented
 
     def __bool__(self) -> bool:
         raise ValueError(

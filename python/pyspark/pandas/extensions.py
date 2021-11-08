@@ -20,9 +20,9 @@ import warnings
 from pyspark.pandas._typing import T
 
 if TYPE_CHECKING:
-    from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.frame import DataFrame
+    from pyspark.pandas.indexes import Index
+    from pyspark.pandas.series import Series
 
 
 class CachedAccessor(Generic[T]):
@@ -59,7 +59,7 @@ class CachedAccessor(Generic[T]):
     ) -> Union[T, Type[T]]:
         if obj is None:
             return self._accessor
-        accessor_obj = self._accessor(obj)  # type: ignore
+        accessor_obj = self._accessor(obj)  # type: ignore[call-arg]
         object.__setattr__(obj, self._name, accessor_obj)
         return accessor_obj
 

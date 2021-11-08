@@ -43,12 +43,13 @@ import org.apache.spark.util.collection.OpenHashMap
  *                             percentage values. Each percentage value must be in the range
  *                             [0.0, 1.0].
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage =
     """
-      _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric column
-       `col` at the given percentage. The value of percentage must be between 0.0 and 1.0. The
-       value of frequency should be positive integral
+      _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric
+       or ansi interval column `col` at the given percentage. The value of percentage must be
+       between 0.0 and 1.0. The value of frequency should be positive integral
 
       _FUNC_(col, array(percentage1 [, percentage2]...) [, frequency]) - Returns the exact
       percentile value array of numeric column `col` at the given percentage(s). Each value
@@ -62,9 +63,14 @@ import org.apache.spark.util.collection.OpenHashMap
        3.0
       > SELECT _FUNC_(col, array(0.25, 0.75)) FROM VALUES (0), (10) AS tab(col);
        [2.5,7.5]
+      > SELECT _FUNC_(col, 0.5) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
+       5.0
+      > SELECT _FUNC_(col, array(0.2, 0.5)) FROM VALUES (INTERVAL '0' SECOND), (INTERVAL '10' SECOND) AS tab(col);
+       [2000000.0,5000000.0]
   """,
   group = "agg_funcs",
   since = "2.1.0")
+// scalastyle:on line.size.limit
 case class Percentile(
     child: Expression,
     percentageExpression: Expression,
@@ -118,7 +124,8 @@ case class Percentile(
       case _: ArrayType => ArrayType(DoubleType, false)
       case _ => DoubleType
     }
-    Seq(NumericType, percentageExpType, IntegralType)
+    Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType),
+      percentageExpType, IntegralType)
   }
 
   // Check the inputTypes are valid, and the percentageExpression satisfies:
@@ -191,8 +198,15 @@ case class Percentile(
       return Seq.empty
     }
 
-    val sortedCounts = buffer.toSeq.sortBy(_._1)(
-      child.dataType.asInstanceOf[NumericType].ordering.asInstanceOf[Ordering[AnyRef]])
+    val ordering =
+      if (child.dataType.isInstanceOf[NumericType]) {
+        child.dataType.asInstanceOf[NumericType].ordering
+      } else if (child.dataType.isInstanceOf[YearMonthIntervalType]) {
+        child.dataType.asInstanceOf[YearMonthIntervalType].ordering
+      } else if (child.dataType.isInstanceOf[DayTimeIntervalType]) {
+        child.dataType.asInstanceOf[DayTimeIntervalType].ordering
+      }
+    val sortedCounts = buffer.toSeq.sortBy(_._1)(ordering.asInstanceOf[Ordering[AnyRef]])
     val accumulatedCounts = sortedCounts.scanLeft((sortedCounts.head._1, 0L)) {
       case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
     }.tail

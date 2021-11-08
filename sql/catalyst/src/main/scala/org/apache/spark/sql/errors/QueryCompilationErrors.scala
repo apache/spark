@@ -419,7 +419,7 @@ object QueryCompilationErrors {
   }
 
   def invalidFunctionArgumentNumberError(
-      validParametersCount: Seq[Int], name: String, params: Seq[Class[Expression]]): Throwable = {
+      validParametersCount: Seq[Int], name: String, actualNumber: Int): Throwable = {
     if (validParametersCount.length == 0) {
       new AnalysisException(s"Invalid arguments for function $name")
     } else {
@@ -429,7 +429,7 @@ object QueryCompilationErrors {
         validParametersCount.init.mkString("one of ", ", ", " and ") +
           validParametersCount.last
       }
-      invalidFunctionArgumentsError(name, expectedNumberOfParameters, params.length)
+      invalidFunctionArgumentsError(name, expectedNumberOfParameters, actualNumber)
     }
   }
 
@@ -1849,19 +1849,6 @@ object QueryCompilationErrors {
     new AnalysisException("Cannot overwrite a path that is also being read from.")
   }
 
-  def createFuncWithBothIfNotExistsAndReplaceError(): Throwable = {
-    new AnalysisException("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed.")
-  }
-
-  def defineTempFuncWithIfNotExistsError(): Throwable = {
-    new AnalysisException("It is not allowed to define a TEMPORARY function with IF NOT EXISTS.")
-  }
-
-  def specifyingDBInCreateTempFuncError(databaseName: String): Throwable = {
-    new AnalysisException(
-      s"Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: '$databaseName'")
-  }
-
   def specifyingDBInDropTempFuncError(databaseName: String): Throwable = {
     new AnalysisException(
       s"Specifying a database in DROP TEMPORARY FUNCTION is not allowed: '$databaseName'")
@@ -2009,19 +1996,6 @@ object QueryCompilationErrors {
       s"Failed to execute SHOW CREATE TABLE against table/view ${table.identifier}, " +
         "which is created by Hive and uses the following unsupported feature(s)\n" +
         features.map(" - " + _).mkString("\n"))
-  }
-
-  def createViewWithBothIfNotExistsAndReplaceError(): Throwable = {
-    new AnalysisException("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.")
-  }
-
-  def defineTempViewWithIfNotExistsError(): Throwable = {
-    new AnalysisException("It is not allowed to define a TEMPORARY view with IF NOT EXISTS.")
-  }
-
-  def notAllowedToAddDBPrefixForTempViewError(database: String): Throwable = {
-    new AnalysisException(
-      s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.")
   }
 
   def logicalPlanForViewNotAnalyzedError(): Throwable = {
@@ -2333,7 +2307,11 @@ object QueryCompilationErrors {
   }
 
   def cannotModifyValueOfSparkConfigError(key: String): Throwable = {
-    new AnalysisException(s"Cannot modify the value of a Spark config: $key")
+    new AnalysisException(
+      s"""
+         |Cannot modify the value of a Spark config: $key.
+         |See also 'https://spark.apache.org/docs/latest/sql-migration-guide.html#ddl-statements'
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   def commandExecutionInRunnerUnsupportedError(runner: String): Throwable = {
@@ -2387,5 +2365,9 @@ object QueryCompilationErrors {
     new AnalysisException(
       errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
       messageParameters = Array(schema.toString))
+  }
+
+  def tableIndexNotSupportedError(errorMessage: String): Throwable = {
+    new AnalysisException(errorMessage)
   }
 }

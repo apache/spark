@@ -20,13 +20,14 @@ import pydoc
 import shutil
 import tempfile
 import unittest
+import datetime
 
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, Column, Row
 from pyspark.sql.functions import udf
 from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import StringType, IntegerType, BooleanType, DoubleType, LongType, \
-    ArrayType, StructType, StructField
+    ArrayType, StructType, StructField, TimestampNTZType
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_compiled_message
 from pyspark.testing.utils import QuietTest
@@ -552,6 +553,23 @@ class UDFTests(ReusedSQLTestCase):
         self.assertEqual(f, f_.func)
         self.assertEqual(return_type, f_.returnType)
 
+    def test_udf_timestamp_ntz(self):
+        # SPARK-36626: Test TimestampNTZ in Python UDF
+        @udf(TimestampNTZType())
+        def noop(x):
+            assert x == datetime.datetime(1970, 1, 1, 0, 0)
+            return x
+
+        with self.sql_conf({"spark.sql.session.timeZone": "Pacific/Honolulu"}):
+            df = (self.spark
+                  .createDataFrame(
+                      [(datetime.datetime(1970, 1, 1, 0, 0),)], schema="dt timestamp_ntz")
+                  .select(noop("dt").alias("dt")))
+
+            df.selectExpr("assert_true('1970-01-01 00:00:00' == CAST(dt AS STRING))").collect()
+            self.assertEqual(df.schema[0].dataType.typeName(), "timestamp_ntz")
+            self.assertEqual(df.first()[0], datetime.datetime(1970, 1, 1, 0, 0))
+
     def test_nonparam_udf_with_aggregate(self):
         import pyspark.sql.functions as f
 
@@ -684,6 +702,26 @@ class UDFTests(ReusedSQLTestCase):
                            udf(f, IntegerType())("c2").alias('c4'))
         self.assertEqual(result.collect(),
                          [Row(c1=Row(_1=1.0, _2=1.0), c2=Row(_1=1, _2=1), c3=1.0, c4=1)])
+
+    # SPARK-33277
+    def test_udf_with_column_vector(self):
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+
+        try:
+            self.spark.range(0, 100000, 1, 1).write.parquet(path)
+
+            def f(x):
+                return 0
+
+            fUdf = udf(f, LongType())
+
+            for offheap in ["true", "false"]:
+                with self.sql_conf({"spark.sql.columnVector.offheap.enabled": offheap}):
+                    self.assertEquals(
+                        self.spark.read.parquet(path).select(fUdf('id')).head(), Row(0))
+        finally:
+            shutil.rmtree(path)
 
 
 class UDFInitializationTests(unittest.TestCase):
