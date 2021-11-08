@@ -169,6 +169,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             elif is_categorical_dtype(s.dtype):
                 # Note: This can be removed once minimum pyarrow version is >= 0.16.1
                 s = s.astype(s.dtypes.categories.dtype)
+            elif t is not None and pa.types.is_string(t):
+                s = s.astype(str)
             try:
                 array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
             except ValueError as e:
