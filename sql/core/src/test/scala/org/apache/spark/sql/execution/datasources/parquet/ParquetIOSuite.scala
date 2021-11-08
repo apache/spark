@@ -1088,7 +1088,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
-  test("SPARK-37035: Improve error message when use parquet vectorize reader") {
+  test("SPARK-37035: Improve error message when use parquet vectorized reader") {
     val data = (0 to 10).flatMap(n => Seq.fill(10)(n)).map(i => (i, i.toString))
     withParquetFile(data) { dir =>
       val file = SpecificParquetRecordReaderBase.listDirectory(new File(dir)).get(0)
@@ -1101,12 +1101,13 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val dictionaryPage = pages.readDictionaryPage()
         assert(dictionaryPage != null, "dictionaryPage shouldn't be null")
         val dictionary = dictionaryPage.getEncoding.initDictionary(descriptor, dictionaryPage)
-        val parquetDictionary = new ParquetDictionary(dictionary, file, true)
+        val parquetDictionary = new ParquetDictionary(
+          dictionary, descriptor.getPrimitiveType.getName, file, true)
         val msg = intercept[UnsupportedOperationException] {
           parquetDictionary.decodeToInt(0)
         }.getMessage
-        assert(msg.contains("Decoding to Int is not supported by PlainIntegerDictionary " +
-          s"while reading file $file"))
+        assert(msg.contains("Decoding to Int is not supported when reading col `_1` by " +
+          s"PlainIntegerDictionary while reading file $file"))
       } finally {
         reader.close()
       }

@@ -207,7 +207,8 @@ public class VectorizedColumnReader {
           boolean isUnsignedInt64 = updaterFactory.isUnsignedIntTypeMatched(64);
 
           boolean needTransform = castLongToInt || isUnsignedInt32 || isUnsignedInt64;
-          column.setDictionary(new ParquetDictionary(dictionary, file, needTransform));
+          column.setDictionary(new ParquetDictionary(dictionary,
+            descriptor.getPrimitiveType().getName(), file, needTransform));
         } else {
           updater.decodeDictionaryIds(readState.offset - startOffset, startOffset, column,
             dictionaryIds, dictionary);

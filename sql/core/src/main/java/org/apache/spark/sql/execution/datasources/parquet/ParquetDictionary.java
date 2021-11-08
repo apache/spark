@@ -24,14 +24,17 @@ import java.math.BigInteger;
 
 public final class ParquetDictionary implements Dictionary {
   private org.apache.parquet.column.Dictionary dictionary;
+  private String colName;
   private String path;
   private boolean needTransform = false;
 
   public ParquetDictionary(
       org.apache.parquet.column.Dictionary dictionary,
+      String colName,
       String path,
       boolean needTransform) {
     this.dictionary = dictionary;
+    this.colName = colName;
     this.path = path;
     this.needTransform = needTransform;
   }
@@ -46,7 +49,7 @@ public final class ParquetDictionary implements Dictionary {
       }
     } catch (UnsupportedOperationException e) {
       throw QueryExecutionErrors.unsupportedParquetDictionaryDecodingError(
-        "Int", dictionary.getClass().getSimpleName(), path, e);
+        "Int", dictionary.getClass().getSimpleName(), colName, path, e);
     }
   }
 
@@ -63,7 +66,7 @@ public final class ParquetDictionary implements Dictionary {
       }
     } catch (UnsupportedOperationException e) {
       throw QueryExecutionErrors.unsupportedParquetDictionaryDecodingError(
-        "Long", dictionary.getClass().getSimpleName(), path, e);
+        "Long", dictionary.getClass().getSimpleName(), colName, path, e);
     }
   }
 
@@ -73,7 +76,7 @@ public final class ParquetDictionary implements Dictionary {
       return dictionary.decodeToFloat(id);
     } catch (UnsupportedOperationException e) {
       throw QueryExecutionErrors.unsupportedParquetDictionaryDecodingError(
-        "Float", dictionary.getClass().getSimpleName(), path, e);
+        "Float", dictionary.getClass().getSimpleName(), colName, path, e);
     }
   }
 
@@ -83,7 +86,7 @@ public final class ParquetDictionary implements Dictionary {
       return dictionary.decodeToDouble(id);
     } catch (UnsupportedOperationException e) {
       throw QueryExecutionErrors.unsupportedParquetDictionaryDecodingError(
-        "Double", dictionary.getClass().getSimpleName(), path, e);
+        "Double", dictionary.getClass().getSimpleName(), colName, path, e);
     }
   }
 
@@ -102,7 +105,7 @@ public final class ParquetDictionary implements Dictionary {
       }
     } catch (UnsupportedOperationException e) {
       throw QueryExecutionErrors.unsupportedParquetDictionaryDecodingError(
-        "Binary", dictionary.getClass().getSimpleName(), path, e);
+        "Binary", dictionary.getClass().getSimpleName(), colName, path, e);
     }
   }
 }
