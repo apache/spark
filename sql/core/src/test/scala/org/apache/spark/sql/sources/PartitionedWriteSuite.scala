@@ -194,26 +194,29 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-37231: Dynamic writes/reads of ANSI interval partitions") {
-    Seq(
-      "INTERVAL '100' YEAR" -> YearMonthIntervalType(YEAR),
-      "INTERVAL '-1-1' YEAR TO MONTH" -> YearMonthIntervalType(YEAR, MONTH),
-      "INTERVAL '1000 02:03:04.123' DAY TO SECOND" -> DayTimeIntervalType(DAY, SECOND),
-      "INTERVAL '-10' MINUTE" -> DayTimeIntervalType(MINUTE)
-    ).foreach { case (intervalStr, intervalType) =>
-      withTempPath { f =>
-        val df = sql(s"select 0 AS id, $intervalStr AS diff")
-        assert(df.schema("diff").dataType === intervalType)
-        df.write
-          .partitionBy("diff")
-          .json(f.getAbsolutePath)
-        val files = TestUtils.recursiveList(f).filter(_.getAbsolutePath.endsWith("json"))
-        assert(files.length == 1)
-        checkPartitionValues(files.head, intervalStr)
-        val schema = new StructType()
-          .add("id", IntegerType)
-          .add("diff", intervalType)
-        checkAnswer(spark.read.schema(schema).json(f.getAbsolutePath), df)
+  test("SPARK-37231, SPARK-37240: Dynamic writes/reads of ANSI interval partitions") {
+    Seq("parquet", "json").foreach { format =>
+      Seq(
+        "INTERVAL '100' YEAR" -> YearMonthIntervalType(YEAR),
+        "INTERVAL '-1-1' YEAR TO MONTH" -> YearMonthIntervalType(YEAR, MONTH),
+        "INTERVAL '1000 02:03:04.123' DAY TO SECOND" -> DayTimeIntervalType(DAY, SECOND),
+        "INTERVAL '-10' MINUTE" -> DayTimeIntervalType(MINUTE)
+      ).foreach { case (intervalStr, intervalType) =>
+        withTempPath { f =>
+          val df = sql(s"select 0 AS id, $intervalStr AS diff")
+          assert(df.schema("diff").dataType === intervalType)
+          df.write
+            .partitionBy("diff")
+            .format(format)
+            .save(f.getAbsolutePath)
+          val files = TestUtils.recursiveList(f).filter(_.getAbsolutePath.endsWith(format))
+          assert(files.length == 1)
+          checkPartitionValues(files.head, intervalStr)
+          val schema = new StructType()
+            .add("id", IntegerType)
+            .add("diff", intervalType)
+          checkAnswer(spark.read.schema(schema).format(format).load(f.getAbsolutePath), df)
+        }
       }
     }
   }
