@@ -124,7 +124,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     var indexType = ""
     if (!properties.isEmpty) {
       properties.asScala.foreach { case (k, v) =>
-        if (k.equals(SupportsIndex.INDEX_TYPE)) {
+        if (k.equals(SupportsIndex.PROP_TYPE)) {
           if (v.equalsIgnoreCase("BTREE") || v.equalsIgnoreCase("HASH")) {
             indexType = s"USING $v"
           } else {
