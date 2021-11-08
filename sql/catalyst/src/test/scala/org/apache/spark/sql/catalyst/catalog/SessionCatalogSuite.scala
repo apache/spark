@@ -90,6 +90,16 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     case other => other
   }
 
+  private def lookupFunction(
+      catalog: SessionCatalog,
+      name: FunctionIdentifier,
+      children: Seq[Expression]): Expression = {
+    catalog.lookupFunction(name, children) match {
+      case wrapper: RegisteredFunction => wrapper.child
+      case other => other
+    }
+  }
+
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------
@@ -1371,8 +1381,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       catalog.registerFunction(
         newFunc("temp2", None), overrideIfExists = false, functionBuilder = Some(tempFunc2))
       val arguments = Seq(Literal(1), Literal(2), Literal(3))
-      assert(catalog.lookupFunction(FunctionIdentifier("temp1"), arguments) === Literal(1))
-      assert(catalog.lookupFunction(FunctionIdentifier("temp2"), arguments) === Literal(3))
+      assert(lookupFunction(catalog, FunctionIdentifier("temp1"), arguments) === Literal(1))
+      assert(lookupFunction(catalog, FunctionIdentifier("temp2"), arguments) === Literal(3))
       // Temporary function does not exist.
       intercept[NoSuchFunctionException] {
         catalog.lookupFunction(FunctionIdentifier("temp3"), arguments)
@@ -1388,8 +1398,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       catalog.registerFunction(
         newFunc("temp1", None), overrideIfExists = true, functionBuilder = Some(tempFunc3))
       assert(
-        catalog.lookupFunction(
-          FunctionIdentifier("temp1"), arguments) === Literal(arguments.length))
+        lookupFunction(
+          catalog, FunctionIdentifier("temp1"), arguments) === Literal(arguments.length))
     }
   }
 
@@ -1489,7 +1499,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       catalog.registerFunction(
         newFunc("func1", None), overrideIfExists = false, functionBuilder = Some(tempFunc))
       val arguments = Seq(Literal(1), Literal(2), Literal(3))
-      assert(catalog.lookupFunction(FunctionIdentifier("func1"), arguments) === Literal(1))
+      assert(lookupFunction(catalog, FunctionIdentifier("func1"), arguments) === Literal(1))
       catalog.dropTempFunction("func1", ignoreIfNotExists = false)
       intercept[NoSuchFunctionException] {
         catalog.lookupFunction(FunctionIdentifier("func1"), arguments)
@@ -1529,7 +1539,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       val tempFunc1 = (e: Seq[Expression]) => e.head
       catalog.registerFunction(
         newFunc("func1", None), overrideIfExists = false, functionBuilder = Some(tempFunc1))
-      assert(catalog.lookupFunction(
+      assert(lookupFunction(
+        catalog,
         FunctionIdentifier("func1"), Seq(Literal(1), Literal(2), Literal(3))) == Literal(1))
       catalog.dropTempFunction("func1", ignoreIfNotExists = false)
       intercept[NoSuchFunctionException] {

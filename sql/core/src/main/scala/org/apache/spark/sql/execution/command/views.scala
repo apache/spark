@@ -27,7 +27,7 @@ import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog, TemporaryViewRelation}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, RegisteredSimpleFunction, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, RegisteredFunction, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, LogicalPlan, Project, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
@@ -575,7 +575,7 @@ object ViewHelper extends SQLConfHelper with Logging {
             // Catalog API: sparkSession.sessionState.catalog.registerFunction
             // The second one is not a `UserDefinedExpression` and can be any kind of `Expression`.
             // So we wrap all functions to `RegisteredSimpleFunction` in order to collect them both.
-            case RegisteredSimpleFunction(name, _)
+            case RegisteredFunction(name, _)
                 if catalog.isTemporaryFunction(name) =>
               Seq(name.funcName)
             case _ => Seq.empty

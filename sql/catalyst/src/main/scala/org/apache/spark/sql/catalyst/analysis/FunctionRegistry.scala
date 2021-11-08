@@ -305,7 +305,7 @@ class SimpleFunctionRegistry
     // we can identify the functions among the expressions. It will get replaced at
     // runtime (currently by the optimizer) to the actual function.
     def wrappedBuilder: FunctionBuilder = (e: Seq[Expression]) => {
-      RegisteredSimpleFunction(name, builder(e))
+      RegisteredFunction(name, builder(e))
     }
     super.registerFunction(name, info, wrappedBuilder)
   }

@@ -1089,10 +1089,14 @@ trait UserDefinedExpression {
   def name: String
 }
 
-case class RegisteredSimpleFunction(
+case class RegisteredFunction(
     name: FunctionIdentifier, child: Expression) extends RuntimeReplaceable {
   override def exprsReplaced: Seq[Expression] = Seq(child)
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
+
+//  override lazy val canonicalized: Expression = child.canonicalized
+
+  override def sql: String = child.sql
 }

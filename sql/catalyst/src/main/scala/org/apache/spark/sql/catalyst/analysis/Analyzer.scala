@@ -2592,6 +2592,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         case UnresolvedAlias(g: Generator, _) => hasInnerGenerator(g)
         case Alias(g: Generator, _) => hasInnerGenerator(g)
         case MultiAlias(g: Generator, _) => hasInnerGenerator(g)
+        case UnresolvedAlias(RegisteredFunction(_, g: Generator), _) => hasInnerGenerator(g)
+        case Alias(RegisteredFunction(_, g: Generator), _) => hasInnerGenerator(g)
+        case MultiAlias(RegisteredFunction(_, g: Generator), _) => hasInnerGenerator(g)
         case other => hasGenerator(other)
       }
     }
@@ -2624,6 +2627,15 @@ class Analyzer(override val catalogManager: CatalogManager)
         case MultiAlias(GeneratorOuter(g: Generator), names) if g.resolved => Some((g, names, true))
         case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil, false))
         case MultiAlias(g: Generator, names) if g.resolved => Some((g, names, false))
+        case Alias(RegisteredFunction(_, GeneratorOuter(g: Generator)), name) if g.resolved =>
+          Some((g, name :: Nil, true))
+        case MultiAlias(RegisteredFunction(_, GeneratorOuter(g: Generator)), names)
+            if g.resolved =>
+          Some((g, names, true))
+        case Alias(RegisteredFunction(_, g: Generator), name) if g.resolved =>
+          Some((g, name :: Nil, false))
+        case MultiAlias(RegisteredFunction(_, g: Generator), names) if g.resolved =>
+          Some((g, names, false))
         case _ => None
       }
     }
