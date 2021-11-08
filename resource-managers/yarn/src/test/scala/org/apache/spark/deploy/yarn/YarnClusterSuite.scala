@@ -153,11 +153,13 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("SPARK-35672: run Spark in yarn-client mode with additional jar using URI scheme 'local'") {
-    testWithAddJar(clientMode = true, "local")
+    val jarPath = createJarWithOriginalResourceFile().getPath
+    testWithAddJar(clientMode = true, s"local:$jarPath")
   }
 
   test("SPARK-35672: run Spark in yarn-cluster mode with additional jar using URI scheme 'local'") {
-    testWithAddJar(clientMode = false, "local")
+    val jarPath = createJarWithOriginalResourceFile().getPath
+    testWithAddJar(clientMode = false, s"local:$jarPath")
   }
 
   test("SPARK-35672: run Spark in yarn-client mode with additional jar using URI scheme 'local' " +
@@ -166,12 +168,11 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     // replacement occurs, things will break. This ensures the replacement doesn't apply to the
     // driver in 'client' mode. Executors will fail in this case because they still apply the
     // replacement in client mode.
-    testWithAddJar(clientMode = true, "local", Some(jarUrl => {
-      (jarUrl.getPath, Map(
-        GATEWAY_ROOT_PATH.key -> Paths.get(jarUrl.toURI).getParent.toString,
-        REPLACEMENT_ROOT_PATH.key -> "/nonexistent/path/"
-      ))
-    }), expectExecutorFailure = true)
+    val jarUrl = createJarWithOriginalResourceFile()
+    testWithAddJar(clientMode = true, s"local:${jarUrl.getPath}", Map(
+      GATEWAY_ROOT_PATH.key -> Paths.get(jarUrl.toURI).getParent.toString,
+      REPLACEMENT_ROOT_PATH.key -> "/nonexistent/path/"
+    ), expectExecutorFailure = true)
   }
 
   test("SPARK-35672: run Spark in yarn-cluster mode with additional jar using URI scheme 'local' " +
@@ -179,13 +180,12 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     // Put a prefix in front of the original jar URL which causes it to be an invalid path.
     // Set up the gateway/replacement configs such that if replacement occurs, it is a valid
     // path again (by removing the prefix). This ensures the replacement is applied.
+    val jarPath = createJarWithOriginalResourceFile().getPath
     val gatewayPath = "/replaceme/nonexistent/"
-    testWithAddJar(clientMode = false, "local", Some(jarUrl => {
-      (gatewayPath + jarUrl.getPath, Map(
-        GATEWAY_ROOT_PATH.key -> gatewayPath,
-        REPLACEMENT_ROOT_PATH.key -> ""
-      ))
-    }))
+    testWithAddJar(clientMode = false, s"local:$gatewayPath$jarPath", Map(
+      GATEWAY_ROOT_PATH.key -> gatewayPath,
+      REPLACEMENT_ROOT_PATH.key -> ""
+    ))
   }
 
   test("SPARK-35672: run Spark in yarn-client mode with additional jar using URI scheme 'local' " +
@@ -193,21 +193,22 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     // Set up the replacement path to point to the correct path, but suffixed with some
     // nonexistent environment variable. If environment variable replacement takes place, then
     // the var will be replaced with an empty string, and the path will be correct again
-    def urlToParentPath(url: URL): String = Paths.get(url.toURI).getParent.toString
-    testWithAddJar(clientMode = true, "local", Some(jarUrl => {
-      (jarUrl.getPath, Map(
-        GATEWAY_ROOT_PATH.key -> urlToParentPath(jarUrl),
-        REPLACEMENT_ROOT_PATH.key -> s"${urlToParentPath(jarUrl)}{{NO_SUCH_ENV_VAR___}}"
-      ))
-    }))
+    val jarUrl = createJarWithOriginalResourceFile()
+    val jarParent = Paths.get(jarUrl.toURI).getParent.toString
+    testWithAddJar(clientMode = true, s"local:${jarUrl.getPath}", Map(
+      GATEWAY_ROOT_PATH.key -> jarParent,
+      REPLACEMENT_ROOT_PATH.key -> s"$jarParent{{NO_SUCH_ENV_VAR___}}"
+    ))
   }
 
   test("SPARK-35672: run Spark in yarn-client mode with additional jar using URI scheme 'file'") {
-    testWithAddJar(clientMode = true, "file")
+    val jarPath = createJarWithOriginalResourceFile().getPath
+    testWithAddJar(clientMode = true, s"file:$jarPath")
   }
 
   test("SPARK-35672: run Spark in yarn-cluster mode with additional jar using URI scheme 'file'") {
-    testWithAddJar(clientMode = false, "file")
+    val jarPath = createJarWithOriginalResourceFile().getPath
+    testWithAddJar(clientMode = false, s"file:$jarPath")
   }
 
   test("run Spark in yarn-cluster mode unsuccessfully") {
@@ -338,20 +339,19 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     checkResult(finalState, result)
   }
 
+  private def createJarWithOriginalResourceFile(): URL =
+    TestUtils.createJarWithFiles(Map("test.resource" -> "ORIGINAL"), tempDir)
+
   private def testWithAddJar(
       clientMode: Boolean,
-      jarUriScheme: String,
-      jarUrlToPathAndConfs: Option[URL => (String, Map[String, String])] = None,
+      jarPath: String,
+      extraConf: Map[String, String] = Map(),
       expectExecutorFailure: Boolean = false): Unit = {
-    val originalJar = TestUtils.createJarWithFiles(Map("test.resource" -> "ORIGINAL"), tempDir)
-    val (jarPath, extraConf) = jarUrlToPathAndConfs
-        .map(_.apply(originalJar))
-        .getOrElse((originalJar.getPath, Map[String, String]()))
     val driverResult = File.createTempFile("driver", null, tempDir)
     val executorResult = File.createTempFile("executor", null, tempDir)
     val finalState = runSpark(clientMode, mainClassName(YarnClasspathTest.getClass),
       appArgs = Seq(driverResult.getAbsolutePath, executorResult.getAbsolutePath),
-      extraJars = Seq(s"$jarUriScheme:$jarPath"),
+      extraJars = Seq(jarPath),
       extraConf = extraConf)
     checkResult(finalState, driverResult, "ORIGINAL")
     checkResult(finalState, executorResult, if (expectExecutorFailure) "failure" else "ORIGINAL")
