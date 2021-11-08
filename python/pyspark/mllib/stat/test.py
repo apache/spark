@@ -15,68 +15,72 @@
 # limitations under the License.
 #
 
+from typing import TypeVar, Tuple, Generic
+
 from pyspark.mllib.common import inherit_doc, JavaModelWrapper
 
 
 __all__ = ["ChiSqTestResult", "KolmogorovSmirnovTestResult"]
 
+DF = TypeVar("DF", int, float, Tuple[int, ...], Tuple[float, ...])
 
-class TestResult(JavaModelWrapper):
+
+class TestResult(JavaModelWrapper, Generic[DF]):
     """
     Base class for all test results.
     """
 
     @property
-    def pValue(self):
+    def pValue(self) -> float:
         """
         The probability of obtaining a test statistic result at least as
         extreme as the one that was actually observed, assuming that the
         null hypothesis is true.
         """
-        return self._java_model.pValue()
+        return self._java_model.pValue()  # type: ignore[attr-defined]
 
     @property
-    def degreesOfFreedom(self):
+    def degreesOfFreedom(self) -> DF:
         """
         Returns the degree(s) of freedom of the hypothesis test.
         Return type should be Number(e.g. Int, Double) or tuples of Numbers.
         """
-        return self._java_model.degreesOfFreedom()
+        return self._java_model.degreesOfFreedom()  # type: ignore[attr-defined]
 
     @property
-    def statistic(self):
+    def statistic(self) -> float:
         """
         Test statistic.
         """
-        return self._java_model.statistic()
+        return self._java_model.statistic()  # type: ignore[attr-defined]
 
     @property
-    def nullHypothesis(self):
+    def nullHypothesis(self) -> str:
         """
         Null hypothesis of the test.
         """
-        return self._java_model.nullHypothesis()
+        return self._java_model.nullHypothesis()  # type: ignore[attr-defined]
 
-    def __str__(self):
-        return self._java_model.toString()
+    def __str__(self) -> str:
+        return self._java_model.toString()  # type: ignore[attr-defined]
 
 
 @inherit_doc
-class ChiSqTestResult(TestResult):
+class ChiSqTestResult(TestResult[int]):
     """
     Contains test results for the chi-squared hypothesis test.
     """
 
     @property
-    def method(self):
+    def method(self) -> str:
         """
         Name of the test method
         """
-        return self._java_model.method()
+        return self._java_model.method()  # type: ignore[attr-defined]
 
 
 @inherit_doc
-class KolmogorovSmirnovTestResult(TestResult):
+class KolmogorovSmirnovTestResult(TestResult[int]):
     """
     Contains test results for the Kolmogorov-Smirnov test.
     """
