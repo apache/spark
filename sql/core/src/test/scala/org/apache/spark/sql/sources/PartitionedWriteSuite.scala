@@ -194,7 +194,7 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-37231, SPARK-XXXXX: Dynamic writes/reads of ANSI interval partitions") {
+  test("SPARK-37231, SPARK-37240: Dynamic writes/reads of ANSI interval partitions") {
     Seq("parquet", "json").foreach { format =>
       Seq(
         "INTERVAL '100' YEAR" -> YearMonthIntervalType(YEAR),
