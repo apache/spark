@@ -40,7 +40,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.metrics.SystemMetricsPublis
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp
 import org.apache.hadoop.yarn.server.security.ApplicationACLsManager
 import org.apache.hadoop.yarn.util.Records
-import org.mockito.ArgumentMatchers.{any, anyBoolean, anyShort, eq => meq}
+import org.mockito.ArgumentMatchers.{any, anyBoolean, eq => meq}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.scalatest.matchers.must.Matchers
@@ -132,7 +132,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       .set("spark.yarn.dist.jars", ADDED)
     val client = createClient(sparkConf, args = Array("--jar", USER))
     doReturn(new Path("/")).when(client).copyFileToRemote(any(classOf[Path]),
-      any(classOf[Path]), anyShort(), any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
+      any(classOf[Path]), any(), any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
 
     val tempDir = Utils.createTempDir()
     try {
@@ -308,11 +308,11 @@ class ClientSuite extends SparkFunSuite with Matchers {
     assert(sparkConf.get(SPARK_JARS) ===
       Some(Seq(s"local:${jar4.getPath()}", s"local:${single.getAbsolutePath()}/*")))
 
-    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar1.toURI())), anyShort(),
+    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar1.toURI())), any(),
       any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
-    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar2.toURI())), anyShort(),
+    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar2.toURI())), any(),
       any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
-    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar3.toURI())), anyShort(),
+    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar3.toURI())), any(),
       any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
 
     val cp = classpath(client)
@@ -330,7 +330,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     val client = createClient(sparkConf)
     client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
 
-    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(archive.toURI())), anyShort(),
+    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(archive.toURI())), any(),
       any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
     classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
 
