@@ -350,6 +350,24 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     }
   }
 
+  test("cast from date") {
+    withSQLConf(SQLConf.ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI.key -> "true") {
+      val d = Date.valueOf("1970-01-01")
+      checkEvaluation(cast(d, ShortType), null)
+      checkEvaluation(cast(d, IntegerType), null)
+      checkEvaluation(cast(d, LongType), null)
+      checkEvaluation(cast(d, FloatType), null)
+      checkEvaluation(cast(d, DoubleType), null)
+      checkEvaluation(cast(d, DecimalType.SYSTEM_DEFAULT), null)
+      checkEvaluation(cast(d, DecimalType(10, 2)), null)
+      checkEvaluation(cast(d, StringType), "1970-01-01")
+
+      checkEvaluation(
+        cast(cast(d, TimestampType, UTC_OPT), StringType, UTC_OPT),
+        "1970-01-01 00:00:00")
+    }
+  }
+
   test("cast from array II") {
     val array = Literal.create(Seq("123", "true", "f", null),
       ArrayType(StringType, containsNull = true))
