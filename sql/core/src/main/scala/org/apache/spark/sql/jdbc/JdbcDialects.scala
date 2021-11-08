@@ -304,6 +304,7 @@ abstract class JdbcDialect extends Serializable with Logging{
    */
   def createIndex(
       indexName: String,
+      indexType: String,
       tableName: String,
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
