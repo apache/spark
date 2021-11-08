@@ -437,7 +437,6 @@ class CastSuite extends CastSuiteBase {
 
   test("SPARK-37169: cast from date") {
     val d = Date.valueOf("1970-01-01")
-    checkEvaluation(cast(d, ByteType), -128.toByte)
     checkEvaluation(cast(d, ShortType), 28800.toShort)
     checkEvaluation(cast(d, IntegerType), 28800)
     checkEvaluation(cast(d, LongType), 28800L)
