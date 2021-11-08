@@ -137,26 +137,26 @@ jobs:
         include:
           # Hive tests
           - modules: hive
-            java: 8
+            java: ${{ needs.configure-jobs.outputs.java }}
             hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
             hive: hive2.3
             included-tags: org.apache.spark.tags.SlowHiveTest
             comment: "- slow tests"
           - modules: hive
-            java: 8
+            java: ${{ needs.configure-jobs.outputs.java }}
             hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
             hive: hive2.3
             excluded-tags: org.apache.spark.tags.SlowHiveTest
             comment: "- other tests"
           # SQL tests
           - modules: sql
-            java: 8
+            java: ${{ needs.configure-jobs.outputs.java }}
             hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
             hive: hive2.3
             included-tags: org.apache.spark.tags.ExtendedSQLTest
             comment: "- slow tests"
           - modules: sql
-            java: 8
+            java: ${{ needs.configure-jobs.outputs.java }}
             hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
             hive: hive2.3
             excluded-tags: org.apache.spark.tags.ExtendedSQLTest
