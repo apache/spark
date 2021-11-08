@@ -2237,6 +2237,9 @@ class DDLParserSuite extends AnalysisTest {
       false,
       LocalTempView)
     comparePlans(parsed2, expected2)
+
+    val v3 = "CREATE TEMPORARY VIEW a.b AS SELECT 1"
+    intercept(v3, "It is not allowed to add database prefix")
   }
 
   test("create view - full") {

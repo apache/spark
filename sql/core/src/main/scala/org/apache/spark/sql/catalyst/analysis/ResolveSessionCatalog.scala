@@ -456,7 +456,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       if (isTemp) {
         // temp func doesn't belong to any catalog and we shouldn't resolve catalog in the name.
         val database = if (nameParts.length > 2) {
-          throw QueryCompilationErrors.unsupportedFunctionNameError(nameParts.quoted)
+          throw QueryCompilationErrors.requiresSinglePartNamespaceError(nameParts)
         } else if (nameParts.length == 2) {
           Some(nameParts.head)
         } else {
