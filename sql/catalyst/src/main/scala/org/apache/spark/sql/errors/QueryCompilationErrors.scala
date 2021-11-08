@@ -858,8 +858,8 @@ object QueryCompilationErrors {
   }
 
   def requiresSinglePartNamespaceError(ns: Seq[String]): Throwable = {
-    new AnalysisException(
-      "spark_catalog requires a single-part namespace, but got " + ns.mkString("[", ", ", "]"))
+    new AnalysisException(CatalogManager.SESSION_CATALOG_NAME +
+      " requires a single-part namespace, but got " + ns.mkString("[", ", ", "]"))
   }
 
   def namespaceAlreadyExistsError(namespace: Array[String]): Throwable = {
