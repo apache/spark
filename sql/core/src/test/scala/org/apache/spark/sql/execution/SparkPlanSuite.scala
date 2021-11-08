@@ -18,11 +18,16 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkEnv
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.Deduplicate
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class SparkPlanSuite extends QueryTest with SharedSparkSession {
 
@@ -109,4 +114,24 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
     assert(err.getMessage.contains("Deduplicate operator for non streaming data source " +
       "should have been replaced by aggregate in the optimizer"))
   }
+
+  test("SPARK-37221: The collect-like API in SparkPlan should support columnar output") {
+    val emptyResults = ColumnarOp(LocalTableScanExec(Nil, Nil)).executeCollect()
+    assert(emptyResults.isEmpty)
+
+    val relation = LocalTableScanExec(
+      Seq(AttributeReference("val", IntegerType)()), Seq(InternalRow(1)))
+    val nonEmpty = ColumnarOp(relation).executeCollect()
+    assert(nonEmpty === relation.executeCollect())
+  }
+}
+
+case class ColumnarOp(child: SparkPlan) extends UnaryExecNode {
+  override val supportsColumnar: Boolean = true
+  override protected def doExecuteColumnar(): RDD[ColumnarBatch] =
+    RowToColumnarExec(child).executeColumnar()
+  override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException()
+  override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: SparkPlan): ColumnarOp =
+    copy(child = newChild)
 }

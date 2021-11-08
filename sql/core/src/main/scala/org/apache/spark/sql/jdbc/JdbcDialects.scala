@@ -295,7 +295,6 @@ abstract class JdbcDialect extends Serializable with Logging{
    * Build a create index SQL statement.
    *
    * @param indexName         the name of the index to be created
-   * @param indexType         the type of the index to be created
    * @param tableName         the table on which index to be created
    * @param columns           the columns on which index to be created
    * @param columnsProperties the properties of the columns on which index to be created
@@ -304,7 +303,6 @@ abstract class JdbcDialect extends Serializable with Logging{
    */
   def createIndex(
       indexName: String,
-      indexType: String,
       tableName: String,
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
