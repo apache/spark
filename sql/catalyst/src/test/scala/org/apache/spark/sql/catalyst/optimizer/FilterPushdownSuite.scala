@@ -840,6 +840,29 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-32940: aggregate: push filters through first, last and collect") {
+    Seq(
+      first(_: Expression),
+      last(_: Expression),
+      collectList(_: Expression),
+      collectSet(_: Expression)
+    ).foreach { agg =>
+      val originalQuery = testRelation
+        .groupBy('a)(agg('b))
+        .where('a > 42)
+        .analyze
+
+      val optimized = Optimize.execute(originalQuery)
+
+      val correctAnswer = testRelation
+        .where('a > 42)
+        .groupBy('a)(agg('b))
+        .analyze
+
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
   test("union") {
     val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
 

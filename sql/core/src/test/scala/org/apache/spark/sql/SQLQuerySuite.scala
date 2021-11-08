@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, Reparti
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.aggregate._
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.{DataWritingCommandExec, FunctionsCommand}
 import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation}
@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
+import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -2790,15 +2791,25 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("Non-deterministic aggregate functions should not be deduplicated") {
-    val query = "SELECT a, first_value(b), first_value(b) + 1 FROM testData2 GROUP BY a"
-    val df = sql(query)
-    val physical = df.queryExecution.sparkPlan
-    val aggregateExpressions = physical.collectFirst {
-      case agg : HashAggregateExec => agg.aggregateExpressions
-      case agg : SortAggregateExec => agg.aggregateExpressions
+    withUserDefinedFunction("sumND" -> true) {
+      spark.udf.register("sumND", udaf(new Aggregator[Long, Long, Long] {
+        def zero: Long = 0L
+        def reduce(b: Long, a: Long): Long = b + a
+        def merge(b1: Long, b2: Long): Long = b1 + b2
+        def finish(r: Long): Long = r
+        def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+        def outputEncoder: Encoder[Long] = Encoders.scalaLong
+      }).asNondeterministic())
+
+      val query = "SELECT a, sumND(b), sumND(b) + 1 FROM testData2 GROUP BY a"
+      val df = sql(query)
+      val physical = df.queryExecution.sparkPlan
+      val aggregateExpressions = physical.collectFirst {
+        case agg: BaseAggregateExec => agg.aggregateExpressions
+      }
+      assert(aggregateExpressions.isDefined)
+      assert(aggregateExpressions.get.size == 2)
     }
-    assert (aggregateExpressions.isDefined)
-    assert (aggregateExpressions.get.size == 2)
   }
 
   test("SPARK-22356: overlapped columns between data and partition schema in data source tables") {
@@ -4209,6 +4220,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
       "org.apache.spark.sql.catalyst.optimizer.RewriteLateralSubquery") {
       sql("SELECT * FROM testData, LATERAL (SELECT * FROM testData)").collect()
+    }
+  }
+
+  test("TABLE SAMPLE") {
+    withTable("test") {
+      sql("CREATE TABLE test(c int) USING PARQUET")
+      for (i <- 0 to 20) {
+        sql(s"INSERT INTO test VALUES ($i)")
+      }
+      val df1 = sql("SELECT * FROM test TABLESAMPLE (20 PERCENT) REPEATABLE (12345)")
+      val df2 = sql("SELECT * FROM test TABLESAMPLE (20 PERCENT) REPEATABLE (12345)")
+      checkAnswer(df1, df2)
+
+      val df3 = sql("SELECT * FROM test TABLESAMPLE (BUCKET 4 OUT OF 10) REPEATABLE (6789)")
+      val df4 = sql("SELECT * FROM test TABLESAMPLE (BUCKET 4 OUT OF 10) REPEATABLE (6789)")
+      checkAnswer(df3, df4)
     }
   }
 }

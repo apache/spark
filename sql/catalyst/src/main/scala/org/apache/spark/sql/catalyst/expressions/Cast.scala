@@ -513,10 +513,18 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       buildCast[Decimal](_, d => decimalToTimestamp(d))
     // TimestampWritable.doubleToTimestamp
     case DoubleType =>
-      buildCast[Double](_, d => doubleToTimestamp(d))
+      if (ansiEnabled) {
+        buildCast[Double](_, d => doubleToTimestampAnsi(d))
+      } else {
+        buildCast[Double](_, d => doubleToTimestamp(d))
+      }
     // TimestampWritable.floatToTimestamp
     case FloatType =>
-      buildCast[Float](_, f => doubleToTimestamp(f.toDouble))
+      if (ansiEnabled) {
+        buildCast[Float](_, f => doubleToTimestampAnsi(f.toDouble))
+      } else {
+        buildCast[Float](_, f => doubleToTimestamp(f.toDouble))
+      }
   }
 
   private[this] def castToTimestampNTZ(from: DataType): Any => Any = from match {
@@ -595,7 +603,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // LongConverter
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, _.toLongExact())
+      buildCast[UTF8String](_, UTF8StringUtils.toLongExact)
     case StringType =>
       val result = new LongWrapper()
       buildCast[UTF8String](_, s => if (s.toLong(result)) result.value else null)
@@ -614,7 +622,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // IntConverter
   private[this] def castToInt(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, _.toIntExact())
+      buildCast[UTF8String](_, UTF8StringUtils.toIntExact)
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toInt(result)) result.value else null)
@@ -642,7 +650,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // ShortConverter
   private[this] def castToShort(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, _.toShortExact())
+      buildCast[UTF8String](_, UTF8StringUtils.toShortExact)
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toShort(result)) {
@@ -685,7 +693,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // ByteConverter
   private[this] def castToByte(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, _.toByteExact())
+      buildCast[UTF8String](_, UTF8StringUtils.toByteExact)
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toByte(result)) {
@@ -1408,22 +1416,30 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evPrim = ${decimalToTimestampCode(c)};"
     case DoubleType =>
       (c, evPrim, evNull) =>
-        code"""
-          if (Double.isNaN($c) || Double.isInfinite($c)) {
-            $evNull = true;
-          } else {
-            $evPrim = (long)($c * $MICROS_PER_SECOND);
-          }
-        """
+        if (ansiEnabled) {
+          code"$evPrim = $dateTimeUtilsCls.doubleToTimestampAnsi($c);"
+        } else {
+          code"""
+            if (Double.isNaN($c) || Double.isInfinite($c)) {
+              $evNull = true;
+            } else {
+              $evPrim = (long)($c * $MICROS_PER_SECOND);
+            }
+          """
+        }
     case FloatType =>
       (c, evPrim, evNull) =>
-        code"""
-          if (Float.isNaN($c) || Float.isInfinite($c)) {
-            $evNull = true;
-          } else {
-            $evPrim = (long)((double)$c * $MICROS_PER_SECOND);
-          }
-        """
+        if (ansiEnabled) {
+          code"$evPrim = $dateTimeUtilsCls.doubleToTimestampAnsi((double)$c);"
+        } else {
+          code"""
+            if (Float.isNaN($c) || Float.isInfinite($c)) {
+              $evNull = true;
+            } else {
+              $evPrim = (long)((double)$c * $MICROS_PER_SECOND);
+            }
+          """
+        }
   }
 
   private[this] def castToTimestampNTZCode(
@@ -1622,7 +1638,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castToByteCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType if ansiEnabled =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toByteExact();"
+      val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, evNull) => code"$evPrim = $stringUtils.toByteExact($c);"
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
@@ -1653,7 +1670,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType if ansiEnabled =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toShortExact();"
+      val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, evNull) => code"$evPrim = $stringUtils.toShortExact($c);"
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
@@ -1682,7 +1700,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castToIntCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType if ansiEnabled =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toIntExact();"
+      val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, evNull) => code"$evPrim = $stringUtils.toIntExact($c);"
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
@@ -1711,7 +1730,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castToLongCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType if ansiEnabled =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toLongExact();"
+      val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, evNull) => code"$evPrim = $stringUtils.toLongExact($c);"
     case StringType =>
       val wrapper = ctx.freshVariable("longWrapper", classOf[UTF8String.LongWrapper])
       (c, evPrim, evNull) =>
@@ -2069,6 +2089,7 @@ object AnsiCast {
     case (StringType, TimestampType) => true
     case (DateType, TimestampType) => true
     case (TimestampNTZType, TimestampType) => true
+    case (_: NumericType, TimestampType) => SQLConf.get.allowCastBetweenDatetimeAndNumericInAnsi
 
     case (StringType, TimestampNTZType) => true
     case (DateType, TimestampNTZType) => true
@@ -2088,6 +2109,8 @@ object AnsiCast {
     case (_: NumericType, _: NumericType) => true
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
+    case (TimestampType, _: NumericType) => SQLConf.get.allowCastBetweenDatetimeAndNumericInAnsi
+    case (DateType, _: NumericType) => SQLConf.get.allowCastBetweenDatetimeAndNumericInAnsi
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canCast(fromType, toType) &&

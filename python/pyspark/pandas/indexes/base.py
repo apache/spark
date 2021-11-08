@@ -57,6 +57,7 @@ from pyspark.pandas.utils import (
     verify_temp_column_name,
     validate_bool_kwarg,
     ERROR_MESSAGE_CANNOT_COMBINE,
+    log_advice,
 )
 from pyspark.pandas.internal import (
     InternalField,
@@ -488,6 +489,10 @@ class Index(IndexOpsMixin):
         >>> df['dogs'].index.to_pandas()
         Index(['a', 'b', 'c', 'd'], dtype='object')
         """
+        log_advice(
+            "`to_pandas` loads all data into the driver's memory. "
+            "It should only be used if the resulting pandas Index is expected to be small."
+        )
         return self._to_internal_pandas().copy()
 
     def to_numpy(self, dtype: Optional[Union[str, Dtype]] = None, copy: bool = False) -> np.ndarray:
@@ -518,6 +523,10 @@ class Index(IndexOpsMixin):
         >>> ps.DataFrame({'a': ['a', 'b', 'c']}, index=[[1, 2, 3], [4, 5, 6]]).index.to_numpy()
         array([(1, 4), (2, 5), (3, 6)], dtype=object)
         """
+        log_advice(
+            "`to_numpy` loads all data into the driver's memory. "
+            "It should only be used if the resulting NumPy ndarray is expected to be small."
+        )
         result = np.asarray(self._to_internal_pandas()._values, dtype=dtype)
         if copy:
             result = result.copy()
@@ -2549,6 +2558,10 @@ class Index(IndexOpsMixin):
         >>> midx.to_list()
         [(1, 'red'), (1, 'blue'), (2, 'red'), (2, 'green')]
         """
+        log_advice(
+            "`to_list` loads all data into the driver's memory. "
+            "It should only be used if the resulting list is expected to be small."
+        )
         return self._to_internal_pandas().tolist()
 
     tolist = to_list

@@ -21,7 +21,7 @@ from functools import reduce
 from threading import RLock
 from types import TracebackType
 from typing import (
-    Any, Dict, Iterable, List, Optional, Tuple, Type, Union,
+    Any, ClassVar, Dict, Iterable, List, Optional, Tuple, Type, Union,
     cast, no_type_check, overload, TYPE_CHECKING
 )
 
@@ -34,7 +34,7 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.conversion import SparkConversionMixin
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.types import (  # type: ignore[attr-defined]
+from pyspark.sql.types import (
     AtomicType, DataType, StructType,
     _make_type_verifier, _infer_schema, _has_nulltype, _merge_type, _create_converter,
     _parse_datatype_string
@@ -42,7 +42,7 @@ from pyspark.sql.types import (  # type: ignore[attr-defined]
 from pyspark.sql.utils import install_exception_handler, is_timestamp_ntz_preferred
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import DateTimeLiteral, LiteralType, DecimalLiteral, RowLike
+    from pyspark.sql._typing import AtomicValue, RowLike
     from pyspark.sql.catalog import Catalog
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
     from pyspark.sql.streaming import StreamingQueryManager
@@ -127,7 +127,7 @@ class SparkSession(SparkConversionMixin):
 
         _lock = RLock()
         _options: Dict[str, Any] = {}
-        _sc = None
+        _sc: Optional[SparkContext] = None
 
         @overload
         def config(self, *, conf: SparkConf) -> "SparkSession.Builder":
@@ -268,8 +268,8 @@ class SparkSession(SparkConversionMixin):
     builder = Builder()
     """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances."""
 
-    _instantiatedSession = None
-    _activeSession = None
+    _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
+    _activeSession: ClassVar[Optional["SparkSession"]] = None
 
     def __init__(self, sparkContext: SparkContext, jsparkSession: Optional[JavaObject] = None):
         from pyspark.sql.context import SQLContext
@@ -292,7 +292,7 @@ class SparkSession(SparkConversionMixin):
         # which is stopped now, we need to renew the instantiated SparkSession.
         # Otherwise, we will use invalid SparkSession when we call Builder.getOrCreate.
         if SparkSession._instantiatedSession is None \
-                or SparkSession._instantiatedSession._sc._jsc is None:
+                or SparkSession._instantiatedSession._sc._jsc is None:  # type: ignore[attr-defined]
             SparkSession._instantiatedSession = self
             SparkSession._activeSession = self
             self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
@@ -610,7 +610,7 @@ class SparkSession(SparkConversionMixin):
         try:
             # Try to access HiveConf, it will raise exception if Hive is not added
             conf = SparkConf()
-            if conf.get('spark.sql.catalogImplementation', 'hive').lower() == 'hive':
+            if cast(str, conf.get('spark.sql.catalogImplementation', 'hive')).lower() == 'hive':
                 (SparkContext._jvm  # type: ignore[attr-defined]
                  .org.apache.hadoop.hive.conf.HiveConf())
                 return SparkSession.builder\
@@ -619,7 +619,7 @@ class SparkSession(SparkConversionMixin):
             else:
                 return SparkSession.builder.getOrCreate()
         except (py4j.protocol.Py4JError, TypeError):
-            if conf.get('spark.sql.catalogImplementation', '').lower() == 'hive':
+            if cast(str, conf.get('spark.sql.catalogImplementation', '')).lower() == 'hive':
                 warnings.warn("Fall back to non-hive support because failing to access HiveConf, "
                               "please make sure you build spark with hive")
 
@@ -628,7 +628,8 @@ class SparkSession(SparkConversionMixin):
     @overload
     def createDataFrame(
         self,
-        data: Union["RDD[RowLike]", Iterable["RowLike"]],
+        data: Iterable["RowLike"],
+        schema: Union[List[str], Tuple[str, ...]] = ...,
         samplingRatio: Optional[float] = ...,
     ) -> DataFrame:
         ...
@@ -636,19 +637,36 @@ class SparkSession(SparkConversionMixin):
     @overload
     def createDataFrame(
         self,
-        data: Union["RDD[RowLike]", Iterable["RowLike"]],
+        data: "RDD[RowLike]",
         schema: Union[List[str], Tuple[str, ...]] = ...,
-        verifySchema: bool = ...,
+        samplingRatio: Optional[float] = ...,
     ) -> DataFrame:
         ...
 
     @overload
     def createDataFrame(
         self,
-        data: Union[
-            "RDD[Union[DateTimeLiteral, LiteralType, DecimalLiteral]]",
-            Iterable[Union["DateTimeLiteral", "LiteralType", "DecimalLiteral"]],
-        ],
+        data: Iterable["RowLike"],
+        schema: Union[StructType, str],
+        *,
+        verifySchema: bool = ...,
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def createDataFrame(
+            self,
+            data: "RDD[RowLike]",
+            schema: Union[StructType, str],
+            *,
+            verifySchema: bool = ...,
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def createDataFrame(
+        self,
+        data: "RDD[AtomicValue]",
         schema: Union[AtomicType, str],
         verifySchema: bool = ...,
     ) -> DataFrame:
@@ -656,10 +674,10 @@ class SparkSession(SparkConversionMixin):
 
     @overload
     def createDataFrame(
-        self,
-        data: Union["RDD[RowLike]", Iterable["RowLike"]],
-        schema: Union[StructType, str],
-        verifySchema: bool = ...,
+            self,
+            data: Iterable["AtomicValue"],
+            schema: Union[AtomicType, str],
+            verifySchema: bool = ...,
     ) -> DataFrame:
         ...
 
@@ -845,7 +863,7 @@ class SparkSession(SparkConversionMixin):
         )
         jdf = self._jsparkSession.applySchemaToPythonRDD(jrdd.rdd(), struct.json())
         df = DataFrame(jdf, self._wrapped)
-        df._schema = struct  # type: ignore[attr-defined]
+        df._schema = struct
         return df
 
     def sql(self, sqlQuery: str) -> DataFrame:
@@ -945,7 +963,7 @@ class SparkSession(SparkConversionMixin):
         self._jvm.SparkSession.clearActiveSession()
         SparkSession._instantiatedSession = None
         SparkSession._activeSession = None
-        SQLContext._instantiatedContext = None  # type: ignore[attr-defined]
+        SQLContext._instantiatedContext = None
 
     @since(2.0)
     def __enter__(self) -> "SparkSession":

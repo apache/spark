@@ -31,10 +31,10 @@ from typing import (
     TYPE_CHECKING, cast
 )
 
-from py4j.java_gateway import JavaObject
+from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark import since, _NoValue  # type: ignore[attr-defined]
-from pyspark.sql.session import _monkey_patch_RDD, SparkSession  # type: ignore[attr-defined]
+from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
@@ -48,13 +48,11 @@ from pyspark.conf import SparkConf
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import (
-        UserDefinedFunctionLike,
+        AtomicValue,
         RowLike,
-        DateTimeLiteral,
-        LiteralType,
-        DecimalLiteral
+        UserDefinedFunctionLike,
     )
-    from pyspark.sql.pandas._typing import DataFrameLike
+    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
 
 __all__ = ["SQLContext", "HiveContext"]
 
@@ -121,7 +119,7 @@ class SQLContext(object):
         if sparkSession is None:
             sparkSession = SparkSession.builder.getOrCreate()
         if jsqlContext is None:
-            jsqlContext = sparkSession._jwrapped  # type: ignore[attr-defined]
+            jsqlContext = sparkSession._jwrapped
         self.sparkSession = sparkSession
         self._jsqlContext = jsqlContext
         _monkey_patch_RDD(self.sparkSession)
@@ -323,7 +321,8 @@ class SQLContext(object):
     @overload
     def createDataFrame(
         self,
-        data: Iterable["RowLike"],
+        data: Union["RDD[RowLike]", Iterable["RowLike"]],
+        schema: Union[List[str], Tuple[str, ...]] = ...,
         samplingRatio: Optional[float] = ...,
     ) -> DataFrame:
         ...
@@ -331,8 +330,9 @@ class SQLContext(object):
     @overload
     def createDataFrame(
         self,
-        data: Iterable["RowLike"],
-        schema: Union[List[str], Tuple[str, ...]] = ...,
+        data: Union["RDD[RowLike]", Iterable["RowLike"]],
+        schema: Union[StructType, str],
+        *,
         verifySchema: bool = ...,
     ) -> DataFrame:
         ...
@@ -340,7 +340,10 @@ class SQLContext(object):
     @overload
     def createDataFrame(
         self,
-        data: Iterable[Union["DateTimeLiteral", "LiteralType", "DecimalLiteral"]],
+        data: Union[
+            "RDD[AtomicValue]",
+            Iterable["AtomicValue"],
+        ],
         schema: Union[AtomicType, str],
         verifySchema: bool = ...,
     ) -> DataFrame:
@@ -348,23 +351,14 @@ class SQLContext(object):
 
     @overload
     def createDataFrame(
-        self,
-        data: Iterable["RowLike"],
-        schema: Union[StructType, str],
-        verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
-
-    @overload
-    def createDataFrame(
-        self, data: "DataFrameLike", samplingRatio: Optional[float] = ...
+        self, data: "PandasDataFrameLike", samplingRatio: Optional[float] = ...
     ) -> DataFrame:
         ...
 
     @overload
     def createDataFrame(
         self,
-        data: "DataFrameLike",
+        data: "PandasDataFrameLike",
         schema: Union[StructType, str],
         verifySchema: bool = ...,
     ) -> DataFrame:
@@ -372,8 +366,8 @@ class SQLContext(object):
 
     def createDataFrame(  # type: ignore[misc]
         self,
-        data: Iterable["RowLike"],
-        schema: Optional[Union[List[str], Tuple[str, ...]]] = None,
+        data: Union["RDD[Any]", Iterable[Any], "PandasDataFrameLike"],
+        schema: Optional[Union[AtomicType, StructType, str]] = None,
         samplingRatio: Optional[float] = None,
         verifySchema: bool = True
     ) -> DataFrame:
@@ -727,8 +721,7 @@ class HiveContext(SQLContext):
         if jhiveContext is None:
             sparkContext._conf.set(  # type: ignore[attr-defined]
                 "spark.sql.catalogImplementation", "hive")
-            sparkSession = SparkSession.builder._sparkContext(  # type: ignore[attr-defined]
-                sparkContext).getOrCreate()
+            sparkSession = SparkSession.builder._sparkContext(sparkContext).getOrCreate()
         else:
             sparkSession = SparkSession(sparkContext, jhiveContext.sparkSession())
         SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)

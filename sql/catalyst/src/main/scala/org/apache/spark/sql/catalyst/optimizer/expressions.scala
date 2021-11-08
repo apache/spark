@@ -447,6 +447,53 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
 
 
 /**
+ * Move/Push `Not` operator if it's beneficial.
+ */
+object NotPropagation extends Rule[LogicalPlan] {
+  // Given argument x, return true if expression Not(x) can be simplified
+  // E.g. let x == Not(y), then canSimplifyNot(x) == true because Not(x) == Not(Not(y)) == y
+  // For the case of x = EqualTo(a, b), recursively check each child expression
+  // Extra nullable check is required for EqualNullSafe because
+  // Not(EqualNullSafe(e, null)) is different from EqualNullSafe(e, Not(null))
+  private def canSimplifyNot(x: Expression): Boolean = x match {
+    case Literal(_, BooleanType) | Literal(_, NullType) => true
+    case _: Not | _: IsNull | _: IsNotNull | _: And | _: Or => true
+    case _: GreaterThan | _: GreaterThanOrEqual | _: LessThan | _: LessThanOrEqual => true
+    case EqualTo(a, b) if canSimplifyNot(a) || canSimplifyNot(b) => true
+    case EqualNullSafe(a, b)
+      if !a.nullable && !b.nullable && (canSimplifyNot(a) || canSimplifyNot(b)) => true
+    case _ => false
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(NOT), ruleId) {
+    case q: LogicalPlan => q.transformExpressionsDownWithPruning(_.containsPattern(NOT), ruleId) {
+      // Move `Not` from one side of `EqualTo`/`EqualNullSafe` to the other side if it's beneficial.
+      // E.g. `EqualTo(Not(a), b)` where `b = Not(c)`, it will become
+      // `EqualTo(a, Not(b))` => `EqualTo(a, Not(Not(c)))` => `EqualTo(a, c)`
+      // In addition, `if canSimplifyNot(b)` checks if the optimization can converge
+      // that avoids the situation two conditions are returning to each other.
+      case EqualTo(Not(a), b) if !canSimplifyNot(a) && canSimplifyNot(b) => EqualTo(a, Not(b))
+      case EqualTo(a, Not(b)) if canSimplifyNot(a) && !canSimplifyNot(b) => EqualTo(Not(a), b)
+      case EqualNullSafe(Not(a), b) if !canSimplifyNot(a) && canSimplifyNot(b) =>
+        EqualNullSafe(a, Not(b))
+      case EqualNullSafe(a, Not(b)) if canSimplifyNot(a) && !canSimplifyNot(b) =>
+        EqualNullSafe(Not(a), b)
+
+      // Push `Not` to one side of `EqualTo`/`EqualNullSafe` if it's beneficial.
+      // E.g. Not(EqualTo(x, false)) => EqualTo(x, true)
+      case Not(EqualTo(a, b)) if canSimplifyNot(b) => EqualTo(a, Not(b))
+      case Not(EqualTo(a, b)) if canSimplifyNot(a) => EqualTo(Not(a), b)
+      case Not(EqualNullSafe(a, b)) if !a.nullable && !b.nullable && canSimplifyNot(b) =>
+        EqualNullSafe(a, Not(b))
+      case Not(EqualNullSafe(a, b)) if !a.nullable && !b.nullable && canSimplifyNot(a) =>
+        EqualNullSafe(Not(a), b)
+    }
+  }
+}
+
+
+/**
  * Simplifies binary comparisons with semantically-equal expressions:
  * 1) Replace '<=>' with 'true' literal.
  * 2) Replace '=', '<=', and '>=' with 'true' literal if both operands are non-nullable.
@@ -808,6 +855,39 @@ object NullPropagation extends Rule[LogicalPlan] {
       // a null literal.
       case e: NullIntolerant if e.children.exists(isNullLiteral) =>
         Literal.create(null, e.dataType)
+    }
+  }
+}
+
+
+/**
+ * Unwrap the input of IsNull/IsNotNull if the input is NullIntolerant
+ * E.g. IsNull(Not(null)) == IsNull(null)
+ */
+object NullDownPropagation extends Rule[LogicalPlan] {
+  // Return true iff the expression returns non-null result for all non-null inputs.
+  // Not all `NullIntolerant` can be propagated. E.g. `Cast` is `NullIntolerant`; however,
+  // cast('Infinity' as integer) is null. Hence, `Cast` is not supported `NullIntolerant`.
+  // `ExtractValue` is also not supported. E.g. the planner may resolve column `a` to `a#123`,
+  // then IsNull(a#123) cannot be optimized.
+  // Applying to `EqualTo` is too disruptive for [SPARK-32290] optimization, not supported for now.
+  // If e has multiple children, the deterministic check is required because optimizing
+  // IsNull(a > b) to Or(IsNull(a), IsNull(b)), for example, may cause skipping the evaluation of b
+  private def supportedNullIntolerant(e: NullIntolerant): Boolean = (e match {
+    case _: Not => true
+    case _: GreaterThan | _: GreaterThanOrEqual | _: LessThan | _: LessThanOrEqual
+      if e.deterministic => true
+    case _ => false
+  }) && e.children.nonEmpty
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(NULL_CHECK), ruleId) {
+    case q: LogicalPlan => q.transformExpressionsDownWithPruning(
+      _.containsPattern(NULL_CHECK), ruleId) {
+      case IsNull(e: NullIntolerant) if supportedNullIntolerant(e) =>
+        e.children.map(IsNull(_): Expression).reduceLeft(Or)
+      case IsNotNull(e: NullIntolerant) if supportedNullIntolerant(e) =>
+        e.children.map(IsNotNull(_): Expression).reduceLeft(And)
     }
   }
 }

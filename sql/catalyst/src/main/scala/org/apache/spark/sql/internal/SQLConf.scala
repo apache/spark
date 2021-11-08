@@ -960,6 +960,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ORC_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.aggregatePushdown")
+    .doc("If true, aggregates will be pushed down to ORC for optimization. Support MIN, MAX and " +
+      "COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date " +
+      "type. For COUNT, support all data types.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val ORC_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.orc.mergeSchema")
     .doc("When true, the Orc data source merges schemas collected from all data files, " +
       "otherwise the schema is picked from a random data file.")
@@ -1003,6 +1011,17 @@ object SQLConf {
         "pruning on Spark client side, when encountering MetaException from the metastore. Note " +
         "that Spark query performance may degrade if this is enabled and there are many " +
         "partitions to be listed. If this is disabled, Spark will fail the query instead.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK =
+    buildConf("spark.sql.hive.metastorePartitionPruningFastFallback")
+      .doc("When this config is enabled, if the predicates are not supported by Hive or Spark " +
+        "does fallback due to encountering MetaException from the metastore, " +
+        "Spark will instead prune partitions by getting the partition names first " +
+        "and then evaluating the filter expressions on the client side. " +
+        "Note that the predicates with TimeZoneAwareExpression is not supported.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(false)
@@ -1419,8 +1438,8 @@ object SQLConf {
       " bigger files (which is scheduled first). This configuration is effective only when using" +
       " file-based sources such as Parquet, JSON and ORC.")
     .version("2.0.0")
-    .longConf
-    .createWithDefault(4 * 1024 * 1024)
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefaultString("4MB")
 
   val FILES_MIN_PARTITION_NUM = buildConf("spark.sql.files.minPartitionNum")
     .doc("The suggested (not guaranteed) minimum number of split file partitions. " +
@@ -2590,6 +2609,23 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ENFORCE_RESERVED_KEYWORDS = buildConf("spark.sql.ansi.enforceReservedKeywords")
+    .doc(s"When true and '${ANSI_ENABLED.key}' is true, the Spark SQL parser enforces the ANSI " +
+      "reserved keywords and forbids SQL queries that use reserved keywords as alias names " +
+      "and/or identifiers for table, view, function, etc.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(true)
+
+  val ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI =
+    buildConf("spark.sql.ansi.allowCastBetweenDatetimeAndNumeric")
+      .doc("When true, the data type conversions between datetime types and numeric types are " +
+        "allowed in ANSI SQL mode. This configuration is only effective when " +
+        s"'${ANSI_ENABLED.key}' is true.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
       .internal()
@@ -3363,13 +3399,20 @@ object SQLConf {
   val LEGACY_CHAR_VARCHAR_AS_STRING =
     buildConf("spark.sql.legacy.charVarcharAsString")
       .internal()
-      .doc("When true, Spark will not fail if user uses char and varchar type directly in those" +
-        " APIs that accept or parse data types as parameters, e.g." +
-        " `SparkSession.read.schema(...)`, `SparkSession.udf.register(...)` but treat them as" +
-        " string type as Spark 3.0 and earlier.")
+      .doc("When true, Spark treats CHAR/VARCHAR type the same as STRING type, which is the " +
+        "behavior of Spark 3.0 and earlier. This means no length check for CHAR/VARCHAR type and " +
+        "no padding for CHAR type when writing data to the table.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
+
+  val CHAR_AS_VARCHAR = buildConf("spark.sql.charAsVarchar")
+    .doc("When true, Spark replaces CHAR type with VARCHAR type in CREATE/REPLACE/ALTER TABLE " +
+      "commands, so that newly created/updated tables will not have CHAR type columns/fields. " +
+      "Existing tables with CHAR type columns/fields are not affected by this config.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val CLI_PRINT_HEADER =
     buildConf("spark.sql.cli.print.header")
@@ -3698,6 +3741,8 @@ class SQLConf extends Serializable with Logging {
 
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
 
+  def orcAggregatePushDown: Boolean = getConf(ORC_AGGREGATE_PUSHDOWN_ENABLED)
+
   def isOrcSchemaMergingEnabled: Boolean = getConf(ORC_SCHEMA_MERGING_ENABLED)
 
   def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
@@ -3709,6 +3754,9 @@ class SQLConf extends Serializable with Logging {
 
   def metastorePartitionPruningFallbackOnException: Boolean =
     getConf(HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION)
+
+  def metastorePartitionPruningFastFallback: Boolean =
+    getConf(HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK)
 
   def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
 
@@ -4040,6 +4088,11 @@ class SQLConf extends Serializable with Logging {
     StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
 
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
+
+  def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
+
+  def allowCastBetweenDatetimeAndNumericInAnsi: Boolean =
+    getConf(ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>
