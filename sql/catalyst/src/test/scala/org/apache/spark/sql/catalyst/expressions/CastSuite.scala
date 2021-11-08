@@ -44,6 +44,22 @@ class CastSuite extends CastSuiteBase {
     }
   }
 
+  test("SPARK-37169: cast from date") {
+    val d = Date.valueOf("1970-01-01")
+    checkEvaluation(cast(d, ShortType), 28800.toShort)
+    checkEvaluation(cast(d, IntegerType), 28800)
+    checkEvaluation(cast(d, LongType), 28800L)
+    checkEvaluation(cast(d, FloatType), 28800F)
+    checkEvaluation(cast(d, DoubleType), 28800D)
+    checkEvaluation(cast(d, DecimalType.SYSTEM_DEFAULT), Decimal(28800))
+    checkEvaluation(cast(d, DecimalType(10, 2)), Decimal(28800))
+    checkEvaluation(cast(d, StringType), "1970-01-01")
+
+    checkEvaluation(
+      cast(cast(d, TimestampType, UTC_OPT), StringType, UTC_OPT),
+      "1970-01-01 00:00:00")
+  }
+
   test("null cast #2") {
     import DataTypeTestUtils._
 
@@ -433,22 +449,6 @@ class CastSuite extends CastSuiteBase {
         checkEvaluation(cast("badvalue", dataType), null)
       }
     }
-  }
-
-  test("SPARK-37169: cast from date") {
-    val d = Date.valueOf("1970-01-01")
-    checkEvaluation(cast(d, ShortType), 28800.toShort)
-    checkEvaluation(cast(d, IntegerType), 28800)
-    checkEvaluation(cast(d, LongType), 28800L)
-    checkEvaluation(cast(d, FloatType), 28800F)
-    checkEvaluation(cast(d, DoubleType), 28800D)
-    checkEvaluation(cast(d, DecimalType.SYSTEM_DEFAULT), Decimal(28800))
-    checkEvaluation(cast(d, DecimalType(10, 2)), Decimal(28800))
-    checkEvaluation(cast(d, StringType), "1970-01-01")
-
-    checkEvaluation(
-      cast(cast(d, TimestampType, UTC_OPT), StringType, UTC_OPT),
-      "1970-01-01 00:00:00")
   }
 
   test("cast from timestamp") {

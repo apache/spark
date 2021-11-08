@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 import java.time.DateTimeException
 
 import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC, UTC_OPT}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.fromJavaTimestamp
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -347,24 +347,6 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
         val expectedSecs = Math.floorDiv(negativeTs.getTime, MILLIS_PER_SECOND)
         checkEvaluation(cast(negativeTs, LongType), expectedSecs)
       }
-    }
-  }
-
-  test("cast from date") {
-    withSQLConf(SQLConf.ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI.key -> "true") {
-      val d = Date.valueOf("1970-01-01")
-      checkEvaluation(cast(d, ShortType), 28800.toShort)
-      checkEvaluation(cast(d, IntegerType), 28800)
-      checkEvaluation(cast(d, LongType), 28800L)
-      checkEvaluation(cast(d, FloatType), 28800F)
-      checkEvaluation(cast(d, DoubleType), 28800D)
-      checkEvaluation(cast(d, DecimalType.SYSTEM_DEFAULT), Decimal(28800))
-      checkEvaluation(cast(d, DecimalType(10, 2)), Decimal(28800))
-      checkEvaluation(cast(d, StringType), "1970-01-01")
-
-      checkEvaluation(
-        cast(cast(d, TimestampType, UTC_OPT), StringType, UTC_OPT),
-        "1970-01-01 00:00:00")
     }
   }
 
