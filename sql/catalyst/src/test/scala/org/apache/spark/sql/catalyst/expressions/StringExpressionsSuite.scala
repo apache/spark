@@ -749,8 +749,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringLPad(s1, s2, s3), null, row3)
     checkEvaluation(StringLPad(s1, s2, s3), null, row4)
     checkEvaluation(StringLPad(s1, s2, s3), null, row5)
-    checkEvaluation(StringLPad(Literal("hi"), Literal(5)), "   hi")
-    checkEvaluation(StringLPad(Literal("hi"), Literal(1)), "h")
+    checkEvaluation(StringLPad(Literal("hi"), Literal(5), Literal(" ")), "   hi")
+    checkEvaluation(StringLPad(Literal("hi"), Literal(1), Literal(" ")), "h")
 
     checkEvaluation(StringRPad(Literal("hi"), Literal(5), Literal("??")), "hi???", row1)
     checkEvaluation(StringRPad(Literal("hi"), Literal(1), Literal("??")), "h", row1)
@@ -956,7 +956,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         evaluateWithoutCodegen(
           ParseUrl(Seq("https://a.b.c/index.php?params1=a|b&params2=x", "HOST")))
       }.getMessage
-      assert(msg.contains("Find an invaild url string"))
+      assert(msg.contains("Find an invalid url string"))
     }
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       checkEvaluation(

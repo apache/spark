@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PushableColumnWithoutNestedColumn}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
@@ -112,7 +112,7 @@ object PushDownUtils extends PredicateHelper {
    * @return pushed aggregation.
    */
   def pushAggregates(
-      scanBuilder: ScanBuilder,
+      scanBuilder: SupportsPushDownAggregates,
       aggregates: Seq[AggregateExpression],
       groupBy: Seq[Expression]): Option[Aggregation] = {
 
@@ -122,19 +122,27 @@ object PushDownUtils extends PredicateHelper {
       case _ => None
     }
 
+    val translatedAggregates = aggregates.flatMap(DataSourceStrategy.translateAggregate)
+    val translatedGroupBys = groupBy.flatMap(columnAsString)
+
+    if (translatedAggregates.length != aggregates.length ||
+      translatedGroupBys.length != groupBy.length) {
+      return None
+    }
+
+    val agg = new Aggregation(translatedAggregates.toArray, translatedGroupBys.toArray)
+    Some(agg).filter(scanBuilder.pushAggregation)
+  }
+
+  /**
+   * Pushes down TableSample to the data source Scan
+   */
+  def pushTableSample(scanBuilder: ScanBuilder, sample: TableSampleInfo): Boolean = {
     scanBuilder match {
-      case r: SupportsPushDownAggregates if aggregates.nonEmpty =>
-        val translatedAggregates = aggregates.flatMap(DataSourceStrategy.translateAggregate)
-        val translatedGroupBys = groupBy.flatMap(columnAsString)
-
-        if (translatedAggregates.length != aggregates.length ||
-          translatedGroupBys.length != groupBy.length) {
-          return None
-        }
-
-        val agg = new Aggregation(translatedAggregates.toArray, translatedGroupBys.toArray)
-        Some(agg).filter(r.pushAggregation)
-      case _ => None
+      case s: SupportsPushDownTableSample =>
+        s.pushTableSample(
+          sample.lowerBound, sample.upperBound, sample.withReplacement, sample.seed)
+      case _ => false
     }
   }
 

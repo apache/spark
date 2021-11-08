@@ -17,6 +17,8 @@
 
 __all__ = ["StorageLevel"]
 
+from typing import ClassVar
+
 
 class StorageLevel(object):
 
@@ -29,18 +31,35 @@ class StorageLevel(object):
     formats.
     """
 
-    def __init__(self, useDisk, useMemory, useOffHeap, deserialized, replication=1):
+    DISK_ONLY: ClassVar["StorageLevel"]
+    DISK_ONLY_2: ClassVar["StorageLevel"]
+    DISK_ONLY_3: ClassVar["StorageLevel"]
+    MEMORY_ONLY: ClassVar["StorageLevel"]
+    MEMORY_ONLY_2: ClassVar["StorageLevel"]
+    MEMORY_AND_DISK: ClassVar["StorageLevel"]
+    MEMORY_AND_DISK_2: ClassVar["StorageLevel"]
+    OFF_HEAP: ClassVar["StorageLevel"]
+    MEMORY_AND_DISK_DESER: ClassVar["StorageLevel"]
+
+    def __init__(
+        self,
+        useDisk: bool,
+        useMemory: bool,
+        useOffHeap: bool,
+        deserialized: bool,
+        replication: int = 1,
+    ):
         self.useDisk = useDisk
         self.useMemory = useMemory
         self.useOffHeap = useOffHeap
         self.deserialized = deserialized
         self.replication = replication
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "StorageLevel(%s, %s, %s, %s, %s)" % (
             self.useDisk, self.useMemory, self.useOffHeap, self.deserialized, self.replication)
 
-    def __str__(self):
+    def __str__(self) -> str:
         result = ""
         result += "Disk " if self.useDisk else ""
         result += "Memory " if self.useMemory else ""

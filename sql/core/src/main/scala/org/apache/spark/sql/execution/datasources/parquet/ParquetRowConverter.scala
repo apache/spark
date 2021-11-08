@@ -25,8 +25,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.parquet.column.Dictionary
+import org.apache.parquet.io.ColumnIOFactory
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
-import org.apache.parquet.schema.{GroupType, Type}
+import org.apache.parquet.schema.{GroupType, Type, Types}
 import org.apache.parquet.schema.LogicalTypeAnnotation._
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, FIXED_LEN_BYTE_ARRAY, INT32, INT64, INT96}
 
@@ -609,7 +610,13 @@ private[parquet] class ParquetRowConverter(
       //
       // If the element type does not match the Catalyst type and the underlying repeated type
       // does not belong to the legacy LIST type, then it is case 1; otherwise, it is case 2.
-      val guessedElementType = schemaConverter.convertField(repeatedType)
+      //
+      // Since `convertField` method requires a Parquet `ColumnIO` as input, here we first create
+      // a dummy message type which wraps the given repeated type, and then convert it to the
+      // `ColumnIO` using Parquet API.
+      val messageType = Types.buildMessage().addField(repeatedType).named("foo")
+      val column = new ColumnIOFactory().getColumnIO(messageType)
+      val guessedElementType = schemaConverter.convertField(column.getChild(0)).sparkType
       val isLegacy = schemaConverter.isElementType(repeatedType, parquetSchema.getName)
 
       if (DataType.equalsIgnoreCompatibleNullability(guessedElementType, elementType) || isLegacy) {

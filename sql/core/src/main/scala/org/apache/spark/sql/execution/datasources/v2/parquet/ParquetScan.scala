@@ -47,7 +47,11 @@ case class ParquetScan(
     pushedAggregate: Option[Aggregation] = None,
     partitionFilters: Seq[Expression] = Seq.empty,
     dataFilters: Seq[Expression] = Seq.empty) extends FileScan {
-  override def isSplitable(path: Path): Boolean = true
+  override def isSplitable(path: Path): Boolean = {
+    // If aggregate is pushed down, only the file footer will be read once,
+    // so file should not be split across multiple tasks.
+    pushedAggregate.isEmpty
+  }
 
   override def readSchema(): StructType = {
     // If aggregate is pushed down, schema has already been pruned in `ParquetScanBuilder`

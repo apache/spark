@@ -270,7 +270,7 @@ license: |
     | CAST('+inf' AS FLOAT) | NULL | Float.PositiveInfinity |
     | CAST('-infinity' AS FLOAT) | NULL | Float.NegativeInfinity |
     | CAST('-inf' AS FLOAT) | NULL | Float.NegativeInfinity |
-    | CAST('nan' AS DOUBLE) | NULL | Double.Nan |
+    | CAST('nan' AS DOUBLE) | NULL | Double.NaN |
     | CAST('nan' AS FLOAT) | NULL | Float.NaN |
 
   - In Spark 3.0, when casting interval values to string type, there is no "interval" prefix, for example, `1 days 2 hours`. In Spark version 2.4 and below, the string contains the "interval" prefix like `interval 1 days 2 hours`.

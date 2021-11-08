@@ -41,6 +41,8 @@ NULL
 #' @param x Column to compute on. In \code{window}, it must be a time Column of
 #'          \code{TimestampType}. This is not used with \code{current_date} and
 #'          \code{current_timestamp}
+#' @param y Column to compute on.
+#' @param z Column to compute on.
 #' @param format The format for the given dates or timestamps in Column \code{x}. See the
 #'               format used in the following methods:
 #'               \itemize{
@@ -1463,6 +1465,30 @@ setMethod("ltrim",
           signature(x = "Column", trimString = "character"),
           function(x, trimString) {
             jc <- callJStatic("org.apache.spark.sql.functions", "ltrim", x@jc, trimString)
+            column(jc)
+          })
+
+#' @details
+#' \code{make_date}: Create date from year, month and day fields.
+#'
+#' @rdname column_datetime_functions
+#' @aliases make_date make_date,Column-method
+#' @note make_date since 3.3.0
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(
+#'   list(list(2021, 10, 22), list(2021, 13, 1),
+#'        list(2021, 2, 29), list(2020, 2, 29)),
+#'   list("year", "month", "day")
+#' )
+#' tmp <- head(select(df, make_date(df$year, df$month, df$day)))
+#' head(tmp)}
+setMethod("make_date",
+          signature(x = "Column", y = "Column", z = "Column"),
+          function(x, y, z) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "make_date",
+                              x@jc, y@jc, z@jc)
             column(jc)
           })
 

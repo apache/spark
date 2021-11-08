@@ -24,7 +24,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException
+import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
@@ -162,9 +162,26 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     assert(jdbcTable.indexExists("i1") == true)
     assert(jdbcTable.indexExists("i2") == true)
 
+    // This should pass without exception
+    sql(s"CREATE index IF NOT EXISTS i1 ON $catalogName.new_table (col1)")
+
     m = intercept[IndexAlreadyExistsException] {
       sql(s"CREATE index i1 ON $catalogName.new_table (col1)")
     }.getMessage
-    assert(m.contains("Failed to create index: i1 in new_table"))
+    assert(m.contains("Failed to create index i1 in new_table"))
+
+    sql(s"DROP index i1 ON $catalogName.new_table")
+    sql(s"DROP index i2 ON $catalogName.new_table")
+
+    assert(jdbcTable.indexExists("i1") == false)
+    assert(jdbcTable.indexExists("i2") == false)
+
+    // This should pass without exception
+    sql(s"DROP index IF EXISTS i1 ON $catalogName.new_table")
+
+    m = intercept[NoSuchIndexException] {
+      sql(s"DROP index i1 ON $catalogName.new_table")
+    }.getMessage
+    assert(m.contains("Failed to drop index i1 in new_table"))
   }
 }

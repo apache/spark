@@ -44,7 +44,7 @@ import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc._
-import org.apache.spark.util.{SignalUtils, SparkUncaughtExceptionHandler, ThreadUtils, Utils}
+import org.apache.spark.util.{RpcUtils, SignalUtils, SparkUncaughtExceptionHandler, ThreadUtils, Utils}
 
 private[deploy] class Worker(
     override val rpcEnv: RpcEnv,
@@ -161,7 +161,7 @@ private[deploy] class Worker(
 
   // Record the consecutive failure attempts of executor state change syncing with Master,
   // so we don't try it endless. We will exit the Worker process at the end if the failure
-  // attempts reach the max attempts(5). In that case, it's highly possible the Worker
+  // attempts reach the max attempts. In that case, it's highly possible the Worker
   // suffers a severe network issue, and the Worker would exit finally either reaches max
   // re-register attempts or max state syncing attempts.
   // Map from executor fullId to its consecutive failure attempts number. It's supposed
@@ -170,6 +170,8 @@ private[deploy] class Worker(
   private val executorStateSyncFailureAttempts = new HashMap[String, Int]()
   lazy private val executorStateSyncFailureHandler = ExecutionContext.fromExecutor(
     ThreadUtils.newDaemonSingleThreadExecutor("executor-state-sync-failure-handler"))
+  private val executorStateSyncMaxAttempts = conf.get(config.EXECUTOR_STATE_SYNC_MAX_ATTEMPTS)
+  private val defaultAskTimeout = RpcUtils.askRpcTimeout(conf).duration.toMillis
 
   val retainedExecutors = conf.get(WORKER_UI_RETAINED_EXECUTORS)
   val retainedDrivers = conf.get(WORKER_UI_RETAINED_DRIVERS)
@@ -782,13 +784,23 @@ private[deploy] class Worker(
 
           case Failure(t) =>
             val failures = executorStateSyncFailureAttempts.getOrElse(fullId, 0) + 1
-            if (failures < 5) {
+            if (failures < executorStateSyncMaxAttempts) {
               logError(s"Failed to send $newState to Master $masterRef, " +
-                s"will retry ($failures/5).", t)
+                s"will retry ($failures/$executorStateSyncMaxAttempts).", t)
               executorStateSyncFailureAttempts(fullId) = failures
+              // If the failure is not caused by TimeoutException, wait for a while before retry in
+              // case the connection is temporarily unavailable.
+              if (!t.isInstanceOf[TimeoutException]) {
+                try {
+                  Thread.sleep(defaultAskTimeout)
+                } catch {
+                  case _: InterruptedException => // Cancelled
+                }
+              }
               self.send(newState)
             } else {
-              logError(s"Failed to send $newState to Master $masterRef for 5 times. Giving up.")
+              logError(s"Failed to send $newState to Master $masterRef for " +
+                s"$executorStateSyncMaxAttempts times. Giving up.")
               System.exit(1)
             }
         }(executorStateSyncFailureHandler)
