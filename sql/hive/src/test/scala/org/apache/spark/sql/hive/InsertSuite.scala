@@ -905,21 +905,4 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       }
     }
   }
-
-  test("SPARK-37196: HiveDecimal enforcePrecisionScala failed return null") {
-    withTempDir { dir =>
-      withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
-        withTable("test_precision") {
-          val df = sql("SELECT 'dummy' AS name, 1000000000000000000010.7000000000000010 AS value")
-          df.write.mode("Overwrite").parquet(dir.getAbsolutePath)
-          sql(
-            s"""
-               |CREATE EXTERNAL TABLE test_precision(name STRING, value DECIMAL(18,6))
-               |STORED AS PARQUET LOCATION '${dir.getAbsolutePath}'
-               |""".stripMargin)
-          checkAnswer(sql("SELECT * FROM test_precision"), Row("dummy", null))
-        }
-      }
-    }
-  }
 }
