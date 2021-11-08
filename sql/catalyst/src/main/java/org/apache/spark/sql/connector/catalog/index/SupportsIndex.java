@@ -36,7 +36,7 @@ public interface SupportsIndex extends Table {
   /**
    * A reserved property to specify the index type.
    */
-  String INDEX_TYPE = "indexType";
+  String PROP_TYPE = "type";
 
   /**
    * Creates an index.
