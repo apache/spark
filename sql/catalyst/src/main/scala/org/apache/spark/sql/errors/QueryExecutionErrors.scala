@@ -599,7 +599,7 @@ object QueryExecutionErrors {
       colName: String,
       path: String,
       e: Exception): UnsupportedOperationException = {
-    val message = s"Decoding to $valueType is not supported when reading col `$colName` " +
+    val message = s"Decoding to $valueType is not supported when reading column `$colName` " +
       s"by $dictionary while reading file $path"
     new UnsupportedOperationException(message, e)
   }
