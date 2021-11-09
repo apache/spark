@@ -351,6 +351,9 @@ class ClientSuite extends SparkFunSuite with Matchers {
     val client = createClient(sparkConf)
     client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
 
+    // It is difficult to assert the result of `setReplication` in UT because this method in
+    // `RawLocalFileSystem` always return true and not change the value of `replication`.
+    // So we can only assert the call of `client.copyFileToRemote` has passed in a non `None`.
     verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(archive.toURI())),
       meq(Some(replication.toShort)), any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
     classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
