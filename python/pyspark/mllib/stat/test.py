@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import TypeVar, Tuple, Generic
+from typing import Generic, Tuple, TypeVar
 
 from pyspark.mllib.common import inherit_doc, JavaModelWrapper
 
