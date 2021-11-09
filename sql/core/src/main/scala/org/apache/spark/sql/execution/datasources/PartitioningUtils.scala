@@ -544,6 +544,8 @@ object PartitioningUtils extends SQLConfHelper{
       }.getOrElse {
         Cast(Cast(Literal(value), DateType, Some(zoneId.getId)), dt).eval()
       }
+    case it: AnsiIntervalType =>
+      Cast(Literal(unescapePathName(value)), it).eval()
     case dt => throw QueryExecutionErrors.typeUnsupportedError(dt)
   }
 

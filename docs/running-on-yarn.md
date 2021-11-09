@@ -206,6 +206,28 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>3.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.yarn.resourceGpuDeviceName</code></td>
+  <td><code>yarn.io/gpu</code></td>
+  <td>
+    Specify the mapping of the Spark resource type of <code>gpu</code> to the YARN resource
+    representing a GPU. By default YARN uses <code>yarn.io/gpu</code> but if YARN has been
+    configured with a custom resource type, this allows remapping it.
+    Applies when using the <code>spark.{driver/executor}.resource.gpu.*</code> configs.
+  </td>
+  <td>3.2.1</td>
+</tr>
+<tr>
+  <td><code>spark.yarn.resourceFpgaDeviceName</code></td>
+  <td><code>yarn.io/fpga</code></td>
+  <td>
+    Specify the mapping of the Spark resource type of <code>fpga</code> to the YARN resource
+    representing a FPGA. By default YARN uses <code>yarn.io/fpga</code> but if YARN has been
+    configured with a custom resource type, this allows remapping it.
+    Applies when using the <code>spark.{driver/executor}.resource.fpga.*</code> configs.
+  </td>
+  <td>3.2.1</td>
+</tr>
+<tr>
   <td><code>spark.yarn.am.cores</code></td>
   <td><code>1</code></td>
   <td>
@@ -658,7 +680,8 @@ Please make sure to have read the Custom Resource Scheduling and Configuration O
 
 YARN needs to be configured to support any resources the user wants to use with Spark. Resource scheduling on YARN was added in YARN 3.1.0. See the YARN documentation for more information on configuring resources and properly setting up isolation. Ideally the resources are setup isolated so that an executor can only see the resources it was allocated. If you do not have isolation enabled, the user is responsible for creating a discovery script that ensures the resource is not shared between executors.
 
-YARN currently supports any user defined resource type but has built in types for GPU (<code>yarn.io/gpu</code>) and FPGA (<code>yarn.io/fpga</code>). For that reason, if you are using either of those resources, Spark can translate your request for spark resources into YARN resources and you only have to specify the <code>spark.{driver/executor}.resource.</code> configs. If you are using a resource other then FPGA or GPU, the user is responsible for specifying the configs for both YARN (<code>spark.yarn.{driver/executor}.resource.</code>) and Spark (<code>spark.{driver/executor}.resource.</code>).
+YARN supports user defined resource types but has built in types for GPU (<code>yarn.io/gpu</code>) and FPGA (<code>yarn.io/fpga</code>). For that reason, if you are using either of those resources, Spark can translate your request for spark resources into YARN resources and you only have to specify the <code>spark.{driver/executor}.resource.</code> configs. Note, if you are using a custom resource type for GPUs or FPGAs with YARN you can change the Spark mapping using <code>spark.yarn.resourceGpuDeviceName</code> and <code>spark.yarn.resourceFpgaDeviceName</code>.
+ If you are using a resource other then FPGA or GPU, the user is responsible for specifying the configs for both YARN (<code>spark.yarn.{driver/executor}.resource.</code>) and Spark (<code>spark.{driver/executor}.resource.</code>).
 
 For example, the user wants to request 2 GPUs for each executor. The user can just specify <code>spark.executor.resource.gpu.amount=2</code> and Spark will handle requesting <code>yarn.io/gpu</code> resource type from YARN.
 

@@ -2184,7 +2184,7 @@ class DataSourceV2SQLSuite
     val e1 = intercept[AnalysisException] {
       sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
     }
-    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
+    assert(e1.message.contains("requires a single-part namespace"))
   }
 
   test("SHOW FUNCTIONS not valid v1 namespace") {
@@ -2205,7 +2205,7 @@ class DataSourceV2SQLSuite
     val e1 = intercept[AnalysisException] {
       sql("DROP FUNCTION default.ns1.ns2.fun")
     }
-    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
+    assert(e1.message.contains("requires a single-part namespace"))
   }
 
   test("CREATE FUNCTION: only support session catalog") {
@@ -2217,7 +2217,7 @@ class DataSourceV2SQLSuite
     val e1 = intercept[AnalysisException] {
       sql("CREATE FUNCTION default.ns1.ns2.fun as 'f'")
     }
-    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
+    assert(e1.message.contains("requires a single-part namespace"))
   }
 
   test("REFRESH FUNCTION: only support session catalog") {
@@ -2229,8 +2229,7 @@ class DataSourceV2SQLSuite
     val e1 = intercept[AnalysisException] {
       sql("REFRESH FUNCTION default.ns1.ns2.fun")
     }
-    assert(e1.message.contains(
-      "Unsupported function name 'default.ns1.ns2.fun'"))
+    assert(e1.message.contains("requires a single-part namespace"))
   }
 
   test("global temp view should not be masked by v2 catalog") {
@@ -2300,26 +2299,7 @@ class DataSourceV2SQLSuite
 
         def verify(sql: String): Unit = {
           val e = intercept[AnalysisException](spark.sql(sql))
-          assert(e.message.contains(s"Table or view not found: $t"),
-            s"Error message did not contain expected text while evaluting $sql")
-        }
-
-        def verifyView(sql: String): Unit = {
-          val e = intercept[AnalysisException](spark.sql(sql))
-          assert(e.message.contains(s"View not found: $t"),
-            s"Error message did not contain expected text while evaluting $sql")
-        }
-
-        def verifyTable(sql: String): Unit = {
-          val e = intercept[AnalysisException](spark.sql(sql))
-          assert(e.message.contains(s"Table not found: $t"),
-            s"Error message did not contain expected text while evaluting $sql")
-        }
-
-        def verifyGeneric(sql: String): Unit = {
-          val e = intercept[AnalysisException](spark.sql(sql))
-          assert(e.message.contains(s"not found: $t"),
-            s"Error message did not contain expected text while evaluting $sql")
+          assert(e.getMessage.contains("requires a single-part namespace"))
         }
 
         verify(s"select * from $t")
@@ -2327,16 +2307,16 @@ class DataSourceV2SQLSuite
         verify(s"REFRESH TABLE $t")
         verify(s"DESCRIBE $t i")
         verify(s"DROP TABLE $t")
-        verifyView(s"DROP VIEW $t")
-        verifyGeneric(s"ANALYZE TABLE $t COMPUTE STATISTICS")
-        verifyGeneric(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR ALL COLUMNS")
-        verifyTable(s"MSCK REPAIR TABLE $t")
-        verifyTable(s"LOAD DATA INPATH 'filepath' INTO TABLE $t")
-        verifyGeneric(s"SHOW CREATE TABLE $t")
-        verifyGeneric(s"SHOW CREATE TABLE $t AS SERDE")
-        verifyGeneric(s"CACHE TABLE $t")
-        verifyGeneric(s"UNCACHE TABLE $t")
-        verifyGeneric(s"TRUNCATE TABLE $t")
+        verify(s"DROP VIEW $t")
+        verify(s"ANALYZE TABLE $t COMPUTE STATISTICS")
+        verify(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR ALL COLUMNS")
+        verify(s"MSCK REPAIR TABLE $t")
+        verify(s"LOAD DATA INPATH 'filepath' INTO TABLE $t")
+        verify(s"SHOW CREATE TABLE $t")
+        verify(s"SHOW CREATE TABLE $t AS SERDE")
+        verify(s"CACHE TABLE $t")
+        verify(s"UNCACHE TABLE $t")
+        verify(s"TRUNCATE TABLE $t")
         verify(s"SHOW COLUMNS FROM $t")
       }
     }
@@ -2474,22 +2454,6 @@ class DataSourceV2SQLSuite
     assert(sql(s"DESC extended $tableName").toDF("k", "v", "c")
       .where(s"k='${TableCatalog.PROP_COMMENT.capitalize}'")
       .head().getString(1) === expectedComment)
-  }
-
-  test("SPARK-30799: temp view name can't contain catalog name") {
-    val sessionCatalogName = CatalogManager.SESSION_CATALOG_NAME
-    withTempView("v") {
-      spark.range(10).createTempView("v")
-      val e1 = intercept[AnalysisException](
-        sql(s"CACHE TABLE $sessionCatalogName.v")
-      )
-      assert(e1.message.contains(
-        "Table or view not found: spark_catalog.v"))
-    }
-    val e2 = intercept[AnalysisException] {
-      sql(s"CREATE TEMP VIEW $sessionCatalogName.v AS SELECT 1")
-    }
-    assert(e2.message.contains("It is not allowed to add database prefix"))
   }
 
   test("SPARK-31015: star expression should work for qualified column names for v2 tables") {
