@@ -73,6 +73,15 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   private int[] arrayLengths;
   private int[] arrayOffsets;
 
+  // Only set if type is Struct.
+  //
+  // A slot 'structOffsets[i]' is only defined iff 'nulls[i]' is NOT set. If defined,
+  // 'structOffsets[i] = j' indicates that for struct at slot 'i', its offset in the child vectors
+  // is 'j'.
+  //
+  // This is useful since we don't want to materialize null structs.
+  private int[] structOffsets;
+
   public OnHeapColumnVector(int capacity, DataType type) {
     super(capacity, type);
 
@@ -92,6 +101,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     doubleData = null;
     arrayLengths = null;
     arrayOffsets = null;
+    structOffsets = null;
   }
 
   //
@@ -127,7 +137,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public boolean isNullAt(int rowId) {
-    return nulls[rowId] == 1;
+    return isAllNull || nulls[rowId] == 1;
   }
 
   //
@@ -505,9 +515,19 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
+  public int getStructOffset(int rowId) {
+    return structOffsets[rowId];
+  }
+
+  @Override
   public void putArray(int rowId, int offset, int length) {
     arrayOffsets[rowId] = offset;
     arrayLengths[rowId] = length;
+  }
+
+  @Override
+  public void putStruct(int rowId, int offset) {
+    structOffsets[rowId] = offset;
   }
 
   //
@@ -534,6 +554,12 @@ public final class OnHeapColumnVector extends WritableColumnVector {
       }
       arrayLengths = newLengths;
       arrayOffsets = newOffsets;
+    } else if (isStruct()) {
+      int[] newOffsets = new int[newCapacity];
+      if (this.structOffsets != null) {
+        System.arraycopy(this.structOffsets, 0, newOffsets, 0, capacity);
+      }
+      structOffsets = newOffsets;
     } else if (type instanceof BooleanType) {
       if (byteData == null || byteData.length < newCapacity) {
         byte[] newData = new byte[newCapacity];

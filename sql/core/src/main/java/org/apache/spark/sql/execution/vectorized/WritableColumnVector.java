@@ -26,6 +26,7 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
+import org.apache.spark.sql.vectorized.ColumnarRow;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -52,7 +53,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Resets this column for writing. The currently stored values are no longer accessible.
    */
   public void reset() {
-    if (isConstant) return;
+    if (isConstant || isAllNull) return;
 
     if (childColumns != null) {
       for (WritableColumnVector c: childColumns) {
@@ -80,6 +81,10 @@ public abstract class WritableColumnVector extends ColumnVector {
       dictionaryIds = null;
     }
     dictionary = null;
+  }
+
+  public void reserveAdditional(int additionalCapacity) {
+    reserve(elementsAppended + additionalCapacity);
   }
 
   public void reserve(int requiredCapacity) {
@@ -116,7 +121,7 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   @Override
   public boolean hasNull() {
-    return numNulls > 0;
+    return isAllNull || numNulls > 0;
   }
 
   @Override
@@ -375,6 +380,14 @@ public abstract class WritableColumnVector extends ColumnVector {
   public abstract void putArray(int rowId, int offset, int length);
 
   /**
+   * Puts a new non-null struct at 'rowId' of this vector, which is backed by elements at
+   * 'offset' of child vectors.
+   *
+   * NOTE: this MUST be called after new elements are appended to child vectors of a struct vector.
+   */
+  public abstract void putStruct(int rowId, int offset);
+
+  /**
    * Sets values from [value + offset, value + offset + count) to the values at rowId.
    */
   public abstract int putByteArray(int rowId, byte[] value, int offset, int count);
@@ -457,6 +470,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   public final int appendNotNull() {
+    assert (!(dataType() instanceof StructType)); // Use appendStruct()
     reserve(elementsAppended + 1);
     putNotNull(elementsAppended);
     return elementsAppended++;
@@ -661,21 +675,22 @@ public abstract class WritableColumnVector extends ColumnVector {
    * common non-struct case.
    */
   public final int appendStruct(boolean isNull) {
+    reserve(elementsAppended + 1);
     if (isNull) {
       // This is the same as appendNull but without the assertion for struct types
-      reserve(elementsAppended + 1);
       putNull(elementsAppended);
-      elementsAppended++;
       for (WritableColumnVector c: childColumns) {
-        if (c.type instanceof StructType) {
+        if (c.isStruct()) {
           c.appendStruct(true);
         } else {
           c.appendNull();
         }
       }
     } else {
-      appendNotNull();
+      putNotNull(elementsAppended);
     }
+    putStruct(elementsAppended, elementsAppended);
+    elementsAppended++;
     return elementsAppended;
   }
 
@@ -695,6 +710,12 @@ public abstract class WritableColumnVector extends ColumnVector {
     return new ColumnarMap(getChild(0), getChild(1), getArrayOffset(rowId), getArrayLength(rowId));
   }
 
+  @Override
+  public final ColumnarRow getStruct(int rowId) {
+    if (isNullAt(rowId)) return null;
+    return new ColumnarRow(this, getStructOffset(rowId));
+  }
+
   public WritableColumnVector arrayData() {
     return childColumns[0];
   }
@@ -703,18 +724,55 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   public abstract int getArrayOffset(int rowId);
 
+  /**
+   * Returns the offset of a struct element at 'rowId' in the child vectors of this.
+   */
+  public abstract int getStructOffset(int rowId);
+
   @Override
   public WritableColumnVector getChild(int ordinal) { return childColumns[ordinal]; }
 
   /**
-   * Returns the elements appended.
+   * Returns the number of child vectors.
+   */
+  public int getNumChildren() {
+    return childColumns.length;
+  }
+
+  /**
+   * Returns the elements appended. This is useful
    */
   public final int getElementsAppended() { return elementsAppended; }
+
+  /**
+   * Increment number of elements appended by 'num'.
+   *
+   * This is useful when one wants to the 'putXXX' API to add new elements to the vector, but
+   * still want to keep count of how many elements have been added (since the 'putXXX' APIs don't
+   * increment count).
+   */
+  public final void addElementsAppended(int num) {
+    elementsAppended += num;
+  }
 
   /**
    * Marks this column as being constant.
    */
   public final void setIsConstant() { isConstant = true; }
+
+  /**
+   * Marks this column only contains null values.
+   */
+  public final void setAllNull() {
+    isAllNull = true;
+  }
+
+  /**
+   * Whether this column only contains null values.
+   */
+  public final boolean isAllNull() {
+    return isAllNull;
+  }
 
   /**
    * Maximum number of rows that can be stored in this column.
@@ -739,6 +797,12 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected boolean isConstant;
 
   /**
+   * True if this column only contains nulls. Comparing to 'isConstant' above, this doesn't require
+   * any allocation of space.
+   */
+  protected boolean isAllNull;
+
+  /**
    * Default size of each array length value. This grows as necessary.
    */
   protected static final int DEFAULT_ARRAY_LENGTH = 4;
@@ -761,6 +825,10 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected boolean isArray() {
     return type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType ||
       DecimalType.isByteArrayDecimalType(type);
+  }
+
+  protected boolean isStruct() {
+    return type instanceof StructType || type instanceof CalendarIntervalType;
   }
 
   /**

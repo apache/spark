@@ -374,8 +374,10 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     val c2 = testVector.getChild(1)
     c1.putInt(0, 123)
     c2.putDouble(0, 3.45)
+    testVector.putStruct(0, 0)
     c1.putInt(1, 456)
     c2.putDouble(1, 5.67)
+    testVector.putStruct(1, 1)
 
     assert(testVector.getStruct(0).get(0, IntegerType) === 123)
     assert(testVector.getStruct(0).get(1, DoubleType) === 3.45)
@@ -581,6 +583,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       val column = v.getChild(0)
       (0 until 10).foreach { i =>
         column.putInt(i, i)
+        v.putStruct(i, i)
       }
       (0 until 10).foreach { i =>
         val row = v.getStruct(i)
@@ -596,6 +599,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       val column = v.getChild(0)
       (0 until 10).foreach { i =>
         column.putLong(i, i)
+        v.putStruct(i, i)
       }
       (0 until 10).foreach { i =>
         val row = v.getStruct(i)
