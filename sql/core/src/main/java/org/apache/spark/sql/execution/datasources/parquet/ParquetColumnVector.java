@@ -60,7 +60,8 @@ final class ParquetColumnVector {
       int capacity,
       MemoryMode memoryMode,
       Set<ParquetColumn> missingColumns) {
-      DataType sparkType = column.sparkType();
+
+    DataType sparkType = column.sparkType();
     if (!sparkType.sameType(vector.dataType())) {
       throw new IllegalArgumentException("Spark type: " + column.sparkType() +
         " doesn't match the type: " + vector.dataType() + " in column vector");

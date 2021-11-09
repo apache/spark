@@ -89,6 +89,28 @@ abstract class ParquetFileFormatSuite
       }
     }
   }
+
+  test("support batch reads") {
+    val testUDT = new TestUDT.MyDenseVectorUDT
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> enabled.toString) {
+        Seq(
+          IntegerType -> true,
+          BooleanType -> true,
+          ArrayType(TimestampType) -> enabled,
+          StructType(Seq(StructField("f1", DecimalType.SYSTEM_DEFAULT),
+            StructField("f2", StringType))) -> enabled,
+          MapType(keyType = LongType, valueType = DateType) -> enabled,
+          testUDT -> false,
+          ArrayType(testUDT) -> false,
+          StructType(Seq(StructField("f1", ByteType), StructField("f2", testUDT))) -> false,
+          MapType(keyType = testUDT, valueType = BinaryType) -> false
+        ).foreach { case (dt, expected) =>
+          assert(ParquetFileFormat.isBatchReadSupported(conf, dt) == expected)
+        }
+      }
+    }
+  }
 }
 
 class ParquetFileFormatV1Suite extends ParquetFileFormatSuite {

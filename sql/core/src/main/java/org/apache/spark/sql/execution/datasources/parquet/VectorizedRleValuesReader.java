@@ -233,7 +233,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
             if (currentValue == state.maxDefinitionLevel) {
               updater.readValues(n, state.valueOffset, values, valueReader);
               state.valueOffset += n;
-            } else if (!state.isRequired && currentValue == state.maxDefinitionLevel - 1){
+            } else if (!state.isRequired && currentValue == state.maxDefinitionLevel - 1) {
               // only add null if this represents a null element, but not for the case where a
               // struct itself is null
               nulls.putNulls(state.valueOffset, n);
@@ -445,14 +445,14 @@ public final class VectorizedRleValuesReader extends ValuesReader
     private final ParquetVectorUpdater updater;
 
     DefLevelProcessor(
-      VectorizedRleValuesReader reader,
-      ParquetReadState state,
-      WritableColumnVector defLevels,
-      WritableColumnVector values,
-      WritableColumnVector nulls,
-      boolean valuesReused,
-      VectorizedValuesReader valueReader,
-      ParquetVectorUpdater updater) {
+        VectorizedRleValuesReader reader,
+        ParquetReadState state,
+        WritableColumnVector defLevels,
+        WritableColumnVector values,
+        WritableColumnVector nulls,
+        boolean valuesReused,
+        VectorizedValuesReader valueReader,
+        ParquetVectorUpdater updater) {
       this.reader = reader;
       this.state = state;
       this.defLevels = defLevels;

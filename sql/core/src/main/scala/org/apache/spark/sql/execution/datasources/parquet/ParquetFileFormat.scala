@@ -174,25 +174,8 @@ class ParquetFileFormat
   override def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
     val conf = sparkSession.sessionState.conf
     conf.parquetVectorizedReaderEnabled && conf.wholeStageEnabled &&
-      isBatchReadSupported(conf, schema) && !WholeStageCodegenExec.isTooManyFields(conf, schema)
-  }
-
-  // TODO: add some tests for this
-  private def isBatchReadSupported(sqlConf: SQLConf, dt: DataType): Boolean = dt match {
-    case _: AtomicType =>
-      true
-    case at: ArrayType =>
-      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
-          isBatchReadSupported(sqlConf, at.elementType)
-    case mt: MapType =>
-      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
-          isBatchReadSupported(sqlConf, mt.keyType) &&
-          isBatchReadSupported(sqlConf, mt.valueType)
-    case st: StructType =>
-      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
-          st.fields.forall(f => isBatchReadSupported(sqlConf, f.dataType))
-    case _ =>
-      false
+      ParquetFileFormat.isBatchReadSupported(conf, schema) &&
+        !WholeStageCodegenExec.isTooManyFields(conf, schema)
   }
 
   override def vectorTypes(
@@ -259,7 +242,7 @@ class ParquetFileFormat
     val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
     val enableVectorizedReader: Boolean =
       sqlConf.parquetVectorizedReaderEnabled &&
-      resultSchema.map(_.dataType).forall(isBatchReadSupported(sqlConf, _))
+      resultSchema.map(_.dataType).forall(ParquetFileFormat.isBatchReadSupported(sqlConf, _))
     val enableRecordFilter: Boolean = sqlConf.parquetRecordFilterEnabled
     val timestampConversion: Boolean = sqlConf.isParquetINT96TimestampConversion
     val capacity = sqlConf.parquetVectorizedReaderBatchSize
@@ -481,6 +464,23 @@ object ParquetFileFormat extends Logging {
         throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(left, right, e)
       }
     }
+  }
+
+  private[parquet] def isBatchReadSupported(sqlConf: SQLConf, dt: DataType): Boolean = dt match {
+    case _: AtomicType =>
+      true
+    case at: ArrayType =>
+      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
+          isBatchReadSupported(sqlConf, at.elementType)
+    case mt: MapType =>
+      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
+          isBatchReadSupported(sqlConf, mt.keyType) &&
+          isBatchReadSupported(sqlConf, mt.valueType)
+    case st: StructType =>
+      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
+          st.fields.forall(f => isBatchReadSupported(sqlConf, f.dataType))
+    case _ =>
+      false
   }
 
   /**
