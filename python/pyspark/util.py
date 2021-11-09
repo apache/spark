@@ -25,7 +25,10 @@ import sys
 import threading
 import traceback
 import types
-from collections import Callable
+try:
+    from collections.abc import Callable
+except AttributeError:
+    from collections import Callable
 
 from py4j.clientserver import ClientServer
 
