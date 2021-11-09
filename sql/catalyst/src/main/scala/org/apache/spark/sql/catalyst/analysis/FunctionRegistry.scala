@@ -228,7 +228,9 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
       builder: FunctionBuilder): Unit = {
     // We didn't do any check when replacing a function even if it's a builtin one.
     // So no need to do any extra check here.
-    customBuiltinFunctions.add(normalizeFuncName(name).funcName)
+    if (name.database.isEmpty) {
+      customBuiltinFunctions.add(normalizeFuncName(name).funcName)
+    }
     registerFunction(name, info, builder)
   }
 

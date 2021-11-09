@@ -267,7 +267,7 @@ class SparkSessionExtensions {
 
   private[sql] def registerFunctions(functionRegistry: FunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedFunctions) {
-      functionRegistry.registerFunction(name, expressionInfo, function)
+      functionRegistry.registerCustomBuiltinFunction(name, expressionInfo, function)
     }
     functionRegistry
   }
