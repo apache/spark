@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import java.time.{Duration, Period}
+
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
@@ -141,4 +143,38 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
  * The class contains tests for the `ALTER TABLE .. ADD PARTITION` command to check
  * V1 In-Memory table catalog.
  */
-class AlterTableAddPartitionSuite extends AlterTableAddPartitionSuiteBase with CommandSuiteBase
+class AlterTableAddPartitionSuite extends AlterTableAddPartitionSuiteBase with CommandSuiteBase {
+  test("SPARK-XXXXX: Add ANSI intervals as partition values") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(
+        s"""CREATE TABLE $t (
+           | ym INTERVAL YEAR,
+           | dt INTERVAL DAY,
+           | data STRING) $defaultUsing
+           |PARTITIONED BY (ym, dt)""".stripMargin)
+      sql(
+        s"""ALTER TABLE $t ADD PARTITION (
+           | ym = INTERVAL '100' YEAR,
+           | dt = INTERVAL '10' DAY
+           |) LOCATION 'loc'""".stripMargin)
+
+      checkPartitions(t, Map("ym" -> "INTERVAL '100' YEAR", "dt" -> "INTERVAL '10' DAY"))
+      checkLocation(t, Map("ym" -> "INTERVAL '100' YEAR", "dt" -> "INTERVAL '10' DAY"), "loc")
+
+      sql(
+        s"""INSERT INTO $t PARTITION (
+           | ym = INTERVAL '100' YEAR,
+           | dt = INTERVAL '10' DAY) SELECT 'aaa'""".stripMargin)
+      sql(
+        s"""INSERT INTO $t PARTITION (
+           | ym = INTERVAL '1' YEAR,
+           | dt = INTERVAL '-1' DAY) SELECT 'bbb'""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT ym, dt, data FROM $t"),
+        Seq(
+          Row(Period.ofYears(100), Duration.ofDays(10), "aaa"),
+          Row(Period.ofYears(1), Duration.ofDays(-1), "bbb")))
+    }
+  }
+}
