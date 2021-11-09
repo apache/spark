@@ -40,10 +40,18 @@ if __name__ == "__main__":
     df = spark.createDataFrame(data, ["features"])
 
     r1 = Correlation.corr(df, "features").head()
-    print("Pearson correlation matrix:\n" + str(r1[0]))  # type: ignore[index]
+
+    # $example off$
+    assert r1 is not None
+    # $example on$
+    print("Pearson correlation matrix:\n" + str(r1[0]))
 
     r2 = Correlation.corr(df, "features", "spearman").head()
-    print("Spearman correlation matrix:\n" + str(r2[0]))  # type: ignore[index]
+
+    # $example off$
+    assert r2 is not None
+    # $example on$
+    print("Spearman correlation matrix:\n" + str(r2[0]))
     # $example off$
 
     spark.stop()
