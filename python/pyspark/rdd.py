@@ -2797,7 +2797,7 @@ class RDD(object):
         Returns
         -------
         :py:class:`pyspark.resource.ResourceProfile`
-            The the user specified profile or None if none were specified
+            The user specified profile or None if none were specified
 
         Notes
         -----
