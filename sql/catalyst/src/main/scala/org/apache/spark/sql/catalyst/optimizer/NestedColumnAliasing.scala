@@ -321,8 +321,9 @@ object GeneratorNestedColumnAliasing {
     case Project(projectList, Filter(condition, g: Generate))
       if (SQLConf.get.nestedPruningOnExpressions ||
         SQLConf.get.nestedSchemaPruningEnabled) && canPruneGenerator(g.generator) =>
-      // On top on `Generate`, a `Project` that might have nested column accessors.
-      // We try to get alias maps for both project list and generator's children expressions.
+      // On top on `Generate`, a `Project` and `Filter`'s condition that might have nested
+      // column accessors. We try to get alias maps for both project list and generator's
+      // children expressions.
       val attrToExtractValues = NestedColumnAliasing.getAttributeToExtractValues(
         projectList ++ Seq(condition) ++ g.generator.children, Seq.empty)
       rewritePlanIfSubsetFieldsUsed(plan, g, attrToExtractValues)
