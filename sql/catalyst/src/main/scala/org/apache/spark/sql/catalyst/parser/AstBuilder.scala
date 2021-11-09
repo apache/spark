@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateFormatter, DateTimeUtils, IntervalUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -1263,32 +1263,32 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     if (ctx.asOf != null && ctx.asOf.version != null) {
       properties.put(TableCatalog.PROP_VERSION, ctx.asOf.version.getText)
     } else if (ctx.asOf != null && ctx.asOf.TIMESTAMP != null) {
-      val ts = ctx.asOf.timestamp.getText
-      if (ts.length == "'yyyy-MM-dd'".length) {
-        val df = DateFormatter()
-        try {
-          properties.put(
-            TableCatalog.PROP_TIMESTAMP,
-            df.parse(ts.substring(1, ts.length - 1)).toString)
-        } catch {
-          case cause: Throwable =>
-            throw new IllegalArgumentException(
-              s"Illegal timestamp value $ts in TIMESTAMP AS OF", cause)
-        }
-      } else if (ts.length == "'yyyy-MM-dd HH:mm:ss'".length) {
-        val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", getZoneId("+00:00"), isParsing = false)
-        try {
-          properties.put(
-            TableCatalog.PROP_TIMESTAMP,
-            tf.parse(ts.substring(1, ts.length - 1)).toString)
-        } catch {
-          case cause: Throwable =>
-            throw new IllegalArgumentException(
-              s"Illegal timestamp value $ts in TIMESTAMP AS OF", cause)
-        }
-      } else {
+      val tsWithQuotation = ctx.asOf.timestamp.getText
+      val ts = tsWithQuotation.substring(1, tsWithQuotation.length - 1)
+      val tsInLong = SQLConf.get.timestampType match {
+        case TimestampNTZType =>
+          val containsTimeZonePart =
+            DateTimeUtils.parseTimestampString(UTF8String.fromString(ts))._2.isDefined
+          // If the input string contains time zone part, return a timestamp with local time
+          // zone literal.
+          if (containsTimeZonePart) {
+            val zoneId = getZoneId(conf.sessionLocalTimeZone)
+            stringToTimestamp(UTF8String.fromString(ts), zoneId)
+          } else {
+            stringToTimestampWithoutTimeZone(UTF8String.fromString(ts))
+          }
+
+        case TimestampType =>
+          val zoneId = getZoneId(conf.sessionLocalTimeZone)
+          stringToTimestamp(UTF8String.fromString(ts), zoneId)
+      }
+
+      if (tsInLong.isEmpty) {
         throw new IllegalArgumentException(s"Illegal timestamp value $ts in TIMESTAMP AS OF")
       }
+      properties.put(
+        TableCatalog.PROP_TIMESTAMP,
+        tsInLong.get.toString)
     }
 
     val table = mayApplyAliasPlan(ctx.tableAlias,

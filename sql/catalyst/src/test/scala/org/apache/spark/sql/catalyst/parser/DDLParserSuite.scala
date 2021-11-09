@@ -25,8 +25,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{DateFormatter, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.getZoneId
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
@@ -2452,25 +2451,29 @@ class DDLParserSuite extends AnalysisTest {
       Project(Seq(UnresolvedStar(None)),
         UnresolvedRelation(Seq("a", "b", "c"), new CaseInsensitiveStringMap(properties))))
 
-    val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", getZoneId("+00:00"), isParsing = false)
+    val ts1 = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2019-01-29 00:37:58"),
+      DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
     properties = new util.HashMap[String, String]
-    properties.put(TableCatalog.PROP_TIMESTAMP, tf.parse("2019-01-29 00:37:58").toString)
+    properties.put(TableCatalog.PROP_TIMESTAMP, ts1.get.toString)
     comparePlans(
       parsePlan("SELECT * FROM a.b.c TIMESTAMP AS OF '2019-01-29 00:37:58'"),
       Project(Seq(UnresolvedStar(None)),
         UnresolvedRelation(Seq("a", "b", "c"), new CaseInsensitiveStringMap(properties))))
 
-    val df = DateFormatter()
+    val ts2 = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2019-01-29"),
+      DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
     properties = new util.HashMap[String, String]
-    properties.put(TableCatalog.PROP_TIMESTAMP, df.parse("2019-01-29").toString)
+    properties.put(TableCatalog.PROP_TIMESTAMP, ts2.get.toString)
     comparePlans(
       parsePlan("SELECT * FROM a.b.c TIMESTAMP AS OF '2019-01-29'"),
       Project(Seq(UnresolvedStar(None)),
         UnresolvedRelation(Seq("a", "b", "c"), new CaseInsensitiveStringMap(properties))))
 
     val e = intercept[IllegalArgumentException] {
-      parsePlan("SELECT * FROM a.b.c TIMESTAMP AS OF '2019-01'")
+      parsePlan("SELECT * FROM a.b.c TIMESTAMP AS OF '2019-01-11111'")
     }.getMessage
-    assert(e.contains("Illegal timestamp value '2019-01' in TIMESTAMP AS OF"))
+    assert(e.contains("Illegal timestamp value 2019-01-11111 in TIMESTAMP AS OF"))
   }
 }
