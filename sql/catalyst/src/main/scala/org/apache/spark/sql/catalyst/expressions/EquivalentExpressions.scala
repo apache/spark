@@ -24,6 +24,7 @@ import scala.collection.mutable
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.LambdaVariable
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * This class is used to compute equality of (sub)expression trees. Expressions can be added
@@ -66,16 +67,14 @@ class EquivalentExpressions {
             false
           } else {
             // Should not happen
-            throw new IllegalArgumentException(
-              s"Cannot update expression: $expr in map: $map with use count: $useCount")
+            throw QueryExecutionErrors.updateEquivalentExpressionsError(expr, map, useCount)
           }
         case _ =>
           if (useCount > 0) {
             map.put(wrapper, ExpressionStats(expr)(useCount))
           } else {
             // Should not happen
-            throw new IllegalArgumentException(
-              s"Cannot update expression: $expr in map: $map with use count: $useCount")
+            throw QueryExecutionErrors.updateEquivalentExpressionsError(expr, map, useCount)
           }
           false
       }
@@ -85,16 +84,16 @@ class EquivalentExpressions {
   }
 
   /**
-   * Adds only expressions which are common in each of given expressions, in a recursive way.
-   * For example, given two expressions `(a + (b + (c + 1)))` and `(d + (e + (c + 1)))`,
-   * the common expression `(c + 1)` will be added into `equivalenceMap`.
+   * Adds or removes only expressions which are common in each of given expressions, in a recursive
+   * way.
+   * For example, given two expressions `(a + (b + (c + 1)))` and `(d + (e + (c + 1)))`, the common
+   * expression `(c + 1)` will be added into `equivalenceMap`.
    *
-   * Note that as we don't know in advance if any child node of an expression will be common
-   * across all given expressions, we count all child nodes when looking through the given
-   * expressions. But when we call `addExprTree` to add common expressions into the map, we
-   * will add recursively the child nodes. So we need to filter the child expressions first.
-   * For example, if `((a + b) + c)` and `(a + b)` are common expressions, we only add
-   * `((a + b) + c)`.
+   * Note that as we don't know in advance if any child node of an expression will be common across
+   * all given expressions, we compute local equivalence maps for all given expressions and filter
+   * only the common nodes.
+   * Those common nodes are then removed from the local map and added to the final map of
+   * expressions.
    */
   private def updateCommonExprs(
       exprs: Seq[Expression],
@@ -112,20 +111,13 @@ class EquivalentExpressions {
       }
     }
 
-    // Start with the highest common expression, update `map` with the expression and remove it (and
-    // its children recursively if required) from `localEquivalenceMap`. The remaining highest
-    // expression in `localEquivalenceMap` is also common expression.
+    // Start with the highest expression, remove it from `localEquivalenceMap` and add it to `map`.
+    // The remaining highest expression in `localEquivalenceMap` is also common expression so loop
+    // until `localEquivalenceMap` is not empty.
     var statsOption = Some(localEquivalenceMap).filter(_.nonEmpty).map(_.maxBy(_._1.height)._2)
     while (statsOption.nonEmpty) {
       val stats = statsOption.get
       updateExprTree(stats.expr, localEquivalenceMap, -stats.useCount)
-
-      // If `add` is true and the `commonExpr` already appears in the equivalence map, calling
-      // `updateExprTree` will increase the `useCount` and mark it as a common subexpression.
-      // Otherwise, `addExprTree` will recursively add `commonExpr` and its descendant to the
-      // equivalence map, in case they also appear in other places. For example,
-      // `If(a + b > 1, a + b + c, a + b + c)`, `a + b` also appears in the condition and should be
-      // treated as common subexpression. If `add` is false then the other way around.
       updateExprTree(stats.expr, map, useCount)
 
       statsOption = Some(localEquivalenceMap).filter(_.nonEmpty).map(_.maxBy(_._1.height)._2)
