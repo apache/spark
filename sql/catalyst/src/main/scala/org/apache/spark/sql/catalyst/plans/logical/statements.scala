@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ViewType}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, FunctionResource}
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -166,23 +166,6 @@ case class CreateTableAsSelectStatement(
 }
 
 /**
- * A CREATE VIEW statement, as parsed from SQL.
- */
-case class CreateViewStatement(
-    viewName: Seq[String],
-    userSpecifiedColumns: Seq[(String, Option[String])],
-    comment: Option[String],
-    properties: Map[String, String],
-    originalText: Option[String],
-    child: LogicalPlan,
-    allowExisting: Boolean,
-    replace: Boolean,
-    viewType: ViewType) extends UnaryParsedStatement {
-  override protected def withNewChildInternal(newChild: LogicalPlan): CreateViewStatement =
-    copy(child = newChild)
-}
-
-/**
  * A REPLACE TABLE command, as parsed from SQL.
  *
  * If the table exists prior to running this command, executing this statement
@@ -272,24 +255,3 @@ case class InsertIntoStatement(
   override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoStatement =
     copy(query = newChild)
 }
-
-/**
- * A USE statement, as parsed from SQL.
- */
-case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends LeafParsedStatement
-
-/**
- * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
- */
-case class ShowCurrentNamespaceStatement() extends LeafParsedStatement
-
-/**
- *  CREATE FUNCTION statement, as parsed from SQL
- */
-case class CreateFunctionStatement(
-    functionName: Seq[String],
-    className: String,
-    resources: Seq[FunctionResource],
-    isTemp: Boolean,
-    ignoreIfExists: Boolean,
-    replace: Boolean) extends LeafParsedStatement

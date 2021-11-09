@@ -79,18 +79,32 @@ if (!(Test-Path $tools)) {
 }
 
 # ========================== Maven
+# Push-Location $tools
+#
+# $mavenVer = "3.6.3"
+# Start-FileDownload "https://archive.apache.org/dist/maven/maven-3/$mavenVer/binaries/apache-maven-$mavenVer-bin.zip" "maven.zip"
+#
+# # extract
+# Invoke-Expression "7z.exe x maven.zip"
+#
+# # add maven to environment variables
+# $env:PATH = "$tools\apache-maven-$mavenVer\bin;" + $env:PATH
+# $env:M2_HOME = "$tools\apache-maven-$mavenVer"
+# $env:MAVEN_OPTS = "-Xmx2g -XX:ReservedCodeCacheSize=1g"
+#
+# Pop-Location
+
+# ========================== SBT
 Push-Location $tools
 
-$mavenVer = "3.6.3"
-Start-FileDownload "https://archive.apache.org/dist/maven/maven-3/$mavenVer/binaries/apache-maven-$mavenVer-bin.zip" "maven.zip"
+$sbtVer = "1.5.5"
+Start-FileDownload "https://github.com/sbt/sbt/releases/download/v$sbtVer/sbt-$sbtVer.zip" "sbt.zip"
 
 # extract
-Invoke-Expression "7z.exe x maven.zip"
+Invoke-Expression "7z.exe x sbt.zip"
 
-# add maven to environment variables
-$env:PATH = "$tools\apache-maven-$mavenVer\bin;" + $env:PATH
-$env:M2_HOME = "$tools\apache-maven-$mavenVer"
-$env:MAVEN_OPTS = "-Xmx2g -XX:ReservedCodeCacheSize=1g"
+# add sbt to environment variables
+$env:PATH = "$tools\sbt\bin;" + $env:PATH
 
 Pop-Location
 

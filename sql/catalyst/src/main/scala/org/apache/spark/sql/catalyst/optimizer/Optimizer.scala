@@ -99,6 +99,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeRepartition,
         TransposeWindow,
         NullPropagation,
+        NullDownPropagation,
         ConstantPropagation,
         FoldablePropagation,
         OptimizeIn,
@@ -106,6 +107,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         EliminateAggregateFilter,
         ReorderAssociativeOperator,
         LikeSimplification,
+        NotPropagation,
         BooleanSimplification,
         SimplifyConditionals,
         PushFoldableIntoBranches,
@@ -159,7 +161,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       PullOutGroupingExpressions,
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager),
-      SpecialDatetimeValues) ::
+      SpecialDatetimeValues,
+      RewriteAsOfJoin) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -282,7 +285,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewritePredicateSubquery.ruleName ::
       NormalizeFloatingNumbers.ruleName ::
       ReplaceUpdateFieldsExpression.ruleName ::
-      PullOutGroupingExpressions.ruleName :: Nil
+      PullOutGroupingExpressions.ruleName ::
+      RewriteAsOfJoin.ruleName ::
+      RewriteLateralSubquery.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
@@ -420,6 +425,8 @@ object EliminateDistinct extends Rule[LogicalPlan] {
     case _: BitAndAgg => true
     case _: BitOrAgg => true
     case _: CollectSet => true
+    case _: First => true
+    case _: Last => true
     case _ => false
   }
 }

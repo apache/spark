@@ -450,6 +450,8 @@ Lines with a: 46, Lines with b: 23
 </div>
 </div>
 
+Other dependency management tools such as Conda and pip can be also used for custom classes or third-party libraries. See also [Python Package Management](api/python/user_guide/python_packaging.html).
+
 # Where to Go from Here
 Congratulations on running your first Spark application!
 

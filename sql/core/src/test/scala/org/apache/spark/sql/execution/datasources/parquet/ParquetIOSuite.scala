@@ -1062,20 +1062,24 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
-  test("SPARK-36825: year-month/day-time intervals written and read as INT32/INT64") {
-    Seq(
-      YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
-      DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
-    ).foreach { case (it, f) =>
-      val data = (1 to 10).map(i => Row(i, f(i)))
-      val schema = StructType(Array(StructField("d", IntegerType, false),
-        StructField("i", it, false)))
-      withTempPath { file =>
-        val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
-        df.write.parquet(file.getCanonicalPath)
-        withAllParquetReaders {
-          val df2 = spark.read.parquet(file.getCanonicalPath)
-          checkAnswer(df2, df.collect().toSeq)
+  test("SPARK-36825, SPARK-36854: year-month/day-time intervals written and read as INT32/INT64") {
+    Seq(false, true).foreach { offHeapEnabled =>
+      withSQLConf(SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapEnabled.toString) {
+        Seq(
+          YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
+          DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
+        ).foreach { case (it, f) =>
+          val data = (1 to 10).map(i => Row(i, f(i)))
+          val schema = StructType(Array(StructField("d", IntegerType, false),
+            StructField("i", it, false)))
+          withTempPath { file =>
+            val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+            df.write.parquet(file.getCanonicalPath)
+            withAllParquetReaders {
+              val df2 = spark.read.parquet(file.getCanonicalPath)
+              checkAnswer(df2, df.collect().toSeq)
+            }
+          }
         }
       }
     }

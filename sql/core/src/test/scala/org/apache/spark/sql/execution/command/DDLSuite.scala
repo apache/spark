@@ -757,20 +757,12 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
         sql(s"CREATE DATABASE $dbName")
 
-        checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName").toDF("key", "value")
-            .where("key not like 'Owner%'"), // filter for consistency with in-memory catalog
-          Row("Database Name", dbNameWithoutBackTicks) ::
-            Row("Comment", "") ::
-            Row("Location", CatalogUtils.URIToString(location)) ::
-            Row("Properties", "") :: Nil)
-
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
 
         checkAnswer(
           sql(s"DESCRIBE DATABASE EXTENDED $dbName").toDF("key", "value")
             .where("key not like 'Owner%'"), // filter for consistency with in-memory catalog
-          Row("Database Name", dbNameWithoutBackTicks) ::
+          Row("Namespace Name", dbNameWithoutBackTicks) ::
             Row("Comment", "") ::
             Row("Location", CatalogUtils.URIToString(location)) ::
             Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
@@ -780,7 +772,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         checkAnswer(
           sql(s"DESCRIBE DATABASE EXTENDED $dbName").toDF("key", "value")
             .where("key not like 'Owner%'"), // filter for consistency with in-memory catalog
-          Row("Database Name", dbNameWithoutBackTicks) ::
+          Row("Namespace Name", dbNameWithoutBackTicks) ::
             Row("Comment", "") ::
             Row("Location", CatalogUtils.URIToString(location)) ::
             Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
@@ -813,7 +805,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("Drop/Alter/Describe Database - database does not exists") {
+  test("Drop/Alter Database - database does not exists") {
     val databaseNames = Seq("db1", "`database`")
 
     databaseNames.foreach { dbName =>
@@ -829,13 +821,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
       }.getMessage
       assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
-
-      message = intercept[AnalysisException] {
-        sql(s"DESCRIBE DATABASE EXTENDED $dbName")
-      }.getMessage
-      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
-
-      sql(s"DROP DATABASE IF EXISTS $dbName")
     }
   }
 
@@ -1733,8 +1718,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val message = intercept[AnalysisException] {
         sql("SHOW COLUMNS IN tbl FROM a.b.c")
       }.getMessage
-      assert(message.contains(
-        "Table or view not found: a.b.c.tbl"))
+      assert(message.contains("requires a single-part namespace"))
     }
   }
 

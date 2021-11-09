@@ -2243,12 +2243,23 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
 
         pidx = pd.Index([10, 20, 15, 30, 45, None], name="x")
         psidx = ps.Index(pidx)
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            self.assert_eq(psidx.astype(bool), pidx.astype(bool))
+            self.assert_eq(psidx.astype(str), pidx.astype(str))
+        else:
+            self.assert_eq(
+                psidx.astype(bool), ps.Index([True, True, True, True, True, True], name="x")
+            )
+            self.assert_eq(
+                psidx.astype(str),
+                ps.Index(["10.0", "20.0", "15.0", "30.0", "45.0", "nan"], name="x"),
+            )
 
         pidx = pd.Index(["hi", "hi ", " ", " \t", "", None], name="x")
         psidx = ps.Index(pidx)
 
         self.assert_eq(psidx.astype(bool), pidx.astype(bool))
-        self.assert_eq(psidx.astype(str).to_numpy(), ["hi", "hi ", " ", " \t", "", "None"])
+        self.assert_eq(psidx.astype(str), pidx.astype(str))
 
         pidx = pd.Index([True, False, None], name="x")
         psidx = ps.Index(pidx)
@@ -2387,6 +2398,41 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             TypeError,
             lambda: psidx.map({1: 1, 2: 2.0, 3: "three"}),
         )
+
+    def test_multiindex_equal_levels(self):
+        pmidx1 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        pmidx2 = pd.MultiIndex.from_tuples([("b", "y"), ("a", "x"), ("c", "z")])
+        psmidx1 = ps.from_pandas(pmidx1)
+        psmidx2 = ps.from_pandas(pmidx2)
+        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
+
+        pmidx2 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "j")])
+        psmidx2 = ps.from_pandas(pmidx2)
+        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
+
+        pmidx2 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("a", "x")])
+        psmidx2 = ps.from_pandas(pmidx2)
+        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
+
+        pmidx2 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y")])
+        psmidx2 = ps.from_pandas(pmidx2)
+        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
+
+        pmidx2 = pd.MultiIndex.from_tuples([("a", "y"), ("b", "x"), ("c", "z")])
+        psmidx2 = ps.from_pandas(pmidx2)
+        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
+
+        pmidx1 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z"), ("a", "y")])
+        pmidx2 = pd.MultiIndex.from_tuples([("a", "y"), ("b", "x"), ("c", "z"), ("c", "x")])
+        psmidx1 = ps.from_pandas(pmidx1)
+        psmidx2 = ps.from_pandas(pmidx2)
+        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
+
+        pmidx1 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        pmidx2 = pd.MultiIndex.from_tuples([("a", "x", "q"), ("b", "y", "w"), ("c", "z", "e")])
+        psmidx1 = ps.from_pandas(pmidx1)
+        psmidx2 = ps.from_pandas(pmidx2)
+        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
 
     def test_to_numpy(self):
         pidx = pd.Index([1, 2, 3, 4])

@@ -14,10 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from inspect import Signature
+from typing import Any, Callable, Optional, Union, TYPE_CHECKING
+
 from pyspark.sql.pandas.utils import require_minimum_pandas_version
 
+if TYPE_CHECKING:
+    from pyspark.sql.pandas._typing import (
+        PandasScalarUDFType, PandasScalarIterUDFType, PandasGroupedAggUDFType
+    )
 
-def infer_eval_type(sig):
+
+def infer_eval_type(
+    sig: Signature
+) -> Union["PandasScalarUDFType", "PandasScalarIterUDFType", "PandasGroupedAggUDFType"]:
     """
     Infers the evaluation type in :class:`pyspark.rdd.PythonEvalType` from
     :class:`inspect.Signature` instance.
@@ -117,7 +127,9 @@ def infer_eval_type(sig):
         raise NotImplementedError("Unsupported signature: %s." % sig)
 
 
-def check_tuple_annotation(annotation, parameter_check_func=None):
+def check_tuple_annotation(
+    annotation: Any, parameter_check_func: Optional[Callable[[Any], bool]] = None
+) -> bool:
     # Python 3.6 has `__name__`. Python 3.7 and 3.8 have `_name`.
     # Check if the name is Tuple first. After that, check the generic types.
     name = getattr(annotation, "_name", getattr(annotation, "__name__", None))
@@ -125,13 +137,17 @@ def check_tuple_annotation(annotation, parameter_check_func=None):
         parameter_check_func is None or all(map(parameter_check_func, annotation.__args__)))
 
 
-def check_iterator_annotation(annotation, parameter_check_func=None):
+def check_iterator_annotation(
+    annotation: Any, parameter_check_func: Optional[Callable[[Any], bool]] = None
+) -> bool:
     name = getattr(annotation, "_name", getattr(annotation, "__name__", None))
     return name == "Iterator" and (
         parameter_check_func is None or all(map(parameter_check_func, annotation.__args__)))
 
 
-def check_union_annotation(annotation, parameter_check_func=None):
+def check_union_annotation(
+    annotation: Any, parameter_check_func: Optional[Callable[[Any], bool]] = None
+) -> bool:
     import typing
 
     # Note that we cannot rely on '__origin__' in other type hints as it has changed from version

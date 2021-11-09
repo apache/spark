@@ -299,7 +299,9 @@ When the ANSI mode is disabled, Spark SQL has two kinds of keywords:
 * Non-reserved keywords: Same definition as the one when the ANSI mode enabled.
 * Strict-non-reserved keywords: A strict version of non-reserved keywords, which can not be used as table alias.
 
-By default `spark.sql.ansi.enabled` is false.
+If you want to still use reserved keywords as identifiers with ANSI mode, you can set `spark.sql.ansi.enforceReservedKeywords` to false.
+
+By default `spark.sql.ansi.enabled` is false and `spark.sql.ansi.enforceReservedKeywords` is true.
 
 Below is a list of all the keywords in Spark SQL.
 
@@ -328,6 +330,8 @@ Below is a list of all the keywords in Spark SQL.
 |CASCADE|non-reserved|non-reserved|non-reserved|
 |CASE|reserved|non-reserved|reserved|
 |CAST|reserved|non-reserved|reserved|
+|CATALOG|non-reserved|non-reserved|non-reserved|
+|CATALOGS|non-reserved|non-reserved|non-reserved|
 |CHANGE|non-reserved|non-reserved|non-reserved|
 |CHECK|reserved|non-reserved|reserved|
 |CLEAR|non-reserved|non-reserved|non-reserved|
@@ -489,6 +493,7 @@ Below is a list of all the keywords in Spark SQL.
 |REGEXP|non-reserved|non-reserved|not a keyword|
 |RENAME|non-reserved|non-reserved|non-reserved|
 |REPAIR|non-reserved|non-reserved|non-reserved|
+|REPEATABLE|non-reserved|non-reserved|non-reserved|
 |REPLACE|non-reserved|non-reserved|non-reserved|
 |RESET|non-reserved|non-reserved|non-reserved|
 |RESPECT|non-reserved|non-reserved|non-reserved|

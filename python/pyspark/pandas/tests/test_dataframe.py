@@ -4669,12 +4669,40 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
             psdf = ps.from_pandas(pdf)
 
-            def identify4(x) -> ps.DataFrame[float, [int, ntp.NDArray[int]]]:  # type: ignore
+            def identify4(
+                x,
+            ) -> ps.DataFrame[float, [int, ntp.NDArray[int]]]:  # type: ignore[name-defined]
                 return x
 
             actual = psdf.pandas_on_spark.apply_batch(identify4)
             actual.columns = ["a", "b"]
             self.assert_eq(actual, pdf)
+
+        arrays = [[1, 2, 3, 4, 5, 6, 7, 8, 9], ["a", "b", "c", "d", "e", "f", "g", "h", "i"]]
+        idx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
+        pdf = pd.DataFrame(
+            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [[e] for e in [4, 5, 6, 3, 2, 1, 0, 0, 0]]},
+            index=idx,
+        )
+        psdf = ps.from_pandas(pdf)
+
+        def identify4(x) -> ps.DataFrame[[int, str], [int, List[int]]]:
+            return x
+
+        actual = psdf.pandas_on_spark.apply_batch(identify4)
+        actual.index.names = ["number", "color"]
+        actual.columns = ["a", "b"]
+        self.assert_eq(actual, pdf)
+
+        def identify5(
+            x,
+        ) -> ps.DataFrame[
+            [("number", int), ("color", str)], [("a", int), ("b", List[int])]  # noqa: F405
+        ]:
+            return x
+
+        actual = psdf.pandas_on_spark.apply_batch(identify5)
+        self.assert_eq(actual, pdf)
 
     def test_transform_batch(self):
         pdf = pd.DataFrame(
@@ -5971,6 +5999,31 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             # please refer to https://github.com/pandas-dev/pandas/issues/28481 for details
             expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
             self.assert_eq(expected_pdf, psdf1.combine_first(psdf2))
+
+    def test_multi_index_dtypes(self):
+        # SPARK-36930: Support ps.MultiIndex.dtypes
+        arrays = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
+        pmidx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
+        psmidx = ps.from_pandas(pmidx)
+
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            self.assert_eq(psmidx.dtypes, pmidx.dtypes)
+        else:
+            expected = pd.Series([np.dtype("int64"), np.dtype("O")], index=["number", "color"])
+            self.assert_eq(psmidx.dtypes, expected)
+
+        # multiple labels
+        pmidx = pd.MultiIndex.from_arrays(arrays, names=[("zero", "first"), ("one", "second")])
+        psmidx = ps.from_pandas(pmidx)
+
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            self.assert_eq(psmidx.dtypes, pmidx.dtypes)
+        else:
+            expected = pd.Series(
+                [np.dtype("int64"), np.dtype("O")],
+                index=pd.Index([("zero", "first"), ("one", "second")]),
+            )
+            self.assert_eq(psmidx.dtypes, expected)
 
 
 if __name__ == "__main__":

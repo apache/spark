@@ -53,7 +53,7 @@ object InlineCTE extends Rule[LogicalPlan] {
     // 1) It is fine to inline a CTE if it references another CTE that is non-deterministic;
     // 2) Any `CTERelationRef` that contains `OuterReference` would have been inlined first.
     refCount == 1 ||
-      cteDef.child.find(_.expressions.exists(!_.deterministic)).isEmpty ||
+      cteDef.deterministic ||
       cteDef.child.find(_.expressions.exists(_.isInstanceOf[OuterReference])).isDefined
   }
 

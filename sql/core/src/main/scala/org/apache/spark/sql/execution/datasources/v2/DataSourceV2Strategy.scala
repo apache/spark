@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog}
+import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, Literal => V2Literal, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse => V2AlwaysFalse, AlwaysTrue => V2AlwaysTrue, And => V2And, EqualNullSafe => V2EqualNullSafe, EqualTo => V2EqualTo, Filter => V2Filter, GreaterThan => V2GreaterThan, GreaterThanOrEqual => V2GreaterThanOrEqual, In => V2In, IsNotNull => V2IsNotNull, IsNull => V2IsNull, LessThan => V2LessThan, LessThanOrEqual => V2LessThanOrEqual, Not => V2Not, Or => V2Or, StringContains => V2StringContains, StringEndsWith => V2StringEndsWith, StringStartsWith => V2StringStartsWith}
 import org.apache.spark.sql.connector.read.LocalScan
@@ -92,8 +93,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(project, filters,
-        DataSourceV2ScanRelation(_, V1ScanWrapper(scan, pushed, aggregate), output)) =>
+    case PhysicalOperation(project, filters, DataSourceV2ScanRelation(
+      _, V1ScanWrapper(scan, pushed, pushedDownOperators), output)) =>
       val v1Relation = scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
       if (v1Relation.schema != scan.readSchema()) {
         throw QueryExecutionErrors.fallbackV1RelationReportsInconsistentSchemaError(
@@ -101,12 +102,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       val rdd = v1Relation.buildScan()
       val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
+
       val dsScan = RowDataSourceScanExec(
         output,
         output.toStructType,
         Set.empty,
         pushed.toSet,
-        aggregate,
+        pushedDownOperators,
         unsafeRowRDD,
         v1Relation,
         tableIdentifier = None)
@@ -332,13 +334,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ShowTables(ResolvedNamespace(catalog, ns), pattern, output) =>
       ShowTablesExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
 
-    case SetCatalogAndNamespace(catalogManager, catalogName, ns) =>
-      SetCatalogAndNamespaceExec(catalogManager, catalogName, ns) :: Nil
+    case SetCatalogAndNamespace(ResolvedDBObjectName(catalog, ns)) =>
+      val catalogManager = session.sessionState.catalogManager
+      val namespace = if (ns.nonEmpty) Some(ns) else None
+      SetCatalogAndNamespaceExec(catalogManager, Some(catalog.name()), namespace) :: Nil
 
-    case r: ShowCurrentNamespace =>
-      ShowCurrentNamespaceExec(r.output, r.catalogManager) :: Nil
-
-    case r @ ShowTableProperties(rt: ResolvedTable, propertyKey, output) =>
+    case ShowTableProperties(rt: ResolvedTable, propertyKey, output) =>
       ShowTablePropertiesExec(output, rt.table, propertyKey) :: Nil
 
     case AnalyzeTable(_: ResolvedTable, _, _) | AnalyzeColumn(_: ResolvedTable, _, _) =>
@@ -429,6 +430,26 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case a: AlterTableCommand if a.table.resolved =>
       val table = a.table.asInstanceOf[ResolvedTable]
       AlterTableExec(table.catalog, table.identifier, a.changes) :: Nil
+
+    case CreateIndex(ResolvedTable(_, _, table, _),
+        indexName, indexType, ifNotExists, columns, properties) =>
+      table match {
+        case s: SupportsIndex =>
+          val namedRefs = columns.map { case (field, prop) =>
+            FieldReference(field.name) -> prop
+          }
+          CreateIndexExec(s, indexName, indexType, ifNotExists, namedRefs, properties) :: Nil
+        case _ => throw QueryCompilationErrors.tableIndexNotSupportedError(
+          s"CreateIndex is not supported in this table ${table.name}.")
+      }
+
+    case DropIndex(ResolvedTable(_, _, table, _), indexName, ifNotExists) =>
+      table match {
+        case s: SupportsIndex =>
+          DropIndexExec(s, indexName, ifNotExists) :: Nil
+        case _ => throw QueryCompilationErrors.tableIndexNotSupportedError(
+          s"DropIndex is not supported in this table ${table.name}.")
+      }
 
     case _ => Nil
   }

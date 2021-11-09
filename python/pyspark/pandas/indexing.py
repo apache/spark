@@ -53,12 +53,13 @@ from pyspark.pandas.utils import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.frame import DataFrame
+    from pyspark.pandas.generic import Frame
+    from pyspark.pandas.series import Series
 
 
 class IndexerLike(object):
-    def __init__(self, psdf_or_psser: Union["Series", "DataFrame"]):
+    def __init__(self, psdf_or_psser: "Frame"):
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.series import Series
 
@@ -534,7 +535,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         except AnalysisException:
             raise KeyError(
                 "[{}] don't exist in columns".format(
-                    [col._jc.toString() for col in data_spark_columns]  # type: ignore
+                    [col._jc.toString() for col in data_spark_columns]  # type: ignore[operator]
                 )
             )
 
@@ -550,6 +551,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         )
         psdf = DataFrame(internal)
 
+        psdf_or_psser: Union[DataFrame, Series]
         if returns_series:
             psdf_or_psser = first_series(psdf)
             if series_name is not None and series_name != psdf_or_psser.name:
@@ -708,7 +710,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 return
 
             cond, limit, remaining_index = self._select_rows(rows_sel)
-            missing_keys = []  # type: Optional[List[Name]]
+            missing_keys: List[Name] = []
             _, data_spark_columns, _, _, _ = self._select_cols(cols_sel, missing_keys=missing_keys)
 
             if cond is None:
@@ -1032,7 +1034,7 @@ class LocIndexer(LocIndexerLike):
             stop = [row[1] for row in start_and_stop if row[0] == stop]
             stop = stop[-1] if len(stop) > 0 else None
 
-            conds = []  # type: List[Column]
+            conds: List[Column] = []
             if start is not None:
                 conds.append(F.col(NATURAL_ORDER_COLUMN_NAME) >= SF.lit(start).cast(LongType()))
             if stop is not None:
@@ -1199,6 +1201,7 @@ class LocIndexer(LocIndexerLike):
             return self._get_from_multiindex_column((str(key),), missing_keys, labels, recursed + 1)
         else:
             returns_series = all(lbl is None or len(lbl) == 0 for _, lbl in labels)
+            series_name: Optional[Name]
             if returns_series:
                 label_set = set(label for label, _ in labels)
                 assert len(label_set) == 1
@@ -1207,7 +1210,7 @@ class LocIndexer(LocIndexerLike):
                 data_spark_columns = [self._internal.spark_column_for(label)]
                 data_fields = [self._internal.field_for(label)]
                 if label is None:
-                    series_name = None  # type: Name
+                    series_name = None
                 else:
                     if recursed > 0:
                         label = label[:-recursed]
@@ -1245,9 +1248,7 @@ class LocIndexer(LocIndexerLike):
         bool,
         Optional[Name],
     ]:
-        column_labels = [
-            (self._internal.spark_frame.select(cols_sel).columns[0],)
-        ]  # type: List[Label]
+        column_labels: List[Label] = [(self._internal.spark_frame.select(cols_sel).columns[0],)]
         data_spark_columns = [cols_sel]
         return column_labels, data_spark_columns, None, True, None
 

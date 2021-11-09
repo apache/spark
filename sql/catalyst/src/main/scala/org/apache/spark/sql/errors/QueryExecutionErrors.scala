@@ -21,7 +21,9 @@ import java.io.{FileNotFoundException, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{URISyntaxException, URL}
 import java.sql.{SQLException, SQLFeatureNotSupportedException}
+import java.text.{ParseException => JavaParseException}
 import java.time.{DateTimeException, LocalDate}
+import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoField
 import java.util.ConcurrentModificationException
 import java.util.concurrent.TimeoutException
@@ -72,40 +74,46 @@ object QueryExecutionErrors {
   }
 
   def logicalHintOperatorNotRemovedDuringAnalysisError(): Throwable = {
-    new SparkIllegalStateException(errorClass = "LOGICAL_HINT_OPERATOR_NOT_REMOVED_DURING_ANALYSIS",
-      messageParameters = Array.empty)
+    new SparkIllegalStateException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Array(
+        "Internal error: logical hint operator should have been removed during analysis"))
   }
 
   def cannotEvaluateExpressionError(expression: Expression): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "CANNOT_EVALUATE_EXPRESSION",
-      messageParameters = Array("", expression.toString))
+    new SparkUnsupportedOperationException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Array(s"Cannot evaluate expression: $expression"))
   }
 
   def cannotGenerateCodeForExpressionError(expression: Expression): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "CANNOT_GENERATE_CODE_FOR_EXPRESSION",
-      messageParameters = Array(expression.toString))
+    new SparkUnsupportedOperationException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Array(s"Cannot generate code for expression: $expression"))
   }
 
   def cannotTerminateGeneratorError(generator: UnresolvedGenerator): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "CANNOT_TERMINATE_GENERATOR",
-      messageParameters = Array(generator.toString))
+    new SparkUnsupportedOperationException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Array(s"Cannot terminate expression: $generator"))
   }
 
   def castingCauseOverflowError(t: Any, targetType: String): ArithmeticException = {
-    new SparkArithmeticException (errorClass = "CAST_CAUSES_OVERFLOW",
-      messageParameters = Array(t.toString, targetType))
+    new SparkArithmeticException(errorClass = "CAST_CAUSES_OVERFLOW",
+      messageParameters = Array(t.toString, targetType, SQLConf.ANSI_ENABLED.key))
   }
 
   def cannotChangeDecimalPrecisionError(
       value: Decimal, decimalPrecision: Int, decimalScale: Int): ArithmeticException = {
     new SparkArithmeticException(errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
       messageParameters = Array(value.toDebugString,
-        decimalPrecision.toString, decimalScale.toString))
+        decimalPrecision.toString, decimalScale.toString, SQLConf.ANSI_ENABLED.key))
+  }
+
+  def invalidInputSyntaxForNumericError(e: NumberFormatException): NumberFormatException = {
+    new NumberFormatException(s"${e.getMessage}. To return NULL instead, use 'try_cast'. " +
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
   }
 
   def invalidInputSyntaxForNumericError(s: UTF8String): NumberFormatException = {
     new SparkNumberFormatException(errorClass = "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE",
-      messageParameters = Array(s.toString))
+      messageParameters = Array(s.toString, SQLConf.ANSI_ENABLED.key))
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
@@ -130,8 +138,8 @@ object QueryExecutionErrors {
 
   def evaluateUnevaluableAggregateUnsupportedError(
       methodName: String, unEvaluable: UnevaluableAggregate): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "CANNOT_EVALUATE_EXPRESSION",
-      messageParameters = Array(methodName + ": " + unEvaluable.toString))
+    new SparkUnsupportedOperationException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Array(s"Cannot evaluate expression: $methodName: $unEvaluable"))
   }
 
   def dataTypeUnsupportedError(dt: DataType): Throwable = {
@@ -151,17 +159,18 @@ object QueryExecutionErrors {
   }
 
   def divideByZeroError(): ArithmeticException = {
-    new SparkArithmeticException(errorClass = "DIVIDE_BY_ZERO", messageParameters = Array.empty)
+    new SparkArithmeticException(
+      errorClass = "DIVIDE_BY_ZERO", messageParameters = Array(SQLConf.ANSI_ENABLED.key))
   }
 
   def invalidArrayIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_ARRAY_INDEX",
-      messageParameters = Array(index.toString, numElements.toString))
+      messageParameters = Array(index.toString, numElements.toString, SQLConf.ANSI_ENABLED.key))
   }
 
   def mapKeyNotExistError(key: Any): NoSuchElementException = {
     new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
-      messageParameters = Array(key.toString))
+      messageParameters = Array(key.toString, SQLConf.ANSI_ENABLED.key))
   }
 
   def rowFromCSVParserNotExpectedError(): Throwable = {
@@ -174,15 +183,44 @@ object QueryExecutionErrors {
   }
 
   def invalidFractionOfSecondError(): DateTimeException = {
-    new SparkDateTimeException(errorClass = "INVALID_FRACTION_OF_SECOND", Array.empty)
+    new SparkDateTimeException(errorClass = "INVALID_FRACTION_OF_SECOND",
+      Array(SQLConf.ANSI_ENABLED.key))
+  }
+
+  def ansiDateTimeParseError(e: DateTimeParseException): DateTimeParseException = {
+    val newMessage = s"${e.getMessage}. " +
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
+    new DateTimeParseException(newMessage, e.getParsedString, e.getErrorIndex, e.getCause)
+  }
+
+  def ansiDateTimeError(e: DateTimeException): DateTimeException = {
+    val newMessage = s"${e.getMessage}. " +
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
+    new DateTimeException(newMessage, e.getCause)
+  }
+
+  def ansiParseError(e: JavaParseException): JavaParseException = {
+    val newMessage = s"${e.getMessage}. " +
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
+    new JavaParseException(newMessage, e.getErrorOffset)
+  }
+
+  def ansiIllegalArgumentError(message: String): IllegalArgumentException = {
+    val newMessage = s"$message. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
+      s"to false to bypass this error."
+    new IllegalArgumentException(newMessage)
+  }
+
+  def ansiIllegalArgumentError(e: IllegalArgumentException): IllegalArgumentException = {
+    ansiIllegalArgumentError(e.getMessage)
   }
 
   def overflowInSumOfDecimalError(): ArithmeticException = {
-    new ArithmeticException("Overflow in sum of decimals.")
+    arithmeticOverflowError("Overflow in sum of decimals")
   }
 
   def overflowInIntegralDivideError(): ArithmeticException = {
-    new ArithmeticException("Overflow in integral divide.")
+    arithmeticOverflowError("Overflow in integral divide", "try_divide")
   }
 
   def mapSizeExceedArraySizeWhenZipMapError(size: Int): RuntimeException = {
@@ -223,7 +261,8 @@ object QueryExecutionErrors {
   }
 
   def invalidUrlError(url: UTF8String, e: URISyntaxException): Throwable = {
-    new IllegalArgumentException(s"Find an invaild url string ${url.toString}", e)
+    new IllegalArgumentException(s"Find an invalid url string ${url.toString}. " +
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.", e)
   }
 
   def dataTypeOperationUnsupportedError(): Throwable = {
@@ -279,7 +318,9 @@ object QueryExecutionErrors {
   }
 
   def methodNotDeclaredError(name: String): Throwable = {
-    new SparkNoSuchMethodException(errorClass = "MISSING_METHOD", Array(name))
+    new SparkNoSuchMethodException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Array(
+        s"""A method named "$name" is not declared in any enclosing class nor any supertype"""))
   }
 
   def constructorNotFoundError(cls: String): Throwable = {
@@ -389,13 +430,24 @@ object QueryExecutionErrors {
     new IllegalStateException("table stats must be specified.")
   }
 
+  def arithmeticOverflowError(e: ArithmeticException): ArithmeticException = {
+    new ArithmeticException(s"${e.getMessage}. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
+      s"to false to bypass this error.")
+  }
+
+  def arithmeticOverflowError(message: String, hint: String = ""): ArithmeticException = {
+    val alternative = if (hint.nonEmpty) s" To return NULL instead, use '$hint'." else ""
+    new ArithmeticException(s"$message.$alternative If necessary set " +
+      s"${SQLConf.ANSI_ENABLED.key} to false (except for ANSI interval type) to bypass this error.")
+  }
+
   def unaryMinusCauseOverflowError(originValue: AnyVal): ArithmeticException = {
-    new ArithmeticException(s"- $originValue caused overflow.")
+    arithmeticOverflowError(s"- $originValue caused overflow")
   }
 
   def binaryArithmeticCauseOverflowError(
       eval1: Short, symbol: String, eval2: Short): ArithmeticException = {
-    new ArithmeticException(s"$eval1 $symbol $eval2 caused overflow.")
+    arithmeticOverflowError(s"$eval1 $symbol $eval2 caused overflow")
   }
 
   def failedSplitSubExpressionMsg(length: Int): String = {
@@ -583,10 +635,10 @@ object QueryExecutionErrors {
     new QueryExecutionException(message, e)
   }
 
-  def cannotReadParquetFilesError(e: Exception): Throwable = {
-    val message = "Encounter error while reading parquet files. " +
-      "One possible cause: Parquet column cannot be converted in the " +
-      "corresponding files. Details: "
+  def cannotReadFilesError(
+      e: Throwable,
+      path: String): Throwable = {
+    val message = s"Encountered error while reading file $path. Details: "
     new QueryExecutionException(message, e)
   }
 
@@ -852,7 +904,8 @@ object QueryExecutionErrors {
   }
 
   def unscaledValueTooLargeForPrecisionError(): Throwable = {
-    new ArithmeticException("Unscaled value too large for precision")
+    new ArithmeticException("Unscaled value too large for precision. " +
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
   }
 
   def decimalPrecisionExceedsMaxPrecisionError(precision: Int, maxPrecision: Int): Throwable = {
@@ -956,8 +1009,9 @@ object QueryExecutionErrors {
       e)
   }
 
-  def cannotCastUTF8StringToDataTypeError(s: UTF8String, to: DataType): Throwable = {
-    new DateTimeException(s"Cannot cast $s to $to.")
+  def cannotCastToDateTimeError(value: Any, to: DataType): Throwable = {
+    new DateTimeException(s"Cannot cast $value to $to. To return NULL instead, use 'try_cast'. " +
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
   }
 
   def registeringStreamingQueryListenerError(e: Exception): Throwable = {
@@ -1085,7 +1139,9 @@ object QueryExecutionErrors {
   }
 
   def invalidInputSyntaxForBooleanError(s: UTF8String): UnsupportedOperationException = {
-    new UnsupportedOperationException(s"invalid input syntax for type boolean: $s")
+    new UnsupportedOperationException(s"invalid input syntax for type boolean: $s. " +
+      s"To return NULL instead, use 'try_cast'. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
+      "to false to bypass this error.")
   }
 
   def unsupportedOperandTypeForSizeFunctionError(dataType: DataType): Throwable = {
@@ -1822,5 +1878,15 @@ object QueryExecutionErrors {
 
   def pivotNotAfterGroupByUnsupportedError(): Throwable = {
     new UnsupportedOperationException("pivot is only supported after a groupBy")
+  }
+
+  def invalidAesKeyLengthError(actualLength: Int): RuntimeException = {
+    new RuntimeException(
+      s"The key length of aes_encrypt/aes_decrypt should be " +
+        "one of 16, 24 or 32 bytes, but got: $actualLength")
+  }
+
+  def hiveTableWithAnsiIntervalsError(tableName: String): Throwable = {
+    new UnsupportedOperationException(s"Hive table $tableName with ANSI intervals is not supported")
   }
 }

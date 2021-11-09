@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, FunctionResource, FunctionResourceType}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -240,9 +240,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitSingleInsertQuery(
       ctx: SingleInsertQueryContext): LogicalPlan = withOrigin(ctx) {
-    withInsertInto(
-      ctx.insertInto(),
-      plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses))
+    withInsertInto(ctx.insertInto(), visitQuery(ctx.query))
   }
 
   /**
@@ -1179,13 +1177,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    *
    * This currently supports the following sampling methods:
    * - TABLESAMPLE(x ROWS): Sample the table down to the given number of rows.
-   * - TABLESAMPLE(x PERCENT): Sample the table down to the given percentage. Note that percentages
-   * are defined as a number between 0 and 100.
-   * - TABLESAMPLE(BUCKET x OUT OF y): Sample the table down to a 'x' divided by 'y' fraction.
+   * - TABLESAMPLE(x PERCENT) [REPEATABLE (y)]: Sample the table down to the given percentage with
+   * seed 'y'. Note that percentages are defined as a number between 0 and 100.
+   * - TABLESAMPLE(BUCKET x OUT OF y) [REPEATABLE (z)]: Sample the table down to a 'x' divided by
+   * 'y' fraction with seed 'z'.
    */
   private def withSample(ctx: SampleContext, query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     // Create a sampled plan if we need one.
-    def sample(fraction: Double): Sample = {
+    def sample(fraction: Double, seed: Long): Sample = {
       // The range of fraction accepted by Sample is [0, 1]. Because Hive's block sampling
       // function takes X PERCENT as the input and the range of X is [0, 100], we need to
       // adjust the fraction.
@@ -1193,11 +1192,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       validate(fraction >= 0.0 - eps && fraction <= 1.0 + eps,
         s"Sampling fraction ($fraction) must be on interval [0, 1]",
         ctx)
-      Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, query)
+      Sample(0.0, fraction, withReplacement = false, seed, query)
     }
 
     if (ctx.sampleMethod() == null) {
       throw QueryParsingErrors.emptyInputForTableSampleError(ctx)
+    }
+
+    val seed = if (ctx.seed != null) {
+      ctx.seed.getText.toLong
+    } else {
+      (math.random * 1000).toLong
     }
 
     ctx.sampleMethod() match {
@@ -1207,7 +1212,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case ctx: SampleByPercentileContext =>
         val fraction = ctx.percentage.getText.toDouble
         val sign = if (ctx.negativeSign == null) 1 else -1
-        sample(sign * fraction / 100.0d)
+        sample(sign * fraction / 100.0d, seed)
 
       case ctx: SampleByBytesContext =>
         val bytesStr = ctx.bytes.getText
@@ -1227,7 +1232,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         }
 
       case ctx: SampleByBucketContext =>
-        sample(ctx.numerator.getText.toDouble / ctx.denominator.getText.toDouble)
+        sample(ctx.numerator.getText.toDouble / ctx.denominator.getText.toDouble, seed)
     }
   }
 
@@ -1744,7 +1749,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   override def visitCurrentLike(ctx: CurrentLikeContext): Expression = withOrigin(ctx) {
-    if (conf.ansiEnabled) {
+    if (conf.enforceReservedKeywords) {
       ctx.name.getType match {
         case SqlBaseParser.CURRENT_DATE =>
           CurrentDate()
@@ -2542,7 +2547,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
             if (value.exists(Character.isLetter)) {
               throw QueryParsingErrors.invalidIntervalFormError(value, ctx)
             }
-            value
+            if (values(i).MINUS() == null) {
+              value
+            } else {
+              value.startsWith("-") match {
+                case true => value.replaceFirst("-", "")
+                case false => s"-$value"
+              }
+            }
           } else {
             values(i).getText
           }
@@ -2790,14 +2802,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Convert a table property list into a key-value map.
+   * Convert a property list into a key-value map.
    * This should be called through [[visitPropertyKeyValues]] or [[visitPropertyKeys]].
    */
-  override def visitTablePropertyList(
-      ctx: TablePropertyListContext): Map[String, String] = withOrigin(ctx) {
-    val properties = ctx.tableProperty.asScala.map { property =>
-      val key = visitTablePropertyKey(property.key)
-      val value = visitTablePropertyValue(property.value)
+  override def visitPropertyList(
+      ctx: PropertyListContext): Map[String, String] = withOrigin(ctx) {
+    val properties = ctx.property.asScala.map { property =>
+      val key = visitPropertyKey(property.key)
+      val value = visitPropertyValue(property.value)
       key -> value
     }
     // Check for duplicate property names.
@@ -2806,10 +2818,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Parse a key-value map from a [[TablePropertyListContext]], assuming all values are specified.
+   * Parse a key-value map from a [[PropertyListContext]], assuming all values are specified.
    */
-  def visitPropertyKeyValues(ctx: TablePropertyListContext): Map[String, String] = {
-    val props = visitTablePropertyList(ctx)
+  def visitPropertyKeyValues(ctx: PropertyListContext): Map[String, String] = {
+    val props = visitPropertyList(ctx)
     val badKeys = props.collect { case (key, null) => key }
     if (badKeys.nonEmpty) {
       operationNotAllowed(
@@ -2819,10 +2831,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Parse a list of keys from a [[TablePropertyListContext]], assuming no values are specified.
+   * Parse a list of keys from a [[PropertyListContext]], assuming no values are specified.
    */
-  def visitPropertyKeys(ctx: TablePropertyListContext): Seq[String] = {
-    val props = visitTablePropertyList(ctx)
+  def visitPropertyKeys(ctx: PropertyListContext): Seq[String] = {
+    val props = visitPropertyList(ctx)
     val badKeys = props.filter { case (_, v) => v != null }.keys
     if (badKeys.nonEmpty) {
       operationNotAllowed(
@@ -2832,11 +2844,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * A table property key can either be String or a collection of dot separated elements. This
-   * function extracts the property key based on whether its a string literal or a table property
+   * A property key can either be String or a collection of dot separated elements. This
+   * function extracts the property key based on whether its a string literal or a property
    * identifier.
    */
-  override def visitTablePropertyKey(key: TablePropertyKeyContext): String = {
+  override def visitPropertyKey(key: PropertyKeyContext): String = {
     if (key.STRING != null) {
       string(key.STRING)
     } else {
@@ -2845,10 +2857,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * A table property value can be String, Integer, Boolean or Decimal. This function extracts
+   * A property value can be String, Integer, Boolean or Decimal. This function extracts
    * the property value based on whether its a string, integer, boolean or decimal literal.
    */
-  override def visitTablePropertyValue(value: TablePropertyValueContext): String = {
+  override def visitPropertyValue(value: PropertyValueContext): String = {
     if (value == null) {
       null
     } else if (value.STRING != null) {
@@ -3058,7 +3070,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       throw QueryParsingErrors.propertiesAndDbPropertiesBothSpecifiedError(ctx)
     }
 
-    var properties = ctx.tablePropertyList.asScala.headOption
+    var properties = ctx.propertyList.asScala.headOption
       .map(visitPropertyKeyValues)
       .getOrElse(Map.empty)
 
@@ -3106,7 +3118,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitSetNamespaceProperties(ctx: SetNamespacePropertiesContext): LogicalPlan = {
     withOrigin(ctx) {
-      val properties = cleanNamespaceProperties(visitPropertyKeyValues(ctx.tablePropertyList), ctx)
+      val properties = cleanNamespaceProperties(visitPropertyKeyValues(ctx.propertyList), ctx)
       SetNamespaceProperties(
         UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
         properties)
@@ -3247,7 +3259,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     import ctx._
     SerdeInfo(
       serde = Some(string(name)),
-      serdeProperties = Option(tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
+      serdeProperties = Option(propertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
   }
 
   /**
@@ -3573,19 +3585,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[UseStatement]] logical plan.
+   * Create a [[SetCatalogAndNamespace]] command.
    */
   override def visitUse(ctx: UseContext): LogicalPlan = withOrigin(ctx) {
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
-    UseStatement(ctx.NAMESPACE != null, nameParts)
-  }
-
-  /**
-   * Create a [[ShowCurrentNamespaceStatement]].
-   */
-  override def visitShowCurrentNamespace(
-      ctx: ShowCurrentNamespaceContext) : LogicalPlan = withOrigin(ctx) {
-    ShowCurrentNamespaceStatement()
+    SetCatalogAndNamespace(UnresolvedDBObjectName(nameParts, isNamespace = true))
   }
 
   /**
@@ -3827,7 +3831,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitSetTableProperties(
       ctx: SetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
-    val properties = visitPropertyKeyValues(ctx.tablePropertyList)
+    val properties = visitPropertyKeyValues(ctx.propertyList)
     val cleanedTableProperties = cleanTableProperties(ctx, properties)
     if (ctx.VIEW != null) {
       SetViewProperties(
@@ -3858,7 +3862,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitUnsetTableProperties(
       ctx: UnsetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
-    val properties = visitPropertyKeys(ctx.tablePropertyList)
+    val properties = visitPropertyKeys(ctx.propertyList)
     val cleanedProperties = cleanTableProperties(ctx, properties.map(_ -> "").toMap).keys.toSeq
 
     val ifExists = ctx.EXISTS != null
@@ -4296,65 +4300,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
         alterTableTypeMismatchHint),
       Option(ctx.STRING).map(string),
-      Option(ctx.tablePropertyList).map(visitPropertyKeyValues),
+      Option(ctx.propertyList).map(visitPropertyKeyValues),
       // TODO a partition spec is allowed to have optional values. This is currently violated.
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
-  }
-
-  /**
-   * Create or replace a view. This creates a [[CreateViewStatement]]
-   *
-   * For example:
-   * {{{
-   *   CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] multi_part_name
-   *   [(column_name [COMMENT column_comment], ...) ]
-   *   create_view_clauses
-   *
-   *   AS SELECT ...;
-   *
-   *   create_view_clauses (order insensitive):
-   *     [COMMENT view_comment]
-   *     [TBLPROPERTIES (property_name = property_value, ...)]
-   * }}}
-   */
-  override def visitCreateView(ctx: CreateViewContext): LogicalPlan = withOrigin(ctx) {
-    if (!ctx.identifierList.isEmpty) {
-      operationNotAllowed("CREATE VIEW ... PARTITIONED ON", ctx)
-    }
-
-    checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
-    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED ON", ctx)
-    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
-
-    val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
-      icl.identifierComment.asScala.map { ic =>
-        ic.identifier.getText -> Option(ic.commentSpec()).map(visitCommentSpec)
-      }
-    }
-
-    val properties = ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues)
-      .getOrElse(Map.empty)
-    if (ctx.TEMPORARY != null && !properties.isEmpty) {
-      operationNotAllowed("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW", ctx)
-    }
-
-    val viewType = if (ctx.TEMPORARY == null) {
-      PersistedView
-    } else if (ctx.GLOBAL != null) {
-      GlobalTempView
-    } else {
-      LocalTempView
-    }
-    CreateViewStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
-      userSpecifiedColumns,
-      visitCommentSpecList(ctx.commentSpec()),
-      properties,
-      Option(source(ctx.query)),
-      plan(ctx.query),
-      ctx.EXISTS != null,
-      ctx.REPLACE != null,
-      viewType)
   }
 
   /**
@@ -4403,7 +4351,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       ctx: ShowTblPropertiesContext): LogicalPlan = withOrigin(ctx) {
     ShowTableProperties(
       createUnresolvedTableOrView(ctx.table, "SHOW TBLPROPERTIES"),
-      Option(ctx.key).map(visitTablePropertyKey))
+      Option(ctx.key).map(visitPropertyKey))
   }
 
   /**
@@ -4456,36 +4404,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       ctx.TEMPORARY != null)
   }
 
-  /**
-   * Create a CREATE FUNCTION statement.
-   *
-   * For example:
-   * {{{
-   *   CREATE [OR REPLACE] [TEMPORARY] FUNCTION [IF NOT EXISTS] [db_name.]function_name
-   *   AS class_name [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri']];
-   * }}}
-   */
-  override def visitCreateFunction(ctx: CreateFunctionContext): LogicalPlan = withOrigin(ctx) {
-    val resources = ctx.resource.asScala.map { resource =>
-      val resourceType = resource.identifier.getText.toLowerCase(Locale.ROOT)
-      resourceType match {
-        case "jar" | "file" | "archive" =>
-          FunctionResource(FunctionResourceType.fromString(resourceType), string(resource.STRING))
-        case other =>
-          operationNotAllowed(s"CREATE FUNCTION with resource type '$resourceType'", ctx)
-      }
-    }
-
-    val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
-    CreateFunctionStatement(
-      functionIdentifier,
-      string(ctx.className),
-      resources.toSeq,
-      ctx.TEMPORARY != null,
-      ctx.EXISTS != null,
-      ctx.REPLACE != null)
-  }
-
   override def visitRefreshFunction(ctx: RefreshFunctionContext): LogicalPlan = withOrigin(ctx) {
     val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
     RefreshFunction(UnresolvedFunc(functionIdentifier))
@@ -4506,6 +4424,53 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case _ => string(ctx.STRING)
     }
     CommentOnTable(createUnresolvedTable(ctx.multipartIdentifier, "COMMENT ON TABLE"), comment)
+  }
+
+  /**
+   * Create an index, returning a [[CreateIndex]] logical plan.
+   * For example:
+   * {{{
+   * CREATE INDEX index_name ON [TABLE] table_name [USING index_type] (column_index_property_list)
+   *   [OPTIONS indexPropertyList]
+   *   column_index_property_list: column_name [OPTIONS(indexPropertyList)]  [ ,  . . . ]
+   *   indexPropertyList: index_property_name [= index_property_value] [ ,  . . . ]
+   * }}}
+   */
+  override def visitCreateIndex(ctx: CreateIndexContext): LogicalPlan = withOrigin(ctx) {
+    val (indexName, indexType) = if (ctx.identifier.size() == 1) {
+      (ctx.identifier(0).getText, "")
+    } else {
+      (ctx.identifier(0).getText, ctx.identifier(1).getText)
+    }
+
+    val columns = ctx.columns.multipartIdentifierProperty.asScala
+      .map(_.multipartIdentifier).map(typedVisit[Seq[String]]).toSeq
+    val columnsProperties = ctx.columns.multipartIdentifierProperty.asScala
+      .map(x => (Option(x.options).map(visitPropertyKeyValues).getOrElse(Map.empty))).toSeq
+    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
+
+    CreateIndex(
+      createUnresolvedTable(ctx.multipartIdentifier(), "CREATE INDEX"),
+      indexName,
+      indexType,
+      ctx.EXISTS != null,
+      columns.map(UnresolvedFieldName(_)).zip(columnsProperties),
+      options)
+  }
+
+  /**
+   * Drop an index, returning a [[DropIndex]] logical plan.
+   * For example:
+   * {{{
+   *   DROP INDEX [IF EXISTS] index_name ON [TABLE] table_name
+   * }}}
+   */
+  override def visitDropIndex(ctx: DropIndexContext): LogicalPlan = withOrigin(ctx) {
+    val indexName = ctx.identifier.getText
+    DropIndex(
+      createUnresolvedTable(ctx.multipartIdentifier(), "DROP INDEX"),
+      indexName,
+      ctx.EXISTS != null)
   }
 
   private def alterViewTypeMismatchHint: Option[String] = Some("Please use ALTER TABLE instead.")

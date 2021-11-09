@@ -582,8 +582,8 @@ case class DataSource(
   private def disallowWritingIntervals(
       dataTypes: Seq[DataType],
       forbidAnsiIntervals: Boolean): Unit = {
-    val isParquet = providingClass == classOf[ParquetFileFormat]
-    dataTypes.foreach(TypeUtils.invokeOnceForInterval(_, forbidAnsiIntervals || !isParquet) {
+    dataTypes.foreach(
+      TypeUtils.invokeOnceForInterval(_, forbidAnsiIntervals) {
       throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()
     })
   }

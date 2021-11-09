@@ -2114,6 +2114,58 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         )
         self.assert_eq(acc.value, 4)
 
+    def test_apply_return_series(self):
+        # SPARK-36907: Fix DataFrameGroupBy.apply without shortcut.
+        pdf = pd.DataFrame(
+            {"a": [1, 2, 3, 4, 5, 6], "b": [1, 1, 2, 3, 5, 8], "c": [1, 4, 9, 16, 25, 36]},
+            columns=["a", "b", "c"],
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            psdf.groupby("b").apply(lambda x: x.iloc[0]).sort_index(),
+            pdf.groupby("b").apply(lambda x: x.iloc[0]).sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby("b").apply(lambda x: x["a"]).sort_index(),
+            pdf.groupby("b").apply(lambda x: x["a"]).sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby(["b", "c"]).apply(lambda x: x.iloc[0]).sort_index(),
+            pdf.groupby(["b", "c"]).apply(lambda x: x.iloc[0]).sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby(["b", "c"]).apply(lambda x: x["a"]).sort_index(),
+            pdf.groupby(["b", "c"]).apply(lambda x: x["a"]).sort_index(),
+        )
+
+        # multi-index columns
+        columns = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "c")])
+        pdf.columns = columns
+        psdf.columns = columns
+
+        self.assert_eq(
+            psdf.groupby(("x", "b")).apply(lambda x: x.iloc[0]).sort_index(),
+            pdf.groupby(("x", "b")).apply(lambda x: x.iloc[0]).sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby(("x", "b")).apply(lambda x: x[("x", "a")]).sort_index(),
+            pdf.groupby(("x", "b")).apply(lambda x: x[("x", "a")]).sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby([("x", "b"), ("y", "c")]).apply(lambda x: x.iloc[0]).sort_index(),
+            pdf.groupby([("x", "b"), ("y", "c")]).apply(lambda x: x.iloc[0]).sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby([("x", "b"), ("y", "c")]).apply(lambda x: x[("x", "a")]).sort_index(),
+            pdf.groupby([("x", "b"), ("y", "c")]).apply(lambda x: x[("x", "a")]).sort_index(),
+        )
+
+    def test_apply_return_series_without_shortcut(self):
+        # SPARK-36907: Fix DataFrameGroupBy.apply without shortcut.
+        with ps.option_context("compute.shortcut_limit", 2):
+            self.test_apply_return_series()
+
     def test_transform(self):
         pdf = pd.DataFrame(
             {"a": [1, 2, 3, 4, 5, 6], "b": [1, 1, 2, 3, 5, 8], "c": [1, 4, 9, 16, 25, 36]},

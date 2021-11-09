@@ -22,7 +22,7 @@ import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, StandardOpenOption}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{Instant, LocalDate, LocalDateTime}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 import java.util.Locale
 import java.util.zip.GZIPOutputStream
 
@@ -30,6 +30,7 @@ import scala.collection.JavaConverters._
 import scala.util.Properties
 
 import com.univocity.parsers.common.TextParsingException
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
@@ -366,6 +367,7 @@ abstract class CSVSuite
       }
 
       assert(exception.getMessage.contains("Malformed CSV record"))
+      assert(ExceptionUtils.getRootCause(exception).isInstanceOf[RuntimeException])
     }
   }
 
@@ -1249,8 +1251,8 @@ abstract class CSVSuite
         val e = intercept[SparkException] {
           spark.read.csv(inputFile.toURI.toString).collect()
         }
-        assert(e.getCause.isInstanceOf[EOFException])
-        assert(e.getCause.getMessage === "Unexpected end of input stream")
+        assert(e.getCause.getCause.isInstanceOf[EOFException])
+        assert(e.getCause.getCause.getMessage === "Unexpected end of input stream")
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
         assert(spark.read.csv(inputFile.toURI.toString).collect().isEmpty)
@@ -2345,7 +2347,7 @@ abstract class CSVSuite
   }
 
   test("exception mode for parsing date/timestamp string") {
-    val ds = Seq("2020-01-27T20:06:11.847-0800").toDS()
+    val ds = Seq("2020-01-27T20:06:11.847-08000").toDS()
     val csv = spark.read
       .option("header", false)
       .option("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSz")
@@ -2407,10 +2409,11 @@ abstract class CSVSuite
               .option("header", true)
               .csv(path.getCanonicalPath)
             checkAnswer(readback, Seq(Row(2, 3), Row(0, 1)))
-            val errorMsg = intercept[AnalysisException] {
+            val ex = intercept[AnalysisException] {
               readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
-            }.getMessage
-            assert(errorMsg.contains("cannot resolve 'AAA'"))
+            }
+            assert(ex.getErrorClass == "MISSING_COLUMN")
+            assert(ex.messageParameters.head == "AAA")
           }
         }
       }
@@ -2515,6 +2518,25 @@ abstract class CSVSuite
               if (isLegacy) null else LocalDateTime.of(2021, 10, 1, 0, 0, 0)),
             Row(LocalDate.of(2021, 8, 18), Instant.parse("2021-08-18T21:44:30Z"),
               if (isLegacy) null else LocalDateTime.of(2021, 8, 18, 21, 44, 30, 123000000))))
+      }
+    }
+  }
+
+  test("SPARK-36831: Support reading and writing ANSI intervals") {
+    Seq(
+      YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
+      DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
+    ).foreach { case (it, f) =>
+      val data = (1 to 10).map(i => Row(i, f(i)))
+      val schema = StructType(Array(StructField("d", IntegerType, false),
+        StructField("i", it, false)))
+      withTempPath { file =>
+        val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+        df.write.csv(file.getCanonicalPath)
+        val df2 = spark.read.csv(file.getCanonicalPath)
+        checkAnswer(df2, df.select($"d".cast(StringType), $"i".cast(StringType)).collect().toSeq)
+        val df3 = spark.read.schema(schema).csv(file.getCanonicalPath)
+        checkAnswer(df3, df.collect().toSeq)
       }
     }
   }

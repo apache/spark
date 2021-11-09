@@ -1,0 +1,90 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+- case: varargFunctionsOverloads
+  expect_fail: true  # TODO: Remove once SPARK-37085 is resolved
+  main: |
+    from pyspark.sql.functions import (
+      array,
+      col,
+      create_map,
+      map_concat,
+      struct,
+    )
+
+    array(col("foo"), col("bar"))
+    array([col("foo"), col("bar")])
+    array("foo", "bar")
+    array(["foo", "bar"])
+
+    create_map(col("foo"), col("bar"))
+    create_map([col("foo"), col("bar")])
+    create_map("foo", "bar")
+    create_map(["foo", "bar"])
+
+    map_concat(col("foo"), col("bar"))
+    map_concat([col("foo"), col("bar")])
+    map_concat("foo", "bar")
+    map_concat(["foo", "bar"])
+
+    struct(col("foo"), col("bar"))
+    struct([col("foo"), col("bar")])
+    struct("foo", "bar")
+    struct(["foo", "bar"])
+
+    array([col("foo")], [col("bar")])
+    create_map([col("foo")], [col("bar")])
+    map_concat([col("foo")], [col("bar")])
+    struct(["foo"], ["bar"])
+    array(["foo"], ["bar"])
+    create_map(["foo"], ["bar"])
+    map_concat(["foo"], ["bar"])
+    struct(["foo"], ["bar"])
+
+  out: |
+    main.py:29: error: No overload variant of "array" matches argument types "List[Column]", "List[Column]"
+    main.py:29: note: Possible overload variant:
+    main.py:29: note:     def array(*cols: Union[Column, str]) -> Column
+    main.py:29: note:     <1 more non-matching overload not shown>
+    main.py:30: error: No overload variant of "create_map" matches argument types "List[Column]", "List[Column]"
+    main.py:30: note: Possible overload variant:
+    main.py:30: note:     def create_map(*cols: Union[Column, str]) -> Column
+    main.py:30: note:     <1 more non-matching overload not shown>
+    main.py:31: error: No overload variant of "map_concat" matches argument types "List[Column]", "List[Column]"
+    main.py:31: note: Possible overload variant:
+    main.py:31: note:     def map_concat(*cols: Union[Column, str]) -> Column
+    main.py:31: note:     <1 more non-matching overload not shown>
+    main.py:32: error: No overload variant of "struct" matches argument types "List[str]", "List[str]"
+    main.py:32: note: Possible overload variant:
+    main.py:32: note:     def struct(*cols: Union[Column, str]) -> Column
+    main.py:32: note:     <1 more non-matching overload not shown>
+    main.py:33: error: No overload variant of "array" matches argument types "List[str]", "List[str]"
+    main.py:33: note: Possible overload variant:
+    main.py:33: note:     def array(*cols: Union[Column, str]) -> Column
+    main.py:33: note:     <1 more non-matching overload not shown>
+    main.py:34: error: No overload variant of "create_map" matches argument types "List[str]", "List[str]"
+    main.py:34: note: Possible overload variant:
+    main.py:34: note:     def create_map(*cols: Union[Column, str]) -> Column
+    main.py:34: note:     <1 more non-matching overload not shown>
+    main.py:35: error: No overload variant of "map_concat" matches argument types "List[str]", "List[str]"
+    main.py:35: note: Possible overload variant:
+    main.py:35: note:     def map_concat(*cols: Union[Column, str]) -> Column
+    main.py:35: note:     <1 more non-matching overload not shown>
+    main.py:36: error: No overload variant of "struct" matches argument types "List[str]", "List[str]"
+    main.py:36: note: Possible overload variant:
+    main.py:36: note:     def struct(*cols: Union[Column, str]) -> Column
+    main.py:36: note:     <1 more non-matching overload not shown>

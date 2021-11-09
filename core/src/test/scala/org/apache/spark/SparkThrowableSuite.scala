@@ -124,12 +124,14 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
 
     // Does not fail with too many args (expects 0 args)
-    assert(getMessage("DIVIDE_BY_ZERO", Array("foo", "bar")) == "divide by zero")
+    assert(getMessage("DIVIDE_BY_ZERO", Array("foo", "bar")) ==
+      "divide by zero. To return NULL instead, use 'try_divide'. If necessary set foo to false " +
+        "(except for ANSI interval type) to bypass this error.")
   }
 
   test("Error message is formatted") {
-    assert(getMessage("MISSING_COLUMN", Array("foo", "bar")) ==
-      "cannot resolve 'foo' given input columns: [bar]")
+    assert(getMessage("MISSING_COLUMN", Array("foo", "bar, baz")) ==
+      "Column 'foo' does not exist. Did you mean one of the following? [bar, baz]")
   }
 
   test("Try catching legacy SparkError") {
@@ -155,6 +157,23 @@ class SparkThrowableSuite extends SparkFunSuite {
       case e: SparkThrowable =>
         assert(e.getErrorClass == "WRITING_JOB_ABORTED")
         assert(e.getSqlState == "40000")
+      case _: Throwable =>
+        // Should not end up here
+        assert(false)
+    }
+  }
+
+  test("Try catching internal SparkError") {
+    try {
+      throw new SparkException(
+        errorClass = "INTERNAL_ERROR",
+        messageParameters = Array("this is an internal error"),
+        cause = null
+      )
+    } catch {
+      case e: SparkThrowable =>
+        assert(e.isInternalError)
+        assert(e.getSqlState == null)
       case _: Throwable =>
         // Should not end up here
         assert(false)

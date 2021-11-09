@@ -25,6 +25,7 @@ import sys
 import threading
 import traceback
 import types
+from collections import Callable
 
 from py4j.clientserver import ClientServer
 
@@ -41,7 +42,7 @@ class VersionUtils(object):
     Provides utility method to determine Spark versions with given input string.
     """
     @staticmethod
-    def majorMinorVersion(sparkVersion):
+    def majorMinorVersion(sparkVersion: str):
         """
         Given a Spark version string, return the (major version number, minor version number).
         E.g., for 2.0.1-SNAPSHOT, return (2, 0).
@@ -264,7 +265,7 @@ def _parse_memory(s):
     return int(float(s[:-1]) * units[s[-1].lower()])
 
 
-def inheritable_thread_target(f):
+def inheritable_thread_target(f: Callable) -> Callable:
     """
     Return thread target wrapper which is recommended to be used in PySpark when the
     pinned thread mode is enabled. The wrapper function, before calling original
@@ -310,13 +311,16 @@ def inheritable_thread_target(f):
     """
     from pyspark import SparkContext
 
-    if isinstance(SparkContext._gateway, ClientServer):
+    if isinstance(SparkContext._gateway, ClientServer):  # type: ignore[attr-defined]
         # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
 
         # NOTICE the internal difference vs `InheritableThread`. `InheritableThread`
         # copies local properties when the thread starts but `inheritable_thread_target`
         # copies when the function is wrapped.
-        properties = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
+        properties = (SparkContext
+                      ._active_spark_context  # type: ignore[attr-defined]
+                      ._jsc.sc()
+                      .getLocalProperties().clone())
 
         @functools.wraps(f)
         def wrapped(*args, **kwargs):

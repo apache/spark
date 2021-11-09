@@ -87,7 +87,6 @@ abstract class RealBrowserUIHistoryServerSuite(val driverProp: String)
     val securityManager = HistoryServer.createSecurityManager(conf)
 
     server = new HistoryServer(conf, provider, securityManager, 18080)
-    server.initialize()
     server.bind()
     provider.start()
     port = server.boundPort

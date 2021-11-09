@@ -63,7 +63,7 @@ Using PySpark Native Features
 -----------------------------
 
 PySpark allows to upload Python files (``.py``), zipped Python packages (``.zip``), and Egg files (``.egg``)
-to the executors by:
+to the executors by one of the following:
 
 - Setting the configuration setting ``spark.submit.pyFiles``
 - Setting ``--py-files`` option in Spark scripts
