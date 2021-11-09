@@ -32,13 +32,12 @@ import org.mockito.invocation.InvocationOnMock
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
+import org.apache.spark.executor.CoarseGrainedExecutorBackend
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.server.BlockPushNonFatalFailure
 import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode
 import org.apache.spark.network.shuffle.{BlockPushingListener, BlockStoreClient}
 import org.apache.spark.network.util.TransportConf
-import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.ShufflePushCompletion
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.ShuffleBlockPusher.PushRequest
 import org.apache.spark.storage._
@@ -48,7 +47,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
   @Mock(answer = RETURNS_SMART_NULLS) private var blockManager: BlockManager = _
   @Mock(answer = RETURNS_SMART_NULLS) private var dependency: ShuffleDependency[Int, Int, Int] = _
   @Mock(answer = RETURNS_SMART_NULLS) private var shuffleClient: BlockStoreClient = _
-  @Mock(answer = RETURNS_SMART_NULLS) private var driverRpcEndpoint: RpcEndpointRef = _
+  @Mock(answer = RETURNS_SMART_NULLS) private var executorBackend: CoarseGrainedExecutorBackend = _
 
   private var conf: SparkConf = _
   private var pushedBlocks = new ArrayBuffer[String]
@@ -66,6 +65,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     when(mockEnv.conf).thenReturn(conf)
     when(mockEnv.blockManager).thenReturn(blockManager)
     SparkEnv.set(mockEnv)
+    when(SparkEnv.get.executorBackend).thenReturn(Some(executorBackend))
     when(blockManager.blockStoreClient).thenReturn(shuffleClient)
   }
 
@@ -97,8 +97,8 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   private def verifyBlockPushCompleted(
       blockPusher: ShuffleBlockPusher): Unit = {
-    verify(driverRpcEndpoint, times(1))
-      .send(ShufflePushCompletion(dependency.shuffleId, 0))
+    verify(executorBackend, times(1))
+      .notifyDriverAboutPushCompletion(dependency.shuffleId, 0)
     assert(blockPusher.isPushCompletionNotified)
   }
 
