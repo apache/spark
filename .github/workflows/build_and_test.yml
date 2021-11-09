@@ -78,15 +78,15 @@ jobs:
           echo '::set-output name=hadoop::hadoop3.2'
         elif [ "${{ github.event.schedule }}" = "0 13 * * *" ]; then
           echo '::set-output name=java::11'
-          echo '::set-output name=branch::branch-3.2'
+          echo '::set-output name=branch::master'
           echo '::set-output name=type::scheduled'
-          echo '::set-output name=envs::{}'
+          echo '::set-output name=envs::{"SKIP_MIMA": "true", "SKIP_UNIDOC": "true"}'
           echo '::set-output name=hadoop::hadoop3.2'
         elif [ "${{ github.event.schedule }}" = "0 16 * * *" ]; then
           echo '::set-output name=java::17'
-          echo '::set-output name=branch::branch-3.2'
+          echo '::set-output name=branch::master'
           echo '::set-output name=type::scheduled'
-          echo '::set-output name=envs::{}'
+          echo '::set-output name=envs::{"SKIP_MIMA": "true", "SKIP_UNIDOC": "true"}'
           echo '::set-output name=hadoop::hadoop3.2'
         else
           echo '::set-output name=java::8'
