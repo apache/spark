@@ -1809,7 +1809,7 @@ class RDD(object):
         >>> sc.parallelize(['foo', 'bar']).saveAsTextFile(tempFile3.name, codec)
         >>> from fileinput import input, hook_compressed
         >>> result = sorted(input(glob(tempFile3.name + "/part*.gz"), openhook=hook_compressed))
-        >>> b''.join(result).decode('utf-8')
+        >>> ''.join([r.decode('utf-8') if isinstance(r, bytes) else r for r in result])
         'bar\\nfoo\\n'
         """
         def func(split, iterator):
