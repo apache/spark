@@ -38,6 +38,8 @@ private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
   protected val dataSourceName: String
   // The SQL config key for enabling vectorized reader.
   protected val vectorizedReaderEnabledKey: String
+  // The SQL config key for enabling vectorized reader for nested types.
+  protected val vectorizedReaderNestedEnabledKey: String
 
   /**
    * Reads data source file from given `path` as `DataFrame` and passes it to given function.
@@ -52,7 +54,8 @@ private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
       f(spark.read.format(dataSourceName).load(path.toString))
     }
     if (testVectorized) {
-      withSQLConf(vectorizedReaderEnabledKey -> "true") {
+      withSQLConf(vectorizedReaderEnabledKey -> "true",
+          vectorizedReaderNestedEnabledKey -> "true") {
         f(spark.read.format(dataSourceName).load(path.toString))
       }
     }

@@ -1018,12 +1018,16 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
       c1.putInt(0, 123)
       c2.putDouble(0, 3.45)
+      column.putStruct(0, 0)
 
       column.putNull(1)
       assert(column.getStruct(1) == null)
 
       c1.putInt(2, 456)
       c2.putDouble(2, 5.67)
+      c1.putInt(1, 456)
+      c2.putDouble(1, 5.67)
+      column.putStruct(2, 1)
 
       val s = column.getStruct(0)
       assert(s.getInt(0) == 123)
@@ -1079,6 +1083,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       (0 until 6).foreach { i =>
         c0.putInt(i, i)
         c1.putLong(i, i * 10)
+        data.putStruct(i, i)
       }
       // Arrays in column: [(0, 0), (1, 10)], [(1, 10), (2, 20), (3, 30)],
       // [(4, 40), (5, 50)]
@@ -1115,6 +1120,10 @@ class ColumnarBatchSuite extends SparkFunSuite {
       c1.putArray(1, 2, 1)
       c1.putArray(2, 3, 3)
 
+      column.putStruct(0, 0)
+      column.putStruct(1, 1)
+      column.putStruct(2, 2)
+
       assert(column.getStruct(0).getInt(0) === 0)
       assert(column.getStruct(0).getArray(1).toIntArray() === Array(0, 1))
       assert(column.getStruct(1).getInt(0) === 1)
@@ -1135,6 +1144,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
       c0.putInt(0, 0)
       c0.putInt(1, 1)
       c0.putInt(2, 2)
+      column.putStruct(0, 0)
+      column.putStruct(1, 1)
+      column.putStruct(2, 2)
       val c1c0 = c1.getChild(0)
       val c1c1 = c1.getChild(1)
       // Structs in c1: (7, 70), (8, 80), (9, 90)
@@ -1144,6 +1156,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
       c1c1.putInt(0, 70)
       c1c1.putInt(1, 80)
       c1c1.putInt(2, 90)
+      c1.putStruct(0, 0)
+      c1.putStruct(1, 1)
+      c1.putStruct(2, 2)
 
       assert(column.getStruct(0).getInt(0) === 0)
       assert(column.getStruct(0).getStruct(1, 2).toSeq(subSchema) === Seq(7, 70))
