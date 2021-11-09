@@ -16,6 +16,7 @@
 # limitations under the License.
 #
 import os
+import sys
 import tempfile
 import threading
 import time
@@ -179,9 +180,9 @@ class WorkerReuseTest(PySparkTestCase):
 
 
 @unittest.skipIf(
-    not has_resource_module,
+    not has_resource_module or sys.platform != 'linux',
     "Memory limit feature in Python worker is dependent on "
-    "Python's 'resource' module; however, not found.")
+    "Python's 'resource' module on Linux; however, not found or not on Linux.")
 class WorkerMemoryTest(unittest.TestCase):
 
     def setUp(self):
