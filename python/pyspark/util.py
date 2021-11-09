@@ -213,7 +213,7 @@ def try_simplify_traceback(tb):
             tb_next=tb_next,
             tb_frame=cur_tb.tb_frame,
             tb_lasti=cur_tb.tb_frame.f_lasti,
-            tb_lineno=cur_tb.tb_frame.f_lineno)
+            tb_lineno=cur_tb.tb_frame.f_lineno if cur_tb.tb_frame.f_lineno is not None else -1)
         tb_next = new_tb
     return new_tb
 
