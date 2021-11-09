@@ -47,7 +47,7 @@ while inheriting Spark's ease of use and fault tolerance characteristics.
 
 Built on top of Spark, MLlib is a scalable machine learning library that provides
 a uniform set of high-level APIs that help users create and tune practical machine
-learning pipelines.
+learning pipelines and applications.
 
 *******************
 Data APIs 
