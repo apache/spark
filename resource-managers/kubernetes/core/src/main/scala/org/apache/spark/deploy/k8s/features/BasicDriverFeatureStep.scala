@@ -142,6 +142,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       .editOrNewMetadata()
         .withName(driverPodName)
         .addToLabels(conf.labels.asJava)
+        .addToLabels(SPARK_APP_NAME_LABEL, KubernetesConf.getAppNameLabel(conf.appName))
         .addToAnnotations(conf.annotations.asJava)
         .endMetadata()
       .editOrNewSpec()
@@ -151,6 +152,9 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
         .addToImagePullSecrets(conf.imagePullSecrets: _*)
         .endSpec()
       .build()
+
+    conf.get(KUBERNETES_DRIVER_SCHEDULER_NAME)
+      .foreach(driverPod.getSpec.setSchedulerName)
 
     SparkPod(driverPod, driverContainer)
   }

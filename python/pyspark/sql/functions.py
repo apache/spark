@@ -24,6 +24,7 @@ import functools
 import warnings
 from typing import (
     Any,
+    cast,
     Callable,
     Dict,
     List,
@@ -37,7 +38,7 @@ from typing import (
 
 from pyspark import since, SparkContext
 from pyspark.rdd import PythonEvalType
-from pyspark.sql.column import (  # type: ignore[attr-defined]
+from pyspark.sql.column import (
     Column,
     _to_java_column,
     _to_seq,
@@ -46,7 +47,7 @@ from pyspark.sql.column import (  # type: ignore[attr-defined]
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import ArrayType, DataType, StringType, StructType
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
-from pyspark.sql.udf import UserDefinedFunction, _create_udf  # type: ignore[attr-defined] # noqa: F401
+from pyspark.sql.udf import UserDefinedFunction, _create_udf  # noqa: F401
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
 from pyspark.sql.utils import to_str
@@ -108,7 +109,7 @@ def _invoke_binary_math_function(name: str, col1: Any, col2: Any) -> Column:
     )
 
 
-def _options_to_str(options: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+def _options_to_str(options: Optional[Dict[str, Any]] = None) -> Dict[str, Optional[str]]:
     if options:
         return {key: to_str(value) for (key, value) in options.items()}
     return {}
@@ -197,6 +198,76 @@ def min(col: "ColumnOrName") -> Column:
     Aggregate function: returns the minimum value of the expression in a group.
     """
     return _invoke_function_over_column("min", col)
+
+
+def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
+    """
+    Returns the value associated with the maximum value of ord.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column that the value will be returned
+    ord : :class:`~pyspark.sql.Column` or str
+        column to be maximized
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        value associated with the maximum value of ord.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([
+    ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
+    ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
+    ...     schema=("course", "year", "earnings"))
+    >>> df.groupby("course").agg(max_by("year", "earnings")).show()
+    +------+----------------------+
+    |course|max_by(year, earnings)|
+    +------+----------------------+
+    |  Java|                  2013|
+    |dotNET|                  2013|
+    +------+----------------------+
+    """
+    return _invoke_function("max_by", _to_java_column(col), _to_java_column(ord))
+
+
+def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
+    """
+    Returns the value associated with the minimum value of ord.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column that the value will be returned
+    ord : :class:`~pyspark.sql.Column` or str
+        column to be minimized
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        value associated with the minimum value of ord.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([
+    ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
+    ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
+    ...     schema=("course", "year", "earnings"))
+    >>> df.groupby("course").agg(min_by("year", "earnings")).show()
+    +------+----------------------+
+    |course|min_by(year, earnings)|
+    +------+----------------------+
+    |  Java|                  2012|
+    |dotNET|                  2012|
+    +------+----------------------+
+    """
+    return _invoke_function("min_by", _to_java_column(col), _to_java_column(ord))
 
 
 @since(1.3)
@@ -803,8 +874,8 @@ def collect_set(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df2 = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
-    >>> df2.agg(collect_set('age')).collect()
-    [Row(collect_set(age)=[5, 2])]
+    >>> df2.agg(array_sort(collect_set('age')).alias('c')).collect()
+    [Row(c=[2, 5])]
     """
     return _invoke_function_over_column("collect_set", col)
 
@@ -1698,7 +1769,7 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
     """
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if arg2 is None:
-        jc = sc._jvm.functions.log(_to_java_column(arg1))
+        jc = sc._jvm.functions.log(_to_java_column(cast("ColumnOrName", arg1)))
     else:
         jc = sc._jvm.functions.log(arg1, _to_java_column(arg2))
     return Column(jc)
@@ -2058,6 +2129,35 @@ def weekofyear(col: "ColumnOrName") -> Column:
     """
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.weekofyear(_to_java_column(col)))
+
+
+def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") -> Column:
+    """
+    Returns a column with a date built from the year, month and day columns.
+
+    .. versionadded:: 3.3.0
+
+    Parameters
+    ----------
+    year : :class:`~pyspark.sql.Column` or str
+        The year to build the date
+    month : :class:`~pyspark.sql.Column` or str
+        The month to build the date
+    day : :class:`~pyspark.sql.Column` or str
+        The day to build the date
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(2020, 6, 26)], ['Y', 'M', 'D'])
+    >>> df.select(make_date(df.Y, df.M, df.D).alias("datefield")).collect()
+    [Row(datefield=datetime.date(2020, 6, 26))]
+    """
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    year_col = _to_java_column(year)
+    month_col = _to_java_column(month)
+    day_col = _to_java_column(day)
+    jc = sc._jvm.functions.make_date(year_col, month_col, day_col)
+    return Column(jc)
 
 
 def date_add(start: "ColumnOrName", days: int) -> Column:
@@ -3329,10 +3429,10 @@ def octet_length(col: "ColumnOrName") -> Column:
         Byte length of the col
 
     Examples
-    -------
+    --------
     >>> from pyspark.sql.functions import octet_length
-    >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']) \
-            .select(octet_length('cat')).collect()
+    >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']) \\
+    ...      .select(octet_length('cat')).collect()
         [Row(octet_length(cat)=3), Row(octet_length(cat)=4)]
     """
     return _invoke_function_over_column("octet_length", col)
@@ -3355,10 +3455,10 @@ def bit_length(col: "ColumnOrName") -> Column:
         Bit length of the col
 
     Examples
-    -------
+    --------
     >>> from pyspark.sql.functions import bit_length
-    >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']) \
-            .select(bit_length('cat')).collect()
+    >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']) \\
+    ...      .select(bit_length('cat')).collect()
         [Row(bit_length(cat)=24), Row(bit_length(cat)=32)]
     """
     return _invoke_function_over_column("bit_length", col)
@@ -5348,7 +5448,7 @@ def udf(
 
 def udf(
     f: Optional[Union[Callable[..., Any], "DataTypeOrString"]] = None,
-    returnType: Optional["DataTypeOrString"] = StringType(),
+    returnType: "DataTypeOrString" = StringType(),
 ) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
     """Creates a user defined function (UDF).
 

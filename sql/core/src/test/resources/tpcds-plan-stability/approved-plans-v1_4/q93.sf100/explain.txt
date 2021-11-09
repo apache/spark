@@ -63,7 +63,7 @@ Input [2]: [r_reason_sk#6, r_reason_desc#7]
 
 (9) BroadcastExchange
 Input [1]: [r_reason_sk#6]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#8]
 
 (10) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [sr_reason_sk#2]

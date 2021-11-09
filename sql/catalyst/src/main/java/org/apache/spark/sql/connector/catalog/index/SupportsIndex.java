@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.catalog.index;
 
 import java.util.Map;
-import java.util.Properties;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException;
@@ -35,30 +34,32 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
 public interface SupportsIndex extends Table {
 
   /**
+   * A reserved property to specify the index type.
+   */
+  String PROP_TYPE = "type";
+
+  /**
    * Creates an index.
    *
    * @param indexName the name of the index to be created
-   * @param indexType the IndexType of the index to be created
    * @param columns the columns on which index to be created
-   * @param columnProperties the properties of the columns on which index to be created
+   * @param columnsProperties the properties of the columns on which index to be created
    * @param properties the properties of the index to be created
-   * @throws IndexAlreadyExistsException If the index already exists (optional)
+   * @throws IndexAlreadyExistsException If the index already exists.
    */
   void createIndex(String indexName,
-      String indexType,
       NamedReference[] columns,
-      Map<NamedReference, Properties>[] columnProperties,
-      Properties properties)
+      Map<NamedReference, Map<String, String>> columnsProperties,
+      Map<String, String> properties)
       throws IndexAlreadyExistsException;
 
   /**
    * Drops the index with the given name.
    *
    * @param indexName the name of the index to be dropped.
-   * @return true if the index is dropped
-   * @throws NoSuchIndexException If the index does not exist (optional)
+   * @throws NoSuchIndexException If the index does not exist.
    */
-  boolean dropIndex(String indexName) throws NoSuchIndexException;
+  void dropIndex(String indexName) throws NoSuchIndexException;
 
   /**
    * Checks whether an index exists in this table.

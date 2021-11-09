@@ -158,17 +158,6 @@ trait HashJoin extends JoinCodegenSupport {
         output, (streamedPlan.output ++ buildPlan.output).map(_.withNullability(true)))
   }
 
-  // Exposed for testing
-  @transient lazy val ignoreDuplicatedKey = joinType match {
-    case LeftExistence(_) =>
-      // For building hash relation, ignore duplicated rows with same join keys if:
-      // 1. Join condition is empty, or
-      // 2. Join condition only references streamed attributes and build join keys.
-      val streamedOutputAndBuildKeys = AttributeSet(streamedOutput ++ buildKeys)
-      condition.forall(_.references.subsetOf(streamedOutputAndBuildKeys))
-    case _ => false
-  }
-
   private def innerJoin(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation): Iterator[InternalRow] = {
@@ -455,7 +444,7 @@ trait HashJoin extends JoinCodegenSupport {
     val HashedRelationInfo(relationTerm, keyIsUnique, _) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val matched = ctx.freshName("matched")
-    val buildVars = genBuildSideVars(ctx, matched, buildPlan)
+    val buildVars = genOneSideJoinVars(ctx, matched, buildPlan, setDefaultValue = true)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     // filter the output via condition
@@ -657,7 +646,7 @@ trait HashJoin extends JoinCodegenSupport {
     val existsVar = ctx.freshName("exists")
 
     val matched = ctx.freshName("matched")
-    val buildVars = genBuildSideVars(ctx, matched, buildPlan)
+    val buildVars = genOneSideJoinVars(ctx, matched, buildPlan, setDefaultValue = false)
     val checkCondition = if (condition.isDefined) {
       val expr = condition.get
       // evaluate the variables from build side that used by condition

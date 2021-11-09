@@ -26,7 +26,7 @@ from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import DataType
 
 # For running doctests and reference resolution in PyCharm.
-from pyspark import pandas as ps  # noqa: F401
+from pyspark import pandas as ps
 from pyspark.pandas._typing import Label, Name, Scalar
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.frame import DataFrame
@@ -374,6 +374,35 @@ class MultiIndex(Index):
     @name.setter
     def name(self, name: Name) -> None:
         raise PandasNotImplementedError(class_name="pd.MultiIndex", property_name="name")
+
+    @property
+    def dtypes(self) -> pd.Series:
+        """Return the dtypes as a Series for the underlying MultiIndex.
+
+        .. versionadded:: 3.3.0
+
+        Returns
+        -------
+        pd.Series
+            The data type of each level.
+
+        Examples
+        --------
+        >>> psmidx = ps.MultiIndex.from_arrays(
+        ...     [[0, 1, 2, 3, 4, 5, 6, 7, 8], [1, 2, 3, 4, 5, 6, 7, 8, 9]],
+        ...     names=("zero", "one"),
+        ... )
+        >>> psmidx.dtypes
+        zero    int64
+        one     int64
+        dtype: object
+        """
+        return pd.Series(
+            [field.dtype for field in self._internal.index_fields],
+            index=pd.Index(
+                [name if len(name) > 1 else name[0] for name in self._internal.index_names]
+            ),
+        )
 
     def _verify_for_rename(self, name: List[Name]) -> List[Label]:  # type: ignore[override]
         if is_list_like(name):
@@ -1040,9 +1069,7 @@ class MultiIndex(Index):
                     "index {} is out of bounds for axis 0 with size {}".format(loc, length)
                 )
 
-        index_name = [
-            (name,) for name in self._internal.index_spark_column_names
-        ]  # type: List[Label]
+        index_name: List[Label] = [(name,) for name in self._internal.index_spark_column_names]
         sdf_before = self.to_frame(name=index_name)[:loc].to_spark()
         sdf_middle = Index([item]).to_frame(name=index_name).to_spark()
         sdf_after = self.to_frame(name=index_name)[loc:].to_spark()
@@ -1121,7 +1148,7 @@ class MultiIndex(Index):
 
         index_fields = self._index_fields_for_union_like(other, func_name="intersection")
 
-        default_name = [SPARK_INDEX_NAME_FORMAT(i) for i in range(self.nlevels)]  # type: List
+        default_name: List[Name] = [SPARK_INDEX_NAME_FORMAT(i) for i in range(self.nlevels)]
         spark_frame_self = self.to_frame(name=default_name).to_spark()
         spark_frame_intersected = spark_frame_self.intersect(spark_frame_other)
         if keep_name:
@@ -1131,7 +1158,9 @@ class MultiIndex(Index):
 
         internal = InternalFrame(
             spark_frame=spark_frame_intersected,
-            index_spark_columns=[scol_for(spark_frame_intersected, col) for col in default_name],
+            index_spark_columns=[
+                scol_for(spark_frame_intersected, cast(str, col)) for col in default_name
+            ],
             index_names=index_names,
             index_fields=index_fields,
         )

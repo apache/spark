@@ -169,7 +169,7 @@ class PandasConversionMixin(object):
         pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
         column_counter = Counter(self.columns)
 
-        dtype = [None] * len(self.schema)  # type: List[Optional[Type]]
+        dtype: List[Optional[Type]] = [None] * len(self.schema)
         for fieldIdx, field in enumerate(self.schema):
             # For duplicate column name, we use `iloc` to access it.
             if column_counter[field.name] > 1:
@@ -376,7 +376,7 @@ class SparkConversionMixin(object):
                     warnings.warn(msg)
                     raise
         converted_data = self._convert_from_pandas(data, schema, timezone)
-        return self._create_dataframe(  # type: ignore[attr-defined]
+        return self._create_dataframe(
             converted_data, schema, samplingRatio, verifySchema
         )
 
@@ -554,8 +554,8 @@ class SparkConversionMixin(object):
             self._jvm  # type: ignore[attr-defined]
                 .PythonSQLUtils.toDataFrame(jrdd, schema.json(), jsqlContext)
         )
-        df = DataFrame(jdf, self._wrapped)  # type: ignore[attr-defined]
-        df._schema = schema  # type: ignore[attr-defined]
+        df = DataFrame(jdf, self._wrapped)
+        df._schema = schema
         return df
 
 

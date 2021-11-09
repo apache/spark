@@ -171,6 +171,7 @@ DataFrame APIs
     DataFrame.inputFiles
     DataFrame.intersect
     DataFrame.intersectAll
+    DataFrame.isEmpty
     DataFrame.isLocal
     DataFrame.isStreaming
     DataFrame.join
@@ -466,6 +467,7 @@ Functions
     lower
     lpad
     ltrim
+    make_date
     map_concat
     map_entries
     map_filter
@@ -475,9 +477,11 @@ Functions
     map_values
     map_zip_with
     max
+    max_by
     md5
     mean
     min
+    min_by
     minute
     monotonically_increasing_id
     month

@@ -86,7 +86,7 @@ Condition : isnotnull(wp_web_page_sk#9)
 
 (7) BroadcastExchange
 Input [1]: [wp_web_page_sk#9]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#10]
 
 (8) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [ws_web_page_sk#2]
@@ -156,7 +156,7 @@ Condition : (((isnotnull(cd_demo_sk#22) AND isnotnull(cd_marital_status#23)) AND
 
 (23) BroadcastExchange
 Input [3]: [cd_demo_sk#22, cd_marital_status#23, cd_education_status#24]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#25]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#25]
 
 (24) BroadcastHashJoin [codegen id : 7]
 Left keys [1]: [wr_refunded_cdemo_sk#13]
@@ -226,7 +226,7 @@ Input [3]: [ca_address_sk#31, ca_state#32, ca_country#33]
 
 (39) BroadcastExchange
 Input [2]: [ca_address_sk#31, ca_state#32]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#34]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#34]
 
 (40) BroadcastHashJoin [codegen id : 14]
 Left keys [1]: [wr_refunded_addr_sk#14]
@@ -265,7 +265,7 @@ Condition : isnotnull(r_reason_sk#36)
 
 (48) BroadcastExchange
 Input [2]: [r_reason_sk#36, r_reason_desc#37]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#38]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#38]
 
 (49) BroadcastHashJoin [codegen id : 14]
 Left keys [1]: [wr_reason_sk#16]
@@ -328,6 +328,6 @@ Input [2]: [d_date_sk#35, d_year#59]
 
 (59) BroadcastExchange
 Input [1]: [d_date_sk#35]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#60]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#60]
 
 

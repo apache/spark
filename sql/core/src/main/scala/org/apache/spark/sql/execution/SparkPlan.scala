@@ -322,7 +322,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   private def getByteArrayRdd(
       n: Int = -1, takeFromEnd: Boolean = false): RDD[(Long, Array[Byte])] = {
-    execute().mapPartitionsInternal { iter =>
+    val rdd = if (supportsColumnar) {
+      ColumnarToRowExec(this).execute()
+    } else {
+      execute()
+    }
+    rdd.mapPartitionsInternal { iter =>
       var count = 0
       val buffer = new Array[Byte](4 << 10)  // 4K
       val codec = CompressionCodec.createCodec(SparkEnv.get.conf)

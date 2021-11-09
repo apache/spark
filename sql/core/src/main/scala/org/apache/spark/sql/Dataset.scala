@@ -2115,6 +2115,9 @@ class Dataset[T] private[sql](
    *   // +----+----+----+
    * }}}
    *
+   * Note that this supports nested columns in struct and array types. Nested columns in map types
+   * are not currently supported.
+   *
    * @group typedrel
    * @since 2.3.0
    */
@@ -2155,9 +2158,10 @@ class Dataset[T] private[sql](
    *   // +----+----+----+----+
    * }}}
    *
-   * Note that `allowMissingColumns` supports nested column in struct types. Missing nested columns
-   * of struct columns with the same name will also be filled with null values and added to the end
-   * of struct. This currently does not support nested columns in array and map types.
+   * Note that this supports nested columns in struct and array types. With `allowMissingColumns`,
+   * missing nested columns of struct columns with the same name will also be filled with null
+   * values and added to the end of struct. Nested columns in map types are not currently
+   * supported.
    *
    * @group typedrel
    * @since 3.1.0

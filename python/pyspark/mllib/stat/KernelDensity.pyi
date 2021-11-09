@@ -18,7 +18,7 @@
 
 from typing import Iterable
 from pyspark.rdd import RDD
-from numpy import ndarray  # type: ignore[import]
+from numpy import ndarray
 
 class KernelDensity:
     def __init__(self) -> None: ...

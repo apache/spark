@@ -20,14 +20,14 @@ Date/Time related functions on pandas-on-Spark Series
 """
 from typing import Any, Optional, Union, TYPE_CHECKING, no_type_check
 
-import numpy as np  # noqa: F401 (SPARK-34943)
+import numpy as np
 import pandas as pd  # noqa: F401
 from pandas.tseries.offsets import DateOffset
 import pyspark.sql.functions as F
 from pyspark.sql.types import DateType, TimestampType, TimestampNTZType, LongType
 
 if TYPE_CHECKING:
-    import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
+    import pyspark.pandas as ps
 
 
 class DatetimeMethods(object):

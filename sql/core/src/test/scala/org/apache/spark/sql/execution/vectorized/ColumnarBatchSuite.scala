@@ -1688,6 +1688,43 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-37161: RowToColumnConverter for AnsiIntervalType") {
+    DataTypeTestUtils.yearMonthIntervalTypes.foreach { dt =>
+      val schema = new StructType().add(dt.typeName, dt)
+      val converter = new RowToColumnConverter(schema)
+      val columns = OnHeapColumnVector.allocateColumns(10, schema)
+      try {
+        assert(columns(0).dataType() == dt)
+        (0 until 9).foreach { i =>
+          val row = new GenericInternalRow(Array[Any](i))
+          converter.convert(row, columns.toArray)
+          assert(columns(0).getInt(i) == i)
+        }
+        converter.convert(new GenericInternalRow(Array[Any](null)), columns.toArray)
+        assert(columns(0).isNullAt(9))
+      } finally {
+        columns.foreach(_.close())
+      }
+    }
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt =>
+      val schema = new StructType().add(dt.typeName, dt)
+      val converter = new RowToColumnConverter(schema)
+      val columns = OnHeapColumnVector.allocateColumns(10, schema)
+      try {
+        assert(columns(0).dataType() == dt)
+        (0 until 9).foreach { i =>
+          val row = new GenericInternalRow(Array[Any](i.toLong))
+          converter.convert(row, columns.toArray)
+          assert(columns(0).getLong(i) == i)
+        }
+        converter.convert(new GenericInternalRow(Array[Any](null)), columns.toArray)
+        assert(columns(0).isNullAt(9))
+      } finally {
+        columns.foreach(_.close())
+      }
+    }
+  }
+
   testVector("Decimal API", 4, DecimalType.IntDecimal) {
     column =>
 
@@ -1757,5 +1794,37 @@ class ColumnarBatchSuite extends SparkFunSuite {
       val ex = intercept[RuntimeException] { column.reserve(-1) }
       assert(ex.getMessage.contains(
           "Cannot reserve additional contiguous bytes in the vectorized reader (integer overflow)"))
+  }
+
+  DataTypeTestUtils.yearMonthIntervalTypes.foreach { dt =>
+    testVector(dt.typeName, 10, dt) {
+      column =>
+        (0 until 10).foreach{ i =>
+          column.putInt(i, i)
+        }
+        val bachRow = new ColumnarBatchRow(Array(column))
+        (0 until 10).foreach { i =>
+          bachRow.rowId = i
+          assert(bachRow.get(0, dt) === i)
+          val batchRowCopy = bachRow.copy()
+          assert(batchRowCopy.get(0, dt) === i)
+        }
+    }
+  }
+
+  DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt =>
+    testVector(dt.typeName, 10, dt) {
+      column =>
+        (0 until 10).foreach{ i =>
+          column.putLong(i, i)
+        }
+        val bachRow = new ColumnarBatchRow(Array(column))
+        (0 until 10).foreach { i =>
+          bachRow.rowId = i
+          assert(bachRow.get(0, dt) === i)
+          val batchRowCopy = bachRow.copy()
+          assert(batchRowCopy.get(0, dt) === i)
+        }
+    }
   }
 }

@@ -15,12 +15,14 @@
 # limitations under the License.
 #
 
-from collections import namedtuple
-
 __all__ = ['MultivariateGaussian']
 
+from typing import NamedTuple
 
-class MultivariateGaussian(namedtuple('MultivariateGaussian', ['mu', 'sigma'])):
+from pyspark.mllib.linalg import Matrix, Vector
+
+
+class MultivariateGaussian(NamedTuple):
 
     """Represents a (mu, sigma) tuple
 
@@ -32,3 +34,5 @@ class MultivariateGaussian(namedtuple('MultivariateGaussian', ['mu', 'sigma'])):
     >>> (m[0], m[1])
     (DenseVector([11.0, 12.0]), array([[ 1., 5.],[ 3., 2.]]))
     """
+    mu: Vector
+    sigma: Matrix

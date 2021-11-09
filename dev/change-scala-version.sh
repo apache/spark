@@ -88,3 +88,13 @@ else
   sed_i 's:build/sbt \-Pscala\-'$FROM_VERSION':build/sbt:' "$BASEDIR/docs/_plugins/copy_api_dirs.rb"
 fi
 sed_i 's/scala\-'$FROM_VERSION'/scala\-'$TO_VERSION'/' "$BASEDIR/docs/_plugins/copy_api_dirs.rb"
+
+echo "$BASEDIR/dev/mima"
+if [ $TO_VERSION = "2.13" ]; then
+  sed_i '/\-Pscala-'$TO_VERSION'/!s:build/sbt:build/sbt \-Pscala\-'$TO_VERSION':' "$BASEDIR/dev/mima"
+  sed_i '/\-Pscala-'$TO_VERSION'/!s;SPARK_PROFILES=\${1:\-";SPARK_PROFILES=\${1:\-"\-Pscala\-'$TO_VERSION' ;' \
+    "$BASEDIR/dev/mima"
+else
+  sed_i 's/\-Pscala\-'$FROM_VERSION' //' "$BASEDIR/dev/mima"
+fi
+chmod 775 "$BASEDIR/dev/mima"

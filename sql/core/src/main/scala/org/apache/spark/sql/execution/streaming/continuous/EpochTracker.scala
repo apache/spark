@@ -28,7 +28,7 @@ object EpochTracker {
   // update the underlying AtomicLong as it finishes epochs. Other code should only read the value.
   private val currentEpoch: InheritableThreadLocal[AtomicLong] = {
     new InheritableThreadLocal[AtomicLong] {
-      override protected def childValue(parent: AtomicLong): AtomicLong = {
+      override def childValue(parent: AtomicLong): AtomicLong = {
         // Note: make another instance so that changes in the parent epoch aren't reflected in
         // those in the children threads. This is required at `ContinuousCoalesceRDD`.
         new AtomicLong(parent.get)

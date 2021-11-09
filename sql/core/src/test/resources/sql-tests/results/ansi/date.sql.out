@@ -46,7 +46,7 @@ select make_date(2000, 13, 1)
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid value for MonthOfYear (valid values 1 - 12): 13
+Invalid value for MonthOfYear (valid values 1 - 12): 13. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -55,7 +55,7 @@ select make_date(2000, 1, 33)
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid value for DayOfMonth (valid values 1 - 28/31): 33
+Invalid value for DayOfMonth (valid values 1 - 28/31): 33. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -146,7 +146,7 @@ select to_date("02-29", "MM-dd")
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid date 'February 29' as '1970' is not a leap year
+Invalid date 'February 29' as '1970' is not a leap year. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -205,7 +205,7 @@ select next_day("2015-07-23", "xx")
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Illegal input for day of week: xx
+Illegal input for day of week: xx. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -240,7 +240,7 @@ select next_day("xx", "Mon")
 struct<>
 -- !query output
 java.time.DateTimeException
-Cannot cast xx to DateType.
+Cannot cast xx to DateType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -332,7 +332,7 @@ select date_add('2011-11-11', '1.2')
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: 1.2
+invalid input syntax for type numeric: 1.2. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -442,7 +442,7 @@ select date_sub(date'2011-11-11', '1.2')
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: 1.2
+invalid input syntax for type numeric: 1.2. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query

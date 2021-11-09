@@ -55,10 +55,7 @@ else:
     _builtin_table = SelectionMixin._builtin_table
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
-from pyspark.sql.types import (  # noqa: F401
-    DataType,
-    FloatType,
-    DoubleType,
+from pyspark.sql.types import (
     NumericType,
     StructField,
     StructType,
@@ -93,12 +90,13 @@ from pyspark.pandas.utils import (
     same_anchor,
     scol_for,
     verify_temp_column_name,
+    log_advice,
 )
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.exceptions import DataError
 
 if TYPE_CHECKING:
-    from pyspark.pandas.window import RollingGroupby, ExpandingGroupby  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.window import RollingGroupby, ExpandingGroupby
 
 
 # to keep it the same as pandas
@@ -293,9 +291,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             agg_cols = [col.name for col in self._agg_columns]
             func_or_funcs = OrderedDict([(col, func_or_funcs) for col in agg_cols])
 
-        psdf = DataFrame(
+        psdf: DataFrame = DataFrame(
             GroupBy._spark_groupby(self._psdf, func_or_funcs, self._groupkeys)
-        )  # type: DataFrame
+        )
 
         if self._dropna:
             psdf = DataFrame(
@@ -1202,6 +1200,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
+            log_advice(
+                "If the type hints is not specified for `grouby.apply`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = get_option("compute.shortcut_limit")
             pdf = psdf.head(limit + 1)._to_internal_pandas()
             groupkeys = [
@@ -1253,7 +1255,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 data_fields = cast(DataFrameType, return_type).data_fields
                 return_schema = cast(DataFrameType, return_type).spark_type
                 index_fields = cast(DataFrameType, return_type).index_fields
-                should_retain_index = index_fields is not None
+                should_retain_index = len(index_fields) > 0
                 psdf_from_pandas = None
             else:
                 should_return_series = True
@@ -1458,10 +1460,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
     def _prepare_group_map_apply(
         psdf: DataFrame, groupkeys: List[Series], agg_columns: List[Series]
     ) -> Tuple[DataFrame, List[Label], List[str]]:
-        groupkey_labels = [
+        groupkey_labels: List[Label] = [
             verify_temp_column_name(psdf, "__groupkey_{}__".format(i))
             for i in range(len(groupkeys))
-        ]  # type: List[Label]
+        ]
         psdf = psdf[[s.rename(label) for s, label in zip(groupkeys, groupkey_labels)] + agg_columns]
         groupkey_names = [label if len(label) > 1 else label[0] for label in groupkey_labels]
         return DataFrame(psdf._internal.resolved_copy), groupkey_labels, groupkey_names
@@ -2267,10 +2269,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified for `grouby.transform`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = get_option("compute.shortcut_limit")
             pdf = psdf.head(limit + 1)._to_internal_pandas()
             pdf = pdf.groupby(groupkey_names).transform(func, *args, **kwargs)
-            psdf_from_pandas = DataFrame(pdf)  # type: DataFrame
+            psdf_from_pandas: DataFrame = DataFrame(pdf)
             return_schema = force_decimal_precision_scale(
                 as_nullable_spark_type(
                     psdf_from_pandas._internal.spark_frame.drop(*HIDDEN_COLUMNS).schema
@@ -2614,7 +2620,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             data_fields=[psser._internal.data_fields[0] for psser in agg_columns],
             column_label_names=self._psdf._internal.column_label_names,
         )
-        psdf = DataFrame(internal)  # type: DataFrame
+        psdf: DataFrame = DataFrame(internal)
 
         if len(psdf._internal.column_labels) > 0:
             stat_exprs = []
@@ -3351,8 +3357,8 @@ def normalize_keyword_aggregation(
         kwargs = OrderedDict(sorted(kwargs.items()))
 
     # TODO(Py35): When we drop python 3.5, change this to defaultdict(list)
-    aggspec = OrderedDict()  # type: Dict[Union[Any, Tuple], List[str]]
-    order = []  # type: List[Tuple]
+    aggspec: Dict[Union[Any, Tuple], List[str]] = OrderedDict()
+    order: List[Tuple] = []
     columns, pairs = zip(*kwargs.items())
 
     for column, aggfunc in pairs:

@@ -2632,6 +2632,33 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
   }
+
+  test("SPARK-36905: read hive views without without explicit column names") {
+    withTable("t1") {
+      withView("test_view") {
+        hiveClient.runSqlHive("create table t1 stored as avro as select 2 as id")
+        hiveClient.runSqlHive("create view test_view as select 1, id + 1 from t1")
+        checkAnswer(sql("select * from test_view"), Seq(Row(1, 3)))
+      }
+    }
+  }
+
+  test("SPARK-37196: HiveDecimal Precision Scale match failed should return null") {
+    withTempDir { dir =>
+      withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+        withTable("test_precision") {
+          val df = sql(s"SELECT 'dummy' AS name, ${"1" * 20}.${"2" * 18} AS value")
+          df.write.mode("Overwrite").parquet(dir.getAbsolutePath)
+          sql(
+            s"""
+               |CREATE EXTERNAL TABLE test_precision(name STRING, value DECIMAL(18,6))
+               |STORED AS PARQUET LOCATION '${dir.getAbsolutePath}'
+               |""".stripMargin)
+          checkAnswer(sql("SELECT * FROM test_precision"), Row("dummy", null))
+        }
+      }
+    }
+  }
 }
 
 @SlowHiveTest

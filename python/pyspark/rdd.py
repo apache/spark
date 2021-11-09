@@ -1732,7 +1732,7 @@ class RDD(object):
         system, using the "org.apache.hadoop.io.Writable" types that we convert from the
         RDD's key and value types. The mechanism is as follows:
 
-            1. Pyrolite is used to convert pickled Python RDD into RDD of Java objects.
+            1. Pickle is used to convert pickled Python RDD into RDD of Java objects.
             2. Keys and values of this Java RDD are converted to Writables and written out.
 
         Parameters
@@ -1809,7 +1809,7 @@ class RDD(object):
         >>> sc.parallelize(['foo', 'bar']).saveAsTextFile(tempFile3.name, codec)
         >>> from fileinput import input, hook_compressed
         >>> result = sorted(input(glob(tempFile3.name + "/part*.gz"), openhook=hook_compressed))
-        >>> b''.join(result).decode('utf-8')
+        >>> ''.join([r.decode('utf-8') if isinstance(r, bytes) else r for r in result])
         'bar\\nfoo\\n'
         """
         def func(split, iterator):
@@ -2613,7 +2613,7 @@ class RDD(object):
     def _to_java_object_rdd(self):
         """ Return a JavaRDD of Object by unpickling
 
-        It will convert each Python object into Java object by Pyrolite, whenever the
+        It will convert each Python object into Java object by Pickle, whenever the
         RDD is serialized in batch or not.
         """
         rdd = self._pickled()
@@ -2797,7 +2797,7 @@ class RDD(object):
         Returns
         -------
         :py:class:`pyspark.resource.ResourceProfile`
-            The the user specified profile or None if none were specified
+            The user specified profile or None if none were specified
 
         Notes
         -----

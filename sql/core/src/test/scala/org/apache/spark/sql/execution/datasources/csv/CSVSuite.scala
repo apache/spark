@@ -30,6 +30,7 @@ import scala.collection.JavaConverters._
 import scala.util.Properties
 
 import com.univocity.parsers.common.TextParsingException
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
@@ -366,6 +367,7 @@ abstract class CSVSuite
       }
 
       assert(exception.getMessage.contains("Malformed CSV record"))
+      assert(ExceptionUtils.getRootCause(exception).isInstanceOf[RuntimeException])
     }
   }
 
@@ -1249,8 +1251,8 @@ abstract class CSVSuite
         val e = intercept[SparkException] {
           spark.read.csv(inputFile.toURI.toString).collect()
         }
-        assert(e.getCause.isInstanceOf[EOFException])
-        assert(e.getCause.getMessage === "Unexpected end of input stream")
+        assert(e.getCause.getCause.isInstanceOf[EOFException])
+        assert(e.getCause.getCause.getMessage === "Unexpected end of input stream")
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
         assert(spark.read.csv(inputFile.toURI.toString).collect().isEmpty)
@@ -2345,7 +2347,7 @@ abstract class CSVSuite
   }
 
   test("exception mode for parsing date/timestamp string") {
-    val ds = Seq("2020-01-27T20:06:11.847-0800").toDS()
+    val ds = Seq("2020-01-27T20:06:11.847-08000").toDS()
     val csv = spark.read
       .option("header", false)
       .option("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSz")
@@ -2407,10 +2409,11 @@ abstract class CSVSuite
               .option("header", true)
               .csv(path.getCanonicalPath)
             checkAnswer(readback, Seq(Row(2, 3), Row(0, 1)))
-            val errorMsg = intercept[AnalysisException] {
+            val ex = intercept[AnalysisException] {
               readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
-            }.getMessage
-            assert(errorMsg.contains("cannot resolve 'AAA'"))
+            }
+            assert(ex.getErrorClass == "MISSING_COLUMN")
+            assert(ex.messageParameters.head == "AAA")
           }
         }
       }

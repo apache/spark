@@ -117,7 +117,7 @@ Input [3]: [cs_ship_customer_sk#9, cs_sold_date_sk#10, d_date_sk#11]
 
 (17) BroadcastExchange
 Input [1]: [customer_sk#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,true), [id=#13]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#13]
 
 (18) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [c_customer_sk#1]
@@ -153,7 +153,7 @@ Input [3]: [ss_customer_sk#14, ss_sold_date_sk#15, d_date_sk#16]
 
 (25) BroadcastExchange
 Input [1]: [customer_sk#17]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,true), [id=#18]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#18]
 
 (26) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [c_customer_sk#1]
@@ -184,7 +184,7 @@ Input [2]: [ca_address_sk#19, ca_county#20]
 
 (32) BroadcastExchange
 Input [1]: [ca_address_sk#19]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#21]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#21]
 
 (33) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [c_current_addr_sk#3]
@@ -211,7 +211,7 @@ Condition : isnotnull(cd_demo_sk#22)
 
 (38) BroadcastExchange
 Input [9]: [cd_demo_sk#22, cd_gender#23, cd_marital_status#24, cd_education_status#25, cd_purchase_estimate#26, cd_credit_rating#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#31]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#31]
 
 (39) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [c_current_cdemo_sk#2]
@@ -274,7 +274,7 @@ Input [3]: [d_date_sk#7, d_year#42, d_moy#43]
 
 (49) BroadcastExchange
 Input [1]: [d_date_sk#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#44]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#44]
 
 Subquery:2 Hosting operator id = 10 Hosting Expression = cs_sold_date_sk#10 IN dynamicpruning#6
 

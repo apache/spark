@@ -53,27 +53,25 @@ public final class TableIndex {
   /**
    * @return the Index name.
    */
-  String indexName() { return indexName; }
+  public String indexName() { return indexName; }
 
   /**
    * @return the indexType of this Index.
    */
-  String indexType() { return indexType; }
+  public String indexType() { return indexType; }
 
   /**
    * @return the column(s) this Index is on. Could be multi columns (a multi-column index).
    */
-  NamedReference[] columns() { return columns; }
+  public NamedReference[] columns() { return columns; }
 
   /**
    * @return the map of column and column property map.
    */
-  Map<NamedReference, Properties> columnProperties() { return columnProperties; }
+  public Map<NamedReference, Properties> columnProperties() { return columnProperties; }
 
   /**
    * Returns the index properties.
    */
-  Properties properties() {
-    return properties;
-  }
+  public Properties properties() { return properties; }
 }

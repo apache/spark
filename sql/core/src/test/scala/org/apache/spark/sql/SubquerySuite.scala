@@ -896,7 +896,8 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTempView("t") {
       Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("t")
       val e = intercept[AnalysisException](sql("SELECT (SELECT count(*) FROM t WHERE a = 1)"))
-      assert(e.message.contains("cannot resolve 'a' given input columns: [t.i, t.j]"))
+      assert(e.getErrorClass == "MISSING_COLUMN")
+      assert(e.messageParameters.sameElements(Array("a", "t.i, t.j")))
     }
   }
 
@@ -1943,6 +1944,16 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |""".stripMargin),
         correctAnswer)
     }
+  }
+
+  test("SPARK-37199: deterministic in QueryPlan considers subquery") {
+    val deterministicQueryPlan = sql("select (select 1 as b) as b")
+      .queryExecution.executedPlan
+    assert(deterministicQueryPlan.deterministic)
+
+    val nonDeterministicQueryPlan = sql("select (select rand(1) as b) as b")
+      .queryExecution.executedPlan
+    assert(!nonDeterministicQueryPlan.deterministic)
   }
 
   test("Merge non-correlated scalar subqueries",

@@ -36,18 +36,18 @@ jobs:
           - branch-3.1
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@master
+      uses: actions/checkout@61b9e3751b92087fd0b06925ba6dd6314e06f089 # pin@master
       with:
         ref: ${{ matrix.branch }}
     - name: Cache Maven local repository
-      uses: actions/cache@v2
+      uses: actions/cache@c64c572235d810460d0d6876e9c705ad5002b353 # pin@v2
       with:
         path: ~/.m2/repository
         key: snapshot-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           snapshot-maven-
     - name: Install Java 8
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@d202f5dbf7256730fb690ec59f6381650114feb2 # pin@v1
       with:
         java-version: 8
     - name: Publish snapshot

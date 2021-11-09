@@ -22,11 +22,10 @@ import functools
 from collections import OrderedDict
 from contextlib import contextmanager
 import os
-from typing import (  # noqa: F401 (SPARK-34943)
+from typing import (
     Any,
     Callable,
     Dict,
-    Iterable,
     Iterator,
     List,
     Optional,
@@ -51,11 +50,10 @@ from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef.typehints import as_spark_type
 
 if TYPE_CHECKING:
-    # This is required in old Python 3.5 to prevent circular reference.
-    from pyspark.pandas.base import IndexOpsMixin  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.internal import InternalFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.base import IndexOpsMixin
+    from pyspark.pandas.frame import DataFrame
+    from pyspark.pandas.internal import InternalFrame
+    from pyspark.pandas.series import Series
 
 
 ERROR_MESSAGE_CANNOT_COMBINE = (
@@ -385,11 +383,11 @@ def align_diff_frames(
     # 2. Apply the given function to transform the columns in a batch and keep the new columns.
     combined_column_labels = combined._internal.column_labels
 
-    that_columns_to_apply = []  # type: List[Label]
-    this_columns_to_apply = []  # type: List[Label]
-    additional_that_columns = []  # type: List[Label]
-    columns_to_keep = []  # type: List[Union[Series, Column]]
-    column_labels_to_keep = []  # type: List[Label]
+    that_columns_to_apply: List[Label] = []
+    this_columns_to_apply: List[Label] = []
+    additional_that_columns: List[Label] = []
+    columns_to_keep: List[Union[Series, Column]] = []
+    column_labels_to_keep: List[Label] = []
 
     for combined_label in combined_column_labels:
         for common_label in common_column_labels:
@@ -419,22 +417,24 @@ def align_diff_frames(
 
     # Should extract columns to apply and do it in a batch in case
     # it adds new columns for example.
+    columns_applied: List[Union[Series, Column]]
+    column_labels_applied: List[Label]
     if len(this_columns_to_apply) > 0 or len(that_columns_to_apply) > 0:
         psser_set, column_labels_set = zip(
             *resolve_func(combined, this_columns_to_apply, that_columns_to_apply)
         )
-        columns_applied = list(psser_set)  # type: List[Union[Series, Column]]
-        column_labels_applied = list(column_labels_set)  # type: List[Label]
+        columns_applied = list(psser_set)
+        column_labels_applied = list(column_labels_set)
     else:
         columns_applied = []
         column_labels_applied = []
 
-    applied = DataFrame(
+    applied: DataFrame = DataFrame(
         combined._internal.with_new_columns(
             columns_applied + columns_to_keep,
             column_labels=column_labels_applied + column_labels_to_keep,
         )
-    )  # type: DataFrame
+    )
 
     # 3. Restore the names back and deduplicate columns.
     this_labels = OrderedDict()
@@ -620,8 +620,9 @@ def name_like_string(name: Optional[Name]) -> str:
     >>> name_like_string(name)
     '(a, b, c)'
     """
+    label: Label
     if name is None:
-        label = ("__none__",)  # type: Label
+        label = ("__none__",)
     elif is_list_like(name):
         label = tuple([str(n) for n in name])
     else:
@@ -955,6 +956,15 @@ def compare_allow_null(
     comp: Callable[[Column, Column], Column],
 ) -> Column:
     return left.isNull() | right.isNull() | comp(left, right)
+
+
+def log_advice(message: str) -> None:
+    """
+    Display advisory logs for functions to be aware of when using pandas API on Spark
+    for the existing pandas/PySpark users who may not be familiar with distributed environments
+    or the behavior of pandas.
+    """
+    warnings.warn(message, UserWarning)
 
 
 def _test() -> None:

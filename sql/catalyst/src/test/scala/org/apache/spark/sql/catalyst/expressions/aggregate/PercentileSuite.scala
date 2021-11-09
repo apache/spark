@@ -170,8 +170,8 @@ class PercentileSuite extends SparkFunSuite {
       val child = AttributeReference("a", dataType)()
       val percentile = new Percentile(child, percentage)
       assertEqual(percentile.checkInputDataTypes(),
-        TypeCheckFailure(s"argument 1 requires numeric type, however, " +
-            s"'a' is of ${dataType.simpleString} type."))
+        TypeCheckFailure(s"argument 1 requires (numeric or interval year to month or " +
+          s"interval day to second) type, however, 'a' is of ${dataType.simpleString} type."))
     }
 
     val invalidFrequencyDataTypes = Seq(FloatType, DoubleType, BooleanType,
@@ -184,8 +184,8 @@ class PercentileSuite extends SparkFunSuite {
       val frq = AttributeReference("frq", frequencyType)()
       val percentile = new Percentile(child, percentage, frq)
       assertEqual(percentile.checkInputDataTypes(),
-        TypeCheckFailure(s"argument 1 requires numeric type, however, " +
-            s"'a' is of ${dataType.simpleString} type."))
+        TypeCheckFailure(s"argument 1 requires (numeric or interval year to month or " +
+          s"interval day to second) type, however, 'a' is of ${dataType.simpleString} type."))
     }
 
     for(dataType <- validDataTypes;

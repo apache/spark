@@ -17,8 +17,7 @@
 
 import sys
 import warnings
-from collections import namedtuple
-from typing import Any, Callable, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, NamedTuple, List, Optional, TYPE_CHECKING
 
 from pyspark import since
 from pyspark.sql.dataframe import DataFrame
@@ -30,10 +29,34 @@ if TYPE_CHECKING:
     from pyspark.sql.types import DataType
 
 
-Database = namedtuple("Database", "name description locationUri")
-Table = namedtuple("Table", "name database description tableType isTemporary")
-Column = namedtuple("Column", "name description dataType nullable isPartition isBucket")
-Function = namedtuple("Function", "name description className isTemporary")
+class Database(NamedTuple):
+    name: str
+    description: Optional[str]
+    locationUri: str
+
+
+class Table(NamedTuple):
+    name: str
+    database: Optional[str]
+    description: Optional[str]
+    tableType: str
+    isTemporary: bool
+
+
+class Column(NamedTuple):
+    name: str
+    description: Optional[str]
+    dataType: str
+    nullable: bool
+    isPartition: bool
+    isBucket: bool
+
+
+class Function(NamedTuple):
+    name: str
+    description: Optional[str]
+    className: str
+    isTemporary: bool
 
 
 class Catalog(object):
@@ -45,8 +68,8 @@ class Catalog(object):
     def __init__(self, sparkSession: SparkSession) -> None:
         """Create a new Catalog that wraps the underlying JVM object."""
         self._sparkSession = sparkSession
-        self._jsparkSession = sparkSession._jsparkSession  # type: ignore[attr-defined]
-        self._jcatalog = sparkSession._jsparkSession.catalog()  # type: ignore[attr-defined]
+        self._jsparkSession = sparkSession._jsparkSession
+        self._jcatalog = sparkSession._jsparkSession.catalog()
 
     @since(2.0)
     def currentDatabase(self) -> str:
@@ -315,10 +338,10 @@ class Catalog(object):
             options["path"] = path
         if source is None:
             source = (
-                self._sparkSession  # type: ignore[attr-defined]
+                self._sparkSession
                 ._wrapped
                 ._conf
-                .defaultDataSourceName()
+                .defaultDataSourceName()  # type: ignore[attr-defined]
             )
         if description is None:
             description = ""
@@ -330,7 +353,7 @@ class Catalog(object):
             scala_datatype = self._jsparkSession.parseDataType(schema.json())
             df = self._jcatalog.createTable(
                 tableName, source, scala_datatype, description, options)
-        return DataFrame(df, self._sparkSession._wrapped)  # type: ignore[attr-defined]
+        return DataFrame(df, self._sparkSession._wrapped)
 
     def dropTempView(self, viewName: str) -> None:
         """Drops the local temporary view with the given view name in the catalog.

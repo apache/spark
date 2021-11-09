@@ -351,13 +351,15 @@ private[python] class PythonMLLibAPI extends Serializable {
       seed: java.lang.Long,
       initializationSteps: Int,
       epsilon: Double,
-      initialModel: java.util.ArrayList[Vector]): KMeansModel = {
+      initialModel: java.util.ArrayList[Vector],
+      distanceMeasure: String): KMeansModel = {
     val kMeansAlg = new KMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
       .setInitializationMode(initializationMode)
       .setInitializationSteps(initializationSteps)
       .setEpsilon(epsilon)
+      .setDistanceMeasure(distanceMeasure)
 
     if (seed != null) kMeansAlg.setSeed(seed)
     if (!initialModel.isEmpty()) kMeansAlg.setInitialModel(new KMeansModel(initialModel))
