@@ -143,6 +143,34 @@ class ColumnPruningSuite extends PlanTest {
             .analyze
 
         comparePlans(optimized, correctAnswer)
+
+        val queryWithFilter = input
+          .generate(origGenerator, outputNames = generatorOutputNames)
+          .select(selectedExprs: _*)
+          .where('a.attr > 10)
+          .analyze
+
+        val optimizedWithFilter = Optimize.execute(queryWithFilter)
+
+        val aliasesWithFilter =
+          NestedColumnAliasingSuite.collectGeneratedAliases(optimizedWithFilter).toSeq
+
+        val selectedFieldsWithFilter = UnresolvedAttribute("a") +: aliasedExprs(aliasesWithFilter)
+        val finalSelectedExprsWithFilter =
+          Seq(UnresolvedAttribute("a"), $"${aliases(0)}".as("c.d")) ++
+            generatorOutputs
+
+        val correctAnswerWithFilter =
+          input
+            .where('a.attr > 10)
+            .select(selectedFields: _*)
+            .generate(replacedGenerator(aliases),
+              unrequiredChildIndex = unrequiredChildIndex,
+              outputNames = generatorOutputNames)
+            .select(finalSelectedExprs: _*)
+            .analyze
+
+        comparePlans(optimizedWithFilter, correctAnswerWithFilter)
       }
     }
 
