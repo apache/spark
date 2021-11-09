@@ -71,32 +71,62 @@ public interface VectorizedValuesReader {
    void skipFixedLenByteArray(int total, int len);
 
   /**
-   * An interface to write columnar output in various ways
+   * A functional interface to write integer values to columnar output
    */
   @FunctionalInterface
   interface IntegerOutputWriter {
-    void write(WritableColumnVector c, int rowId, long val);
+
+    /**
+     * A functional interface that writes a long value to a specified row in an output column
+     * vector
+     *
+     * @param outputColumnVector the vector to write to
+     * @param rowId the row to write to
+     * @param val value to write
+     */
+    void write(WritableColumnVector outputColumnVector, int rowId, long val);
   }
 
+  /**
+   * A functional interface to write a byte buffer to columnar output
+   */
   @FunctionalInterface
   interface ByteBufferOutputWriter {
-    void write(WritableColumnVector c, int rowId, ByteBuffer val, int length);
 
-    static void writeArrayByteBuffer(WritableColumnVector c, int rowId, ByteBuffer val,
+    /**
+     * A functional interface that writes a value from a ByteBuffer  to a specified row in an output
+     * column vector
+     *
+     * @param outputColumnVector the vector to write to
+     * @param rowId the row to write to
+     * @param val value to write
+     * @param length the number of bytes to write to output
+     */
+    void write(WritableColumnVector outputColumnVector, int rowId, ByteBuffer val, int length);
+
+    // a concrete implementation where the byte buffer is backed by an array
+    static void writeArrayByteBuffer(WritableColumnVector outputColumnVector, int rowId,
+        ByteBuffer val,
         int length) {
-      c.putByteArray(rowId,
+      outputColumnVector.putByteArray(rowId,
           val.array(),
           val.arrayOffset() + val.position(),
           length);
     }
 
-    static void copyWriteByteBuffer(WritableColumnVector c, int rowId, ByteBuffer val, int length) {
+    // a concrete implementation where th buffer is not backed by an array. Requires a copy
+    // (from off-heap memory)
+    static void copyWriteByteBuffer(WritableColumnVector outputColumnVector, int rowId,
+        ByteBuffer val, int length) {
       byte[] bytes = new byte[length];
       val.get(bytes);
-      c.putByteArray(rowId, bytes);
+      outputColumnVector.putByteArray(rowId, bytes);
     }
 
-    static void skipWrite(WritableColumnVector c, int rowId, ByteBuffer val, int length) {
+    // skips writing to output. Used to skip data where the value has to be skipped but still has
+    // to be read
+    static void skipWrite(WritableColumnVector outputColumnVector, int rowId, ByteBuffer val,
+        int length) {
     }
 
   }

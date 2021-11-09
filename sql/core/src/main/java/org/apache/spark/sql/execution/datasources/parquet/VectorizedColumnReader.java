@@ -173,7 +173,7 @@ public class VectorizedColumnReader {
         readState.resetForNewPage(pageValueCount, pageFirstRowIndex);
       }
       PrimitiveType.PrimitiveTypeName typeName =
-        descriptor.getPrimitiveType().getPrimitiveTypeName();
+          descriptor.getPrimitiveType().getPrimitiveTypeName();
       if (isCurrentPageDictionaryEncoded) {
         // Save starting offset in case we need to decode dictionary IDs.
         int startOffset = readState.offset;
@@ -284,18 +284,18 @@ public class VectorizedColumnReader {
     }
   }
 
-    private ValuesReader getValuesReader(Encoding encoding) {
-        switch (encoding) {
-            case PLAIN:
-                return new VectorizedPlainValuesReader();
-            case DELTA_BYTE_ARRAY:
-                return new VectorizedDeltaByteArrayReader();
-            case DELTA_BINARY_PACKED:
-                return new VectorizedDeltaBinaryPackedReader();
-            default:
-                throw new UnsupportedOperationException("Unsupported encoding: " + encoding);
-        }
+  private ValuesReader getValuesReader(Encoding encoding) {
+    switch (encoding) {
+      case PLAIN:
+        return new VectorizedPlainValuesReader();
+      case DELTA_BYTE_ARRAY:
+        return new VectorizedDeltaByteArrayReader();
+      case DELTA_BINARY_PACKED:
+        return new VectorizedDeltaBinaryPackedReader();
+      default:
+        throw new UnsupportedOperationException("Unsupported encoding: " + encoding);
     }
+  }
 
 
   private int readPageV1(DataPageV1 page) throws IOException {

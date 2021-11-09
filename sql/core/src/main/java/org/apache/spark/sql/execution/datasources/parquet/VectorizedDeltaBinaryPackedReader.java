@@ -16,25 +16,34 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
+
 import org.apache.parquet.Preconditions;
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.bytes.BytesUtils;
-import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.column.values.bitpacking.BytePackerForLong;
 import org.apache.parquet.column.values.bitpacking.Packer;
 import org.apache.parquet.io.ParquetDecodingException;
-import org.apache.parquet.io.api.Binary;
+import org.apache.spark.sql.catalyst.util.RebaseDateTime;
+import org.apache.spark.sql.execution.datasources.DataSourceUtils;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
-import java.io.IOException;
 
 /**
  * An implementation of the Parquet DELTA_BINARY_PACKED decoder that supports the vectorized
- * interface.
+ * interface. DELTA_BINARY_PACKED is a delta encoding for integer and long types that stores values
+ * as a delta between consecutive values. Delta values are themselves bit packed. Similar to RLE but
+ * is more effective in the case of large variation of values in the encoded column. <br/>
+ * DELTA_BINARY_PACKED is the default encoding for integer and long columns in Parquet V2. <br/>
+ * Supported Types: INT32, INT64 <br/>
+ *
+ * @see <a href="https://github.com/apache/parquet-format/blob/master/Encodings.md#delta-encoding-delta_binary_packed--5">
+ * Parquet format encodings: DELTA_BINARY_PACKED</a>
  */
-public class VectorizedDeltaBinaryPackedReader extends ValuesReader
-    implements VectorizedValuesReader {
+public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
 
   // header data
   private int blockSizeInValues;
@@ -47,24 +56,31 @@ public class VectorizedDeltaBinaryPackedReader extends ValuesReader
   // values read by the caller
   private int valuesRead = 0;
 
-  //variables to keep state of the current block and miniblock
-  private long lastValueRead;
-  private long minDeltaInCurrentBlock;
-  private int currentMiniBlock = 0;
-  private int[] bitWidths; // bit widths for each miniblock in the current block
+  // variables to keep state of the current block and miniblock
+  private long lastValueRead;  // needed to compute the next value
+  private long minDeltaInCurrentBlock; // needed to compute the next value
+  private int currentMiniBlock = 0; // keep track of the mini block within the current block that we
+  // we read and decoded most recently. Only used as an index into
+  // bitWidths array
+  private int[] bitWidths; // bit widths for each miniBlock in the current block
   private int remainingInBlock = 0; // values in current block still to be read
   private int remainingInMiniBlock = 0; // values in current mini block still to be read
   private long[] unpackedValuesBuffer;
 
   private ByteBufferInputStream in;
 
+  // temporary buffers used by readByte, readShort, readInteger, and readLong
+  byte byteVal;
+  short shortVal;
+  int intVal;
+  long longVal;
+
   @SuppressWarnings("unused")
   @Override
-  public void initFromPage(/*unused*/int valueCount, ByteBufferInputStream in) throws IOException {
+  public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
     Preconditions.checkArgument(valueCount >= 1,
         "Page must have at least one value, but it has " + valueCount);
     this.in = in;
-
     // Read the header
     this.blockSizeInValues = BytesUtils.readUnsignedVarInt(in);
     this.miniBlockNumInABlock = BytesUtils.readUnsignedVarInt(in);
@@ -74,68 +90,80 @@ public class VectorizedDeltaBinaryPackedReader extends ValuesReader
     this.miniBlockSizeInValues = (int) miniSize;
     this.totalValueCount = BytesUtils.readUnsignedVarInt(in);
     this.bitWidths = new int[miniBlockNumInABlock];
-
+    this.unpackedValuesBuffer = new long[miniBlockSizeInValues];
     // read the first value
     firstValue = BytesUtils.readZigZagVarLong(in);
-
-  }
-
-  @Override
-  public void skip() {
-    throw new UnsupportedOperationException();
   }
 
   @Override
   public byte readByte() {
-    throw new UnsupportedOperationException();
+    readValues(1, null, 0, (w, r, v) -> byteVal = (byte) v);
+    return byteVal;
   }
 
   @Override
   public short readShort() {
-    throw new UnsupportedOperationException();
+    readValues(1, null, 0, (w, r, v) -> shortVal = (short) v);
+    return shortVal;
   }
 
   @Override
-  public Binary readBinary(int len) {
-    throw new UnsupportedOperationException();
+  public int readInteger() {
+    readValues(1, null, 0, (w, r, v) -> intVal = (int) v);
+    return intVal;
   }
 
   @Override
-  public void readBooleans(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
+  public long readLong() {
+    readValues(1, null, 0, (w, r, v) -> longVal = v);
+    return longVal;
   }
+
 
   @Override
   public void readBytes(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
+    readValues(total, c, rowId, (w, r, v) -> w.putByte(r, (byte) v));
   }
 
   @Override
   public void readShorts(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
+    readValues(total, c, rowId, (w, r, v) -> w.putShort(r, (short) v));
   }
 
   @Override
   public void readIntegers(int total, WritableColumnVector c, int rowId) {
+    readValues(total, c, rowId, (w, r, v) -> w.putInt(r, (int) v));
+  }
+
+  // Based on VectorizedPlainValuesReader.readIntegersWithRebase
+  @Override
+  public final void readIntegersWithRebase(
+      int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
     readValues(total, c, rowId, (w, r, v) -> {
-      c.putInt(r, (int) v);
+      if (v < RebaseDateTime.lastSwitchJulianDay()) {
+        if (failIfRebase) {
+          throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
+        } else {
+          w.putInt(r, RebaseDateTime.rebaseJulianToGregorianDays((int) v));
+        }
+      } else {
+        w.putInt(r, (int) v);
+      }
     });
   }
 
   @Override
-  public void readIntegersWithRebase(int total, WritableColumnVector c, int rowId,
-      boolean failIfRebase) {
-    throw new UnsupportedOperationException("Only readIntegers is valid.");
-  }
-
-  @Override
   public void readUnsignedIntegers(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
+    readValues(total, c, rowId, (w, r, v) -> {
+      w.putLong(r, Integer.toUnsignedLong((int) v));
+    });
   }
 
   @Override
   public void readUnsignedLongs(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
+    readValues(total, c, rowId, (w, r, v) -> {
+      w.putByteArray(r, new BigInteger(Long.toUnsignedString(v)).toByteArray());
+    });
   }
 
   @Override
@@ -144,85 +172,50 @@ public class VectorizedDeltaBinaryPackedReader extends ValuesReader
   }
 
   @Override
-  public void readLongsWithRebase(int total, WritableColumnVector c, int rowId,
-      boolean failIfRebase) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void readFloats(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void readDoubles(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void readBinary(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void skipBooleans(int total) {
-    throw new UnsupportedOperationException();
+  public final void readLongsWithRebase(
+      int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
+    readValues(total, c, rowId, (w, r, v) -> {
+      if (v < RebaseDateTime.lastSwitchJulianDay()) {
+        if (failIfRebase) {
+          throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
+        } else {
+          w.putLong(r, RebaseDateTime.rebaseJulianToGregorianMicros(v));
+        }
+      } else {
+        w.putLong(r, v);
+      }
+    });
   }
 
   @Override
   public void skipBytes(int total) {
-    throw new UnsupportedOperationException();
+    skipValues(total);
   }
 
   @Override
   public void skipShorts(int total) {
-    throw new UnsupportedOperationException();
+    skipValues(total);
   }
 
   @Override
   public void skipIntegers(int total) {
-    // Read the values but don't write them out (the writer output method is a no-op)
-    readValues(total, null, -1, (w, r, v) -> {
-    });
+    skipValues(total);
   }
 
   @Override
   public void skipLongs(int total) {
-    // Read the values but don't write them out (the writer output method is a no-op)
-    readValues(total, null, -1, (w, r, v) -> {
-    });
-  }
-
-  @Override
-  public void skipFloats(int total) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void skipDoubles(int total) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void skipBinary(int total) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void skipFixedLenByteArray(int total, int len) {
-    throw new UnsupportedOperationException();
+    skipValues(total);
   }
 
   private void readValues(int total, WritableColumnVector c, int rowId,
       IntegerOutputWriter outputWriter) {
-    int remaining = total;
     if (valuesRead + total > totalValueCount) {
       throw new ParquetDecodingException(
           "no more values to read, total value count is " + valuesRead);
     }
+    int remaining = total;
     // First value
     if (valuesRead == 0) {
-      //c.putInt(rowId, (int)firstValue);
       outputWriter.write(c, rowId, firstValue);
       lastValueRead = firstValue;
       rowId++;
@@ -290,11 +283,12 @@ public class VectorizedDeltaBinaryPackedReader extends ValuesReader
   }
 
   /**
-   * mini block has a size of 8*n, unpack 8 value each time
-   * @see org.apache.parquet.column.values.delta.DeltaBinaryPackingValuesReader#unpackMiniBlock
+   * mini block has a size of 8*n, unpack 32 value each time
+   *
+   * see org.apache.parquet.column.values.delta.DeltaBinaryPackingValuesReader#unpackMiniBlock
    */
   private void unpackMiniBlock() throws IOException {
-    this.unpackedValuesBuffer = new long[miniBlockSizeInValues];
+    Arrays.fill(this.unpackedValuesBuffer, 0);
     BytePackerForLong packer = Packer.LITTLE_ENDIAN.newBytePackerForLong(
         bitWidths[currentMiniBlock]);
     for (int j = 0; j < miniBlockSizeInValues; j += 8) {
@@ -314,6 +308,11 @@ public class VectorizedDeltaBinaryPackedReader extends ValuesReader
         throw new ParquetDecodingException("Can not decode bitwidth in block header", e);
       }
     }
+  }
+
+  private void skipValues(int total) {
+    // Read the values but don't write them out (the writer output method is a no-op)
+    readValues(total, null, -1, (w, r, v) -> {});
   }
 
 }

@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import org.apache.parquet.bytes.ByteBufferInputStream;
-import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.column.values.deltastrings.DeltaByteArrayReader;
 import org.apache.parquet.io.api.Binary;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
@@ -28,7 +27,7 @@ import java.nio.ByteBuffer;
 /**
  * An implementation of the Parquet DELTA_BYTE_ARRAY decoder that supports the vectorized interface.
  */
-public class VectorizedDeltaByteArrayReader extends ValuesReader implements VectorizedValuesReader {
+public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase {
   private final DeltaByteArrayReader deltaByteArrayReader = new DeltaByteArrayReader();
 
   @Override
@@ -37,80 +36,8 @@ public class VectorizedDeltaByteArrayReader extends ValuesReader implements Vect
   }
 
   @Override
-  public void skip() {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public byte readByte() {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public short readShort() {
-    return 0;
-  }
-
-  @Override
   public Binary readBinary(int len) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void readBooleans(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void readBytes(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void readShorts(int total, WritableColumnVector c, int rowId) {
-
-  }
-
-  @Override
-  public void readIntegers(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void readIntegersWithRebase(int total, WritableColumnVector c, int rowId,
-      boolean failIfRebase) {
-
-  }
-
-  @Override
-  public void readUnsignedIntegers(int total, WritableColumnVector c, int rowId) {
-
-  }
-
-  @Override
-  public void readUnsignedLongs(int total, WritableColumnVector c, int rowId) {
-
-  }
-
-  @Override
-  public void readLongs(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void readLongsWithRebase(int total, WritableColumnVector c, int rowId,
-      boolean failIfRebase) {
-
-  }
-
-  @Override
-  public void readFloats(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void readDoubles(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
+    return deltaByteArrayReader.readBytes();
   }
 
   @Override
@@ -130,47 +57,10 @@ public class VectorizedDeltaByteArrayReader extends ValuesReader implements Vect
   }
 
   @Override
-  public void skipBooleans(int total) {
-
-  }
-
-  @Override
-  public void skipBytes(int total) {
-
-  }
-
-  @Override
-  public void skipShorts(int total) {
-
-  }
-
-  @Override
-  public void skipIntegers(int total) {
-
-  }
-
-  @Override
-  public void skipLongs(int total) {
-
-  }
-
-  @Override
-  public void skipFloats(int total) {
-
-  }
-
-  @Override
-  public void skipDoubles(int total) {
-
-  }
-
-  @Override
   public void skipBinary(int total) {
-
+    for(int i =0; i < total; i++) {
+      deltaByteArrayReader.skip();
+    }
   }
 
-  @Override
-  public void skipFixedLenByteArray(int total, int len) {
-
-  }
 }
