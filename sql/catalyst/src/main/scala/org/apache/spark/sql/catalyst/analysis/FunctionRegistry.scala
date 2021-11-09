@@ -69,6 +69,18 @@ trait FunctionRegistryBase[T] {
     info: ExpressionInfo,
     builder: FunctionBuilder): Unit
 
+  /**
+   * This function is used by `SparkSessionExtensions` to register the `injectedFunction`.
+   * We need this because injectedFunctions are not `UserDefinedExpression`, so it cannot
+   * be captured as a temporary function during view creation and cause resolution failure.
+   * To fix this, we treat the injected functions as a custom "builtin" function, so that
+   * it will be resolved using the similar way to resolve a builtin function.
+   */
+  def registerCustomBuiltinFunction(
+    name: FunctionIdentifier,
+    info: ExpressionInfo,
+    builder: FunctionBuilder): Unit
+
   /* Create or replace a temporary function. */
   final def createOrReplaceTempFunction(
       name: String, builder: FunctionBuilder, source: String): Unit = {
@@ -95,6 +107,9 @@ trait FunctionRegistryBase[T] {
 
   /** Checks if a function with a given name exists. */
   def functionExists(name: FunctionIdentifier): Boolean = lookupFunction(name).isDefined
+
+  /** Check if a function with a given name is a custom builtin function */
+  def customBuiltinFunctionExists(name: FunctionIdentifier): Boolean
 
   /** Clear all registered functions. */
   def clear(): Unit
@@ -190,6 +205,8 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
   @GuardedBy("this")
   protected val functionBuilders =
     new mutable.HashMap[FunctionIdentifier, (ExpressionInfo, FunctionBuilder)]
+  @GuardedBy("this")
+  protected val customBuiltinFunctions = new mutable.HashSet[String]
 
   // Resolution of the function name is always case insensitive, but the database name
   // depends on the caller
@@ -203,6 +220,20 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
       builder: FunctionBuilder): Unit = {
     val normalizedName = normalizeFuncName(name)
     internalRegisterFunction(normalizedName, info, builder)
+  }
+
+  override def registerCustomBuiltinFunction(
+      name: FunctionIdentifier,
+      info: ExpressionInfo,
+      builder: FunctionBuilder): Unit = {
+    // We didn't do any check when replacing a function even if it's a builtin one.
+    // So no need to do any extra check here.
+    customBuiltinFunctions.add(normalizeFuncName(name).funcName)
+    registerFunction(name, info, builder)
+  }
+
+  override def customBuiltinFunctionExists(name: FunctionIdentifier): Boolean = {
+    name.database.isEmpty && customBuiltinFunctions.contains(name.funcName)
   }
 
   /**
@@ -259,6 +290,15 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
 trait EmptyFunctionRegistryBase[T] extends FunctionRegistryBase[T] {
   override def registerFunction(
       name: FunctionIdentifier, info: ExpressionInfo, builder: FunctionBuilder): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  override def registerCustomBuiltinFunction(
+      name: FunctionIdentifier, info: ExpressionInfo, builder: FunctionBuilder): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  override def customBuiltinFunctionExists(name: FunctionIdentifier): Boolean = {
     throw new UnsupportedOperationException
   }
 

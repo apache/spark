@@ -1512,7 +1512,12 @@ class SessionCatalog(
     name.database.isEmpty &&
       (functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name)) &&
       !FunctionRegistry.builtin.functionExists(name) &&
-      !TableFunctionRegistry.builtin.functionExists(name)
+      !TableFunctionRegistry.builtin.functionExists(name) &&
+      !functionRegistry.customBuiltinFunctionExists(name)
+  }
+
+  def isCustomBuiltinFunction(name: FunctionIdentifier): Boolean = {
+    functionRegistry.customBuiltinFunctionExists(name)
   }
 
   def isTempFunction(name: String): Boolean = {

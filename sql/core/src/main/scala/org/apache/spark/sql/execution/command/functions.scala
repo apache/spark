@@ -171,6 +171,9 @@ case class DropFunctionCommand(
       if (FunctionRegistry.builtin.functionExists(FunctionIdentifier(functionName))) {
         throw QueryCompilationErrors.cannotDropNativeFuncError(functionName)
       }
+      if (catalog.isCustomBuiltinFunction(FunctionIdentifier(functionName))) {
+        throw QueryCompilationErrors.cannotDropCustomBuiltInFuncError(functionName)
+      }
       catalog.dropTempFunction(functionName, ifExists)
     } else {
       // We are dropping a permanent function.
@@ -246,6 +249,9 @@ case class RefreshFunctionCommand(
     }
     if (catalog.isTemporaryFunction(FunctionIdentifier(functionName, databaseName))) {
       throw QueryCompilationErrors.cannotRefreshTempFuncError(functionName)
+    }
+    if (catalog.isCustomBuiltinFunction(FunctionIdentifier(functionName, databaseName))) {
+      throw QueryCompilationErrors.cannotRefreshCustomBuiltInFuncError(functionName)
     }
 
     val identifier = FunctionIdentifier(

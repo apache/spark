@@ -1854,12 +1854,20 @@ object QueryCompilationErrors {
     new AnalysisException(s"Cannot drop native function '$functionName'")
   }
 
+  def cannotDropCustomBuiltInFuncError(functionName: String): Throwable = {
+    new AnalysisException(s"Cannot drop custom built-in function '$functionName'")
+  }
+
   def cannotRefreshBuiltInFuncError(functionName: String): Throwable = {
     new AnalysisException(s"Cannot refresh built-in function $functionName")
   }
 
   def cannotRefreshTempFuncError(functionName: String): Throwable = {
     new AnalysisException(s"Cannot refresh temporary function $functionName")
+  }
+
+  def cannotRefreshCustomBuiltInFuncError(functionName: String): Throwable = {
+    new AnalysisException(s"Cannot refresh custom built-in function $functionName")
   }
 
   def noSuchFunctionError(identifier: FunctionIdentifier): Throwable = {
