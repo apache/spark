@@ -391,7 +391,7 @@ private[spark] class Client(
   private[yarn] def copyFileToRemote(
       destDir: Path,
       srcPath: Path,
-      replication: Short,
+      replication: Option[Short],
       symlinkCache: Map[URI, Path],
       force: Boolean = false,
       destName: Option[String] = None): Path = {
@@ -408,7 +408,7 @@ private[spark] class Client(
         case e: PathOperationException
             if srcFs.makeQualified(srcPath).equals(destFs.makeQualified(destPath)) =>
       }
-      destFs.setReplication(destPath, replication)
+      replication.foreach(repl => destFs.setReplication(destPath, repl))
       destFs.setPermission(destPath, new FsPermission(APP_FILE_PERMISSION))
     } else {
       logInfo(s"Source and destination file systems are the same. Not copying $srcPath")
@@ -448,7 +448,6 @@ private[spark] class Client(
     val distributedNames = new HashSet[String]
 
     val replication = sparkConf.get(STAGING_FILE_REPLICATION).map(_.toShort)
-      .getOrElse(fs.getDefaultReplication(destDir))
     val localResources = HashMap[String, LocalResource]()
     FileSystem.mkdirs(fs, destDir, new FsPermission(STAGING_DIR_PERMISSION))
 
