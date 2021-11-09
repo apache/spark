@@ -1507,16 +1507,12 @@ class SessionCatalog(
    * Returns whether it is a temporary function. If not existed, returns false.
    */
   def isTemporaryFunction(name: FunctionIdentifier): Boolean = {
-    // copied from HiveSessionCatalog
-    val hiveFunctions = Seq()
-
     // A temporary function is a function that has been registered in functionRegistry
     // without a database name, and is neither a built-in function nor a Hive function
     name.database.isEmpty &&
       (functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name)) &&
       !FunctionRegistry.builtin.functionExists(name) &&
-      !TableFunctionRegistry.builtin.functionExists(name) &&
-      !hiveFunctions.contains(name.funcName.toLowerCase(Locale.ROOT))
+      !TableFunctionRegistry.builtin.functionExists(name)
   }
 
   def isTempFunction(name: String): Boolean = {

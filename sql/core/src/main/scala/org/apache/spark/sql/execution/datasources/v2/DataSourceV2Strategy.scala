@@ -93,8 +93,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(project, filters,
-        DataSourceV2ScanRelation(_, V1ScanWrapper(scan, pushed, aggregate), output)) =>
+    case PhysicalOperation(project, filters, DataSourceV2ScanRelation(
+      _, V1ScanWrapper(scan, pushed, pushedDownOperators), output)) =>
       val v1Relation = scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
       if (v1Relation.schema != scan.readSchema()) {
         throw QueryExecutionErrors.fallbackV1RelationReportsInconsistentSchemaError(
@@ -102,12 +102,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       val rdd = v1Relation.buildScan()
       val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
+
       val dsScan = RowDataSourceScanExec(
         output,
         output.toStructType,
         Set.empty,
         pushed.toSet,
-        aggregate,
+        pushedDownOperators,
         unsafeRowRDD,
         v1Relation,
         tableIdentifier = None)
@@ -434,9 +435,20 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         indexName, indexType, ifNotExists, columns, properties) =>
       table match {
         case s: SupportsIndex =>
-          CreateIndexExec(s, indexName, indexType, ifNotExists, columns, properties):: Nil
+          val namedRefs = columns.map { case (field, prop) =>
+            FieldReference(field.name) -> prop
+          }
+          CreateIndexExec(s, indexName, indexType, ifNotExists, namedRefs, properties) :: Nil
         case _ => throw QueryCompilationErrors.tableIndexNotSupportedError(
           s"CreateIndex is not supported in this table ${table.name}.")
+      }
+
+    case DropIndex(ResolvedTable(_, _, table, _), indexName, ifNotExists) =>
+      table match {
+        case s: SupportsIndex =>
+          DropIndexExec(s, indexName, ifNotExists) :: Nil
+        case _ => throw QueryCompilationErrors.tableIndexNotSupportedError(
+          s"DropIndex is not supported in this table ${table.name}.")
       }
 
     case _ => Nil

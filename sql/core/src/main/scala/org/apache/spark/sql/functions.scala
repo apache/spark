@@ -2739,7 +2739,7 @@ object functions {
    * @since 3.3.0
    */
   def lpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
-    StringLPad(str.expr, lit(len).expr, lit(pad).expr)
+    new BinaryLPad(str.expr, lit(len).expr, lit(pad).expr)
   }
 
   /**
@@ -2828,7 +2828,7 @@ object functions {
    * @since 3.3.0
    */
   def rpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
-    StringRPad(str.expr, lit(len).expr, lit(pad).expr)
+    new BinaryRPad(str.expr, lit(len).expr, lit(pad).expr)
   }
 
   /**
@@ -3234,6 +3234,15 @@ object functions {
    * @since 1.5.0
    */
   def minute(e: Column): Column = withExpr { Minute(e.expr) }
+
+  /**
+   * @return A date created from year, month and day fields.
+   * @group datetime_funcs
+   * @since 3.3.0
+   */
+  def make_date(year: Column, month: Column, day: Column): Column = withExpr {
+    MakeDate(year.expr, month.expr, day.expr)
+  }
 
   /**
    * Returns number of months between dates `start` and `end`.

@@ -84,13 +84,19 @@ jobs:
                   summary: `
             Unable to detect the workflow run for testing the changes in your PR.
 
-            1. If you did not enable GitHub Actions in your forked repository, please enable it. See also [Disabling or limiting GitHub Actions for a repository](https://docs.github.com/en/github/administering-a-repository/disabling-or-limiting-github-actions-for-a-repository) for more details.
+            1. If you did not enable GitHub Actions in your forked repository, please enable it by clicking the button as shown in the image below. See also [Disabling or limiting GitHub Actions for a repository](https://docs.github.com/en/github/administering-a-repository/disabling-or-limiting-github-actions-for-a-repository) for more details.
             2. It is possible your branch is based on the old \`master\` branch in Apache Spark, please sync your branch to the latest master branch. For example as below:
                 \`\`\`bash
                 git fetch upstream
                 git rebase upstream/master
                 git push origin YOUR_BRANCH --force
-                \`\`\``
+                \`\`\``,
+                  images: [
+                    {
+                      alt: 'enabling workflows button',
+                      image_url: 'https://raw.githubusercontent.com/apache/spark/master/.github/workflows/images/workflow-enable-button.png'
+                    }
+                  ]
                 }
               })
             } else {

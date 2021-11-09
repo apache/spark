@@ -15,23 +15,34 @@
 # limitations under the License.
 #
 
-from collections import namedtuple
-
 __all__ = ["SparkJobInfo", "SparkStageInfo", "StatusTracker"]
 
+from typing import List, NamedTuple, Optional
 
-class SparkJobInfo(namedtuple("SparkJobInfo", "jobId stageIds status")):
+from py4j.java_collections import JavaArray  # type: ignore[import]
+from py4j.java_gateway import JavaObject  # type: ignore[import]
+
+
+class SparkJobInfo(NamedTuple):
     """
     Exposes information about Spark Jobs.
     """
+    jobId: int
+    stageIds: JavaArray
+    status: str
 
 
-class SparkStageInfo(namedtuple("SparkStageInfo",
-                                "stageId currentAttemptId name numTasks numActiveTasks "
-                                "numCompletedTasks numFailedTasks")):
+class SparkStageInfo(NamedTuple):
     """
     Exposes information about Spark Stages.
     """
+    stageId: int
+    currentAttemptId: int
+    name: str
+    numTasks: int
+    numActiveTasks: int
+    numCompletedTasks: int
+    numFailedTasks: int
 
 
 class StatusTracker(object):
@@ -48,10 +59,10 @@ class StatusTracker(object):
     jobs / stages.  These APIs will provide information for the last
     `spark.ui.retainedStages` stages and `spark.ui.retainedJobs` jobs.
     """
-    def __init__(self, jtracker):
+    def __init__(self, jtracker: JavaObject):
         self._jtracker = jtracker
 
-    def getJobIdsForGroup(self, jobGroup=None):
+    def getJobIdsForGroup(self, jobGroup: Optional[str] = None) -> List[int]:
         """
         Return a list of all known jobs in a particular job group.  If
         `jobGroup` is None, then returns all known jobs that are not
@@ -63,19 +74,19 @@ class StatusTracker(object):
         """
         return list(self._jtracker.getJobIdsForGroup(jobGroup))
 
-    def getActiveStageIds(self):
+    def getActiveStageIds(self) -> List[int]:
         """
         Returns an array containing the ids of all active stages.
         """
         return sorted(list(self._jtracker.getActiveStageIds()))
 
-    def getActiveJobsIds(self):
+    def getActiveJobsIds(self) -> List[int]:
         """
         Returns an array containing the ids of all active jobs.
         """
         return sorted((list(self._jtracker.getActiveJobIds())))
 
-    def getJobInfo(self, jobId):
+    def getJobInfo(self, jobId: int) -> Optional[SparkJobInfo]:
         """
         Returns a :class:`SparkJobInfo` object, or None if the job info
         could not be found or was garbage collected.
@@ -83,8 +94,9 @@ class StatusTracker(object):
         job = self._jtracker.getJobInfo(jobId)
         if job is not None:
             return SparkJobInfo(jobId, job.stageIds(), str(job.status()))
+        return None
 
-    def getStageInfo(self, stageId):
+    def getStageInfo(self, stageId: int) -> Optional[SparkStageInfo]:
         """
         Returns a :class:`SparkStageInfo` object, or None if the stage
         info could not be found or was garbage collected.
@@ -94,3 +106,4 @@ class StatusTracker(object):
             # TODO: fetch them in batch for better performance
             attrs = [getattr(stage, f)() for f in SparkStageInfo._fields[1:]]
             return SparkStageInfo(stageId, *attrs)
+        return None

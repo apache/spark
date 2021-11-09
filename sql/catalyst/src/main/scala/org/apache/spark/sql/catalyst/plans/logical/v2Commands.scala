@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{FieldName, NamedRelation, PartitionSpec, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.Write
 import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
 
@@ -1061,12 +1061,26 @@ case class UncacheTable(
  * The logical plan of the CREATE INDEX command.
  */
 case class CreateIndex(
-    child: LogicalPlan,
+    table: LogicalPlan,
     indexName: String,
     indexType: String,
     ignoreIfExists: Boolean,
-    columns: Seq[(NamedReference, Map[String, String])],
+    columns: Seq[(FieldName, Map[String, String])],
     properties: Map[String, String]) extends UnaryCommand {
+  override def child: LogicalPlan = table
+  override lazy val resolved: Boolean = table.resolved && columns.forall(_._1.resolved)
   override protected def withNewChildInternal(newChild: LogicalPlan): CreateIndex =
-    copy(child = newChild)
+    copy(table = newChild)
+}
+
+/**
+ * The logical plan of the DROP INDEX command.
+ */
+case class DropIndex(
+    table: LogicalPlan,
+    indexName: String,
+    ignoreIfNotExists: Boolean) extends UnaryCommand {
+  override def child: LogicalPlan = table
+  override protected def withNewChildInternal(newChild: LogicalPlan): DropIndex =
+    copy(table = newChild)
 }

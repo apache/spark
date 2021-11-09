@@ -52,9 +52,9 @@ public final class ColumnarBatchRow extends InternalRow {
           row.setByte(i, getByte(i));
         } else if (dt instanceof ShortType) {
           row.setShort(i, getShort(i));
-        } else if (dt instanceof IntegerType) {
+        } else if (dt instanceof IntegerType || dt instanceof YearMonthIntervalType) {
           row.setInt(i, getInt(i));
-        } else if (dt instanceof LongType) {
+        } else if (dt instanceof LongType || dt instanceof DayTimeIntervalType) {
           row.setLong(i, getLong(i));
         } else if (dt instanceof FloatType) {
           row.setFloat(i, getFloat(i));
@@ -151,9 +151,9 @@ public final class ColumnarBatchRow extends InternalRow {
       return getByte(ordinal);
     } else if (dataType instanceof ShortType) {
       return getShort(ordinal);
-    } else if (dataType instanceof IntegerType) {
+    } else if (dataType instanceof IntegerType || dataType instanceof YearMonthIntervalType) {
       return getInt(ordinal);
-    } else if (dataType instanceof LongType) {
+    } else if (dataType instanceof LongType || dataType instanceof DayTimeIntervalType) {
       return getLong(ordinal);
     } else if (dataType instanceof FloatType) {
       return getFloat(ordinal);
