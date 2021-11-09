@@ -192,7 +192,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
     }
   }
 
-  test("SPARK-XXXXX: Add ANSI intervals as partition values") {
+  test("SPARK-37261: Add ANSI intervals as partition values") {
     assume(!catalogVersion.contains("Hive")) // Hive catalog doesn't support the interval types
 
     withNamespaceAndTable("ns", "tbl") { t =>
