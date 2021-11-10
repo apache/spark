@@ -145,6 +145,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       extensions.injectFunction(MyExtensions.myFunction)
     }
     withSession(extensions) { session =>
+      assert(!session.sessionState.catalog.isTemporaryFunction(MyExtensions.myFunction._1))
       session.sql("CREATE TEMP VIEW v AS SELECT myFunction(a) FROM VALUES(1), (2) t(a)")
       session.sql("SELECT * FROM v")
     }
