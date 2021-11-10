@@ -1602,9 +1602,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   private[this] def castDateToIntegralTypeCode(
-    ctx: CodegenContext,
-    integralType: String,
-    catalogType: String): CastFunction = {
+      ctx: CodegenContext,
+      integralType: String,
+      catalogType: String): CastFunction = {
     val zoneIdClass = classOf[ZoneId]
     val zid = JavaCode.global(
       ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
