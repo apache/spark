@@ -24,7 +24,6 @@ import scala.collection.mutable
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.LambdaVariable
-import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * This class is used to compute equality of (sub)expression trees. Expressions can be added
@@ -67,14 +66,16 @@ class EquivalentExpressions {
             false
           } else {
             // Should not happen
-            throw QueryExecutionErrors.updateEquivalentExpressionsError(expr, map, useCount)
+            throw new IllegalStateException(
+              s"Cannot update expression: $expr in map: $map with use count: $useCount")
           }
         case _ =>
           if (useCount > 0) {
             map.put(wrapper, ExpressionStats(expr)(useCount))
           } else {
             // Should not happen
-            throw QueryExecutionErrors.updateEquivalentExpressionsError(expr, map, useCount)
+            throw new IllegalStateException(
+              s"Cannot update expression: $expr in map: $map with use count: $useCount")
           }
           false
       }

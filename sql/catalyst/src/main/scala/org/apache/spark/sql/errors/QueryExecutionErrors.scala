@@ -28,8 +28,6 @@ import java.time.temporal.ChronoField
 import java.util.ConcurrentModificationException
 import java.util.concurrent.TimeoutException
 
-import scala.collection.mutable
-
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FileStatus, Path}
 import org.apache.hadoop.fs.permission.FsPermission
@@ -44,7 +42,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection.Schema
 import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, ExpressionEquals, ExpressionStats, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, UnevaluableAggregate}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LogicalPlan}
@@ -1890,14 +1888,6 @@ object QueryExecutionErrors {
 
   def hiveTableWithAnsiIntervalsError(tableName: String): Throwable = {
     new UnsupportedOperationException(s"Hive table $tableName with ANSI intervals is not supported")
-  }
-
-  def updateEquivalentExpressionsError(
-      expr: Expression,
-      map: mutable.HashMap[ExpressionEquals, ExpressionStats],
-      useCount: Int): Throwable = {
-    throw new IllegalArgumentException(
-      s"Cannot update expression: $expr in map: $map with use count: $useCount")
   }
 }
 
