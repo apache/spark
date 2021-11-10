@@ -45,6 +45,7 @@ class StreamingContext(object):
         the time interval (in seconds) at which streaming
         data will be divided into batches
     """
+
     _transformerSerializer = None
 
     # Reference to a currently active StreamingContext
@@ -76,12 +77,14 @@ class StreamingContext(object):
         java_import(gw.jvm, "org.apache.spark.streaming.api.python.*")
 
         from pyspark.java_gateway import ensure_callback_server_started
+
         ensure_callback_server_started(gw)
 
         # register serializer for TransformFunction
         # it happens before creating SparkContext when loading from checkpointing
         cls._transformerSerializer = TransformFunctionSerializer(
-            SparkContext._active_spark_context, CloudPickleSerializer(), gw)
+            SparkContext._active_spark_context, CloudPickleSerializer(), gw
+        )
 
     @classmethod
     def getOrCreate(cls, checkpointPath, setupFunc):
@@ -141,7 +144,8 @@ class StreamingContext(object):
                 cls._activeContext = None
                 raise RuntimeError(
                     "JVM's active JavaStreamingContext is not the JavaStreamingContext "
-                    "backing the action Python StreamingContext. This is unexpected.")
+                    "backing the action Python StreamingContext. This is unexpected."
+                )
         return cls._activeContext
 
     @classmethod
@@ -276,8 +280,9 @@ class StreamingContext(object):
             Storage level to use for storing the received objects
         """
         jlevel = self._sc._getJavaStorageLevel(storageLevel)
-        return DStream(self._jssc.socketTextStream(hostname, port, jlevel), self,
-                       UTF8Deserializer())
+        return DStream(
+            self._jssc.socketTextStream(hostname, port, jlevel), self, UTF8Deserializer()
+        )
 
     def textFileStream(self, directory):
         """
@@ -304,8 +309,9 @@ class StreamingContext(object):
         recordLength : int
             Length of each record in bytes
         """
-        return DStream(self._jssc.binaryRecordsStream(directory, recordLength), self,
-                       NoOpSerializer())
+        return DStream(
+            self._jssc.binaryRecordsStream(directory, recordLength), self, NoOpSerializer()
+        )
 
     def _check_serializers(self, rdds):
         # make sure they have same serializer
@@ -359,9 +365,11 @@ class StreamingContext(object):
         """
         jdstreams = [d._jdstream for d in dstreams]
         # change the final serializer to sc.serializer
-        func = TransformFunction(self._sc,
-                                 lambda t, *rdds: transformFunc(rdds),
-                                 *[d._jrdd_deserializer for d in dstreams])
+        func = TransformFunction(
+            self._sc,
+            lambda t, *rdds: transformFunc(rdds),
+            *[d._jrdd_deserializer for d in dstreams],
+        )
         jfunc = self._jvm.TransformFunction(func)
         jdstream = self._jssc.transform(jdstreams, jfunc)
         return DStream(jdstream, self, self._sc.serializer)
@@ -399,5 +407,8 @@ class StreamingContext(object):
         Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
         receiving system events related to streaming.
         """
-        self._jssc.addStreamingListener(self._jvm.JavaStreamingListenerWrapper(
-            self._jvm.PythonStreamingListenerWrapper(streamingListener)))
+        self._jssc.addStreamingListener(
+            self._jvm.JavaStreamingListenerWrapper(
+                self._jvm.PythonStreamingListenerWrapper(streamingListener)
+            )
+        )

@@ -26,23 +26,27 @@ from pyspark.testing.utils import search_jar
 
 # Must be same as the variable and condition defined in KinesisTestUtils.scala and modules.py
 kinesis_test_environ_var = "ENABLE_KINESIS_TESTS"
-should_skip_kinesis_tests = not os.environ.get(kinesis_test_environ_var) == '1'
+should_skip_kinesis_tests = not os.environ.get(kinesis_test_environ_var) == "1"
 
 if should_skip_kinesis_tests:
     kinesis_requirement_message = (
         "Skipping all Kinesis Python tests as environmental variable 'ENABLE_KINESIS_TESTS' "
-        "was not set.")
+        "was not set."
+    )
 else:
-    kinesis_asl_assembly_jar = search_jar("external/kinesis-asl-assembly",
-                                          "spark-streaming-kinesis-asl-assembly-",
-                                          "spark-streaming-kinesis-asl-assembly_")
+    kinesis_asl_assembly_jar = search_jar(
+        "external/kinesis-asl-assembly",
+        "spark-streaming-kinesis-asl-assembly-",
+        "spark-streaming-kinesis-asl-assembly_",
+    )
     if kinesis_asl_assembly_jar is None:
         kinesis_requirement_message = (  # type: ignore
             "Skipping all Kinesis Python tests as the optional Kinesis project was "
             "not compiled into a JAR. To run these tests, "
             "you need to build Spark with 'build/sbt -Pkinesis-asl assembly/package "
             "streaming-kinesis-asl-assembly/assembly' or "
-            "'build/mvn -Pkinesis-asl package' before running this test.")
+            "'build/mvn -Pkinesis-asl package' before running this test."
+        )
     else:
         existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
         jars_args = "--jars %s" % kinesis_asl_assembly_jar
@@ -55,7 +59,7 @@ should_test_kinesis = kinesis_requirement_message is None
 class PySparkStreamingTestCase(unittest.TestCase):
 
     timeout = 30  # seconds
-    duration = .5
+    duration = 0.5
 
     @classmethod
     def setUpClass(cls):

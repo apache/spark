@@ -85,7 +85,8 @@ class PandasMapOpsMixin(object):
         assert isinstance(self, DataFrame)
 
         udf = pandas_udf(
-            func, returnType=schema, functionType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF)
+            func, returnType=schema, functionType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
+        )
         udf_column = udf(*[self[col] for col in self.columns])
         jdf = self._jdf.mapInPandas(udf_column._jc.expr())  # type: ignore[operator]
         return DataFrame(jdf, self.sql_ctx)
@@ -95,15 +96,17 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.pandas.map_ops
+
     globs = pyspark.sql.pandas.map_ops.__dict__.copy()
-    spark = SparkSession.builder\
-        .master("local[4]")\
-        .appName("sql.pandas.map_ops tests")\
-        .getOrCreate()
-    globs['spark'] = spark
+    spark = (
+        SparkSession.builder.master("local[4]").appName("sql.pandas.map_ops tests").getOrCreate()
+    )
+    globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.pandas.map_ops, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
+        pyspark.sql.pandas.map_ops,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+    )
     spark.stop()
     if failure_count:
         sys.exit(-1)

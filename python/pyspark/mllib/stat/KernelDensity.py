@@ -34,6 +34,7 @@ class KernelDensity(object):
     >>> kd.estimate([0.0, 1.0])
     array([ 0.12938758,  0.12938758])
     """
+
     def __init__(self):
         self._bandwidth = 1.0
         self._sample = None
@@ -51,6 +52,5 @@ class KernelDensity(object):
     def estimate(self, points):
         """Estimate the probability density at points"""
         points = list(points)
-        densities = callMLlibFunc(
-            "estimateKernelDensity", self._sample, self._bandwidth, points)
+        densities = callMLlibFunc("estimateKernelDensity", self._sample, self._bandwidth, points)
         return np.asarray(densities)

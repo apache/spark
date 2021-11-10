@@ -66,7 +66,8 @@ def vector_to_array(col, dtype="float64"):
     """
     sc = SparkContext._active_spark_context
     return Column(
-        sc._jvm.org.apache.spark.ml.functions.vector_to_array(_to_java_column(col), dtype))
+        sc._jvm.org.apache.spark.ml.functions.vector_to_array(_to_java_column(col), dtype)
+    )
 
 
 def array_to_vector(col):
@@ -100,8 +101,7 @@ def array_to_vector(col):
     [Row(vec1=DenseVector([1.0, 3.0]))]
     """
     sc = SparkContext._active_spark_context
-    return Column(
-        sc._jvm.org.apache.spark.ml.functions.array_to_vector(_to_java_column(col)))
+    return Column(sc._jvm.org.apache.spark.ml.functions.array_to_vector(_to_java_column(col)))
 
 
 def _test():
@@ -109,18 +109,18 @@ def _test():
     from pyspark.sql import SparkSession
     import pyspark.ml.functions
     import sys
+
     globs = pyspark.ml.functions.__dict__.copy()
-    spark = SparkSession.builder \
-        .master("local[2]") \
-        .appName("ml.functions tests") \
-        .getOrCreate()
+    spark = SparkSession.builder.master("local[2]").appName("ml.functions tests").getOrCreate()
     sc = spark.sparkContext
-    globs['sc'] = sc
-    globs['spark'] = spark
+    globs["sc"] = sc
+    globs["spark"] = spark
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.ml.functions, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
+        pyspark.ml.functions,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
     spark.stop()
     if failure_count:
         sys.exit(-1)
