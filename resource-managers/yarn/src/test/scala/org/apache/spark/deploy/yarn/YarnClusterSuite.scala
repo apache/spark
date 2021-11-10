@@ -188,17 +188,24 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     ))
   }
 
-  test("SPARK-35672: run Spark in yarn-client mode with additional jar using URI scheme 'local' " +
+  test("SPARK-35672: run Spark in yarn-cluster mode with additional jar using URI scheme 'local' " +
     "and gateway-replacement path containing an environment variable") {
-    // Set up the replacement path to point to the correct path, but suffixed with some
-    // nonexistent environment variable. If environment variable replacement takes place, then
-    // the var will be replaced with an empty string, and the path will be correct again
-    val jarUrl = createJarWithOriginalResourceFile()
-    val jarParent = Paths.get(jarUrl.toURI).getParent.toString
-    testWithAddJar(clientMode = true, s"local:${jarUrl.getPath}", Map(
-      GATEWAY_ROOT_PATH.key -> jarParent,
-      REPLACEMENT_ROOT_PATH.key -> s"$jarParent{{NO_SUCH_ENV_VAR___}}"
-    ))
+    // Treat the entire jar path as a string which needs to be replaced, and which will be replaced
+    // (using the gateway/replacement logic) by two environment variables, both of which have to be
+    // resolved properly for the resulting path to be correct. Two environment variables are
+    // used to test the two different styles of variable substitution (OS-style vs. YARN-style)
+    val jarPath = Paths.get(createJarWithOriginalResourceFile().toURI)
+
+    val envVarConfigs = for (
+      envVar <- Map("PARENT" -> jarPath.getParent, "FILENAME" -> jarPath.getFileName);
+      prefix <- Seq("spark.yarn.appMasterEnv.", "spark.executorEnv.")
+    ) yield s"$prefix${envVar._1}" -> envVar._2.toString
+
+    val osSpecificEnvVar = if (Utils.isWindows) "%PARENT%" else "${PARENT}"
+    testWithAddJar(clientMode = false, s"local:/replaceme", Map(
+      GATEWAY_ROOT_PATH.key -> "/replaceme",
+      REPLACEMENT_ROOT_PATH.key -> s"$osSpecificEnvVar/{{FILENAME}}"
+    ) ++ envVarConfigs)
   }
 
   test("SPARK-35672: run Spark in yarn-client mode with additional jar using URI scheme 'file'") {
