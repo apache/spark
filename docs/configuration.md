@@ -3277,7 +3277,7 @@ Push-based shuffle helps improve the reliability and performance of spark shuffl
   <td>3.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.shuffle.push.minPushRatio</code></td>
+  <td><code>spark.shuffle.push.minCompletedPushRatio</code></td>
   <td><code>1.0</code></td>
   <td>
     Fraction of map partitions that should be push complete before driver starts shuffle merge finalization during push based shuffle.

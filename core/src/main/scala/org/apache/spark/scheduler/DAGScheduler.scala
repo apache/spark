@@ -286,8 +286,8 @@ private[spark] class DAGScheduler(
   // depending on the time to establish connections to mergers, and the time to get MergeStatuses
   // from all the mergers.
   private val shuffleMergeFinalizeScheduler =
-    ThreadUtils.newDaemonFixedThreadScheduledExecutor(shuffleMergeFinalizeNumThreads,
-      "shuffle-merge-finalizer")
+    ThreadUtils.newDaemonThreadPoolScheduledExecutor("shuffle-merge-finalizer",
+      shuffleMergeFinalizeNumThreads)
 
   /**
    * Called by the TaskSetManager to report task's starting.

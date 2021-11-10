@@ -2199,6 +2199,7 @@ package object config {
         " potentially take seconds for a large shuffle to finalize, having multiple threads helps" +
         " driver to handle concurrent shuffle merge finalize requests when push-based" +
         " shuffle is enabled.")
+      .version("3.3.0")
       .intConf
       .createWithDefault(3)
 
@@ -2207,13 +2208,15 @@ package object config {
       .doc("Driver will wait for merge finalization to complete only if total shuffle size is" +
         " more than this threshold. If total shuffle size is less, driver will immediately" +
         " finalize the shuffle output")
+      .version("3.3.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("500m")
 
   private[spark] val PUSH_BASED_SHUFFLE_MIN_PUSH_RATIO =
-    ConfigBuilder("spark.shuffle.push.minPushRatio")
+    ConfigBuilder("spark.shuffle.push.minCompletedPushRatio")
       .doc("Fraction of map partitions that should be push complete before driver starts" +
         " shuffle merge finalization during push based shuffle")
+      .version("3.3.0")
       .doubleConf
       .createWithDefault(1.0)
 
