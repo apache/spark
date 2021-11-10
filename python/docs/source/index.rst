@@ -33,9 +33,9 @@ of Spark's features such as Spark SQL, DataFrame, Streaming, MLlib
 .. image:: ../../../docs/img/SparkComponents.png
   :alt: PySpark Components
 
-*****************
+***************
 High-level APIs
-*****************
+***************
 
 `Streaming <https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html>`_
 
@@ -49,9 +49,9 @@ Built on top of Spark, MLlib is a scalable machine learning library that provide
 a uniform set of high-level APIs that help users create and tune practical machine
 learning pipelines and applications.
 
-*******************
+*********
 Data APIs 
-*******************
+*********
 
 `Spark SQL and DataFrame <https://spark.apache.org/docs/latest/sql-programming-guide.html>`_
 
@@ -68,9 +68,9 @@ With this package, you can:
 * Have a single codebase that works both with pandas (tests, smaller datasets) and with Spark (distributed datasets).
 * Switch to pandas API and PySpark API contexts easily without any overhead.
 
-*****************
+*****************************
 Spark Core + Spark SQL Engine
-*****************
+*****************************
 
 Spark Core is the underlying general execution engine for the Spark platform that all
 other functionality is built on top of. It provides an RDD (Resilient Distributed Dataset)
