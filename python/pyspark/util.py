@@ -25,7 +25,10 @@ import sys
 import threading
 import traceback
 import types
-from collections import Callable
+try:
+    from collections.abc import Callable
+except AttributeError:
+    from collections import Callable
 
 from py4j.clientserver import ClientServer
 
@@ -215,7 +218,7 @@ def try_simplify_traceback(tb):
             tb_next=tb_next,
             tb_frame=cur_tb.tb_frame,
             tb_lasti=cur_tb.tb_frame.f_lasti,
-            tb_lineno=cur_tb.tb_frame.f_lineno)
+            tb_lineno=cur_tb.tb_frame.f_lineno if cur_tb.tb_frame.f_lineno is not None else -1)
         tb_next = new_tb
     return new_tb
 

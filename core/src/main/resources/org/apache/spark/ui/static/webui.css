@@ -383,16 +383,6 @@ a.expandbutton {
   border-left: 1px solid #dddddd;
 }
 
-#speculation-metrics-table th {
-  border-top: 1px solid #dddddd;
-  border-bottom: 1px solid #dddddd;
-  border-right: 1px solid #dddddd;
-}
-
-#speculation-metrics-table th:first-child {
-  border-left: 1px solid #dddddd;
-}
-
 #summary-metrics-table th {
   border-top: 1px solid #dddddd;
   border-bottom: 1px solid #dddddd;

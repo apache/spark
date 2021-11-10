@@ -21,9 +21,8 @@ import java.io.File
 
 import org.mockito.AdditionalAnswers
 import org.mockito.ArgumentMatchers.{anyBoolean, anyLong, eq => meq}
-import org.mockito.Mockito.{doAnswer, spy, when}
-import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
-import org.scalatestplus.mockito.MockitoSugar.mock
+import org.mockito.Mockito.{doAnswer, spy}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.History._
@@ -31,8 +30,7 @@ import org.apache.spark.status.KVUtils
 import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.util.kvstore.KVStore
 
-class HistoryServerDiskManagerSuite extends SparkFunSuite
-  with PrivateMethodTester with BeforeAndAfter {
+class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter {
 
   private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
@@ -158,28 +156,6 @@ class HistoryServerDiskManagerSuite extends SparkFunSuite
       new ManualClock())
     assert(manager.approximateSize(50L, false) < 50L)
     assert(manager.approximateSize(50L, true) > 50L)
-  }
-
-  test("SPARK-36998: Should be able to delete a store") {
-    val manager = mockManager()
-    val tempDir = Utils.createTempDir()
-    tempDir.delete()
-    Seq(true, false).foreach { exists =>
-      val file = mock[File]
-      when(file.exists()).thenReturn(true).thenReturn(true).thenReturn(exists)
-      when(file.isDirectory).thenReturn(true)
-      when(file.toPath).thenReturn(tempDir.toPath)
-      when(file.getAbsolutePath).thenReturn(tempDir.getAbsolutePath)
-      val deleteStore = PrivateMethod[Unit]('deleteStore)
-      if (exists) {
-        val m = intercept[Exception] {
-          manager invokePrivate deleteStore(file)
-        }.getMessage
-        assert(m.contains("Unknown I/O error"))
-      } else {
-        manager invokePrivate deleteStore(file)
-      }
-    }
   }
 
   test("SPARK-32024: update ApplicationStoreInfo.size during initializing") {
