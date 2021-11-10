@@ -431,6 +431,9 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
 
   override def parseDataType(sqlText: String): DataType =
     delegate.parseDataType(sqlText)
+
+  override def parseQuery(sqlText: String): LogicalPlan =
+    delegate.parseQuery(sqlText)
 }
 
 object MyExtensions {

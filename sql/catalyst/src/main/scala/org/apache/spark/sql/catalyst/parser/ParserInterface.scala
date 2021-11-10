@@ -70,4 +70,10 @@ trait ParserInterface {
    */
   @throws[ParseException]("Text cannot be parsed to a DataType")
   def parseDataType(sqlText: String): DataType
+
+  /**
+   * Parse a string to a [[LogicalPlan]] of query.
+   */
+  @throws[ParseException]("Text cannot be parsed to a LogicalPlan")
+  def parseQuery(sqlText: String): LogicalPlan
 }

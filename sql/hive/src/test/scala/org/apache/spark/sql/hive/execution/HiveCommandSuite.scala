@@ -324,4 +324,19 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       FsConstants.LOCAL_FS_URI, workingDir, new Path("kv1.txt"))
     assert(r === new Path(s"$workingDir/kv1.txt"))
   }
+
+  test("SPARK-37266: Optimize the analysis for view text of persistent view and" +
+    " fix security vulnerabilities caused by sql tampering") {
+    val table = hiveContext.sessionState.catalog.getTableMetadata(TableIdentifier("parquet_view1"))
+    val tamperedTable = table.copy(viewText = Some("drop table parquet_tab1"))
+    try {
+      hiveContext.sessionState.catalog.alterTable(tamperedTable)
+      val message = intercept[AnalysisException] {
+        sql("SELECT * FROM parquet_view1")
+      }.getMessage
+      assert(message.contains("Invalid view text of view default.parquet_view1"))
+    } finally {
+      hiveContext.sessionState.catalog.alterTable(table)
+    }
+  }
 }

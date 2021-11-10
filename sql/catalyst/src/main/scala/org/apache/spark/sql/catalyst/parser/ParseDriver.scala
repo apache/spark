@@ -73,6 +73,11 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     astBuilder.visitSingleTableSchema(parser.singleTableSchema())
   }
 
+  /** Creates LogicalPlan of query for a given SQL string. */
+  override def parseQuery(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
+    astBuilder.visitQuery(parser.query())
+  }
+
   /** Creates LogicalPlan for a given SQL string. */
   override def parsePlan(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
     astBuilder.visitSingleStatement(parser.singleStatement()) match {
