@@ -6083,6 +6083,11 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pdf.cov(min_periods=11), psdf.cov(min_periods=11), almost=True)
         self.assert_eq(pdf.cov(min_periods=10), psdf.cov(min_periods=10), almost=True)
 
+        # return empty DataFrame
+        pdf = pd.DataFrame([("1", "2"), ("0", "3"), ("2", "0"), ("1", "1")], columns=["a", "b"])
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf.cov(), psdf.cov())
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.test_dataframe import *  # noqa: F401

@@ -8350,6 +8350,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ]
 
         num_cols = len(psdf.columns)
+        cov = np.zeros([num_cols, num_cols])
+
+        if num_cols == 0:
+            return DataFrame()
+
+        if len(psdf) < min_periods:
+            cov.fill(np.nan)
+            return DataFrame(cov, columns=psdf.columns, index=psdf.columns)
+
         data_cols = psdf._internal.data_spark_column_names
         cov_scols = []
         count_not_null_scols = []
@@ -8422,7 +8431,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # a  cov(a, a) None      cov(a, c)
         # b            cov(b, b) cov(b, c)
         # c                      cov(c, c)
-        cov = np.zeros([num_cols, num_cols])
         step = 0
         for r in range(0, num_cols):
             step += r
