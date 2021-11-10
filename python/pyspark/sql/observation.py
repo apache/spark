@@ -65,6 +65,7 @@ class Observation:
     >>> observation.get
     {'count': 2, 'max(age)': 5}
     """
+
     def __init__(self, name: Optional[str] = None) -> None:
         """Constructs a named or unnamed Observation instance.
 
@@ -76,7 +77,7 @@ class Observation:
         if name is not None:
             if not isinstance(name, str):
                 raise TypeError("name should be a string")
-            if name == '':
+            if name == "":
                 raise ValueError("name should not be empty")
         self._name = name
         self._jvm: Optional[JVMView] = None
@@ -105,9 +106,7 @@ class Observation:
         cls = self._jvm.org.apache.spark.sql.Observation  # type: ignore[attr-defined]
         self._jo = cls(self._name) if self._name is not None else cls()
         observed_df = self._jo.on(
-            df._jdf,
-            exprs[0]._jc,
-            column._to_seq(df._sc, [c._jc for c in exprs[1:]])
+            df._jdf, exprs[0]._jc, column._to_seq(df._sc, [c._jc for c in exprs[1:]])
         )
         return DataFrame(observed_df, df.sql_ctx)
 
@@ -123,7 +122,7 @@ class Observation:
         dict
             the observed metrics
         """
-        assert self._jo is not None, 'call DataFrame.observe'
+        assert self._jo is not None, "call DataFrame.observe"
         jmap = self._jo.getAsJava()
         # return a pure Python dict, not jmap which is a py4j JavaMap
         return {k: v for k, v in jmap.items()}
@@ -135,9 +134,10 @@ def _test() -> None:
     from pyspark.context import SparkContext
     from pyspark.sql import SparkSession
     import pyspark.sql.observation
+
     globs = pyspark.sql.observation.__dict__.copy()
-    sc = SparkContext('local[4]', 'PythonTest')
-    globs['spark'] = SparkSession(sc)
+    sc = SparkContext("local[4]", "PythonTest")
+    globs["spark"] = SparkSession(sc)
 
     (failure_count, test_count) = doctest.testmod(pyspark.sql.observation, globs=globs)
     sc.stop()

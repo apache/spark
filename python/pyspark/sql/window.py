@@ -29,9 +29,7 @@ if TYPE_CHECKING:
 __all__ = ["Window", "WindowSpec"]
 
 
-def _to_java_cols(
-    cols: Tuple[Union["ColumnOrName", List["ColumnOrName"]], ...]
-) -> int:
+def _to_java_cols(cols: Tuple[Union["ColumnOrName", List["ColumnOrName"]], ...]) -> int:
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if len(cols) == 1 and isinstance(cols[0], list):
         cols = cols[0]  # type: ignore[assignment]
@@ -327,11 +325,12 @@ class WindowSpec(object):
 def _test() -> None:
     import doctest
     import pyspark.sql.window
-    SparkContext('local[4]', 'PythonTest')
+
+    SparkContext("local[4]", "PythonTest")
     globs = pyspark.sql.window.__dict__.copy()
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.window, globs=globs,
-        optionflags=doctest.NORMALIZE_WHITESPACE)
+        pyspark.sql.window, globs=globs, optionflags=doctest.NORMALIZE_WHITESPACE
+    )
     if failure_count:
         sys.exit(-1)
 

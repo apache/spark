@@ -430,7 +430,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         className, resources, ignoreIfExists, replace) =>
       if (isSessionCatalog(catalog)) {
         val database = if (nameParts.length > 2) {
-          throw QueryCompilationErrors.unsupportedFunctionNameError(nameParts.quoted)
+          throw QueryCompilationErrors.requiresSinglePartNamespaceError(nameParts)
         } else if (nameParts.length == 2) {
           Some(nameParts.head)
         } else {

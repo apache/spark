@@ -22,8 +22,14 @@ import threading
 
 from pyspark import since
 from pyspark.ml.common import inherit_doc
-from pyspark.ml.param.shared import HasInputCol, HasOutputCol, HasLabelCol, HasFeaturesCol, \
-    HasPredictionCol, Params
+from pyspark.ml.param.shared import (
+    HasInputCol,
+    HasOutputCol,
+    HasLabelCol,
+    HasFeaturesCol,
+    HasPredictionCol,
+    Params,
+)
 from pyspark.sql.functions import udf
 from pyspark.sql.types import StructField, StructType
 
@@ -48,10 +54,9 @@ class _FitMultipleIterator(object):
     -----
     See :py:meth:`Estimator.fitMultiple` for more info.
     """
-    def __init__(self, fitSingleModel, numModels):
-        """
 
-        """
+    def __init__(self, fitSingleModel, numModels):
+        """ """
         self.fitSingleModel = fitSingleModel
         self.numModel = numModels
         self.counter = 0
@@ -80,6 +85,7 @@ class Estimator(Params, metaclass=ABCMeta):
 
     .. versionadded:: 1.3.0
     """
+
     pass
 
     @abstractmethod
@@ -160,8 +166,10 @@ class Estimator(Params, metaclass=ABCMeta):
             else:
                 return self._fit(dataset)
         else:
-            raise TypeError("Params must be either a param map or a list/tuple of param maps, "
-                            "but got %s." % type(params))
+            raise TypeError(
+                "Params must be either a param map or a list/tuple of param maps, "
+                "but got %s." % type(params)
+            )
 
 
 @inherit_doc
@@ -171,6 +179,7 @@ class Transformer(Params, metaclass=ABCMeta):
 
     .. versionadded:: 1.3.0
     """
+
     pass
 
     @abstractmethod
@@ -226,6 +235,7 @@ class Model(Transformer, metaclass=ABCMeta):
 
     .. versionadded:: 1.4.0
     """
+
     pass
 
 
@@ -279,16 +289,15 @@ class UnaryTransformer(HasInputCol, HasOutputCol, Transformer):
         if self.getOutputCol() in schema.names:
             raise ValueError("Output column %s already exists." % self.getOutputCol())
         outputFields = copy.copy(schema.fields)
-        outputFields.append(StructField(self.getOutputCol(),
-                                        self.outputDataType(),
-                                        nullable=False))
+        outputFields.append(StructField(self.getOutputCol(), self.outputDataType(), nullable=False))
         return StructType(outputFields)
 
     def _transform(self, dataset):
         self.transformSchema(dataset.schema)
         transformUDF = udf(self.createTransformFunc(), self.outputDataType())
-        transformedDataset = dataset.withColumn(self.getOutputCol(),
-                                                transformUDF(dataset[self.getInputCol()]))
+        transformedDataset = dataset.withColumn(
+            self.getOutputCol(), transformUDF(dataset[self.getInputCol()])
+        )
         return transformedDataset
 
 
@@ -299,6 +308,7 @@ class _PredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol):
 
     .. versionadded:: 3.0.0
     """
+
     pass
 
 

@@ -88,7 +88,7 @@ class Option:
         doc: str,
         default: Any,
         types: Union[Tuple[type, ...], type] = str,
-        check_func: Tuple[Callable[[Any], bool], str] = (lambda v: True, "")
+        check_func: Tuple[Callable[[Any], bool], str] = (lambda v: True, ""),
     ):
         self.key = key
         self.doc = doc

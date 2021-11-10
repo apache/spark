@@ -28,7 +28,6 @@ from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietT
 
 
 class CheckpointTests(ReusedPySparkTestCase):
-
     def setUp(self):
         self.checkpointDir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(self.checkpointDir.name)
@@ -50,10 +49,13 @@ class CheckpointTests(ReusedPySparkTestCase):
         time.sleep(1)  # 1 second
         self.assertTrue(flatMappedRDD.isCheckpointed())
         self.assertEqual(flatMappedRDD.collect(), result)
-        self.assertEqual("file:" + self.checkpointDir.name,
-                         os.path.dirname(os.path.dirname(flatMappedRDD.getCheckpointFile())))
-        self.assertEqual(self.sc.getCheckpointDir(),
-                         os.path.dirname(flatMappedRDD.getCheckpointFile()))
+        self.assertEqual(
+            "file:" + self.checkpointDir.name,
+            os.path.dirname(os.path.dirname(flatMappedRDD.getCheckpointFile())),
+        )
+        self.assertEqual(
+            self.sc.getCheckpointDir(), os.path.dirname(flatMappedRDD.getCheckpointFile())
+        )
 
     def test_checkpoint_and_restore(self):
         parCollection = self.sc.parallelize([1, 2, 3, 4])
@@ -67,13 +69,13 @@ class CheckpointTests(ReusedPySparkTestCase):
         time.sleep(1)  # 1 second
 
         self.assertTrue(flatMappedRDD.getCheckpointFile() is not None)
-        recovered = self.sc._checkpointFile(flatMappedRDD.getCheckpointFile(),
-                                            flatMappedRDD._jrdd_deserializer)
+        recovered = self.sc._checkpointFile(
+            flatMappedRDD.getCheckpointFile(), flatMappedRDD._jrdd_deserializer
+        )
         self.assertEqual([1, 2, 3, 4], recovered.collect())
 
 
 class LocalCheckpointTests(ReusedPySparkTestCase):
-
     def test_basic_localcheckpointing(self):
         parCollection = self.sc.parallelize([1, 2, 3, 4])
         flatMappedRDD = parCollection.flatMap(lambda x: range(1, x + 1))
@@ -90,14 +92,15 @@ class LocalCheckpointTests(ReusedPySparkTestCase):
 
 
 class AddFileTests(PySparkTestCase):
-
     def test_add_py_file(self):
         # To ensure that we're actually testing addPyFile's effects, check that
         # this job fails due to `userlibrary` not being on the Python path:
         # disable logging in log4j temporarily
         def func(x):
             from userlibrary import UserClass  # type: ignore
+
             return UserClass().hello()
+
         with QuietTest(self.sc):
             self.assertRaises(Exception, self.sc.parallelize(range(2)).map(func).first)
 
@@ -130,10 +133,12 @@ class AddFileTests(PySparkTestCase):
         # this fails due to `userlibrary` not being on the Python path:
         def func():
             from userlibrary import UserClass  # noqa: F401
+
         self.assertRaises(ImportError, func)
         path = os.path.join(SPARK_HOME, "python/test_support/userlibrary.py")
         self.sc.addPyFile(path)
         from userlibrary import UserClass
+
         self.assertEqual("Hello World!", UserClass().hello())
 
     def test_add_egg_file_locally(self):
@@ -141,28 +146,32 @@ class AddFileTests(PySparkTestCase):
         # this fails due to `userlibrary` not being on the Python path:
         def func():
             from userlib import UserClass  # type: ignore[import]
+
             UserClass()
+
         self.assertRaises(ImportError, func)
         path = os.path.join(SPARK_HOME, "python/test_support/userlib-0.1.zip")
         self.sc.addPyFile(path)
         from userlib import UserClass
+
         self.assertEqual("Hello World from inside a package!", UserClass().hello())
 
     def test_overwrite_system_module(self):
         self.sc.addPyFile(os.path.join(SPARK_HOME, "python/test_support/SimpleHTTPServer.py"))
 
         import SimpleHTTPServer  # type: ignore[import]
+
         self.assertEqual("My Server", SimpleHTTPServer.__name__)
 
         def func(x):
             import SimpleHTTPServer  # type: ignore[import]
+
             return SimpleHTTPServer.__name__
 
         self.assertEqual(["My Server"], self.sc.parallelize(range(1)).map(func).collect())
 
 
 class ContextTests(unittest.TestCase):
-
     def test_failed_sparkcontext_creation(self):
         # Regression test for SPARK-1550
         self.assertRaises(Exception, lambda: SparkContext("an-invalid-master-name"))
@@ -214,18 +223,19 @@ class ContextTests(unittest.TestCase):
 
     def test_progress_api(self):
         with SparkContext() as sc:
-            sc.setJobGroup('test_progress_api', '', True)
+            sc.setJobGroup("test_progress_api", "", True)
             rdd = sc.parallelize(range(10)).map(lambda x: time.sleep(100))
 
             def run():
                 # When thread is pinned, job group should be set for each thread for now.
                 # Local properties seem not being inherited like Scala side does.
                 if os.environ.get("PYSPARK_PIN_THREAD", "true").lower() == "true":
-                    sc.setJobGroup('test_progress_api', '', True)
+                    sc.setJobGroup("test_progress_api", "", True)
                 try:
                     rdd.count()
                 except Exception:
                     pass
+
             t = threading.Thread(target=run)
             t.daemon = True
             t.start()
@@ -233,7 +243,7 @@ class ContextTests(unittest.TestCase):
             time.sleep(3)
 
             tracker = sc.statusTracker()
-            jobIds = tracker.getJobIdsForGroup('test_progress_api')
+            jobIds = tracker.getJobIdsForGroup("test_progress_api")
             self.assertEqual(1, len(jobIds))
             job = tracker.getJobInfo(jobIds[0])
             self.assertEqual(1, len(job.stageIds))
@@ -246,7 +256,7 @@ class ContextTests(unittest.TestCase):
             time.sleep(1)
 
             job = tracker.getJobInfo(jobIds[0])
-            self.assertEqual('FAILED', job.status)
+            self.assertEqual("FAILED", job.status)
             self.assertEqual([], tracker.getActiveJobsIds())
             self.assertEqual([], tracker.getActiveStageIds())
 
@@ -259,8 +269,8 @@ class ContextTests(unittest.TestCase):
     def test_forbid_insecure_gateway(self):
         # Fail immediately if you try to create a SparkContext
         # with an insecure gateway
-        parameters = namedtuple('MockGatewayParameters', 'auth_token')(None)
-        mock_insecure_gateway = namedtuple('MockJavaGateway', 'gateway_parameters')(parameters)
+        parameters = namedtuple("MockGatewayParameters", "auth_token")(None)
+        mock_insecure_gateway = namedtuple("MockJavaGateway", "gateway_parameters")(parameters)
         with self.assertRaises(ValueError) as context:
             SparkContext(gateway=mock_insecure_gateway)
         self.assertIn("insecure Py4j gateway", str(context.exception))
@@ -276,8 +286,10 @@ class ContextTests(unittest.TestCase):
         with SparkContext("local-cluster[3, 1, 1024]") as sc:
             with self.assertRaises(Exception) as context:
                 sc.range(2).foreach(lambda _: SparkContext())
-            self.assertIn("SparkContext should only be created and accessed on the driver.",
-                          str(context.exception))
+            self.assertIn(
+                "SparkContext should only be created and accessed on the driver.",
+                str(context.exception),
+            )
 
     def test_allow_to_create_spark_context_in_executors(self):
         # SPARK-32160: SparkContext can be created in executors if the config is set.
@@ -292,7 +304,6 @@ class ContextTests(unittest.TestCase):
 
 
 class ContextTestsWithResources(unittest.TestCase):
-
     def setUp(self):
         class_name = self.__class__.__name__
         self.tempFile = tempfile.NamedTemporaryFile(delete=False)
@@ -301,20 +312,22 @@ class ContextTestsWithResources(unittest.TestCase):
         # create temporary directory for Worker resources coordination
         self.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(self.tempdir.name)
-        os.chmod(self.tempFile.name, stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP |
-                 stat.S_IROTH | stat.S_IXOTH)
+        os.chmod(
+            self.tempFile.name,
+            stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
+        )
         conf = SparkConf().set("spark.test.home", SPARK_HOME)
         conf = conf.set("spark.driver.resource.gpu.amount", "1")
         conf = conf.set("spark.driver.resource.gpu.discoveryScript", self.tempFile.name)
-        self.sc = SparkContext('local-cluster[2,1,1024]', class_name, conf=conf)
+        self.sc = SparkContext("local-cluster[2,1,1024]", class_name, conf=conf)
 
     def test_resources(self):
         """Test the resources are available."""
         resources = self.sc.resources
         self.assertEqual(len(resources), 1)
-        self.assertTrue('gpu' in resources)
-        self.assertEqual(resources['gpu'].name, 'gpu')
-        self.assertEqual(resources['gpu'].addresses, ['0'])
+        self.assertTrue("gpu" in resources)
+        self.assertEqual(resources["gpu"].name, "gpu")
+        self.assertEqual(resources["gpu"].addresses, ["0"])
 
     def tearDown(self):
         os.unlink(self.tempFile.name)
@@ -326,7 +339,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

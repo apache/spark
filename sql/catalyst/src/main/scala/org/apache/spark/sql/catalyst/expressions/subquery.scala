@@ -42,6 +42,9 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(PLAN_EXPRESSION) ++ nodePatternsInternal
 
+  override lazy val deterministic: Boolean = children.forall(_.deterministic) &&
+    plan.deterministic
+
   // Subclasses can override this function to provide more TreePatterns.
   def nodePatternsInternal(): Seq[TreePattern] = Seq()
 
