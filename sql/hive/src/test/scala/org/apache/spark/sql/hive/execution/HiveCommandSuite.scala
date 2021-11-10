@@ -330,6 +330,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     val table = hiveContext.sessionState.catalog.getTableMetadata(TableIdentifier("parquet_view1"))
     val tamperedTable = table.copy(viewText = Some("drop table parquet_tab1"))
     try {
+      // Simulate hacker behavior
       hiveContext.sessionState.catalog.alterTable(tamperedTable)
       val message = intercept[AnalysisException] {
         sql("SELECT * FROM parquet_view1")
