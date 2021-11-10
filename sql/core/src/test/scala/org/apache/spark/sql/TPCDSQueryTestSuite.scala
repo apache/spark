@@ -152,7 +152,7 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
     SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
     "spark.sql.join.forceApplyShuffledHashJoin" -> "true")
 
-  val shuffleConfSet: Set[Map[String, String]] =
+  val joinConfSet: Set[Map[String, String]] =
     Set(broadcastHashJoinConf, sortMergeJoinConf, shuffleHashJoinConf);
 
   if (tpcdsDataPath.nonEmpty) {
@@ -163,7 +163,7 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
         val goldenFile = new File(s"$baseResourcePath/v1_4", s"$name.sql.out")
         runQuery(queryString, goldenFile, false)
         if (!regenerateGoldenFiles) {
-          shuffleConfSet.foreach { testConf =>
+          joinConfSet.foreach { testConf =>
             withSQLConf(testConf.toSeq: _*) {
               logInfo(s"\n with configuration:\n${Utils.redact(testConf).mkString("\n")}")
               runQuery(queryString, goldenFile, true)
@@ -180,7 +180,7 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
         val goldenFile = new File(s"$baseResourcePath/v2_7", s"$name.sql.out")
         runQuery(queryString, goldenFile, false)
         if (!regenerateGoldenFiles) {
-          shuffleConfSet.foreach { testConf =>
+          joinConfSet.foreach { testConf =>
             withSQLConf(testConf.toSeq: _*) {
               runQuery(queryString, goldenFile, true)
             }
