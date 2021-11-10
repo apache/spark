@@ -235,7 +235,7 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
   }
 
   override def customBuiltinFunctionExists(name: FunctionIdentifier): Boolean = {
-    name.database.isEmpty && customBuiltinFunctions.contains(name.funcName)
+    name.database.isEmpty && customBuiltinFunctions.contains(normalizeFuncName(name).funcName)
   }
 
   /**
