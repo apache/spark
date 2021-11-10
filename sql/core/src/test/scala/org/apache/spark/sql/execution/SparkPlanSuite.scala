@@ -116,12 +116,12 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-37221: The collect-like API in SparkPlan should support columnar output") {
-    val emptyResults = ColumnarOp(LocalTableScanExec(Nil, Nil)).executeCollect()
+    val emptyResults = ColumnarOp(LocalTableScanExec(Nil, Nil)).toRowBased.executeCollect()
     assert(emptyResults.isEmpty)
 
     val relation = LocalTableScanExec(
       Seq(AttributeReference("val", IntegerType)()), Seq(InternalRow(1)))
-    val nonEmpty = ColumnarOp(relation).executeCollect()
+    val nonEmpty = ColumnarOp(relation).toRowBased.executeCollect()
     assert(nonEmpty === relation.executeCollect())
   }
 }
