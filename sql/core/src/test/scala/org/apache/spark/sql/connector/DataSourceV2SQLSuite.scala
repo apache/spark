@@ -340,13 +340,15 @@ class DataSourceV2SQLSuite
   }
 
   test("CTAS/RTAS: invalid schema if has interval type") {
-    Seq("CREATE", "REPLACE").foreach { action =>
-      val e1 = intercept[AnalysisException](
-        sql(s"$action TABLE table_name USING $v2Format as select interval 1 day"))
-      assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
-      val e2 = intercept[AnalysisException](
-        sql(s"$action TABLE table_name USING $v2Format as select array(interval 1 day)"))
-      assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      Seq("CREATE", "REPLACE").foreach { action =>
+        val e1 = intercept[AnalysisException](
+          sql(s"$action TABLE table_name USING $v2Format as select interval 1 day"))
+        assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
+        val e2 = intercept[AnalysisException](
+          sql(s"$action TABLE table_name USING $v2Format as select array(interval 1 day)"))
+        assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
+      }
     }
   }
 
