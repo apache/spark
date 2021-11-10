@@ -70,6 +70,7 @@ JAVA_VERSION=$($MVN -q \
     --non-recursive \
     org.codehaus.mojo:exec-maven-plugin:1.6.0:exec)
 if [[ $(echo "$JAVA_VERSION" | grep "^17") ]]; then
+  # TODO(SPARK-37265) Support Java 17 in dev/test-dependencies.sh
   echo "Skip dependency testing on Java $JAVA_VERSION"
   exit 0
 fi
