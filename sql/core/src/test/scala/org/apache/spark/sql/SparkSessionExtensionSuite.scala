@@ -396,6 +396,16 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
         Nil)
     }
   }
+
+  test("SPARK-37202: temp view refers a inject function") {
+    val extensions = create { extensions =>
+      extensions.injectFunction(MyExtensions.myFunction)
+    }
+    withSession(extensions) { session =>
+      session.sql("CREATE TEMP VIEW v AS SELECT myFunction(a) FROM VALUES(1), (2) t(a)")
+      session.sql("SELECT * FROM v")
+    }
+  }
 }
 
 case class MyRule(spark: SparkSession) extends Rule[LogicalPlan] {

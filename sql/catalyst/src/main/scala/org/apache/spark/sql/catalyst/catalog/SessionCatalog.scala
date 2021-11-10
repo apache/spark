@@ -1605,6 +1605,11 @@ class SessionCatalog(
       if (!isResolvingView ||
           !isTemporaryFunction(name) ||
           referredTempFunctionNames.contains(name.funcName)) {
+        // We are not resolving a view and the function is a temp one, add it to `AnalysisContext`,
+        // so during the view creation, we can save all referred temp functions to view metadata
+        if (!isResolvingView && isTemporaryFunction(name)) {
+          AnalysisContext.get.referredTempFunctionNames.add(name.funcName)
+        }
         // This function has been already loaded into the function registry.
         return registry.lookupFunction(name, children)
       }

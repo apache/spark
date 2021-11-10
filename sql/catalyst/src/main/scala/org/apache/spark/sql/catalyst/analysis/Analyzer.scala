@@ -125,7 +125,11 @@ case class AnalysisContext(
     maxNestedViewDepth: Int = -1,
     relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
-    referredTempFunctionNames: Seq[String] = Seq.empty,
+    // 1. If we are resolving a view, this field will be restored from the view metadata,
+    //    by calling `AnalysisContext.withAnalysisContext(viewDesc)`.
+    // 2. If we are not resolving a view, this field will be updated everytime the analyzer
+    //    lookup a temporary function. And export to the view metadata.
+    referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     outerPlan: Option[LogicalPlan] = None)
 
 object AnalysisContext {
@@ -152,7 +156,7 @@ object AnalysisContext {
       maxNestedViewDepth,
       originContext.relationCache,
       viewDesc.viewReferredTempViewNames,
-      viewDesc.viewReferredTempFunctionNames)
+      mutable.Set(viewDesc.viewReferredTempFunctionNames: _*))
     set(context)
     try f finally { set(originContext) }
   }
@@ -173,6 +177,10 @@ class Analyzer(override val catalogManager: CatalogManager)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis with SQLConfHelper {
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
+
+  private var analysisContext: AnalysisContext = AnalysisContext.get
+
+  def getAnalysisContext: AnalysisContext = analysisContext
 
   override protected def isPlanIntegral(
       previousPlan: LogicalPlan,
@@ -208,6 +216,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     try {
       executeSameContext(plan)
     } finally {
+      analysisContext = AnalysisContext.get.copy()
       AnalysisContext.reset()
     }
   }
