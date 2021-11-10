@@ -37,7 +37,7 @@ class TestResult(JavaModelWrapper, Generic[DF]):
         extreme as the one that was actually observed, assuming that the
         null hypothesis is true.
         """
-        return self._java_model.pValue()  # type: ignore[attr-defined]
+        return self._java_model.pValue()
 
     @property
     def degreesOfFreedom(self) -> DF:
@@ -45,24 +45,24 @@ class TestResult(JavaModelWrapper, Generic[DF]):
         Returns the degree(s) of freedom of the hypothesis test.
         Return type should be Number(e.g. Int, Double) or tuples of Numbers.
         """
-        return self._java_model.degreesOfFreedom()  # type: ignore[attr-defined]
+        return self._java_model.degreesOfFreedom()
 
     @property
     def statistic(self) -> float:
         """
         Test statistic.
         """
-        return self._java_model.statistic()  # type: ignore[attr-defined]
+        return self._java_model.statistic()
 
     @property
     def nullHypothesis(self) -> str:
         """
         Null hypothesis of the test.
         """
-        return self._java_model.nullHypothesis()  # type: ignore[attr-defined]
+        return self._java_model.nullHypothesis()
 
     def __str__(self) -> str:
-        return self._java_model.toString()  # type: ignore[attr-defined]
+        return self._java_model.toString()
 
 
 @inherit_doc
@@ -76,7 +76,7 @@ class ChiSqTestResult(TestResult[int]):
         """
         Name of the test method
         """
-        return self._java_model.method()  # type: ignore[attr-defined]
+        return self._java_model.method()
 
 
 @inherit_doc
