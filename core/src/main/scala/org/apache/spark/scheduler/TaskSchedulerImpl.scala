@@ -875,8 +875,8 @@ private[spark] class TaskSchedulerImpl(
       taskSetManager.handleSuccessfulTask(tid, taskResult)
     } else {
       logInfo(s"Ignoring update with state finished for task (TID $tid) because its task set " +
-        s"is gone (this is likely the result of receiving duplicate task finished status updates)" +
-        s" or its executor has been marked as failed.")
+        "is gone (this is likely the result of receiving duplicate task finished status updates)" +
+        " or its executor has been marked as failed.")
     }
   }
 
