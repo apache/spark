@@ -599,9 +599,11 @@ fromClause
     : FROM relation (',' relation)* lateralView* pivotClause?
     ;
 
-asOf
+temporalClause
     : VERSION AS OF version=INTEGER_VALUE
+    | SYSTEM_VERSION AS OF version=INTEGER_VALUE
     | TIMESTAMP AS OF timestamp=STRING
+    | SYSTEM_TIME AS OF timestamp=STRING
     ;
 
 aggregationClause
@@ -716,7 +718,7 @@ identifierComment
     ;
 
 relationPrimary
-    : multipartIdentifier asOf? sample? tableAlias  #tableName
+    : multipartIdentifier temporalClause? sample? tableAlias  #tableName
     | '(' query ')' sample? tableAlias        #aliasedQuery
     | '(' relation ')' sample? tableAlias     #aliasedRelation
     | inlineTable                             #inlineTableDefault2
@@ -1234,6 +1236,8 @@ ansiNonReserved
     | SUBSTR
     | SUBSTRING
     | SYNC
+    | SYSTEM_TIME
+    | SYSTEM_VERSION
     | TABLES
     | TABLESAMPLE
     | TBLPROPERTIES
@@ -1504,6 +1508,8 @@ nonReserved
     | SUBSTR
     | SUBSTRING
     | SYNC
+    | SYSTEM_TIME
+    | SYSTEM_VERSION
     | TABLE
     | TABLES
     | TABLESAMPLE
@@ -1776,6 +1782,8 @@ STRUCT: 'STRUCT';
 SUBSTR: 'SUBSTR';
 SUBSTRING: 'SUBSTRING';
 SYNC: 'SYNC';
+SYSTEM_TIME: 'SYSTEM_TIME';
+SYSTEM_VERSION: 'SYSTEM_VERSION';
 TABLE: 'TABLE';
 TABLES: 'TABLES';
 TABLESAMPLE: 'TABLESAMPLE';

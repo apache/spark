@@ -2451,6 +2451,11 @@ class DDLParserSuite extends AnalysisTest {
       Project(Seq(UnresolvedStar(None)),
         UnresolvedRelation(Seq("a", "b", "c"), new CaseInsensitiveStringMap(properties))))
 
+    comparePlans(
+      parsePlan("SELECT * FROM a.b.c SYSTEM_VERSION AS OF 123456789"),
+      Project(Seq(UnresolvedStar(None)),
+        UnresolvedRelation(Seq("a", "b", "c"), new CaseInsensitiveStringMap(properties))))
+
     val ts1 = DateTimeUtils.stringToTimestamp(
       UTF8String.fromString("2019-01-29 00:37:58"),
       DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
@@ -2458,6 +2463,10 @@ class DDLParserSuite extends AnalysisTest {
     properties.put(TableCatalog.PROP_TIMESTAMP, ts1.get.toString)
     comparePlans(
       parsePlan("SELECT * FROM a.b.c TIMESTAMP AS OF '2019-01-29 00:37:58'"),
+      Project(Seq(UnresolvedStar(None)),
+        UnresolvedRelation(Seq("a", "b", "c"), new CaseInsensitiveStringMap(properties))))
+    comparePlans(
+      parsePlan("SELECT * FROM a.b.c SYSTEM_TIME AS OF '2019-01-29 00:37:58'"),
       Project(Seq(UnresolvedStar(None)),
         UnresolvedRelation(Seq("a", "b", "c"), new CaseInsensitiveStringMap(properties))))
 
@@ -2468,6 +2477,10 @@ class DDLParserSuite extends AnalysisTest {
     properties.put(TableCatalog.PROP_TIMESTAMP, ts2.get.toString)
     comparePlans(
       parsePlan("SELECT * FROM a.b.c TIMESTAMP AS OF '2019-01-29'"),
+      Project(Seq(UnresolvedStar(None)),
+        UnresolvedRelation(Seq("a", "b", "c"), new CaseInsensitiveStringMap(properties))))
+    comparePlans(
+      parsePlan("SELECT * FROM a.b.c SYSTEM_TIME AS OF '2019-01-29'"),
       Project(Seq(UnresolvedStar(None)),
         UnresolvedRelation(Seq("a", "b", "c"), new CaseInsensitiveStringMap(properties))))
 
