@@ -38,7 +38,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   // Only used for booleans.
   private int bitOffset;
-  private byte currentByte = 0;
+  private int currentByte = 0;
 
   public VectorizedPlainValuesReader() {
   }
@@ -53,20 +53,45 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     throw new UnsupportedOperationException();
   }
 
+  private void updateCurrentByte() {
+    try {
+      currentByte = in.read();
+    } catch (IOException e) {
+      throw new ParquetDecodingException("Failed to read a byte", e);
+    }
+  }
+
   @Override
   public final void readBooleans(int total, WritableColumnVector c, int rowId) {
-    // TODO: properly vectorize this
-    for (int i = 0; i < total; i++) {
-      c.putBoolean(rowId + i, readBoolean());
+    int i = 0;
+    if (bitOffset > 0) {
+      i = Math.min(8 - bitOffset, total);
+      c.putBooleans(rowId, i, currentByte, bitOffset);
+      bitOffset = (bitOffset + i) & 7;
+    }
+    for (; i + 7 < total; i += 8) {
+      updateCurrentByte();
+      c.putBooleans(rowId + i, currentByte);
+    }
+    if (i < total) {
+      updateCurrentByte();
+      bitOffset = total - i;
+      c.putBooleans(rowId + i, bitOffset, currentByte, 0);
     }
   }
 
   @Override
   public final void skipBooleans(int total) {
-    // TODO: properly vectorize this
-    for (int i = 0; i < total; i++) {
-      readBoolean();
+    int totalByte = total / 8;
+    if (totalByte > 0) {
+      try {
+        in.skipFully(totalByte - 1L);
+        currentByte = in.read();
+      } catch (IOException e) {
+        throw new ParquetDecodingException("Failed to skip bytes", e);
+      }
     }
+    bitOffset = (bitOffset + total % 8) & 7;
   }
 
   private ByteBuffer getBuffer(int length) {
@@ -276,13 +301,8 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public final boolean readBoolean() {
-    // TODO: vectorize decoding and keep boolean[] instead of currentByte
     if (bitOffset == 0) {
-      try {
-        currentByte = (byte) in.read();
-      } catch (IOException e) {
-        throw new ParquetDecodingException("Failed to read a byte", e);
-      }
+      updateCurrentByte();
     }
 
     boolean v = (currentByte & (1 << bitOffset)) != 0;

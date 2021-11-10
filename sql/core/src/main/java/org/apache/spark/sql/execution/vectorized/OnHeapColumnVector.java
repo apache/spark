@@ -148,6 +148,11 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
+  public void putBooleans(int rowId, int src) {
+    ByteBuffer.wrap(byteData, rowId, 8).putLong(toBitPerByte(src));
+  }
+
+  @Override
   public boolean getBoolean(int rowId) {
     return byteData[rowId] == 1;
   }

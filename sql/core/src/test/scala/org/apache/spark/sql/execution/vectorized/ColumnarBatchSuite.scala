@@ -130,6 +130,47 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
+  testVector("[SPARK35867] Boolean APIs", 1024, BooleanType) {
+    column => ()
+      val reference = mutable.ArrayBuffer.empty[Boolean]
+
+      var values = Array(true, false, true, false, false)
+      column.appendBooleans(2, values.foldRight(0)((b, i) => (i << 1) | (if (b) 1 else 0)), 0)
+      reference ++= values.take(2)
+
+      column.appendBooleans(3, values.foldRight(0)((b, i) => (i << 1) | (if (b) 1 else 0)), 2)
+      reference ++= values.takeRight(3)
+
+      column.appendBooleans(6, true)
+      reference ++= Array.fill(6)(true)
+
+      column.appendBoolean(false)
+      reference += false
+
+      var idx = column.elementsAppended
+
+      values = Array(true, true, false, true, false)
+      column.putBooleans(idx, 2, values.foldRight(0)((b, i) => (i << 1) | (if (b) 1 else 0)), 0)
+      reference ++= values.take(2)
+      idx += 2
+
+      column.putBooleans(idx, 3, values.foldRight(0)((b, i) => (i << 1) | (if (b) 1 else 0)), 2)
+      reference ++= values.takeRight(3)
+      idx += 3
+
+      column.putBoolean(idx, false)
+      reference += false
+      idx += 1
+
+      column.putBooleans(idx, 3, true)
+      reference ++= Array.fill(3)(true)
+      idx += 3
+
+      reference.zipWithIndex.foreach { v =>
+        assert(v._1 == column.getBoolean(v._2), "VectorType=" + column.getClass.getSimpleName)
+      }
+  }
+
   testVector("Byte APIs", 1024, ByteType) {
     column =>
       val reference = mutable.ArrayBuffer.empty[Byte]

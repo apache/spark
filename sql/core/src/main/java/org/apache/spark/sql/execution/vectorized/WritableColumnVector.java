@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.vectorized;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -180,6 +181,18 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected abstract void reserveInternal(int capacity);
 
   /**
+   * Each byte of the returned value (long) has one bit from `bits`. I.e. it is equivalent to
+   *    byte[] a = {(byte)(bits >> 0 & 1), (byte)(bits >> 1 & 1),
+   *                (byte)(bits >> 2 & 1), (byte)(bits >> 3 & 1),
+   *                (byte)(bits >> 4 & 1), (byte)(bits >> 5 & 1),
+   *                (byte)(bits >> 6 & 1), (byte)(bits >> 7 & 1)};
+   *    return ByteBuffer.wrap(a).getLong();
+   */
+  protected final long toBitPerByte(int bits) {
+    return ((bits * 0x100804020100804L) | (bits >> 7)) & 0x101010101010101L;
+  }
+
+  /**
    * Sets null/not null to the value at rowId.
    */
   public abstract void putNotNull(int rowId);
@@ -200,6 +213,15 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Sets value to [rowId, rowId + count).
    */
   public abstract void putBooleans(int rowId, int count, boolean value);
+
+  /**
+   * Sets bits from [src[srcIndex], src[srcIndex + count]) to [rowId, rowId + count)
+   * src must be positive and contain 8 bits of bitmask in the lowest byte.
+   */
+  public void putBooleans(int rowId, int count, int src, int srcIndex) {
+    putBytes(rowId, count, ByteBuffer.allocate(8).putLong(toBitPerByte(src)).array(), srcIndex);
+  }
+  public void putBooleans(int rowId, int src) {putBooleans(rowId, 8, src, 0);}
 
   /**
    * Sets `value` to the value at rowId.
@@ -466,6 +488,14 @@ public abstract class WritableColumnVector extends ColumnVector {
     reserve(elementsAppended + count);
     int result = elementsAppended;
     putBooleans(elementsAppended, count, v);
+    elementsAppended += count;
+    return result;
+  }
+
+  public final int appendBooleans(int count, int src, int offset) {
+    reserve(elementsAppended + count);
+    int result = elementsAppended;
+    putBooleans(elementsAppended, count, src, offset);
     elementsAppended += count;
     return result;
   }
