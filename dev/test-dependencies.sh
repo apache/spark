@@ -63,18 +63,6 @@ if [[ "$SCALA_BINARY_VERSION" != "2.12" ]]; then
   echo "Skip dependency testing on $SCALA_BINARY_VERSION"
   exit 0
 fi
-
-JAVA_VERSION=$($MVN -q \
-    -Dexec.executable="echo" \
-    -Dexec.args='${java.version}' \
-    --non-recursive \
-    org.codehaus.mojo:exec-maven-plugin:1.6.0:exec)
-if [[ $(echo "$JAVA_VERSION" | grep "^17") ]]; then
-  # TODO(SPARK-37265) Support Java 17 in dev/test-dependencies.sh
-  echo "Skip dependency testing on Java $JAVA_VERSION"
-  exit 0
-fi
-
 set -e
 TEMP_VERSION="spark-$(python3 -S -c "import random; print(random.randrange(100000, 999999))")"
 
