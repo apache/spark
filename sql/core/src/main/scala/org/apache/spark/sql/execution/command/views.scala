@@ -187,7 +187,7 @@ case class CreateViewCommand(
       throw QueryCompilationErrors.createPersistedViewFromDatasetAPINotAllowedError()
     }
     val aliasedSchema = CharVarcharUtils.getRawSchema(
-      aliasPlan(session, analyzedPlan).schema)
+      aliasPlan(session, analyzedPlan).schema, session.sessionState.conf)
     val newProperties = generateViewProperties(
       properties, session, analyzedPlan, aliasedSchema.fieldNames)
 

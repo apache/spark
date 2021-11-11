@@ -88,10 +88,11 @@ class Catalog(object):
         databases = []
         while iter.hasNext():
             jdb = iter.next()
-            databases.append(Database(
-                name=jdb.name(),
-                description=jdb.description(),
-                locationUri=jdb.locationUri()))
+            databases.append(
+                Database(
+                    name=jdb.name(), description=jdb.description(), locationUri=jdb.locationUri()
+                )
+            )
         return databases
 
     def databaseExists(self, dbName: str) -> bool:
@@ -133,12 +134,15 @@ class Catalog(object):
         tables = []
         while iter.hasNext():
             jtable = iter.next()
-            tables.append(Table(
-                name=jtable.name(),
-                database=jtable.database(),
-                description=jtable.description(),
-                tableType=jtable.tableType(),
-                isTemporary=jtable.isTemporary()))
+            tables.append(
+                Table(
+                    name=jtable.name(),
+                    database=jtable.database(),
+                    description=jtable.description(),
+                    tableType=jtable.tableType(),
+                    isTemporary=jtable.isTemporary(),
+                )
+            )
         return tables
 
     @since(2.0)
@@ -154,11 +158,14 @@ class Catalog(object):
         functions = []
         while iter.hasNext():
             jfunction = iter.next()
-            functions.append(Function(
-                name=jfunction.name(),
-                description=jfunction.description(),
-                className=jfunction.className(),
-                isTemporary=jfunction.isTemporary()))
+            functions.append(
+                Function(
+                    name=jfunction.name(),
+                    description=jfunction.description(),
+                    className=jfunction.className(),
+                    isTemporary=jfunction.isTemporary(),
+                )
+            )
         return functions
 
     def functionExists(self, functionName: str, dbName: Optional[str] = None) -> bool:
@@ -189,19 +196,17 @@ class Catalog(object):
             dbName = self.currentDatabase()
         return self._jcatalog.functionExists(dbName, functionName)
 
-    def listColumns(
-        self, tableName: str, dbName: Optional[str] = None
-    ) -> List[Column]:
+    def listColumns(self, tableName: str, dbName: Optional[str] = None) -> List[Column]:
         """Returns a list of columns for the given table/view in the specified database.
 
-        If no database is specified, the current database is used.
+         If no database is specified, the current database is used.
 
-       .. versionadded:: 2.0.0
+        .. versionadded:: 2.0.0
 
-        Notes
-        -----
-        the order of arguments here is different from that of its JVM counterpart
-        because Python does not support method overloading.
+         Notes
+         -----
+         the order of arguments here is different from that of its JVM counterpart
+         because Python does not support method overloading.
         """
         if dbName is None:
             dbName = self.currentDatabase()
@@ -209,13 +214,16 @@ class Catalog(object):
         columns = []
         while iter.hasNext():
             jcolumn = iter.next()
-            columns.append(Column(
-                name=jcolumn.name(),
-                description=jcolumn.description(),
-                dataType=jcolumn.dataType(),
-                nullable=jcolumn.nullable(),
-                isPartition=jcolumn.isPartition(),
-                isBucket=jcolumn.isBucket()))
+            columns.append(
+                Column(
+                    name=jcolumn.name(),
+                    description=jcolumn.description(),
+                    dataType=jcolumn.dataType(),
+                    nullable=jcolumn.nullable(),
+                    isPartition=jcolumn.isPartition(),
+                    isBucket=jcolumn.isBucket(),
+                )
+            )
         return columns
 
     def tableExists(self, tableName: str, dbName: Optional[str] = None) -> bool:
@@ -279,7 +287,7 @@ class Catalog(object):
         path: Optional[str] = None,
         source: Optional[str] = None,
         schema: Optional[StructType] = None,
-        **options: str
+        **options: str,
     ) -> DataFrame:
         """Creates a table based on the dataset in a data source.
 
@@ -300,7 +308,7 @@ class Catalog(object):
         """
         warnings.warn(
             "createExternalTable is deprecated since Spark 2.2, please use createTable instead.",
-            FutureWarning
+            FutureWarning,
         )
         return self.createTable(tableName, path, source, schema, **options)
 
@@ -311,7 +319,7 @@ class Catalog(object):
         source: Optional[str] = None,
         schema: Optional[StructType] = None,
         description: Optional[str] = None,
-        **options: str
+        **options: str,
     ) -> DataFrame:
         """Creates a table based on the dataset in a data source.
 
@@ -338,10 +346,7 @@ class Catalog(object):
             options["path"] = path
         if source is None:
             source = (
-                self._sparkSession
-                ._wrapped
-                ._conf
-                .defaultDataSourceName()  # type: ignore[attr-defined]
+                self._sparkSession._wrapped._conf.defaultDataSourceName()  # type: ignore[attr-defined]
             )
         if description is None:
             description = ""
@@ -351,8 +356,7 @@ class Catalog(object):
             if not isinstance(schema, StructType):
                 raise TypeError("schema should be StructType")
             scala_datatype = self._jsparkSession.parseDataType(schema.json())
-            df = self._jcatalog.createTable(
-                tableName, source, scala_datatype, description, options)
+            df = self._jcatalog.createTable(tableName, source, scala_datatype, description, options)
         return DataFrame(df, self._sparkSession._wrapped)
 
     def dropTempView(self, viewName: str) -> None:
@@ -413,10 +417,7 @@ class Catalog(object):
         .. deprecated:: 2.3.0
             Use :func:`spark.udf.register` instead.
         """
-        warnings.warn(
-            "Deprecated in 2.3.0. Use spark.udf.register instead.",
-            FutureWarning
-        )
+        warnings.warn("Deprecated in 2.3.0. Use spark.udf.register instead.", FutureWarning)
         return self._sparkSession.udf.register(name, f, returnType)
 
     @since(2.0)
@@ -444,7 +445,7 @@ class Catalog(object):
         """Invalidates and refreshes all the cached data and metadata of the given table."""
         self._jcatalog.refreshTable(tableName)
 
-    @since('2.1.1')
+    @since("2.1.1")
     def recoverPartitions(self, tableName: str) -> None:
         """Recovers all the partitions of the given table and update the catalog.
 
@@ -452,7 +453,7 @@ class Catalog(object):
         """
         self._jcatalog.recoverPartitions(tableName)
 
-    @since('2.2.0')
+    @since("2.2.0")
     def refreshByPath(self, path: str) -> None:
         """Invalidates and refreshes all the cached data (and the associated metadata) for any
         DataFrame that contains the given data source path.
@@ -477,19 +478,18 @@ def _test() -> None:
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.catalog.__dict__.copy()
-    spark = SparkSession.builder\
-        .master("local[4]")\
-        .appName("sql.catalog tests")\
-        .getOrCreate()
-    globs['sc'] = spark.sparkContext
-    globs['spark'] = spark
+    spark = SparkSession.builder.master("local[4]").appName("sql.catalog tests").getOrCreate()
+    globs["sc"] = spark.sparkContext
+    globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.catalog,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
     spark.stop()
     if failure_count:
         sys.exit(-1)
+
 
 if __name__ == "__main__":
     _test()

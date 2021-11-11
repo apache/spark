@@ -29,8 +29,10 @@ import org.apache.spark._
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.CreateAtomicTestManager
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.ExtendedRocksDBTest
 import org.apache.spark.util.{ThreadUtils, Utils}
 
+@ExtendedRocksDBTest
 class RocksDBSuite extends SparkFunSuite {
 
   test("RocksDB: get, put, iterator, commit, load") {

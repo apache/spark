@@ -30,9 +30,11 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedRocksDBTest
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.Utils
 
+@ExtendedRocksDBTest
 class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvider]
   with BeforeAndAfter {
 

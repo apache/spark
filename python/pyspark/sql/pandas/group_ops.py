@@ -83,17 +83,24 @@ class PandasGroupedOpsMixin(object):
         pyspark.sql.functions.pandas_udf
         """
         # Columns are special because hasattr always return True
-        if isinstance(udf, Column) or not hasattr(udf, 'func') or (
-            udf.evalType  # type: ignore[attr-defined]
-            != PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+        if (
+            isinstance(udf, Column)
+            or not hasattr(udf, "func")
+            or (
+                udf.evalType  # type: ignore[attr-defined]
+                != PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+            )
         ):
-            raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
-                             "GROUPED_MAP.")
+            raise ValueError(
+                "Invalid udf: the udf argument must be a pandas_udf of type " "GROUPED_MAP."
+            )
 
         warnings.warn(
             "It is preferred to use 'applyInPandas' over this "
             "API. This API will be deprecated in the future releases. See SPARK-28264 for "
-            "more details.", UserWarning)
+            "more details.",
+            UserWarning,
+        )
 
         return self.applyInPandas(udf.func, schema=udf.returnType)  # type: ignore[attr-defined]
 
@@ -209,8 +216,7 @@ class PandasGroupedOpsMixin(object):
 
         assert isinstance(self, GroupedData)
 
-        udf = pandas_udf(
-            func, returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
+        udf = pandas_udf(func, returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
         jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())  # type: ignore[attr-defined]
@@ -342,7 +348,8 @@ class PandasCogroupedOps(object):
         from pyspark.sql.pandas.functions import pandas_udf
 
         udf = pandas_udf(
-            func, returnType=schema, functionType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF)
+            func, returnType=schema, functionType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF
+        )
         all_cols = self._extract_cols(self._gd1) + self._extract_cols(self._gd2)
         udf_column = udf(*all_cols)
         jdf = self._gd1._jgd.flatMapCoGroupsInPandas(  # type: ignore[attr-defined]
@@ -360,15 +367,15 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.pandas.group_ops
+
     globs = pyspark.sql.pandas.group_ops.__dict__.copy()
-    spark = SparkSession.builder\
-        .master("local[4]")\
-        .appName("sql.pandas.group tests")\
-        .getOrCreate()
-    globs['spark'] = spark
+    spark = SparkSession.builder.master("local[4]").appName("sql.pandas.group tests").getOrCreate()
+    globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.pandas.group_ops, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
+        pyspark.sql.pandas.group_ops,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+    )
     spark.stop()
     if failure_count:
         sys.exit(-1)

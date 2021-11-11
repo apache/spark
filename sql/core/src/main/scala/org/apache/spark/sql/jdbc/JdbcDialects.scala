@@ -35,6 +35,7 @@ import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -294,7 +295,6 @@ abstract class JdbcDialect extends Serializable with Logging{
    * Build a create index SQL statement.
    *
    * @param indexName         the name of the index to be created
-   * @param indexType         the type of the index to be created
    * @param tableName         the table on which index to be created
    * @param columns           the columns on which index to be created
    * @param columnsProperties the properties of the columns on which index to be created
@@ -303,7 +303,6 @@ abstract class JdbcDialect extends Serializable with Logging{
    */
   def createIndex(
       indexName: String,
-      indexType: String,
       tableName: String,
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
@@ -370,6 +369,11 @@ abstract class JdbcDialect extends Serializable with Logging{
    * returns whether the dialect supports limit or not
    */
   def supportsLimit(): Boolean = true
+
+  def supportsTableSample: Boolean = false
+
+  def getTableSample(sample: TableSampleInfo): String =
+    throw new UnsupportedOperationException("TableSample is not supported by this data source")
 }
 
 /**

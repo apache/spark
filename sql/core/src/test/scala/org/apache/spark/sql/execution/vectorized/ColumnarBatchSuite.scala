@@ -1688,6 +1688,43 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-37161: RowToColumnConverter for AnsiIntervalType") {
+    DataTypeTestUtils.yearMonthIntervalTypes.foreach { dt =>
+      val schema = new StructType().add(dt.typeName, dt)
+      val converter = new RowToColumnConverter(schema)
+      val columns = OnHeapColumnVector.allocateColumns(10, schema)
+      try {
+        assert(columns(0).dataType() == dt)
+        (0 until 9).foreach { i =>
+          val row = new GenericInternalRow(Array[Any](i))
+          converter.convert(row, columns.toArray)
+          assert(columns(0).getInt(i) == i)
+        }
+        converter.convert(new GenericInternalRow(Array[Any](null)), columns.toArray)
+        assert(columns(0).isNullAt(9))
+      } finally {
+        columns.foreach(_.close())
+      }
+    }
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt =>
+      val schema = new StructType().add(dt.typeName, dt)
+      val converter = new RowToColumnConverter(schema)
+      val columns = OnHeapColumnVector.allocateColumns(10, schema)
+      try {
+        assert(columns(0).dataType() == dt)
+        (0 until 9).foreach { i =>
+          val row = new GenericInternalRow(Array[Any](i.toLong))
+          converter.convert(row, columns.toArray)
+          assert(columns(0).getLong(i) == i)
+        }
+        converter.convert(new GenericInternalRow(Array[Any](null)), columns.toArray)
+        assert(columns(0).isNullAt(9))
+      } finally {
+        columns.foreach(_.close())
+      }
+    }
+  }
+
   testVector("Decimal API", 4, DecimalType.IntDecimal) {
     column =>
 

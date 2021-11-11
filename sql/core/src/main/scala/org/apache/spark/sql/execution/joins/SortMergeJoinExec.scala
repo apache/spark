@@ -655,7 +655,8 @@ case class SortMergeJoinExec(
     // Create variables for row from both sides.
     val (streamedVars, streamedVarDecl) = createStreamedVars(ctx, streamedRow)
     val bufferedRow = ctx.freshName("bufferedRow")
-    val bufferedVars = genBuildSideVars(ctx, bufferedRow, bufferedPlan)
+    val setDefaultValue = joinType == LeftOuter || joinType == RightOuter
+    val bufferedVars = genOneSideJoinVars(ctx, bufferedRow, bufferedPlan, setDefaultValue)
 
     val iterator = ctx.freshName("iterator")
     val numOutput = metricTerm(ctx, "numOutputRows")

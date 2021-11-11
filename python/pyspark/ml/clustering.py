@@ -19,20 +19,49 @@ import sys
 import warnings
 
 from pyspark import since, keyword_only
-from pyspark.ml.param.shared import HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol, \
-    HasAggregationDepth, HasWeightCol, HasTol, HasProbabilityCol, HasDistanceMeasure, \
-    HasCheckpointInterval, Param, Params, TypeConverters
-from pyspark.ml.util import JavaMLWritable, JavaMLReadable, GeneralJavaMLWritable, \
-    HasTrainingSummary, SparkContext
+from pyspark.ml.param.shared import (
+    HasMaxIter,
+    HasFeaturesCol,
+    HasSeed,
+    HasPredictionCol,
+    HasAggregationDepth,
+    HasWeightCol,
+    HasTol,
+    HasProbabilityCol,
+    HasDistanceMeasure,
+    HasCheckpointInterval,
+    Param,
+    Params,
+    TypeConverters,
+)
+from pyspark.ml.util import (
+    JavaMLWritable,
+    JavaMLReadable,
+    GeneralJavaMLWritable,
+    HasTrainingSummary,
+    SparkContext,
+)
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaWrapper
 from pyspark.ml.common import inherit_doc, _java2py
 from pyspark.ml.stat import MultivariateGaussian
 from pyspark.sql import DataFrame
 
-__all__ = ['BisectingKMeans', 'BisectingKMeansModel', 'BisectingKMeansSummary',
-           'KMeans', 'KMeansModel', 'KMeansSummary',
-           'GaussianMixture', 'GaussianMixtureModel', 'GaussianMixtureSummary',
-           'LDA', 'LDAModel', 'LocalLDAModel', 'DistributedLDAModel', 'PowerIterationClustering']
+__all__ = [
+    "BisectingKMeans",
+    "BisectingKMeansModel",
+    "BisectingKMeansSummary",
+    "KMeans",
+    "KMeansModel",
+    "KMeansSummary",
+    "GaussianMixture",
+    "GaussianMixtureModel",
+    "GaussianMixtureSummary",
+    "LDA",
+    "LDAModel",
+    "LocalLDAModel",
+    "DistributedLDAModel",
+    "PowerIterationClustering",
+]
 
 
 class ClusteringSummary(JavaWrapper):
@@ -100,16 +129,28 @@ class ClusteringSummary(JavaWrapper):
 
 
 @inherit_doc
-class _GaussianMixtureParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol,
-                             HasProbabilityCol, HasTol, HasAggregationDepth, HasWeightCol):
+class _GaussianMixtureParams(
+    HasMaxIter,
+    HasFeaturesCol,
+    HasSeed,
+    HasPredictionCol,
+    HasProbabilityCol,
+    HasTol,
+    HasAggregationDepth,
+    HasWeightCol,
+):
     """
     Params for :py:class:`GaussianMixture` and :py:class:`GaussianMixtureModel`.
 
     .. versionadded:: 3.0.0
     """
 
-    k = Param(Params._dummy(), "k", "Number of independent Gaussians in the mixture model. " +
-              "Must be > 1.", typeConverter=TypeConverters.toInt)
+    k = Param(
+        Params._dummy(),
+        "k",
+        "Number of independent Gaussians in the mixture model. " + "Must be > 1.",
+        typeConverter=TypeConverters.toInt,
+    )
 
     def __init__(self, *args):
         super(_GaussianMixtureParams, self).__init__(*args)
@@ -123,8 +164,9 @@ class _GaussianMixtureParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionC
         return self.getOrDefault(self.k)
 
 
-class GaussianMixtureModel(JavaModel, _GaussianMixtureParams, JavaMLWritable, JavaMLReadable,
-                           HasTrainingSummary):
+class GaussianMixtureModel(
+    JavaModel, _GaussianMixtureParams, JavaMLWritable, JavaMLReadable, HasTrainingSummary
+):
     """
     Model fitted by GaussianMixture.
 
@@ -173,7 +215,8 @@ class GaussianMixtureModel(JavaModel, _GaussianMixtureParams, JavaMLWritable, Ja
         jgaussians = self._java_obj.gaussians()
         return [
             MultivariateGaussian(_java2py(sc, jgaussian.mean()), _java2py(sc, jgaussian.cov()))
-            for jgaussian in jgaussians]
+            for jgaussian in jgaussians
+        ]
 
     @property
     @since("2.0.0")
@@ -195,8 +238,9 @@ class GaussianMixtureModel(JavaModel, _GaussianMixtureParams, JavaMLWritable, Ja
         if self.hasSummary:
             return GaussianMixtureSummary(super(GaussianMixtureModel, self).summary)
         else:
-            raise RuntimeError("No training summary available for this %s" %
-                               self.__class__.__name__)
+            raise RuntimeError(
+                "No training summary available for this %s" % self.__class__.__name__
+            )
 
     @since("3.0.0")
     def predict(self, value):
@@ -336,17 +380,28 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     """
 
     @keyword_only
-    def __init__(self, *, featuresCol="features", predictionCol="prediction", k=2,
-                 probabilityCol="probability", tol=0.01, maxIter=100, seed=None,
-                 aggregationDepth=2, weightCol=None):
+    def __init__(
+        self,
+        *,
+        featuresCol="features",
+        predictionCol="prediction",
+        k=2,
+        probabilityCol="probability",
+        tol=0.01,
+        maxIter=100,
+        seed=None,
+        aggregationDepth=2,
+        weightCol=None,
+    ):
         """
         __init__(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None, \
                  aggregationDepth=2, weightCol=None)
         """
         super(GaussianMixture, self).__init__()
-        self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.GaussianMixture",
-                                            self.uid)
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.clustering.GaussianMixture", self.uid
+        )
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -355,9 +410,19 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, *, featuresCol="features", predictionCol="prediction", k=2,
-                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None,
-                  aggregationDepth=2, weightCol=None):
+    def setParams(
+        self,
+        *,
+        featuresCol="features",
+        predictionCol="prediction",
+        k=2,
+        probabilityCol="probability",
+        tol=0.01,
+        maxIter=100,
+        seed=None,
+        aggregationDepth=2,
+        weightCol=None,
+    ):
         """
         setParams(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                   probabilityCol="probability", tol=0.01, maxIter=100, seed=None, \
@@ -482,28 +547,46 @@ class KMeansSummary(ClusteringSummary):
 
 
 @inherit_doc
-class _KMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol, HasTol,
-                    HasDistanceMeasure, HasWeightCol):
+class _KMeansParams(
+    HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol, HasTol, HasDistanceMeasure, HasWeightCol
+):
     """
     Params for :py:class:`KMeans` and :py:class:`KMeansModel`.
 
     .. versionadded:: 3.0.0
     """
 
-    k = Param(Params._dummy(), "k", "The number of clusters to create. Must be > 1.",
-              typeConverter=TypeConverters.toInt)
-    initMode = Param(Params._dummy(), "initMode",
-                     "The initialization algorithm. This can be either \"random\" to " +
-                     "choose random points as initial cluster centers, or \"k-means||\" " +
-                     "to use a parallel variant of k-means++",
-                     typeConverter=TypeConverters.toString)
-    initSteps = Param(Params._dummy(), "initSteps", "The number of steps for k-means|| " +
-                      "initialization mode. Must be > 0.", typeConverter=TypeConverters.toInt)
+    k = Param(
+        Params._dummy(),
+        "k",
+        "The number of clusters to create. Must be > 1.",
+        typeConverter=TypeConverters.toInt,
+    )
+    initMode = Param(
+        Params._dummy(),
+        "initMode",
+        'The initialization algorithm. This can be either "random" to '
+        + 'choose random points as initial cluster centers, or "k-means||" '
+        + "to use a parallel variant of k-means++",
+        typeConverter=TypeConverters.toString,
+    )
+    initSteps = Param(
+        Params._dummy(),
+        "initSteps",
+        "The number of steps for k-means|| " + "initialization mode. Must be > 0.",
+        typeConverter=TypeConverters.toInt,
+    )
 
     def __init__(self, *args):
         super(_KMeansParams, self).__init__(*args)
-        self._setDefault(k=2, initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20,
-                         distanceMeasure="euclidean")
+        self._setDefault(
+            k=2,
+            initMode="k-means||",
+            initSteps=2,
+            tol=1e-4,
+            maxIter=20,
+            distanceMeasure="euclidean",
+        )
 
     @since("1.5.0")
     def getK(self):
@@ -527,8 +610,9 @@ class _KMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol, HasTo
         return self.getOrDefault(self.initSteps)
 
 
-class KMeansModel(JavaModel, _KMeansParams, GeneralJavaMLWritable, JavaMLReadable,
-                  HasTrainingSummary):
+class KMeansModel(
+    JavaModel, _KMeansParams, GeneralJavaMLWritable, JavaMLReadable, HasTrainingSummary
+):
     """
     Model fitted by KMeans.
 
@@ -564,8 +648,9 @@ class KMeansModel(JavaModel, _KMeansParams, GeneralJavaMLWritable, JavaMLReadabl
         if self.hasSummary:
             return KMeansSummary(super(KMeansModel, self).summary)
         else:
-            raise RuntimeError("No training summary available for this %s" %
-                               self.__class__.__name__)
+            raise RuntimeError(
+                "No training summary available for this %s" % self.__class__.__name__
+            )
 
     @since("3.0.0")
     def predict(self, value):
@@ -643,9 +728,20 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
     """
 
     @keyword_only
-    def __init__(self, *, featuresCol="features", predictionCol="prediction", k=2,
-                 initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None,
-                 distanceMeasure="euclidean", weightCol=None):
+    def __init__(
+        self,
+        *,
+        featuresCol="features",
+        predictionCol="prediction",
+        k=2,
+        initMode="k-means||",
+        initSteps=2,
+        tol=1e-4,
+        maxIter=20,
+        seed=None,
+        distanceMeasure="euclidean",
+        weightCol=None,
+    ):
         """
         __init__(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
@@ -661,9 +757,20 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
 
     @keyword_only
     @since("1.5.0")
-    def setParams(self, *, featuresCol="features", predictionCol="prediction", k=2,
-                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None,
-                  distanceMeasure="euclidean", weightCol=None):
+    def setParams(
+        self,
+        *,
+        featuresCol="features",
+        predictionCol="prediction",
+        k=2,
+        initMode="k-means||",
+        initSteps=2,
+        tol=1e-4,
+        maxIter=20,
+        seed=None,
+        distanceMeasure="euclidean",
+        weightCol=None,
+    ):
         """
         setParams(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                   initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
@@ -746,20 +853,28 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
 
 
 @inherit_doc
-class _BisectingKMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol,
-                             HasDistanceMeasure, HasWeightCol):
+class _BisectingKMeansParams(
+    HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol, HasDistanceMeasure, HasWeightCol
+):
     """
     Params for :py:class:`BisectingKMeans` and :py:class:`BisectingKMeansModel`.
 
     .. versionadded:: 3.0.0
     """
 
-    k = Param(Params._dummy(), "k", "The desired number of leaf clusters. Must be > 1.",
-              typeConverter=TypeConverters.toInt)
-    minDivisibleClusterSize = Param(Params._dummy(), "minDivisibleClusterSize",
-                                    "The minimum number of points (if >= 1.0) or the minimum " +
-                                    "proportion of points (if < 1.0) of a divisible cluster.",
-                                    typeConverter=TypeConverters.toFloat)
+    k = Param(
+        Params._dummy(),
+        "k",
+        "The desired number of leaf clusters. Must be > 1.",
+        typeConverter=TypeConverters.toInt,
+    )
+    minDivisibleClusterSize = Param(
+        Params._dummy(),
+        "minDivisibleClusterSize",
+        "The minimum number of points (if >= 1.0) or the minimum "
+        + "proportion of points (if < 1.0) of a divisible cluster.",
+        typeConverter=TypeConverters.toFloat,
+    )
 
     def __init__(self, *args):
         super(_BisectingKMeansParams, self).__init__(*args)
@@ -780,8 +895,9 @@ class _BisectingKMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionC
         return self.getOrDefault(self.minDivisibleClusterSize)
 
 
-class BisectingKMeansModel(JavaModel, _BisectingKMeansParams, JavaMLWritable, JavaMLReadable,
-                           HasTrainingSummary):
+class BisectingKMeansModel(
+    JavaModel, _BisectingKMeansParams, JavaMLWritable, JavaMLReadable, HasTrainingSummary
+):
     """
     Model fitted by BisectingKMeans.
 
@@ -817,9 +933,12 @@ class BisectingKMeansModel(JavaModel, _BisectingKMeansParams, JavaMLWritable, Ja
             It will be removed in future versions. Use :py:class:`ClusteringEvaluator` instead.
             You can also get the cost on the training dataset in the summary.
         """
-        warnings.warn("Deprecated in 3.0.0. It will be removed in future versions. Use "
-                      "ClusteringEvaluator instead. You can also get the cost on the training "
-                      "dataset in the summary.", FutureWarning)
+        warnings.warn(
+            "Deprecated in 3.0.0. It will be removed in future versions. Use "
+            "ClusteringEvaluator instead. You can also get the cost on the training "
+            "dataset in the summary.",
+            FutureWarning,
+        )
         return self._call_java("computeCost", dataset)
 
     @property
@@ -832,8 +951,9 @@ class BisectingKMeansModel(JavaModel, _BisectingKMeansParams, JavaMLWritable, Ja
         if self.hasSummary:
             return BisectingKMeansSummary(super(BisectingKMeansModel, self).summary)
         else:
-            raise RuntimeError("No training summary available for this %s" %
-                               self.__class__.__name__)
+            raise RuntimeError(
+                "No training summary available for this %s" % self.__class__.__name__
+            )
 
     @since("3.0.0")
     def predict(self, value):
@@ -924,25 +1044,44 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
     """
 
     @keyword_only
-    def __init__(self, *, featuresCol="features", predictionCol="prediction", maxIter=20,
-                 seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean",
-                 weightCol=None):
+    def __init__(
+        self,
+        *,
+        featuresCol="features",
+        predictionCol="prediction",
+        maxIter=20,
+        seed=None,
+        k=4,
+        minDivisibleClusterSize=1.0,
+        distanceMeasure="euclidean",
+        weightCol=None,
+    ):
         """
         __init__(self, \\*, featuresCol="features", predictionCol="prediction", maxIter=20, \
                  seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean", \
                  weightCol=None)
         """
         super(BisectingKMeans, self).__init__()
-        self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.BisectingKMeans",
-                                            self.uid)
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.clustering.BisectingKMeans", self.uid
+        )
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, *, featuresCol="features", predictionCol="prediction", maxIter=20,
-                  seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean",
-                  weightCol=None):
+    def setParams(
+        self,
+        *,
+        featuresCol="features",
+        predictionCol="prediction",
+        maxIter=20,
+        seed=None,
+        k=4,
+        minDivisibleClusterSize=1.0,
+        distanceMeasure="euclidean",
+        weightCol=None,
+    ):
         """
         setParams(self, \\*, featuresCol="features", predictionCol="prediction", maxIter=20, \
                   seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean", \
@@ -1037,52 +1176,95 @@ class _LDAParams(HasMaxIter, HasFeaturesCol, HasSeed, HasCheckpointInterval):
     .. versionadded:: 3.0.0
     """
 
-    k = Param(Params._dummy(), "k", "The number of topics (clusters) to infer. Must be > 1.",
-              typeConverter=TypeConverters.toInt)
-    optimizer = Param(Params._dummy(), "optimizer",
-                      "Optimizer or inference algorithm used to estimate the LDA model.  "
-                      "Supported: online, em", typeConverter=TypeConverters.toString)
-    learningOffset = Param(Params._dummy(), "learningOffset",
-                           "A (positive) learning parameter that downweights early iterations."
-                           " Larger values make early iterations count less",
-                           typeConverter=TypeConverters.toFloat)
-    learningDecay = Param(Params._dummy(), "learningDecay", "Learning rate, set as an"
-                          "exponential decay rate. This should be between (0.5, 1.0] to "
-                          "guarantee asymptotic convergence.", typeConverter=TypeConverters.toFloat)
-    subsamplingRate = Param(Params._dummy(), "subsamplingRate",
-                            "Fraction of the corpus to be sampled and used in each iteration "
-                            "of mini-batch gradient descent, in range (0, 1].",
-                            typeConverter=TypeConverters.toFloat)
-    optimizeDocConcentration = Param(Params._dummy(), "optimizeDocConcentration",
-                                     "Indicates whether the docConcentration (Dirichlet parameter "
-                                     "for document-topic distribution) will be optimized during "
-                                     "training.", typeConverter=TypeConverters.toBoolean)
-    docConcentration = Param(Params._dummy(), "docConcentration",
-                             "Concentration parameter (commonly named \"alpha\") for the "
-                             "prior placed on documents' distributions over topics (\"theta\").",
-                             typeConverter=TypeConverters.toListFloat)
-    topicConcentration = Param(Params._dummy(), "topicConcentration",
-                               "Concentration parameter (commonly named \"beta\" or \"eta\") for "
-                               "the prior placed on topic' distributions over terms.",
-                               typeConverter=TypeConverters.toFloat)
-    topicDistributionCol = Param(Params._dummy(), "topicDistributionCol",
-                                 "Output column with estimates of the topic mixture distribution "
-                                 "for each document (often called \"theta\" in the literature). "
-                                 "Returns a vector of zeros for an empty document.",
-                                 typeConverter=TypeConverters.toString)
-    keepLastCheckpoint = Param(Params._dummy(), "keepLastCheckpoint",
-                               "(For EM optimizer) If using checkpointing, this indicates whether"
-                               " to keep the last checkpoint. If false, then the checkpoint will be"
-                               " deleted. Deleting the checkpoint can cause failures if a data"
-                               " partition is lost, so set this bit with care.",
-                               TypeConverters.toBoolean)
+    k = Param(
+        Params._dummy(),
+        "k",
+        "The number of topics (clusters) to infer. Must be > 1.",
+        typeConverter=TypeConverters.toInt,
+    )
+    optimizer = Param(
+        Params._dummy(),
+        "optimizer",
+        "Optimizer or inference algorithm used to estimate the LDA model.  "
+        "Supported: online, em",
+        typeConverter=TypeConverters.toString,
+    )
+    learningOffset = Param(
+        Params._dummy(),
+        "learningOffset",
+        "A (positive) learning parameter that downweights early iterations."
+        " Larger values make early iterations count less",
+        typeConverter=TypeConverters.toFloat,
+    )
+    learningDecay = Param(
+        Params._dummy(),
+        "learningDecay",
+        "Learning rate, set as an"
+        "exponential decay rate. This should be between (0.5, 1.0] to "
+        "guarantee asymptotic convergence.",
+        typeConverter=TypeConverters.toFloat,
+    )
+    subsamplingRate = Param(
+        Params._dummy(),
+        "subsamplingRate",
+        "Fraction of the corpus to be sampled and used in each iteration "
+        "of mini-batch gradient descent, in range (0, 1].",
+        typeConverter=TypeConverters.toFloat,
+    )
+    optimizeDocConcentration = Param(
+        Params._dummy(),
+        "optimizeDocConcentration",
+        "Indicates whether the docConcentration (Dirichlet parameter "
+        "for document-topic distribution) will be optimized during "
+        "training.",
+        typeConverter=TypeConverters.toBoolean,
+    )
+    docConcentration = Param(
+        Params._dummy(),
+        "docConcentration",
+        'Concentration parameter (commonly named "alpha") for the '
+        'prior placed on documents\' distributions over topics ("theta").',
+        typeConverter=TypeConverters.toListFloat,
+    )
+    topicConcentration = Param(
+        Params._dummy(),
+        "topicConcentration",
+        'Concentration parameter (commonly named "beta" or "eta") for '
+        "the prior placed on topic' distributions over terms.",
+        typeConverter=TypeConverters.toFloat,
+    )
+    topicDistributionCol = Param(
+        Params._dummy(),
+        "topicDistributionCol",
+        "Output column with estimates of the topic mixture distribution "
+        'for each document (often called "theta" in the literature). '
+        "Returns a vector of zeros for an empty document.",
+        typeConverter=TypeConverters.toString,
+    )
+    keepLastCheckpoint = Param(
+        Params._dummy(),
+        "keepLastCheckpoint",
+        "(For EM optimizer) If using checkpointing, this indicates whether"
+        " to keep the last checkpoint. If false, then the checkpoint will be"
+        " deleted. Deleting the checkpoint can cause failures if a data"
+        " partition is lost, so set this bit with care.",
+        TypeConverters.toBoolean,
+    )
 
     def __init__(self, *args):
         super(_LDAParams, self).__init__(*args)
-        self._setDefault(maxIter=20, checkpointInterval=10,
-                         k=10, optimizer="online", learningOffset=1024.0, learningDecay=0.51,
-                         subsamplingRate=0.05, optimizeDocConcentration=True,
-                         topicDistributionCol="topicDistribution", keepLastCheckpoint=True)
+        self._setDefault(
+            maxIter=20,
+            checkpointInterval=10,
+            k=10,
+            optimizer="online",
+            learningOffset=1024.0,
+            learningDecay=0.51,
+            subsamplingRate=0.05,
+            optimizeDocConcentration=True,
+            topicDistributionCol="topicDistribution",
+            keepLastCheckpoint=True,
+        )
 
     @since("2.0.0")
     def getK(self):
@@ -1336,6 +1518,7 @@ class LocalLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
 
     .. versionadded:: 2.0.0
     """
+
     pass
 
 
@@ -1411,11 +1594,24 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
     """
 
     @keyword_only
-    def __init__(self, *, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,
-                 k=10, optimizer="online", learningOffset=1024.0, learningDecay=0.51,
-                 subsamplingRate=0.05, optimizeDocConcentration=True,
-                 docConcentration=None, topicConcentration=None,
-                 topicDistributionCol="topicDistribution", keepLastCheckpoint=True):
+    def __init__(
+        self,
+        *,
+        featuresCol="features",
+        maxIter=20,
+        seed=None,
+        checkpointInterval=10,
+        k=10,
+        optimizer="online",
+        learningOffset=1024.0,
+        learningDecay=0.51,
+        subsamplingRate=0.05,
+        optimizeDocConcentration=True,
+        docConcentration=None,
+        topicConcentration=None,
+        topicDistributionCol="topicDistribution",
+        keepLastCheckpoint=True,
+    ):
         """
         __init__(self, \\*, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,\
                   k=10, optimizer="online", learningOffset=1024.0, learningDecay=0.51,\
@@ -1436,11 +1632,24 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, *, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,
-                  k=10, optimizer="online", learningOffset=1024.0, learningDecay=0.51,
-                  subsamplingRate=0.05, optimizeDocConcentration=True,
-                  docConcentration=None, topicConcentration=None,
-                  topicDistributionCol="topicDistribution", keepLastCheckpoint=True):
+    def setParams(
+        self,
+        *,
+        featuresCol="features",
+        maxIter=20,
+        seed=None,
+        checkpointInterval=10,
+        k=10,
+        optimizer="online",
+        learningOffset=1024.0,
+        learningDecay=0.51,
+        subsamplingRate=0.05,
+        optimizeDocConcentration=True,
+        docConcentration=None,
+        topicConcentration=None,
+        topicDistributionCol="topicDistribution",
+        keepLastCheckpoint=True,
+    ):
         """
         setParams(self, \\*, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,\
                   k=10, optimizer="online", learningOffset=1024.0, learningDecay=0.51,\
@@ -1619,21 +1828,33 @@ class _PowerIterationClusteringParams(HasMaxIter, HasWeightCol):
     .. versionadded:: 3.0.0
     """
 
-    k = Param(Params._dummy(), "k",
-              "The number of clusters to create. Must be > 1.",
-              typeConverter=TypeConverters.toInt)
-    initMode = Param(Params._dummy(), "initMode",
-                     "The initialization algorithm. This can be either " +
-                     "'random' to use a random vector as vertex properties, or 'degree' to use " +
-                     "a normalized sum of similarities with other vertices.  Supported options: " +
-                     "'random' and 'degree'.",
-                     typeConverter=TypeConverters.toString)
-    srcCol = Param(Params._dummy(), "srcCol",
-                   "Name of the input column for source vertex IDs.",
-                   typeConverter=TypeConverters.toString)
-    dstCol = Param(Params._dummy(), "dstCol",
-                   "Name of the input column for destination vertex IDs.",
-                   typeConverter=TypeConverters.toString)
+    k = Param(
+        Params._dummy(),
+        "k",
+        "The number of clusters to create. Must be > 1.",
+        typeConverter=TypeConverters.toInt,
+    )
+    initMode = Param(
+        Params._dummy(),
+        "initMode",
+        "The initialization algorithm. This can be either "
+        + "'random' to use a random vector as vertex properties, or 'degree' to use "
+        + "a normalized sum of similarities with other vertices.  Supported options: "
+        + "'random' and 'degree'.",
+        typeConverter=TypeConverters.toString,
+    )
+    srcCol = Param(
+        Params._dummy(),
+        "srcCol",
+        "Name of the input column for source vertex IDs.",
+        typeConverter=TypeConverters.toString,
+    )
+    dstCol = Param(
+        Params._dummy(),
+        "dstCol",
+        "Name of the input column for destination vertex IDs.",
+        typeConverter=TypeConverters.toString,
+    )
 
     def __init__(self, *args):
         super(_PowerIterationClusteringParams, self).__init__(*args)
@@ -1669,8 +1890,9 @@ class _PowerIterationClusteringParams(HasMaxIter, HasWeightCol):
 
 
 @inherit_doc
-class PowerIterationClustering(_PowerIterationClusteringParams, JavaParams, JavaMLReadable,
-                               JavaMLWritable):
+class PowerIterationClustering(
+    _PowerIterationClusteringParams, JavaParams, JavaMLReadable, JavaMLWritable
+):
     """
     Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
     `Lin and Cohen <http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf>`_. From the
@@ -1722,22 +1944,25 @@ class PowerIterationClustering(_PowerIterationClusteringParams, JavaParams, Java
     """
 
     @keyword_only
-    def __init__(self, *, k=2, maxIter=20, initMode="random", srcCol="src", dstCol="dst",
-                 weightCol=None):
+    def __init__(
+        self, *, k=2, maxIter=20, initMode="random", srcCol="src", dstCol="dst", weightCol=None
+    ):
         """
         __init__(self, \\*, k=2, maxIter=20, initMode="random", srcCol="src", dstCol="dst",\
                  weightCol=None)
         """
         super(PowerIterationClustering, self).__init__()
         self._java_obj = self._new_java_obj(
-            "org.apache.spark.ml.clustering.PowerIterationClustering", self.uid)
+            "org.apache.spark.ml.clustering.PowerIterationClustering", self.uid
+        )
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.4.0")
-    def setParams(self, *, k=2, maxIter=20, initMode="random", srcCol="src", dstCol="dst",
-                  weightCol=None):
+    def setParams(
+        self, *, k=2, maxIter=20, initMode="random", srcCol="src", dstCol="dst", weightCol=None
+    ):
         """
         setParams(self, \\*, k=2, maxIter=20, initMode="random", srcCol="src", dstCol="dst",\
                   weightCol=None)
@@ -1822,29 +2047,29 @@ if __name__ == "__main__":
     import numpy
     import pyspark.ml.clustering
     from pyspark.sql import SparkSession
+
     try:
         # Numpy 1.14+ changed it's string format.
-        numpy.set_printoptions(legacy='1.13')
+        numpy.set_printoptions(legacy="1.13")
     except TypeError:
         pass
     globs = pyspark.ml.clustering.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    spark = SparkSession.builder\
-        .master("local[2]")\
-        .appName("ml.clustering tests")\
-        .getOrCreate()
+    spark = SparkSession.builder.master("local[2]").appName("ml.clustering tests").getOrCreate()
     sc = spark.sparkContext
-    globs['sc'] = sc
-    globs['spark'] = spark
+    globs["sc"] = sc
+    globs["spark"] = spark
     import tempfile
+
     temp_path = tempfile.mkdtemp()
-    globs['temp_path'] = temp_path
+    globs["temp_path"] = temp_path
     try:
         (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
         spark.stop()
     finally:
         from shutil import rmtree
+
         try:
             rmtree(temp_path)
         except OSError:

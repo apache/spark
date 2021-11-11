@@ -27,9 +27,10 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.commons.codec.binary.{Base64 => CommonsBase64}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -1328,25 +1329,31 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
 
 }
 
-/**
- * Helper class for implementing StringLPad and StringRPad.
- * Returns the default expression to be used in StringLPad or StringRPad based on the type of
- * the input expression.
- * For character string expressions the default padding expression is the string literal ' '.
- * For byte sequence expressions the default padding expression is the byte literal 0x00.
- */
-object StringPadDefaultValue {
-  def get(str: Expression): Expression = {
-    str.dataType match {
-      case StringType => Literal(" ")
-      case BinaryType => Literal(Array[Byte](0))
+trait PadExpressionBuilderBase extends ExpressionBuilder {
+  override def build(expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 2) {
+      if (expressions(0).dataType == BinaryType) {
+        createBinaryPad(expressions(0), expressions(1), Literal(Array[Byte](0)))
+      } else {
+        createStringPad(expressions(0), expressions(1), Literal(" "))
+      }
+    } else if (numArgs == 3) {
+      if (expressions(0).dataType == BinaryType && expressions(2).dataType == BinaryType) {
+        createBinaryPad(expressions(0), expressions(1), expressions(2))
+      } else {
+        createStringPad(expressions(0), expressions(1), expressions(2))
+      }
+    } else {
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2, 3), funcName, numArgs)
     }
   }
+
+  protected def funcName: String
+  protected def createBinaryPad(str: Expression, len: Expression, pad: Expression): Expression
+  protected def createStringPad(str: Expression, len: Expression, pad: Expression): Expression
 }
 
-/**
- * Returns str, left-padded with pad to a length of len.
- */
 @ExpressionDescription(
   usage = """
     _FUNC_(str, len[, pad]) - Returns `str`, left-padded with `pad` to a length of `len`.
@@ -1363,52 +1370,39 @@ object StringPadDefaultValue {
       > SELECT _FUNC_('hi', 5);
           hi
       > SELECT hex(_FUNC_(unhex('aabb'), 5));
-          000000AABB
+       000000AABB
       > SELECT hex(_FUNC_(unhex('aabb'), 5, unhex('1122')));
-          112211AABB
+       112211AABB
   """,
   since = "1.5.0",
   group = "string_funcs")
-case class StringLPad(str: Expression, len: Expression, pad: Expression = Literal(" "))
-  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  def this(str: Expression, len: Expression) = {
-    this(str, len, StringPadDefaultValue.get(str))
+object LPadExpressionBuilder extends PadExpressionBuilderBase {
+  override def funcName: String = "lpad"
+  override def createBinaryPad(str: Expression, len: Expression, pad: Expression): Expression = {
+    new BinaryLPad(str, len, pad)
   }
+  override def createStringPad(str: Expression, len: Expression, pad: Expression): Expression = {
+    StringLPad(str, len, pad)
+  }
+}
+
+case class StringLPad(str: Expression, len: Expression, pad: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def first: Expression = str
   override def second: Expression = len
   override def third: Expression = pad
 
   override def dataType: DataType = str.dataType
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringType, BinaryType), IntegerType, TypeCollection(StringType, BinaryType))
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case fail: TypeCheckResult.TypeCheckFailure => fail
-      case _ if str.dataType != pad.dataType =>
-        TypeCheckResult.TypeCheckFailure(
-          s"Arguments 'str' and 'pad' of function '$prettyName' must be the same type.")
-      case other => other
-    }
-  }
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, StringType)
 
   override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
-    str.dataType match {
-      case StringType => string.asInstanceOf[UTF8String]
-        .lpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
-      case BinaryType => ByteArray.lpad(string.asInstanceOf[Array[Byte]],
-        len.asInstanceOf[Int], pad.asInstanceOf[Array[Byte]])
-    }
+    string.asInstanceOf[UTF8String].lpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (string, len, pad) => {
-      str.dataType match {
-        case StringType => s"$string.lpad($len, $pad)"
-        case BinaryType => s"${classOf[ByteArray].getName}.lpad($string, $len, $pad)"
-      }
+      s"$string.lpad($len, $pad)"
     })
   }
 
@@ -1419,9 +1413,23 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression = Litera
     copy(str = newFirst, len = newSecond, pad = newThird)
 }
 
-/**
- * Returns str, right-padded with pad to a length of len.
- */
+case class BinaryLPad(str: Expression, len: Expression, pad: Expression, child: Expression)
+  extends RuntimeReplaceable {
+
+  def this(str: Expression, len: Expression, pad: Expression) = this(str, len, pad, StaticInvoke(
+    classOf[ByteArray],
+    BinaryType,
+    "lpad",
+    Seq(str, len, pad),
+    Seq(BinaryType, IntegerType, BinaryType),
+    returnNullable = false)
+  )
+
+  override def prettyName: String = "lpad"
+  def exprsReplaced: Seq[Expression] = Seq(str, len, pad)
+  protected def withNewChildInternal(newChild: Expression): BinaryLPad = copy(child = newChild)
+}
+
 @ExpressionDescription(
   usage = """
     _FUNC_(str, len[, pad]) - Returns `str`, right-padded with `pad` to a length of `len`.
@@ -1438,51 +1446,39 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression = Litera
       > SELECT _FUNC_('hi', 5);
        hi
       > SELECT hex(_FUNC_(unhex('aabb'), 5));
-          AABB000000
+       AABB000000
       > SELECT hex(_FUNC_(unhex('aabb'), 5, unhex('1122')));
-          AABB112211
+       AABB112211
   """,
   since = "1.5.0",
   group = "string_funcs")
+object RPadExpressionBuilder extends PadExpressionBuilderBase {
+  override def funcName: String = "rpad"
+  override def createBinaryPad(str: Expression, len: Expression, pad: Expression): Expression = {
+    new BinaryRPad(str, len, pad)
+  }
+  override def createStringPad(str: Expression, len: Expression, pad: Expression): Expression = {
+    StringRPad(str, len, pad)
+  }
+}
+
 case class StringRPad(str: Expression, len: Expression, pad: Expression = Literal(" "))
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  def this(str: Expression, len: Expression) = {
-    this(str, len, StringPadDefaultValue.get(str))
-  }
 
   override def first: Expression = str
   override def second: Expression = len
   override def third: Expression = pad
 
   override def dataType: DataType = str.dataType
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringType, BinaryType), IntegerType, TypeCollection(StringType, BinaryType))
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case fail: TypeCheckResult.TypeCheckFailure => fail
-      case _ if str.dataType != pad.dataType =>
-        TypeCheckResult.TypeCheckFailure(
-          s"Arguments 'str' and 'pad' of function '$prettyName' must be the same type.")
-      case other => other
-    }
-  }
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, StringType)
 
   override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
-    str.dataType match {
-      case StringType => string.asInstanceOf[UTF8String]
-        .rpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
-      case BinaryType => ByteArray.rpad(string.asInstanceOf[Array[Byte]],
-        len.asInstanceOf[Int], pad.asInstanceOf[Array[Byte]])
-    }
+    string.asInstanceOf[UTF8String].rpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (string, len, pad) => {
-      str.dataType match {
-        case StringType => s"$string.rpad($len, $pad)"
-        case BinaryType => s"${classOf[ByteArray].getName}.rpad($string, $len, $pad)"
-      }
+      s"$string.rpad($len, $pad)"
     })
   }
 
@@ -1491,6 +1487,23 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression = Litera
   override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): StringRPad =
     copy(str = newFirst, len = newSecond, pad = newThird)
+}
+
+case class BinaryRPad(str: Expression, len: Expression, pad: Expression, child: Expression)
+  extends RuntimeReplaceable {
+
+  def this(str: Expression, len: Expression, pad: Expression) = this(str, len, pad, StaticInvoke(
+    classOf[ByteArray],
+    BinaryType,
+    "rpad",
+    Seq(str, len, pad),
+    Seq(BinaryType, IntegerType, BinaryType),
+    returnNullable = false)
+  )
+
+  override def prettyName: String = "rpad"
+  def exprsReplaced: Seq[Expression] = Seq(str, len, pad)
+  protected def withNewChildInternal(newChild: Expression): BinaryRPad = copy(child = newChild)
 }
 
 object ParseUrl {

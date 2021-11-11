@@ -21,9 +21,10 @@ import scala.util.control.NonFatal
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
+import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
@@ -37,6 +38,7 @@ case class JDBCScanBuilder(
     with SupportsPushDownRequiredColumns
     with SupportsPushDownAggregates
     with SupportsPushDownLimit
+    with SupportsPushDownTableSample
     with Logging {
 
   private val isCaseSensitive = session.sessionState.conf.caseSensitiveAnalysis
@@ -45,15 +47,9 @@ case class JDBCScanBuilder(
 
   private var finalSchema = schema
 
-  private var pushedLimit = 0
+  private var tableSample: Option[TableSampleInfo] = None
 
-  override def pushLimit(limit: Int): Boolean = {
-    if (jdbcOptions.pushDownLimit && JdbcDialects.get(jdbcOptions.url).supportsLimit) {
-      pushedLimit = limit
-      return true
-    }
-    false
-  }
+  private var pushedLimit = 0
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
@@ -109,6 +105,27 @@ case class JDBCScanBuilder(
     }
   }
 
+  override def pushTableSample(
+      lowerBound: Double,
+      upperBound: Double,
+      withReplacement: Boolean,
+      seed: Long): Boolean = {
+    if (jdbcOptions.pushDownTableSample &&
+      JdbcDialects.get(jdbcOptions.url).supportsTableSample) {
+      this.tableSample = Some(TableSampleInfo(lowerBound, upperBound, withReplacement, seed))
+      return true
+    }
+    false
+  }
+
+  override def pushLimit(limit: Int): Boolean = {
+    if (jdbcOptions.pushDownLimit && JdbcDialects.get(jdbcOptions.url).supportsLimit) {
+      pushedLimit = limit
+      return true
+    }
+    false
+  }
+
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // JDBC doesn't support nested column pruning.
     // TODO (SPARK-32593): JDBC support nested column and nested column pruning.
@@ -134,6 +151,6 @@ case class JDBCScanBuilder(
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
     JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedFilter,
-      pushedAggregateList, pushedGroupByCols, pushedLimit)
+      pushedAggregateList, pushedGroupByCols, tableSample, pushedLimit)
   }
 }

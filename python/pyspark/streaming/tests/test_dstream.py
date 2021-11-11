@@ -31,15 +31,16 @@ from pyspark.testing.streamingutils import PySparkStreamingTestCase
 
 @unittest.skipIf(
     "pypy" in platform.python_implementation().lower(),
-    "The tests fail in PyPy3 implementation for an unknown reason.")
+    "The tests fail in PyPy3 implementation for an unknown reason.",
+)
 class BasicOperationTests(PySparkStreamingTestCase):
-
     def test_map(self):
         """Basic operation test for DStream.map."""
         input = [range(1, 5), range(5, 9), range(9, 13)]
 
         def func(dstream):
             return dstream.map(str)
+
         expected = [list(map(str, x)) for x in input]
         self._test_func(input, func, expected)
 
@@ -49,8 +50,8 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
         def func(dstream):
             return dstream.flatMap(lambda x: (x, x * 2))
-        expected = [list(chain.from_iterable((map(lambda y: [y, y * 2], x))))
-                    for x in input]
+
+        expected = [list(chain.from_iterable((map(lambda y: [y, y * 2], x)))) for x in input]
         self._test_func(input, func, expected)
 
     def test_filter(self):
@@ -59,6 +60,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
         def func(dstream):
             return dstream.filter(lambda x: x % 2 == 0)
+
         expected = [[y for y in x if y % 2 == 0] for x in input]
         self._test_func(input, func, expected)
 
@@ -68,12 +70,14 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
         def func(dstream):
             return dstream.count()
+
         expected = [[len(x)] for x in input]
         self._test_func(input, func, expected)
 
     def test_slice(self):
         """Basic operation test for DStream.slice."""
         import datetime as dt
+
         self.ssc = StreamingContext(self.sc, 1.0)
         self.ssc.remember(4.0)
         input = [[1], [2], [3], [4]]
@@ -109,45 +113,58 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
         def func(dstream):
             return dstream.reduce(operator.add)
+
         expected = [[reduce(operator.add, x)] for x in input]
         self._test_func(input, func, expected)
 
     def test_reduceByKey(self):
         """Basic operation test for DStream.reduceByKey."""
-        input = [[("a", 1), ("a", 1), ("b", 1), ("b", 1)],
-                 [("", 1), ("", 1), ("", 1), ("", 1)],
-                 [(1, 1), (1, 1), (2, 1), (2, 1), (3, 1)]]
+        input = [
+            [("a", 1), ("a", 1), ("b", 1), ("b", 1)],
+            [("", 1), ("", 1), ("", 1), ("", 1)],
+            [(1, 1), (1, 1), (2, 1), (2, 1), (3, 1)],
+        ]
 
         def func(dstream):
             return dstream.reduceByKey(operator.add)
+
         expected = [[("a", 2), ("b", 2)], [("", 4)], [(1, 2), (2, 2), (3, 1)]]
         self._test_func(input, func, expected, sort=True)
 
     def test_mapValues(self):
         """Basic operation test for DStream.mapValues."""
-        input = [[("a", 2), ("b", 2), ("c", 1), ("d", 1)],
-                 [(0, 4), (1, 1), (2, 2), (3, 3)],
-                 [(1, 1), (2, 1), (3, 1), (4, 1)]]
+        input = [
+            [("a", 2), ("b", 2), ("c", 1), ("d", 1)],
+            [(0, 4), (1, 1), (2, 2), (3, 3)],
+            [(1, 1), (2, 1), (3, 1), (4, 1)],
+        ]
 
         def func(dstream):
             return dstream.mapValues(lambda x: x + 10)
-        expected = [[("a", 12), ("b", 12), ("c", 11), ("d", 11)],
-                    [(0, 14), (1, 11), (2, 12), (3, 13)],
-                    [(1, 11), (2, 11), (3, 11), (4, 11)]]
+
+        expected = [
+            [("a", 12), ("b", 12), ("c", 11), ("d", 11)],
+            [(0, 14), (1, 11), (2, 12), (3, 13)],
+            [(1, 11), (2, 11), (3, 11), (4, 11)],
+        ]
         self._test_func(input, func, expected, sort=True)
 
     def test_flatMapValues(self):
         """Basic operation test for DStream.flatMapValues."""
-        input = [[("a", 2), ("b", 2), ("c", 1), ("d", 1)],
-                 [(0, 4), (1, 1), (2, 1), (3, 1)],
-                 [(1, 1), (2, 1), (3, 1), (4, 1)]]
+        input = [
+            [("a", 2), ("b", 2), ("c", 1), ("d", 1)],
+            [(0, 4), (1, 1), (2, 1), (3, 1)],
+            [(1, 1), (2, 1), (3, 1), (4, 1)],
+        ]
 
         def func(dstream):
             return dstream.flatMapValues(lambda x: (x, x + 10))
-        expected = [[("a", 2), ("a", 12), ("b", 2), ("b", 12),
-                     ("c", 1), ("c", 11), ("d", 1), ("d", 11)],
-                    [(0, 4), (0, 14), (1, 1), (1, 11), (2, 1), (2, 11), (3, 1), (3, 11)],
-                    [(1, 1), (1, 11), (2, 1), (2, 11), (3, 1), (3, 11), (4, 1), (4, 11)]]
+
+        expected = [
+            [("a", 2), ("a", 12), ("b", 2), ("b", 12), ("c", 1), ("c", 11), ("d", 1), ("d", 11)],
+            [(0, 4), (0, 14), (1, 1), (1, 11), (2, 1), (2, 11), (3, 1), (3, 11)],
+            [(1, 1), (1, 11), (2, 1), (2, 11), (3, 1), (3, 11), (4, 1), (4, 11)],
+        ]
         self._test_func(input, func, expected)
 
     def test_glom(self):
@@ -157,6 +174,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
         def func(dstream):
             return dstream.glom()
+
         expected = [[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]]
         self._test_func(rdds, func, expected)
 
@@ -168,7 +186,9 @@ class BasicOperationTests(PySparkStreamingTestCase):
         def func(dstream):
             def f(iterator):
                 yield sum(iterator)
+
             return dstream.mapPartitions(f)
+
         expected = [[3, 7], [11, 15], [19, 23]]
         self._test_func(rdds, func, expected)
 
@@ -178,38 +198,51 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
         def func(dstream):
             return dstream.countByValue()
-        expected = [[(1, 2), (2, 2), (3, 2), (4, 2)],
-                    [(5, 2), (6, 2), (7, 1), (8, 1)],
-                    [("a", 2), ("b", 1), ("", 1)]]
+
+        expected = [
+            [(1, 2), (2, 2), (3, 2), (4, 2)],
+            [(5, 2), (6, 2), (7, 1), (8, 1)],
+            [("a", 2), ("b", 1), ("", 1)],
+        ]
         self._test_func(input, func, expected, sort=True)
 
     def test_groupByKey(self):
         """Basic operation test for DStream.groupByKey."""
-        input = [[(1, 1), (2, 1), (3, 1), (4, 1)],
-                 [(1, 1), (1, 1), (1, 1), (2, 1), (2, 1), (3, 1)],
-                 [("a", 1), ("a", 1), ("b", 1), ("", 1), ("", 1), ("", 1)]]
+        input = [
+            [(1, 1), (2, 1), (3, 1), (4, 1)],
+            [(1, 1), (1, 1), (1, 1), (2, 1), (2, 1), (3, 1)],
+            [("a", 1), ("a", 1), ("b", 1), ("", 1), ("", 1), ("", 1)],
+        ]
 
         def func(dstream):
             return dstream.groupByKey().mapValues(list)
 
-        expected = [[(1, [1]), (2, [1]), (3, [1]), (4, [1])],
-                    [(1, [1, 1, 1]), (2, [1, 1]), (3, [1])],
-                    [("a", [1, 1]), ("b", [1]), ("", [1, 1, 1])]]
+        expected = [
+            [(1, [1]), (2, [1]), (3, [1]), (4, [1])],
+            [(1, [1, 1, 1]), (2, [1, 1]), (3, [1])],
+            [("a", [1, 1]), ("b", [1]), ("", [1, 1, 1])],
+        ]
         self._test_func(input, func, expected, sort=True)
 
     def test_combineByKey(self):
         """Basic operation test for DStream.combineByKey."""
-        input = [[(1, 1), (2, 1), (3, 1), (4, 1)],
-                 [(1, 1), (1, 1), (1, 1), (2, 1), (2, 1), (3, 1)],
-                 [("a", 1), ("a", 1), ("b", 1), ("", 1), ("", 1), ("", 1)]]
+        input = [
+            [(1, 1), (2, 1), (3, 1), (4, 1)],
+            [(1, 1), (1, 1), (1, 1), (2, 1), (2, 1), (3, 1)],
+            [("a", 1), ("a", 1), ("b", 1), ("", 1), ("", 1), ("", 1)],
+        ]
 
         def func(dstream):
             def add(a, b):
                 return a + str(b)
+
             return dstream.combineByKey(str, add, add)
-        expected = [[(1, "1"), (2, "1"), (3, "1"), (4, "1")],
-                    [(1, "111"), (2, "11"), (3, "1")],
-                    [("a", "11"), ("b", "1"), ("", "111")]]
+
+        expected = [
+            [(1, "1"), (2, "1"), (3, "1"), (4, "1")],
+            [(1, "111"), (2, "11"), (3, "1")],
+            [("a", "11"), ("b", "1"), ("", "111")],
+        ]
         self._test_func(input, func, expected, sort=True)
 
     def test_repartition(self):
@@ -218,6 +251,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
         def func(dstream):
             return dstream.repartition(1).glom()
+
         expected = [[[1, 2, 3, 4]], [[5, 6, 7, 8]]]
         self._test_func(rdds, func, expected)
 
@@ -232,96 +266,96 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self._test_func(input1, func, expected, input2=input2)
 
     def test_cogroup(self):
-        input = [[(1, 1), (2, 1), (3, 1)],
-                 [(1, 1), (1, 1), (1, 1), (2, 1)],
-                 [("a", 1), ("a", 1), ("b", 1), ("", 1), ("", 1)]]
-        input2 = [[(1, 2)],
-                  [(4, 1)],
-                  [("a", 1), ("a", 1), ("b", 1), ("", 1), ("", 2)]]
+        input = [
+            [(1, 1), (2, 1), (3, 1)],
+            [(1, 1), (1, 1), (1, 1), (2, 1)],
+            [("a", 1), ("a", 1), ("b", 1), ("", 1), ("", 1)],
+        ]
+        input2 = [[(1, 2)], [(4, 1)], [("a", 1), ("a", 1), ("b", 1), ("", 1), ("", 2)]]
 
         def func(d1, d2):
             return d1.cogroup(d2).mapValues(lambda vs: tuple(map(list, vs)))
 
-        expected = [[(1, ([1], [2])), (2, ([1], [])), (3, ([1], []))],
-                    [(1, ([1, 1, 1], [])), (2, ([1], [])), (4, ([], [1]))],
-                    [("a", ([1, 1], [1, 1])), ("b", ([1], [1])), ("", ([1, 1], [1, 2]))]]
+        expected = [
+            [(1, ([1], [2])), (2, ([1], [])), (3, ([1], []))],
+            [(1, ([1, 1, 1], [])), (2, ([1], [])), (4, ([], [1]))],
+            [("a", ([1, 1], [1, 1])), ("b", ([1], [1])), ("", ([1, 1], [1, 2]))],
+        ]
         self._test_func(input, func, expected, sort=True, input2=input2)
 
     def test_join(self):
-        input = [[('a', 1), ('b', 2)]]
-        input2 = [[('b', 3), ('c', 4)]]
+        input = [[("a", 1), ("b", 2)]]
+        input2 = [[("b", 3), ("c", 4)]]
 
         def func(a, b):
             return a.join(b)
 
-        expected = [[('b', (2, 3))]]
+        expected = [[("b", (2, 3))]]
         self._test_func(input, func, expected, True, input2)
 
     def test_left_outer_join(self):
-        input = [[('a', 1), ('b', 2)]]
-        input2 = [[('b', 3), ('c', 4)]]
+        input = [[("a", 1), ("b", 2)]]
+        input2 = [[("b", 3), ("c", 4)]]
 
         def func(a, b):
             return a.leftOuterJoin(b)
 
-        expected = [[('a', (1, None)), ('b', (2, 3))]]
+        expected = [[("a", (1, None)), ("b", (2, 3))]]
         self._test_func(input, func, expected, True, input2)
 
     def test_right_outer_join(self):
-        input = [[('a', 1), ('b', 2)]]
-        input2 = [[('b', 3), ('c', 4)]]
+        input = [[("a", 1), ("b", 2)]]
+        input2 = [[("b", 3), ("c", 4)]]
 
         def func(a, b):
             return a.rightOuterJoin(b)
 
-        expected = [[('b', (2, 3)), ('c', (None, 4))]]
+        expected = [[("b", (2, 3)), ("c", (None, 4))]]
         self._test_func(input, func, expected, True, input2)
 
     def test_full_outer_join(self):
-        input = [[('a', 1), ('b', 2)]]
-        input2 = [[('b', 3), ('c', 4)]]
+        input = [[("a", 1), ("b", 2)]]
+        input2 = [[("b", 3), ("c", 4)]]
 
         def func(a, b):
             return a.fullOuterJoin(b)
 
-        expected = [[('a', (1, None)), ('b', (2, 3)), ('c', (None, 4))]]
+        expected = [[("a", (1, None)), ("b", (2, 3)), ("c", (None, 4))]]
         self._test_func(input, func, expected, True, input2)
 
     def test_update_state_by_key(self):
-
         def updater(vs, s):
             if not s:
                 s = []
             s.extend(vs)
             return s
 
-        input = [[('k', i)] for i in range(5)]
+        input = [[("k", i)] for i in range(5)]
 
         def func(dstream):
             return dstream.updateStateByKey(updater)
 
         expected = [[0], [0, 1], [0, 1, 2], [0, 1, 2, 3], [0, 1, 2, 3, 4]]
-        expected = [[('k', v)] for v in expected]
+        expected = [[("k", v)] for v in expected]
         self._test_func(input, func, expected)
 
     def test_update_state_by_key_initial_rdd(self):
-
         def updater(vs, s):
             if not s:
                 s = []
             s.extend(vs)
             return s
 
-        initial = [('k', [0, 1])]
+        initial = [("k", [0, 1])]
         initial = self.sc.parallelize(initial, 1)
 
-        input = [[('k', i)] for i in range(2, 5)]
+        input = [[("k", i)] for i in range(2, 5)]
 
         def func(dstream):
             return dstream.updateStateByKey(updater, initialRDD=initial)
 
         expected = [[0, 1, 2], [0, 1, 2, 3], [0, 1, 2, 3, 4]]
-        expected = [[('k', v)] for v in expected]
+        expected = [[("k", v)] for v in expected]
         self._test_func(input, func, expected)
 
     def test_failed_func(self):
@@ -339,6 +373,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
             self.ssc.awaitTerminationOrTimeout(10)
         except:
             import traceback
+
             failure = traceback.format_exc()
             self.assertTrue("This is a special error" in failure)
             return
@@ -361,6 +396,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
             self.ssc.awaitTerminationOrTimeout(10)
         except:
             import traceback
+
             failure = traceback.format_exc()
             self.assertTrue("This is a special error" in failure)
             return
@@ -386,6 +422,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
             self.ssc.awaitTerminationOrTimeout(10)
         except:
             import traceback
+
             failure = traceback.format_exc()
             self.assertTrue("This is a special error" in failure)
             return
@@ -395,7 +432,8 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
 @unittest.skipIf(
     "pypy" in platform.python_implementation().lower(),
-    "The tests fail in PyPy3 implementation for an unknown reason.")
+    "The tests fail in PyPy3 implementation for an unknown reason.",
+)
 class WindowFunctionTests(PySparkStreamingTestCase):
 
     timeout = 15
@@ -404,7 +442,7 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         input = [range(1), range(2), range(3), range(4), range(5)]
 
         def func(dstream):
-            return dstream.window(1.5, .5).count()
+            return dstream.window(1.5, 0.5).count()
 
         expected = [[1], [3], [6], [9], [12], [9], [5]]
         self._test_func(input, func, expected)
@@ -413,7 +451,7 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         input = [range(1), range(2), range(3), range(4), range(5)]
 
         def func(dstream):
-            return dstream.countByWindow(1.5, .5)
+            return dstream.countByWindow(1.5, 0.5)
 
         expected = [[1], [3], [6], [9], [12], [9], [5]]
         self._test_func(input, func, expected)
@@ -422,7 +460,7 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         input = [range(1), range(2), range(3), range(4), range(5), range(6)]
 
         def func(dstream):
-            return dstream.countByWindow(2.5, .5)
+            return dstream.countByWindow(2.5, 0.5)
 
         expected = [[1], [3], [6], [10], [15], [20], [18], [15], [11], [6]]
         self._test_func(input, func, expected)
@@ -431,28 +469,37 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         input = [range(1), range(2), range(3), range(4), range(5), range(6)]
 
         def func(dstream):
-            return dstream.countByValueAndWindow(2.5, .5)
+            return dstream.countByValueAndWindow(2.5, 0.5)
 
-        expected = [[(0, 1)],
-                    [(0, 2), (1, 1)],
-                    [(0, 3), (1, 2), (2, 1)],
-                    [(0, 4), (1, 3), (2, 2), (3, 1)],
-                    [(0, 5), (1, 4), (2, 3), (3, 2), (4, 1)],
-                    [(0, 5), (1, 5), (2, 4), (3, 3), (4, 2), (5, 1)],
-                    [(0, 4), (1, 4), (2, 4), (3, 3), (4, 2), (5, 1)],
-                    [(0, 3), (1, 3), (2, 3), (3, 3), (4, 2), (5, 1)],
-                    [(0, 2), (1, 2), (2, 2), (3, 2), (4, 2), (5, 1)],
-                    [(0, 1), (1, 1), (2, 1), (3, 1), (4, 1), (5, 1)]]
+        expected = [
+            [(0, 1)],
+            [(0, 2), (1, 1)],
+            [(0, 3), (1, 2), (2, 1)],
+            [(0, 4), (1, 3), (2, 2), (3, 1)],
+            [(0, 5), (1, 4), (2, 3), (3, 2), (4, 1)],
+            [(0, 5), (1, 5), (2, 4), (3, 3), (4, 2), (5, 1)],
+            [(0, 4), (1, 4), (2, 4), (3, 3), (4, 2), (5, 1)],
+            [(0, 3), (1, 3), (2, 3), (3, 3), (4, 2), (5, 1)],
+            [(0, 2), (1, 2), (2, 2), (3, 2), (4, 2), (5, 1)],
+            [(0, 1), (1, 1), (2, 1), (3, 1), (4, 1), (5, 1)],
+        ]
         self._test_func(input, func, expected)
 
     def test_group_by_key_and_window(self):
-        input = [[('a', i)] for i in range(5)]
+        input = [[("a", i)] for i in range(5)]
 
         def func(dstream):
-            return dstream.groupByKeyAndWindow(1.5, .5).mapValues(list)
+            return dstream.groupByKeyAndWindow(1.5, 0.5).mapValues(list)
 
-        expected = [[('a', [0])], [('a', [0, 1])], [('a', [0, 1, 2])], [('a', [1, 2, 3])],
-                    [('a', [2, 3, 4])], [('a', [3, 4])], [('a', [4])]]
+        expected = [
+            [("a", [0])],
+            [("a", [0, 1])],
+            [("a", [0, 1, 2])],
+            [("a", [1, 2, 3])],
+            [("a", [2, 3, 4])],
+            [("a", [3, 4])],
+            [("a", [4])],
+        ]
         self._test_func(input, func, expected)
 
     def test_reduce_by_invalid_window(self):
@@ -465,9 +512,12 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         input = [range(1), range(2), range(3), range(4), range(5), range(6)]
 
         def func(dstream):
-            return dstream.map(lambda x: (x, 1))\
-                .reduceByKeyAndWindow(operator.add, None, 5, 1)\
-                .filter(lambda kv: kv[1] > 0).count()
+            return (
+                dstream.map(lambda x: (x, 1))
+                .reduceByKeyAndWindow(operator.add, None, 5, 1)
+                .filter(lambda kv: kv[1] > 0)
+                .count()
+            )
 
         expected = [[2], [4], [6], [6], [6], [6]]
         self._test_func(input, func, expected)
@@ -475,7 +525,8 @@ class WindowFunctionTests(PySparkStreamingTestCase):
 
 @unittest.skipIf(
     "pypy" in platform.python_implementation().lower(),
-    "The tests fail in PyPy3 implementation for an unknown reason.")
+    "The tests fail in PyPy3 implementation for an unknown reason.",
+)
 class CheckpointTests(unittest.TestCase):
 
     setupCalled = False
@@ -484,8 +535,9 @@ class CheckpointTests(unittest.TestCase):
     def tearDownClass():
         # Clean up in the JVM just in case there has been some issues in Python API
         if SparkContext._jvm is not None:
-            jStreamingContextOption = \
+            jStreamingContextOption = (
                 SparkContext._jvm.org.apache.spark.streaming.StreamingContext.getActive()
+            )
             if jStreamingContextOption.nonEmpty():
                 jStreamingContextOption.get().stop()
 
@@ -523,9 +575,11 @@ class CheckpointTests(unittest.TestCase):
             self.ssc.start()
         except:
             import traceback
+
             failure = traceback.format_exc()
             self.assertTrue(
-                "It appears that you are attempting to reference SparkContext" in failure)
+                "It appears that you are attempting to reference SparkContext" in failure
+            )
             return
 
         self.fail("using SparkContext in process should fail because it's not Serializable")
@@ -561,14 +615,14 @@ class CheckpointTests(unittest.TestCase):
                 if self.ssc.awaitTerminationOrTimeout(0.5):
                     raise RuntimeError("ssc stopped")
             time.sleep(1)  # make sure mtime is larger than the previous one
-            with open(os.path.join(inputd, str(n)), 'w') as f:
+            with open(os.path.join(inputd, str(n)), "w") as f:
                 f.writelines(["%d\n" % i for i in range(10)])
 
             while True:
                 if self.ssc.awaitTerminationOrTimeout(0.5):
                     raise RuntimeError("ssc stopped")
                 p = os.path.join(outputd, max(os.listdir(outputd)))
-                if '_SUCCESS' not in os.listdir(p):
+                if "_SUCCESS" not in os.listdir(p):
                     # not finished
                     continue
                 ordd = self.ssc.sparkContext.textFile(p).map(lambda line: line.split(","))
@@ -645,7 +699,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

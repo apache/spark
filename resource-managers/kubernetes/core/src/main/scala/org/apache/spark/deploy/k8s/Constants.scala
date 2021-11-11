@@ -20,6 +20,7 @@ private[spark] object Constants {
 
   // Labels
   val SPARK_APP_ID_LABEL = "spark-app-selector"
+  val SPARK_APP_NAME_LABEL = "spark-app-name"
   val SPARK_EXECUTOR_ID_LABEL = "spark-exec-id"
   val SPARK_RESOURCE_PROFILE_ID_LABEL = "spark-exec-resourceprofile-id"
   val SPARK_ROLE_LABEL = "spark-role"

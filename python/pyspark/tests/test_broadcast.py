@@ -26,7 +26,6 @@ from pyspark.serializers import ChunkedStream
 
 
 class BroadcastTest(unittest.TestCase):
-
     def tearDown(self):
         if getattr(self, "sc", None) is not None:
             self.sc.stop()
@@ -102,7 +101,6 @@ class BroadcastTest(unittest.TestCase):
 
 
 class BroadcastFrameProtocolTest(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         gateway = launch_gateway(SparkConf())
@@ -139,17 +137,19 @@ class BroadcastFrameProtocolTest(unittest.TestCase):
     def test_chunked_stream(self):
         def random_bytes(n):
             return bytearray(random.getrandbits(8) for _ in range(n))
+
         for data_length in [1, 10, 100, 10000]:
             for buffer_length in [1, 2, 5, 8192]:
                 self._test_chunked_stream(random_bytes(data_length), buffer_length)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     from pyspark.tests.test_broadcast import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

@@ -24,51 +24,44 @@ from pyspark.shuffle import Aggregator, ExternalMerger, ExternalSorter
 
 
 class MergerTests(unittest.TestCase):
-
     def setUp(self):
         self.N = 1 << 12
         self.l = [i for i in range(self.N)]
         self.data = list(zip(self.l, self.l))
-        self.agg = Aggregator(lambda x: [x],
-                              lambda x, y: x.append(y) or x,
-                              lambda x, y: x.extend(y) or x)
+        self.agg = Aggregator(
+            lambda x: [x], lambda x, y: x.append(y) or x, lambda x, y: x.extend(y) or x
+        )
 
     def test_small_dataset(self):
         m = ExternalMerger(self.agg, 1000)
         m.mergeValues(self.data)
         self.assertEqual(m.spills, 0)
-        self.assertEqual(sum(sum(v) for k, v in m.items()),
-                         sum(range(self.N)))
+        self.assertEqual(sum(sum(v) for k, v in m.items()), sum(range(self.N)))
 
         m = ExternalMerger(self.agg, 1000)
         m.mergeCombiners(map(lambda x_y1: (x_y1[0], [x_y1[1]]), self.data))
         self.assertEqual(m.spills, 0)
-        self.assertEqual(sum(sum(v) for k, v in m.items()),
-                         sum(range(self.N)))
+        self.assertEqual(sum(sum(v) for k, v in m.items()), sum(range(self.N)))
 
     def test_medium_dataset(self):
         m = ExternalMerger(self.agg, 20)
         m.mergeValues(self.data)
         self.assertTrue(m.spills >= 1)
-        self.assertEqual(sum(sum(v) for k, v in m.items()),
-                         sum(range(self.N)))
+        self.assertEqual(sum(sum(v) for k, v in m.items()), sum(range(self.N)))
 
         m = ExternalMerger(self.agg, 10)
         m.mergeCombiners(map(lambda x_y2: (x_y2[0], [x_y2[1]]), self.data * 3))
         self.assertTrue(m.spills >= 1)
-        self.assertEqual(sum(sum(v) for k, v in m.items()),
-                         sum(range(self.N)) * 3)
+        self.assertEqual(sum(sum(v) for k, v in m.items()), sum(range(self.N)) * 3)
 
     def test_huge_dataset(self):
         m = ExternalMerger(self.agg, 5, partitions=3)
         m.mergeCombiners(map(lambda k_v: (k_v[0], [str(k_v[1])]), self.data * 10))
         self.assertTrue(m.spills >= 1)
-        self.assertEqual(sum(len(v) for k, v in m.items()),
-                         self.N * 10)
+        self.assertEqual(sum(len(v) for k, v in m.items()), self.N * 10)
         m._cleanup()
 
     def test_group_by_key(self):
-
         def gen_data(N, step):
             for i in range(1, N + 1, step):
                 for j in range(i):
@@ -94,7 +87,6 @@ class MergerTests(unittest.TestCase):
             self.assertEqual(list(range(k)), list(vs))
 
     def test_stopiteration_is_raised(self):
-
         def stopit(*args, **kwargs):
             raise StopIteration()
 
@@ -133,13 +125,16 @@ class SorterTests(unittest.TestCase):
         self.assertEqual(sorted(l), list(sorter.sorted(l)))
         self.assertEqual(sorted(l, reverse=True), list(sorter.sorted(l, reverse=True)))
         self.assertEqual(sorted(l, key=lambda x: -x), list(sorter.sorted(l, key=lambda x: -x)))
-        self.assertEqual(sorted(l, key=lambda x: -x, reverse=True),
-                         list(sorter.sorted(l, key=lambda x: -x, reverse=True)))
+        self.assertEqual(
+            sorted(l, key=lambda x: -x, reverse=True),
+            list(sorter.sorted(l, key=lambda x: -x, reverse=True)),
+        )
 
     def test_external_sort(self):
         class CustomizedSorter(ExternalSorter):
             def _next_limit(self):
                 return self.memory_limit
+
         l = list(range(1024))
         random.shuffle(l)
         sorter = CustomizedSorter(1)
@@ -152,8 +147,10 @@ class SorterTests(unittest.TestCase):
         self.assertEqual(sorted(l, key=lambda x: -x), list(sorter.sorted(l, key=lambda x: -x)))
         self.assertGreater(shuffle.DiskBytesSpilled, last)
         last = shuffle.DiskBytesSpilled
-        self.assertEqual(sorted(l, key=lambda x: -x, reverse=True),
-                         list(sorter.sorted(l, key=lambda x: -x, reverse=True)))
+        self.assertEqual(
+            sorted(l, key=lambda x: -x, reverse=True),
+            list(sorter.sorted(l, key=lambda x: -x, reverse=True)),
+        )
         self.assertGreater(shuffle.DiskBytesSpilled, last)
 
     def test_external_sort_in_rdd(self):
@@ -171,7 +168,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

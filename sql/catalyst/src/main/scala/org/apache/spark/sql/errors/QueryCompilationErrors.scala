@@ -425,7 +425,7 @@ object QueryCompilationErrors {
   }
 
   def invalidFunctionArgumentNumberError(
-      validParametersCount: Seq[Int], name: String, params: Seq[Class[Expression]]): Throwable = {
+      validParametersCount: Seq[Int], name: String, actualNumber: Int): Throwable = {
     if (validParametersCount.length == 0) {
       new AnalysisException(s"Invalid arguments for function $name")
     } else {
@@ -435,7 +435,7 @@ object QueryCompilationErrors {
         validParametersCount.init.mkString("one of ", ", ", " and ") +
           validParametersCount.last
       }
-      invalidFunctionArgumentsError(name, expectedNumberOfParameters, params.length)
+      invalidFunctionArgumentsError(name, expectedNumberOfParameters, actualNumber)
     }
   }
 
@@ -534,10 +534,6 @@ object QueryCompilationErrors {
   def externalCatalogNotSupportShowViewsError(resolved: ResolvedNamespace): Throwable = {
     new AnalysisException(s"Catalog ${resolved.catalog.name} doesn't support " +
       "SHOW VIEWS, only SessionCatalog supports this command.")
-  }
-
-  def unsupportedFunctionNameError(quoted: String): Throwable = {
-    new AnalysisException(s"Unsupported function name '$quoted'")
   }
 
   def sqlOnlySupportedWithV1TablesError(sql: String): Throwable = {
@@ -867,9 +863,9 @@ object QueryCompilationErrors {
     new TableAlreadyExistsException(ident)
   }
 
-  def requiresSinglePartNamespaceError(ident: Identifier): Throwable = {
-    new NoSuchTableException(
-      s"V2 session catalog requires a single-part namespace: ${ident.quoted}")
+  def requiresSinglePartNamespaceError(ns: Seq[String]): Throwable = {
+    new AnalysisException(CatalogManager.SESSION_CATALOG_NAME +
+      " requires a single-part namespace, but got " + ns.mkString("[", ", ", "]"))
   }
 
   def namespaceAlreadyExistsError(namespace: Array[String]): Throwable = {

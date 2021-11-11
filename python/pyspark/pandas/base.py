@@ -92,7 +92,7 @@ def align_diff_index_ops(
         combined = combine_frames(
             this_index_ops.to_frame(),
             *[cast(Series, col).rename(i) for i, col in enumerate(cols)],
-            how="full"
+            how="full",
         )
 
         return column_op(func)(
@@ -100,7 +100,7 @@ def align_diff_index_ops(
             *[
                 combined["that"]._psser_for(label)
                 for label in combined["that"]._internal.column_labels
-            ]
+            ],
         ).rename(this_index_ops.name)
     else:
         # This could cause as many counts, reset_index calls, joins for combining
@@ -121,7 +121,7 @@ def align_diff_index_ops(
                             if isinstance(arg, Index)
                             else arg
                             for arg in args
-                        ]
+                        ],
                     ).sort_index(),
                     name=this_index_ops.name,
                 )
@@ -145,7 +145,7 @@ def align_diff_index_ops(
                     *[
                         combined["that"]._psser_for(label)
                         for label in combined["that"]._internal.column_labels
-                    ]
+                    ],
                 ).rename(this_index_ops.name)
             else:
                 this = cast(Index, this_index_ops).to_frame().reset_index(drop=True)
@@ -174,7 +174,7 @@ def align_diff_index_ops(
                     *[
                         other._psser_for(label)
                         for label, col in zip(other._internal.column_labels, cols)
-                    ]
+                    ],
                 ).rename(that_series.name)
 
 
@@ -221,7 +221,7 @@ def column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
             # Same DataFrame anchors
             scol = f(
                 self.spark.column,
-                *[arg.spark.column if isinstance(arg, IndexOpsMixin) else arg for arg in args]
+                *[arg.spark.column if isinstance(arg, IndexOpsMixin) else arg for arg in args],
             )
 
             field = InternalField.from_struct_field(
@@ -1146,7 +1146,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         periods: int,
         fill_value: Any,
         *,
-        part_cols: Sequence["ColumnOrName"] = ()
+        part_cols: Sequence["ColumnOrName"] = (),
     ) -> IndexOpsLike:
         if not isinstance(periods, int):
             raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)

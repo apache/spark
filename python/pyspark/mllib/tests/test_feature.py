@@ -32,7 +32,7 @@ class FeatureTest(MLlibTestCase):
             Vectors.dense([1, 2, 6, 0, 2, 3, 1, 1, 0, 0, 3]),
             Vectors.dense([1, 3, 0, 1, 3, 0, 0, 2, 0, 0, 1]),
             Vectors.dense([1, 4, 1, 0, 0, 4, 9, 0, 1, 2, 0]),
-            Vectors.dense([2, 1, 0, 3, 0, 0, 5, 0, 2, 3, 9])
+            Vectors.dense([2, 1, 0, 3, 0, 0, 5, 0, 2, 3, 9]),
         ]
         model = IDF().fit(self.sc.parallelize(data, 2))
         idf = model.idf()
@@ -41,14 +41,16 @@ class FeatureTest(MLlibTestCase):
 
 class Word2VecTests(MLlibTestCase):
     def test_word2vec_setters(self):
-        model = Word2Vec() \
-            .setVectorSize(2) \
-            .setLearningRate(0.01) \
-            .setNumPartitions(2) \
-            .setNumIterations(10) \
-            .setSeed(1024) \
-            .setMinCount(3) \
+        model = (
+            Word2Vec()
+            .setVectorSize(2)
+            .setLearningRate(0.01)
+            .setNumPartitions(2)
+            .setNumIterations(10)
+            .setSeed(1024)
+            .setMinCount(3)
             .setWindowSize(6)
+        )
         self.assertEqual(model.vectorSize, 2)
         self.assertTrue(model.learningRate < 0.02)
         self.assertEqual(model.numPartitions, 2)
@@ -65,7 +67,7 @@ class Word2VecTests(MLlibTestCase):
             ["a", "b", "c", "d"],
             ["a", "b", "c"],
             ["a", "b"],
-            ["a"]
+            ["a"],
         ]
         model = Word2Vec().fit(self.sc.parallelize(data))
         self.assertEqual(len(model.getVectors()), 3)
@@ -73,22 +75,14 @@ class Word2VecTests(MLlibTestCase):
 
 class StandardScalerTests(MLlibTestCase):
     def test_model_setters(self):
-        data = [
-            [1.0, 2.0, 3.0],
-            [2.0, 3.0, 4.0],
-            [3.0, 4.0, 5.0]
-        ]
+        data = [[1.0, 2.0, 3.0], [2.0, 3.0, 4.0], [3.0, 4.0, 5.0]]
         model = StandardScaler().fit(self.sc.parallelize(data))
         self.assertIsNotNone(model.setWithMean(True))
         self.assertIsNotNone(model.setWithStd(True))
         self.assertEqual(model.transform([1.0, 2.0, 3.0]), DenseVector([-1.0, -1.0, -1.0]))
 
     def test_model_transform(self):
-        data = [
-            [1.0, 2.0, 3.0],
-            [2.0, 3.0, 4.0],
-            [3.0, 4.0, 5.0]
-        ]
+        data = [[1.0, 2.0, 3.0], [2.0, 3.0, 4.0], [3.0, 4.0, 5.0]]
         model = StandardScaler().fit(self.sc.parallelize(data))
         self.assertEqual(model.transform([1.0, 2.0, 3.0]), DenseVector([1.0, 2.0, 3.0]))
 
@@ -101,23 +95,26 @@ class ElementwiseProductTests(MLlibTestCase):
         sparsevec = Vectors.sparse(3, [0], [1])
         eprod = ElementwiseProduct(weight)
         self.assertEqual(eprod.transform(densevec), DenseVector([12, 10, 6]))
-        self.assertEqual(
-            eprod.transform(sparsevec), SparseVector(3, [0], [3]))
+        self.assertEqual(eprod.transform(sparsevec), SparseVector(3, [0], [3]))
 
 
 class HashingTFTest(MLlibTestCase):
-
     def test_binary_term_freqs(self):
         hashingTF = HashingTF(100).setBinary(True)
         doc = "a a b c c c".split(" ")
         n = hashingTF.numFeatures
         output = hashingTF.transform(doc).toArray()
-        expected = Vectors.sparse(n, {hashingTF.indexOf("a"): 1.0,
-                                      hashingTF.indexOf("b"): 1.0,
-                                      hashingTF.indexOf("c"): 1.0}).toArray()
+        expected = Vectors.sparse(
+            n,
+            {hashingTF.indexOf("a"): 1.0, hashingTF.indexOf("b"): 1.0, hashingTF.indexOf("c"): 1.0},
+        ).toArray()
         for i in range(0, n):
-            self.assertAlmostEqual(output[i], expected[i], 14, "Error at " + str(i) +
-                                   ": expected " + str(expected[i]) + ", got " + str(output[i]))
+            self.assertAlmostEqual(
+                output[i],
+                expected[i],
+                14,
+                "Error at " + str(i) + ": expected " + str(expected[i]) + ", got " + str(output[i]),
+            )
 
 
 class DimensionalityReductionTests(MLlibTestCase):
@@ -126,13 +123,13 @@ class DimensionalityReductionTests(MLlibTestCase):
         Vectors.dense([0.0, 1.0, 2.0]),
         Vectors.dense([3.0, 4.0, 5.0]),
         Vectors.dense([6.0, 7.0, 8.0]),
-        Vectors.dense([9.0, 0.0, 1.0])
+        Vectors.dense([9.0, 0.0, 1.0]),
     ]
     sparseData = [
         Vectors.sparse(3, [(1, 1.0), (2, 2.0)]),
         Vectors.sparse(3, [(0, 3.0), (1, 4.0), (2, 5.0)]),
         Vectors.sparse(3, [(0, 6.0), (1, 7.0), (2, 8.0)]),
-        Vectors.sparse(3, [(0, 9.0), (2, 1.0)])
+        Vectors.sparse(3, [(0, 9.0), (2, 1.0)]),
     ]
 
     def assertEqualUpToSign(self, vecA, vecB):
@@ -163,11 +160,13 @@ class DimensionalityReductionTests(MLlibTestCase):
         self.assertEqual(rm.computeSVD(3, False, 1e-6).s.size, 1)
 
     def test_pca(self):
-        expected_pcs = array([
-            [0.0, 1.0, 0.0],
-            [sqrt(2.0) / 2.0, 0.0, sqrt(2.0) / 2.0],
-            [sqrt(2.0) / 2.0, 0.0, -sqrt(2.0) / 2.0]
-        ])
+        expected_pcs = array(
+            [
+                [0.0, 1.0, 0.0],
+                [sqrt(2.0) / 2.0, 0.0, sqrt(2.0) / 2.0],
+                [sqrt(2.0) / 2.0, 0.0, -sqrt(2.0) / 2.0],
+            ]
+        )
         n = 3
         denseMat = RowMatrix(self.sc.parallelize(self.denseData))
         sparseMat = RowMatrix(self.sc.parallelize(self.sparseData))
@@ -186,7 +185,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)
