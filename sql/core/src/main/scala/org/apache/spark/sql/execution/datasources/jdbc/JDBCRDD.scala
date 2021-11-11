@@ -25,7 +25,6 @@ import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskCon
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
@@ -137,34 +136,6 @@ object JDBCRDD extends Logging {
           null
         }
       case _ => null
-    })
-  }
-
-  def compileAggregates(
-      aggregates: Seq[AggregateFunc],
-      dialect: JdbcDialect): Option[Seq[String]] = {
-    def quote(colName: String): String = dialect.quoteIdentifier(colName)
-
-    Some(aggregates.map {
-      case min: Min =>
-        if (min.column.fieldNames.length != 1) return None
-        s"MIN(${quote(min.column.fieldNames.head)})"
-      case max: Max =>
-        if (max.column.fieldNames.length != 1) return None
-        s"MAX(${quote(max.column.fieldNames.head)})"
-      case count: Count =>
-        if (count.column.fieldNames.length != 1) return None
-        val distinct = if (count.isDistinct) "DISTINCT " else ""
-        val column = quote(count.column.fieldNames.head)
-        s"COUNT($distinct$column)"
-      case sum: Sum =>
-        if (sum.column.fieldNames.length != 1) return None
-        val distinct = if (sum.isDistinct) "DISTINCT " else ""
-        val column = quote(sum.column.fieldNames.head)
-        s"SUM($distinct$column)"
-      case _: CountStar =>
-        s"COUNT(*)"
-      case _ => return None
     })
   }
 
