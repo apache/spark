@@ -565,6 +565,12 @@ private[spark] class TaskSetManager(
     s"task ${info.get.id} in stage ${taskSet.id} (TID $tid)"
   }
 
+  def taskFinished(tid: Long): Boolean = {
+    val info = taskInfos.get(tid)
+    assert(info.isDefined, s"Can not find TaskInfo for task (TID $tid)")
+    info.get.finished
+  }
+
   private def maybeFinishTaskSet(): Unit = {
     if (isZombie && runningTasks == 0) {
       sched.taskSetFinished(this)
