@@ -38,6 +38,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.{And, EqualNullSafe, EqualTo, Filter, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Not, Or, StringContains, StringEndsWith, StringStartsWith}
 import org.apache.spark.sql.types._
 
 /**
@@ -195,7 +196,56 @@ abstract class JdbcDialect extends Serializable with Logging{
   }
 
   /**
-   * Converts aggregate functions to SQL expression.
+   * Turns a single Filter into a String representing a SQL expression.
+   * Returns None for an unhandled filter.
+   */
+  @Since("3.3.0")
+  def compileFilter(f: Filter): Option[String] = {
+    def quote(colName: String): String = quoteIdentifier(colName)
+
+    Option(f match {
+      case EqualTo(attr, value) => s"${quote(attr)} = ${compileValue(value)}"
+      case EqualNullSafe(attr, value) =>
+        val col = quote(attr)
+        s"(NOT ($col != ${compileValue(value)} OR $col IS NULL OR " +
+          s"${compileValue(value)} IS NULL) OR " +
+          s"($col IS NULL AND ${compileValue(value)} IS NULL))"
+      case LessThan(attr, value) => s"${quote(attr)} < ${compileValue(value)}"
+      case GreaterThan(attr, value) => s"${quote(attr)} > ${compileValue(value)}"
+      case LessThanOrEqual(attr, value) => s"${quote(attr)} <= ${compileValue(value)}"
+      case GreaterThanOrEqual(attr, value) => s"${quote(attr)} >= ${compileValue(value)}"
+      case IsNull(attr) => s"${quote(attr)} IS NULL"
+      case IsNotNull(attr) => s"${quote(attr)} IS NOT NULL"
+      case StringStartsWith(attr, value) => s"${quote(attr)} LIKE '${value}%'"
+      case StringEndsWith(attr, value) => s"${quote(attr)} LIKE '%${value}'"
+      case StringContains(attr, value) => s"${quote(attr)} LIKE '%${value}%'"
+      case In(attr, value) if value.isEmpty =>
+        s"CASE WHEN ${quote(attr)} IS NULL THEN NULL ELSE FALSE END"
+      case In(attr, value) => s"${quote(attr)} IN (${compileValue(value)})"
+      case Not(f) => compileFilter(f).map(p => s"(NOT ($p))").getOrElse(null)
+      case Or(f1, f2) =>
+        // We can't compile Or filter unless both sub-filters are compiled successfully.
+        // It applies too for the following And filter.
+        // If we can make sure compileFilter supports all filters, we can remove this check.
+        val or = Seq(f1, f2).flatMap(compileFilter(_))
+        if (or.size == 2) {
+          or.map(p => s"($p)").mkString(" OR ")
+        } else {
+          null
+        }
+      case And(f1, f2) =>
+        val and = Seq(f1, f2).flatMap(compileFilter(_))
+        if (and.size == 2) {
+          and.map(p => s"($p)").mkString(" AND ")
+        } else {
+          null
+        }
+      case _ => null
+    })
+  }
+
+  /**
+   * Converts aggregate function to String representing a SQL expression.
    * @param aggregates The aggregate functions to be converted.
    * @return Converted value.
    */

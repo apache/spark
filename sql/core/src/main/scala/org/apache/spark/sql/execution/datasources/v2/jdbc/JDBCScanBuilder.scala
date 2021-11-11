@@ -54,7 +54,7 @@ case class JDBCScanBuilder(
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
       val dialect = JdbcDialects.get(jdbcOptions.url)
-      val (pushed, unSupported) = filters.partition(JDBCRDD.compileFilter(_, dialect).isDefined)
+      val (pushed, unSupported) = filters.partition(dialect.compileFilter(_).isDefined)
       this.pushedFilter = pushed
       unSupported
     } else {
