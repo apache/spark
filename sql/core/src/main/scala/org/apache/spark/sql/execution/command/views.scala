@@ -243,7 +243,7 @@ case class AlterViewAsCommand(
   override def childrenToAnalyze: Seq[LogicalPlan] = query :: Nil
 
   override def applyAnalysisContext(analysisContext: AnalysisContext): AnalysisOnlyCommand = {
-    // Collect the reffered temporary functions from AnalysisContext
+    // Collect the referred temporary functions from AnalysisContext
     copy(referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq)
   }
 
