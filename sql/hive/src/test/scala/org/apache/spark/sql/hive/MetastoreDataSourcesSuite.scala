@@ -1403,6 +1403,69 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
+  test("SPARK-37283: Don't try to store a V1 table which contains " +
+    "ANSI intervals in Hive compatible format") {
+    import DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
+    import YearMonthIntervalType.{MONTH, YEAR}
+    withTempPath{ dir =>
+      withTable("t") {
+        val bout = new java.io.ByteArrayOutputStream
+        Console.withOut(bout) {
+          sql(
+            """
+              |CREATE TABLE t(
+              |  c1 INTERVAL DAY TO MINUTE,
+              |  c2 STRING,
+              |  c3 INTERVAL YEAR TO MONTH,
+              |  c4 INT,
+              |  c5 INTERVAL HOUR,
+              |  c6 INTERVAL MONTH,
+              |  c7 struct<a: int, b: string>,
+              |  c8 struct<a: int, b: interval hour to second>,
+              |  c9 array<int>,
+              |  c10 array<interval year>,
+              |  c11 map<int, string>,
+              |  c12 map<int, interval day>,
+              |  c13 map<interval minute to second, string>
+              |) USING Parquet""".stripMargin)
+        }
+        val expectedMsg = "Hive incompatible types found: interval day to minute, " +
+          "interval year to month, interval hour, interval month, " +
+          "struct<a:int,b:interval hour to second>, " +
+          "array<interval year>, map<int,interval day>, " +
+          "map<interval minute to second,string>. " +
+          "Persisting data source table `default`.`t` into Hive metastore in " +
+          "Spark SQL specific format, which is NOT compatible with Hive."
+        assert(bout.toString === expectedMsg)
+        assert(hiveClient.getTable("default", "t").schema
+          .forall(_.dataType == ArrayType(StringType)))
+
+        val df = sql("SELECT * FROM t")
+        assert(df.schema ===
+          StructType(Seq(
+            StructField("c1", DayTimeIntervalType(DAY, MINUTE)),
+            StructField("c2", StringType),
+            StructField("c3", YearMonthIntervalType(YEAR, MONTH)),
+            StructField("c4", IntegerType),
+            StructField("c5", DayTimeIntervalType(HOUR)),
+            StructField("c6", YearMonthIntervalType(MONTH)),
+            StructField("c7",
+              StructType(Seq(
+                StructField("a", IntegerType),
+                StructField("b", StringType)))),
+            StructField("c8",
+              StructType(Seq(
+                StructField("a", IntegerType),
+                StructField("b", DayTimeIntervalType(HOUR, SECOND))))),
+            StructField("c9", ArrayType(IntegerType)),
+            StructField("c10", ArrayType(YearMonthIntervalType(YEAR))),
+            StructField("c11", MapType(IntegerType, StringType)),
+            StructField("c12", MapType(IntegerType, DayTimeIntervalType(DAY))),
+            StructField("c13", MapType(DayTimeIntervalType(MINUTE, SECOND), StringType)))))
+      }
+    }
+  }
+
   private def withDebugMode(f: => Unit): Unit = {
     val previousValue = sparkSession.sparkContext.conf.get(DEBUG_MODE)
     try {
