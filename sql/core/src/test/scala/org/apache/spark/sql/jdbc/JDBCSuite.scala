@@ -27,7 +27,7 @@ import scala.collection.JavaConverters._
 import org.h2.jdbc.JdbcSQLException
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
@@ -46,8 +46,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCSuite extends QueryTest
-  with BeforeAndAfter with PrivateMethodTester with SharedSparkSession {
+class JDBCSuite extends QueryTest with BeforeAndAfter with SharedSparkSession {
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"
