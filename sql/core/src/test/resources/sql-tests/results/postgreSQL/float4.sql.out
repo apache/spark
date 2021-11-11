@@ -96,7 +96,7 @@ SELECT float('N A N')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: N A N
+invalid input syntax for type numeric: N A N. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -105,7 +105,7 @@ SELECT float('NaN x')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: NaN x
+invalid input syntax for type numeric: NaN x. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -114,7 +114,7 @@ SELECT float(' INFINITY    x')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric:  INFINITY    x
+invalid input syntax for type numeric:  INFINITY    x. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -147,7 +147,7 @@ SELECT float(decimal('nan'))
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: nan
+invalid input syntax for type numeric: nan. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -325,7 +325,7 @@ SELECT int(float('2147483647'))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting 2.14748365E9 to int causes overflow. You can use 'try_cast' or set spark.sql.ansi.enabled to false to bypass this error.
+Casting 2.14748365E9 to int causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -342,7 +342,7 @@ SELECT int(float('-2147483900'))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting -2.1474839E9 to int causes overflow. You can use 'try_cast' or set spark.sql.ansi.enabled to false to bypass this error.
+Casting -2.1474839E9 to int causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -375,7 +375,7 @@ SELECT bigint(float('-9223380000000000000'))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting -9.22338E18 to int causes overflow. You can use 'try_cast' or set spark.sql.ansi.enabled to false to bypass this error.
+Casting -9.22338E18 to int causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query

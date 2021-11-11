@@ -25,8 +25,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.parquet.column.Dictionary
+import org.apache.parquet.io.ColumnIOFactory
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
-import org.apache.parquet.schema.{GroupType, Type}
+import org.apache.parquet.schema.{GroupType, Type, Types}
 import org.apache.parquet.schema.LogicalTypeAnnotation._
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, FIXED_LEN_BYTE_ARRAY, INT32, INT64, INT96}
 
@@ -369,6 +370,23 @@ private[parquet] class ParquetRowConverter(
           }
         }
 
+      case TimestampNTZType
+        if canReadAsTimestampNTZ(parquetType) &&
+          parquetType.getLogicalTypeAnnotation
+            .asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MICROS =>
+        new ParquetPrimitiveConverter(updater)
+
+      case TimestampNTZType
+        if canReadAsTimestampNTZ(parquetType) &&
+          parquetType.getLogicalTypeAnnotation
+            .asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MILLIS =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addLong(value: Long): Unit = {
+            val micros = DateTimeUtils.millisToMicros(value)
+            updater.setLong(micros)
+          }
+        }
+
       case DateType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {
@@ -434,6 +452,16 @@ private[parquet] class ParquetRowConverter(
           t, parquetType.toString)
     }
   }
+
+
+  // Only INT64 column with Timestamp logical annotation `isAdjustedToUTC=false`
+  // can be read as Spark's TimestampNTZ type. This is to avoid mistakes in reading the timestamp
+  // values.
+  private def canReadAsTimestampNTZ(parquetType: Type): Boolean =
+    parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 &&
+      parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
+      !parquetType.getLogicalTypeAnnotation
+        .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC
 
   /**
    * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
@@ -609,7 +637,13 @@ private[parquet] class ParquetRowConverter(
       //
       // If the element type does not match the Catalyst type and the underlying repeated type
       // does not belong to the legacy LIST type, then it is case 1; otherwise, it is case 2.
-      val guessedElementType = schemaConverter.convertField(repeatedType)
+      //
+      // Since `convertField` method requires a Parquet `ColumnIO` as input, here we first create
+      // a dummy message type which wraps the given repeated type, and then convert it to the
+      // `ColumnIO` using Parquet API.
+      val messageType = Types.buildMessage().addField(repeatedType).named("foo")
+      val column = new ColumnIOFactory().getColumnIO(messageType)
+      val guessedElementType = schemaConverter.convertField(column.getChild(0)).sparkType
       val isLegacy = schemaConverter.isElementType(repeatedType, parquetSchema.getName)
 
       if (DataType.equalsIgnoreCompatibleNullability(guessedElementType, elementType) || isLegacy) {

@@ -25,7 +25,9 @@ from functools import wraps
 from pyspark.mllib.common import callMLlibFunc
 
 
-__all__ = ['RandomRDDs', ]
+__all__ = [
+    "RandomRDDs",
+]
 
 
 def toArray(f):
@@ -33,6 +35,7 @@ def toArray(f):
     def func(sc, *a, **kw):
         rdd = f(sc, *a, **kw)
         return rdd.map(lambda vec: vec.toArray())
+
     return func
 
 
@@ -172,8 +175,9 @@ class RandomRDDs(object):
         >>> abs(stats.stdev() - expStd) < 0.5
         True
         """
-        return callMLlibFunc("logNormalRDD", sc._jsc, float(mean), float(std),
-                             size, numPartitions, seed)
+        return callMLlibFunc(
+            "logNormalRDD", sc._jsc, float(mean), float(std), size, numPartitions, seed
+        )
 
     @staticmethod
     def poissonRDD(sc, mean, size, numPartitions=None, seed=None):
@@ -301,8 +305,9 @@ class RandomRDDs(object):
         >>> abs(stats.stdev() - expStd) < 0.5
         True
         """
-        return callMLlibFunc("gammaRDD", sc._jsc, float(shape),
-                             float(scale), size, numPartitions, seed)
+        return callMLlibFunc(
+            "gammaRDD", sc._jsc, float(shape), float(scale), size, numPartitions, seed
+        )
 
     @staticmethod
     @toArray
@@ -432,8 +437,16 @@ class RandomRDDs(object):
         >>> abs(mat.std() - expStd) < 0.1
         True
         """
-        return callMLlibFunc("logNormalVectorRDD", sc._jsc, float(mean), float(std),
-                             numRows, numCols, numPartitions, seed)
+        return callMLlibFunc(
+            "logNormalVectorRDD",
+            sc._jsc,
+            float(mean),
+            float(std),
+            numRows,
+            numCols,
+            numPartitions,
+            seed,
+        )
 
     @staticmethod
     @toArray
@@ -478,8 +491,9 @@ class RandomRDDs(object):
         >>> abs(mat.std() - sqrt(mean)) < 0.5
         True
         """
-        return callMLlibFunc("poissonVectorRDD", sc._jsc, float(mean), numRows, numCols,
-                             numPartitions, seed)
+        return callMLlibFunc(
+            "poissonVectorRDD", sc._jsc, float(mean), numRows, numCols, numPartitions, seed
+        )
 
     @staticmethod
     @toArray
@@ -524,8 +538,9 @@ class RandomRDDs(object):
         >>> abs(mat.std() - sqrt(mean)) < 0.5
         True
         """
-        return callMLlibFunc("exponentialVectorRDD", sc._jsc, float(mean), numRows, numCols,
-                             numPartitions, seed)
+        return callMLlibFunc(
+            "exponentialVectorRDD", sc._jsc, float(mean), numRows, numCols, numPartitions, seed
+        )
 
     @staticmethod
     @toArray
@@ -574,21 +589,27 @@ class RandomRDDs(object):
         >>> abs(mat.std() - expStd) < 0.1
         True
         """
-        return callMLlibFunc("gammaVectorRDD", sc._jsc, float(shape), float(scale),
-                             numRows, numCols, numPartitions, seed)
+        return callMLlibFunc(
+            "gammaVectorRDD",
+            sc._jsc,
+            float(shape),
+            float(scale),
+            numRows,
+            numCols,
+            numPartitions,
+            seed,
+        )
 
 
 def _test():
     import doctest
     from pyspark.sql import SparkSession
+
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    spark = SparkSession.builder\
-        .master("local[2]")\
-        .appName("mllib.random tests")\
-        .getOrCreate()
-    globs['sc'] = spark.sparkContext
+    spark = SparkSession.builder.master("local[2]").appName("mllib.random tests").getOrCreate()
+    globs["sc"] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:

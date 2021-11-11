@@ -39,11 +39,15 @@ class EliminateDistinctSuite extends PlanTest {
     Min(_),
     BitAndAgg(_),
     BitOrAgg(_),
+    First(_, ignoreNulls = true),
+    First(_, ignoreNulls = false),
+    Last(_, ignoreNulls = true),
+    Last(_, ignoreNulls = false),
     CollectSet(_: Expression)
   ).foreach {
     aggBuilder =>
       val agg = aggBuilder('a)
-      test(s"Eliminate Distinct in ${agg.prettyName}") {
+      test(s"Eliminate Distinct in $agg") {
         val query = testRelation
           .select(agg.toAggregateExpression(isDistinct = true).as('result))
           .analyze

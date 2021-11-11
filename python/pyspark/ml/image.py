@@ -136,8 +136,9 @@ class _ImageSchema(object):
 
         if self._undefinedImageType is None:
             ctx = SparkContext._active_spark_context
-            self._undefinedImageType = \
+            self._undefinedImageType = (
                 ctx._jvm.org.apache.spark.ml.image.ImageSchema.undefinedImageType()
+            )
         return self._undefinedImageType
 
     def toNDArray(self, image):
@@ -161,12 +162,14 @@ class _ImageSchema(object):
         if not isinstance(image, Row):
             raise TypeError(
                 "image argument should be pyspark.sql.types.Row; however, "
-                "it got [%s]." % type(image))
+                "it got [%s]." % type(image)
+            )
 
         if any(not hasattr(image, f) for f in self.imageFields):
             raise ValueError(
                 "image argument should have attributes specified in "
-                "ImageSchema.imageSchema [%s]." % ", ".join(self.imageFields))
+                "ImageSchema.imageSchema [%s]." % ", ".join(self.imageFields)
+            )
 
         height = image.height
         width = image.width
@@ -175,7 +178,8 @@ class _ImageSchema(object):
             shape=(height, width, nChannels),
             dtype=np.uint8,
             buffer=image.data,
-            strides=(width * nChannels, nChannels, 1))
+            strides=(width * nChannels, nChannels, 1),
+        )
 
     def toImage(self, array, origin=""):
         """
@@ -198,7 +202,8 @@ class _ImageSchema(object):
 
         if not isinstance(array, np.ndarray):
             raise TypeError(
-                "array argument should be numpy.ndarray; however, it got [%s]." % type(array))
+                "array argument should be numpy.ndarray; however, it got [%s]." % type(array)
+            )
 
         if array.ndim != 3:
             raise ValueError("Invalid array shape")
@@ -217,7 +222,7 @@ class _ImageSchema(object):
         # Running `bytearray(numpy.array([1]))` fails in specific Python versions
         # with a specific Numpy version, for example in Python 3.6.0 and NumPy 1.13.3.
         # Here, it avoids it by converting it to bytes.
-        if LooseVersion(np.__version__) >= LooseVersion('1.9'):
+        if LooseVersion(np.__version__) >= LooseVersion("1.9"):
             data = bytearray(array.astype(dtype=np.uint8).ravel().tobytes())
         else:
             # Numpy prior to 1.9 don't have `tobytes` method.
@@ -226,8 +231,7 @@ class _ImageSchema(object):
         # Creating new Row with _create_row(), because Row(name = value, ... )
         # orders fields by name, which conflicts with expected schema order
         # when the new DataFrame is created by UDF
-        return _create_row(self.imageFields,
-                           [origin, height, width, nChannels, mode, data])
+        return _create_row(self.imageFields, [origin, height, width, nChannels, mode, data])
 
 
 ImageSchema = _ImageSchema()
@@ -236,22 +240,22 @@ ImageSchema = _ImageSchema()
 # Monkey patch to disallow instantiation of this class.
 def _disallow_instance(_):
     raise RuntimeError("Creating instance of _ImageSchema class is disallowed.")
+
+
 _ImageSchema.__init__ = _disallow_instance
 
 
 def _test():
     import doctest
     import pyspark.ml.image
+
     globs = pyspark.ml.image.__dict__.copy()
-    spark = SparkSession.builder\
-        .master("local[2]")\
-        .appName("ml.image tests")\
-        .getOrCreate()
-    globs['spark'] = spark
+    spark = SparkSession.builder.master("local[2]").appName("ml.image tests").getOrCreate()
+    globs["spark"] = spark
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.ml.image, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
+        pyspark.ml.image, globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
+    )
     spark.stop()
     if failure_count:
         sys.exit(-1)

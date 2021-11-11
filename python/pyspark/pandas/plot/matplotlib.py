@@ -331,7 +331,7 @@ class PandasOnSparkBoxPlot(PandasBoxPlot, BoxPlotBase):
         showcaps=None,
         showbox=None,
         showfliers=None,
-        **kwargs
+        **kwargs,
     ):
         # Missing arguments default to rcParams.
         if whis is None:
@@ -564,7 +564,7 @@ def plot_series(
     xerr=None,
     label=None,
     secondary_y=False,  # Series unique
-    **kwds
+    **kwds,
 ):
     """
     Make plots of Series using matplotlib / pylab.
@@ -727,7 +727,7 @@ def plot_frame(
     xerr=None,
     secondary_y=False,
     sort_columns=False,
-    **kwds
+    **kwds,
 ):
     """
     Make plots of DataFrames using matplotlib / pylab.

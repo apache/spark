@@ -4429,7 +4429,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
 
     val columns = ctx.columns.multipartIdentifierProperty.asScala
-      .map(_.multipartIdentifier.getText).toSeq
+      .map(_.multipartIdentifier).map(typedVisit[Seq[String]]).toSeq
     val columnsProperties = ctx.columns.multipartIdentifierProperty.asScala
       .map(x => (Option(x.options).map(visitPropertyKeyValues).getOrElse(Map.empty))).toSeq
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
@@ -4439,8 +4439,23 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       indexName,
       indexType,
       ctx.EXISTS != null,
-      columns.map(FieldReference(_).asInstanceOf[FieldReference]).zip(columnsProperties),
+      columns.map(UnresolvedFieldName(_)).zip(columnsProperties),
       options)
+  }
+
+  /**
+   * Drop an index, returning a [[DropIndex]] logical plan.
+   * For example:
+   * {{{
+   *   DROP INDEX [IF EXISTS] index_name ON [TABLE] table_name
+   * }}}
+   */
+  override def visitDropIndex(ctx: DropIndexContext): LogicalPlan = withOrigin(ctx) {
+    val indexName = ctx.identifier.getText
+    DropIndex(
+      createUnresolvedTable(ctx.multipartIdentifier(), "DROP INDEX"),
+      indexName,
+      ctx.EXISTS != null)
   }
 
   private def alterViewTypeMismatchHint: Option[String] = Some("Please use ALTER TABLE instead.")

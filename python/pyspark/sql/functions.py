@@ -33,21 +33,18 @@ from typing import (
     Tuple,
     TYPE_CHECKING,
     Union,
-    ValuesView
+    ValuesView,
 )
 
 from pyspark import since, SparkContext
 from pyspark.rdd import PythonEvalType
-from pyspark.sql.column import (
-    Column,
-    _to_java_column,
-    _to_seq,
-    _create_column_from_literal
-)
+from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import ArrayType, DataType, StringType, StructType
+
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_udf  # noqa: F401
+
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
 from pyspark.sql.utils import to_str
@@ -81,8 +78,7 @@ def _invoke_function(name: str, *args: Any) -> Column:
     and wraps the result with :class:`~pyspark.sql.Column`.
     """
     jf = _get_get_jvm_function(
-        name,
-        SparkContext._active_spark_context  # type: ignore[attr-defined]
+        name, SparkContext._active_spark_context  # type: ignore[attr-defined]
     )
     return Column(jf(*args))
 
@@ -105,7 +101,7 @@ def _invoke_binary_math_function(name: str, col1: Any, col2: Any) -> Column:
         # For legacy reasons, the arguments here can be implicitly converted into floats,
         # if they are not columns or strings.
         _to_java_column(col1) if isinstance(col1, (str, Column)) else float(col1),
-        _to_java_column(col2) if isinstance(col2, (str, Column)) else float(col2)
+        _to_java_column(col2) if isinstance(col2, (str, Column)) else float(col2),
     )
 
 
@@ -151,10 +147,7 @@ def asc(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the ascending order of the given column name.
     """
-    return (
-        col.asc() if isinstance(col, Column)
-        else _invoke_function("asc", col)
-    )
+    return col.asc() if isinstance(col, Column) else _invoke_function("asc", col)
 
 
 @since(1.3)
@@ -162,10 +155,7 @@ def desc(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the descending order of the given column name.
     """
-    return (
-        col.desc() if isinstance(col, Column)
-        else _invoke_function("desc", col)
-    )
+    return col.desc() if isinstance(col, Column) else _invoke_function("desc", col)
 
 
 @since(1.3)
@@ -732,7 +722,8 @@ def asc_nulls_first(col: "ColumnOrName") -> Column:
     column name, and null values return before non-null values.
     """
     return (
-        col.asc_nulls_first() if isinstance(col, Column)
+        col.asc_nulls_first()
+        if isinstance(col, Column)
         else _invoke_function("asc_nulls_first", col)
     )
 
@@ -744,8 +735,7 @@ def asc_nulls_last(col: "ColumnOrName") -> Column:
     column name, and null values appear after non-null values.
     """
     return (
-        col.asc_nulls_last() if isinstance(col, Column)
-        else _invoke_function("asc_nulls_last", col)
+        col.asc_nulls_last() if isinstance(col, Column) else _invoke_function("asc_nulls_last", col)
     )
 
 
@@ -756,7 +746,8 @@ def desc_nulls_first(col: "ColumnOrName") -> Column:
     column name, and null values appear before non-null values.
     """
     return (
-        col.desc_nulls_first() if isinstance(col, Column)
+        col.desc_nulls_first()
+        if isinstance(col, Column)
         else _invoke_function("desc_nulls_first", col)
     )
 
@@ -768,7 +759,8 @@ def desc_nulls_last(col: "ColumnOrName") -> Column:
     column name, and null values appear after non-null values.
     """
     return (
-        col.desc_nulls_last() if isinstance(col, Column)
+        col.desc_nulls_last()
+        if isinstance(col, Column)
         else _invoke_function("desc_nulls_last", col)
     )
 
@@ -1300,8 +1292,7 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
 
 @since(1.6)
 def input_file_name() -> Column:
-    """Creates a string column for the file name of the current Spark task.
-    """
+    """Creates a string column for the file name of the current Spark task."""
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.input_file_name())
 
@@ -1441,9 +1432,9 @@ def percentile_approx(
 
     if isinstance(percentage, (list, tuple)):
         # A local list
-        percentage = sc._jvm.functions.array(_to_seq(sc, [
-            _create_column_from_literal(x) for x in percentage
-        ]))
+        percentage = sc._jvm.functions.array(
+            _to_seq(sc, [_create_column_from_literal(x) for x in percentage])
+        )
     elif isinstance(percentage, Column):
         # Already a Column
         percentage = _to_java_column(percentage)
@@ -1452,7 +1443,8 @@ def percentile_approx(
         percentage = _create_column_from_literal(percentage)
 
     accuracy = (
-        _to_java_column(accuracy) if isinstance(accuracy, Column)
+        _to_java_column(accuracy)
+        if isinstance(accuracy, Column)
         else _create_column_from_literal(accuracy)
     )
 
@@ -1742,7 +1734,7 @@ def when(condition: Column, value: Any) -> Column:
     return Column(jc)
 
 
-@overload   # type: ignore[no-redef]
+@overload  # type: ignore[no-redef]
 def log(arg1: "ColumnOrName") -> Column:
     ...
 
@@ -1823,9 +1815,8 @@ def factorial(col: "ColumnOrName") -> Column:
 
 # ---------------  Window functions ------------------------
 
-def lag(
-    col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None
-) -> Column:
+
+def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> Column:
     """
     Window function: returns the value that is `offset` rows before the current row, and
     `default` if there is less than `offset` rows before the current row. For example,
@@ -1848,9 +1839,7 @@ def lag(
     return Column(sc._jvm.functions.lag(_to_java_column(col), offset, default))
 
 
-def lead(
-    col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None
-) -> Column:
+def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> Column:
     """
     Window function: returns the value that is `offset` rows after the current row, and
     `default` if there is less than `offset` rows after the current row. For example,
@@ -1873,9 +1862,7 @@ def lead(
     return Column(sc._jvm.functions.lead(_to_java_column(col), offset, default))
 
 
-def nth_value(
-    col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = False
-) -> Column:
+def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = False) -> Column:
     """
     Window function: returns the value that is the `offset`\\th row of the window frame
     (counting from 1), and `null` if the size of window frame is less than `offset` rows.
@@ -1922,6 +1909,7 @@ def ntile(n: int) -> Column:
 
 
 # ---------------------- Date/Timestamp functions ------------------------------
+
 
 @since(1.5)
 def current_date() -> Column:
@@ -2011,7 +1999,7 @@ def month(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
     >>> df.select(month('dt').alias('month')).collect()
     [Row(month=4)]
-   """
+    """
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.month(_to_java_column(col)))
 
@@ -2224,9 +2212,7 @@ def add_months(start: "ColumnOrName", months: int) -> Column:
     return Column(sc._jvm.functions.add_months(_to_java_column(start), months))
 
 
-def months_between(
-    date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool = True
-) -> Column:
+def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool = True) -> Column:
     """
     Returns number of months between dates date1 and date2.
     If date1 is later than date2, then the result is positive.
@@ -2245,8 +2231,9 @@ def months_between(
     [Row(months=3.9495967741935485)]
     """
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-    return Column(sc._jvm.functions.months_between(
-        _to_java_column(date1), _to_java_column(date2), roundOff))
+    return Column(
+        sc._jvm.functions.months_between(_to_java_column(date1), _to_java_column(date2), roundOff)
+    )
 
 
 def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
@@ -2425,7 +2412,7 @@ def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss"
 
 
 def unix_timestamp(
-    timestamp: Optional["ColumnOrName"] = None, format: str = 'yyyy-MM-dd HH:mm:ss'
+    timestamp: Optional["ColumnOrName"] = None, format: str = "yyyy-MM-dd HH:mm:ss"
 ) -> Column:
     """
     Convert time string with given pattern ('yyyy-MM-dd HH:mm:ss', by default)
@@ -2621,6 +2608,7 @@ def window(
     ...          w.window.end.cast("string").alias("end"), "sum").collect()
     [Row(start='2016-03-11 09:00:05', end='2016-03-11 09:00:10', sum=1)]
     """
+
     def check_string_field(field, fieldName):  # type: ignore[no-untyped-def]
         if not field or type(field) is not str:
             raise TypeError("%s should be provided as a string" % fieldName)
@@ -2685,6 +2673,7 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     ...          w.session_window.end.cast("string").alias("end"), "sum").collect()
     [Row(start='2016-03-11 09:00:07', end='2016-03-11 09:00:12', sum=1)]
     """
+
     def check_field(field: Union[Column, str], fieldName: str) -> None:
         if field is None or not isinstance(field, (str, Column)):
             raise TypeError("%s should be provided as a string or Column" % fieldName)
@@ -2692,16 +2681,13 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     time_col = _to_java_column(timeColumn)
     check_field(gapDuration, "gapDuration")
-    gap_duration = (
-        gapDuration
-        if isinstance(gapDuration, str)
-        else _to_java_column(gapDuration)
-    )
+    gap_duration = gapDuration if isinstance(gapDuration, str) else _to_java_column(gapDuration)
     res = sc._jvm.functions.session_window(time_col, gap_duration)
     return Column(res)
 
 
 # ---------------------------- misc functions ----------------------------------
+
 
 def crc32(col: "ColumnOrName") -> Column:
     """
@@ -2823,14 +2809,10 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     if errMsg is None:
         return Column(sc._jvm.functions.assert_true(_to_java_column(col)))
     if not isinstance(errMsg, (str, Column)):
-        raise TypeError(
-            "errMsg should be a Column or a str, got {}".format(type(errMsg))
-        )
+        raise TypeError("errMsg should be a Column or a str, got {}".format(type(errMsg)))
 
     errMsg = (
-        _create_column_from_literal(errMsg)
-        if isinstance(errMsg, str)
-        else _to_java_column(errMsg)
+        _create_column_from_literal(errMsg) if isinstance(errMsg, str) else _to_java_column(errMsg)
     )
     return Column(sc._jvm.functions.assert_true(_to_java_column(col), errMsg))
 
@@ -2841,20 +2823,17 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
     Throws an exception with the provided error message.
     """
     if not isinstance(errMsg, (str, Column)):
-        raise TypeError(
-            "errMsg should be a Column or a str, got {}".format(type(errMsg))
-        )
+        raise TypeError("errMsg should be a Column or a str, got {}".format(type(errMsg)))
 
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     errMsg = (
-        _create_column_from_literal(errMsg)
-        if isinstance(errMsg, str)
-        else _to_java_column(errMsg)
+        _create_column_from_literal(errMsg) if isinstance(errMsg, str) else _to_java_column(errMsg)
     )
     return Column(sc._jvm.functions.raise_error(errMsg))
 
 
 # ---------------------- String/Binary functions ------------------------------
+
 
 @since(1.5)
 def upper(col: "ColumnOrName") -> Column:
@@ -3045,22 +3024,21 @@ def overlay(
     """
     if not isinstance(pos, (int, str, Column)):
         raise TypeError(
-            "pos should be an integer or a Column / column name, got {}".format(type(pos)))
+            "pos should be an integer or a Column / column name, got {}".format(type(pos))
+        )
     if len is not None and not isinstance(len, (int, str, Column)):
         raise TypeError(
-            "len should be an integer or a Column / column name, got {}".format(type(len)))
+            "len should be an integer or a Column / column name, got {}".format(type(len))
+        )
 
     pos = _create_column_from_literal(pos) if isinstance(pos, int) else _to_java_column(pos)
     len = _create_column_from_literal(len) if isinstance(len, int) else _to_java_column(len)
 
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
 
-    return Column(sc._jvm.functions.overlay(
-        _to_java_column(src),
-        _to_java_column(replace),
-        pos,
-        len
-    ))
+    return Column(
+        sc._jvm.functions.overlay(_to_java_column(src), _to_java_column(replace), pos, len)
+    )
 
 
 def sentences(
@@ -3099,11 +3077,11 @@ def sentences(
         country = lit("")
 
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-    return Column(sc._jvm.functions.sentences(
-        _to_java_column(string),
-        _to_java_column(language),
-        _to_java_column(country)
-    ))
+    return Column(
+        sc._jvm.functions.sentences(
+            _to_java_column(string), _to_java_column(language), _to_java_column(country)
+        )
+    )
 
 
 def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
@@ -3484,6 +3462,7 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
 
 # ---------------------- Collection functions ------------------------------
 
+
 def create_map(*cols: "ColumnOrName") -> Column:
     """Creates a new map column.
 
@@ -3605,9 +3584,7 @@ def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.arrays_overlap(_to_java_column(a1), _to_java_column(a2)))
 
 
-def slice(
-    x: "ColumnOrName", start: Union[Column, int], length: Union[Column, int]
-) -> Column:
+def slice(x: "ColumnOrName", start: Union[Column, int], length: Union[Column, int]) -> Column:
     """
     Collection function: returns an array containing  all the elements in `x` from index `start`
     (array indices start at 1, or from the end if `start` is negative) with the specified `length`.
@@ -3630,11 +3607,13 @@ def slice(
     [Row(sliced=[2, 3]), Row(sliced=[5])]
     """
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-    return Column(sc._jvm.functions.slice(
-        _to_java_column(x),
-        start._jc if isinstance(start, Column) else start,
-        length._jc if isinstance(length, Column) else length
-    ))
+    return Column(
+        sc._jvm.functions.slice(
+            _to_java_column(x),
+            start._jc if isinstance(start, Column) else start,
+            length._jc if isinstance(length, Column) else length,
+        )
+    )
 
 
 def array_join(
@@ -3658,8 +3637,9 @@ def array_join(
     if null_replacement is None:
         return Column(sc._jvm.functions.array_join(_to_java_column(col), delimiter))
     else:
-        return Column(sc._jvm.functions.array_join(
-            _to_java_column(col), delimiter, null_replacement))
+        return Column(
+            sc._jvm.functions.array_join(_to_java_column(col), delimiter, null_replacement)
+        )
 
 
 def concat(*cols: "ColumnOrName") -> Column:
@@ -3734,8 +3714,7 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     [Row(element_at(data, a)=1.0), Row(element_at(data, a)=None)]
     """
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-    return Column(sc._jvm.functions.element_at(
-        _to_java_column(col), lit(extraction)._jc))
+    return Column(sc._jvm.functions.element_at(_to_java_column(col), lit(extraction)._jc))
 
 
 def array_remove(col: "ColumnOrName", element: Any) -> Column:
@@ -4420,7 +4399,7 @@ def reverse(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([([2, 1, 3],) ,([1],) ,([],)], ['data'])
     >>> df.select(reverse(df.data).alias('r')).collect()
     [Row(r=[3, 1, 2]), Row(r=[1]), Row(r=[])]
-     """
+    """
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.functions.reverse(_to_java_column(col)))
 
@@ -4565,10 +4544,11 @@ def array_repeat(col: "ColumnOrName", count: Union[Column, int]) -> Column:
     [Row(r=['ab', 'ab', 'ab'])]
     """
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-    return Column(sc._jvm.functions.array_repeat(
-        _to_java_column(col),
-        _to_java_column(count) if isinstance(count, Column) else count
-    ))
+    return Column(
+        sc._jvm.functions.array_repeat(
+            _to_java_column(col), _to_java_column(count) if isinstance(count, Column) else count
+        )
+    )
 
 
 def arrays_zip(*cols: "ColumnOrName") -> Column:
@@ -4645,8 +4625,11 @@ def sequence(
     if step is None:
         return Column(sc._jvm.functions.sequence(_to_java_column(start), _to_java_column(stop)))
     else:
-        return Column(sc._jvm.functions.sequence(
-            _to_java_column(start), _to_java_column(stop), _to_java_column(step)))
+        return Column(
+            sc._jvm.functions.sequence(
+                _to_java_column(start), _to_java_column(stop), _to_java_column(step)
+            )
+        )
 
 
 def from_csv(
@@ -4713,11 +4696,7 @@ def _unresolved_named_lambda_variable(*name_parts: Any) -> Column:
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     name_parts_seq = _to_seq(sc, name_parts)
     expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
-    return Column(
-        sc._jvm.Column(
-            expressions.UnresolvedNamedLambdaVariable(name_parts_seq)
-        )
-    )
+    return Column(sc._jvm.Column(expressions.UnresolvedNamedLambdaVariable(name_parts_seq)))
 
 
 def _get_lambda_parameters(f: Callable) -> ValuesView[inspect.Parameter]:
@@ -4743,9 +4722,7 @@ def _get_lambda_parameters(f: Callable) -> ValuesView[inspect.Parameter]:
 
     # and all arguments can be used as positional
     if not all(p.kind in supported_parameter_types for p in parameters):
-        raise ValueError(
-            "f should use only POSITIONAL or POSITIONAL OR KEYWORD arguments"
-        )
+        raise ValueError("f should use only POSITIONAL or POSITIONAL OR KEYWORD arguments")
 
     return parameters
 
@@ -5067,18 +5044,10 @@ def aggregate(
     +----+
     """
     if finish is not None:
-        return _invoke_higher_order_function(
-            "ArrayAggregate",
-            [col, initialValue],
-            [merge, finish]
-        )
+        return _invoke_higher_order_function("ArrayAggregate", [col, initialValue], [merge, finish])
 
     else:
-        return _invoke_higher_order_function(
-            "ArrayAggregate",
-            [col, initialValue],
-            [merge]
-        )
+        return _invoke_higher_order_function("ArrayAggregate", [col, initialValue], [merge])
 
 
 def zip_with(
@@ -5131,9 +5100,7 @@ def zip_with(
     return _invoke_higher_order_function("ZipWith", [left, right], [f])
 
 
-def transform_keys(
-    col: "ColumnOrName", f: Callable[[Column, Column], Column]
-) -> Column:
+def transform_keys(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
     """
     Applies a function to every key-value pair in a map and returns
     a map with the results of those applications as the new keys for the pairs.
@@ -5170,9 +5137,7 @@ def transform_keys(
     return _invoke_higher_order_function("TransformKeys", [col], [f])
 
 
-def transform_values(
-    col: "ColumnOrName", f: Callable[[Column, Column], Column]
-) -> Column:
+def transform_values(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
     """
     Applies a function to every key-value pair in a map and returns
     a map with the results of those applications as the new values for the pairs.
@@ -5292,6 +5257,7 @@ def map_zip_with(
 
 # ---------------------- Partition transform functions --------------------------------
 
+
 def years(col: "ColumnOrName") -> Column:
     """
     Partition transform function: A transform for timestamps and dates
@@ -5409,9 +5375,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
 
     """
     if not isinstance(numBuckets, (int, Column)):
-        raise TypeError(
-            "numBuckets should be a Column or an int, got {}".format(type(numBuckets))
-        )
+        raise TypeError("numBuckets should be a Column or an int, got {}".format(type(numBuckets)))
 
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     numBuckets = (
@@ -5423,6 +5387,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
 
 
 # ---------------------------- User Defined Function ----------------------------------
+
 
 @overload
 def udf(
@@ -5538,29 +5503,29 @@ def udf(
         # If DataType has been passed as a positional argument
         # for decorator use it as a returnType
         return_type = f or returnType
-        return functools.partial(_create_udf, returnType=return_type,
-                                 evalType=PythonEvalType.SQL_BATCHED_UDF)
+        return functools.partial(
+            _create_udf, returnType=return_type, evalType=PythonEvalType.SQL_BATCHED_UDF
+        )
     else:
-        return _create_udf(f=f, returnType=returnType,
-                           evalType=PythonEvalType.SQL_BATCHED_UDF)
+        return _create_udf(f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF)
 
 
 def _test() -> None:
     import doctest
     from pyspark.sql import Row, SparkSession
     import pyspark.sql.functions
+
     globs = pyspark.sql.functions.__dict__.copy()
-    spark = SparkSession.builder\
-        .master("local[4]")\
-        .appName("sql.functions tests")\
-        .getOrCreate()
+    spark = SparkSession.builder.master("local[4]").appName("sql.functions tests").getOrCreate()
     sc = spark.sparkContext
-    globs['sc'] = sc
-    globs['spark'] = spark
-    globs['df'] = spark.createDataFrame([Row(age=2, name='Alice'), Row(age=5, name='Bob')])
+    globs["sc"] = sc
+    globs["spark"] = spark
+    globs["df"] = spark.createDataFrame([Row(age=2, name="Alice"), Row(age=5, name="Bob")])
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.functions, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
+        pyspark.sql.functions,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
     spark.stop()
     if failure_count:
         sys.exit(-1)

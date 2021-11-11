@@ -21,7 +21,6 @@ from pyspark.testing.mlutils import MockDataset, MockEstimator, MockTransformer,
 
 
 class PipelineTests(PySparkTestCase):
-
     def test_pipeline(self):
         dataset = MockDataset()
         estimator0 = MockEstimator()
@@ -37,8 +36,9 @@ class PipelineTests(PySparkTestCase):
         self.assertEqual(1, transformer1.getFake())
         self.assertEqual(2, dataset.index)
         self.assertIsNone(model2.dataset_index, "The last model shouldn't be called in fit.")
-        self.assertIsNone(transformer3.dataset_index,
-                          "The last transformer shouldn't be called in fit.")
+        self.assertIsNone(
+            transformer3.dataset_index, "The last transformer shouldn't be called in fit."
+        )
         dataset = pipeline_model.transform(dataset)
         self.assertEqual(2, model0.dataset_index)
         self.assertEqual(3, transformer1.dataset_index)
@@ -52,6 +52,7 @@ class PipelineTests(PySparkTestCase):
         def doTransform(pipeline):
             pipeline_model = pipeline.fit(dataset)
             return pipeline_model.transform(dataset)
+
         # check that empty pipeline did not perform any transformation
         self.assertEqual(dataset.index, doTransform(Pipeline(stages=[])).index)
         # check that failure to set stages param will raise KeyError for missing param
@@ -63,7 +64,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

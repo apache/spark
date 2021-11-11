@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model.{ContainerPort, ContainerPortBuilder, LocalObjectReferenceBuilder, Quantity}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.TestResourceInformation
@@ -116,7 +116,10 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
 
     val driverPodMetadata = configuredPod.pod.getMetadata
     assert(driverPodMetadata.getName === "spark-driver-pod")
-    DRIVER_LABELS.foreach { case (k, v) =>
+    val DEFAULT_LABELS = Map(
+      SPARK_APP_NAME_LABEL-> KubernetesConf.getAppNameLabel(kubernetesConf.appName)
+    )
+    (DRIVER_LABELS ++ DEFAULT_LABELS).foreach { case (k, v) =>
       assert(driverPodMetadata.getLabels.get(k) === v)
     }
     assert(driverPodMetadata.getAnnotations.asScala === DRIVER_ANNOTATIONS)

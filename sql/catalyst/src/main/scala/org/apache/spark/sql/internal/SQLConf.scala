@@ -1015,6 +1015,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK =
+    buildConf("spark.sql.hive.metastorePartitionPruningFastFallback")
+      .doc("When this config is enabled, if the predicates are not supported by Hive or Spark " +
+        "does fallback due to encountering MetaException from the metastore, " +
+        "Spark will instead prune partitions by getting the partition names first " +
+        "and then evaluating the filter expressions on the client side. " +
+        "Note that the predicates with TimeZoneAwareExpression is not supported.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val HIVE_MANAGE_FILESOURCE_PARTITIONS =
     buildConf("spark.sql.hive.manageFilesourcePartitions")
       .doc("When true, enable metastore partition management for file source tables as well. " +
@@ -2606,6 +2617,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI =
+    buildConf("spark.sql.ansi.allowCastBetweenDatetimeAndNumeric")
+      .doc("When true, the data type conversions between datetime types and numeric types are " +
+        "allowed in ANSI SQL mode. This configuration is only effective when " +
+        s"'${ANSI_ENABLED.key}' is true.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
       .internal()
@@ -3735,6 +3755,9 @@ class SQLConf extends Serializable with Logging {
   def metastorePartitionPruningFallbackOnException: Boolean =
     getConf(HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION)
 
+  def metastorePartitionPruningFastFallback: Boolean =
+    getConf(HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK)
+
   def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
 
   def filesourcePartitionFileCacheSize: Long = getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE)
@@ -4067,6 +4090,9 @@ class SQLConf extends Serializable with Logging {
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
   def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
+
+  def allowCastBetweenDatetimeAndNumericInAnsi: Boolean =
+    getConf(ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>

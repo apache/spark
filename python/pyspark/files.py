@@ -18,7 +18,7 @@
 import os
 
 
-__all__ = ['SparkFiles']
+__all__ = ["SparkFiles"]
 
 from typing import cast, ClassVar, Optional, TYPE_CHECKING
 
@@ -61,6 +61,5 @@ class SparkFiles(object):
         else:
             # This will have to change if we support multiple SparkContexts:
             return cast(
-                "SparkContext",
-                cls._sc
+                "SparkContext", cls._sc
             )._jvm.org.apache.spark.SparkFiles.getRootDirectory()  # type: ignore[attr-defined]

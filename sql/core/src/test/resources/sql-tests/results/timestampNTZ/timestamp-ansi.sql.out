@@ -104,7 +104,7 @@ SELECT make_timestamp(2021, 07, 11, 6, 30, 60.007)
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-The fraction of sec must be zero. Valid range is [0, 60].
+The fraction of sec must be zero. Valid range is [0, 60]. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -129,7 +129,7 @@ SELECT make_timestamp(1, 1, 1, 1, 1, 61)
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid value for SecondOfMinute (valid values 0 - 59): 61
+Invalid value for SecondOfMinute (valid values 0 - 59): 61. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -154,7 +154,7 @@ SELECT make_timestamp(1, 1, 1, 1, 1, 99.999999)
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid value for SecondOfMinute (valid values 0 - 59): 99
+Invalid value for SecondOfMinute (valid values 0 - 59): 99. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -163,7 +163,7 @@ SELECT make_timestamp(1, 1, 1, 1, 1, 999.999999)
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid value for SecondOfMinute (valid values 0 - 59): 999
+Invalid value for SecondOfMinute (valid values 0 - 59): 999. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -343,7 +343,7 @@ select to_timestamp('2019-10-06 10:11:12.', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 struct<>
 -- !query output
 java.time.format.DateTimeParseException
-Text '2019-10-06 10:11:12.' could not be parsed at index 20
+Text '2019-10-06 10:11:12.' could not be parsed at index 20. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -408,7 +408,7 @@ select to_timestamp('2019-10-06 10:11:12.1234567PST', 'yyyy-MM-dd HH:mm:ss.SSSSS
 struct<>
 -- !query output
 java.time.format.DateTimeParseException
-Text '2019-10-06 10:11:12.1234567PST' could not be parsed, unparsed text found at index 26
+Text '2019-10-06 10:11:12.1234567PST' could not be parsed, unparsed text found at index 26. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -425,7 +425,7 @@ select to_timestamp('223456 2019-10-06 10:11:12.123456PST', 'SSSSSS yyyy-MM-dd H
 struct<>
 -- !query output
 java.time.format.DateTimeParseException
-Text '223456 2019-10-06 10:11:12.123456PST' could not be parsed at index 27
+Text '223456 2019-10-06 10:11:12.123456PST' could not be parsed at index 27. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -490,7 +490,7 @@ select to_timestamp("12.1232019-10-06S10:11", "ss.SSSSyyyy-MM-dd'S'HH:mm")
 struct<>
 -- !query output
 java.time.format.DateTimeParseException
-Text '12.1232019-10-06S10:11' could not be parsed at index 7
+Text '12.1232019-10-06S10:11' could not be parsed at index 7. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -499,7 +499,7 @@ select to_timestamp("12.1232019-10-06S10:11", "ss.SSSSyy-MM-dd'S'HH:mm")
 struct<>
 -- !query output
 java.time.format.DateTimeParseException
-Text '12.1232019-10-06S10:11' could not be parsed at index 9
+Text '12.1232019-10-06S10:11' could not be parsed at index 9. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -572,7 +572,7 @@ select to_timestamp("02-29", "MM-dd")
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid date 'February 29' as '1970' is not a leap year
+Invalid date 'February 29' as '1970' is not a leap year. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query

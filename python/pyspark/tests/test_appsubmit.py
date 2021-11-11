@@ -25,14 +25,15 @@ import zipfile
 
 
 class SparkSubmitTests(unittest.TestCase):
-
     def setUp(self):
         self.programDir = tempfile.mkdtemp()
         tmp_dir = tempfile.gettempdir()
         self.sparkSubmit = [
             os.path.join(os.environ.get("SPARK_HOME"), "bin", "spark-submit"),
-            "--conf", "spark.driver.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
-            "--conf", "spark.executor.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
+            "--conf",
+            "spark.driver.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
+            "--conf",
+            "spark.executor.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
         ]
 
     def tearDown(self):
@@ -43,8 +44,8 @@ class SparkSubmitTests(unittest.TestCase):
         Create a temp file with the given name and content and return its path.
         Strips leading spaces from content up to the first '|' in each line.
         """
-        pattern = re.compile(r'^ *\|', re.MULTILINE)
-        content = re.sub(pattern, '', content.strip())
+        pattern = re.compile(r"^ *\|", re.MULTILINE)
+        content = re.sub(pattern, "", content.strip())
         if dir is None:
             path = os.path.join(self.programDir, name)
         else:
@@ -59,20 +60,23 @@ class SparkSubmitTests(unittest.TestCase):
         Create a zip archive containing a file with the given content and return its path.
         Strips leading spaces from content up to the first '|' in each line.
         """
-        pattern = re.compile(r'^ *\|', re.MULTILINE)
-        content = re.sub(pattern, '', content.strip())
+        pattern = re.compile(r"^ *\|", re.MULTILINE)
+        content = re.sub(pattern, "", content.strip())
         if dir is None:
             path = os.path.join(self.programDir, name + ext)
         else:
             path = os.path.join(self.programDir, dir, zip_name + ext)
-        zip = zipfile.ZipFile(path, 'w')
+        zip = zipfile.ZipFile(path, "w")
         zip.writestr(name, content)
         zip.close()
         return path
 
     def create_spark_package(self, artifact_name):
         group_id, artifact_id, version = artifact_name.split(":")
-        self.createTempFile("%s-%s.pom" % (artifact_id, version), ("""
+        self.createTempFile(
+            "%s-%s.pom" % (artifact_id, version),
+            (
+                """
             |<?xml version="1.0" encoding="UTF-8"?>
             |<project xmlns="http://maven.apache.org/POM/4.0.0"
             |       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -83,30 +87,43 @@ class SparkSubmitTests(unittest.TestCase):
             |   <artifactId>%s</artifactId>
             |   <version>%s</version>
             |</project>
-            """ % (group_id, artifact_id, version)).lstrip(),
-            os.path.join(group_id, artifact_id, version))
-        self.createFileInZip("%s.py" % artifact_id, """
+            """
+                % (group_id, artifact_id, version)
+            ).lstrip(),
+            os.path.join(group_id, artifact_id, version),
+        )
+        self.createFileInZip(
+            "%s.py" % artifact_id,
+            """
             |def myfunc(x):
             |    return x + 1
-            """, ".jar", os.path.join(group_id, artifact_id, version),
-                             "%s-%s" % (artifact_id, version))
+            """,
+            ".jar",
+            os.path.join(group_id, artifact_id, version),
+            "%s-%s" % (artifact_id, version),
+        )
 
     def test_single_script(self):
         """Submit and test a single script file"""
-        script = self.createTempFile("test.py", """
+        script = self.createTempFile(
+            "test.py",
+            """
             |from pyspark import SparkContext
             |
             |sc = SparkContext()
             |print(sc.parallelize([1, 2, 3]).map(lambda x: x * 2).collect())
-            """)
+            """,
+        )
         proc = subprocess.Popen(self.sparkSubmit + [script], stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
-        self.assertIn("[2, 4, 6]", out.decode('utf-8'))
+        self.assertIn("[2, 4, 6]", out.decode("utf-8"))
 
     def test_script_with_local_functions(self):
         """Submit and test a single script file calling a global function"""
-        script = self.createTempFile("test.py", """
+        script = self.createTempFile(
+            "test.py",
+            """
             |from pyspark import SparkContext
             |
             |def foo(x):
@@ -114,91 +131,123 @@ class SparkSubmitTests(unittest.TestCase):
             |
             |sc = SparkContext()
             |print(sc.parallelize([1, 2, 3]).map(foo).collect())
-            """)
+            """,
+        )
         proc = subprocess.Popen(self.sparkSubmit + [script], stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
-        self.assertIn("[3, 6, 9]", out.decode('utf-8'))
+        self.assertIn("[3, 6, 9]", out.decode("utf-8"))
 
     def test_module_dependency(self):
         """Submit and test a script with a dependency on another module"""
-        script = self.createTempFile("test.py", """
+        script = self.createTempFile(
+            "test.py",
+            """
             |from pyspark import SparkContext
             |from mylib import myfunc
             |
             |sc = SparkContext()
             |print(sc.parallelize([1, 2, 3]).map(myfunc).collect())
-            """)
-        zip = self.createFileInZip("mylib.py", """
+            """,
+        )
+        zip = self.createFileInZip(
+            "mylib.py",
+            """
             |def myfunc(x):
             |    return x + 1
-            """)
-        proc = subprocess.Popen(self.sparkSubmit + ["--py-files", zip, script],
-                                stdout=subprocess.PIPE)
+            """,
+        )
+        proc = subprocess.Popen(
+            self.sparkSubmit + ["--py-files", zip, script], stdout=subprocess.PIPE
+        )
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
-        self.assertIn("[2, 3, 4]", out.decode('utf-8'))
+        self.assertIn("[2, 3, 4]", out.decode("utf-8"))
 
     def test_module_dependency_on_cluster(self):
         """Submit and test a script with a dependency on another module on a cluster"""
-        script = self.createTempFile("test.py", """
+        script = self.createTempFile(
+            "test.py",
+            """
             |from pyspark import SparkContext
             |from mylib import myfunc
             |
             |sc = SparkContext()
             |print(sc.parallelize([1, 2, 3]).map(myfunc).collect())
-            """)
-        zip = self.createFileInZip("mylib.py", """
+            """,
+        )
+        zip = self.createFileInZip(
+            "mylib.py",
+            """
             |def myfunc(x):
             |    return x + 1
-            """)
-        proc = subprocess.Popen(self.sparkSubmit + ["--py-files", zip, "--master",
-                                "local-cluster[1,1,1024]", script],
-                                stdout=subprocess.PIPE)
+            """,
+        )
+        proc = subprocess.Popen(
+            self.sparkSubmit + ["--py-files", zip, "--master", "local-cluster[1,1,1024]", script],
+            stdout=subprocess.PIPE,
+        )
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
-        self.assertIn("[2, 3, 4]", out.decode('utf-8'))
+        self.assertIn("[2, 3, 4]", out.decode("utf-8"))
 
     def test_package_dependency(self):
         """Submit and test a script with a dependency on a Spark Package"""
-        script = self.createTempFile("test.py", """
+        script = self.createTempFile(
+            "test.py",
+            """
             |from pyspark import SparkContext
             |from mylib import myfunc
             |
             |sc = SparkContext()
             |print(sc.parallelize([1, 2, 3]).map(myfunc).collect())
-            """)
+            """,
+        )
         self.create_spark_package("a:mylib:0.1")
         proc = subprocess.Popen(
-            self.sparkSubmit + ["--packages", "a:mylib:0.1", "--repositories",
-                                "file:" + self.programDir, script],
-            stdout=subprocess.PIPE)
+            self.sparkSubmit
+            + ["--packages", "a:mylib:0.1", "--repositories", "file:" + self.programDir, script],
+            stdout=subprocess.PIPE,
+        )
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
-        self.assertIn("[2, 3, 4]", out.decode('utf-8'))
+        self.assertIn("[2, 3, 4]", out.decode("utf-8"))
 
     def test_package_dependency_on_cluster(self):
         """Submit and test a script with a dependency on a Spark Package on a cluster"""
-        script = self.createTempFile("test.py", """
+        script = self.createTempFile(
+            "test.py",
+            """
             |from pyspark import SparkContext
             |from mylib import myfunc
             |
             |sc = SparkContext()
             |print(sc.parallelize([1, 2, 3]).map(myfunc).collect())
-            """)
+            """,
+        )
         self.create_spark_package("a:mylib:0.1")
         proc = subprocess.Popen(
-            self.sparkSubmit + ["--packages", "a:mylib:0.1", "--repositories",
-                                "file:" + self.programDir, "--master", "local-cluster[1,1,1024]",
-                                script],
-            stdout=subprocess.PIPE)
+            self.sparkSubmit
+            + [
+                "--packages",
+                "a:mylib:0.1",
+                "--repositories",
+                "file:" + self.programDir,
+                "--master",
+                "local-cluster[1,1,1024]",
+                script,
+            ],
+            stdout=subprocess.PIPE,
+        )
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
-        self.assertIn("[2, 3, 4]", out.decode('utf-8'))
+        self.assertIn("[2, 3, 4]", out.decode("utf-8"))
 
     def test_single_script_on_cluster(self):
         """Submit and test a single script on a cluster"""
-        script = self.createTempFile("test.py", """
+        script = self.createTempFile(
+            "test.py",
+            """
             |from pyspark import SparkContext
             |
             |def foo(x):
@@ -206,19 +255,23 @@ class SparkSubmitTests(unittest.TestCase):
             |
             |sc = SparkContext()
             |print(sc.parallelize([1, 2, 3]).map(foo).collect())
-            """)
+            """,
+        )
         # this will fail if you have different spark.executor.memory
         # in conf/spark-defaults.conf
         proc = subprocess.Popen(
             self.sparkSubmit + ["--master", "local-cluster[1,1,1024]", script],
-            stdout=subprocess.PIPE)
+            stdout=subprocess.PIPE,
+        )
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
-        self.assertIn("[2, 4, 6]", out.decode('utf-8'))
+        self.assertIn("[2, 4, 6]", out.decode("utf-8"))
 
     def test_user_configuration(self):
         """Make sure user configuration is respected (SPARK-19307)"""
-        script = self.createTempFile("test.py", """
+        script = self.createTempFile(
+            "test.py",
+            """
             |from pyspark import SparkConf, SparkContext
             |
             |conf = SparkConf().set("spark.test_config", "1")
@@ -228,11 +281,13 @@ class SparkSubmitTests(unittest.TestCase):
             |        raise RuntimeError("Cannot find spark.test_config in SparkContext's conf.")
             |finally:
             |    sc.stop()
-            """)
+            """,
+        )
         proc = subprocess.Popen(
             self.sparkSubmit + ["--master", "local", script],
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT)
+            stderr=subprocess.STDOUT,
+        )
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode, msg="Process failed with error:\n {0}".format(out))
 
@@ -242,7 +297,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)
