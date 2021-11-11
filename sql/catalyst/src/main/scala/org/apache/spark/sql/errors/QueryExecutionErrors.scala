@@ -1890,3 +1890,4 @@ object QueryExecutionErrors {
     new UnsupportedOperationException(s"Hive table $tableName with ANSI intervals is not supported")
   }
 }
+
