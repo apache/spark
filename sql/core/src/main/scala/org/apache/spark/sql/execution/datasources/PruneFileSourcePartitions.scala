@@ -90,7 +90,7 @@ private[sql] object PruneFileSourcePartitions
             _,
             _,
             _))
-        if filters.nonEmpty && fsRelation.partitionSchemaOption.isDefined =>
+        if filters.nonEmpty && fsRelation.partitionSchema.nonEmpty =>
       val (partitionKeyFilters, _) = getPartitionKeyFiltersAndDataFilters(
         fsRelation.sparkSession, logicalRelation, partitionSchema, filters,
         logicalRelation.output)
