@@ -964,7 +964,10 @@ def log_advice(message: str) -> None:
     for the existing pandas/PySpark users who may not be familiar with distributed environments
     or the behavior of pandas.
     """
-    warnings.warn(message, UserWarning)
+    from pyspark.pandas.config import get_option
+
+    if get_option("display.log_advice"):
+        warnings.warn(message, UserWarning)
 
 
 def _test() -> None:

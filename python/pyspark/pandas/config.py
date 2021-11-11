@@ -133,6 +133,19 @@ _options: List[Option] = [
         ),
     ),
     Option(
+        key="display.log_advice",
+        doc=(
+            "This determines whether or not to issue advice log for pandas-on-Spark APIs. "
+            "pandas API on Spark exposes appropriate warnings using a function called log_advice "
+            "because there are many expensive operations and users who are not familiar with "
+            "distributed environments can easily make mistakes. "
+            "However, sometimes these warnings appear so often that they can annoy users. "
+            "Thus, this option can be used to decide whether to turn the log_advice on or off."
+        ),
+        default=False,
+        types=bool,
+    ),
+    Option(
         key="compute.max_rows",
         doc=(
             "'compute.max_rows' sets the limit of the current pandas-on-Spark DataFrame. "
