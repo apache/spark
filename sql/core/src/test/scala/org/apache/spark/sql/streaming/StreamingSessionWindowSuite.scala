@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.{count, session_window, sum}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 class StreamingSessionWindowSuite extends StreamTest
   with BeforeAndAfter with Matchers with Logging {
@@ -50,8 +51,7 @@ class StreamingSessionWindowSuite extends StreamTest
       (SQLConf.STATE_STORE_PROVIDER_CLASS.key, value.stripSuffix("$"))
     }
     // RocksDB doesn't support Apple Silicon yet
-    if (System.getProperty("os.name").equals("Mac OS X") &&
-        System.getProperty("os.arch").equals("aarch64")) {
+    if (Utils.isMac && System.getProperty("os.arch").equals("aarch64")) {
       providerOptions = providerOptions
         .filterNot(_._2.contains(classOf[RocksDBStateStoreProvider].getSimpleName))
     }

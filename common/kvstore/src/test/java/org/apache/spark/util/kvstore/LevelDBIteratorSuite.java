@@ -20,7 +20,9 @@ package org.apache.spark.util.kvstore;
 import java.io.File;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.SystemUtils;
 import org.junit.AfterClass;
+import static org.junit.Assume.assumeFalse;
 
 public class LevelDBIteratorSuite extends DBIteratorSuite {
 
@@ -39,6 +41,7 @@ public class LevelDBIteratorSuite extends DBIteratorSuite {
 
   @Override
   protected KVStore createStore() throws Exception {
+    assumeFalse(SystemUtils.IS_OS_MAC_OSX && System.getProperty("os.arch").equals("aarch64"));
     dbpath = File.createTempFile("test.", ".ldb");
     dbpath.delete();
     db = new LevelDB(dbpath);
