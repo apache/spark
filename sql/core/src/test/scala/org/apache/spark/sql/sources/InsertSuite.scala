@@ -1063,6 +1063,40 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       checkAnswer(spark.table("t"), Row(1, 2, 3))
     }
   }
+
+  test("SPARK-37294: insert ANSI intervals into a table partitioned by the interval columns") {
+    val tbl = "interval_table"
+    Seq(PartitionOverwriteMode.DYNAMIC.toString,
+      PartitionOverwriteMode.STATIC.toString).foreach { mode =>
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> mode) {
+        withTable(tbl) {
+          sql(
+            s"""
+              |CREATE TABLE $tbl (i int, part1 INTERVAL YEAR, part2 INTERVAL DAY) USING PARQUET
+              |PARTITIONED BY (part1, part2)
+              """.stripMargin)
+
+          sql(
+            s"""ALTER TABLE $tbl ADD PARTITION (
+               |part1 = INTERVAL '2' YEAR,
+               |part2 = INTERVAL '3' DAY)""".stripMargin)
+          sql(s"INSERT OVERWRITE TABLE $tbl SELECT 1, INTERVAL '2' YEAR, INTERVAL '3' DAY")
+          sql(s"INSERT INTO TABLE $tbl SELECT 4, INTERVAL '5' YEAR, INTERVAL '6' DAY")
+          sql(
+            s"""
+               |INSERT INTO $tbl
+               | PARTITION (part1 = INTERVAL '8' YEAR, part2 = INTERVAL '9' DAY)
+               |SELECT 7""".stripMargin)
+
+          checkAnswer(
+            spark.table(tbl),
+            Seq(Row(1, java.time.Period.ofYears(2), java.time.Duration.ofDays(3)),
+              Row(4, java.time.Period.ofYears(5), java.time.Duration.ofDays(6)),
+              Row(7, java.time.Period.ofYears(8), java.time.Duration.ofDays(9))))
+        }
+      }
+    }
+  }
 }
 
 class FileExistingTestFileSystem extends RawLocalFileSystem {
