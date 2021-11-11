@@ -1651,6 +1651,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       .set(FAST_IN_PROGRESS_PARSING, true)
 
     if (!inMemory) {
+      // LevelDB doesn't support Apple Silicon yet
+      assume(!(Utils.isMac && System.getProperty("os.arch").equals("aarch64")))
       conf.set(LOCAL_STORE_DIR, Utils.createTempDir().getAbsolutePath())
     }
     conf.set(HYBRID_STORE_ENABLED, useHybridStore)
