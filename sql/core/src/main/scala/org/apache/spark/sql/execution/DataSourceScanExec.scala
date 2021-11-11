@@ -134,13 +134,6 @@ case class RowDataSourceScanExec(
 
     def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
 
-    val (aggString, groupByString) = if (pushedDownOperators.aggregation.nonEmpty) {
-      (seqToString(pushedDownOperators.aggregation.get.aggregateExpressions),
-        seqToString(pushedDownOperators.aggregation.get.groupByColumns))
-    } else {
-      ("[]", "[]")
-    }
-
     val markedFilters = if (filters.nonEmpty) {
       for (filter <- filters) yield {
         if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
@@ -151,9 +144,10 @@ case class RowDataSourceScanExec(
 
     Map(
       "ReadSchema" -> requiredSchema.catalogString,
-      "PushedFilters" -> seqToString(markedFilters.toSeq),
-      "PushedAggregates" -> aggString,
-      "PushedGroupby" -> groupByString) ++
+      "PushedFilters" -> seqToString(markedFilters.toSeq)) ++
+      pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
+        Map("PushedAggregates" -> seqToString(v.aggregateExpressions),
+          "PushedGroupByColumns" -> seqToString(v.groupByColumns))} ++
       pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value") ++
       pushedDownOperators.sample.map(v => "PushedSample" ->
         s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
