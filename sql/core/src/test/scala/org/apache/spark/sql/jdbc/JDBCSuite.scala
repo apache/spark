@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -788,9 +788,8 @@ class JDBCSuite extends QueryTest
   }
 
   test("compile filters") {
-    val compileFilter = PrivateMethod[Option[String]](Symbol("compileFilter"))
     def doCompileFilter(f: Filter): String =
-      JDBCRDD invokePrivate compileFilter(f, JdbcDialects.get("jdbc:")) getOrElse("")
+      JdbcDialects.get("jdbc:").compileFilter(f) getOrElse("")
     assert(doCompileFilter(EqualTo("col0", 3)) === """"col0" = 3""")
     assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === """(NOT ("col1" = 'abc'))""")
     assert(doCompileFilter(And(EqualTo("col0", 0), EqualTo("col1", "def")))
