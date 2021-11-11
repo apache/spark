@@ -143,13 +143,6 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
         spark.read.schema(schema).orc(orcDir).collect()
       }.getMessage
       assert(msg.contains("ORC data source does not support interval data type."))
-
-      msg = intercept[AnalysisException] {
-        val schema = StructType(StructField("a", TimestampNTZType, true) :: Nil)
-        spark.range(1).write.mode("overwrite").orc(orcDir)
-        spark.read.schema(schema).orc(orcDir).collect()
-      }.getMessage
-      assert(msg.contains("ORC data source does not support timestamp_ntz data type."))
     }
   }
 

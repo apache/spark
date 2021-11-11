@@ -778,10 +778,14 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
       (new Timestamp(i), LocalDateTime.of(2019, 3, 21, 0, 2, 3, 456000000 + i))
     }
 
-    withOrcFile(data) { file =>
-      checkAnswer(
-        spark.read.orc(file),
-        data.toDF().collect())
+    Seq("true", "false").foreach { key =>
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> key) {
+        withOrcFile(data) { file =>
+          checkAnswer(
+            spark.read.orc(file),
+            data.toDF().collect())
+        }
+      }
     }
   }
 
@@ -791,10 +795,14 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
         new Timestamp(i), LocalDateTime.of(2019, 3, 21, 0, 2, 3, 456000000 + i))
     }
 
-    withOrcFile(data) { file =>
-      checkAnswer(
-        spark.read.orc(file),
-        data.toDF().collect())
+    Seq("true", "false").foreach { key =>
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> key) {
+        withOrcFile(data) { file =>
+          checkAnswer(
+            spark.read.orc(file),
+            data.toDF().collect())
+        }
+      }
     }
   }
 
@@ -804,10 +812,14 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
       Option.empty[LocalDateTime]
     ) :: Nil
 
-    withOrcFile(data) { file =>
-      checkAnswer(
-        spark.read.orc(file),
-        Row(Seq.fill(2)(null): _*))
+    Seq("true", "false").foreach { key =>
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> key) {
+        withOrcFile(data) { file =>
+          checkAnswer(
+            spark.read.orc(file),
+            Row(Seq.fill(2)(null): _*))
+        }
+      }
     }
   }
 }

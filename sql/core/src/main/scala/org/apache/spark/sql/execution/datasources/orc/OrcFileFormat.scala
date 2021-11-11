@@ -47,7 +47,6 @@ private[sql] object OrcFileFormat {
   def getQuotedSchemaString(dataType: DataType): String = dataType match {
     case _: DayTimeIntervalType => LongType.catalogString
     case _: YearMonthIntervalType => IntegerType.catalogString
-    case _: AtomicType => dataType.catalogString
     case StructType(fields) =>
       fields.map(f => s"`${f.name}`:${getQuotedSchemaString(f.dataType)}")
         .mkString("struct<", ",", ">")

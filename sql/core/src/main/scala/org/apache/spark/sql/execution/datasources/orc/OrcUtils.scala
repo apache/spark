@@ -84,11 +84,11 @@ object OrcUtils extends Logging {
             (schema, None)
           }
         }
-        if (schema.getFieldNames.size == 0) {
-          (None, structTypeOpt)
-        } else {
-          (Some(schema), structTypeOpt)
-        }
+      if (schema.getFieldNames.size == 0) {
+        (None, structTypeOpt)
+      } else {
+        (Some(schema), structTypeOpt)
+      }
     } catch {
       case e: org.apache.orc.FileFormatException =>
         if (ignoreCorruptFiles) {
@@ -359,6 +359,8 @@ object OrcUtils extends Logging {
           case None => result.addChild(orcTypeDescription(m.valueType))
         }
         result
+      case TimestampNTZType =>
+        TypeDescription.fromString(TypeDescription.Category.TIMESTAMP.getName)
       case other =>
         TypeDescription.fromString(other.catalogString)
     }
