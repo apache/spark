@@ -278,7 +278,7 @@ class SparkSession(SparkConversionMixin):
                     # by all sessions.
                     session = SparkSession(sc)
                 for key, value in self._options.items():
-                    session._jsparkSession.sessionState().conf().setConfString(key, value)
+                    session._jsparkSession.sessionState().conf().set(key, value)
                 return session
 
     builder = Builder()
