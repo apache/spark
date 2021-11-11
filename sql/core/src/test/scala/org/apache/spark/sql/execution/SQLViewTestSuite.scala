@@ -383,16 +383,15 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
 abstract class TempViewTestSuite extends SQLViewTestSuite {
   test("SPARK-37202: temp view should capture the function registered by catalog API") {
     val funcName = "tempFunc"
-    val viewName = "tempView"
     withUserDefinedFunction(funcName -> true) {
       val catalogFunction = CatalogFunction(
         FunctionIdentifier(funcName, None), "org.apache.spark.myFunc", Seq.empty)
       val functionBuilder = (e: Seq[Expression]) => e.head
       spark.sessionState.catalog.registerFunction(
         catalogFunction, overrideIfExists = false, functionBuilder = Some(functionBuilder))
+      val query = s"SELECT $funcName(max(a), min(a)) FROM VALUES (1), (2), (3) t(a)"
+      val viewName = createView("tempView", query)
       withView(viewName) {
-        val query = s"SELECT $funcName(max(a), min(a)) FROM VALUES (1), (2), (3) t(a)"
-        createView(viewName, query)
         checkViewOutput(viewName, sql(query).collect())
       }
     }
