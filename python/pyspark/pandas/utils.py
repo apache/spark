@@ -65,6 +65,10 @@ ERROR_MESSAGE_CANNOT_COMBINE = (
 SPARK_CONF_ARROW_ENABLED = "spark.sql.execution.arrow.pyspark.enabled"
 
 
+class PandasAPIOnSparkAdviceWarning(Warning):
+    pass
+
+
 def same_anchor(
     this: Union["DataFrame", "IndexOpsMixin", "InternalFrame"],
     that: Union["DataFrame", "IndexOpsMixin", "InternalFrame"],
@@ -964,10 +968,7 @@ def log_advice(message: str) -> None:
     for the existing pandas/PySpark users who may not be familiar with distributed environments
     or the behavior of pandas.
     """
-    from pyspark.pandas.config import get_option
-
-    if get_option("display.log_advice"):
-        warnings.warn(message, UserWarning)
+    warnings.warn(message, PandasAPIOnSparkAdviceWarning)
 
 
 def _test() -> None:
