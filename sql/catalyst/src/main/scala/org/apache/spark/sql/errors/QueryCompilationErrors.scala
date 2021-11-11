@@ -66,10 +66,10 @@ object QueryCompilationErrors {
       messageParameters = Array(sizeLimit.toString))
   }
 
-  def illegalFormatArgumentIndexError(index: Int): Throwable = {
+  def illegalSubstringError(subject: String, illegalContent: String): Throwable = {
     new AnalysisException(
-      errorClass = "ILLEGAL_FORMAT_ARGUMENT_INDEX",
-      messageParameters = Array(index.toString))
+      errorClass = "ILLEGAL_SUBSTRING",
+      messageParameters = Array(subject, illegalContent))
   }
 
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
