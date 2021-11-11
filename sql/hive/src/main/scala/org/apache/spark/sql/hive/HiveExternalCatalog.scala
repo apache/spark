@@ -47,8 +47,6 @@ import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType, MapType, StructType}
-import org.apache.spark.util.Utils
-
 
 /**
  * A persistent implementation of the system catalog using Hive.
@@ -414,11 +412,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         }
 
       case (None, message) =>
-        if (Utils.isTesting) {
-          print(message)
-        } else {
-          logWarning(message)
-        }
+        logWarning(message)
         saveTableIntoHive(newSparkSQLSpecificMetastoreTable(), ignoreIfExists)
     }
   }
