@@ -370,6 +370,23 @@ private[parquet] class ParquetRowConverter(
           }
         }
 
+      case TimestampNTZType
+        if canReadAsTimestampNTZ(parquetType) &&
+          parquetType.getLogicalTypeAnnotation
+            .asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MICROS =>
+        new ParquetPrimitiveConverter(updater)
+
+      case TimestampNTZType
+        if canReadAsTimestampNTZ(parquetType) &&
+          parquetType.getLogicalTypeAnnotation
+            .asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MILLIS =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addLong(value: Long): Unit = {
+            val micros = DateTimeUtils.millisToMicros(value)
+            updater.setLong(micros)
+          }
+        }
+
       case DateType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {
@@ -435,6 +452,16 @@ private[parquet] class ParquetRowConverter(
           t, parquetType.toString)
     }
   }
+
+
+  // Only INT64 column with Timestamp logical annotation `isAdjustedToUTC=false`
+  // can be read as Spark's TimestampNTZ type. This is to avoid mistakes in reading the timestamp
+  // values.
+  private def canReadAsTimestampNTZ(parquetType: Type): Boolean =
+    parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 &&
+      parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
+      !parquetType.getLogicalTypeAnnotation
+        .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC
 
   /**
    * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
