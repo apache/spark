@@ -130,9 +130,8 @@ private[hive] class SparkGetColumnsOperation(
    * For array, map, string, and binaries, the column size is variable, return null as unknown.
    */
   private def getColumnSize(typ: DataType): Option[Int] = typ match {
-    case dt @ (BooleanType | _: NumericType | DateType | TimestampType |
-               CalendarIntervalType | NullType |
-               _: YearMonthIntervalType | _: DayTimeIntervalType) =>
+    case dt @ (BooleanType | _: NumericType | DateType | TimestampType | TimestampNTZType |
+               CalendarIntervalType | NullType | _: AnsiIntervalType) =>
       Some(dt.defaultSize)
     case CharType(n) => Some(n)
     case StructType(fields) =>
@@ -158,7 +157,7 @@ private[hive] class SparkGetColumnsOperation(
     case FloatType => Some(7)
     case DoubleType => Some(15)
     case d: DecimalType => Some(d.scale)
-    case TimestampType => Some(6)
+    case TimestampType | TimestampNTZType => Some(6)
     case _ => None
   }
 
@@ -182,12 +181,12 @@ private[hive] class SparkGetColumnsOperation(
     case CharType(_) => java.sql.Types.CHAR
     case BinaryType => java.sql.Types.BINARY
     case DateType => java.sql.Types.DATE
-    case TimestampType => java.sql.Types.TIMESTAMP
+    case TimestampType | TimestampNTZType => java.sql.Types.TIMESTAMP
     case _: ArrayType => java.sql.Types.ARRAY
     case _: MapType => java.sql.Types.JAVA_OBJECT
     case _: StructType => java.sql.Types.STRUCT
     // Hive's year-month and day-time intervals are mapping to java.sql.Types.OTHER
-    case _: CalendarIntervalType | _: YearMonthIntervalType | _: DayTimeIntervalType =>
+    case _: CalendarIntervalType | _: AnsiIntervalType =>
       java.sql.Types.OTHER
     case _ => throw new IllegalArgumentException(s"Unrecognized type name: ${typ.sql}")
   }

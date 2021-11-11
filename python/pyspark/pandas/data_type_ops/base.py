@@ -18,13 +18,13 @@
 import numbers
 from abc import ABCMeta
 from itertools import chain
-from typing import Any, Optional, TypeVar, Union, TYPE_CHECKING
+from typing import Any, Optional, Union
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Column
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -40,13 +40,17 @@ from pyspark.sql.types import (
     StringType,
     StructType,
     TimestampType,
+    TimestampNTZType,
     UserDefinedType,
 )
-from pyspark.pandas.typedef import Dtype, extension_dtypes
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
+from pyspark.pandas.spark import functions as SF
+from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
     extension_float_dtypes_available,
     extension_object_dtypes_available,
+    spark_type_to_pandas_dtype,
 )
 
 if extension_dtypes_available:
@@ -57,14 +61,6 @@ if extension_float_dtypes_available:
 
 if extension_object_dtypes_available:
     from pandas import BooleanDtype, StringDtype
-
-if TYPE_CHECKING:
-    from pyspark.pandas.base import IndexOpsMixin  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
-
-
-T_IndexOps = TypeVar("T_IndexOps", bound="IndexOpsMixin")
 
 
 def is_valid_operand_for_numeric_arithmetic(operand: Any, *, allow_bool: bool = True) -> bool:
@@ -85,7 +81,7 @@ def is_valid_operand_for_numeric_arithmetic(operand: Any, *, allow_bool: bool = 
 
 
 def transform_boolean_operand_to_numeric(
-    operand: Any, spark_type: Optional[DataType] = None
+    operand: Any, *, spark_type: Optional[DataType] = None
 ) -> Any:
     """Transform boolean operand to numeric.
 
@@ -98,7 +94,14 @@ def transform_boolean_operand_to_numeric(
 
     if isinstance(operand, IndexOpsMixin) and isinstance(operand.spark.data_type, BooleanType):
         assert spark_type, "spark_type must be provided if the operand is a boolean IndexOpsMixin"
-        return operand.spark.transform(lambda scol: scol.cast(spark_type))
+        assert isinstance(spark_type, NumericType), "spark_type must be NumericType"
+        dtype = spark_type_to_pandas_dtype(
+            spark_type, use_extension_dtypes=operand._internal.data_fields[0].is_extension_dtype
+        )
+        return operand._with_new_scol(
+            operand.spark.column.cast(spark_type),
+            field=operand._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type),
+        )
     elif isinstance(operand, bool):
         return int(operand)
     else:
@@ -106,8 +109,8 @@ def transform_boolean_operand_to_numeric(
 
 
 def _as_categorical_type(
-    index_ops: T_IndexOps, dtype: CategoricalDtype, spark_type: DataType
-) -> T_IndexOps:
+    index_ops: IndexOpsLike, dtype: CategoricalDtype, spark_type: DataType
+) -> IndexOpsLike:
     """Cast `index_ops` to categorical dtype, given `dtype` and `spark_type`."""
     assert isinstance(dtype, CategoricalDtype)
     if dtype.categories is None:
@@ -119,60 +122,56 @@ def _as_categorical_type(
     else:
         categories = dtype.categories
         if len(categories) == 0:
-            scol = F.lit(-1)
+            scol = SF.lit(-1)
         else:
             kvs = chain(
-                *[(F.lit(category), F.lit(code)) for code, category in enumerate(categories)]
+                *[(SF.lit(category), SF.lit(code)) for code, category in enumerate(categories)]
             )
             map_scol = F.create_map(*kvs)
 
-            scol = F.coalesce(map_scol.getItem(index_ops.spark.column), F.lit(-1))
+            scol = F.coalesce(map_scol[index_ops.spark.column], SF.lit(-1))
         return index_ops._with_new_scol(
-            scol.cast(spark_type).alias(index_ops._internal.data_fields[0].name),
+            scol.cast(spark_type),
             field=index_ops._internal.data_fields[0].copy(
                 dtype=dtype, spark_type=spark_type, nullable=False
             ),
         )
 
 
-def _as_bool_type(index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+def _as_bool_type(index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
     """Cast `index_ops` to BooleanType Spark type, given `dtype`."""
-    from pyspark.pandas.internal import InternalField
-
+    spark_type = BooleanType()
     if isinstance(dtype, extension_dtypes):
-        scol = index_ops.spark.column.cast(BooleanType())
+        scol = index_ops.spark.column.cast(spark_type)
     else:
-        scol = F.when(index_ops.spark.column.isNull(), F.lit(False)).otherwise(
-            index_ops.spark.column.cast(BooleanType())
+        scol = F.when(index_ops.spark.column.isNull(), SF.lit(False)).otherwise(
+            index_ops.spark.column.cast(spark_type)
         )
     return index_ops._with_new_scol(
-        scol.alias(index_ops._internal.data_spark_column_names[0]),
-        field=InternalField(dtype=dtype),
+        scol, field=index_ops._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type)
     )
 
 
 def _as_string_type(
-    index_ops: T_IndexOps, dtype: Union[str, type, Dtype], *, null_str: str = str(None)
-) -> T_IndexOps:
+    index_ops: IndexOpsLike, dtype: Union[str, type, Dtype], *, null_str: str = str(None)
+) -> IndexOpsLike:
     """Cast `index_ops` to StringType Spark type, given `dtype` and `null_str`,
-    representing null Spark column.
+    representing null Spark column. Note that `null_str` is for non-extension dtypes only.
     """
-    from pyspark.pandas.internal import InternalField
-
+    spark_type = StringType()
     if isinstance(dtype, extension_dtypes):
-        scol = index_ops.spark.column.cast(StringType())
+        scol = index_ops.spark.column.cast(spark_type)
     else:
-        casted = index_ops.spark.column.cast(StringType())
+        casted = index_ops.spark.column.cast(spark_type)
         scol = F.when(index_ops.spark.column.isNull(), null_str).otherwise(casted)
     return index_ops._with_new_scol(
-        scol.alias(index_ops._internal.data_spark_column_names[0]),
-        field=InternalField(dtype=dtype),
+        scol, field=index_ops._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type)
     )
 
 
 def _as_other_type(
-    index_ops: T_IndexOps, dtype: Union[str, type, Dtype], spark_type: DataType
-) -> T_IndexOps:
+    index_ops: IndexOpsLike, dtype: Union[str, type, Dtype], spark_type: DataType
+) -> IndexOpsLike:
     """Cast `index_ops` to a `dtype` (`spark_type`) that needs no pre-processing.
 
     Destination types that need pre-processing: CategoricalDtype, BooleanType, and StringType.
@@ -187,22 +186,45 @@ def _as_other_type(
     assert not need_pre_process, "Pre-processing is needed before the type casting."
 
     scol = index_ops.spark.column.cast(spark_type)
-    return index_ops._with_new_scol(
-        scol.alias(index_ops._internal.data_spark_column_names[0]),
-        field=InternalField(dtype=dtype),
+    return index_ops._with_new_scol(scol, field=InternalField(dtype=dtype))
+
+
+def _sanitize_list_like(operand: Any) -> None:
+    """Raise TypeError if operand is list-like."""
+    if isinstance(operand, (list, tuple, dict, set)):
+        raise TypeError("The operation can not be applied to %s." % type(operand).__name__)
+
+
+def _is_valid_for_logical_operator(right: Any) -> bool:
+    from pyspark.pandas.base import IndexOpsMixin
+
+    return isinstance(right, (int, bool)) or (
+        isinstance(right, IndexOpsMixin)
+        and (
+            isinstance(right.spark.data_type, BooleanType)
+            or isinstance(right.spark.data_type, IntegralType)
+        )
+    )
+
+
+def _is_boolean_type(right: Any) -> bool:
+    from pyspark.pandas.base import IndexOpsMixin
+
+    return isinstance(right, bool) or (
+        isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, BooleanType)
     )
 
 
 class DataTypeOps(object, metaclass=ABCMeta):
     """The base class for binary operations of pandas-on-Spark objects (of different data types)."""
 
-    def __new__(cls, dtype: Dtype, spark_type: DataType):
+    def __new__(cls, dtype: Dtype, spark_type: DataType) -> "DataTypeOps":
         from pyspark.pandas.data_type_ops.binary_ops import BinaryOps
         from pyspark.pandas.data_type_ops.boolean_ops import BooleanOps, BooleanExtensionOps
         from pyspark.pandas.data_type_ops.categorical_ops import CategoricalOps
         from pyspark.pandas.data_type_ops.complex_ops import ArrayOps, MapOps, StructOps
         from pyspark.pandas.data_type_ops.date_ops import DateOps
-        from pyspark.pandas.data_type_ops.datetime_ops import DatetimeOps
+        from pyspark.pandas.data_type_ops.datetime_ops import DatetimeOps, DatetimeNTZOps
         from pyspark.pandas.data_type_ops.null_ops import NullOps
         from pyspark.pandas.data_type_ops.num_ops import (
             DecimalOps,
@@ -245,6 +267,8 @@ class DataTypeOps(object, metaclass=ABCMeta):
                 return object.__new__(BooleanOps)
         elif isinstance(spark_type, TimestampType):
             return object.__new__(DatetimeOps)
+        elif isinstance(spark_type, TimestampNTZType):
+            return object.__new__(DatetimeNTZOps)
         elif isinstance(spark_type, DateType):
             return object.__new__(DateOps)
         elif isinstance(spark_type, BinaryType):
@@ -270,59 +294,190 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def pretty_name(self) -> str:
         raise NotImplementedError()
 
-    def add(self, left, right) -> Union["Series", "Index"]:
+    def add(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("Addition can not be applied to %s." % self.pretty_name)
 
-    def sub(self, left, right) -> Union["Series", "Index"]:
+    def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("Subtraction can not be applied to %s." % self.pretty_name)
 
-    def mul(self, left, right) -> Union["Series", "Index"]:
+    def mul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("Multiplication can not be applied to %s." % self.pretty_name)
 
-    def truediv(self, left, right) -> Union["Series", "Index"]:
+    def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("True division can not be applied to %s." % self.pretty_name)
 
-    def floordiv(self, left, right) -> Union["Series", "Index"]:
+    def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("Floor division can not be applied to %s." % self.pretty_name)
 
-    def mod(self, left, right) -> Union["Series", "Index"]:
+    def mod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("Modulo can not be applied to %s." % self.pretty_name)
 
-    def pow(self, left, right) -> Union["Series", "Index"]:
+    def pow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("Exponentiation can not be applied to %s." % self.pretty_name)
 
-    def radd(self, left, right) -> Union["Series", "Index"]:
+    def radd(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("Addition can not be applied to %s." % self.pretty_name)
 
-    def rsub(self, left, right) -> Union["Series", "Index"]:
+    def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("Subtraction can not be applied to %s." % self.pretty_name)
 
-    def rmul(self, left, right) -> Union["Series", "Index"]:
+    def rmul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("Multiplication can not be applied to %s." % self.pretty_name)
 
-    def rtruediv(self, left, right) -> Union["Series", "Index"]:
+    def rtruediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("True division can not be applied to %s." % self.pretty_name)
 
-    def rfloordiv(self, left, right) -> Union["Series", "Index"]:
+    def rfloordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("Floor division can not be applied to %s." % self.pretty_name)
 
-    def rmod(self, left, right) -> Union["Series", "Index"]:
+    def rmod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("Modulo can not be applied to %s." % self.pretty_name)
 
-    def rpow(self, left, right) -> Union["Series", "Index"]:
+    def rpow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("Exponentiation can not be applied to %s." % self.pretty_name)
 
-    def __and__(self, left, right) -> Union["Series", "Index"]:
+    def __and__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("Bitwise and can not be applied to %s." % self.pretty_name)
 
-    def __or__(self, left, right) -> Union["Series", "Index"]:
+    def xor(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise TypeError("Bitwise xor can not be applied to %s." % self.pretty_name)
+
+    def __or__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("Bitwise or can not be applied to %s." % self.pretty_name)
 
-    def rand(self, left, right) -> Union["Series", "Index"]:
+    def rand(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         return left.__and__(right)
 
-    def ror(self, left, right) -> Union["Series", "Index"]:
+    def rxor(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+        return left ^ right
+
+    def ror(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         return left.__or__(right)
+
+    def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
+        raise TypeError("Unary - can not be applied to %s." % self.pretty_name)
+
+    def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
+        raise TypeError("abs() can not be applied to %s." % self.pretty_name)
+
+    def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise TypeError("< can not be applied to %s." % self.pretty_name)
+
+    def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise TypeError("<= can not be applied to %s." % self.pretty_name)
+
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise TypeError("> can not be applied to %s." % self.pretty_name)
+
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise TypeError(">= can not be applied to %s." % self.pretty_name)
+
+    def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        if isinstance(right, (list, tuple)):
+            from pyspark.pandas.series import first_series, scol_for
+            from pyspark.pandas.frame import DataFrame
+            from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, InternalField
+
+            len_right = len(right)
+            if len(left) != len(right):
+                raise ValueError("Lengths must be equal")
+
+            sdf = left._internal.spark_frame
+            structed_scol = F.struct(
+                sdf[NATURAL_ORDER_COLUMN_NAME],
+                *left._internal.index_spark_columns,
+                left.spark.column,
+            )
+            # The size of the list is expected to be small.
+            collected_structed_scol = F.collect_list(structed_scol)
+            # Sort the array by NATURAL_ORDER_COLUMN so that we can guarantee the order.
+            collected_structed_scol = F.array_sort(collected_structed_scol)
+            right_values_scol = F.array(*(F.lit(x) for x in right))
+            index_scol_names = left._internal.index_spark_column_names
+            scol_name = left._internal.spark_column_name_for(left._internal.column_labels[0])
+            # Compare the values of left and right by using zip_with function.
+            cond = F.zip_with(
+                collected_structed_scol,
+                right_values_scol,
+                lambda x, y: F.struct(
+                    *[
+                        x[index_scol_name].alias(index_scol_name)
+                        for index_scol_name in index_scol_names
+                    ],
+                    F.when(x[scol_name].isNull() | y.isNull(), False)
+                    .otherwise(
+                        x[scol_name] == y,
+                    )
+                    .alias(scol_name),
+                ),
+            ).alias(scol_name)
+            # 1. `sdf_new` here looks like the below (the first field of each set is Index):
+            # +----------------------------------------------------------+
+            # |0                                                         |
+            # +----------------------------------------------------------+
+            # |[{0, false}, {1, true}, {2, false}, {3, true}, {4, false}]|
+            # +----------------------------------------------------------+
+            sdf_new = sdf.select(cond)
+            # 2. `sdf_new` after the explode looks like the below:
+            # +----------+
+            # |       col|
+            # +----------+
+            # |{0, false}|
+            # | {1, true}|
+            # |{2, false}|
+            # | {3, true}|
+            # |{4, false}|
+            # +----------+
+            sdf_new = sdf_new.select(F.explode(scol_name))
+            # 3. Here, the final `sdf_new` looks like the below:
+            # +-----------------+-----+
+            # |__index_level_0__|    0|
+            # +-----------------+-----+
+            # |                0|false|
+            # |                1| true|
+            # |                2|false|
+            # |                3| true|
+            # |                4|false|
+            # +-----------------+-----+
+            sdf_new = sdf_new.select("col.*")
+
+            index_spark_columns = [
+                scol_for(sdf_new, index_scol_name) for index_scol_name in index_scol_names
+            ]
+            data_spark_columns = [scol_for(sdf_new, scol_name)]
+
+            internal = left._internal.copy(
+                spark_frame=sdf_new,
+                index_spark_columns=index_spark_columns,
+                data_spark_columns=data_spark_columns,
+                index_fields=[
+                    InternalField.from_struct_field(index_field)
+                    for index_field in sdf_new.select(index_spark_columns).schema.fields
+                ],
+                data_fields=[
+                    InternalField.from_struct_field(
+                        sdf_new.select(data_spark_columns).schema.fields[0]
+                    )
+                ],
+            )
+            return first_series(DataFrame(internal))
+        else:
+            from pyspark.pandas.base import column_op
+
+            return column_op(Column.__eq__)(left, right)
+
+    def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        _sanitize_list_like(right)
+
+        return column_op(Column.__ne__)(left, right)
+
+    def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
+        raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)
 
     def restore(self, col: pd.Series) -> pd.Series:
         """Restore column when to_pandas."""
@@ -332,7 +487,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
         """Prepare column when from_pandas."""
         return col.replace({np.nan: None})
 
-    def isnull(self, index_ops: T_IndexOps) -> T_IndexOps:
+    def isnull(self, index_ops: IndexOpsLike) -> IndexOpsLike:
         return index_ops._with_new_scol(
             index_ops.spark.column.isNull(),
             field=index_ops._internal.data_fields[0].copy(
@@ -340,5 +495,8 @@ class DataTypeOps(object, metaclass=ABCMeta):
             ),
         )
 
-    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+    def nan_to_null(self, index_ops: IndexOpsLike) -> IndexOpsLike:
+        return index_ops.copy()
+
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         raise TypeError("astype can not be applied to %s." % self.pretty_name)

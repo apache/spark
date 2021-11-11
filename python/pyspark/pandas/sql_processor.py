@@ -15,17 +15,19 @@
 # limitations under the License.
 #
 
-import _string  # type: ignore
-from typing import Any, Dict, Optional  # noqa: F401 (SPARK-34943)
+import _string  # type: ignore[import]
+from typing import Any, Dict, Optional, Union, List
 import inspect
 import pandas as pd
 
-from pyspark.sql import SparkSession, DataFrame as SDataFrame  # noqa: F401 (SPARK-34943)
+from pyspark.sql import SparkSession, DataFrame as SDataFrame
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.utils import default_session
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.series import Series
+from pyspark.pandas.internal import InternalFrame
+from pyspark.pandas.namespace import _get_index_map
 
 
 __all__ = ["sql"]
@@ -36,9 +38,10 @@ from builtins import locals as builtin_locals
 
 def sql(
     query: str,
+    index_col: Optional[Union[str, List[str]]] = None,
     globals: Optional[Dict[str, Any]] = None,
     locals: Optional[Dict[str, Any]] = None,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> DataFrame:
     """
     Execute a SQL query and return the result as a pandas-on-Spark DataFrame.
@@ -65,6 +68,44 @@ def sql(
     ----------
     query : str
         the SQL query
+    index_col : str or list of str, optional
+        Column names to be used in Spark to represent pandas-on-Spark's index. The index name
+        in pandas-on-Spark is ignored. By default, the index is always lost.
+
+        .. note:: If you want to preserve the index, explicitly use :func:`DataFrame.reset_index`,
+            and pass it to the sql statement with `index_col` parameter.
+
+            For example,
+
+            >>> psdf = ps.DataFrame({"A": [1, 2, 3], "B":[4, 5, 6]}, index=['a', 'b', 'c'])
+            >>> psdf_reset_index = psdf.reset_index()
+            >>> ps.sql("SELECT * FROM {psdf_reset_index}", index_col="index")
+            ... # doctest: +NORMALIZE_WHITESPACE
+                   A  B
+            index
+            a      1  4
+            b      2  5
+            c      3  6
+
+            For MultiIndex,
+
+            >>> psdf = ps.DataFrame(
+            ...     {"A": [1, 2, 3], "B": [4, 5, 6]},
+            ...     index=pd.MultiIndex.from_tuples(
+            ...         [("a", "b"), ("c", "d"), ("e", "f")], names=["index1", "index2"]
+            ...     ),
+            ... )
+            >>> psdf_reset_index = psdf.reset_index()
+            >>> ps.sql("SELECT * FROM {psdf_reset_index}", index_col=["index1", "index2"])
+            ... # doctest: +NORMALIZE_WHITESPACE
+                           A  B
+            index1 index2
+            a      b       1  4
+            c      d       2  5
+            e      f       3  6
+
+            Also note that the index name(s) should be matched to the existing name.
+
     globals : dict, optional
         the dictionary of global variables, if explicitly set by the user
     locals : dict, optional
@@ -151,7 +192,7 @@ def sql(
     _dict.update(_locals)
     # Highest order of precedence is the locals
     _dict.update(kwargs)
-    return SQLProcessor(_dict, query, default_session()).execute()
+    return SQLProcessor(_dict, query, default_session()).execute(index_col)
 
 
 _CAPTURE_SCOPES = 2
@@ -173,7 +214,7 @@ def _get_ipython_scope() -> Dict[str, Any]:
     in an IPython notebook environment.
     """
     try:
-        from IPython import get_ipython  # type: ignore
+        from IPython import get_ipython  # type: ignore[import]
 
         shell = get_ipython()
         return shell.user_ns
@@ -216,17 +257,17 @@ class SQLProcessor(object):
         # All the temporary views created when executing this statement
         # The key is the name of the variable in {}
         # The value is the cached Spark Dataframe.
-        self._temp_views = {}  # type: Dict[str, SDataFrame]
+        self._temp_views: Dict[str, SDataFrame] = {}
         # All the other variables, converted to a normalized form.
         # The normalized form is typically a string
-        self._cached_vars = {}  # type: Dict[str, Any]
+        self._cached_vars: Dict[str, Any] = {}
         # The SQL statement after:
-        # - all the dataframes have been have been registered as temporary views
+        # - all the dataframes have been registered as temporary views
         # - all the values have been converted normalized to equivalent SQL representations
-        self._normalized_statement = None  # type: Optional[str]
+        self._normalized_statement: Optional[str] = None
         self._session = session
 
-    def execute(self) -> DataFrame:
+    def execute(self, index_col: Optional[Union[str, List[str]]]) -> DataFrame:
         """
         Returns a DataFrame for which the SQL statement has been executed by
         the underlying SQL engine.
@@ -260,7 +301,14 @@ class SQLProcessor(object):
         finally:
             for v in self._temp_views:
                 self._session.catalog.dropTempView(v)
-        return DataFrame(sdf)
+
+        index_spark_columns, index_names = _get_index_map(sdf, index_col)
+
+        return DataFrame(
+            InternalFrame(
+                spark_frame=sdf, index_spark_columns=index_spark_columns, index_names=index_names
+            )
+        )
 
     def _convert(self, key: str) -> Any:
         """

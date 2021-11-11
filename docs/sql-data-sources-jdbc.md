@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -191,7 +191,7 @@ logging into the data sources.
     <td>write</td>
    </td>
   </tr>
-  
+
   <tr>
     <td><code>cascadeTruncate</code></td>
     <td>the default cascading truncate behaviour of the JDBC database in question, specified in the <code>isCascadeTruncate</code> in each JDBCDialect</td>
@@ -238,6 +238,33 @@ logging into the data sources.
   </tr>
 
   <tr>
+    <td><code>pushDownAggregate</code></td>
+    <td><code>false</code></td>
+    <td>
+     The option to enable or disable aggregate push-down in V2 JDBC data source. The default value is false, in which case Spark will not push down aggregates to the JDBC data source. Otherwise, if sets to true, aggregates will be pushed down to the JDBC data source. Aggregate push-down is usually turned off when the aggregate is performed faster by Spark than by the JDBC data source. Please note that aggregates can be pushed down if and only if all the aggregate functions and the related filters can be pushed down. Spark assumes that the data source can't fully complete the aggregate and does a final aggregate over the data source output.
+    </td>
+    <td>read</td>
+  </tr>
+
+  <tr>
+    <td><code>pushDownLimit</code></td>
+    <td><code>false</code></td>
+    <td>
+     The option to enable or disable LIMIT push-down into V2 JDBC data source. The default value is false, in which case Spark does not push down LIMIT to the JDBC data source. Otherwise, if value sets to true, LIMIT is pushed down to the JDBC data source. SPARK still applies LIMIT on the result from data source even if LIMIT is pushed down.
+    </td>
+    <td>read</td>
+  </tr>
+
+  <tr>
+    <td><code>pushDownTableSample</code></td>
+    <td><code>false</code></td>
+    <td>
+     The option to enable or disable TABLESAMPLE push-down into V2 JDBC data source. The default value is false, in which case Spark does not push down TABLESAMPLE to the JDBC data source. Otherwise, if value sets to true, TABLESAMPLE is pushed down to the JDBC data source.
+    </td>
+    <td>read</td>
+  </tr>
+
+  <tr>
     <td><code>keytab</code></td>
     <td>(none)</td>
     <td>
@@ -275,11 +302,22 @@ logging into the data sources.
     </td>
     <td>read/write</td>
   </tr>  
+
+  <tr>
+    <td><code>connectionProvider</code></td>
+    <td>(none)</td>
+    <td>
+      The name of the JDBC connection provider to use to connect to this URL, e.g. <code>db2</code>, <code>mssql</code>.
+      Must be one of the providers loaded with the JDBC data source. Used to disambiguate when more than one provider can handle
+      the specified driver and options. The selected provider must not be disabled by <code>spark.sql.sources.disabledJdbcConnProviderList</code>. 
+    </td>
+    <td>read/write</td>
+ </tr>  
 </table>
 
 Note that kerberos authentication with keytab is not always supported by the JDBC driver.<br>
 Before using <code>keytab</code> and <code>principal</code> configuration options, please make sure the following requirements are met:
-* The included JDBC driver version supports kerberos authentication with keytab. 
+* The included JDBC driver version supports kerberos authentication with keytab.
 * There is a built-in connection provider which supports the used database.
 
 There is a built-in connection providers for the following databases:

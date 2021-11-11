@@ -29,8 +29,10 @@ Core Classes
     :toctree: api/
 
     SparkSession
+    Catalog
     DataFrame
     Column
+    Observation
     Row
     GroupedData
     PandasCogroupedOps
@@ -169,6 +171,7 @@ DataFrame APIs
     DataFrame.inputFiles
     DataFrame.intersect
     DataFrame.intersectAll
+    DataFrame.isEmpty
     DataFrame.isLocal
     DataFrame.isStreaming
     DataFrame.join
@@ -176,6 +179,7 @@ DataFrame APIs
     DataFrame.localCheckpoint
     DataFrame.mapInPandas
     DataFrame.na
+    DataFrame.observe
     DataFrame.orderBy
     DataFrame.persist
     DataFrame.printSchema
@@ -218,6 +222,7 @@ DataFrame APIs
     DataFrame.write
     DataFrame.writeStream
     DataFrame.writeTo
+    DataFrame.to_pandas_on_spark
     DataFrameNaFunctions.drop
     DataFrameNaFunctions.fill
     DataFrameNaFunctions.replace
@@ -255,6 +260,7 @@ Column APIs
     Column.eqNullSafe
     Column.getField
     Column.getItem
+    Column.ilike
     Column.isNotNull
     Column.isNull
     Column.isin
@@ -294,7 +300,19 @@ Data Types
     StringType
     StructField
     StructType
+    TimestampNTZType
     TimestampType
+
+
+Observation
+-----------
+
+.. currentmodule:: pyspark.sql
+
+.. autosummary::
+    :toctree: api/
+
+    Observation.get
 
 
 Row
@@ -351,6 +369,7 @@ Functions
     avg
     base64
     bin
+    bit_length
     bitwise_not
     bitwiseNOT
     broadcast
@@ -369,6 +388,7 @@ Functions
     corr
     cos
     cosh
+    cot
     count
     count_distinct
     countDistinct
@@ -376,6 +396,7 @@ Functions
     covar_samp
     crc32
     create_map
+    csc
     cume_dist
     current_date
     current_timestamp
@@ -446,6 +467,7 @@ Functions
     lower
     lpad
     ltrim
+    make_date
     map_concat
     map_entries
     map_filter
@@ -455,9 +477,11 @@ Functions
     map_values
     map_zip_with
     max
+    max_by
     md5
     mean
     min
+    min_by
     minute
     monotonically_increasing_id
     month
@@ -467,6 +491,7 @@ Functions
     next_day
     nth_value
     ntile
+    octet_length
     overlay
     pandas_udf
     percent_rank
@@ -492,9 +517,11 @@ Functions
     rtrim
     schema_of_csv
     schema_of_json
+    sec
     second
     sentences
     sequence
+    session_window
     sha1
     sha2
     shiftleft
@@ -602,3 +629,33 @@ Grouping
     GroupedData.pivot
     GroupedData.sum
     PandasCogroupedOps.applyInPandas
+
+Catalog APIs
+------------
+
+.. currentmodule:: pyspark.sql
+
+.. autosummary::
+    :toctree: api/
+
+    Catalog.cacheTable
+    Catalog.clearCache
+    Catalog.createExternalTable
+    Catalog.createTable
+    Catalog.currentDatabase
+    Catalog.databaseExists
+    Catalog.dropGlobalTempView
+    Catalog.dropTempView
+    Catalog.functionExists
+    Catalog.isCached
+    Catalog.listColumns
+    Catalog.listDatabases
+    Catalog.listFunctions
+    Catalog.listTables
+    Catalog.recoverPartitions
+    Catalog.refreshByPath
+    Catalog.refreshTable
+    Catalog.registerFunction
+    Catalog.setCurrentDatabase
+    Catalog.tableExists
+    Catalog.uncacheTable

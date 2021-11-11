@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.2.0-SNAPSHOT</version>
+    <version>3.3.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -84,14 +84,6 @@
         <exclusion>
           <groupId>commons-logging</groupId>
           <artifactId>commons-logging</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-mapper-asl</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-core-asl</artifactId>
         </exclusion>
         <exclusion>
           <groupId>com.fasterxml.jackson.core</groupId>
@@ -185,10 +177,6 @@
           <artifactId>hadoop-common</artifactId>
         </exclusion>
         <exclusion>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-mapper-asl</artifactId>
-        </exclusion>
-        <exclusion>
           <groupId>com.fasterxml.jackson.core</groupId>
           <artifactId>jackson-core</artifactId>
         </exclusion>
@@ -201,13 +189,22 @@
   </dependencies>
 
   <profiles>
-
+    <!--
+     hadoop-3.2 profile is activated by default so hadoop-2.7 profile
+     also needs to be declared here for building with -Phadoop-2.7.
+    -->
+    <profile>
+      <id>hadoop-2.7</id>
+    </profile>
     <!--
      Hadoop 3 simplifies the classpath, and adds a new committer base class which
      enables store-specific committers.
     -->
     <profile>
       <id>hadoop-3.2</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
       <properties>
         <extra.source.dir>src/hadoop-3/main/scala</extra.source.dir>
         <extra.testsource.dir>src/hadoop-3/test/scala</extra.testsource.dir>
@@ -261,10 +258,6 @@
             <exclusion>
               <groupId>org.apache.hadoop</groupId>
               <artifactId>hadoop-common</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>org.codehaus.jackson</groupId>
-              <artifactId>jackson-mapper-asl</artifactId>
             </exclusion>
             <exclusion>
               <groupId>com.fasterxml.jackson.core</groupId>

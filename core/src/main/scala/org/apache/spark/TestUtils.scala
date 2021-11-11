@@ -34,6 +34,7 @@ import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.io.Source
 import scala.reflect.{classTag, ClassTag}
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.Try
@@ -277,16 +278,9 @@ private[spark] object TestUtils {
   }
 
   def isPythonVersionAtLeast38(): Boolean = {
-    val attempt = if (Utils.isWindows) {
-      Try(Process(Seq("cmd.exe", "/C", "python3 --version"))
-        .run(ProcessLogger(s => s.startsWith("Python 3.8") || s.startsWith("Python 3.9")))
-        .exitValue())
-    } else {
-      Try(Process(Seq("sh", "-c", "python3 --version"))
-        .run(ProcessLogger(s => s.startsWith("Python 3.8") || s.startsWith("Python 3.9")))
-        .exitValue())
-    }
-    attempt.isSuccess && attempt.get == 0
+    val cmdSeq = if (Utils.isWindows) Seq("cmd.exe", "/C") else Seq("sh", "-c")
+    val pythonSnippet = "import sys; sys.exit(sys.version_info < (3, 8, 0))"
+    Try(Process(cmdSeq :+ s"python3 -c '$pythonSnippet'").! == 0).getOrElse(false)
   }
 
   /**
@@ -316,6 +310,18 @@ private[spark] object TestUtils {
       headers: Seq[(String, String)] = Nil): Int = {
     withHttpConnection(url, method, headers = headers) { connection =>
       connection.getResponseCode()
+    }
+  }
+
+  /**
+   * Returns the response message from an HTTP(S) URL.
+   */
+  def httpResponseMessage(
+    url: URL,
+    method: String = "GET",
+    headers: Seq[(String, String)] = Nil): String = {
+    withHttpConnection(url, method, headers = headers) { connection =>
+      Source.fromInputStream(connection.getInputStream, "utf-8").getLines().mkString("\n")
     }
   }
 

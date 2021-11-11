@@ -80,7 +80,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.DeduplicateRelations" ::
       "org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases" ::
       "org.apache.spark.sql.catalyst.analysis.EliminateUnions" ::
-      "org.apache.spark.sql.catalyst.analysis.ResolveCreateNamedStruct" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveExpressionsWithNamePlaceholders" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveCoalesceHints" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveJoinStrategyHints" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveInlineTables" ::
@@ -115,6 +115,8 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.LikeSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.LimitPushDown" ::
       "org.apache.spark.sql.catalyst.optimizer.LimitPushDownThroughWindow" ::
+      "org.apache.spark.sql.catalyst.optimizer.NotPropagation" ::
+      "org.apache.spark.sql.catalyst.optimizer.NullDownPropagation" ::
       "org.apache.spark.sql.catalyst.optimizer.NullPropagation" ::
       "org.apache.spark.sql.catalyst.optimizer.ObjectSerializerPruning" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeCsvJsonExprs" ::
@@ -144,6 +146,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.ReplaceIntersectWithSemiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteExceptAll" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteIntersectAll" ::
+      "org.apache.spark.sql.catalyst.optimizer.RewriteAsOfJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyBinaryComparison" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyCaseConversionExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyCasts" ::
@@ -159,6 +162,7 @@ object RuleIdCollection {
       // In the production code path, the following rules are run in CombinedTypeCoercionRule, and
       // hence we only need to add them for unit testing.
       "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$PromoteStringLiterals" ::
+      "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$GetDateFieldOperations" ::
       "org.apache.spark.sql.catalyst.analysis.DecimalPrecision" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercion$BooleanEquality" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$CaseWhenCoercion" ::

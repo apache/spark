@@ -29,9 +29,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., 2019-GA-ubuntu-16.04):
+ * To run this test suite for a specific version (e.g., 2019-CU13-ubuntu-20.04):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MSSQLSERVER_DOCKER_IMAGE_NAME=2019-GA-ubuntu-16.04
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MSSQLSERVER_DOCKER_IMAGE_NAME=2019-CU13-ubuntu-20.04
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2*MsSqlServerIntegrationSuite"
  * }}}
  */
@@ -42,7 +42,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBC
 
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env.getOrElse("MSSQLSERVER_DOCKER_IMAGE_NAME",
-      "mcr.microsoft.com/mssql/server:2019-GA-ubuntu-16.04")
+      "mcr.microsoft.com/mssql/server:2019-CU13-ubuntu-20.04")
     override val env = Map(
       "SA_PASSWORD" -> "Sapass123",
       "ACCEPT_EULA" -> "Y"
@@ -77,7 +77,8 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBC
     val msg1 = intercept[AnalysisException] {
       sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER")
     }.getMessage
-    assert(msg1.contains("Cannot update alt_table field ID: string cannot be cast to int"))
+    assert(msg1.contains(
+      s"Cannot update $catalogName.alt_table field ID: string cannot be cast to int"))
   }
 
   override def testUpdateColumnNullability(tbl: String): Unit = {

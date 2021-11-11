@@ -27,6 +27,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkException, SparkFunSuite, TaskContext, TaskContextImpl}
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.util.ThreadUtils
 
 
@@ -62,7 +63,8 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
   private def withTaskId[T](taskAttemptId: Long)(block: => T): T = {
     try {
       TaskContext.setTaskContext(
-        new TaskContextImpl(0, 0, 0, taskAttemptId, 0, null, new Properties, null))
+        new TaskContextImpl(0, 0, 0, taskAttemptId, 0,
+          null, new Properties, null, TaskMetrics.empty, 1))
       block
     } finally {
       TaskContext.unset()

@@ -67,6 +67,7 @@ project/plugins/src_managed/
 project/plugins/target/
 python/lib/pyspark.zip
 python/.eggs/
+python/coverage.xml
 python/deps
 python/docs/_site/
 python/docs/source/reference/**/api/

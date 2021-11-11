@@ -28,6 +28,7 @@ import scala.util.Random
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
@@ -171,7 +172,8 @@ private[spark] class TaskSchedulerImpl(
       SchedulingMode.withName(schedulingModeConf)
     } catch {
       case e: java.util.NoSuchElementException =>
-        throw new SparkException(s"Unrecognized $SCHEDULER_MODE_PROPERTY: $schedulingModeConf")
+        throw SparkCoreErrors.unrecognizedSchedulerModePropertyError(SCHEDULER_MODE_PROPERTY,
+          schedulingModeConf)
     }
 
   val rootPool: Pool = new Pool("", schedulingMode, 0, 0)
@@ -392,7 +394,7 @@ private[spark] class TaskSchedulerImpl(
             val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
             val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
             val (taskDescOption, didReject, index) =
-              taskSet.resourceOffer(execId, host, maxLocality, taskResAssignments)
+              taskSet.resourceOffer(execId, host, maxLocality, taskCpus, taskResAssignments)
             noDelayScheduleRejects &= !didReject
             for (task <- taskDescOption) {
               val (locality, resources) = if (task != null) {
@@ -608,7 +610,7 @@ private[spark] class TaskSchedulerImpl(
           taskSet.getCompletelyExcludedTaskIfAny(hostToExecutors).foreach { taskIndex =>
               // If the taskSet is unschedulable we try to find an existing idle excluded
               // executor and kill the idle executor and kick off an abortTimer which if it doesn't
-              // schedule a task within the the timeout will abort the taskSet if we were unable to
+              // schedule a task within the timeout will abort the taskSet if we were unable to
               // schedule any task from the taskSet.
               // Note 1: We keep track of schedulability on a per taskSet basis rather than on a per
               // task basis.
@@ -684,7 +686,7 @@ private[spark] class TaskSchedulerImpl(
                 s"${LEGACY_LOCALITY_WAIT_RESET.key} to false to get rid of this error."
               logWarning(errorMsg)
               taskSet.abort(errorMsg)
-              throw new SparkException(errorMsg)
+              throw SparkCoreErrors.sparkError(errorMsg)
             } else {
               val curTime = clock.getTimeMillis()
               if (curTime - taskSet.lastResourceOfferFailLogTime >
@@ -714,6 +716,7 @@ private[spark] class TaskSchedulerImpl(
                 task.index,
                 task.taskLocality,
                 false,
+                task.assignedCores,
                 task.assignedResources,
                 launchTime)
               addRunningTask(taskDesc.taskId, taskDesc.executorId, taskSet)
@@ -798,7 +801,8 @@ private[spark] class TaskSchedulerImpl(
                 val errorMsg =
                   "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)"
                 taskSet.abort(errorMsg)
-                throw new SparkException(errorMsg)
+                throw new SparkException(
+                  "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)")
               })
               if (executorIdToRunningTaskIds.contains(execId)) {
                 reason = Some(
@@ -916,7 +920,7 @@ private[spark] class TaskSchedulerImpl(
         // No task sets are active but we still got an error. Just exit since this
         // must mean the error is during registration.
         // It might be good to do something smarter here in the future.
-        throw new SparkException(s"Exiting due to error from cluster scheduler: $message")
+        throw SparkCoreErrors.clusterSchedulerError(message)
       }
     }
   }

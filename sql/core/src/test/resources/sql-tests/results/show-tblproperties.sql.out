@@ -59,13 +59,6 @@ struct<key:string,value:string>
 -- !query output
 p1	v1
 p2	v2
-view.catalogAndNamespace.numParts	2
-view.catalogAndNamespace.part.0	spark_catalog
-view.catalogAndNamespace.part.1	default
-view.query.out.col.0	c1
-view.query.out.numCols	1
-view.referredTempFunctionsNames	[]
-view.referredTempViewNames	[]
 
 
 -- !query

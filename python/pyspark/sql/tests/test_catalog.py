@@ -21,7 +21,6 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class CatalogTests(ReusedSQLTestCase):
-
     def test_current_database(self):
         spark = self.spark
         with self.database("some_db"):
@@ -32,7 +31,8 @@ class CatalogTests(ReusedSQLTestCase):
             self.assertRaisesRegex(
                 AnalysisException,
                 "does_not_exist",
-                lambda: spark.catalog.setCurrentDatabase("does_not_exist"))
+                lambda: spark.catalog.setCurrentDatabase("does_not_exist"),
+            )
 
     def test_list_databases(self):
         spark = self.spark
@@ -43,8 +43,17 @@ class CatalogTests(ReusedSQLTestCase):
             databases = [db.name for db in spark.catalog.listDatabases()]
             self.assertEqual(sorted(databases), ["default", "some_db"])
 
+    def test_database_exists(self):
+        # SPARK-36207: testing that database_exists returns correct boolean
+        spark = self.spark
+        with self.database("some_db"):
+            self.assertFalse(spark.catalog.databaseExists("some_db"))
+            spark.sql("CREATE DATABASE some_db")
+            self.assertTrue(spark.catalog.databaseExists("some_db"))
+
     def test_list_tables(self):
         from pyspark.sql.catalog import Table
+
         spark = self.spark
         with self.database("some_db"):
             spark.sql("CREATE DATABASE some_db")
@@ -59,53 +68,76 @@ class CatalogTests(ReusedSQLTestCase):
                     schema = StructType([StructField("a", IntegerType(), True)])
                     description = "this a table created via Catalog.createTable()"
                     spark.catalog.createTable(
-                        "tab3_via_catalog", schema=schema, description=description)
+                        "tab3_via_catalog", schema=schema, description=description
+                    )
 
                     tables = sorted(spark.catalog.listTables(), key=lambda t: t.name)
-                    tablesDefault = \
-                        sorted(spark.catalog.listTables("default"), key=lambda t: t.name)
-                    tablesSomeDb = \
-                        sorted(spark.catalog.listTables("some_db"), key=lambda t: t.name)
+                    tablesDefault = sorted(
+                        spark.catalog.listTables("default"), key=lambda t: t.name
+                    )
+                    tablesSomeDb = sorted(spark.catalog.listTables("some_db"), key=lambda t: t.name)
                     self.assertEqual(tables, tablesDefault)
                     self.assertEqual(len(tables), 3)
                     self.assertEqual(len(tablesSomeDb), 2)
-                    self.assertEqual(tables[0], Table(
-                        name="tab1",
-                        database="default",
-                        description=None,
-                        tableType="MANAGED",
-                        isTemporary=False))
-                    self.assertEqual(tables[1], Table(
-                        name="tab3_via_catalog",
-                        database="default",
-                        description=description,
-                        tableType="MANAGED",
-                        isTemporary=False))
-                    self.assertEqual(tables[2], Table(
-                        name="temp_tab",
-                        database=None,
-                        description=None,
-                        tableType="TEMPORARY",
-                        isTemporary=True))
-                    self.assertEqual(tablesSomeDb[0], Table(
-                        name="tab2",
-                        database="some_db",
-                        description=None,
-                        tableType="MANAGED",
-                        isTemporary=False))
-                    self.assertEqual(tablesSomeDb[1], Table(
-                        name="temp_tab",
-                        database=None,
-                        description=None,
-                        tableType="TEMPORARY",
-                        isTemporary=True))
+                    self.assertEqual(
+                        tables[0],
+                        Table(
+                            name="tab1",
+                            database="default",
+                            description=None,
+                            tableType="MANAGED",
+                            isTemporary=False,
+                        ),
+                    )
+                    self.assertEqual(
+                        tables[1],
+                        Table(
+                            name="tab3_via_catalog",
+                            database="default",
+                            description=description,
+                            tableType="MANAGED",
+                            isTemporary=False,
+                        ),
+                    )
+                    self.assertEqual(
+                        tables[2],
+                        Table(
+                            name="temp_tab",
+                            database=None,
+                            description=None,
+                            tableType="TEMPORARY",
+                            isTemporary=True,
+                        ),
+                    )
+                    self.assertEqual(
+                        tablesSomeDb[0],
+                        Table(
+                            name="tab2",
+                            database="some_db",
+                            description=None,
+                            tableType="MANAGED",
+                            isTemporary=False,
+                        ),
+                    )
+                    self.assertEqual(
+                        tablesSomeDb[1],
+                        Table(
+                            name="temp_tab",
+                            database=None,
+                            description=None,
+                            tableType="TEMPORARY",
+                            isTemporary=True,
+                        ),
+                    )
                     self.assertRaisesRegex(
                         AnalysisException,
                         "does_not_exist",
-                        lambda: spark.catalog.listTables("does_not_exist"))
+                        lambda: spark.catalog.listTables("does_not_exist"),
+                    )
 
     def test_list_functions(self):
         from pyspark.sql.catalog import Function
+
         spark = self.spark
         with self.database("some_db"):
             spark.sql("CREATE DATABASE some_db")
@@ -119,20 +151,25 @@ class CatalogTests(ReusedSQLTestCase):
             self.assertTrue("to_timestamp" in functions)
             self.assertTrue("to_unix_timestamp" in functions)
             self.assertTrue("current_database" in functions)
-            self.assertEqual(functions["+"], Function(
-                name="+",
-                description=None,
-                className="org.apache.spark.sql.catalyst.expressions.Add",
-                isTemporary=True))
+            self.assertEqual(
+                functions["+"],
+                Function(
+                    name="+",
+                    description=None,
+                    className="org.apache.spark.sql.catalyst.expressions.Add",
+                    isTemporary=True,
+                ),
+            )
             self.assertEqual(functions, functionsDefault)
 
             with self.function("func1", "some_db.func2"):
-                spark.catalog.registerFunction("temp_func", lambda x: str(x))
+                spark.udf.register("temp_func", lambda x: str(x))
                 spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
                 spark.sql("CREATE FUNCTION some_db.func2 AS 'org.apache.spark.data.bricks'")
                 newFunctions = dict((f.name, f) for f in spark.catalog.listFunctions())
-                newFunctionsSomeDb = \
-                    dict((f.name, f) for f in spark.catalog.listFunctions("some_db"))
+                newFunctionsSomeDb = dict(
+                    (f.name, f) for f in spark.catalog.listFunctions("some_db")
+                )
                 self.assertTrue(set(functions).issubset(set(newFunctions)))
                 self.assertTrue(set(functions).issubset(set(newFunctionsSomeDb)))
                 self.assertTrue("temp_func" in newFunctions)
@@ -144,61 +181,105 @@ class CatalogTests(ReusedSQLTestCase):
                 self.assertRaisesRegex(
                     AnalysisException,
                     "does_not_exist",
-                    lambda: spark.catalog.listFunctions("does_not_exist"))
+                    lambda: spark.catalog.listFunctions("does_not_exist"),
+                )
+
+    def test_function_exists(self):
+        # SPARK-36258: testing that function_exists returns correct boolean
+        spark = self.spark
+        with self.function("func1"):
+            self.assertFalse(spark.catalog.functionExists("func1"))
+            self.assertFalse(spark.catalog.functionExists("func1", "default"))
+            spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
+            self.assertTrue(spark.catalog.functionExists("func1"))
+            self.assertTrue(spark.catalog.functionExists("func1", "default"))
 
     def test_list_columns(self):
         from pyspark.sql.catalog import Column
+
         spark = self.spark
         with self.database("some_db"):
             spark.sql("CREATE DATABASE some_db")
             with self.table("tab1", "some_db.tab2"):
                 spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
                 spark.sql(
-                    "CREATE TABLE some_db.tab2 (nickname STRING, tolerance FLOAT) USING parquet")
+                    "CREATE TABLE some_db.tab2 (nickname STRING, tolerance FLOAT) USING parquet"
+                )
                 columns = sorted(spark.catalog.listColumns("tab1"), key=lambda c: c.name)
-                columnsDefault = \
-                    sorted(spark.catalog.listColumns("tab1", "default"), key=lambda c: c.name)
+                columnsDefault = sorted(
+                    spark.catalog.listColumns("tab1", "default"), key=lambda c: c.name
+                )
                 self.assertEqual(columns, columnsDefault)
                 self.assertEqual(len(columns), 2)
-                self.assertEqual(columns[0], Column(
-                    name="age",
-                    description=None,
-                    dataType="int",
-                    nullable=True,
-                    isPartition=False,
-                    isBucket=False))
-                self.assertEqual(columns[1], Column(
-                    name="name",
-                    description=None,
-                    dataType="string",
-                    nullable=True,
-                    isPartition=False,
-                    isBucket=False))
-                columns2 = \
-                    sorted(spark.catalog.listColumns("tab2", "some_db"), key=lambda c: c.name)
+                self.assertEqual(
+                    columns[0],
+                    Column(
+                        name="age",
+                        description=None,
+                        dataType="int",
+                        nullable=True,
+                        isPartition=False,
+                        isBucket=False,
+                    ),
+                )
+                self.assertEqual(
+                    columns[1],
+                    Column(
+                        name="name",
+                        description=None,
+                        dataType="string",
+                        nullable=True,
+                        isPartition=False,
+                        isBucket=False,
+                    ),
+                )
+                columns2 = sorted(
+                    spark.catalog.listColumns("tab2", "some_db"), key=lambda c: c.name
+                )
                 self.assertEqual(len(columns2), 2)
-                self.assertEqual(columns2[0], Column(
-                    name="nickname",
-                    description=None,
-                    dataType="string",
-                    nullable=True,
-                    isPartition=False,
-                    isBucket=False))
-                self.assertEqual(columns2[1], Column(
-                    name="tolerance",
-                    description=None,
-                    dataType="float",
-                    nullable=True,
-                    isPartition=False,
-                    isBucket=False))
+                self.assertEqual(
+                    columns2[0],
+                    Column(
+                        name="nickname",
+                        description=None,
+                        dataType="string",
+                        nullable=True,
+                        isPartition=False,
+                        isBucket=False,
+                    ),
+                )
+                self.assertEqual(
+                    columns2[1],
+                    Column(
+                        name="tolerance",
+                        description=None,
+                        dataType="float",
+                        nullable=True,
+                        isPartition=False,
+                        isBucket=False,
+                    ),
+                )
                 self.assertRaisesRegex(
-                    AnalysisException,
-                    "tab2",
-                    lambda: spark.catalog.listColumns("tab2"))
+                    AnalysisException, "tab2", lambda: spark.catalog.listColumns("tab2")
+                )
                 self.assertRaisesRegex(
                     AnalysisException,
                     "does_not_exist",
-                    lambda: spark.catalog.listColumns("does_not_exist"))
+                    lambda: spark.catalog.listColumns("does_not_exist"),
+                )
+
+    def test_table_exists(self):
+        # SPARK-36176: testing that table_exists returns correct boolean
+        spark = self.spark
+        with self.database("some_db"):
+            spark.sql("CREATE DATABASE some_db")
+            with self.table("tab1", "some_db.tab2"):
+                self.assertFalse(spark.catalog.tableExists("tab1"))
+                self.assertFalse(spark.catalog.tableExists("tab2", "some_db"))
+                spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
+                self.assertTrue(spark.catalog.tableExists("tab1"))
+                spark.sql("CREATE TABLE some_db.tab2 (name STRING, age INT) USING parquet")
+                self.assertTrue(spark.catalog.tableExists("tab2", "some_db"))
 
 
 if __name__ == "__main__":
@@ -207,7 +288,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

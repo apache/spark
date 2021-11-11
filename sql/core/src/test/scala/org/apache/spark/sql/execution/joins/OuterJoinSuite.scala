@@ -31,6 +31,8 @@ import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
 
 class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
 
+  private val EnsureRequirements = new EnsureRequirements()
+
   private lazy val left = spark.createDataFrame(
     sparkContext.parallelize(Seq(
       Row(1, 2.0),
@@ -105,7 +107,7 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
     }
 
     testWithWholeStageCodegenOnAndOff(s"$testName using ShuffledHashJoin") { _ =>
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           val buildSide = if (joinType == LeftOuter) BuildRight else BuildLeft
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
@@ -125,7 +127,7 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
           case RightOuter => BuildLeft
           case _ => fail(s"Unsupported join type $joinType")
         }
-        extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+        extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
           withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
             checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
               BroadcastHashJoinExec(
@@ -138,7 +140,7 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
     }
 
     testWithWholeStageCodegenOnAndOff(s"$testName using SortMergeJoin") { _ =>
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements.apply(
@@ -299,6 +301,27 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
       (null, null, 3, 2.0),
       (null, null, 4, 1.0),
       (5, 1.0, 5, 3.0),
+      (null, null, 7, 7.0)
+    )
+  )
+
+  testOuterJoin(
+    "full outer join with unique keys",
+    uniqueLeft,
+    uniqueRight,
+    FullOuter,
+    uniqueCondition,
+    Seq(
+      (null, null, null, null),
+      (null, null, null, null),
+      (1, 2.0, null, null),
+      (2, 1.0, 2, 3.0),
+      (3, 3.0, null, null),
+      (5, 1.0, 5, 3.0),
+      (6, 6.0, null, null),
+      (null, null, 0, 0.0),
+      (null, null, 3, 2.0),
+      (null, null, 4, 1.0),
       (null, null, 7, 7.0)
     )
   )

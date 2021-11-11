@@ -70,12 +70,21 @@ RANGE BETWEEN CURRENT ROW AND 2 FOLLOWING) FROM testData ORDER BY cate, val_date
 SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY val_timestamp
 RANGE BETWEEN CURRENT ROW AND interval 23 days 4 hours FOLLOWING) FROM testData
 ORDER BY cate, val_timestamp;
+SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp)
+RANGE BETWEEN CURRENT ROW AND interval 23 days 4 hours FOLLOWING) FROM testData
+ORDER BY cate, to_timestamp_ntz(val_timestamp);
 SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY val_timestamp
 RANGE BETWEEN CURRENT ROW AND interval '1-1' year to month FOLLOWING) FROM testData
 ORDER BY cate, val_timestamp;
+SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp)
+RANGE BETWEEN CURRENT ROW AND interval '1-1' year to month FOLLOWING) FROM testData
+ORDER BY cate, to_timestamp_ntz(val_timestamp);
 SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY val_timestamp
 RANGE BETWEEN CURRENT ROW AND interval '1 2:3:4.001' day to second FOLLOWING) FROM testData
 ORDER BY cate, val_timestamp;
+SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp)
+RANGE BETWEEN CURRENT ROW AND interval '1 2:3:4.001' day to second FOLLOWING) FROM testData
+ORDER BY cate, to_timestamp_ntz(val_timestamp);
 SELECT val_date, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY val_date
 RANGE BETWEEN CURRENT ROW AND interval '1-1' year to month FOLLOWING) FROM testData
 ORDER BY cate, val_date;
@@ -421,3 +430,13 @@ FROM
     test_ignore_null
 WINDOW w AS (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
 ORDER BY id;
+
+SELECT
+	nth_value(employee_name, 2) OVER w second_highest_salary
+FROM
+	basic_pays;
+
+SELECT
+	SUM(salary) OVER w sum_salary
+FROM
+	basic_pays;

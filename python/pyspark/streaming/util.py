@@ -34,6 +34,7 @@ class TransformFunction(object):
     Java calls this function with a sequence of JavaRDDs and this function
     returns a single JavaRDD pointer back to Java.
     """
+
     _emptyRDD = None
 
     def __init__(self, ctx, func, *deserializers):
@@ -62,8 +63,10 @@ class TransformFunction(object):
             if len(sers) < len(jrdds):
                 sers += (sers[0],) * (len(jrdds) - len(sers))
 
-            rdds = [self.rdd_wrap_func(jrdd, self.ctx, ser) if jrdd else None
-                    for jrdd, ser in zip(jrdds, sers)]
+            rdds = [
+                self.rdd_wrap_func(jrdd, self.ctx, ser) if jrdd else None
+                for jrdd, ser in zip(jrdds, sers)
+            ]
             t = datetime.fromtimestamp(milliseconds / 1000.0)
             r = self.func(t, *rdds)
             if r:
@@ -85,7 +88,7 @@ class TransformFunction(object):
         return "TransformFunction(%s)" % self.func
 
     class Java:
-        implements = ['org.apache.spark.streaming.api.python.PythonTransformFunction']
+        implements = ["org.apache.spark.streaming.api.python.PythonTransformFunction"]
 
 
 class TransformFunctionSerializer(object):
@@ -99,6 +102,7 @@ class TransformFunctionSerializer(object):
     it uses this class to invoke Python, which returns the serialized function
     as a byte array.
     """
+
     def __init__(self, ctx, serializer, gateway=None):
         self.ctx = ctx
         self.serializer = serializer
@@ -111,8 +115,9 @@ class TransformFunctionSerializer(object):
         self.failure = None
         try:
             func = self.gateway.gateway_property.pool[id]
-            return bytearray(self.serializer.dumps((
-                func.func, func.rdd_wrap_func, func.deserializers)))
+            return bytearray(
+                self.serializer.dumps((func.func, func.rdd_wrap_func, func.deserializers))
+            )
         except:
             self.failure = traceback.format_exc()
 
@@ -132,7 +137,7 @@ class TransformFunctionSerializer(object):
         return "TransformFunctionSerializer(%s)" % self.serializer
 
     class Java:
-        implements = ['org.apache.spark.streaming.api.python.PythonTransformFunctionSerializer']
+        implements = ["org.apache.spark.streaming.api.python.PythonTransformFunctionSerializer"]
 
 
 def rddToFileName(prefix, suffix, timestamp):
@@ -157,6 +162,7 @@ def rddToFileName(prefix, suffix, timestamp):
 
 if __name__ == "__main__":
     import doctest
+
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
         sys.exit(-1)

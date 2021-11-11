@@ -853,7 +853,7 @@ private[spark] class SparkSubmit extends Logging {
     }
     sparkConf.set(SUBMIT_PYTHON_FILES, formattedPyFiles.split(",").toSeq)
 
-    if (args.verbose) {
+    if (args.verbose && isSqlShell(childMainClass)) {
       childArgs ++= Seq("--verbose")
     }
     (childArgs.toSeq, childClasspath.toSeq, sparkConf, childMainClass)
@@ -957,8 +957,8 @@ private[spark] class SparkSubmit extends Logging {
       case t: Throwable =>
         throw findCause(t)
     } finally {
-      if (!isShell(args.primaryResource) && !isSqlShell(args.mainClass) &&
-        !isThriftServer(args.mainClass)) {
+      if (args.master.startsWith("k8s") && !isShell(args.primaryResource) &&
+          !isSqlShell(args.mainClass) && !isThriftServer(args.mainClass)) {
         try {
           SparkContext.getActive.foreach(_.stop())
         } catch {
@@ -1282,6 +1282,12 @@ private[spark] object SparkSubmitUtils extends Logging {
     ivySettings.addResolver(repoResolver)
     ivySettings.setDefaultResolver(repoResolver.getName)
     processRemoteRepoArg(ivySettings, remoteRepos)
+    // (since 2.5) Setting the property ivy.maven.lookup.sources to false
+    // disables the lookup of the sources artifact.
+    // And setting the property ivy.maven.lookup.javadoc to false
+    // disables the lookup of the javadoc artifact.
+    ivySettings.setVariable("ivy.maven.lookup.sources", "false")
+    ivySettings.setVariable("ivy.maven.lookup.javadoc", "false")
     ivySettings
   }
 

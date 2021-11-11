@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
@@ -24,7 +25,8 @@ import scala.util.Random
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArraysZip, AttributeReference, Expression, NamedExpression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
@@ -243,6 +245,133 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.selectExpr("crc32(a)", "crc32(b)"),
       Row(2743272264L, 2180413220L))
+  }
+
+  test("misc aes function") {
+    val key16 = "abcdefghijklmnop"
+    val key24 = "abcdefghijklmnop12345678"
+    val key32 = "abcdefghijklmnop12345678ABCDEFGH"
+    val dummyKey16 = "1234567812345678"
+    val dummyKey24 = "123456781234567812345678"
+    val dummyKey32 = "12345678123456781234567812345678"
+    val encryptedText16 = "4Hv0UKCx6nfUeAoPZo1z+w=="
+    val encryptedText24 = "NeTYNgA+PCQBN50DA//O2w=="
+    val encryptedText32 = "9J3iZbIxnmaG+OIA9Amd+A=="
+    val encryptedEmptyText16 = "jmTOhz8XTbskI/zYFFgOFQ=="
+    val encryptedEmptyText24 = "9RDK70sHNzqAFRcpfGM5gQ=="
+    val encryptedEmptyText32 = "j9IDsCvlYXtcVJUf4FAjQQ=="
+
+    def checkInvalidKeyLength(df: => DataFrame): Unit = {
+      val e = intercept[Exception] {
+        df.collect
+      }
+      assert(e.getMessage.contains(
+        "The key length of aes_encrypt/aes_decrypt should be one of 16, 24 or 32 bytes"))
+    }
+
+    val df1 = Seq("Spark", "").toDF
+
+    // Successful encryption
+    Seq(
+      (key16, encryptedText16, encryptedEmptyText16),
+      (key24, encryptedText24, encryptedEmptyText24),
+      (key32, encryptedText32, encryptedEmptyText32)).foreach {
+      case (key, encryptedText, encryptedEmptyText) =>
+        checkAnswer(
+          df1.selectExpr(s"base64(aes_encrypt(value, '$key'))"),
+          Seq(Row(encryptedText), Row(encryptedEmptyText)))
+        checkAnswer(
+          df1.selectExpr(s"base64(aes_encrypt(binary(value), '$key'))"),
+          Seq(Row(encryptedText), Row(encryptedEmptyText)))
+    }
+
+    // Encryption failure - input or key is null
+    Seq(key16, key24, key32).foreach { key =>
+      checkAnswer(
+        df1.selectExpr(s"aes_encrypt(cast(null as string), '$key')"),
+        Seq(Row(null), Row(null)))
+      checkAnswer(
+        df1.selectExpr(s"aes_encrypt(cast(null as binary), '$key')"),
+        Seq(Row(null), Row(null)))
+      checkAnswer(
+        df1.selectExpr(s"aes_encrypt(cast(null as string), binary('$key'))"),
+        Seq(Row(null), Row(null)))
+      checkAnswer(
+        df1.selectExpr(s"aes_encrypt(cast(null as binary), binary('$key'))"),
+        Seq(Row(null), Row(null)))
+    }
+    checkAnswer(
+      df1.selectExpr("aes_encrypt(value, cast(null as string))"),
+      Seq(Row(null), Row(null)))
+    checkAnswer(
+      df1.selectExpr("aes_encrypt(value, cast(null as binary))"),
+      Seq(Row(null), Row(null)))
+
+    // Encryption failure - invalid key length
+    checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, '12345678901234567')"))
+    checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, binary('123456789012345'))"))
+    checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, binary(''))"))
+
+    val df2 = Seq(
+      (encryptedText16, encryptedText24, encryptedText32),
+      (encryptedEmptyText16, encryptedEmptyText24, encryptedEmptyText32)
+    ).toDF("value16", "value24", "value32")
+
+    // Successful decryption
+    Seq(
+      ("value16", key16),
+      ("value24", key24),
+      ("value32", key32)).foreach {
+      case (colName, key) =>
+        checkAnswer(
+          df2.selectExpr(s"cast(aes_decrypt(unbase64($colName), '$key') as string)"),
+          Seq(Row("Spark"), Row("")))
+        checkAnswer(
+          df2.selectExpr(s"cast(aes_decrypt(unbase64($colName), binary('$key')) as string)"),
+          Seq(Row("Spark"), Row("")))
+    }
+
+    // Decryption failure - input or key is null
+    Seq(key16, key24, key32).foreach { key =>
+      checkAnswer(
+        df2.selectExpr(s"aes_decrypt(cast(null as binary), '$key')"),
+        Seq(Row(null), Row(null)))
+      checkAnswer(
+        df2.selectExpr(s"aes_decrypt(cast(null as binary), binary('$key'))"),
+        Seq(Row(null), Row(null)))
+    }
+    Seq("value16", "value24", "value32").foreach { colName =>
+      checkAnswer(
+        df2.selectExpr(s"aes_decrypt($colName, cast(null as string))"),
+        Seq(Row(null), Row(null)))
+      checkAnswer(
+        df2.selectExpr(s"aes_decrypt($colName, cast(null as binary))"),
+        Seq(Row(null), Row(null)))
+    }
+
+    // Decryption failure - invalid key length
+    Seq("value16", "value24", "value32").foreach { colName =>
+      checkInvalidKeyLength(df2.selectExpr(
+        s"aes_decrypt(unbase64($colName), '12345678901234567')"))
+      checkInvalidKeyLength(df2.selectExpr(
+        s"aes_decrypt(unbase64($colName), binary('123456789012345'))"))
+      checkInvalidKeyLength(df2.selectExpr(
+        s"aes_decrypt(unbase64($colName), '')"))
+      checkInvalidKeyLength(df2.selectExpr(
+        s"aes_decrypt(unbase64($colName), binary(''))"))
+    }
+
+    // Decryption failure - key mismatch
+    Seq(
+      ("value16", dummyKey16),
+      ("value24", dummyKey24),
+      ("value32", dummyKey32)).foreach {
+      case (colName, key) =>
+        val e = intercept[Exception] {
+          df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'))").collect
+        }
+        assert(e.getMessage.contains("BadPaddingException"))
+    }
   }
 
   test("string function find_in_set") {
@@ -550,6 +679,74 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val exprs = (0 to 5).map(x => array($"id" + lit(x)))
     checkAnswer(df.select(arrays_zip(exprs: _*)),
       Row(Seq(Row(0, 1, 2, 3, 4, 5))))
+  }
+
+  test("SPARK-35876: arrays_zip should retain field names") {
+    withTempDir { dir =>
+      val df = spark.sparkContext.parallelize(
+        Seq((Seq(9001, 9002, 9003), Seq(4, 5, 6)))).toDF("val1", "val2")
+      val qualifiedDF = df.as("foo")
+
+      // Fields are UnresolvedAttribute
+      val zippedDF1 = qualifiedDF.select(arrays_zip($"foo.val1", $"foo.val2") as "zipped")
+      val maybeAlias1 = zippedDF1.queryExecution.logical.expressions.head
+      assert(maybeAlias1.isInstanceOf[Alias])
+      val maybeArraysZip1 = maybeAlias1.children.head
+      assert(maybeArraysZip1.isInstanceOf[ArraysZip])
+      assert(maybeArraysZip1.children.forall(_.isInstanceOf[UnresolvedAttribute]))
+      val file1 = new File(dir, "arrays_zip1")
+      zippedDF1.write.parquet(file1.getAbsolutePath)
+      val restoredDF1 = spark.read.parquet(file1.getAbsolutePath)
+      val fieldNames1 = restoredDF1.schema.head.dataType.asInstanceOf[ArrayType]
+        .elementType.asInstanceOf[StructType].fieldNames
+      assert(fieldNames1.toSeq === Seq("val1", "val2"))
+
+      // Fields are resolved NamedExpression
+      val zippedDF2 = df.select(arrays_zip(df("val1"), df("val2")) as "zipped")
+      val maybeAlias2 = zippedDF2.queryExecution.logical.expressions.head
+      assert(maybeAlias2.isInstanceOf[Alias])
+      val maybeArraysZip2 = maybeAlias2.children.head
+      assert(maybeArraysZip2.isInstanceOf[ArraysZip])
+      assert(maybeArraysZip2.children.forall(
+        e => e.isInstanceOf[AttributeReference] && e.resolved))
+      val file2 = new File(dir, "arrays_zip2")
+      zippedDF2.write.parquet(file2.getAbsolutePath)
+      val restoredDF2 = spark.read.parquet(file2.getAbsolutePath)
+      val fieldNames2 = restoredDF2.schema.head.dataType.asInstanceOf[ArrayType]
+        .elementType.asInstanceOf[StructType].fieldNames
+      assert(fieldNames2.toSeq === Seq("val1", "val2"))
+
+      // Fields are unresolved NamedExpression
+      val zippedDF3 = df.select(arrays_zip($"val1" as "val3", $"val2" as "val4") as "zipped")
+      val maybeAlias3 = zippedDF3.queryExecution.logical.expressions.head
+      assert(maybeAlias3.isInstanceOf[Alias])
+      val maybeArraysZip3 = maybeAlias3.children.head
+      assert(maybeArraysZip3.isInstanceOf[ArraysZip])
+      assert(maybeArraysZip3.children.forall(e => e.isInstanceOf[Alias] && !e.resolved))
+      val file3 = new File(dir, "arrays_zip3")
+      zippedDF3.write.parquet(file3.getAbsolutePath)
+      val restoredDF3 = spark.read.parquet(file3.getAbsolutePath)
+      val fieldNames3 = restoredDF3.schema.head.dataType.asInstanceOf[ArrayType]
+        .elementType.asInstanceOf[StructType].fieldNames
+      assert(fieldNames3.toSeq === Seq("val3", "val4"))
+
+      // Fields are neither UnresolvedAttribute nor NamedExpression
+      val zippedDF4 = df.select(arrays_zip(array_sort($"val1"), array_sort($"val2")) as "zipped")
+      val maybeAlias4 = zippedDF4.queryExecution.logical.expressions.head
+      assert(maybeAlias4.isInstanceOf[Alias])
+      val maybeArraysZip4 = maybeAlias4.children.head
+      assert(maybeArraysZip4.isInstanceOf[ArraysZip])
+      assert(maybeArraysZip4.children.forall {
+        case _: UnresolvedAttribute | _: NamedExpression => false
+        case _ => true
+      })
+      val file4 = new File(dir, "arrays_zip4")
+      zippedDF4.write.parquet(file4.getAbsolutePath)
+      val restoredDF4 = spark.read.parquet(file4.getAbsolutePath)
+      val fieldNames4 = restoredDF4.schema.head.dataType.asInstanceOf[ArrayType]
+        .elementType.asInstanceOf[StructType].fieldNames
+      assert(fieldNames4.toSeq === Seq("0", "1"))
+    }
   }
 
   def testSizeOfMap(sizeOfNull: Any): Unit = {
@@ -2258,7 +2455,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex3 = intercept[AnalysisException] {
       df.selectExpr("transform(a, x -> x)")
     }
-    assert(ex3.getMessage.contains("cannot resolve 'a'"))
+    assert(ex3.getErrorClass == "MISSING_COLUMN")
+    assert(ex3.messageParameters.head == "a")
   }
 
   test("map_filter") {
@@ -2329,7 +2527,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("map_filter(a, (k, v) -> k > v)")
     }
-    assert(ex4.getMessage.contains("cannot resolve 'a'"))
+    assert(ex4.getErrorClass == "MISSING_COLUMN")
+    assert(ex4.messageParameters.head == "a")
   }
 
   test("filter function - array for primitive type not containing null") {
@@ -2488,7 +2687,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("filter(a, x -> x)")
     }
-    assert(ex4.getMessage.contains("cannot resolve 'a'"))
+    assert(ex4.getErrorClass == "MISSING_COLUMN")
+    assert(ex4.messageParameters.head == "a")
   }
 
   test("exists function - array for primitive type not containing null") {
@@ -2620,7 +2820,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("exists(a, x -> x)")
     }
-    assert(ex4.getMessage.contains("cannot resolve 'a'"))
+    assert(ex4.getErrorClass == "MISSING_COLUMN")
+    assert(ex4.messageParameters.head == "a")
   }
 
   test("forall function - array for primitive type not containing null") {
@@ -2766,12 +2967,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("forall(a, x -> x)")
     }
-    assert(ex4.getMessage.contains("cannot resolve 'a'"))
+    assert(ex4.getErrorClass == "MISSING_COLUMN")
+    assert(ex4.messageParameters.head == "a")
 
     val ex4a = intercept[AnalysisException] {
       df.select(forall(col("a"), x => x))
     }
-    assert(ex4a.getMessage.contains("cannot resolve 'a'"))
+    assert(ex4a.getErrorClass == "MISSING_COLUMN")
+    assert(ex4a.messageParameters.head == "a")
   }
 
   test("aggregate function - array for primitive type not containing null") {
@@ -2948,7 +3151,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex5 = intercept[AnalysisException] {
       df.selectExpr("aggregate(a, 0, (acc, x) -> x)")
     }
-    assert(ex5.getMessage.contains("cannot resolve 'a'"))
+    assert(ex5.getErrorClass == "MISSING_COLUMN")
+    assert(ex5.messageParameters.head == "a")
   }
 
   test("map_zip_with function - map of primitive types") {
@@ -3501,7 +3705,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("zip_with(a1, a, (acc, x) -> x)")
     }
-    assert(ex4.getMessage.contains("cannot resolve 'a'"))
+    assert(ex4.getErrorClass == "MISSING_COLUMN")
+    assert(ex4.messageParameters.head == "a")
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {

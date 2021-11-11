@@ -33,6 +33,7 @@ import org.apache.spark.annotation.{Stable, Unstable}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -375,7 +376,7 @@ trait Row extends Serializable {
    * @throws IllegalArgumentException when a field `name` does not exist.
    */
   def fieldIndex(name: String): Int = {
-    throw new UnsupportedOperationException("fieldIndex on a Row without schema is undefined.")
+    throw QueryExecutionErrors.fieldIndexOnRowWithoutSchemaError()
   }
 
   /**
@@ -520,7 +521,7 @@ trait Row extends Serializable {
    * @throws NullPointerException when value is null.
    */
   private def getAnyValAs[T <: AnyVal](i: Int): T =
-    if (isNullAt(i)) throw new NullPointerException(s"Value at index $i is null")
+    if (isNullAt(i)) throw QueryExecutionErrors.valueIsNullError(i)
     else getAs[T](i)
 
   /**

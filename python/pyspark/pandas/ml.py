@@ -24,10 +24,11 @@ import pyspark
 from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.stat import Correlation
 
+from pyspark.pandas._typing import Label
 from pyspark.pandas.utils import column_labels_level
 
 if TYPE_CHECKING:
-    import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
+    import pyspark.pandas as ps
 
 
 CORRELATION_OUTPUT_COLUMN = "__correlation_output__"
@@ -62,7 +63,7 @@ def corr(psdf: "ps.DataFrame", method: str = "pearson") -> pd.DataFrame:
     return pd.DataFrame(arr, columns=idx, index=idx)
 
 
-def to_numeric_df(psdf: "ps.DataFrame") -> Tuple[pyspark.sql.DataFrame, List[Tuple]]:
+def to_numeric_df(psdf: "ps.DataFrame") -> Tuple[pyspark.sql.DataFrame, List[Label]]:
     """
     Takes a dataframe and turns it into a dataframe containing a single numerical
     vector of doubles. This dataframe has a single field called '_1'.
@@ -77,7 +78,7 @@ def to_numeric_df(psdf: "ps.DataFrame") -> Tuple[pyspark.sql.DataFrame, List[Tup
     """
     # TODO, it should be more robust.
     accepted_types = {
-        np.dtype(dt)
+        np.dtype(dt)  # type: ignore[misc]
         for dt in [np.int8, np.int16, np.int32, np.int64, np.float32, np.float64, np.bool_]
     }
     numeric_column_labels = [

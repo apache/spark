@@ -1524,6 +1524,35 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     }
   }
 
+  test("SPARK-36354: EventLogFileReader should skip rolling event log directories with no logs") {
+    withTempDir { dir =>
+      val conf = createTestConf(true)
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
+
+      val provider = new FsHistoryProvider(conf)
+
+      val writer = new RollingEventLogFilesWriter("app", None, dir.toURI, conf, hadoopConf)
+      writer.start()
+
+      writeEventsToRollingWriter(writer, Seq(
+        SparkListenerApplicationStart("app", Some("app"), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      provider.checkForLogs()
+      provider.cleanLogs()
+      assert(dir.listFiles().size === 1)
+      assert(provider.getListing.length === 1)
+
+      // Manually delete event log files and create event log file reader
+      val eventLogDir = dir.listFiles().head
+      eventLogDir.listFiles
+        .filter(f => RollingEventLogFilesWriter.isEventLogFile(f.getName))
+        .foreach(f => f.delete())
+      EventLogFileReader(fs, new Path(eventLogDir.getAbsolutePath)).map(_.lastIndex)
+    }
+  }
+
   test("SPARK-33215: check ui view permissions without retrieving ui") {
     val conf = createTestConf()
       .set(HISTORY_SERVER_UI_ACLS_ENABLE, true)
@@ -1622,6 +1651,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       .set(FAST_IN_PROGRESS_PARSING, true)
 
     if (!inMemory) {
+      // LevelDB doesn't support Apple Silicon yet
+      assume(!(Utils.isMac && System.getProperty("os.arch").equals("aarch64")))
       conf.set(LOCAL_STORE_DIR, Utils.createTempDir().getAbsolutePath())
     }
     conf.set(HYBRID_STORE_ENABLED, useHybridStore)

@@ -25,7 +25,8 @@ import scala.reflect.ClassTag
 
 import com.google.common.collect.{ConcurrentHashMultiset, ImmutableMultiset}
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.TaskContext
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 
 
@@ -247,13 +248,12 @@ private[storage] class BlockInfoManager extends Logging {
     infos.get(blockId) match {
       case Some(info) =>
         if (info.writerTask != currentTaskAttemptId) {
-          throw new SparkException(
-            s"Task $currentTaskAttemptId has not locked block $blockId for writing")
+          throw SparkCoreErrors.taskHasNotLockedBlockError(currentTaskAttemptId, blockId)
         } else {
           info
         }
       case None =>
-        throw new SparkException(s"Block $blockId does not exist")
+        throw SparkCoreErrors.blockDoesNotExistError(blockId)
     }
   }
 

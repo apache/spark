@@ -1,3 +1,21 @@
+..  Licensed to the Apache Software Foundation (ASF) under one
+    or more contributor license agreements.  See the NOTICE file
+    distributed with this work for additional information
+    regarding copyright ownership.  The ASF licenses this file
+    to you under the Apache License, Version 2.0 (the
+    "License"); you may not use this file except in compliance
+    with the License.  You may obtain a copy of the License at
+
+..    http://www.apache.org/licenses/LICENSE-2.0
+
+..  Unless required by applicable law or agreed to in writing,
+    software distributed under the License is distributed on an
+    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, either express or implied.  See the License for the
+    specific language governing permissions and limitations
+    under the License.
+
+
 .. _api.indexing:
 
 =============
@@ -64,6 +82,7 @@ Modifying and computations
    Index.drop_duplicates
    Index.min
    Index.max
+   Index.map
    Index.rename
    Index.repeat
    Index.take
@@ -111,7 +130,6 @@ in Spark. These can be accessed by ``Index.spark.<function/property>``.
 .. autosummary::
    :toctree: api/
 
-   Index.spark.data_type
    Index.spark.column
    Index.spark.transform
 
@@ -175,6 +193,15 @@ Categorical components
    CategoricalIndex.codes
    CategoricalIndex.categories
    CategoricalIndex.ordered
+   CategoricalIndex.rename_categories
+   CategoricalIndex.reorder_categories
+   CategoricalIndex.add_categories
+   CategoricalIndex.remove_categories
+   CategoricalIndex.remove_unused_categories
+   CategoricalIndex.set_categories
+   CategoricalIndex.as_ordered
+   CategoricalIndex.as_unordered
+   CategoricalIndex.map
 
 .. _api.multiindex:
 
@@ -213,6 +240,7 @@ MultiIndex Properties
    MultiIndex.nlevels
    MultiIndex.levshape
    MultiIndex.values
+   MultiIndex.dtypes
 
 MultiIndex components
 ~~~~~~~~~~~~~~~~~~~~~
@@ -242,6 +270,7 @@ MultiIndex Modifying and computations
    :toctree: api/
 
    MultiIndex.equals
+   MultiIndex.equal_levels
    MultiIndex.identical
    MultiIndex.insert
    MultiIndex.drop

@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
@@ -274,14 +275,16 @@ trait JoinSelectionHelper {
     } else {
       hintToPreferShuffleHashJoinLeft(hint) ||
         (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(left, conf) &&
-          muchSmaller(left, right))
+          muchSmaller(left, right, conf)) ||
+        forceApplyShuffledHashJoin(conf)
     }
     val buildRight = if (hintOnly) {
       hintToShuffleHashJoinRight(hint)
     } else {
       hintToPreferShuffleHashJoinRight(hint) ||
         (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(right, conf) &&
-          muchSmaller(right, left))
+          muchSmaller(right, left, conf)) ||
+        forceApplyShuffledHashJoin(conf)
     }
     getBuildSide(
       canBuildShuffledHashJoinLeft(joinType) && buildLeft,
@@ -376,6 +379,14 @@ trait JoinSelectionHelper {
     hint.rightHint.exists(_.strategy.contains(PREFER_SHUFFLE_HASH))
   }
 
+  def hintToPreferShuffleHashJoin(hint: JoinHint): Boolean = {
+    hintToPreferShuffleHashJoinLeft(hint) || hintToPreferShuffleHashJoinRight(hint)
+  }
+
+  def hintToShuffleHashJoin(hint: JoinHint): Boolean = {
+    hintToShuffleHashJoinLeft(hint) || hintToShuffleHashJoinRight(hint)
+  }
+
   def hintToSortMergeJoin(hint: JoinHint): Boolean = {
     hint.leftHint.exists(_.strategy.contains(SHUFFLE_MERGE)) ||
       hint.rightHint.exists(_.strategy.contains(SHUFFLE_MERGE))
@@ -415,14 +426,24 @@ trait JoinSelectionHelper {
   }
 
   /**
-   * Returns whether plan a is much smaller (3X) than plan b.
+   * Returns true if the data size of plan a multiplied by SHUFFLE_HASH_JOIN_FACTOR
+   * is smaller than plan b.
    *
    * The cost to build hash map is higher than sorting, we should only build hash map on a table
    * that is much smaller than other one. Since we does not have the statistic for number of rows,
    * use the size of bytes here as estimation.
    */
-  private def muchSmaller(a: LogicalPlan, b: LogicalPlan): Boolean = {
-    a.stats.sizeInBytes * 3 <= b.stats.sizeInBytes
+  private def muchSmaller(a: LogicalPlan, b: LogicalPlan, conf: SQLConf): Boolean = {
+    a.stats.sizeInBytes * conf.getConf(SQLConf.SHUFFLE_HASH_JOIN_FACTOR) <= b.stats.sizeInBytes
+  }
+
+  /**
+   * Returns whether a shuffled hash join should be force applied.
+   * The config key is hard-coded because it's testing only and should not be exposed.
+   */
+  private def forceApplyShuffledHashJoin(conf: SQLConf): Boolean = {
+    Utils.isTesting &&
+      conf.getConfString("spark.sql.join.forceApplyShuffledHashJoin", "false") == "true"
   }
 }
 

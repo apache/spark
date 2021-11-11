@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.ViewType
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, FunctionResource}
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
-import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -167,23 +166,6 @@ case class CreateTableAsSelectStatement(
 }
 
 /**
- * A CREATE VIEW statement, as parsed from SQL.
- */
-case class CreateViewStatement(
-    viewName: Seq[String],
-    userSpecifiedColumns: Seq[(String, Option[String])],
-    comment: Option[String],
-    properties: Map[String, String],
-    originalText: Option[String],
-    child: LogicalPlan,
-    allowExisting: Boolean,
-    replace: Boolean,
-    viewType: ViewType) extends UnaryParsedStatement {
-  override protected def withNewChildInternal(newChild: LogicalPlan): CreateViewStatement =
-    copy(child = newChild)
-}
-
-/**
  * A REPLACE TABLE command, as parsed from SQL.
  *
  * If the table exists prior to running this command, executing this statement
@@ -226,36 +208,19 @@ case class ReplaceTableAsSelectStatement(
 
 
 /**
- * Column data as parsed by ALTER TABLE ... ADD COLUMNS.
+ * Column data as parsed by ALTER TABLE ... (ADD|REPLACE) COLUMNS.
  */
 case class QualifiedColType(
-    name: Seq[String],
+    path: Option[FieldName],
+    colName: String,
     dataType: DataType,
     nullable: Boolean,
     comment: Option[String],
-    position: Option[ColumnPosition])
+    position: Option[FieldPosition]) {
+  def name: Seq[String] = path.map(_.name).getOrElse(Nil) :+ colName
 
-/**
- * ALTER TABLE ... ADD COLUMNS command, as parsed from SQL.
- */
-case class AlterTableAddColumnsStatement(
-    tableName: Seq[String],
-    columnsToAdd: Seq[QualifiedColType]) extends LeafParsedStatement
-
-case class AlterTableReplaceColumnsStatement(
-    tableName: Seq[String],
-    columnsToAdd: Seq[QualifiedColType]) extends LeafParsedStatement
-
-/**
- * ALTER TABLE ... CHANGE COLUMN command, as parsed from SQL.
- */
-case class AlterTableAlterColumnStatement(
-    tableName: Seq[String],
-    column: Seq[String],
-    dataType: Option[DataType],
-    nullable: Option[Boolean],
-    comment: Option[String],
-    position: Option[ColumnPosition]) extends LeafParsedStatement
+  def resolved: Boolean = path.forall(_.resolved) && position.forall(_.resolved)
+}
 
 /**
  * An INSERT INTO statement, as parsed from SQL.
@@ -290,32 +255,3 @@ case class InsertIntoStatement(
   override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoStatement =
     copy(query = newChild)
 }
-
-/**
- * A CREATE NAMESPACE statement, as parsed from SQL.
- */
-case class CreateNamespaceStatement(
-    namespace: Seq[String],
-    ifNotExists: Boolean,
-    properties: Map[String, String]) extends LeafParsedStatement
-
-/**
- * A USE statement, as parsed from SQL.
- */
-case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends LeafParsedStatement
-
-/**
- * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
- */
-case class ShowCurrentNamespaceStatement() extends LeafParsedStatement
-
-/**
- *  CREATE FUNCTION statement, as parsed from SQL
- */
-case class CreateFunctionStatement(
-    functionName: Seq[String],
-    className: String,
-    resources: Seq[FunctionResource],
-    isTemp: Boolean,
-    ignoreIfExists: Boolean,
-    replace: Boolean) extends LeafParsedStatement

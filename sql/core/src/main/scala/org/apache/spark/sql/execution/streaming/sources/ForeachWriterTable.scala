@@ -19,9 +19,6 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.util
 
-import scala.collection.JavaConverters._
-
-import org.apache.spark.SparkException
 import org.apache.spark.sql.{ForeachWriter, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -29,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.write.{DataWriter, LogicalWriteInfo, PhysicalWriteInfo, SupportsTruncate, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.python.PythonForeachWriter
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.types.StructType
@@ -51,7 +49,7 @@ case class ForeachWriterTable[T](
   override def schema(): StructType = StructType(Nil)
 
   override def capabilities(): util.Set[TableCapability] = {
-    Set(TableCapability.STREAMING_WRITE).asJava
+    util.EnumSet.of(TableCapability.STREAMING_WRITE)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
@@ -160,7 +158,7 @@ class ForeachDataWriter[T](
 
   override def abort(): Unit = {
     if (errorOrNull == null) {
-      errorOrNull = new SparkException("Foreach writer has been aborted due to a task failure")
+      errorOrNull = QueryExecutionErrors.foreachWriterAbortedDueToTaskFailureError()
     }
   }
 

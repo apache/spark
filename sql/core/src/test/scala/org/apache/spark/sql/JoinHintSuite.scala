@@ -597,4 +597,115 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
       assert(df9.collect().size == df10.collect().size)
     }
   }
+
+  test("SPARK-35221: Add join hint build side check") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
+      Seq("left_outer", "left_semi", "left_anti").foreach { joinType =>
+        val hintAppender = new LogAppender(s"join hint build side check for $joinType")
+        withLogAppender(hintAppender, level = Some(Level.WARN)) {
+          assertShuffleMergeJoin(
+            df1.hint("BROADCAST").join(df2, $"a1" === $"b1", joinType))
+          assertShuffleMergeJoin(
+            df1.hint("SHUFFLE_HASH").join(df2, $"a1" === $"b1", joinType))
+        }
+
+        val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
+          .filter(_.contains("is not supported in the query:"))
+        assert(logs.size === 2)
+        logs.foreach(log =>
+          assert(log.contains(s"build left for ${joinType.split("_").mkString(" ")} join.")))
+      }
+
+      Seq("left_outer", "left_semi", "left_anti").foreach { joinType =>
+        val hintAppender = new LogAppender(s"join hint build side check for $joinType")
+        withLogAppender(hintAppender, level = Some(Level.WARN)) {
+          assertBroadcastHashJoin(
+            df1.join(df2.hint("BROADCAST"), $"a1" === $"b1", joinType), BuildRight)
+          assertShuffleHashJoin(
+            df1.join(df2.hint("SHUFFLE_HASH"), $"a1" === $"b1", joinType), BuildRight)
+        }
+
+        val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
+          .filter(_.contains("is not supported in the query:"))
+        assert(logs.isEmpty)
+      }
+
+      Seq("right_outer").foreach { joinType =>
+        val hintAppender = new LogAppender(s"join hint build side check for $joinType")
+        withLogAppender(hintAppender, level = Some(Level.WARN)) {
+          assertShuffleMergeJoin(
+            df1.join(df2.hint("BROADCAST"), $"a1" === $"b1", joinType))
+          assertShuffleMergeJoin(
+            df1.join(df2.hint("SHUFFLE_HASH"), $"a1" === $"b1", joinType))
+        }
+        val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
+          .filter(_.contains("is not supported in the query:"))
+        assert(logs.size === 2)
+        logs.foreach(log =>
+          assert(log.contains(s"build right for ${joinType.split("_").mkString(" ")} join.")))
+      }
+
+      Seq("right_outer").foreach { joinType =>
+        val hintAppender = new LogAppender(s"join hint build side check for $joinType")
+        withLogAppender(hintAppender, level = Some(Level.WARN)) {
+          assertBroadcastHashJoin(
+            df1.hint("BROADCAST").join(df2, $"a1" === $"b1", joinType), BuildLeft)
+          assertShuffleHashJoin(
+            df1.hint("SHUFFLE_HASH").join(df2, $"a1" === $"b1", joinType), BuildLeft)
+        }
+        val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
+          .filter(_.contains("is not supported in the query:"))
+        assert(logs.isEmpty)
+      }
+
+      Seq("inner", "cross").foreach { joinType =>
+        val hintAppender = new LogAppender(s"join hint build side check for $joinType")
+        withLogAppender(hintAppender, level = Some(Level.WARN)) {
+          assertBroadcastHashJoin(
+            df1.hint("BROADCAST").join(df2, $"a1" === $"b1", joinType), BuildLeft)
+          assertBroadcastHashJoin(
+            df1.join(df2.hint("BROADCAST"), $"a1" === $"b1", joinType), BuildRight)
+
+          assertShuffleHashJoin(
+            df1.hint("SHUFFLE_HASH").join(df2, $"a1" === $"b1", joinType), BuildLeft)
+          assertShuffleHashJoin(
+            df1.join(df2.hint("SHUFFLE_HASH"), $"a1" === $"b1", joinType), BuildRight)
+        }
+        val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
+          .filter(_.contains("is not supported in the query:"))
+        assert(logs.isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-35221: Add join hint non equi-join check") {
+    val hintAppender = new LogAppender(s"join hint check for equi-join")
+    withLogAppender(hintAppender, level = Some(Level.WARN)) {
+      assertBroadcastNLJoin(
+        df1.hint("SHUFFLE_HASH").join(df2, $"a1" !== $"b1"), BuildRight)
+    }
+    withLogAppender(hintAppender, level = Some(Level.WARN)) {
+      assertBroadcastNLJoin(
+        df1.join(df2.hint("MERGE"), $"a1" !== $"b1"), BuildRight)
+    }
+    val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
+      .filter(_.contains("is not supported in the query:"))
+    assert(logs.size === 2)
+    logs.foreach(log => assert(log.contains("no equi-join keys")))
+  }
+
+  test("SPARK-36652: AQE dynamic join selection should not apply to non-equi join") {
+    val hintAppender = new LogAppender(s"join hint check for equi-join")
+    withLogAppender(hintAppender, level = Some(Level.WARN)) {
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "64MB") {
+        df1.join(df2.repartition($"b1"), $"a1" =!= $"b1").collect()
+      }
+      val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
+        .filter(_.contains("is not supported in the query: no equi-join keys"))
+      assert(logs.isEmpty)
+    }
+  }
 }

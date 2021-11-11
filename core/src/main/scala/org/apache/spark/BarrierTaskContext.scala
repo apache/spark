@@ -227,6 +227,8 @@ class BarrierTaskContext private[spark] (
     taskContext.getMetricsSources(sourceName)
   }
 
+  override def cpus(): Int = taskContext.cpus()
+
   override def resources(): Map[String, ResourceInformation] = taskContext.resources()
 
   override def resourcesJMap(): java.util.Map[String, ResourceInformation] = {
