@@ -2366,4 +2366,9 @@ object QueryCompilationErrors {
   def tableIndexNotSupportedError(errorMessage: String): Throwable = {
     new AnalysisException(errorMessage)
   }
+
+  def invalidViewText(viewText: String, tableName: String): Throwable = {
+    new AnalysisException(
+      s"Invalid view text: $viewText. The view $tableName may have been tampered with")
+  }
 }

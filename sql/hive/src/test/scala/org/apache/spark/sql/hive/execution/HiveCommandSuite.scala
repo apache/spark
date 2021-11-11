@@ -62,6 +62,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     sql("INSERT INTO parquet_tab4 PARTITION(year = 2016, month = 2) SELECT 3, 3")
     sql("INSERT INTO parquet_tab4 PARTITION(year = 2016, month = 3) SELECT 3, 3")
     sql("CREATE VIEW parquet_view1 as select * from parquet_tab4")
+    sql("CREATE VIEW parquet_view2 as select * from parquet_tab4")
   }
 
   override protected def afterAll(): Unit = {
@@ -327,15 +328,17 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   test("SPARK-37266: Optimize the analysis for view text of persistent view and" +
     " fix security vulnerabilities caused by sql tampering") {
-    val table = hiveContext.sessionState.catalog.getTableMetadata(TableIdentifier("parquet_view1"))
-    val tamperedTable = table.copy(viewText = Some("drop table parquet_tab1"))
+    val table = hiveContext.sessionState.catalog.getTableMetadata(TableIdentifier("parquet_view2"))
     try {
       // Simulate the behavior of hackers
+      val tamperedViewText = "drop view parquet_view2"
+      val tamperedTable = table.copy(viewText = Some(tamperedViewText))
       hiveContext.sessionState.catalog.alterTable(tamperedTable)
       val message = intercept[AnalysisException] {
-        sql("SELECT * FROM parquet_view1")
+        sql("SELECT * FROM parquet_view2")
       }.getMessage
-      assert(message.contains("Invalid view text of view default.parquet_view1"))
+      assert(message.contains(s"Invalid view text: $tamperedViewText." +
+        s" The view ${table.qualifiedName} may have been tampered with"))
     } finally {
       hiveContext.sessionState.catalog.alterTable(table)
     }

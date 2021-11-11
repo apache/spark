@@ -880,8 +880,8 @@ class SessionCatalog(
       try {
         parser.parseQuery(viewText)
       } catch {
-        case _: ParseException => throw new AnalysisException(
-          s"Invalid view text of view ${metadata.qualifiedName}, it may have been tampered with")
+        case _: ParseException =>
+          throw QueryCompilationErrors.invalidViewText(viewText, metadata.qualifiedName)
       }
     }
     val projectList = if (!isHiveCreatedView(metadata)) {
