@@ -22,13 +22,14 @@ import org.apache.spark.sql.{execution, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, RepartitionOperation, Union}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REPARTITION_BY_COL, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -38,6 +39,8 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   setupTestData()
+
+  private val EnsureRequirements = new EnsureRequirements()
 
   private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
     val planner = spark.sessionState.planner
@@ -61,13 +64,13 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("count distinct is partially aggregated") {
-    val query = testData.groupBy('value).agg(countDistinct('key)).queryExecution.analyzed
+    val query = testData.groupBy('value).agg(count_distinct('key)).queryExecution.analyzed
     testPartialAggregationPlan(query)
   }
 
   test("mixed aggregates are partially aggregated") {
     val query =
-      testData.groupBy('value).agg(count('value), countDistinct('key)).queryExecution.analyzed
+      testData.groupBy('value).agg(count('value), count_distinct('key)).queryExecution.analyzed
     testPartialAggregationPlan(query)
   }
 
@@ -419,7 +422,8 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
     val inputPlan = ShuffleExchangeExec(
       partitioning,
-      DummySparkPlan(outputPartitioning = partitioning))
+      DummySparkPlan(outputPartitioning = partitioning),
+      REPARTITION_BY_COL)
     val outputPlan = EnsureRequirements.apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.size == 1) {
@@ -461,9 +465,9 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       Inner,
       None,
       shuffle,
-      shuffle)
+      shuffle.copy())
 
-    val outputPlan = ReuseExchange.apply(inputPlan)
+    val outputPlan = ReuseExchangeAndSubquery.apply(inputPlan)
     if (outputPlan.collect { case e: ReusedExchangeExec => true }.size != 1) {
       fail(s"Should re-use the shuffle:\n$outputPlan")
     }
@@ -480,7 +484,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       ShuffleExchangeExec(finalPartitioning, inputPlan),
       ShuffleExchangeExec(finalPartitioning, inputPlan))
 
-    val outputPlan2 = ReuseExchange.apply(inputPlan2)
+    val outputPlan2 = ReuseExchangeAndSubquery.apply(inputPlan2)
     if (outputPlan2.collect { case e: ReusedExchangeExec => true }.size != 2) {
       fail(s"Should re-use the two shuffles:\n$outputPlan2")
     }
@@ -728,8 +732,6 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       case r: Range => r
     }
     assert(ranges.length == 2)
-    // Ensure the two Range instances are equal according to their equal method
-    assert(ranges.head == ranges.last)
     val execRanges = df.queryExecution.sparkPlan.collect {
       case r: RangeExec => r
     }
@@ -772,19 +774,19 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     // when enable AQE, the reusedExchange is inserted when executed.
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       // ReusedExchange is HashPartitioning
-      val df1 = Seq(1 -> "a").toDF("i", "j").repartition($"i")
-      val df2 = Seq(1 -> "a").toDF("i", "j").repartition($"i")
+      val df1 = Seq(1 -> "a", 2 -> "b").toDF("i", "j").repartition($"i")
+      val df2 = Seq(1 -> "a", 2 -> "b").toDF("i", "j").repartition($"i")
       checkReusedExchangeOutputPartitioningRewrite(df1.union(df2), classOf[HashPartitioning])
 
       // ReusedExchange is RangePartitioning
-      val df3 = Seq(1 -> "a").toDF("i", "j").orderBy($"i")
-      val df4 = Seq(1 -> "a").toDF("i", "j").orderBy($"i")
+      val df3 = Seq(1 -> "a", 2 -> "b").toDF("i", "j").orderBy($"i")
+      val df4 = Seq(1 -> "a", 2 -> "b").toDF("i", "j").orderBy($"i")
       checkReusedExchangeOutputPartitioningRewrite(df3.union(df4), classOf[RangePartitioning])
 
       // InMemoryTableScan is HashPartitioning
-      Seq(1 -> "a").toDF("i", "j").repartition($"i").persist()
+      Seq(1 -> "a", 2 -> "b").toDF("i", "j").repartition($"i").persist()
       checkInMemoryTableScanOutputPartitioningRewrite(
-        Seq(1 -> "a").toDF("i", "j").repartition($"i"), classOf[HashPartitioning])
+        Seq(1 -> "a", 2 -> "b").toDF("i", "j").repartition($"i"), classOf[HashPartitioning])
 
       // InMemoryTableScan is RangePartitioning
       spark.range(1, 100, 1, 10).toDF().persist()
@@ -794,9 +796,11 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
     // InMemoryTableScan is PartitioningCollection
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      Seq(1 -> "a").toDF("i", "j").join(Seq(1 -> "a").toDF("m", "n"), $"i" === $"m").persist()
+      Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+        .join(Seq(1 -> "a", 2 -> "b").toDF("m", "n"), $"i" === $"m").persist()
       checkInMemoryTableScanOutputPartitioningRewrite(
-        Seq(1 -> "a").toDF("i", "j").join(Seq(1 -> "a").toDF("m", "n"), $"i" === $"m"),
+        Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+          .join(Seq(1 -> "a", 2 -> "b").toDF("m", "n"), $"i" === $"m"),
         classOf[PartitioningCollection])
     }
   }
@@ -1239,6 +1243,21 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       }
     }
   }
+
+  test("SPARK-34919: Change partitioning to SinglePartition if partition number is 1") {
+    def checkSinglePartitioning(df: DataFrame): Unit = {
+      assert(
+        df.queryExecution.analyzed.collect {
+          case r: RepartitionOperation => r
+        }.size == 1)
+      assert(
+        collect(df.queryExecution.executedPlan) {
+          case s: ShuffleExchangeExec if s.outputPartitioning == SinglePartition => s
+        }.size == 1)
+    }
+    checkSinglePartitioning(sql("SELECT /*+ REPARTITION(1) */ * FROM VALUES(1),(2),(3) AS t(c)"))
+    checkSinglePartitioning(sql("SELECT /*+ REPARTITION(1, c) */ * FROM VALUES(1),(2),(3) AS t(c)"))
+  }
 }
 
 // Used for unit-testing EnsureRequirements
@@ -1251,4 +1270,6 @@ private case class DummySparkPlan(
   ) extends SparkPlan {
   override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException
   override def output: Seq[Attribute] = Seq.empty
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): SparkPlan =
+    copy(children = newChildren)
 }

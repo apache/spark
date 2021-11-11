@@ -80,13 +80,13 @@ Refer to the [`HashingTF` Scala docs](api/scala/org/apache/spark/mllib/feature/H
 </div>
 <div data-lang="python" markdown="1">
 
-TF and IDF are implemented in [HashingTF](api/python/pyspark.mllib.html#pyspark.mllib.feature.HashingTF)
-and [IDF](api/python/pyspark.mllib.html#pyspark.mllib.feature.IDF).
+TF and IDF are implemented in [HashingTF](api/python/reference/api/pyspark.mllib.feature.HashingTF.html)
+and [IDF](api/python/reference/api/pyspark.mllib.feature.IDF.html).
 `HashingTF` takes an RDD of list as the input.
 Each record could be an iterable of strings or other types.
 
 
-Refer to the [`HashingTF` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.HashingTF) for details on the API.
+Refer to the [`HashingTF` Python docs](api/python/reference/api/pyspark.mllib.feature.HashingTF.html) for details on the API.
 
 {% include_example python/mllib/tf_idf_example.py %}
 </div>
@@ -140,7 +140,7 @@ Refer to the [`Word2Vec` Scala docs](api/scala/org/apache/spark/mllib/feature/Wo
 {% include_example scala/org/apache/spark/examples/mllib/Word2VecExample.scala %}
 </div>
 <div data-lang="python" markdown="1">
-Refer to the [`Word2Vec` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.Word2Vec) for more details on the API.
+Refer to the [`Word2Vec` Python docs](api/python/reference/api/pyspark.mllib.feature.Word2Vec.html) for more details on the API.
 
 {% include_example python/mllib/word2vec_example.py %}
 </div>
@@ -191,7 +191,7 @@ Refer to the [`StandardScaler` Scala docs](api/scala/org/apache/spark/mllib/feat
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`StandardScaler` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.StandardScaler) for more details on the API.
+Refer to the [`StandardScaler` Python docs](api/python/reference/api/pyspark.mllib.feature.StandardScaler.html) for more details on the API.
 
 {% include_example python/mllib/standard_scaler_example.py %}
 </div>
@@ -227,7 +227,7 @@ Refer to the [`Normalizer` Scala docs](api/scala/org/apache/spark/mllib/feature/
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`Normalizer` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.Normalizer) for more details on the API.
+Refer to the [`Normalizer` Python docs](api/python/reference/api/pyspark.mllib.feature.Normalizer.html) for more details on the API.
 
 {% include_example python/mllib/normalizer_example.py %}
 </div>
@@ -337,7 +337,7 @@ Refer to the [`ElementwiseProduct` Java docs](api/java/org/apache/spark/mllib/fe
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`ElementwiseProduct` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.ElementwiseProduct) for more details on the API.
+Refer to the [`ElementwiseProduct` Python docs](api/python/reference/api/pyspark.mllib.feature.ElementwiseProduct.html) for more details on the API.
 
 {% include_example python/mllib/elementwise_product_example.py %}
 </div>

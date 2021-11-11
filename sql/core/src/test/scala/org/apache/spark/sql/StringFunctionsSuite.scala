@@ -154,25 +154,9 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("300", "100") :: Row("400", "100") :: Row("400-400", "100") :: Nil)
   }
 
-  test("string regex_extract_all") {
-    val df = Seq(
-      ("100-200,300-400", "(\\d+)-(\\d+)"),
-      ("101-201,301-401", "(\\d+)-(\\d+)"),
-      ("102-202,302-402", "(\\d+)")).toDF("a", "b")
-
-    checkAnswer(
-      df.select(
-        regexp_extract_all($"a", "(\\d+)-(\\d+)", 1),
-        regexp_extract_all($"a", "(\\d+)-(\\d+)", 2)),
-      Row(Seq("100", "300"), Seq("200", "400")) ::
-        Row(Seq("101", "301"), Seq("201", "401")) ::
-        Row(Seq("102", "302"), Seq("202", "402")) :: Nil)
-  }
-
   test("non-matching optional group") {
     val df = Seq(Tuple1("aaaac")).toDF("s")
 
-    // regexp_extract
     checkAnswer(
       df.select(regexp_extract($"s", "(foo)", 1)),
       Row("")
@@ -180,16 +164,6 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(regexp_extract($"s", "(a+)(b)?(c)", 2)),
       Row("")
-    )
-
-    // regexp_extract_all
-    checkAnswer(
-      df.select(regexp_extract_all($"s", "(foo)", 1)),
-      Row(Seq())
-    )
-    checkAnswer(
-      df.select(regexp_extract_all($"s", "(a+)(b)?(c)", 2)),
-      Row(Seq(""))
     )
   }
 
@@ -512,6 +486,58 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("SPARK-36751: add octet length api for scala") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123, 2.0f, 3.015, "\ud83d\udc08"))
+      .toDF("a", "b", "c", "d", "e", "f")
+    // string and binary input
+    checkAnswer(
+      df.select(octet_length($"a"), octet_length($"b")),
+      Row(3, 4))
+    // string and binary input
+    checkAnswer(
+      df.selectExpr("octet_length(a)", "octet_length(b)"),
+      Row(3, 4))
+    // integer, float and double input
+    checkAnswer(
+      df.selectExpr("octet_length(c)", "octet_length(d)", "octet_length(e)"),
+      Row(3, 3, 5)
+    )
+    // multi-byte character input
+    checkAnswer(
+      df.selectExpr("octet_length(f)"),
+      Row(4)
+    )
+    // scalastyle:on
+  }
+
+  test("SPARK-36751: add bit length api for scala") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123, 2.0f, 3.015, "\ud83d\udc08"))
+      .toDF("a", "b", "c", "d", "e", "f")
+    // string and binary input
+    checkAnswer(
+      df.select(bit_length($"a"), bit_length($"b")),
+      Row(24, 32))
+    // string and binary input
+    checkAnswer(
+      df.selectExpr("bit_length(a)", "bit_length(b)"),
+      Row(24, 32))
+    // integer, float and double input
+    checkAnswer(
+      df.selectExpr("bit_length(c)", "bit_length(d)", "bit_length(e)"),
+      Row(24, 24, 40)
+    )
+    // multi-byte character input
+    checkAnswer(
+      df.selectExpr("bit_length(f)"),
+      Row(32)
+    )
+    // scalastyle:on
+  }
+
   test("initcap function") {
     val df = Seq(("ab", "a B", "sParK")).toDF("x", "y", "z")
     checkAnswer(
@@ -583,9 +609,16 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("sentences(str, language, country)"),
       Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
 
+    checkAnswer(
+      df.select(sentences($"str", $"language", $"country")),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
     // Type coercion
     checkAnswer(
       df.selectExpr("sentences(null)", "sentences(10)", "sentences(3.14)"),
+      Row(null, Seq(Seq("10")), Seq(Seq("3.14"))))
+
+    checkAnswer(df.select(sentences(lit(null)), sentences(lit(10)), sentences(lit(3.14))),
       Row(null, Seq(Seq("10")), Seq(Seq("3.14"))))
 
     // Argument number exception
@@ -616,5 +649,12 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
     )
 
+  }
+
+  test("SPARK-36148: check input data types of regexp_replace") {
+    val m = intercept[AnalysisException] {
+      sql("select regexp_replace(collect_list(1), '1', '2')")
+    }.getMessage
+    assert(m.contains("data type mismatch: argument 1 requires string type"))
   }
 }

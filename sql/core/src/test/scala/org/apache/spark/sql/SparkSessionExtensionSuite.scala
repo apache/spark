@@ -46,8 +46,8 @@ import org.apache.spark.unsafe.types.UTF8String
  * Test cases for the [[SparkSessionExtensions]].
  */
 class SparkSessionExtensionSuite extends SparkFunSuite {
-  type ExtensionsBuilder = SparkSessionExtensions => Unit
-  private def create(builder: ExtensionsBuilder): Seq[ExtensionsBuilder] = Seq(builder)
+  private def create(
+      builder: SparkSessionExtensionsProvider): Seq[SparkSessionExtensionsProvider] = Seq(builder)
 
   private def stop(spark: SparkSession): Unit = {
     spark.stop()
@@ -55,7 +55,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     SparkSession.clearDefaultSession()
   }
 
-  private def withSession(builders: Seq[ExtensionsBuilder])(f: SparkSession => Unit): Unit = {
+  private def withSession(
+      builders: Seq[SparkSessionExtensionsProvider])(f: SparkSession => Unit): Unit = {
     val builder = SparkSession.builder().master("local[1]")
     builders.foreach(builder.withExtensions)
     val spark = builder.getOrCreate()
@@ -355,6 +356,46 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       stop(session)
     }
   }
+
+  test("SPARK-35380: Loading extensions from ServiceLoader") {
+    val builder = SparkSession.builder().master("local[1]")
+
+    Seq(None, Some(classOf[YourExtensions].getName)).foreach { ext =>
+      ext.foreach(builder.config(SPARK_SESSION_EXTENSIONS.key, _))
+      val session = builder.getOrCreate()
+      try {
+        assert(session.sql("select get_fake_app_name()").head().getString(0) === "Fake App Name")
+      } finally {
+        stop(session)
+      }
+    }
+  }
+
+  test("SPARK-35673: user-defined hint and unrecognized hint in subquery") {
+    withSession(Seq(_.injectPostHocResolutionRule(MyHintRule))) { session =>
+      // unrecognized hint
+      QueryTest.checkAnswer(
+        session.sql(
+          """
+            |SELECT *
+            |FROM (
+            |    SELECT /*+ some_random_hint_that_does_not_exist */ 42
+            |)
+            |""".stripMargin),
+        Row(42) :: Nil)
+
+      // user-defined hint
+      QueryTest.checkAnswer(
+        session.sql(
+          """
+            |SELECT *
+            |FROM (
+            |    SELECT /*+ CONVERT_TO_EMPTY */ 42
+            |)
+            |""".stripMargin),
+        Nil)
+    }
+  }
 }
 
 case class MyRule(spark: SparkSession) extends Rule[LogicalPlan] {
@@ -409,7 +450,8 @@ object MyExtensions {
       "3.0.0",
       """
        deprecated
-      """),
+      """,
+      ""),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
@@ -494,7 +536,7 @@ case class NoCloseColumnVector(wrapped: ColumnVector) extends ColumnVector(wrapp
 
   override def getBinary(rowId: Int): Array[Byte] = wrapped.getBinary(rowId)
 
-  override protected def getChild(ordinal: Int): ColumnVector = wrapped.getChild(ordinal)
+  override def getChild(ordinal: Int): ColumnVector = wrapped.getChild(ordinal)
 }
 
 trait ColumnarExpression extends Expression with Serializable {
@@ -582,6 +624,10 @@ class ColumnarAlias(child: ColumnarExpression, name: String)(
   with ColumnarExpression {
 
   override def columnarEval(batch: ColumnarBatch): Any = child.columnarEval(batch)
+
+  override protected def withNewChildInternal(newChild: Expression): ColumnarAlias =
+    new ColumnarAlias(newChild.asInstanceOf[ColumnarExpression], name)(exprId, qualifier,
+      explicitMetadata, nonInheritableMetadataKeys)
 }
 
 class ColumnarAttributeReference(
@@ -641,6 +687,9 @@ class ColumnarProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   override def hashCode(): Int = super.hashCode()
+
+  override def withNewChildInternal(newChild: SparkPlan): ColumnarProjectExec =
+    new ColumnarProjectExec(projectList, newChild)
 }
 
 /**
@@ -705,6 +754,12 @@ class BrokenColumnarAdd(
     }
     ret
   }
+
+  override def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): BrokenColumnarAdd =
+    new BrokenColumnarAdd(
+      left = newLeft.asInstanceOf[ColumnarExpression],
+      right = newRight.asInstanceOf[ColumnarExpression], failOnError)
 }
 
 class CannotReplaceException(str: String) extends RuntimeException(str) {
@@ -774,13 +829,15 @@ case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleE
     delegate.shuffleOrigin
   }
   override def mapOutputStatisticsFuture: Future[MapOutputStatistics] =
-    delegate.mapOutputStatisticsFuture
+    delegate.submitShuffleJob
   override def getShuffleRDD(partitionSpecs: Array[ShufflePartitionSpec]): RDD[_] =
     delegate.getShuffleRDD(partitionSpecs)
   override def runtimeStatistics: Statistics = delegate.runtimeStatistics
   override def child: SparkPlan = delegate.child
   override protected def doExecute(): RDD[InternalRow] = delegate.execute()
   override def outputPartitioning: Partitioning = delegate.outputPartitioning
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    super.legacyWithNewChildren(Seq(newChild))
 }
 
 /**
@@ -791,13 +848,16 @@ case class MyBroadcastExchangeExec(delegate: BroadcastExchangeExec) extends Broa
   override def runId: UUID = delegate.runId
   override def relationFuture: java.util.concurrent.Future[Broadcast[Any]] =
     delegate.relationFuture
-  override def completionFuture: Future[Broadcast[Any]] = delegate.completionFuture
+  override def completionFuture: Future[Broadcast[Any]] = delegate.submitBroadcastJob
   override def runtimeStatistics: Statistics = delegate.runtimeStatistics
   override def child: SparkPlan = delegate.child
   override protected def doPrepare(): Unit = delegate.prepare()
   override protected def doExecute(): RDD[InternalRow] = delegate.execute()
   override def doExecuteBroadcast[T](): Broadcast[T] = delegate.executeBroadcast()
   override def outputPartitioning: Partitioning = delegate.outputPartitioning
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    super.legacyWithNewChildren(Seq(newChild))
 }
 
 class ReplacedRowToColumnarExec(override val child: SparkPlan)
@@ -815,6 +875,9 @@ class ReplacedRowToColumnarExec(override val child: SparkPlan)
   }
 
   override def hashCode(): Int = super.hashCode()
+
+  override def withNewChildInternal(newChild: SparkPlan): ReplacedRowToColumnarExec =
+    new ReplacedRowToColumnarExec(newChild)
 }
 
 case class MyPostRule() extends Rule[SparkPlan] {
@@ -896,7 +959,8 @@ object MyExtensions2 {
       "3.0.0",
       """
        deprecated
-      """),
+      """,
+      ""),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
@@ -929,12 +993,26 @@ object MyExtensions2Duplicate {
       "3.0.0",
       """
        deprecated
-      """),
+      """,
+      ""),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
 class MyExtensions2Duplicate extends (SparkSessionExtensions => Unit) {
   def apply(e: SparkSessionExtensions): Unit = {
     e.injectFunction(MyExtensions2Duplicate.myFunction)
+  }
+}
+
+class YourExtensions extends SparkSessionExtensionsProvider {
+  val getAppName = (FunctionIdentifier("get_fake_app_name"),
+    new ExpressionInfo(
+      "zzz.zzz.zzz",
+      "",
+      "get_fake_app_name"),
+    (_: Seq[Expression]) => Literal("Fake App Name"))
+
+  override def apply(v1: SparkSessionExtensions): Unit = {
+    v1.injectFunction(getAppName)
   }
 }

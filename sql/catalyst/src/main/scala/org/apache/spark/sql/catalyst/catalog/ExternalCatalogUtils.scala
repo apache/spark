@@ -22,11 +22,13 @@ import java.net.URI
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BoundReference, Expression, Predicate}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BasePredicate, BoundReference, Expression, Predicate}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
 
 object ExternalCatalogUtils {
   // This duplicates default value of Hive `ConfVars.DEFAULTPARTITIONNAME`, since catalyst doesn't
@@ -119,13 +121,30 @@ object ExternalCatalogUtils {
     }
   }
 
-  def getPartitionPathString(col: String, value: String): String = {
-    val partitionString = if (value == null || value.isEmpty) {
+  def getPartitionValueString(value: String): String = {
+    if (value == null || value.isEmpty) {
       DEFAULT_PARTITION_NAME
     } else {
       escapePathName(value)
     }
+  }
+
+  def getPartitionPathString(col: String, value: String): String = {
+    val partitionString = getPartitionValueString(value)
     escapePathName(col) + "=" + partitionString
+  }
+
+  def listPartitionsByFilter(
+      conf: SQLConf,
+      catalog: SessionCatalog,
+      table: CatalogTable,
+      partitionFilters: Seq[Expression]): Seq[CatalogTablePartition] = {
+    if (conf.metastorePartitionPruning) {
+      catalog.listPartitionsByFilter(table.identifier, partitionFilters)
+    } else {
+      ExternalCatalogUtils.prunePartitionsByFilter(table, catalog.listPartitions(table.identifier),
+        partitionFilters, conf.sessionLocalTimeZone)
+    }
   }
 
   def prunePartitionsByFilter(
@@ -138,27 +157,38 @@ object ExternalCatalogUtils {
     } else {
       val partitionSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
         catalogTable.partitionSchema)
-      val partitionColumnNames = catalogTable.partitionColumnNames.toSet
-
-      val nonPartitionPruningPredicates = predicates.filterNot {
-        _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
-      }
-      if (nonPartitionPruningPredicates.nonEmpty) {
-        throw new AnalysisException("Expected only partition pruning predicates: " +
-          nonPartitionPruningPredicates)
-      }
-
-      val boundPredicate =
-        Predicate.createInterpreted(predicates.reduce(And).transform {
-          case att: AttributeReference =>
-            val index = partitionSchema.indexWhere(_.name == att.name)
-            BoundReference(index, partitionSchema(index).dataType, nullable = true)
-        })
+      val boundPredicate = generatePartitionPredicateByFilter(catalogTable,
+        partitionSchema, predicates)
 
       inputPartitions.filter { p =>
         boundPredicate.eval(p.toRow(partitionSchema, defaultTimeZoneId))
       }
     }
+  }
+
+  def generatePartitionPredicateByFilter(
+      catalogTable: CatalogTable,
+      partitionSchema: StructType,
+      predicates: Seq[Expression]): BasePredicate = {
+    val partitionColumnNames = catalogTable.partitionColumnNames.toSet
+
+    val nonPartitionPruningPredicates = predicates.filterNot {
+      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+    }
+    if (nonPartitionPruningPredicates.nonEmpty) {
+      throw QueryCompilationErrors.nonPartitionPruningPredicatesNotExpectedError(
+        nonPartitionPruningPredicates)
+    }
+
+    Predicate.createInterpreted(predicates.reduce(And).transform {
+      case att: AttributeReference =>
+        val index = partitionSchema.indexWhere(_.name == att.name)
+        BoundReference(index, partitionSchema(index).dataType, nullable = true)
+    })
+  }
+
+  private def isNullPartitionValue(value: String): Boolean = {
+    value == null || value == DEFAULT_PARTITION_NAME
   }
 
   /**
@@ -169,8 +199,14 @@ object ExternalCatalogUtils {
       spec1: TablePartitionSpec,
       spec2: TablePartitionSpec): Boolean = {
     spec1.forall {
+      case (partitionColumn, value) if isNullPartitionValue(value) =>
+        isNullPartitionValue(spec2(partitionColumn))
       case (partitionColumn, value) => spec2(partitionColumn) == value
     }
+  }
+
+  def convertNullPartitionValues(spec: TablePartitionSpec): TablePartitionSpec = {
+    spec.mapValues(v => if (v == null) DEFAULT_PARTITION_NAME else v).map(identity).toMap
   }
 }
 
@@ -229,8 +265,8 @@ object CatalogUtils {
       colType: String,
       resolver: Resolver): String = {
     tableCols.find(resolver(_, colName)).getOrElse {
-      throw new AnalysisException(s"$colType column $colName is not defined in table $tableName, " +
-        s"defined table columns are: ${tableCols.mkString(", ")}")
+      throw QueryCompilationErrors.columnNotDefinedInTableError(
+        colType, colName, tableName, tableCols)
     }
   }
 }

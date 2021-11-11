@@ -89,9 +89,17 @@ private[sql] class JSONOptions(
   val zoneId: ZoneId = DateTimeUtils.getZoneId(
     parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
 
-  val dateFormat: String = parameters.getOrElse("dateFormat", DateFormatter.defaultPattern)
+  val dateFormatInRead: Option[String] = parameters.get("dateFormat")
+  val dateFormatInWrite: String = parameters.getOrElse("dateFormat", DateFormatter.defaultPattern)
 
-  val timestampFormat: String = parameters.getOrElse("timestampFormat",
+  val timestampFormatInRead: Option[String] =
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      Some(parameters.getOrElse("timestampFormat",
+        s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"))
+    } else {
+      parameters.get("timestampFormat")
+    }
+  val timestampFormatInWrite: String = parameters.getOrElse("timestampFormat",
     if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"
     } else {
@@ -134,6 +142,12 @@ private[sql] class JSONOptions(
    * defined by the timestampFormat option.
    */
   val inferTimestamp: Boolean = parameters.get("inferTimestamp").map(_.toBoolean).getOrElse(false)
+
+  /**
+   * Generating \u0000 style codepoints for non-ASCII characters if the parameter is enabled.
+   */
+  val writeNonAsciiCharacterAsCodePoint: Boolean =
+    parameters.get("writeNonAsciiCharacterAsCodePoint").map(_.toBoolean).getOrElse(false)
 
   /** Build a Jackson [[JsonFactory]] using JSON options. */
   def buildJsonFactory(): JsonFactory = {

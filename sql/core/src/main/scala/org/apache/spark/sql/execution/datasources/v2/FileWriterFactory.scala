@@ -24,7 +24,7 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.write.{DataWriter, DataWriterFactory}
-import org.apache.spark.sql.execution.datasources.{DynamicPartitionDataWriter, SingleDirectoryDataWriter, WriteJobDescription}
+import org.apache.spark.sql.execution.datasources.{DynamicPartitionDataSingleWriter, SingleDirectoryDataWriter, WriteJobDescription}
 
 case class FileWriterFactory (
     description: WriteJobDescription,
@@ -35,7 +35,7 @@ case class FileWriterFactory (
     if (description.partitionColumns.isEmpty) {
       new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
     } else {
-      new DynamicPartitionDataWriter(description, taskAttemptContext, committer)
+      new DynamicPartitionDataSingleWriter(description, taskAttemptContext, committer)
     }
   }
 

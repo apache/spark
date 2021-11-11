@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.execution.command
 
+import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -28,7 +29,8 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
  * settings for all unified datasource V1 and V2 test suites.
  */
 trait CommandSuiteBase extends TestHiveSingleton {
-  def version: String = "Hive V1" // The prefix is added to test names
+  def catalogVersion: String = "Hive V1" // The catalog version is added to test names
+  def commandVersion: String = "V1" // The command version is added to test names
   def catalog: String = CatalogManager.SESSION_CATALOG_NAME
   def defaultUsing: String = "USING HIVE" // The clause is used in creating tables under testing
 
@@ -46,5 +48,12 @@ trait CommandSuiteBase extends TestHiveSingleton {
         .first().getString(0)
     val location = information.split("\\r?\\n").filter(_.startsWith("Location:")).head
     assert(location.endsWith(expected))
+  }
+
+  def checkHiveClientCalls[T](expected: Int)(f: => T): Unit = {
+    HiveCatalogMetrics.reset()
+    assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount === 0)
+    f
+    assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount === expected)
   }
 }

@@ -30,7 +30,7 @@ and building from the source.
 Python Version Supported
 ------------------------
 
-Python 3.6 and above.
+Python 3.7 and above.
 
 
 Using PyPI
@@ -46,13 +46,16 @@ If you want to install extra dependencies for a specific component, you can inst
 
 .. code-block:: bash
 
+    # Spark SQL
     pip install pyspark[sql]
+    # pandas API on Spark
+    pip install pyspark[pandas_on_spark] plotly  # to plot your data, you can install plotly together.
 
-For PySpark with/without a specific Hadoop version, you can install it by using ``HADOOP_VERSION`` environment variables as below:
+For PySpark with/without a specific Hadoop version, you can install it by using ``PYSPARK_HADOOP_VERSION`` environment variables as below:
 
 .. code-block:: bash
 
-    HADOOP_VERSION=2.7 pip install pyspark
+    PYSPARK_HADOOP_VERSION=2.7 pip install pyspark
 
 The default distribution uses Hadoop 3.2 and Hive 2.3. If users specify different versions of Hadoop, the pip installation automatically
 downloads a different version and use it in PySpark. Downloading it can take a while depending on
@@ -60,15 +63,15 @@ the network and the mirror chosen. ``PYSPARK_RELEASE_MIRROR`` can be set to manu
 
 .. code-block:: bash
 
-    PYSPARK_RELEASE_MIRROR=http://mirror.apache-kr.org HADOOP_VERSION=2.7 pip install
+    PYSPARK_RELEASE_MIRROR=http://mirror.apache-kr.org PYSPARK_HADOOP_VERSION=2.7 pip install
 
 It is recommended to use ``-v`` option in ``pip`` to track the installation and download status.
 
 .. code-block:: bash
 
-    HADOOP_VERSION=2.7 pip install pyspark -v
+    PYSPARK_HADOOP_VERSION=2.7 pip install pyspark -v
 
-Supported values in ``HADOOP_VERSION`` are:
+Supported values in ``PYSPARK_HADOOP_VERSION`` are:
 
 - ``without``: Spark pre-built with user-provided Apache Hadoop
 - ``2.7``: Spark pre-built for Apache Hadoop 2.7
@@ -80,46 +83,42 @@ Note that this installation way of PySpark with/without a specific Hadoop versio
 Using Conda
 -----------
 
-Conda is an open-source package management and environment management system which is a part of
-the `Anaconda <https://docs.continuum.io/anaconda/>`_ distribution. It is both cross-platform and
-language agnostic. In practice, Conda can replace both `pip <https://pip.pypa.io/en/latest/>`_ and
-`virtualenv <https://virtualenv.pypa.io/en/latest/>`_.
+Conda is an open-source package management and environment management system (developed by
+`Anaconda <https://www.anaconda.com/>`_), which is best installed through
+`Miniconda <https://docs.conda.io/en/latest/miniconda.html/>`_ or `Miniforge <https://github.com/conda-forge/miniforge/>`_.
+The tool is both cross-platform and language agnostic, and in practice, conda can replace both
+`pip <https://pip.pypa.io/en/latest/>`_ and `virtualenv <https://virtualenv.pypa.io/en/latest/>`_.
 
-Create new virtual environment from your terminal as shown below:
+Conda uses so-called channels to distribute packages, and together with the default channels by
+Anaconda itself, the most important channel is `conda-forge <https://conda-forge.org/>`_, which
+is the community-driven packaging effort that is the most extensive & the most current (and also
+serves as the upstream for the Anaconda channels in most cases).
+
+To create a new conda environment from your terminal and activate it, proceed as shown below:
 
 .. code-block:: bash
 
     conda create -n pyspark_env
-
-After the virtual environment is created, it should be visible under the list of Conda environments
-which can be seen using the following command:
-
-.. code-block:: bash
-
-    conda env list
-
-Now activate the newly created environment with the following command:
-
-.. code-block:: bash
-
     conda activate pyspark_env
 
-You can install pyspark by `Using PyPI <#using-pypi>`_ to install PySpark in the newly created
-environment, for example as below. It will install PySpark under the new virtual environment
-``pyspark_env`` created above.
+After activating the environment, use the following command to install pyspark,
+a python version of your choice, as well as other packages you want to use in
+the same session as pyspark (you can install in several steps too).
 
 .. code-block:: bash
 
-    pip install pyspark
+    conda install -c conda-forge pyspark  # can also add "python=3.8 some_package [etc.]" here
 
-Alternatively, you can install PySpark from Conda itself as below:
+Note that `PySpark for conda <https://anaconda.org/conda-forge/pyspark>`_ is maintained
+separately by the community; while new versions generally get packaged quickly, the
+availability through conda(-forge) is not directly in sync with the PySpark release cycle.
 
-.. code-block:: bash
+While using pip in a conda environment is technically feasible (with the same command as
+`above <#using-pypi>`_), this approach is `discouraged <https://www.anaconda.com/blog/using-pip-in-a-conda-environment/>`_,
+because pip does not interoperate with conda.
 
-    conda install pyspark
-
-However, note that `PySpark at Conda <https://anaconda.org/conda-forge/pyspark>`_ is not necessarily
-synced with PySpark release cycle because it is maintained by the community separately.
+For a short summary about useful conda commands, see their
+`cheat sheet <https://docs.conda.io/projects/conda/en/latest/user-guide/cheatsheet.html/>`_.
 
 
 Manually Downloading
@@ -152,15 +151,26 @@ To install PySpark from source, refer to |building_spark|_.
 
 Dependencies
 ------------
-============= ========================= ================
+============= ========================= ======================================
 Package       Minimum supported version Note
-============= ========================= ================
-`pandas`      0.23.2                    Optional for SQL
-`NumPy`       1.7                       Required for ML 
-`pyarrow`     1.0.0                     Optional for SQL
-`Py4J`        0.10.9                    Required
-============= ========================= ================
+============= ========================= ======================================
+`pandas`      0.23.2                    Optional for Spark SQL
+`NumPy`       1.7                       Required for MLlib DataFrame-based API
+`pyarrow`     1.0.0                     Optional for Spark SQL
+`Py4J`        0.10.9.2                  Required
+`pandas`      0.23.2                    Required for pandas API on Spark
+`pyarrow`     1.0.0                     Required for pandas API on Spark
+`Numpy`       1.14                      Required for pandas API on Spark
+============= ========================= ======================================
 
 Note that PySpark requires Java 8 or later with ``JAVA_HOME`` properly set.  
 If using JDK 11, set ``-Dio.netty.tryReflectionSetAccessible=true`` for Arrow related features and refer
 to |downloading|_.
+
+Note for AArch64 (ARM64) users: PyArrow is required by PySpark SQL, but PyArrow support for AArch64
+is introduced in PyArrow 4.0.0. If PySpark installation fails on AArch64 due to PyArrow
+installation errors, you can install PyArrow >= 4.0.0 as below:
+
+.. code-block:: bash
+
+    pip install "pyarrow>=4.0.0" --prefer-binary

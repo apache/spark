@@ -71,11 +71,11 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
   val hadoopConf = new Configuration()
   val streamId = 1
   val securityMgr = new SecurityManager(conf, encryptionKey)
-  val broadcastManager = new BroadcastManager(true, conf, securityMgr)
+  val broadcastManager = new BroadcastManager(true, conf)
   val mapOutputTracker = new MapOutputTrackerMaster(conf, broadcastManager, true)
   val shuffleManager = new SortShuffleManager(conf)
   val serializer = new KryoSerializer(conf)
-  var serializerManager = new SerializerManager(serializer, conf, encryptionKey)
+  val serializerManager = new SerializerManager(serializer, conf, encryptionKey)
   val manualClock = new ManualClock
   val blockManagerSize = 10000000
   val blockManagerBuffer = new ArrayBuffer[BlockManager]()
@@ -93,7 +93,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
     val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
     blockManagerMaster = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(conf), None, blockManagerInfo, mapOutputTracker)),
+        new LiveListenerBus(conf), None, blockManagerInfo, mapOutputTracker, isDriver = true)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true)
 

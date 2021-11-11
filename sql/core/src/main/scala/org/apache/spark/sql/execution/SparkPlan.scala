@@ -32,7 +32,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -56,15 +57,17 @@ object SparkPlan {
  * The naming convention is that physical operators end with "Exec" suffix, e.g. [[ProjectExec]].
  */
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
+  @transient final val session = SparkSession.getActiveSession.orNull
 
-  /**
-   * A handle to the SQL Context that was used to create this plan. Since many operators need
-   * access to the sqlContext for RDD operations or configuration this field is automatically
-   * populated by the query planning infrastructure.
-   */
-  @transient final val sqlContext = SparkSession.getActiveSession.map(_.sqlContext).orNull
+  protected def sparkContext = session.sparkContext
 
-  protected def sparkContext = sqlContext.sparkContext
+  override def conf: SQLConf = {
+    if (session != null) {
+      session.sessionState.conf
+    } else {
+      super.conf
+    }
+  }
 
   val id: Int = SparkPlan.newPlanId()
 
@@ -81,10 +84,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
-    if (sqlContext != null) {
-      SparkSession.setActiveSession(sqlContext.sparkSession)
+    if (session != null) {
+      session.withActive(super.makeCopy(newArgs))
+    } else {
+      super.makeCopy(newArgs)
     }
-    super.makeCopy(newArgs)
   }
 
   /**
@@ -295,7 +299,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Overridden by concrete implementations of SparkPlan.
    */
   protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
-    throw new UnsupportedOperationException(s"$nodeName does not implement doExecuteBroadcast")
+    throw QueryExecutionErrors.doExecuteBroadcastNotImplementedError(nodeName)
   }
 
   /**
@@ -307,6 +311,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     throw new IllegalStateException(s"Internal Error ${this.getClass} has column support" +
       s" mismatch:\n${this}")
   }
+
+  /**
+   * Converts the output of this plan to row-based if it is columnar plan.
+   */
+  def toRowBased: SparkPlan = if (supportsColumnar) ColumnarToRowExec(this) else this
 
   /**
    * Packing the UnsafeRows into byte array for faster serialization.
@@ -449,7 +458,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         // If we didn't find any rows after the previous iteration, quadruple and retry.
         // Otherwise, interpolate the number of partitions we need to try, but overestimate
         // it by 50%. We also cap the estimation in the end.
-        val limitScaleUpFactor = Math.max(sqlContext.conf.limitScaleUpFactor, 2)
+        val limitScaleUpFactor = Math.max(conf.limitScaleUpFactor, 2)
         if (buf.isEmpty) {
           numPartsToTry = partsScanned * limitScaleUpFactor
         } else {
@@ -468,7 +477,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       } else {
         parts
       }
-      val sc = sqlContext.sparkContext
+      val sc = sparkContext
       val res = sc.runJob(childRDD, (it: Iterator[(Long, Array[Byte])]) =>
         if (it.hasNext) it.next() else (0L, Array.emptyByteArray), partsToScan)
 
@@ -514,11 +523,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 }
 
-trait LeafExecNode extends SparkPlan {
-  override final def children: Seq[SparkPlan] = Nil
+trait LeafExecNode extends SparkPlan with LeafLike[SparkPlan] {
+
   override def producedAttributes: AttributeSet = outputSet
   override def verboseStringWithOperatorId(): String = {
-    val argumentString = argString(SQLConf.get.maxToStringFields)
+    val argumentString = argString(conf.maxToStringFields)
     val outputStr = s"${ExplainUtils.generateFieldString("Output", output)}"
 
     if (argumentString.nonEmpty) {
@@ -543,12 +552,10 @@ object UnaryExecNode {
   }
 }
 
-trait UnaryExecNode extends SparkPlan {
-  def child: SparkPlan
+trait UnaryExecNode extends SparkPlan with UnaryLike[SparkPlan] {
 
-  override final def children: Seq[SparkPlan] = child :: Nil
   override def verboseStringWithOperatorId(): String = {
-    val argumentString = argString(SQLConf.get.maxToStringFields)
+    val argumentString = argString(conf.maxToStringFields)
     val inputStr = s"${ExplainUtils.generateFieldString("Input", child.output)}"
 
     if (argumentString.nonEmpty) {
@@ -566,13 +573,10 @@ trait UnaryExecNode extends SparkPlan {
   }
 }
 
-trait BinaryExecNode extends SparkPlan {
-  def left: SparkPlan
-  def right: SparkPlan
+trait BinaryExecNode extends SparkPlan with BinaryLike[SparkPlan] {
 
-  override final def children: Seq[SparkPlan] = Seq(left, right)
   override def verboseStringWithOperatorId(): String = {
-    val argumentString = argString(SQLConf.get.maxToStringFields)
+    val argumentString = argString(conf.maxToStringFields)
     val leftOutputStr = s"${ExplainUtils.generateFieldString("Left output", left.output)}"
     val rightOutputStr = s"${ExplainUtils.generateFieldString("Right output", right.output)}"
 

@@ -32,9 +32,11 @@ import org.apache.hadoop.metrics2.MetricsSource;
  */
 class YarnShuffleServiceMetrics implements MetricsSource {
 
+  private final String metricsNamespace;
   private final MetricSet metricSet;
 
-  YarnShuffleServiceMetrics(MetricSet metricSet) {
+  YarnShuffleServiceMetrics(String metricsNamespace, MetricSet metricSet) {
+    this.metricsNamespace = metricsNamespace;
     this.metricSet = metricSet;
   }
 
@@ -46,7 +48,7 @@ class YarnShuffleServiceMetrics implements MetricsSource {
    */
   @Override
   public void getMetrics(MetricsCollector collector, boolean all) {
-    MetricsRecordBuilder metricsRecordBuilder = collector.addRecord("sparkShuffleService");
+    MetricsRecordBuilder metricsRecordBuilder = collector.addRecord(metricsNamespace);
 
     for (Map.Entry<String, Metric> entry : metricSet.getMetrics().entrySet()) {
       collectMetric(metricsRecordBuilder, entry.getKey(), entry.getValue());
@@ -62,7 +64,10 @@ class YarnShuffleServiceMetrics implements MetricsSource {
     MetricsRecordBuilder metricsRecordBuilder, String name, Metric metric) {
 
     if (metric instanceof Timer) {
+      // Timer records both the operations count and delay
+      // Snapshot inside the Timer provides the information for the operation delay
       Timer t = (Timer) metric;
+      Snapshot snapshot = t.getSnapshot();
       metricsRecordBuilder
         .addCounter(new ShuffleServiceMetricsInfo(name + "_count", "Count of timer " + name),
           t.getCount())
@@ -76,7 +81,32 @@ class YarnShuffleServiceMetrics implements MetricsSource {
           new ShuffleServiceMetricsInfo(name + "_rate1", "1 minute rate of timer " + name),
           t.getOneMinuteRate())
         .addGauge(new ShuffleServiceMetricsInfo(name + "_rateMean", "Mean rate of timer " + name),
-          t.getMeanRate());
+          t.getMeanRate())
+        .addGauge(
+          getShuffleServiceMetricsInfoForGenericValue(name, "max"), snapshot.getMax())
+        .addGauge(
+          getShuffleServiceMetricsInfoForGenericValue(name, "min"), snapshot.getMin())
+        .addGauge(
+          getShuffleServiceMetricsInfoForGenericValue(name, "mean"), snapshot.getMean())
+        .addGauge(
+          getShuffleServiceMetricsInfoForGenericValue(name, "stdDev"), snapshot.getStdDev());
+      for (int percentileThousands : new int[] { 10, 50, 250, 500, 750, 950, 980, 990, 999 }) {
+        String percentileStr;
+        switch (percentileThousands) {
+          case 10:
+            percentileStr = "1stPercentile";
+            break;
+          case 999:
+            percentileStr = "999thPercentile";
+            break;
+          default:
+            percentileStr = String.format("%dthPercentile", percentileThousands / 10);
+            break;
+        }
+        metricsRecordBuilder.addGauge(
+          getShuffleServiceMetricsInfoForGenericValue(name, percentileStr),
+          snapshot.getValue(percentileThousands / 1000.0));
+      }
     } else if (metric instanceof Meter) {
       Meter m = (Meter) metric;
       metricsRecordBuilder
@@ -124,6 +154,13 @@ class YarnShuffleServiceMetrics implements MetricsSource {
 
   private static ShuffleServiceMetricsInfo getShuffleServiceMetricsInfoForCounter(String name) {
     return new ShuffleServiceMetricsInfo(name, "Value of counter " + name);
+  }
+
+  private static ShuffleServiceMetricsInfo getShuffleServiceMetricsInfoForGenericValue(
+      String baseName, String valueName) {
+    return new ShuffleServiceMetricsInfo(
+      baseName + "_" + valueName,
+      valueName + " value of " + baseName);
   }
 
   private static class ShuffleServiceMetricsInfo implements MetricsInfo {

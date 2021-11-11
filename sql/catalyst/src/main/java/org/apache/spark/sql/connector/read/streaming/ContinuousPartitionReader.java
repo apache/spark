@@ -30,7 +30,7 @@ public interface ContinuousPartitionReader<T> extends PartitionReader<T> {
 
   /**
    * Get the offset of the current record, or the start offset if no records have been read.
-   *
+   * <p>
    * The execution engine will call this method along with get() to keep track of the current
    * offset. When an epoch ends, the offset of the previous record in each partition will be saved
    * as a restart checkpoint.

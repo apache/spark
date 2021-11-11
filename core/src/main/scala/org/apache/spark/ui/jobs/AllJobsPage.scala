@@ -19,7 +19,7 @@ package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.Date
+import java.util.{Date, Locale}
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.ListBuffer
@@ -29,6 +29,7 @@ import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.config.SCHEDULER_MODE
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
@@ -39,6 +40,9 @@ import org.apache.spark.util.Utils
 private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends WebUIPage("") {
 
   import ApiHelper._
+
+  private val MAX_TIMELINE_JOBS = parent.conf.get(UI_TIMELINE_JOBS_MAXIMUM)
+  private val MAX_TIMELINE_EXECUTORS = parent.conf.get(UI_TIMELINE_EXECUTORS_MAXIMUM)
 
   private val JOBS_LEGEND =
     <div class="legend-area"><svg width="150px" height="85px">
@@ -64,9 +68,12 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     </svg></div>.toString.filter(_ != '\n')
 
   private def makeJobEvent(jobs: Seq[v1.JobData]): Seq[String] = {
+    val now = System.currentTimeMillis()
     jobs.filter { job =>
       job.status != JobExecutionStatus.UNKNOWN && job.submissionTime.isDefined
-    }.map { job =>
+    }.sortBy { j =>
+      (j.completionTime.map(_.getTime).getOrElse(now), j.submissionTime.get.getTime)
+    }.takeRight(MAX_TIMELINE_JOBS).map { job =>
       val jobId = job.jobId
       val status = job.status
       val (_, lastStageDescription) = lastStageNameAndDescription(store, job)
@@ -76,7 +83,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         plainText = true).text
 
       val submissionTime = job.submissionTime.get.getTime()
-      val completionTime = job.completionTime.map(_.getTime()).getOrElse(System.currentTimeMillis())
+      val completionTime = job.completionTime.map(_.getTime()).getOrElse(now)
       val classNameByStatus = status match {
         case JobExecutionStatus.SUCCEEDED => "succeeded"
         case JobExecutionStatus.FAILED => "failed"
@@ -118,7 +125,9 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
   private def makeExecutorEvent(executors: Seq[v1.ExecutorSummary]):
       Seq[String] = {
     val events = ListBuffer[String]()
-    executors.foreach { e =>
+    executors.sortBy { e =>
+      e.removeTime.map(_.getTime).getOrElse(e.addTime.getTime)
+    }.takeRight(MAX_TIMELINE_EXECUTORS).foreach { e =>
       val addedEvent =
         s"""
            |{
@@ -192,6 +201,30 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       </a>
     </span> ++
     <div id="application-timeline" class="collapsed">
+      {
+        if (MAX_TIMELINE_JOBS < jobs.size) {
+          <div>
+            <strong>
+              Only the most recent {MAX_TIMELINE_JOBS} submitted/completed jobs
+              (of {jobs.size} total) are shown.
+            </strong>
+          </div>
+        } else {
+          Seq.empty
+        }
+      }
+      {
+        if (MAX_TIMELINE_EXECUTORS < executors.size) {
+          <div>
+            <strong>
+              Only the most recent {MAX_TIMELINE_EXECUTORS} added/removed executors
+              (of {executors.size} total) are shown.
+            </strong>
+          </div>
+        } else {
+          Seq.empty
+        }
+      }
       <div class="control-panel">
         <div id="application-timeline-zoom-lock">
           <input type="checkbox"></input>
@@ -277,15 +310,17 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       s"${appSummary.numCompletedJobs}, only showing ${completedJobs.size}"
     }
 
+    // SPARK-33991 Avoid enumeration conversion error.
     val schedulingMode = store.environmentInfo().sparkProperties.toMap
       .get(SCHEDULER_MODE.key)
-      .map { mode => SchedulingMode.withName(mode).toString }
+      .map { mode => SchedulingMode.withName(mode.toUpperCase(Locale.ROOT)).toString }
       .getOrElse("Unknown")
 
     val summary: NodeSeq =
       <div>
         <ul class="list-unstyled">
           <li>
+
             <strong>User:</strong>
             {parent.getSparkUser}
           </li>

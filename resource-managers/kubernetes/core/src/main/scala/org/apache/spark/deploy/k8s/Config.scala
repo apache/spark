@@ -54,6 +54,36 @@ private[spark] object Config extends Logging {
       .stringConf
       .createWithDefault(KUBERNETES_MASTER_INTERNAL_URL)
 
+  val KUBERNETES_DRIVER_SERVICE_DELETE_ON_TERMINATION =
+    ConfigBuilder("spark.kubernetes.driver.service.deleteOnTermination")
+      .doc("If true, driver service will be deleted on Spark application termination. " +
+        "If false, it will be cleaned up when the driver pod is deletion.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val KUBERNETES_DRIVER_OWN_PVC =
+    ConfigBuilder("spark.kubernetes.driver.ownPersistentVolumeClaim")
+      .doc("If true, driver pod becomes the owner of on-demand persistent volume claims " +
+        "instead of the executor pods")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_DRIVER_REUSE_PVC =
+    ConfigBuilder("spark.kubernetes.driver.reusePersistentVolumeClaim")
+      .doc("If true, driver pod tries to reuse driver-owned on-demand persistent volume claims " +
+        "of the deleted executor pods if exists. This can be useful to reduce executor pod " +
+        "creation delay by skipping persistent volume creations. Note that a pod in " +
+        "`Terminating` pod status is not a deleted pod by definition and its resources " +
+        "including persistent volume claims are not reusable yet. Spark will create new " +
+        "persistent volume claims when there exists no reusable one. In other words, the total " +
+        "number of persistent volume claims can be larger than the number of running executors " +
+        s"sometimes. This config requires ${KUBERNETES_DRIVER_OWN_PVC.key}=true.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
       .doc("The namespace that will be used for running the driver and executor pods.")
@@ -98,6 +128,14 @@ private[spark] object Config extends Logging {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
+
+  val CONFIG_MAP_MAXSIZE =
+    ConfigBuilder("spark.kubernetes.configMap.maxSize")
+      .doc("Max size limit for a config map. This is configurable as per" +
+        " https://etcd.io/docs/v3.4.0/dev-guide/limit/ on k8s server end.")
+      .version("3.1.0")
+      .longConf
+      .createWithDefault(1572864) // 1.5 MiB
 
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"
@@ -190,6 +228,13 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_DRIVER_SCHEDULER_NAME =
+    ConfigBuilder("spark.kubernetes.driver.scheduler.name")
+      .doc("Specify the scheduler name for driver pod")
+      .version("3.3.0")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_EXECUTOR_REQUEST_CORES =
     ConfigBuilder("spark.kubernetes.executor.request.cores")
       .doc("Specify the cpu request for each executor pod")
@@ -212,13 +257,40 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  // the definition of a label in DNS (RFC 1123).
+  private val dns1123LabelFmt = "[a-z0-9]([-a-z0-9]*[a-z0-9])?"
+
+  private val podConfValidator = (s"^$dns1123LabelFmt(\\.$dns1123LabelFmt)*$$").r.pattern
+
+  // The possible longest executor name would be "$prefix-exec-${Int.MaxValue}"
+  private def isValidExecutorPodNamePrefix(prefix: String): Boolean = {
+    // 6 is length of '-exec-'
+    val reservedLen = Int.MaxValue.toString.length + 6
+    val validLength = prefix.length + reservedLen <= KUBERNETES_DNSNAME_MAX_LENGTH
+    validLength && podConfValidator.matcher(prefix).matches()
+  }
+
   val KUBERNETES_EXECUTOR_POD_NAME_PREFIX =
     ConfigBuilder("spark.kubernetes.executor.podNamePrefix")
-      .doc("Prefix to use in front of the executor pod names.")
+      .doc("Prefix to use in front of the executor pod names. It must conform the rules defined " +
+        "by the Kubernetes <a href=\"https://kubernetes.io/docs/concepts/overview/" +
+        "working-with-objects/names/#dns-label-names\">DNS Label Names</a>. " +
+        "The prefix will be used to generate executor pod names in the form of " +
+        "<code>$podNamePrefix-exec-$id</code>, where the `id` is a positive int value, " +
+        "so the length of the `podNamePrefix` needs to be <= 47(= 63 - 10 - 6).")
       .version("2.3.0")
-      .internal()
       .stringConf
+      .checkValue(isValidExecutorPodNamePrefix,
+        "must conform https://kubernetes.io/docs/concepts/overview/working-with-objects" +
+          "/names/#dns-label-names and the value length <= 47")
       .createOptional
+
+  val KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP =
+    ConfigBuilder("spark.kubernetes.executor.disableConfigMap")
+      .doc("If true, disable ConfigMap creation for executors.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val KUBERNETES_DRIVER_POD_FEATURE_STEPS =
     ConfigBuilder("spark.kubernetes.driver.pod.featureSteps")
@@ -240,6 +312,34 @@ private[spark] object Config extends Logging {
       .toSequence
       .createWithDefault(Nil)
 
+  val KUBERNETES_EXECUTOR_DECOMMISSION_LABEL =
+    ConfigBuilder("spark.kubernetes.executor.decommmissionLabel")
+      .doc("Label to apply to a pod which is being decommissioned." +
+        " Designed for use with pod disruption budgets and similar mechanism" +
+        " such as pod-deletion-cost.")
+      .version("3.3.0")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE =
+    ConfigBuilder("spark.kubernetes.executor.decommmissionLabelValue")
+      .doc("Label value to apply to a pod which is being decommissioned." +
+        " Designed for use with pod disruption budgets and similar mechanism" +
+        " such as pod-deletion-cost.")
+      .version("3.3.0")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_ALLOCATION_PODS_ALLOCATOR =
+    ConfigBuilder("spark.kubernetes.allocation.pods.allocator")
+      .doc("Allocator to use for pods. Possible values are direct (the default) and statefulset " +
+        ", or a full class name of a class implementing AbstractPodsAllocator. " +
+        "Future version may add Job or replicaset. This is a developer API and may change " +
+      "or be removed at anytime.")
+      .version("3.3.0")
+      .stringConf
+      .createWithDefault("direct")
+
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
       .doc("Number of pods to launch at once in each round of executor allocation.")
@@ -256,9 +356,21 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Allocation batch delay must be a positive time value.")
       .createWithDefaultString("1s")
 
+  val KUBERNETES_ALLOCATION_DRIVER_READINESS_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.allocation.driver.readinessTimeout")
+      .doc("Time to wait for driver pod to get ready before creating executor pods. This wait " +
+        "only happens on application start. If timeout happens, executor pods will still be " +
+        "created.")
+      .version("3.1.3")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(value => value > 0, "Allocation driver readiness timeout must be a positive "
+        + "time value.")
+      .createWithDefaultString("1s")
+
   val KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT =
     ConfigBuilder("spark.kubernetes.allocation.executor.timeout")
-      .doc("Time to wait before considering a pending executor timedout.")
+      .doc("Time to wait before a newly created executor POD request, which does not reached " +
+        "the POD pending state yet, considered timedout and will be deleted.")
       .version("3.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(value => value > 0, "Allocation executor timeout must be a positive time value.")
@@ -299,6 +411,14 @@ private[spark] object Config extends Logging {
       .checkValue(interval => interval > 0, s"API server polling interval must be a" +
         " positive time value.")
       .createWithDefaultString("30s")
+
+  val KUBERNETES_EXECUTOR_API_POLLING_WITH_RESOURCE_VERSION =
+    ConfigBuilder("spark.kubernetes.executor.enablePollingWithResourceVersion")
+      .doc("If true, `resourceVersion` is set with `0` during invoking pod listing APIs " +
+        "in order to allow API Server-side caching. This should be used carefully.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.eventProcessingInterval")
@@ -428,7 +548,18 @@ private[spark] object Config extends Logging {
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 
+  val KUBERNETES_TRUST_CERTIFICATES =
+    ConfigBuilder("spark.kubernetes.trust.certificates")
+      .doc("If set to true then client can submit to kubernetes cluster only with token")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_NODE_SELECTOR_PREFIX = "spark.kubernetes.node.selector."
+
+  val KUBERNETES_DRIVER_NODE_SELECTOR_PREFIX = "spark.kubernetes.driver.node.selector."
+
+  val KUBERNETES_EXECUTOR_NODE_SELECTOR_PREFIX = "spark.kubernetes.executor.node.selector."
 
   val KUBERNETES_DELETE_EXECUTORS =
     ConfigBuilder("spark.kubernetes.executor.deleteOnTermination")
@@ -469,6 +600,29 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(false)
 
+  val KUBERNETES_EXECUTOR_MISSING_POD_DETECT_DELTA =
+    ConfigBuilder("spark.kubernetes.executor.missingPodDetectDelta")
+      .doc("When a registered executor's POD is missing from the Kubernetes API server's polled " +
+        "list of PODs then this delta time is taken as the accepted time difference between the " +
+        "registration time and the time of the polling. After this time the POD is considered " +
+        "missing from the cluster and the executor will be removed.")
+      .version("3.1.1")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(delay => delay > 0, "delay must be a positive time value")
+      .createWithDefaultString("30s")
+
+  val KUBERNETES_MAX_PENDING_PODS =
+    ConfigBuilder("spark.kubernetes.allocation.maxPendingPods")
+      .doc("Maximum number of pending PODs allowed during executor allocation for this " +
+        "application. Those newly requested executors which are unknown by Kubernetes yet are " +
+        "also counted into this limit as they will change into pending PODs by time. " +
+        "This limit is independent from the resource profiles as it limits the sum of all " +
+        "allocation for all the used resource profiles.")
+      .version("3.2.0")
+      .intConf
+      .checkValue(value => value > 0, "Maximum number of pending pods should be a positive integer")
+      .createWithDefault(Int.MaxValue)
+
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SERVICE_ANNOTATION_PREFIX = "spark.kubernetes.driver.service.annotation."
@@ -497,4 +651,6 @@ private[spark] object Config extends Logging {
   val KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY = "options.server"
 
   val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
+
+  val KUBERNETES_DNSNAME_MAX_LENGTH = 63
 }

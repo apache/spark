@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import scala.util.Random
-
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.{IntParam, ParamValidators}
@@ -94,7 +92,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
    * @param y Another hash vector.
    * @return The distance between hash vectors x and y.
    */
-  protected[ml] def hashDistance(x: Seq[Vector], y: Seq[Vector]): Double
+  protected[ml] def hashDistance(x: Array[Vector], y: Array[Vector]): Double
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
@@ -116,25 +114,25 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
     require(numNearestNeighbors > 0, "The number of nearest neighbors cannot be less than 1")
     // Get Hash Value of the key
     val keyHash = hashFunction(key)
-    val modelDataset: DataFrame = if (!dataset.columns.contains($(outputCol))) {
+    val modelDataset = if (!dataset.columns.contains($(outputCol))) {
         transform(dataset)
       } else {
         dataset.toDF()
       }
 
     val modelSubset = if (singleProbe) {
-      def sameBucket(x: Seq[Vector], y: Seq[Vector]): Boolean = {
-        x.zip(y).exists(tuple => tuple._1 == tuple._2)
+      def sameBucket(x: Array[Vector], y: Array[Vector]): Boolean = {
+        x.iterator.zip(y.iterator).exists(tuple => tuple._1 == tuple._2)
       }
 
       // In the origin dataset, find the hash value that hash the same bucket with the key
-      val sameBucketWithKeyUDF = udf((x: Seq[Vector]) => sameBucket(x, keyHash))
+      val sameBucketWithKeyUDF = udf((x: Array[Vector]) => sameBucket(x, keyHash))
 
       modelDataset.filter(sameBucketWithKeyUDF(col($(outputCol))))
     } else {
       // In the origin dataset, find the hash value that is closest to the key
       // Limit the use of hashDist since it's controversial
-      val hashDistUDF = udf((x: Seq[Vector]) => hashDistance(x, keyHash))
+      val hashDistUDF = udf((x: Array[Vector]) => hashDistance(x, keyHash))
       val hashDistCol = hashDistUDF(col($(outputCol)))
       val modelDatasetWithDist = modelDataset.withColumn(distCol, hashDistCol)
 
@@ -223,7 +221,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       inputName: String,
       explodeCols: Seq[String]): Dataset[_] = {
     require(explodeCols.size == 2, "explodeCols must be two strings.")
-    val modelDataset: DataFrame = if (!dataset.columns.contains($(outputCol))) {
+    val modelDataset = if (!dataset.columns.contains($(outputCol))) {
       transform(dataset)
     } else {
       dataset.toDF()
@@ -280,7 +278,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
     val explodedB = if (datasetA != datasetB) {
       processDataset(datasetB, rightColName, explodeCols)
     } else {
-      val recreatedB = recreateCol(datasetB, $(inputCol), s"${$(inputCol)}#${Random.nextString(5)}")
+      val recreatedB = recreateCol(datasetB, $(inputCol), Identifiable.randomUID(inputCol.name))
       processDataset(recreatedB, rightColName, explodeCols)
     }
 

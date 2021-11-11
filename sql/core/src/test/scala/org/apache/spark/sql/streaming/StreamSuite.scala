@@ -34,7 +34,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkConf, SparkContext, TaskContext, TestUtils}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.plans.logical.Range
+import org.apache.spark.sql.catalyst.plans.logical.{Range, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{LocalLimitExec, SimpleMode, SparkPlan}
@@ -214,7 +214,9 @@ class StreamSuite extends StreamTest {
             .start(outputDir.getAbsolutePath)
           try {
             query.processAllAvailable()
-            val outputDf = spark.read.parquet(outputDir.getAbsolutePath).as[Long]
+            // Parquet write page-level CRC checksums will change the file size and
+            // affect the data order when reading these files. Please see PARQUET-1746 for details.
+            val outputDf = spark.read.parquet(outputDir.getAbsolutePath).sort('a).as[Long]
             checkDataset[Long](outputDf, (0L to 10L).toArray: _*)
           } finally {
             query.stop()
@@ -308,7 +310,7 @@ class StreamSuite extends StreamTest {
     // For each batch, we would log the state change during the execution
     // This checks whether the key of the state change log is the expected batch id
     def CheckIncrementalExecutionCurrentBatchId(expectedId: Int): AssertOnQuery =
-      AssertOnQuery(_.lastExecution.asInstanceOf[IncrementalExecution].currentBatchId == expectedId,
+      AssertOnQuery(_.lastExecution.currentBatchId == expectedId,
         s"lastExecution's currentBatchId should be $expectedId")
 
     // For each batch, we would log the sink change after the execution
@@ -1264,6 +1266,37 @@ class StreamSuite extends StreamTest {
       }
     }
   }
+
+  test("SPARK-34482: correct active SparkSession for logicalPlan") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "10") {
+      val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
+      var query: StreamExecution = null
+      try {
+        query =
+          df.repartition($"a")
+            .writeStream
+            .format("memory")
+            .queryName("memory")
+            .start()
+            .asInstanceOf[StreamingQueryWrapper]
+            .streamingQuery
+        query.awaitInitialization(streamingTimeout.toMillis)
+        val plan = query.logicalPlan
+        val numPartition = plan
+          .find { _.isInstanceOf[RepartitionByExpression] }
+          .map(_.asInstanceOf[RepartitionByExpression].numPartitions)
+        // Before the fix of SPARK-34482, the numPartition is the value of
+        // `COALESCE_PARTITIONS_INITIAL_PARTITION_NUM`.
+        assert(numPartition.get === spark.sqlContext.conf.getConf(SQLConf.SHUFFLE_PARTITIONS))
+      } finally {
+        if (query != null) {
+          query.stop()
+        }
+      }
+    }
+  }
 }
 
 abstract class FakeSource extends StreamSourceProvider {
@@ -1385,7 +1418,7 @@ class TestStateStoreProvider extends StateStoreProvider {
       stateStoreId: StateStoreId,
       keySchema: StructType,
       valueSchema: StructType,
-      indexOrdinal: Option[Int],
+      numColsPrefixKey: Int,
       storeConfs: StateStoreConf,
       hadoopConf: Configuration): Unit = {
     throw new Exception("Successfully instantiated")

@@ -46,7 +46,7 @@ class PassThroughSuite extends SparkFunSuite {
 
       val builder = TestCompressibleColumnBuilder(columnStats, columnType, PassThrough)
 
-      input.map { value =>
+      input.foreach { value =>
         val row = new GenericInternalRow(1)
         columnType.setField(row, 0, value)
         builder.appendFrom(row, 0)
@@ -98,7 +98,7 @@ class PassThroughSuite extends SparkFunSuite {
       val row = new GenericInternalRow(1)
       val nullRow = new GenericInternalRow(1)
       nullRow.setNullAt(0)
-      input.map { value =>
+      input.foreach { value =>
         if (value == nullValue) {
           builder.appendFrom(nullRow, 0)
         } else {

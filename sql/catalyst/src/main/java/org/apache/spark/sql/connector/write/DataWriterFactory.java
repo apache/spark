@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow;
  * A factory of {@link DataWriter} returned by
  * {@link BatchWrite#createBatchWriterFactory(PhysicalWriteInfo)}, which is responsible for
  * creating and initializing the actual data writer at executor side.
- *
+ * <p>
  * Note that, the writer factory will be serialized and sent to executors, then the data writer
  * will be created on executors and do the actual writing. So this interface must be
  * serializable and {@link DataWriter} doesn't need to be.
@@ -42,7 +42,7 @@ public interface DataWriterFactory extends Serializable {
    * object instance when sending data to the data writer, for better performance. Data writers
    * are responsible for defensive copies if necessary, e.g. copy the data before buffer it in a
    * list.
-   *
+   * <p>
    * If this method fails (by throwing an exception), the corresponding Spark write task would fail
    * and get retried until hitting the maximum retry times.
    *

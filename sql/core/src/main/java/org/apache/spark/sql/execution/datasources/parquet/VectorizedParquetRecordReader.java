@@ -22,10 +22,12 @@ import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.page.PageReadStore;
+import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Type;
 
 import org.apache.spark.memory.MemoryMode;
@@ -162,6 +164,17 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   public void initialize(String path, List<String> columns) throws IOException,
       UnsupportedOperationException {
     super.initialize(path, columns);
+    initializeInternal();
+  }
+
+  @VisibleForTesting
+  @Override
+  public void initialize(
+      MessageType fileSchema,
+      MessageType requestedSchema,
+      ParquetRowGroupReader rowGroupReader,
+      int totalRowCount) throws IOException {
+    super.initialize(fileSchema, requestedSchema, rowGroupReader, totalRowCount);
     initializeInternal();
   }
 
@@ -332,8 +345,9 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       if (missingColumns[i]) continue;
       columnReaders[i] = new VectorizedColumnReader(
         columns.get(i),
-        types.get(i).getOriginalType(),
+        types.get(i).getLogicalTypeAnnotation(),
         pages.getPageReader(columns.get(i)),
+        pages.getRowIndexes().orElse(null),
         convertTz,
         datetimeRebaseMode,
         int96RebaseMode);

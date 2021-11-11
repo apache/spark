@@ -17,7 +17,7 @@ declare -a java_args
 declare -a scalac_args
 declare -a sbt_commands
 declare -a maven_profiles
-declare sbt_default_mem=2048
+declare sbt_default_mem=4096
 
 if test -x "$JAVA_HOME/bin/java"; then
     echo -e "Using $JAVA_HOME as default JAVA_HOME."

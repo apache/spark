@@ -18,8 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
+import java.time.{Duration, Period}
+import java.time.temporal.ChronoUnit
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.DecimalPrecision
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
@@ -206,6 +208,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
+  test("IntegralDivide: throw exception on overflow under ANSI mode") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkExceptionInExpression[ArithmeticException](
+        IntegralDivide(Literal(Long.MinValue), Literal(-1L)), "Overflow in integral divide.")
+    }
+  }
+
   test("% (Remainder)") {
     testNumericDataTypes { convert =>
       val left = Literal(convert(1))
@@ -243,13 +252,19 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("Abs") {
-    testNumericDataTypes { convert =>
-      val input = Literal(convert(1))
-      val dataType = input.dataType
-      checkEvaluation(Abs(Literal(convert(0))), convert(0))
-      checkEvaluation(Abs(Literal(convert(1))), convert(1))
-      checkEvaluation(Abs(Literal(convert(-1))), convert(1))
-      checkEvaluation(Abs(Literal.create(null, dataType)), null)
+    // SPARK-34742: when the input is not MinValue of integral types, the results of function ABS
+    //              should be the same with/without ANSI mode on.
+    Seq("true", "false").foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled) {
+        testNumericDataTypes { convert =>
+          val input = Literal(convert(1))
+          val dataType = input.dataType
+          checkEvaluation(Abs(Literal(convert(0))), convert(0))
+          checkEvaluation(Abs(Literal(convert(1))), convert(1))
+          checkEvaluation(Abs(Literal(convert(-1))), convert(1))
+          checkEvaluation(Abs(Literal.create(null, dataType)), null)
+        }
+      }
     }
     checkEvaluation(Abs(positiveShortLit), positiveShort)
     checkEvaluation(Abs(negativeShortLit), (- negativeShort).toShort)
@@ -259,7 +274,26 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Abs(negativeLongLit), - negativeLong)
 
     DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(Abs, tpe)
+      checkConsistencyBetweenInterpretedAndCodegen((e: Expression) => Abs(e, false), tpe)
+    }
+  }
+
+  test("SPARK-34742: Abs throws exception when input is out of range in ANSI mode") {
+    val minValues = Seq(
+      Literal(Byte.MinValue, ByteType),
+      Literal(Short.MinValue, ShortType),
+      Literal(Int.MinValue),
+      Literal(Long.MinValue)
+    )
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      minValues.foreach { v =>
+        checkExceptionInExpression[ArithmeticException](Abs(v), "overflow")
+      }
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      minValues.foreach { v =>
+        checkEvaluation(Abs(v), v.value)
+      }
     }
   }
 
@@ -575,5 +609,175 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         }
       }
     }
+  }
+
+  test("SPARK-34677: exact add and subtract of day-time and year-month intervals") {
+    Seq(true, false).foreach { failOnError =>
+      checkExceptionInExpression[ArithmeticException](
+        UnaryMinus(
+          Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType()),
+          failOnError),
+        "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        Subtract(
+          Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType()),
+          Literal.create(Period.ofMonths(10), YearMonthIntervalType()),
+          failOnError
+        ),
+        "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        Add(
+          Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType()),
+          Literal.create(Period.ofMonths(10), YearMonthIntervalType()),
+          failOnError
+        ),
+        "overflow")
+
+      checkExceptionInExpression[ArithmeticException](
+        Subtract(
+          Literal.create(Duration.ofDays(-106751991), DayTimeIntervalType()),
+          Literal.create(Duration.ofDays(10), DayTimeIntervalType()),
+          failOnError
+        ),
+        "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        Add(
+          Literal.create(Duration.ofDays(106751991), DayTimeIntervalType()),
+          Literal.create(Duration.ofDays(10), DayTimeIntervalType()),
+          failOnError
+        ),
+        "overflow")
+    }
+  }
+
+  test("SPARK-34920: error class") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val operators: Seq[((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)] =
+        Seq((Divide(_, _), testDecimalAndDoubleType),
+          (IntegralDivide(_, _), testDecimalAndLongType),
+          (Remainder(_, _), testNumericDataTypes),
+          (Pmod(_, _), testNumericDataTypes))
+      operators.foreach { case (operator, testTypesFn) =>
+        testTypesFn { convert =>
+          val one = Literal(convert(1))
+          val zero = Literal(convert(0))
+          checkEvaluation(operator(Literal.create(null, one.dataType), zero), null)
+          checkEvaluation(operator(one, Literal.create(null, zero.dataType)), null)
+          checkExceptionInExpression[SparkArithmeticException](operator(one, zero),
+            "divide by zero")
+        }
+      }
+    }
+  }
+
+  test("SPARK-36920: Support year-month intervals by ABS") {
+    checkEvaluation(Abs(Literal(Period.ZERO)), Period.ZERO)
+    checkEvaluation(Abs(Literal(Period.ofMonths(-1))), Period.ofMonths(1))
+    checkEvaluation(Abs(Literal(Period.ofYears(-12345))), Period.ofYears(12345))
+    checkEvaluation(Abs(Literal.create(null, YearMonthIntervalType())), null)
+    checkExceptionInExpression[ArithmeticException](
+      Abs(Literal(Period.ofMonths(Int.MinValue))),
+      "overflow")
+
+    DataTypeTestUtils.yearMonthIntervalTypes.foreach { tpe =>
+      checkConsistencyBetweenInterpretedAndCodegen((e: Expression) => Abs(e, false), tpe)
+    }
+  }
+
+  test("SPARK-36920: Support day-time intervals by ABS") {
+    checkEvaluation(Abs(Literal(Duration.ZERO)), Duration.ZERO)
+    checkEvaluation(
+      Abs(Literal(Duration.of(-1, ChronoUnit.MICROS))),
+      Duration.of(1, ChronoUnit.MICROS))
+    checkEvaluation(Abs(Literal(Duration.ofDays(-12345))), Duration.ofDays(12345))
+    checkEvaluation(Abs(Literal.create(null, DayTimeIntervalType())), null)
+    checkExceptionInExpression[ArithmeticException](
+      Abs(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS))),
+      "overflow")
+
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach { tpe =>
+      checkConsistencyBetweenInterpretedAndCodegen((e: Expression) => Abs(e, false), tpe)
+    }
+  }
+
+  test("SPARK-36921: Support YearMonthIntervalType by div") {
+    checkEvaluation(IntegralDivide(Literal(Period.ZERO), Literal(Period.ZERO)), null)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+      Literal(Period.ZERO)), null)
+    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MinValue),
+      Literal(Period.ZERO)), null)
+    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MaxValue),
+      Literal(Period.ZERO)), null)
+
+    checkEvaluation(IntegralDivide(Literal.create(null, YearMonthIntervalType()),
+      Literal.create(null, YearMonthIntervalType())), null)
+    checkEvaluation(IntegralDivide(Literal.create(null, YearMonthIntervalType()),
+      Literal(Period.ofYears(1))), null)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+      Literal.create(null, YearMonthIntervalType())), null)
+
+    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MaxValue),
+      Period.ofMonths(Int.MaxValue)), 1L)
+    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MaxValue),
+      Period.ofMonths(Int.MinValue)), 0L)
+    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MinValue),
+      Period.ofMonths(Int.MinValue)), 1L)
+    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MinValue),
+      Period.ofMonths(Int.MaxValue)), -1L)
+
+    checkEvaluation(IntegralDivide(Literal(Period.ZERO),
+      Literal(Period.ofYears(-1))), 0L)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(2)),
+      Literal(Period.ofYears(1))), 2L)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(2)),
+      Literal(Period.ofYears(-1))), -2L)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+      Literal(Period.ofMonths(3))), 4L)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+      Literal(Period.ofMonths(-3))), -4L)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+      Literal(Period.ofMonths(5))), 2L)
+    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+      Literal(Period.ofMonths(-5))), -2L)
+  }
+  test("SPARK-36921: Support DayTimeIntervalType by div") {
+    checkEvaluation(IntegralDivide(Literal(Duration.ZERO), Literal(Duration.ZERO)), null)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+      Literal(Duration.ZERO)), null)
+    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
+      Literal(Duration.ZERO)), null)
+    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS)),
+      Literal(Duration.ZERO)), null)
+
+    checkEvaluation(IntegralDivide(Literal.create(null, DayTimeIntervalType()),
+      Literal.create(null, DayTimeIntervalType())), null)
+    checkEvaluation(IntegralDivide(Literal.create(null, DayTimeIntervalType()),
+      Literal(Duration.ofDays(1))), null)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+      Literal.create(null, DayTimeIntervalType())), null)
+
+    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
+      Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS))), 1L)
+    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS)),
+      Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS))), 1L)
+    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
+      Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS))), 0L)
+    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS)),
+      Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS))), -1L)
+
+    checkEvaluation(IntegralDivide(Literal(Duration.ZERO),
+      Literal(Duration.ofDays(-1))), 0L)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(2)),
+      Literal(Duration.ofDays(1))), 2L)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(2)),
+      Literal(Duration.ofDays(-1))), -2L)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+      Literal(Duration.ofHours(4))), 6L)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+      Literal(Duration.ofHours(-4))), -6L)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+      Literal(Duration.ofHours(5))), 4L)
+    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+      Literal(Duration.ofHours(-5))), -4L)
   }
 }

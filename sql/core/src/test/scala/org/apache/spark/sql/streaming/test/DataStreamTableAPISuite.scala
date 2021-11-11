@@ -20,8 +20,6 @@ package org.apache.spark.sql.streaming.test
 import java.io.File
 import java.util
 
-import scala.collection.JavaConverters._
-
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, Row}
@@ -29,8 +27,8 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.connector.{FakeV2Provider, InMemoryTableCatalog, InMemoryTableSessionCatalog}
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsRead, Table, TableCapability, V2TableWithV1Fallback}
+import org.apache.spark.sql.connector.{FakeV2Provider, InMemoryTableSessionCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, SupportsRead, Table, TableCapability, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamScanBuilder}
@@ -412,7 +410,7 @@ class InMemoryStreamTable(override val name: String) extends Table with Supports
   override def schema(): StructType = stream.fullSchema()
 
   override def capabilities(): util.Set[TableCapability] = {
-    Set(TableCapability.MICRO_BATCH_READ, TableCapability.CONTINUOUS_READ).asJava
+    util.EnumSet.of(TableCapability.MICRO_BATCH_READ, TableCapability.CONTINUOUS_READ)
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
@@ -423,7 +421,8 @@ class InMemoryStreamTable(override val name: String) extends Table with Supports
 class NonStreamV2Table(override val name: String)
     extends Table with SupportsRead with V2TableWithV1Fallback {
   override def schema(): StructType = StructType(Nil)
-  override def capabilities(): util.Set[TableCapability] = Set(TableCapability.BATCH_READ).asJava
+  override def capabilities(): util.Set[TableCapability] =
+    util.EnumSet.of(TableCapability.BATCH_READ)
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = new FakeScanBuilder
 
   override def v1Table: CatalogTable = {

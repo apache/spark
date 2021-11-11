@@ -46,6 +46,8 @@ goes into specific options that are available for the built-in data sources.
   * [Configuration](sql-data-sources-parquet.html#configuration)
 * [ORC Files](sql-data-sources-orc.html)
 * [JSON Files](sql-data-sources-json.html)
+* [CSV Files](sql-data-sources-csv.html)
+* [Text Files](sql-data-sources-text.html)
 * [Hive Tables](sql-data-sources-hive-tables.html)
   * [Specifying storage format for Hive tables](sql-data-sources-hive-tables.html#specifying-storage-format-for-hive-tables)
   * [Interacting with Different Versions of Hive Metastore](sql-data-sources-hive-tables.html#interacting-with-different-versions-of-hive-metastore)

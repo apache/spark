@@ -23,7 +23,7 @@ import org.apache.spark.sql.connector.write.streaming.StreamingWrite;
 /**
  * An interface for building the {@link Write}. Implementations can mix in some interfaces to
  * support different ways to write data to data sources.
- *
+ * <p>
  * Unless modified by a mixin interface, the {@link Write} configured by this builder is to
  * append data without affecting existing data.
  *

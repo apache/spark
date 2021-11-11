@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription}
+import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
+import org.apache.spark.sql.catalyst.trees.QuaternaryLike
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.sketch.CountMinSketch
@@ -60,7 +61,9 @@ case class CountMinSketchAgg(
     seedExpression: Expression,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
-  extends TypedImperativeAggregate[CountMinSketch] with ExpectsInputTypes {
+  extends TypedImperativeAggregate[CountMinSketch]
+  with ExpectsInputTypes
+  with QuaternaryLike[Expression] {
 
   def this(
       child: Expression,
@@ -142,8 +145,21 @@ case class CountMinSketchAgg(
 
   override def dataType: DataType = BinaryType
 
-  override def children: Seq[Expression] =
-    Seq(child, epsExpression, confidenceExpression, seedExpression)
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
 
   override def prettyName: String = "count_min_sketch"
+
+  override def first: Expression = child
+  override def second: Expression = epsExpression
+  override def third: Expression = confidenceExpression
+  override def fourth: Expression = seedExpression
+
+  override protected def withNewChildrenInternal(first: Expression, second: Expression,
+      third: Expression, fourth: Expression): CountMinSketchAgg =
+    copy(
+      child = first,
+      epsExpression = second,
+      confidenceExpression = third,
+      seedExpression = fourth)
 }

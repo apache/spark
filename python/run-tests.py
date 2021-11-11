@@ -48,6 +48,12 @@ def print_red(text):
     print('\033[31m' + text + '\033[0m')
 
 
+def get_valid_filename(s):
+    """Replace whitespaces and special characters in the given string to get a valid file name."""
+    s = s.strip().replace(' ', '_').replace(os.sep, '_')
+    return re.sub(r'(?u)[^-\w.]', '', s)
+
+
 SKIPPED_TESTS = None
 LOG_FILE = os.path.join(SPARK_HOME, "python/unit-tests.log")
 FAILURE_REPORTING_LOCK = Lock()
@@ -55,13 +61,13 @@ LOGGER = logging.getLogger()
 
 # Find out where the assembly jars are located.
 # TODO: revisit for Scala 2.13
-for scala in ["2.12"]:
+for scala in ["2.12", "2.13"]:
     build_dir = os.path.join(SPARK_HOME, "assembly", "target", "scala-" + scala)
     if os.path.isdir(build_dir):
         SPARK_DIST_CLASSPATH = os.path.join(build_dir, "jars", "*")
         break
 else:
-    raise Exception("Cannot find assembly build directory, please build Spark first.")
+    raise RuntimeError("Cannot find assembly build directory, please build Spark first.")
 
 
 def run_individual_python_test(target_dir, test_name, pyspark_python):
@@ -98,10 +104,12 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
     ]
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
 
-    LOGGER.info("Starting test(%s): %s", pyspark_python, test_name)
+    output_prefix = get_valid_filename(pyspark_python + "__" + test_name + "__").lstrip("_")
+    per_test_output = tempfile.NamedTemporaryFile(prefix=output_prefix, suffix=".log")
+    LOGGER.info(
+        "Starting test(%s): %s (temp output: %s)", pyspark_python, test_name, per_test_output.name)
     start_time = time.time()
     try:
-        per_test_output = tempfile.TemporaryFile()
         retcode = subprocess.Popen(
             [os.path.join(SPARK_HOME, "bin/pyspark")] + test_name.split(),
             stderr=per_test_output, stdout=per_test_output, env=env).wait()
@@ -279,7 +287,8 @@ def main():
                 if python_implementation not in module.excluded_python_implementations:
                     for test_goal in module.python_test_goals:
                         heavy_tests = ['pyspark.streaming.tests', 'pyspark.mllib.tests',
-                                       'pyspark.tests', 'pyspark.sql.tests', 'pyspark.ml.tests']
+                                       'pyspark.tests', 'pyspark.sql.tests', 'pyspark.ml.tests',
+                                       'pyspark.pandas.tests']
                         if any(map(lambda prefix: test_goal.startswith(prefix), heavy_tests)):
                             priority = 0
                         else:

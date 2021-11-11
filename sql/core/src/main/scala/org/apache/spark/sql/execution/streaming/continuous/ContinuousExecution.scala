@@ -26,31 +26,28 @@ import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestamp}
+import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestampLike, LocalTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
+import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
-import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, Offset => OffsetV2, PartitionOffset, ReadLimit}
+import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, PartitionOffset, ReadLimit}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.streaming.{OutputMode, Trigger}
+import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.Clock
 
 class ContinuousExecution(
     sparkSession: SparkSession,
-    name: String,
-    checkpointRoot: String,
-    analyzedPlan: LogicalPlan,
-    sink: SupportsWrite,
     trigger: Trigger,
     triggerClock: Clock,
-    outputMode: OutputMode,
     extraOptions: Map[String, String],
-    deleteCheckpointOnStop: Boolean)
+    plan: WriteToStream)
   extends StreamExecution(
-    sparkSession, name, checkpointRoot, analyzedPlan, sink,
-    trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
+    sparkSession, plan.name, plan.resolvedCheckpointLocation, plan.inputQuery, plan.sink,
+    trigger, triggerClock, plan.outputMode, plan.deleteCheckpointOnStop) {
 
   @volatile protected var sources: Seq[ContinuousStream] = Seq()
 
@@ -68,8 +65,7 @@ class ContinuousExecution(
       case s @ StreamingRelationV2(ds, sourceName, table: SupportsRead, options, output, _, _, _) =>
         val dsStr = if (ds.nonEmpty) s"[${ds.get}]" else ""
         if (!table.supports(TableCapability.CONTINUOUS_READ)) {
-          throw new UnsupportedOperationException(
-            s"Data source $sourceName does not support continuous processing.")
+          throw QueryExecutionErrors.continuousProcessingUnsupportedByDataSourceError(sourceName)
         }
 
         v2ToRelationMap.getOrElseUpdate(s, {
@@ -89,8 +85,9 @@ class ContinuousExecution(
     uniqueSources = sources.distinct.map(s => s -> ReadLimit.allAvailable()).toMap
 
     // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
-    WriteToContinuousDataSource(
-      createStreamingWrite(sink, extraOptions, _logicalPlan), _logicalPlan)
+    val (streamingWrite, customMetrics) = createStreamingWrite(
+      plan.sink.asInstanceOf[SupportsWrite], extraOptions, _logicalPlan)
+    WriteToContinuousDataSource(streamingWrite, _logicalPlan, customMetrics)
   }
 
   private val triggerExecutor = trigger match {
@@ -174,10 +171,10 @@ class ContinuousExecution(
         relation.copy(startOffset = Some(startOffset))
     }
 
-    withNewSources.transformAllExpressions {
-      case (_: CurrentTimestamp | _: CurrentDate) =>
-        throw new IllegalStateException(
-          "CurrentTimestamp and CurrentDate not yet supported for continuous processing")
+    withNewSources.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
+      case (_: CurrentTimestampLike | _: CurrentDate | _: LocalTimestamp) =>
+        throw new IllegalStateException("CurrentTimestamp, Now, CurrentDate and LocalTimestamp" +
+          " not yet supported for continuous processing")
     }
 
     reportTimeTaken("queryPlanning") {
@@ -338,7 +335,7 @@ class ContinuousExecution(
         val offset =
           sources(0).deserializeOffset(offsetLog.get(epoch).get.offsets(0).get.json)
         committedOffsets ++= Seq(sources(0) -> offset)
-        sources(0).commit(offset.asInstanceOf[OffsetV2])
+        sources(0).commit(offset)
       } else {
         return
       }

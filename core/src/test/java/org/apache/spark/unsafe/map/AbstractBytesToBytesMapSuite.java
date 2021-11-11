@@ -24,6 +24,7 @@ import java.util.*;
 
 import scala.Tuple2$;
 
+import org.hamcrest.MatcherAssert;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -75,7 +76,7 @@ public abstract class AbstractBytesToBytesMapSuite {
   @Mock(answer = RETURNS_SMART_NULLS) DiskBlockManager diskBlockManager;
 
   @Before
-  public void setup() {
+  public void setup() throws Exception {
     memoryManager =
       new TestMemoryManager(
         new SparkConf()
@@ -87,7 +88,7 @@ public abstract class AbstractBytesToBytesMapSuite {
 
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
     spillFilesCreated.clear();
-    MockitoAnnotations.initMocks(this);
+    MockitoAnnotations.openMocks(this).close();
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
     when(diskBlockManager.createTempLocalBlock()).thenAnswer(invocationOnMock -> {
       TempLocalBlockId blockId = new TempLocalBlockId(UUID.randomUUID());
@@ -216,19 +217,6 @@ public abstract class AbstractBytesToBytesMapSuite {
       Assert.assertArrayEquals(valueData,
         getByteArray(loc.getValueBase(), loc.getValueOffset(), recordLengthBytes));
 
-      try {
-        Assert.assertTrue(loc.append(
-          keyData,
-          Platform.BYTE_ARRAY_OFFSET,
-          recordLengthBytes,
-          valueData,
-          Platform.BYTE_ARRAY_OFFSET,
-          recordLengthBytes
-        ));
-        Assert.fail("Should not be able to set a new value for a key");
-      } catch (AssertionError e) {
-        // Expected exception; do nothing.
-      }
     } finally {
       map.free();
     }
@@ -282,7 +270,7 @@ public abstract class AbstractBytesToBytesMapSuite {
         final long value = Platform.getLong(loc.getValueBase(), loc.getValueOffset());
         final long keyLength = loc.getKeyLength();
         if (keyLength == 0) {
-          Assert.assertTrue("value " + value + " was not divisible by 5", value % 5 == 0);
+          assertEquals("value " + value + " was not divisible by 5", 0, value % 5);
         } else {
           final long key = Platform.getLong(loc.getKeyBase(), loc.getKeyOffset());
           Assert.assertEquals(value, key);
@@ -539,7 +527,7 @@ public abstract class AbstractBytesToBytesMapSuite {
           break;
         }
       }
-      Assert.assertThat(i, greaterThan(0));
+      MatcherAssert.assertThat(i, greaterThan(0));
       Assert.assertFalse(success);
     } finally {
       map.free();

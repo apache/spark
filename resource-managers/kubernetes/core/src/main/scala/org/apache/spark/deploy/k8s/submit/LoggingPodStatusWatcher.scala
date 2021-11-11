@@ -17,9 +17,8 @@
 package org.apache.spark.deploy.k8s.submit
 
 import io.fabric8.kubernetes.api.model.Pod
-import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
+import io.fabric8.kubernetes.client.{Watcher, WatcherException}
 import io.fabric8.kubernetes.client.Watcher.Action
-import java.net.HttpURLConnection.HTTP_GONE
 
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.KubernetesDriverConf
@@ -68,14 +67,19 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
     }
   }
 
-  override def onClose(e: KubernetesClientException): Unit = {
+  override def onClose(e: WatcherException): Unit = {
     logDebug(s"Stopping watching application $appId with last-observed phase $phase")
-    if(e != null && e.getCode == HTTP_GONE) {
+    if(e != null && e.isHttpGone) {
       resourceTooOldReceived = true
       logDebug(s"Got HTTP Gone code, resource version changed in k8s api: $e")
     } else {
       closeWatch()
     }
+  }
+
+  override def onClose(): Unit = {
+    logDebug(s"Stopping watching application $appId with last-observed phase $phase")
+    closeWatch()
   }
 
   private def logLongStatus(): Unit = {

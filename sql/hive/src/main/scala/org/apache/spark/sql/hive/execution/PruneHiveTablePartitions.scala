@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeSet, Expression, ExpressionSet, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.FilterEstimation
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 
@@ -56,27 +57,12 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
   }
 
   /**
-   * Prune the hive table using filters on the partitions of the table.
-   */
-  private def prunePartitions(
-      relation: HiveTableRelation,
-      partitionFilters: ExpressionSet): Seq[CatalogTablePartition] = {
-    if (conf.metastorePartitionPruning) {
-      session.sessionState.catalog.listPartitionsByFilter(
-        relation.tableMeta.identifier, partitionFilters.toSeq)
-    } else {
-      ExternalCatalogUtils.prunePartitionsByFilter(relation.tableMeta,
-        session.sessionState.catalog.listPartitions(relation.tableMeta.identifier),
-        partitionFilters.toSeq, conf.sessionLocalTimeZone)
-    }
-  }
-
-  /**
    * Update the statistics of the table.
    */
   private def updateTableMeta(
-      tableMeta: CatalogTable,
-      prunedPartitions: Seq[CatalogTablePartition]): CatalogTable = {
+      relation: HiveTableRelation,
+      prunedPartitions: Seq[CatalogTablePartition],
+      partitionKeyFilters: ExpressionSet): CatalogTable = {
     val sizeOfPartitions = prunedPartitions.map { partition =>
       val rawDataSize = partition.parameters.get(StatsSetupConst.RAW_DATA_SIZE).map(_.toLong)
       val totalSize = partition.parameters.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
@@ -89,10 +75,18 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
       }
     }
     if (sizeOfPartitions.forall(_ > 0)) {
-      val sizeInBytes = sizeOfPartitions.sum
-      tableMeta.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
+      val filteredStats =
+        FilterEstimation(Filter(partitionKeyFilters.reduce(And), relation)).estimate
+      val colStats = filteredStats.map(_.attributeStats.map { case (attr, colStat) =>
+        (attr.name, colStat.toCatalogColumnStat(attr.name, attr.dataType))
+      })
+      relation.tableMeta.copy(
+        stats = Some(CatalogStatistics(
+          sizeInBytes = BigInt(sizeOfPartitions.sum),
+          rowCount = filteredStats.flatMap(_.rowCount),
+          colStats = colStats.getOrElse(Map.empty))))
     } else {
-      tableMeta
+      relation.tableMeta
     }
   }
 
@@ -101,8 +95,9 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
       if filters.nonEmpty && relation.isPartitioned && relation.prunedPartitions.isEmpty =>
       val partitionKeyFilters = getPartitionKeyFilters(filters, relation)
       if (partitionKeyFilters.nonEmpty) {
-        val newPartitions = prunePartitions(relation, partitionKeyFilters)
-        val newTableMeta = updateTableMeta(relation.tableMeta, newPartitions)
+        val newPartitions = ExternalCatalogUtils.listPartitionsByFilter(conf,
+          session.sessionState.catalog, relation.tableMeta, partitionKeyFilters.toSeq)
+        val newTableMeta = updateTableMeta(relation, newPartitions, partitionKeyFilters)
         val newRelation = relation.copy(
           tableMeta = newTableMeta, prunedPartitions = Some(newPartitions))
         // Keep partition filters so that they are visible in physical planning

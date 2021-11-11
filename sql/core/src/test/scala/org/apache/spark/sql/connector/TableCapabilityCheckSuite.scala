@@ -19,10 +19,8 @@ package org.apache.spark.sql.connector
 
 import java.util
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisSuite, NamedRelation}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
@@ -36,7 +34,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
+class TableCapabilityCheckSuite extends AnalysisTest with SharedSparkSession {
 
   private val emptyMap = CaseInsensitiveStringMap.empty
   private def createStreamingRelation(table: Table, v1Relation: Option[StreamingRelation]) = {
@@ -217,7 +215,11 @@ private case object TestRelation extends LeafNode with NamedRelation {
 private case class CapabilityTable(_capabilities: TableCapability*) extends Table {
   override def name(): String = "capability_test_table"
   override def schema(): StructType = TableCapabilityCheckSuite.schema
-  override def capabilities(): util.Set[TableCapability] = _capabilities.toSet.asJava
+  override def capabilities(): util.Set[TableCapability] = {
+    val set = util.EnumSet.noneOf(classOf[TableCapability])
+    _capabilities.foreach(set.add)
+    set
+  }
 }
 
 private class TestStreamSourceProvider extends StreamSourceProvider {

@@ -19,16 +19,20 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{BOOL_AGG, TreePattern}
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types._
 
 abstract class UnevaluableBooleanAggBase(arg: Expression)
-  extends UnevaluableAggregate with ImplicitCastInputTypes {
+  extends UnevaluableAggregate with ImplicitCastInputTypes with UnaryLike[Expression] {
 
-  override def children: Seq[Expression] = arg :: Nil
+  override def child: Expression = arg
 
   override def dataType: DataType = BooleanType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(BOOL_AGG)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     arg.dataType match {
@@ -55,6 +59,8 @@ abstract class UnevaluableBooleanAggBase(arg: Expression)
   since = "3.0.0")
 case class BoolAnd(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
   override def nodeName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("bool_and")
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(arg = newChild)
 }
 
 @ExpressionDescription(
@@ -72,4 +78,6 @@ case class BoolAnd(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
   since = "3.0.0")
 case class BoolOr(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
   override def nodeName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("bool_or")
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(arg = newChild)
 }

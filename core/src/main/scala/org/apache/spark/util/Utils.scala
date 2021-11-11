@@ -31,7 +31,7 @@ import java.security.SecureRandom
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
-import java.util.zip.GZIPInputStream
+import java.util.zip.{GZIPInputStream, ZipInputStream}
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -45,9 +45,11 @@ import scala.util.matching.Regex
 
 import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
+import com.google.common.collect.Interners
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import org.apache.commons.codec.binary.Hex
+import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
@@ -68,7 +70,7 @@ import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
+import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer, SerializerInstance}
 import org.apache.spark.status.api.v1.{StackTrace, ThreadStackTrace}
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
@@ -96,11 +98,13 @@ private[spark] object Utils extends Logging {
    */
   val DEFAULT_DRIVER_MEM_MB = JavaUtils.DEFAULT_DRIVER_MEM_MB.toInt
 
-  private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
+  val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
   val LOCAL_SCHEME = "local"
+
+  private val weakStringInterner = Interners.newWeakInterner[String]()
 
   private val PATTERN_FOR_COMMAND_LINE_ARG = "-D(.+?)=(.+)".r
 
@@ -172,6 +176,11 @@ private[spark] object Utils extends Logging {
     } finally {
       isWrapper.close()
     }
+  }
+
+  /** String interning to reduce the memory usage. */
+  def weakIntern(s: String): String = {
+    weakStringInterner.intern(s)
   }
 
   /**
@@ -276,9 +285,11 @@ private[spark] object Utils extends Logging {
    */
   def createDirectory(dir: File): Boolean = {
     try {
-      // This sporadically fails - not sure why ... !dir.exists() && !dir.mkdirs()
-      // So attempting to create and then check if directory was created or not.
-      dir.mkdirs()
+      // SPARK-35907: The check was required by File.mkdirs() because it could sporadically
+      // fail silently. After switching to Files.createDirectories(), ideally, there should
+      // no longer be silent fails. But the check is kept for the safety concern. We can
+      // remove the check when we're sure that Files.createDirectories() would never fail silently.
+      Files.createDirectories(dir.toPath)
       if ( !dir.exists() || !dir.isDirectory) {
         logError(s"Failed to create directory " + dir)
       }
@@ -306,10 +317,14 @@ private[spark] object Utils extends Logging {
       }
       try {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID.toString)
-        if (dir.exists() || !dir.mkdirs()) {
+        // SPARK-35907:
+        // This could throw more meaningful exception information if directory creation failed.
+        Files.createDirectories(dir.toPath)
+      } catch {
+        case e @ (_ : IOException | _ : SecurityException) =>
+          logError(s"Failed to create directory $dir", e)
           dir = null
-        }
-      } catch { case e: SecurityException => dir = null; }
+      }
     }
 
     dir.getCanonicalFile
@@ -1130,6 +1145,22 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Lists files recursively.
+   */
+  def recursiveList(f: File): Array[File] = {
+    require(f.isDirectory)
+    val result = f.listFiles.toBuffer
+    val dirList = result.filter(_.isDirectory)
+    while (dirList.nonEmpty) {
+      val curDir = dirList.remove(0)
+      val files = curDir.listFiles()
+      result ++= files
+      dirList ++= files.filter(_.isDirectory)
+    }
+    result.toArray
+  }
+
+  /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
    * Throws an exception if deletion is unsuccessful.
@@ -1939,7 +1970,9 @@ private[spark] object Utils extends Logging {
    * Indicates whether Spark is currently running unit tests.
    */
   def isTesting: Boolean = {
-    sys.env.contains("SPARK_TESTING") || sys.props.contains(IS_TESTING.key)
+    // Scala's `sys.env` creates a ton of garbage by constructing Scala immutable maps, so
+    // we directly use the Java APIs instead.
+    System.getenv("SPARK_TESTING") != null || System.getProperty(IS_TESTING.key) != null
   }
 
   /**
@@ -2049,7 +2082,7 @@ private[spark] object Utils extends Logging {
     } catch {
       case e: URISyntaxException =>
     }
-    new File(path).getAbsoluteFile().toURI()
+    new File(path).getCanonicalFile().toURI()
   }
 
   /** Resolve a comma-separated list of paths. */
@@ -2058,6 +2091,17 @@ private[spark] object Utils extends Logging {
       ""
     } else {
       paths.split(",").filter(_.trim.nonEmpty).map { p => Utils.resolveURI(p) }.mkString(",")
+    }
+  }
+
+  /** Check whether a path is an absolute URI. */
+  def isAbsoluteURI(path: String): Boolean = {
+    try {
+      val uri = new URI(path: String)
+      uri.isAbsolute
+    } catch {
+      case _: URISyntaxException =>
+        false
     }
   }
 
@@ -2553,11 +2597,79 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Push based shuffle can only be enabled when external shuffle service is enabled.
+   * Push based shuffle can only be enabled when below conditions are met:
+   *   - the application is submitted to run in YARN mode
+   *   - external shuffle service enabled
+   *   - IO encryption disabled
+   *   - serializer(such as KryoSerializer) supports relocation of serialized objects
    */
-  def isPushBasedShuffleEnabled(conf: SparkConf): Boolean = {
-    conf.get(PUSH_BASED_SHUFFLE_ENABLED) &&
-      (conf.get(IS_TESTING).getOrElse(false) || conf.get(SHUFFLE_SERVICE_ENABLED))
+  def isPushBasedShuffleEnabled(conf: SparkConf,
+      isDriver: Boolean,
+      checkSerializer: Boolean = true): Boolean = {
+    val pushBasedShuffleEnabled = conf.get(PUSH_BASED_SHUFFLE_ENABLED)
+    if (pushBasedShuffleEnabled) {
+      val canDoPushBasedShuffle = {
+        val isTesting = conf.get(IS_TESTING).getOrElse(false)
+        val isShuffleServiceAndYarn = conf.get(SHUFFLE_SERVICE_ENABLED) &&
+            conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn"
+        lazy val serializerIsSupported = {
+          if (checkSerializer) {
+            Option(SparkEnv.get)
+              .map(_.serializer)
+              .filter(_ != null)
+              .getOrElse(instantiateSerializerFromConf[Serializer](SERIALIZER, conf, isDriver))
+              .supportsRelocationOfSerializedObjects
+          } else {
+            // if no need to check Serializer, always set serializerIsSupported as true
+            true
+          }
+        }
+        // TODO: [SPARK-36744] needs to support IO encryption for push-based shuffle
+        val ioEncryptionDisabled = !conf.get(IO_ENCRYPTION_ENABLED)
+        (isShuffleServiceAndYarn || isTesting) && ioEncryptionDisabled && serializerIsSupported
+      }
+      if (!canDoPushBasedShuffle) {
+        logWarning("Push-based shuffle can only be enabled when the application is submitted " +
+          "to run in YARN mode, with external shuffle service enabled, IO encryption disabled, " +
+          "and relocation of serialized objects supported.")
+      }
+
+      canDoPushBasedShuffle
+    } else {
+      false
+    }
+  }
+
+  // Create an instance of Serializer or ShuffleManager with the given name,
+  // possibly initializing it with our conf
+  def instantiateSerializerOrShuffleManager[T](className: String,
+      conf: SparkConf,
+      isDriver: Boolean): T = {
+    val cls = Utils.classForName(className)
+    // Look for a constructor taking a SparkConf and a boolean isDriver, then one taking just
+    // SparkConf, then one taking no arguments
+    try {
+      cls.getConstructor(classOf[SparkConf], java.lang.Boolean.TYPE)
+        .newInstance(conf, java.lang.Boolean.valueOf(isDriver))
+        .asInstanceOf[T]
+    } catch {
+      case _: NoSuchMethodException =>
+        try {
+          cls.getConstructor(classOf[SparkConf]).newInstance(conf).asInstanceOf[T]
+        } catch {
+          case _: NoSuchMethodException =>
+            cls.getConstructor().newInstance().asInstanceOf[T]
+        }
+    }
+  }
+
+  // Create an instance of Serializer named by the given SparkConf property
+  // if the property is not set, possibly initializing it with our conf
+  def instantiateSerializerFromConf[T](propertyName: ConfigEntry[String],
+      conf: SparkConf,
+      isDriver: Boolean): T = {
+    instantiateSerializerOrShuffleManager[T](
+      conf.get(propertyName), conf, isDriver)
   }
 
   /**
@@ -2773,7 +2885,7 @@ private[spark] object Utils extends Logging {
             klass.getConstructor().newInstance()
         }
 
-        Some(ext.asInstanceOf[T])
+        Some(ext)
       } catch {
         case _: NoSuchMethodException =>
           throw new SparkException(
@@ -2854,6 +2966,34 @@ private[spark] object Utils extends Logging {
     val secretBytes = new Array[Byte](bits / JByte.SIZE)
     rnd.nextBytes(secretBytes)
     Hex.encodeHexString(secretBytes)
+  }
+
+  /**
+   * Returns true if and only if the underlying class is a member class.
+   *
+   * Note: jdk8u throws a "Malformed class name" error if a given class is a deeply-nested
+   * inner class (See SPARK-34607 for details). This issue has already been fixed in jdk9+, so
+   * we can remove this helper method safely if we drop the support of jdk8u.
+   */
+  def isMemberClass(cls: Class[_]): Boolean = {
+    try {
+      cls.isMemberClass
+    } catch {
+      case _: InternalError =>
+        // We emulate jdk8u `Class.isMemberClass` below:
+        //   public boolean isMemberClass() {
+        //     return getSimpleBinaryName() != null && !isLocalOrAnonymousClass();
+        //   }
+        // `getSimpleBinaryName()` returns null if a given class is a top-level class,
+        // so we replace it with `cls.getEnclosingClass != null`. The second condition checks
+        // if a given class is not a local or an anonymous class, so we replace it with
+        // `cls.getEnclosingMethod == null` because `cls.getEnclosingMethod()` return a value
+        // only in either case (JVM Spec 4.8.6).
+        //
+        // Note: The newer jdk evaluates `!isLocalOrAnonymousClass()` first,
+        // we reorder the conditions to follow it.
+        cls.getEnclosingMethod == null && cls.getEnclosingClass != null
+    }
   }
 
   /**
@@ -2968,6 +3108,9 @@ private[spark] object Utils extends Logging {
 
   /** Create a new properties object with the same values as `props` */
   def cloneProperties(props: Properties): Properties = {
+    if (props == null) {
+      return props
+    }
     val resultProps = new Properties()
     props.forEach((k, v) => resultProps.put(k, v))
     resultProps
@@ -2978,7 +3121,7 @@ private[spark] object Utils extends Logging {
    * exceeds `stopAppendingThreshold`, stop appending paths for saving memory.
    */
   def buildLocationMetadata(paths: Seq[Path], stopAppendingThreshold: Int): String = {
-    val metadata = new StringBuilder("[")
+    val metadata = new StringBuilder(s"(${paths.length} paths)[")
     var index: Int = 0
     while (index < paths.length && metadata.length < stopAppendingThreshold) {
       if (index > 0) {
@@ -2986,6 +3129,12 @@ private[spark] object Utils extends Logging {
       }
       metadata.append(paths(index).toString)
       index += 1
+    }
+    if (paths.length > index) {
+      if (index > 0) {
+        metadata.append(", ")
+      }
+      metadata.append("...")
     }
     metadata.append("]")
     metadata.toString
@@ -3010,6 +3159,45 @@ private[spark] object Utils extends Logging {
     } else {
       0
     }
+  }
+
+  /** Returns a string message about delegation token generation failure */
+  def createFailedToGetTokenMessage(serviceName: String, e: scala.Throwable): String = {
+    val message = "Failed to get token from service %s due to %s. " +
+      "If %s is not used, set spark.security.credentials.%s.enabled to false."
+    message.format(serviceName, e, serviceName, serviceName)
+  }
+
+  /**
+   * Decompress a zip file into a local dir. File names are read from the zip file. Note, we skip
+   * addressing the directory here. Also, we rely on the caller side to address any exceptions.
+   */
+  def unzipFilesFromFile(fs: FileSystem, dfsZipFile: Path, localDir: File): Seq[File] = {
+    val files = new ArrayBuffer[File]()
+    val in = new ZipInputStream(fs.open(dfsZipFile))
+    var out: OutputStream = null
+    try {
+      var entry = in.getNextEntry()
+      while (entry != null) {
+        if (!entry.isDirectory) {
+          val fileName = localDir.toPath.resolve(entry.getName).getFileName.toString
+          val outFile = new File(localDir, fileName)
+          files += outFile
+          out = new FileOutputStream(outFile)
+          IOUtils.copy(in, out)
+          out.close()
+          in.closeEntry()
+        }
+        entry = in.getNextEntry()
+      }
+      in.close() // so that any error in closing does not get ignored
+      logInfo(s"Unzipped from $dfsZipFile\n\t${files.mkString("\n\t")}")
+    } finally {
+      // Close everything no matter what happened
+      IOUtils.closeQuietly(in)
+      IOUtils.closeQuietly(out)
+    }
+    files.toSeq
   }
 }
 

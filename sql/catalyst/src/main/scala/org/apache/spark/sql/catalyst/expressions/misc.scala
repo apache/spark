@@ -22,6 +22,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -51,6 +53,9 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
          | ${ev.value} = $c;
        """.stripMargin)
   }
+
+  override protected def withNewChildInternal(newChild: Expression): PrintToStderr =
+    copy(child = newChild)
 }
 
 /**
@@ -66,11 +71,13 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
   """,
   since = "3.1.0",
   group = "misc_funcs")
-case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class RaiseError(child: Expression, dataType: DataType)
+  extends UnaryExpression with ImplicitCastInputTypes {
+
+  def this(child: Expression) = this(child, NullType)
 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
-  override def dataType: DataType = NullType
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 
   override def prettyName: String = "raise_error"
@@ -98,6 +105,13 @@ case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCa
       value = JavaCode.defaultLiteral(dataType)
     )
   }
+
+  override protected def withNewChildInternal(newChild: Expression): RaiseError =
+    copy(child = newChild)
+}
+
+object RaiseError {
+  def apply(child: Expression): RaiseError = new RaiseError(child)
 }
 
 /**
@@ -127,6 +141,9 @@ case class AssertTrue(left: Expression, right: Expression, child: Expression)
 
   override def flatArguments: Iterator[Any] = Iterator(left, right)
   override def exprsReplaced: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildInternal(newChild: Expression): AssertTrue =
+    copy(child = newChild)
 }
 
 object AssertTrue {
@@ -149,6 +166,7 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
   override def nullable: Boolean = false
   override def prettyName: String = "current_database"
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
 /**
@@ -167,6 +185,7 @@ case class CurrentCatalog() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
   override def nullable: Boolean = false
   override def prettyName: String = "current_catalog"
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
 // scalastyle:off line.size.limit
@@ -262,4 +281,100 @@ case class TypeOf(child: Expression) extends UnaryExpression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, _ => s"""UTF8String.fromString(${child.dataType.catalogString})""")
   }
+
+  override protected def withNewChildInternal(newChild: Expression): TypeOf = copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """_FUNC_() - user name of current execution context.""",
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       mockingjay
+  """,
+  since = "3.2.0",
+  group = "misc_funcs")
+// scalastyle:on line.size.limit
+case class CurrentUser() extends LeafExpression with Unevaluable {
+  override def nullable: Boolean = false
+  override def dataType: DataType = StringType
+  override def prettyName: String = "current_user"
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
+}
+
+/**
+ * A function that encrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
+ * For versions prior to JDK 8u161, 192 and 256 bits keys can be used
+ * if Java Cryptography Extension (JCE) Unlimited Strength Jurisdiction Policy Files are installed.
+ * If either argument is NULL or the key length is not one of the permitted values,
+ * the return value is NULL.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr, key) - Returns an encrypted value of `expr` using AES.
+      Key lengths of 16, 24 and 32 bits are supported.
+  """,
+  examples = """
+    Examples:
+      > SELECT base64(_FUNC_('Spark', 'abcdefghijklmnop'));
+       4Hv0UKCx6nfUeAoPZo1z+w==
+  """,
+  since = "3.3.0",
+  group = "misc_funcs")
+case class AesEncrypt(input: Expression, key: Expression, child: Expression)
+    extends RuntimeReplaceable {
+
+  def this(input: Expression, key: Expression) = {
+    this(input,
+      key,
+      StaticInvoke(
+        classOf[ExpressionImplUtils],
+        BinaryType,
+        "aesEncrypt",
+        Seq(input, key),
+        Seq(BinaryType, BinaryType)))
+  }
+
+  def exprsReplaced: Seq[Expression] = Seq(input, key)
+  protected def withNewChildInternal(newChild: Expression): AesEncrypt =
+    copy(child = newChild)
+}
+
+/**
+ * A function that decrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
+ * For versions prior to JDK 8u161, 192 and 256 bits keys can be used
+ * if Java Cryptography Extension (JCE) Unlimited Strength Jurisdiction Policy Files are installed.
+ * If either argument is NULL or the key length is not one of the permitted values,
+ * the return value is NULL.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr, key) - Returns a decrepted value of `expr` using AES.
+      Key lengths of 16, 24 and 32 bits are supported.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(unbase64('4Hv0UKCx6nfUeAoPZo1z+w=='), 'abcdefghijklmnop');
+       Spark
+  """,
+  since = "3.3.0",
+  group = "misc_funcs")
+case class AesDecrypt(input: Expression, key: Expression, child: Expression)
+    extends RuntimeReplaceable {
+
+  def this(input: Expression, key: Expression) = {
+    this(input,
+      key,
+      StaticInvoke(
+        classOf[ExpressionImplUtils],
+        BinaryType,
+        "aesDecrypt",
+        Seq(input, key),
+        Seq(BinaryType, BinaryType)))
+  }
+
+  def exprsReplaced: Seq[Expression] = Seq(input, key)
+  protected def withNewChildInternal(newChild: Expression): AesDecrypt =
+    copy(child = newChild)
 }

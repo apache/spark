@@ -29,6 +29,7 @@ import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.util.Utils
 
 /**
  * The collection of functions for rebasing days and microseconds from/to the hybrid calendar
@@ -263,7 +264,7 @@ object RebaseDateTime {
   // `JsonRebaseRecord`. AnyRefMap is used here instead of Scala's immutable map because
   // it is 2 times faster in DateTimeRebaseBenchmark.
   private[sql] def loadRebaseRecords(fileName: String): AnyRefMap[String, RebaseInfo] = {
-    val file = Thread.currentThread().getContextClassLoader.getResource(fileName)
+    val file = Utils.getSparkClassLoader.getResource(fileName)
     val mapper = new ObjectMapper() with ScalaObjectMapper
     mapper.registerModule(DefaultScalaModule)
     val jsonRebaseRecords = mapper.readValue[Seq[JsonRebaseRecord]](file)

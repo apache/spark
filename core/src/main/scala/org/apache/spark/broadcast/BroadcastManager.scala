@@ -24,15 +24,12 @@ import scala.reflect.ClassTag
 
 import org.apache.commons.collections.map.{AbstractReferenceMap, ReferenceMap}
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.SparkConf
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.internal.Logging
 
 private[spark] class BroadcastManager(
-    val isDriver: Boolean,
-    conf: SparkConf,
-    securityManager: SecurityManager)
-  extends Logging {
+    val isDriver: Boolean, conf: SparkConf) extends Logging {
 
   private var initialized = false
   private var broadcastFactory: BroadcastFactory = null
@@ -44,7 +41,7 @@ private[spark] class BroadcastManager(
     synchronized {
       if (!initialized) {
         broadcastFactory = new TorrentBroadcastFactory
-        broadcastFactory.initialize(isDriver, conf, securityManager)
+        broadcastFactory.initialize(isDriver, conf)
         initialized = true
       }
     }

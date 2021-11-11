@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.text.TextOptions
-import org.apache.spark.sql.execution.datasources.v2.{FileScan, TextBasedFileScan}
+import org.apache.spark.sql.execution.datasources.v2.TextBasedFileScan
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
@@ -33,6 +33,7 @@ import org.apache.spark.util.SerializableConfiguration
 case class TextScan(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
+    dataSchema: StructType,
     readDataSchema: StructType,
     readPartitionSchema: StructType,
     options: CaseInsensitiveStringMap,
@@ -70,10 +71,6 @@ case class TextScan(
     TextPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf, readDataSchema,
       readPartitionSchema, textOptions)
   }
-
-  override def withFilters(
-      partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): FileScan =
-    this.copy(partitionFilters = partitionFilters, dataFilters = dataFilters)
 
   override def equals(obj: Any): Boolean = obj match {
     case t: TextScan => super.equals(t) && options == t.options

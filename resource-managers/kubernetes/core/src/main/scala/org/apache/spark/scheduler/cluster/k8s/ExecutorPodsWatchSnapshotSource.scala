@@ -19,7 +19,7 @@ package org.apache.spark.scheduler.cluster.k8s
 import java.io.Closeable
 
 import io.fabric8.kubernetes.api.model.Pod
-import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException, Watcher}
+import io.fabric8.kubernetes.client.{KubernetesClient, Watcher, WatcherException}
 import io.fabric8.kubernetes.client.Watcher.Action
 
 import org.apache.spark.deploy.k8s.Constants._
@@ -58,9 +58,13 @@ private[spark] class ExecutorPodsWatchSnapshotSource(
       snapshotsStore.updatePod(pod)
     }
 
-    override def onClose(e: KubernetesClientException): Unit = {
+    override def onClose(e: WatcherException): Unit = {
       logWarning("Kubernetes client has been closed (this is expected if the application is" +
         " shutting down.)", e)
+    }
+
+    override def onClose(): Unit = {
+      logWarning("Kubernetes client has been closed.")
     }
   }
 

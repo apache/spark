@@ -32,8 +32,14 @@ import org.apache.spark.util.Utils
 
 trait DataSourceV2ScanExecBase extends LeafExecNode {
 
-  override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+  lazy val customMetrics = scan.supportedCustomMetrics().map { customMetric =>
+    customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
+  }.toMap
+
+  override lazy val metrics = {
+    Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows")) ++
+      customMetrics
+  }
 
   def scan: Scan
 
@@ -51,7 +57,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
    * Shorthand for calling redact() without specifying redacting rules
    */
   protected def redact(text: String): String = {
-    Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, text)
+    Utils.redact(session.sessionState.conf.stringRedactionPattern, text)
   }
 
   override def verboseStringWithOperatorId(): String = {

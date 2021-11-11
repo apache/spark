@@ -28,7 +28,7 @@ import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.config.{SaslConfigs, SslConfigs}
 import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL, SSL}
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
 
 class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
@@ -64,8 +64,10 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
       === bootStrapServers)
     assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
       === SASL_PLAINTEXT.name)
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG))
     assert(!adminClientProperties.containsKey(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG))
     assert(!adminClientProperties.containsKey(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG))
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEYSTORE_TYPE_CONFIG))
     assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG))
     assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG))
     assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEY_PASSWORD_CONFIG))
@@ -80,10 +82,12 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
       === bootStrapServers)
     assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
       === SASL_SSL.name)
+    assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG) === trustStoreType)
     assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG)
       === trustStoreLocation)
     assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG)
       === trustStorePassword)
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEYSTORE_TYPE_CONFIG))
     assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG))
     assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG))
     assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEY_PASSWORD_CONFIG))
@@ -99,10 +103,12 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
       === bootStrapServers)
     assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
       === SSL.name)
+    assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG) === trustStoreType)
     assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG)
       === trustStoreLocation)
     assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG)
       === trustStorePassword)
+    assert(adminClientProperties.get(SslConfigs.SSL_KEYSTORE_TYPE_CONFIG) === keyStoreType)
     assert(adminClientProperties.get(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG) === keyStoreLocation)
     assert(adminClientProperties.get(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG) === keyStorePassword)
     assert(adminClientProperties.get(SslConfigs.SSL_KEY_PASSWORD_CONFIG) === keyPassword)
@@ -233,24 +239,17 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     assert(jaasParams.contains(tokenPassword1))
   }
 
-  test("needTokenUpdate without security credentials enabled should return false") {
-    sparkConf.set(s"spark.security.credentials.kafka.enabled", "false")
-    val kafkaParams = getKafkaParams(addJaasConfig = true, Some("custom_jaas_config"))
-
-    assert(!KafkaTokenUtil.needTokenUpdate(sparkConf, kafkaParams, None))
-  }
-
   test("needTokenUpdate without cluster config should return false") {
     val kafkaParams = getKafkaParams(addJaasConfig = true, Some("custom_jaas_config"))
 
-    assert(!KafkaTokenUtil.needTokenUpdate(sparkConf, kafkaParams, None))
+    assert(!KafkaTokenUtil.needTokenUpdate(kafkaParams, None))
   }
 
   test("needTokenUpdate without jaas config should return false") {
     setSparkEnv(Map.empty)
     val kafkaParams = getKafkaParams(addJaasConfig = false)
 
-    assert(!KafkaTokenUtil.needTokenUpdate(SparkEnv.get.conf, kafkaParams, None))
+    assert(!KafkaTokenUtil.needTokenUpdate(kafkaParams, None))
   }
 
   test("needTokenUpdate with same token should return false") {
@@ -260,7 +259,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(sparkConf,
       kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
 
-    assert(!KafkaTokenUtil.needTokenUpdate(sparkConf, kafkaParams, clusterConfig))
+    assert(!KafkaTokenUtil.needTokenUpdate(kafkaParams, clusterConfig))
   }
 
   test("needTokenUpdate with different token should return true") {
@@ -271,7 +270,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(sparkConf,
       kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
 
-    assert(KafkaTokenUtil.needTokenUpdate(sparkConf, kafkaParams, clusterConfig))
+    assert(KafkaTokenUtil.needTokenUpdate(kafkaParams, clusterConfig))
   }
 
   private def getKafkaParams(

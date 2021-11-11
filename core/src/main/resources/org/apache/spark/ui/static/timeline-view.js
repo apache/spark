@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+/* global $, vis, uiRoot, appBasePath */
+/* eslint-disable no-unused-vars */
 function drawApplicationTimeline(groupArray, eventObjArray, startTime, offset) {
   var groups = new vis.DataSet(groupArray);
   var items = new vis.DataSet(eventObjArray);
@@ -249,7 +251,7 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, ma
     var visibilityState = status ? "" : "none";
     $("#task-assignment-timeline").css("display", visibilityState);
 
-     // Switch the class of the arrow from open to closed.
+    // Switch the class of the arrow from open to closed.
     $(this).find(".expand-task-assignment-timeline-arrow").toggleClass("arrow-open");
     $(this).find(".expand-task-assignment-timeline-arrow").toggleClass("arrow-closed");
 
@@ -280,6 +282,7 @@ function setupExecutorEventAction() {
     );
   });
 }
+/* eslint-enable no-unused-vars */
 
 function setupZoomable(id, timeline) {
   $(id + ' > input[type="checkbox"]').click(function() {

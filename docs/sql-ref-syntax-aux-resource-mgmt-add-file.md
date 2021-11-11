@@ -26,7 +26,7 @@ license: |
 ### Syntax
 
 ```sql
-ADD FILE resource_name
+ADD { FILE | FILES } resource_name [ ... ]
 ```
 
 ### Parameters
@@ -43,11 +43,13 @@ ADD FILE "/path/to/file/abc.txt";
 ADD FILE '/another/test.txt';
 ADD FILE "/path with space/abc.txt";
 ADD FILE "/path/to/some/directory";
+ADD FILES "/path with space/cde.txt" '/path with space/fgh.txt';
 ```
 
 ### Related Statements
 
 * [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
 * [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)
+* [LIST ARCHIVE](sql-ref-syntax-aux-resource-mgmt-list-archive.html)
 * [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html)
-
+* [ADD ARCHIVE](sql-ref-syntax-aux-resource-mgmt-add-archive.html)

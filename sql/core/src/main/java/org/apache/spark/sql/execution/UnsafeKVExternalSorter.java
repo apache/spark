@@ -145,7 +145,7 @@ public final class UnsafeKVExternalSorter {
         // the KV-pair's length data is stored at 2 * uaoSize bytes immediately before that address
         MemoryBlock page = loc.getMemoryPage();
         long address = taskMemoryManager.encodePageNumberAndOffset(page,
-            baseOffset - 2 * UnsafeAlignedOffset.getUaoSize());
+            baseOffset - 2L * UnsafeAlignedOffset.getUaoSize());
 
         // Compute prefix
         row.pointTo(baseObject, baseOffset, loc.getKeyLength());
@@ -165,7 +165,8 @@ public final class UnsafeKVExternalSorter {
         (int) (long) SparkEnv.get().conf().get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE()),
         pageSizeBytes,
         numElementsForSpillThreshold,
-        inMemSorter);
+        inMemSorter,
+        map.getTotalMemoryConsumption());
 
       // reset the map, so we can re-use it to insert new records. the inMemSorter will not used
       // anymore, so the underline array could be used by map again.

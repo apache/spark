@@ -19,6 +19,7 @@ package org.apache.spark.network.util;
 
 import java.util.Locale;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
 import com.google.common.primitives.Ints;
 import io.netty.util.NettyRuntime;
@@ -31,6 +32,7 @@ public class TransportConf {
   private final String SPARK_NETWORK_IO_MODE_KEY;
   private final String SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY;
   private final String SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY;
+  private final String SPARK_NETWORK_IO_CONNECTIONCREATIONTIMEOUT_KEY;
   private final String SPARK_NETWORK_IO_BACKLOG_KEY;
   private final String SPARK_NETWORK_IO_NUMCONNECTIONSPERPEER_KEY;
   private final String SPARK_NETWORK_IO_SERVERTHREADS_KEY;
@@ -54,6 +56,7 @@ public class TransportConf {
     SPARK_NETWORK_IO_MODE_KEY = getConfKey("io.mode");
     SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY = getConfKey("io.preferDirectBufs");
     SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY = getConfKey("io.connectionTimeout");
+    SPARK_NETWORK_IO_CONNECTIONCREATIONTIMEOUT_KEY = getConfKey("io.connectionCreationTimeout");
     SPARK_NETWORK_IO_BACKLOG_KEY = getConfKey("io.backLog");
     SPARK_NETWORK_IO_NUMCONNECTIONSPERPEER_KEY =  getConfKey("io.numConnectionsPerPeer");
     SPARK_NETWORK_IO_SERVERTHREADS_KEY = getConfKey("io.serverThreads");
@@ -94,12 +97,20 @@ public class TransportConf {
     return conf.getBoolean(SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY, true);
   }
 
-  /** Connect timeout in milliseconds. Default 120 secs. */
+  /** Connection idle timeout in milliseconds. Default 120 secs. */
   public int connectionTimeoutMs() {
     long defaultNetworkTimeoutS = JavaUtils.timeStringAsSec(
       conf.get("spark.network.timeout", "120s"));
     long defaultTimeoutMs = JavaUtils.timeStringAsSec(
       conf.get(SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY, defaultNetworkTimeoutS + "s")) * 1000;
+    return (int) defaultTimeoutMs;
+  }
+
+  /** Connect creation timeout in milliseconds. Default 30 secs. */
+  public int connectionCreationTimeoutMs() {
+    long connectionTimeoutS = TimeUnit.MILLISECONDS.toSeconds(connectionTimeoutMs());
+    long defaultTimeoutMs = JavaUtils.timeStringAsSec(
+      conf.get(SPARK_NETWORK_IO_CONNECTIONCREATIONTIMEOUT_KEY,  connectionTimeoutS + "s")) * 1000;
     return (int) defaultTimeoutMs;
   }
 
@@ -367,36 +378,44 @@ public class TransportConf {
    * Class name of the implementation of MergedShuffleFileManager that merges the blocks
    * pushed to it when push-based shuffle is enabled. By default, push-based shuffle is disabled at
    * a cluster level because this configuration is set to
-   * 'org.apache.spark.network.shuffle.ExternalBlockHandler$NoOpMergedShuffleFileManager'.
+   * 'org.apache.spark.network.shuffle.NoOpMergedShuffleFileManager'.
    * To turn on push-based shuffle at a cluster level, set the configuration to
    * 'org.apache.spark.network.shuffle.RemoteBlockPushResolver'.
    */
   public String mergedShuffleFileManagerImpl() {
-    return conf.get("spark.shuffle.server.mergedShuffleFileManagerImpl",
-      "org.apache.spark.network.shuffle.ExternalBlockHandler$NoOpMergedShuffleFileManager");
+    return conf.get("spark.shuffle.push.server.mergedShuffleFileManagerImpl",
+      "org.apache.spark.network.shuffle.NoOpMergedShuffleFileManager");
   }
 
   /**
    * The minimum size of a chunk when dividing a merged shuffle file into multiple chunks during
    * push-based shuffle.
-   * A merged shuffle file consists of multiple small shuffle blocks. Fetching the
-   * complete merged shuffle file in a single response increases the memory requirements for the
-   * clients. Instead of serving the entire merged file, the shuffle service serves the
-   * merged file in `chunks`. A `chunk` constitutes few shuffle blocks in entirety and this
-   * configuration controls how big a chunk can get. A corresponding index file for each merged
-   * shuffle file will be generated indicating chunk boundaries.
+   * A merged shuffle file consists of multiple small shuffle blocks. Fetching the complete
+   * merged shuffle file in a single disk I/O increases the memory requirements for both the
+   * clients and the external shuffle service. Instead, the external shuffle service serves
+   * the merged file in MB-sized chunks. This configuration controls how big a chunk can get.
+   * A corresponding index file for each merged shuffle file will be generated indicating chunk
+   * boundaries.
+   *
+   * Setting this too high would increase the memory requirements on both the clients and the
+   * external shuffle service.
+   *
+   * Setting this too low would increase the overall number of RPC requests to external shuffle
+   * service unnecessarily.
    */
   public int minChunkSizeInMergedShuffleFile() {
     return Ints.checkedCast(JavaUtils.byteStringAsBytes(
-      conf.get("spark.shuffle.server.minChunkSizeInMergedShuffleFile", "2m")));
+      conf.get("spark.shuffle.push.server.minChunkSizeInMergedShuffleFile", "2m")));
   }
 
   /**
-   * The size of cache in memory which is used in push-based shuffle for storing merged index files.
+   * The maximum size of cache in memory which is used in push-based shuffle for storing merged
+   * index files. This cache is in addition to the one configured via
+   * spark.shuffle.service.index.cache.size.
    */
   public long mergedIndexCacheSize() {
     return JavaUtils.byteStringAsBytes(
-      conf.get("spark.shuffle.server.mergedIndexCacheSize", "100m"));
+      conf.get("spark.shuffle.push.server.mergedIndexCacheSize", "100m"));
   }
 
   /**
@@ -406,6 +425,6 @@ public class TransportConf {
    * blocks for this shuffle partition.
    */
   public int ioExceptionsThresholdDuringMerge() {
-    return conf.getInt("spark.shuffle.server.ioExceptionsThresholdDuringMerge", 4);
+    return conf.getInt("spark.shuffle.push.server.ioExceptionsThresholdDuringMerge", 4);
   }
 }

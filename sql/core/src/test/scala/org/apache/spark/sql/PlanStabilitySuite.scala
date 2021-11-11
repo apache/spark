@@ -28,8 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
-import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec, ValidateRequirements}
 
 // scalastyle:off line.size.limit
 /**
@@ -43,9 +42,6 @@ import org.apache.spark.sql.internal.SQLConf
  *   actual simplified plan: /path/to/tmp/q1.actual.simplified.txt
  *   actual explain plan: /path/to/tmp/q1.actual.explain.txt
  *   [actual simplified plan]
- *
- * The explain files are saved to help debug later, they are not checked. Only the simplified
- * plans are checked (by string comparison).
  *
  *
  * To run the entire test suite:
@@ -69,25 +65,13 @@ import org.apache.spark.sql.internal.SQLConf
  * }}}
  */
 // scalastyle:on line.size.limit
-trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
-
-  private val originalMaxToStringFields = conf.maxToStringFields
-
-  override def beforeAll(): Unit = {
-    conf.setConf(SQLConf.MAX_TO_STRING_FIELDS, Int.MaxValue)
-    super.beforeAll()
-  }
-
-  override def afterAll(): Unit = {
-    super.afterAll()
-    conf.setConf(SQLConf.MAX_TO_STRING_FIELDS, originalMaxToStringFields)
-  }
+trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
 
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
   protected val baseResourcePath = {
     // use the same way as `SQLQueryTestSuite` to get the resource path
-    java.nio.file.Paths.get("src", "test", "resources", "tpcds-plan-stability").toFile
+    getWorkspaceFilePath("sql", "core", "src", "test", "resources", "tpcds-plan-stability").toFile
   }
 
   private val referenceRegex = "#\\d+".r
@@ -101,10 +85,13 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
     new File(goldenFilePath, name)
   }
 
-  private def isApproved(dir: File, actualSimplifiedPlan: String): Boolean = {
-    val file = new File(dir, "simplified.txt")
-    val expected = FileUtils.readFileToString(file, StandardCharsets.UTF_8)
-    expected == actualSimplifiedPlan
+  private def isApproved(
+      dir: File, actualSimplifiedPlan: String, actualExplain: String): Boolean = {
+    val simplifiedFile = new File(dir, "simplified.txt")
+    val expectedSimplified = FileUtils.readFileToString(simplifiedFile, StandardCharsets.UTF_8)
+    lazy val explainFile = new File(dir, "explain.txt")
+    lazy val expectedExplain = FileUtils.readFileToString(explainFile, StandardCharsets.UTF_8)
+    expectedSimplified == actualSimplifiedPlan && expectedExplain == actualExplain
   }
 
   /**
@@ -119,7 +106,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
   private def generateGoldenFile(plan: SparkPlan, name: String, explain: String): Unit = {
     val dir = getDirForTest(name)
     val simplified = getSimplifiedPlan(plan)
-    val foundMatch = dir.exists() && isApproved(dir, simplified)
+    val foundMatch = dir.exists() && isApproved(dir, simplified, explain)
 
     if (!foundMatch) {
       FileUtils.deleteDirectory(dir)
@@ -137,7 +124,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
     val dir = getDirForTest(name)
     val tempDir = FileUtils.getTempDirectory
     val actualSimplified = getSimplifiedPlan(plan)
-    val foundMatch = isApproved(dir, actualSimplified)
+    val foundMatch = isApproved(dir, actualSimplified, explain)
 
     if (!foundMatch) {
       // show diff with last approved
@@ -252,6 +239,8 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
     val plan = qe.executedPlan
     val explain = normalizeLocation(normalizeIds(qe.explainString(FormattedMode)))
 
+    assert(ValidateRequirements.validate(plan))
+
     if (regenerateGoldenFiles) {
       generateGoldenFile(plan, query + suffix, explain)
     } else {
@@ -260,7 +249,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
   }
 }
 
-class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite {
+class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v1_4").getAbsolutePath
 
@@ -271,7 +260,7 @@ class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite {
   }
 }
 
-class TPCDSV1_4_PlanStabilityWithStatsSuite extends PlanStabilitySuite {
+class TPCDSV1_4_PlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCDSBase {
   override def injectStats: Boolean = true
 
   override val goldenFilePath: String =
@@ -284,7 +273,7 @@ class TPCDSV1_4_PlanStabilityWithStatsSuite extends PlanStabilitySuite {
   }
 }
 
-class TPCDSV2_7_PlanStabilitySuite extends PlanStabilitySuite {
+class TPCDSV2_7_PlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v2_7").getAbsolutePath
 
@@ -295,7 +284,7 @@ class TPCDSV2_7_PlanStabilitySuite extends PlanStabilitySuite {
   }
 }
 
-class TPCDSV2_7_PlanStabilityWithStatsSuite extends PlanStabilitySuite {
+class TPCDSV2_7_PlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCDSBase {
   override def injectStats: Boolean = true
 
   override val goldenFilePath: String =
@@ -308,7 +297,7 @@ class TPCDSV2_7_PlanStabilityWithStatsSuite extends PlanStabilitySuite {
   }
 }
 
-class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite {
+class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-modified").getAbsolutePath
 
@@ -319,7 +308,7 @@ class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite {
   }
 }
 
-class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite {
+class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCDSBase {
   override def injectStats: Boolean = true
 
   override val goldenFilePath: String =
@@ -328,6 +317,17 @@ class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite {
   modifiedTPCDSQueries.foreach { q =>
     test(s"check simplified sf100 (tpcds-modifiedQueries/$q)") {
       testQuery("tpcds-modifiedQueries", q, ".sf100")
+    }
+  }
+}
+
+class TPCHPlanStabilitySuite extends PlanStabilitySuite with TPCHBase {
+  override def goldenFilePath: String = getWorkspaceFilePath(
+    "sql", "core", "src", "test", "resources", "tpch-plan-stability").toFile.getAbsolutePath
+
+  tpchQueries.foreach { q =>
+    test(s"check simplified (tpch/$q)") {
+      testQuery("tpch", q)
     }
   }
 }

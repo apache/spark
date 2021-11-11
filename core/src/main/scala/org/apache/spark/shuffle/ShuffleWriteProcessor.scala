@@ -57,7 +57,23 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
         createMetricsReporter(context))
       writer.write(
         rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
-      writer.stop(success = true).get
+      val mapStatus = writer.stop(success = true)
+      if (mapStatus.isDefined) {
+        // Initiate shuffle push process if push based shuffle is enabled
+        // The map task only takes care of converting the shuffle data file into multiple
+        // block push requests. It delegates pushing the blocks to a different thread-pool -
+        // ShuffleBlockPusher.BLOCK_PUSHER_POOL.
+        if (dep.shuffleMergeEnabled && dep.getMergerLocs.nonEmpty && !dep.shuffleMergeFinalized) {
+          manager.shuffleBlockResolver match {
+            case resolver: IndexShuffleBlockResolver =>
+              val dataFile = resolver.getDataFile(dep.shuffleId, mapId)
+              new ShuffleBlockPusher(SparkEnv.get.conf)
+                .initiateBlockPush(dataFile, writer.getPartitionLengths(), dep, partition.index)
+            case _ =>
+          }
+        }
+      }
+      mapStatus.get
     } catch {
       case e: Exception =>
         try {

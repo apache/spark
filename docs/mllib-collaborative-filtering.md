@@ -111,7 +111,7 @@ In the following example we load rating data. Each row consists of a user, a pro
 We use the default ALS.train() method which assumes ratings are explicit. We evaluate the
 recommendation by measuring the Mean Squared Error of rating prediction.
 
-Refer to the [`ALS` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.recommendation.ALS) for more details on the API.
+Refer to the [`ALS` Python docs](api/python/reference/api/pyspark.mllib.recommendation.ALS.html) for more details on the API.
 
 {% include_example python/mllib/recommendation_example.py %}
 

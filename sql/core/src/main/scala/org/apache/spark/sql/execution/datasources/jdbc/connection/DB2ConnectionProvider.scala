@@ -34,7 +34,7 @@ private[sql] class DB2ConnectionProvider extends SecureConnectionProvider {
 
   override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
     val jdbcOptions = new JDBCOptions(options)
-    setAuthenticationConfigIfNeeded(driver, jdbcOptions)
+    setAuthenticationConfig(driver, jdbcOptions)
     UserGroupInformation.loginUserFromKeytabAndReturnUGI(jdbcOptions.principal, jdbcOptions.keytab)
       .doAs(
         new PrivilegedExceptionAction[Connection]() {
@@ -51,12 +51,5 @@ private[sql] class DB2ConnectionProvider extends SecureConnectionProvider {
     result.put("securityMechanism", new String("11"))
     result.put("KerberosServerPrincipal", options.principal)
     result
-  }
-
-  override def setAuthenticationConfigIfNeeded(driver: Driver, options: JDBCOptions): Unit = {
-    val (parent, configEntry) = getConfigWithAppEntry(driver, options)
-    if (configEntry == null || configEntry.isEmpty) {
-      setAuthenticationConfig(parent, driver, options)
-    }
   }
 }

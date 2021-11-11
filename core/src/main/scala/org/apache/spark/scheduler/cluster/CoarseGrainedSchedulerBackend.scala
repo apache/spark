@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import javax.annotation.concurrent.GuardedBy
 
@@ -26,9 +26,10 @@ import scala.concurrent.Future
 
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
+import org.apache.spark.{ExecutorAllocationClient, SparkEnv, TaskState}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -115,6 +116,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
 
+  private val cleanupService: Option[ScheduledExecutorService] =
+    conf.get(EXECUTOR_DECOMMISSION_FORCE_KILL_TIMEOUT).map { _ =>
+      ThreadUtils.newDaemonSingleThreadScheduledExecutor("cleanup-decommission-execs")
+    }
+
   class DriverEndpoint extends IsolatedRpcEndpoint with Logging {
 
     override val rpcEnv: RpcEnv = CoarseGrainedSchedulerBackend.this.rpcEnv
@@ -176,9 +182,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
 
       case KillExecutorsOnHost(host) =>
-        scheduler.getExecutorsAliveOnHost(host).foreach { exec =>
-          killExecutors(exec.toSeq, adjustTargetNumExecutors = false, countFailures = false,
+        scheduler.getExecutorsAliveOnHost(host).foreach { execs =>
+          killExecutors(execs.toSeq, adjustTargetNumExecutors = false, countFailures = false,
             force = true)
+        }
+
+      case DecommissionExecutorsOnHost(host) =>
+        val reason = ExecutorDecommissionInfo(s"Decommissioning all executors on $host.")
+        scheduler.getExecutorsAliveOnHost(host).foreach { execs =>
+          val execsWithReasons = execs.map(exec => (exec, reason)).toArray
+
+          decommissionExecutors(execsWithReasons, adjustTargetNumExecutors = false,
+            triggeredByExecutor = false)
         }
 
       case UpdateDelegationTokens(newDelegationTokens) =>
@@ -199,6 +214,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           data.freeCores = data.totalCores
         }
         makeOffers(executorId)
+
+      case MiscellaneousProcessAdded(time: Long,
+          processId: String, info: MiscellaneousProcessDetails) =>
+        listenerBus.post(SparkListenerMiscellaneousProcessAdded(time, processId, info))
+
       case e =>
         logError(s"Received unexpected message. ${e}")
     }
@@ -239,7 +259,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
           val data = new ExecutorData(executorRef, executorAddress, hostname,
             0, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
-            resourcesInfo, resourceProfileId)
+            resourcesInfo, resourceProfileId, registrationTs = System.currentTimeMillis())
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
@@ -409,8 +429,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           totalCoreCount.addAndGet(-executorInfo.totalCores)
           totalRegisteredExecutors.addAndGet(-1)
           scheduler.executorLost(executorId, lossReason)
-          listenerBus.post(
-            SparkListenerExecutorRemoved(System.currentTimeMillis(), executorId, reason.toString))
+          listenerBus.post(SparkListenerExecutorRemoved(
+            System.currentTimeMillis(), executorId, lossReason.toString))
         case None =>
           // SPARK-15262: If an executor is still alive even after the scheduler has removed
           // its metadata, we may receive a heartbeat from that executor and tell its block
@@ -506,6 +526,21 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
     }
 
+    conf.get(EXECUTOR_DECOMMISSION_FORCE_KILL_TIMEOUT).map { cleanupInterval =>
+      val cleanupTask = new Runnable() {
+        override def run(): Unit = Utils.tryLogNonFatalError {
+          val stragglers = CoarseGrainedSchedulerBackend.this.synchronized {
+            executorsToDecommission.filter(executorsPendingDecommission.contains)
+          }
+          if (stragglers.nonEmpty) {
+            logInfo(s"${stragglers.toList} failed to decommission in ${cleanupInterval}, killing.")
+            killExecutors(stragglers, false, false, true)
+          }
+        }
+      }
+      cleanupService.map(_.schedule(cleanupTask, cleanupInterval, TimeUnit.SECONDS))
+    }
+
     executorsToDecommission
   }
 
@@ -542,12 +577,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
     } catch {
       case e: Exception =>
-        throw new SparkException("Error asking standalone scheduler to shut down executors", e)
+        throw SparkCoreErrors.askStandaloneSchedulerToShutDownExecutorsError(e)
     }
   }
 
   override def stop(): Unit = {
     reviveThread.shutdownNow()
+    cleanupService.foreach(_.shutdownNow())
     stopExecutors()
     delegationTokenManager.foreach(_.stop())
     try {
@@ -556,7 +592,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
     } catch {
       case e: Exception =>
-        throw new SparkException("Error stopping standalone scheduler's driver endpoint", e)
+        throw SparkCoreErrors.stopStandaloneSchedulerDriverEndpointError(e)
     }
   }
 
@@ -627,6 +663,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   override def getExecutorIds(): Seq[String] = synchronized {
     executorDataMap.keySet.toSeq
+  }
+
+  def getExecutorsWithRegistrationTs(): Map[String, Long] = synchronized {
+    executorDataMap.mapValues(v => v.registrationTs).toMap
   }
 
   override def isExecutorActive(id: String): Boolean = synchronized {
@@ -847,13 +887,29 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     Future.successful(false)
 
   /**
+   * Request that the cluster manager decommissions all executors on a given host.
+   * @return whether the decommission request is acknowledged.
+   */
+  final override def decommissionExecutorsOnHost(host: String): Boolean = {
+    logInfo(s"Requesting to kill any and all executors on host $host")
+    // A potential race exists if a new executor attempts to register on a host
+    // that is on the exclude list and is no longer valid. To avoid this race,
+    // all executor registration and decommissioning happens in the event loop. This way, either
+    // an executor will fail to register, or will be decommed when all executors on a host
+    // are decommed.
+    // Decommission all the executors on this host in an event loop to ensure serialization.
+    driverEndpoint.send(DecommissionExecutorsOnHost(host))
+    true
+  }
+
+  /**
    * Request that the cluster manager kill all executors on a given host.
    * @return whether the kill request is acknowledged.
    */
   final override def killExecutorsOnHost(host: String): Boolean = {
-    logInfo(s"Requesting to kill any and all executors on host ${host}")
+    logInfo(s"Requesting to kill any and all executors on host $host")
     // A potential race exists if a new executor attempts to register on a host
-    // that is on the exclude list and is no no longer valid. To avoid this race,
+    // that is on the exclude list and is no longer valid. To avoid this race,
     // all executor registration and killing happens in the event loop. This way, either
     // an executor will fail to register, or will be killed when all executors on a host
     // are killed.

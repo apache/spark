@@ -62,10 +62,6 @@ case class AvroScan(
       pushedFilters)
   }
 
-  override def withFilters(
-      partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): FileScan =
-    this.copy(partitionFilters = partitionFilters, dataFilters = dataFilters)
-
   override def equals(obj: Any): Boolean = obj match {
     case a: AvroScan => super.equals(a) && dataSchema == a.dataSchema && options == a.options &&
       equivalentFilters(pushedFilters, a.pushedFilters)
@@ -79,6 +75,6 @@ case class AvroScan(
   }
 
   override def getMetaData(): Map[String, String] = {
-    super.getMetaData() ++ Map("PushedFilers" -> seqToString(pushedFilters))
+    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters))
   }
 }

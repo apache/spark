@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableCatalog, TableChange}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog}
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -32,97 +31,14 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case AlterTableAddColumnsStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), cols) =>
-      cols.foreach(c => failNullType(c.dataType))
-      val changes = cols.map { col =>
-        TableChange.addColumn(
-          col.name.toArray,
-          col.dataType,
-          col.nullable,
-          col.comment.orNull,
-          col.position.orNull)
-      }
-      createAlterTable(nameParts, catalog, tbl, changes)
+    case UnresolvedDBObjectName(CatalogAndNamespace(catalog, name), isNamespace) if isNamespace =>
+      ResolvedDBObjectName(catalog, name)
 
-    case AlterTableReplaceColumnsStatement(
-        nameParts @ NonSessionCatalogAndTable(catalog, tbl), cols) =>
-      cols.foreach(c => failNullType(c.dataType))
-      val changes: Seq[TableChange] = loadTable(catalog, tbl.asIdentifier) match {
-        case Some(table) =>
-          // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
-          val deleteChanges = table.schema.fieldNames.map { name =>
-            TableChange.deleteColumn(Array(name))
-          }
-          val addChanges = cols.map { col =>
-            TableChange.addColumn(
-              col.name.toArray,
-              col.dataType,
-              col.nullable,
-              col.comment.orNull,
-              col.position.orNull)
-          }
-          deleteChanges ++ addChanges
-        case None => Seq()
-      }
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    case a @ AlterTableAlterColumnStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _) =>
-      a.dataType.foreach(failNullType)
-      val colName = a.column.toArray
-      val typeChange = a.dataType.map { newDataType =>
-        TableChange.updateColumnType(colName, newDataType)
-      }
-      val nullabilityChange = a.nullable.map { nullable =>
-        TableChange.updateColumnNullability(colName, nullable)
-      }
-      val commentChange = a.comment.map { newComment =>
-        TableChange.updateColumnComment(colName, newComment)
-      }
-      val positionChange = a.position.map { newPosition =>
-        TableChange.updateColumnPosition(colName, newPosition)
-      }
-      createAlterTable(
-        nameParts,
-        catalog,
-        tbl,
-        typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange)
-
-    case AlterTableRenameColumnStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), col, newName) =>
-      val changes = Seq(TableChange.renameColumn(col.toArray, newName))
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    case AlterTableDropColumnsStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), cols) =>
-      val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    case AlterTableSetPropertiesStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), props) =>
-      val changes = props.map { case (key, value) =>
-        TableChange.setProperty(key, value)
-      }.toSeq
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    // TODO: v2 `UNSET TBLPROPERTIES` should respect the ifExists flag.
-    case AlterTableUnsetPropertiesStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), keys, _) =>
-      val changes = keys.map(key => TableChange.removeProperty(key))
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    case AlterTableSetLocationStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), partitionSpec, newLoc) =>
-      if (partitionSpec.nonEmpty) {
-        throw QueryCompilationErrors.alterV2TableSetLocationWithPartitionNotSupportedError
-      }
-      val changes = Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, newLoc))
-      createAlterTable(nameParts, catalog, tbl, changes)
+    case UnresolvedDBObjectName(CatalogAndIdentifier(catalog, identifier), _) =>
+      ResolvedDBObjectName(catalog, identifier.namespace :+ identifier.name())
 
     case c @ CreateTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
-      assertNoNullTypeInSchema(c.tableSchema)
       CreateV2Table(
         catalog.asTableCatalog,
         tbl.asIdentifier,
@@ -134,9 +50,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case c @ CreateTableAsSelectStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _, _) =>
-      if (c.asSelect.resolved) {
-        assertNoNullTypeInSchema(c.asSelect.schema)
-      }
       CreateTableAsSelect(
         catalog.asTableCatalog,
         tbl.asIdentifier,
@@ -149,7 +62,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case c @ ReplaceTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
-      assertNoNullTypeInSchema(c.tableSchema)
       ReplaceTable(
         catalog.asTableCatalog,
         tbl.asIdentifier,
@@ -161,9 +73,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case c @ ReplaceTableAsSelectStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
-      if (c.asSelect.resolved) {
-        assertNoNullTypeInSchema(c.asSelect.schema)
-      }
       ReplaceTableAsSelect(
         catalog.asTableCatalog,
         tbl.asIdentifier,
@@ -173,22 +82,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         convertTableProperties(c),
         writeOptions = c.writeOptions,
         orCreate = c.orCreate)
-
-    case c @ CreateNamespaceStatement(CatalogAndNamespace(catalog, ns), _, _)
-        if !isSessionCatalog(catalog) =>
-      CreateNamespace(catalog.asNamespaceCatalog, ns, c.ifNotExists, c.properties)
-
-    case UseStatement(isNamespaceSet, nameParts) =>
-      if (isNamespaceSet) {
-        SetCatalogAndNamespace(catalogManager, None, Some(nameParts))
-      } else {
-        val CatalogAndNamespace(catalog, ns) = nameParts
-        val namespace = if (ns.nonEmpty) Some(ns) else None
-        SetCatalogAndNamespace(catalogManager, Some(catalog.name()), namespace)
-      }
-
-    case ShowCurrentNamespaceStatement() =>
-      ShowCurrentNamespace(catalogManager)
   }
 
   object NonSessionCatalogAndTable {

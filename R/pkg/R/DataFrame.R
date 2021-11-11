@@ -880,7 +880,7 @@ setMethod("toJSON",
 
 #' Save the contents of SparkDataFrame as a JSON file
 #'
-#' Save the contents of a SparkDataFrame as a JSON file (\href{http://jsonlines.org/}{
+#' Save the contents of a SparkDataFrame as a JSON file (\href{https://jsonlines.org/}{
 #' JSON Lines text format or newline-delimited JSON}). Files written out
 #' with this method can be read back in as a SparkDataFrame using read.json().
 #'
@@ -889,6 +889,10 @@ setMethod("toJSON",
 #' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
+#'            You can find the JSON-specific options for writing JSON files in
+#'            \url{
+#'            https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
+#'            Data Source Option} in the version you use.
 #'
 #' @family SparkDataFrame functions
 #' @rdname write.json
@@ -920,6 +924,10 @@ setMethod("write.json",
 #' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
+#'            You can find the ORC-specific options for writing ORC files in
+#'            \url{
+#'            https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option}{
+#'            Data Source Option} in the version you use.
 #'
 #' @family SparkDataFrame functions
 #' @aliases write.orc,SparkDataFrame,character-method
@@ -951,6 +959,10 @@ setMethod("write.orc",
 #' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
+#'            You can find the Parquet-specific options for writing Parquet files in
+#'            \url{
+#'            https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option
+#'            }{Data Source Option} in the version you use.
 #'
 #' @family SparkDataFrame functions
 #' @rdname write.parquet
@@ -983,6 +995,10 @@ setMethod("write.parquet",
 #' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
+#'            You can find the text-specific options for writing text files in
+#'            \url{
+#'            https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option}{
+#'            Data Source Option} in the version you use.
 #'
 #' @family SparkDataFrame functions
 #' @aliases write.text,SparkDataFrame,character-method
@@ -3731,6 +3747,9 @@ setMethod("histogram",
 #'
 #' Save the content of the SparkDataFrame to an external database table via JDBC. Additional JDBC
 #' database connection properties can be set (...)
+#' You can find the JDBC-specific option and parameter documentation for writing tables via JDBC in
+#' \url{https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' Also, mode is used to specify the behavior of the save operation when
 #' data already exists in the data source. There are four modes:

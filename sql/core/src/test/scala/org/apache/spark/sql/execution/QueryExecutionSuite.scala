@@ -19,11 +19,14 @@ package org.apache.spark.sql.execution
 import scala.io.Source
 
 import org.apache.spark.sql.{AnalysisException, FastOperator}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedNamespace
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, LogicalPlan, OneRowRelation, Project, ShowTables, SubqueryAlias}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.execution.datasources.v2.ShowTablesExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 case class QueryExecutionTestRecord(
     c0: Int, c1: Int, c2: Int, c3: Int, c4: Int,
@@ -36,8 +39,9 @@ case class QueryExecutionTestRecord(
 class QueryExecutionSuite extends SharedSparkSession {
   import testImplicits._
 
-  def checkDumpedPlans(path: String, expected: Int): Unit = {
-    assert(Source.fromFile(path).getLines.toList
+  def checkDumpedPlans(path: String, expected: Int): Unit = Utils.tryWithResource(
+    Source.fromFile(path)) { source =>
+    assert(source.getLines.toList
       .takeWhile(_ != "== Whole Stage Codegen ==") == List(
       "== Parsed Logical Plan ==",
       s"Range (0, $expected, step=1, splits=Some(2))",
@@ -99,7 +103,8 @@ class QueryExecutionSuite extends SharedSparkSession {
       val path = dir.getCanonicalPath + "/plans.txt"
       val df = spark.range(0, 10)
       df.queryExecution.debug.toFile(path, explainMode = Option("formatted"))
-      assert(Source.fromFile(path).getLines.toList
+      val lines = Utils.tryWithResource(Source.fromFile(path))(_.getLines().toList)
+      assert(lines
         .takeWhile(_ != "== Whole Stage Codegen ==").map(_.replaceAll("#\\d+", "#x")) == List(
         "== Physical Plan ==",
         s"* Range (1)",
@@ -135,9 +140,10 @@ class QueryExecutionSuite extends SharedSparkSession {
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
         16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)))
       ds.queryExecution.debug.toFile(path)
-      val localRelations = Source.fromFile(path).getLines().filter(_.contains("LocalRelation"))
-
-      assert(!localRelations.exists(_.contains("more fields")))
+      Utils.tryWithResource(Source.fromFile(path)) { source =>
+        val localRelations = source.getLines().filter(_.contains("LocalRelation"))
+        assert(!localRelations.exists(_.contains("more fields")))
+      }
     }
   }
 
@@ -223,5 +229,35 @@ class QueryExecutionSuite extends SharedSparkSession {
         "=== Result of Batch Preparations ===").foreach { expectedMsg =>
       assert(testAppender.loggingEvents.exists(_.getRenderedMessage.contains(expectedMsg)))
     }
+  }
+
+  test("SPARK-34129: Add table name to LogicalRelation.simpleString") {
+    withTable("spark_34129") {
+      spark.sql("CREATE TABLE spark_34129(id INT) using parquet")
+      val df = spark.table("spark_34129")
+      assert(df.queryExecution.optimizedPlan.toString.startsWith("Relation default.spark_34129["))
+    }
+  }
+
+  test("SPARK-35378: Eagerly execute non-root Command") {
+    def qe(logicalPlan: LogicalPlan): QueryExecution = new QueryExecution(spark, logicalPlan)
+
+    val showTables = ShowTables(UnresolvedNamespace(Seq.empty[String]), None)
+    val showTablesQe = qe(showTables)
+    assert(showTablesQe.commandExecuted.isInstanceOf[CommandResult])
+    assert(showTablesQe.executedPlan.isInstanceOf[CommandResultExec])
+    val showTablesResultExec = showTablesQe.executedPlan.asInstanceOf[CommandResultExec]
+    assert(showTablesResultExec.commandPhysicalPlan.isInstanceOf[ShowTablesExec])
+
+    val project = Project(showTables.output, SubqueryAlias("s", showTables))
+    val projectQe = qe(project)
+    assert(projectQe.commandExecuted.isInstanceOf[Project])
+    assert(projectQe.commandExecuted.children.length == 1)
+    assert(projectQe.commandExecuted.children(0).isInstanceOf[SubqueryAlias])
+    assert(projectQe.commandExecuted.children(0).children.length == 1)
+    assert(projectQe.commandExecuted.children(0).children(0).isInstanceOf[CommandResult])
+    assert(projectQe.executedPlan.isInstanceOf[CommandResultExec])
+    val cmdResultExec = projectQe.executedPlan.asInstanceOf[CommandResultExec]
+    assert(cmdResultExec.commandPhysicalPlan.isInstanceOf[ShowTablesExec])
   }
 }

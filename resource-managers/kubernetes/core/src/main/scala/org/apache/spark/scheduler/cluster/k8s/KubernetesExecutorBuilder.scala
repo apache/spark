@@ -16,8 +16,6 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import java.io.File
-
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SecurityManager
@@ -37,8 +35,9 @@ private[spark] class KubernetesExecutorBuilder {
       .map { file =>
         KubernetesUtils.loadPodFromTemplate(
           client,
-          new File(file),
-          conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME))
+          file,
+          conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME),
+          conf.sparkConf)
       }
       .getOrElse(SparkPod.initialPod())
 

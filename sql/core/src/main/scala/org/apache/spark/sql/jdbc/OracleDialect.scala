@@ -64,12 +64,6 @@ private case object OracleDialect extends JdbcDialect {
         => Some(TimestampType) // Value for Timestamp with Time Zone in Oracle
       case BINARY_FLOAT => Some(FloatType) // Value for OracleTypes.BINARY_FLOAT
       case BINARY_DOUBLE => Some(DoubleType) // Value for OracleTypes.BINARY_DOUBLE
-      // scalastyle:off line.size.limit
-      // According to the documentation for Oracle Database 19c:
-      // "Values of the ROWID pseudocolumn are strings representing the address of each row."
-      // https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/Data-Types.html#GUID-AEF1FE4C-2DE5-4BE7-BB53-83AD8F1E34EF
-      // scalastyle:on line.size.limit
-      case Types.ROWID => Some(StringType)
       case _ => None
     }
   }

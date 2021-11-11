@@ -147,7 +147,7 @@ object MLUtils extends Logging {
       previous = current
       i += 1
     }
-    (label, indices.toArray, values.toArray)
+    (label, indices, values)
   }
 
   /**

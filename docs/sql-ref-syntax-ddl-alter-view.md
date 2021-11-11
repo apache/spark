@@ -28,6 +28,8 @@ the name of a view to a different name, set and unset the metadata of the view b
 Renames the existing view. If the new view name already exists in the source database, a `TableAlreadyExistsException` is thrown. This operation
 does not support moving the views across databases.
 
+If the view is cached, the command clears cached data of the view and all its dependents that refer to it. View's cache will be lazily filled when the next time the view is accessed. The command leaves view's dependents as uncached.
+
 #### Syntax
 ```sql
 ALTER VIEW view_identifier RENAME TO view_identifier

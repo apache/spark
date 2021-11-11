@@ -30,10 +30,10 @@ import org.apache.spark.tags.DockerTest
 
 /**
  *
- * To run this test suite for a specific version (e.g., mysql:5.7.31):
+ * To run this test suite for a specific version (e.g., mysql:5.7.36):
  * {{{
- * MYSQL_DOCKER_IMAGE_NAME=mysql:5.7.31
- *         ./build/sbt -Pdocker-integration-tests "testOnly *v2*MySQLIntegrationSuite"
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:5.7.36
+ *     ./build/sbt -Pdocker-integration-tests "testOnly *v2*MySQLIntegrationSuite"
  *
  * }}}
  *
@@ -42,7 +42,7 @@ import org.apache.spark.tags.DockerTest
 class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override val catalogName: String = "mysql"
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:5.7.31")
+    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:5.7.36")
     override val env = Map(
       "MYSQL_ROOT_PASSWORD" -> "rootpass"
     )
@@ -69,17 +69,18 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", IntegerType)
+    var expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", StringType)
+    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from STRING to INTEGER
     val msg1 = intercept[AnalysisException] {
       sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER")
     }.getMessage
-    assert(msg1.contains("Cannot update alt_table field ID: string cannot be cast to int"))
+    assert(msg1.contains(
+      s"Cannot update $catalogName.alt_table field ID: string cannot be cast to int"))
   }
 
   override def testRenameColumn(tbl: String): Unit = {
@@ -110,8 +111,10 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override def testCreateTableWithProperty(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INT)" +
       s" TBLPROPERTIES('ENGINE'='InnoDB', 'DEFAULT CHARACTER SET'='utf8')")
-    var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", IntegerType)
+    val t = spark.table(tbl)
+    val expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
   }
+
+  override def supportsIndex: Boolean = true
 }

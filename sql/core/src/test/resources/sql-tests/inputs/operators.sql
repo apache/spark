@@ -40,6 +40,14 @@ select 5 % 3;
 select pmod(-7, 3);
 
 -- math functions
+select sec(1);
+select sec(null);
+select sec(0);
+select sec(-1);
+select csc(1);
+select csc(null);
+select csc(0);
+select csc(-1);
 select cot(1);
 select cot(null);
 select cot(0);

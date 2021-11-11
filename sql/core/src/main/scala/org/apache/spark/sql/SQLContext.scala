@@ -29,8 +29,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedNamespace
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.command.ShowTablesCommand
+import org.apache.spark.sql.catalyst.plans.logical.ShowTables
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming.{DataStreamReader, StreamingQueryManager}
@@ -668,7 +669,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   def tables(): DataFrame = {
-    Dataset.ofRows(sparkSession, ShowTablesCommand(None, None))
+    Dataset.ofRows(sparkSession, ShowTables(UnresolvedNamespace(Nil), None))
   }
 
   /**
@@ -680,7 +681,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   def tables(databaseName: String): DataFrame = {
-    Dataset.ofRows(sparkSession, ShowTablesCommand(Some(databaseName), None))
+    Dataset.ofRows(sparkSession, ShowTables(UnresolvedNamespace(Seq(databaseName)), None))
   }
 
   /**

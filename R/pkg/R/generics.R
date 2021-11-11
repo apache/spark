@@ -725,6 +725,9 @@ setGeneric("like", function(x, ...) { standardGeneric("like") })
 #' @rdname columnfunctions
 setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
 
+#' @rdname columnfunctions
+setGeneric("ilike", function(x, ...) { standardGeneric("ilike") })
+
 #' @rdname startsWith
 setGeneric("startsWith", function(x, prefix) { standardGeneric("startsWith") })
 
@@ -780,7 +783,8 @@ setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCoun
 
 #' @rdname column_collection_functions
 #' @name NULL
-setGeneric("array_aggregate", function(x, zero, merge, ...) { standardGeneric("array_aggregate") })
+setGeneric("array_aggregate",
+           function(x, initialValue, merge, ...) { standardGeneric("array_aggregate") })
 
 #' @rdname column_collection_functions
 #' @name NULL
@@ -883,6 +887,14 @@ setGeneric("base64", function(x) { standardGeneric("base64") })
 #' @name NULL
 setGeneric("bin", function(x) { standardGeneric("bin") })
 
+#' @rdname column_string_functions
+#' @name NULL
+setGeneric("bit_length", function(x, ...) { standardGeneric("bit_length") })
+
+#' @rdname column_nonaggregate_functions
+#' @name NULL
+setGeneric("bitwise_not", function(x) { standardGeneric("bitwise_not") })
+
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("bitwiseNOT", function(x) { standardGeneric("bitwiseNOT") })
@@ -922,6 +934,14 @@ setGeneric("concat_ws", function(sep, x, ...) { standardGeneric("concat_ws") })
 #' @name NULL
 setGeneric("conv", function(x, fromBase, toBase) { standardGeneric("conv") })
 
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("cot", function(x) { standardGeneric("cot") })
+
+#' @rdname column_aggregate_functions
+#' @name NULL
+setGeneric("count_distinct", function(x, ...) { standardGeneric("count_distinct") })
+
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") })
@@ -937,6 +957,10 @@ setGeneric("create_array", function(x, ...) { standardGeneric("create_array") })
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("create_map", function(x, ...) { standardGeneric("create_map") })
+
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("csc", function(x) { standardGeneric("csc") })
 
 #' @rdname column_misc_functions
 #' @name NULL
@@ -1134,6 +1158,10 @@ setGeneric("lpad", function(x, len, pad) { standardGeneric("lpad") })
 #' @name NULL
 setGeneric("ltrim", function(x, trimString) { standardGeneric("ltrim") })
 
+#' @rdname column_datetime_functions
+#' @name NULL
+setGeneric("make_date", function(x, y, z) { standardGeneric("make_date") })
+
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("map_concat", function(x, ...) { standardGeneric("map_concat") })
@@ -1166,9 +1194,17 @@ setGeneric("map_values", function(x) { standardGeneric("map_values") })
 #' @name NULL
 setGeneric("map_zip_with", function(x, y, f) { standardGeneric("map_zip_with") })
 
+#' @rdname column_aggregate_functions
+#' @name NULL
+setGeneric("max_by", function(x, y) { standardGeneric("max_by") })
+
 #' @rdname column_misc_functions
 #' @name NULL
 setGeneric("md5", function(x) { standardGeneric("md5") })
+
+#' @rdname column_aggregate_functions
+#' @name NULL
+setGeneric("min_by", function(x, y) { standardGeneric("min_by") })
 
 #' @rdname column_datetime_functions
 #' @name NULL
@@ -1219,6 +1255,10 @@ setGeneric("n_distinct", function(x, ...) { standardGeneric("n_distinct") })
 
 #' @rdname column_string_functions
 #' @name NULL
+setGeneric("octet_length", function(x, ...) { standardGeneric("octet_length") })
+
+#' @rdname column_string_functions
+#' @name NULL
 setGeneric("overlay", function(x, replace, pos, ...) { standardGeneric("overlay") })
 
 #' @rdname column_window_functions
@@ -1241,6 +1281,10 @@ setGeneric("posexplode", function(x) { standardGeneric("posexplode") })
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("posexplode_outer", function(x) { standardGeneric("posexplode_outer") })
+
+#' @rdname column_aggregate_functions
+#' @name NULL
+setGeneric("product", function(x) { standardGeneric("product") })
 
 #' @rdname column_datetime_functions
 #' @name NULL
@@ -1307,6 +1351,10 @@ setGeneric("schema_of_json", function(x, ...) { standardGeneric("schema_of_json"
 #' @name NULL
 setGeneric("sd", function(x, na.rm = FALSE) { standardGeneric("sd") })
 
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("sec", function(x) { standardGeneric("sec") })
+
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("second", function(x) { standardGeneric("second") })
@@ -1325,11 +1373,23 @@ setGeneric("shiftLeft", function(y, x) { standardGeneric("shiftLeft") })
 
 #' @rdname column_math_functions
 #' @name NULL
+setGeneric("shiftleft", function(y, x) { standardGeneric("shiftleft") })
+
+#' @rdname column_math_functions
+#' @name NULL
 setGeneric("shiftRight", function(y, x) { standardGeneric("shiftRight") })
 
 #' @rdname column_math_functions
 #' @name NULL
+setGeneric("shiftright", function(y, x) { standardGeneric("shiftright") })
+
+#' @rdname column_math_functions
+#' @name NULL
 setGeneric("shiftRightUnsigned", function(y, x) { standardGeneric("shiftRightUnsigned") })
+
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("shiftrightunsigned", function(y, x) { standardGeneric("shiftrightunsigned") })
 
 #' @rdname column_collection_functions
 #' @name NULL
@@ -1386,6 +1446,10 @@ setGeneric("struct", function(x, ...) { standardGeneric("struct") })
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("substring_index", function(x, delim, count) { standardGeneric("substring_index") })
+
+#' @rdname column_aggregate_functions
+#' @name NULL
+setGeneric("sum_distinct", function(x) { standardGeneric("sum_distinct") })
 
 #' @rdname column_aggregate_functions
 #' @name NULL

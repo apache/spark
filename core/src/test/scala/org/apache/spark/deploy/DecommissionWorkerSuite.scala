@@ -153,6 +153,7 @@ class DecommissionWorkerSuite
       config.SHUFFLE_SERVICE_ENABLED.key -> "true",
       config.SHUFFLE_SERVICE_PORT.key -> ss.getPort.toString
     )
+    TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
     // Here we will create a 2 stage job: The first stage will have two tasks and the second stage
     // will have one task. The two tasks in the first stage will be long and short. We decommission
@@ -209,6 +210,8 @@ class DecommissionWorkerSuite
       config.Tests.TEST_NO_STAGE_RETRY.key -> "false",
       "spark.test.executor.decommission.initial.sleep.millis" -> initialSleepMillis.toString,
       config.UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE.key -> "true")
+    TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
+
     val executorIdToWorkerInfo = getExecutorToWorkerAssignments
     val executorToDecom = executorIdToWorkerInfo.keysIterator.next
 

@@ -972,6 +972,75 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+  test("SPARK-35565: read data from outputs of another streaming query but ignore its metadata") {
+    withSQLConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3",
+        SQLConf.FILESTREAM_SINK_METADATA_IGNORED.key -> "true") {
+      withTempDirs { case (outputDir, checkpointDir1) =>
+        // q0 is a streaming query that reads from memory and writes to text files
+        val q0Source = MemoryStream[String]
+        val q0 =
+          q0Source
+            .toDF()
+            .writeStream
+            .option("checkpointLocation", checkpointDir1.getCanonicalPath)
+            .format("text")
+            .start(outputDir.getCanonicalPath)
+
+        q0Source.addData("keep0")
+        q0.processAllAvailable()
+        q0.stop()
+        Utils.deleteRecursively(new File(outputDir.getCanonicalPath + "/" +
+          FileStreamSink.metadataDir))
+
+        withTempDir { checkpointDir2 =>
+          // q1 is a streaming query that reads from memory and writes to text files too
+          val q1Source = MemoryStream[String]
+          val q1 =
+            q1Source
+              .toDF()
+              .writeStream
+              .option("checkpointLocation", checkpointDir2.getCanonicalPath)
+              .format("text")
+              .start(outputDir.getCanonicalPath)
+
+          // q2 is a streaming query that reads both q0 and q1's text outputs
+          val q2 =
+            createFileStream("text", outputDir.getCanonicalPath).filter($"value" contains "keep")
+
+          def q1AddData(data: String*): StreamAction =
+            Execute { _ =>
+              q1Source.addData(data)
+              q1.processAllAvailable()
+            }
+
+          def q2ProcessAllAvailable(): StreamAction = Execute { q2 => q2.processAllAvailable() }
+
+          testStream(q2)(
+            // batch 0
+            q1AddData("drop1", "keep2"),
+            q2ProcessAllAvailable(),
+            CheckAnswer("keep0", "keep2"),
+
+            q1AddData("keep3"),
+            q2ProcessAllAvailable(),
+            CheckAnswer("keep0", "keep2", "keep3"),
+
+            // batch 2: check that things work well when the sink log gets compacted
+            q1AddData("keep4"),
+            Assert {
+              // compact interval is 3, so file "2.compact" should exist
+              new File(outputDir, s"${FileStreamSink.metadataDir}/2.compact").exists()
+            },
+            q2ProcessAllAvailable(),
+            CheckAnswer("keep0", "keep2", "keep3", "keep4"),
+
+            Execute { _ => q1.stop() }
+          )
+        }
+      }
+    }
+  }
+
   test("start before another streaming query, and read its output") {
     withTempDirs { case (outputDir, checkpointDir) =>
       // q1 is a streaming query that reads from memory and writes to text files
@@ -1231,6 +1300,88 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 5).map(_.toString).toDF)
       } finally {
         q2.stop()
+      }
+    }
+  }
+
+  test("SPARK-36533: Trigger.AvailableNow - multiple queries with checkpoint") {
+    withTempDirs { (src, target) =>
+      val checkpoint = new File(target, "chk").getCanonicalPath
+      var lastFileModTime: Option[Long] = None
+
+      /** Create a text file with a single data item */
+      def createFile(data: Int): File = {
+        val file = stringToFile(new File(src, s"$data.txt"), data.toString)
+        if (lastFileModTime.nonEmpty) file.setLastModified(lastFileModTime.get + 1000)
+        lastFileModTime = Some(file.lastModified)
+        file
+      }
+
+      createFile(1)
+      createFile(2)
+      createFile(3)
+
+      // Set up a query to read text files one at a time
+      val df = spark
+        .readStream
+        .option("maxFilesPerTrigger", 1)
+        .text(src.getCanonicalPath)
+
+      def startTriggerOnceQuery(): StreamingQuery = {
+        df.writeStream
+          .foreachBatch((_: Dataset[Row], _: Long) => {})
+          .trigger(Trigger.Once)
+          .option("checkpointLocation", checkpoint)
+          .start()
+      }
+
+      // run a query with Trigger.Once first
+      val q = startTriggerOnceQuery()
+
+      try {
+        assert(q.awaitTermination(streamingTimeout.toMillis))
+      } finally {
+        q.stop()
+      }
+
+      // For queries with Trigger.AvailableNow, maxFilesPerTrigger option will be honored, so we
+      // will have a one-to-one mapping between rows and micro-batches.
+      // This variable tracks the number of rows / micro-batches starting from here.
+      // It starts from 3 since we have processed the first 3 rows in the first query.
+      var index = 3
+      def startTriggerAvailableNowQuery(): StreamingQuery = {
+        df.writeStream
+          .foreachBatch((df: Dataset[Row], _: Long) => {
+            index += 1
+            checkAnswer(df, Row(index.toString))
+          })
+          .trigger(Trigger.AvailableNow)
+          .option("checkpointLocation", checkpoint)
+          .start()
+      }
+
+      createFile(4)
+      createFile(5)
+
+      // run a second query with Trigger.AvailableNow
+      val q2 = startTriggerAvailableNowQuery()
+      try {
+        assert(q2.awaitTermination(streamingTimeout.toMillis))
+        assert(index == 5)
+      } finally {
+        q2.stop()
+      }
+
+      createFile(6)
+      createFile(7)
+
+      // run a third query with Trigger.AvailableNow
+      val q3 = startTriggerAvailableNowQuery()
+      try {
+        assert(q3.awaitTermination(streamingTimeout.toMillis))
+        assert(index == 7)
+      } finally {
+        q3.stop()
       }
     }
   }
@@ -1532,8 +1683,10 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
   private def readOffsetFromResource(file: String): SerializedOffset = {
     import scala.io.Source
-    val str = Source.fromFile(getClass.getResource(s"/structured-streaming/$file").toURI).mkString
-    SerializedOffset(str.trim)
+    Utils.tryWithResource(
+      Source.fromFile(getClass.getResource(s"/structured-streaming/$file").toURI)) { source =>
+      SerializedOffset(source.mkString.trim)
+    }
   }
 
   private def runTwoBatchesAndVerifyResults(
@@ -2168,6 +2321,25 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     require(src.isDirectory(), s"$src is not a directory")
     require(stringToFile(tempFile, content).renameTo(finalFile))
     finalFile
+  }
+
+  test("SPARK-35320: Reading JSON with key type different to String in a map should fail") {
+    Seq(
+      MapType(IntegerType, StringType),
+      StructType(Seq(StructField("test", MapType(IntegerType, StringType)))),
+      ArrayType(MapType(IntegerType, StringType)),
+      MapType(StringType, MapType(IntegerType, StringType))
+    ).foreach { schema =>
+      withTempDir { dir =>
+        val colName = "col"
+        val msg = "can only contain StringType as a key type for a MapType"
+
+        val thrown1 = intercept[AnalysisException](
+          spark.readStream.schema(StructType(Seq(StructField(colName, schema))))
+            .json(dir.getCanonicalPath).schema)
+        assert(thrown1.getMessage.contains(msg))
+      }
+    }
   }
 }
 

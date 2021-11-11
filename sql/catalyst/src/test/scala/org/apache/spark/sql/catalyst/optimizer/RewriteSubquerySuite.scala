@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{IsNull, ListQuery, Not}
@@ -66,5 +67,13 @@ class RewriteSubquerySuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-34598: Filters without subquery must not be modified by RewritePredicateSubquery") {
+    val relation = LocalRelation('a.int, 'b.int, 'c.int, 'd.int)
+    val query = relation.where(('a === 1 || 'b === 2) && ('c === 3 && 'd === 4)).select('a)
+    val tracker = new QueryPlanningTracker
+    Optimize.executeAndTrack(query.analyze, tracker)
+    assert(tracker.rules(RewritePredicateSubquery.ruleName).numEffectiveInvocations == 0)
   }
 }

@@ -16,8 +16,6 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import java.io.File
-
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.deploy.k8s._
@@ -33,8 +31,9 @@ private[spark] class KubernetesDriverBuilder {
       .map { file =>
         KubernetesUtils.loadPodFromTemplate(
           client,
-          new File(file),
-          conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME))
+          file,
+          conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME),
+          conf.sparkConf)
       }
       .getOrElse(SparkPod.initialPod())
 

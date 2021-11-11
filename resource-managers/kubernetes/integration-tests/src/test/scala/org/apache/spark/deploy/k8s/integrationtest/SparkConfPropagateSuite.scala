@@ -54,7 +54,6 @@ private[spark] trait SparkConfPropagateSuite { k8sSuite: KubernetesSuite =>
         appArgs = Array.empty[String],
         driverPodChecker = doBasicDriverPodCheck,
         executorPodChecker = doBasicExecutorPodCheck,
-        appLocator = appLocator,
         isJVM = true)
     } finally {
       new File(logConfFilePath).delete()

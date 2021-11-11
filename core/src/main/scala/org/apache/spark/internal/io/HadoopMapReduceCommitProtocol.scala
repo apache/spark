@@ -118,7 +118,12 @@ class HadoopMapReduceCommitProtocol(
 
   override def newTaskTempFile(
       taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
-    val filename = getFilename(taskContext, ext)
+    newTaskTempFile(taskContext, dir, FileNameSpec("", ext))
+  }
+
+  override def newTaskTempFile(
+      taskContext: TaskAttemptContext, dir: Option[String], spec: FileNameSpec): String = {
+    val filename = getFilename(taskContext, spec)
 
     val stagingDir: Path = committer match {
       // For FileOutputCommitter it has its own staging path called "work path".
@@ -141,7 +146,12 @@ class HadoopMapReduceCommitProtocol(
 
   override def newTaskTempFileAbsPath(
       taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
-    val filename = getFilename(taskContext, ext)
+    newTaskTempFileAbsPath(taskContext, absoluteDir, FileNameSpec("", ext))
+  }
+
+  override def newTaskTempFileAbsPath(
+      taskContext: TaskAttemptContext, absoluteDir: String, spec: FileNameSpec): String = {
+    val filename = getFilename(taskContext, spec)
     val absOutputPath = new Path(absoluteDir, filename).toString
 
     // Include a UUID here to prevent file collisions for one task writing to different dirs.
@@ -152,12 +162,12 @@ class HadoopMapReduceCommitProtocol(
     tmpOutputPath
   }
 
-  protected def getFilename(taskContext: TaskAttemptContext, ext: String): String = {
+  protected def getFilename(taskContext: TaskAttemptContext, spec: FileNameSpec): String = {
     // The file name looks like part-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003-c000.parquet
     // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
     // the file name is fine and won't overflow.
     val split = taskContext.getTaskAttemptID.getTaskID.getId
-    f"part-$split%05d-$jobId$ext"
+    f"${spec.prefix}part-$split%05d-$jobId${spec.suffix}"
   }
 
   override def setupJob(jobContext: JobContext): Unit = {
@@ -188,13 +198,18 @@ class HadoopMapReduceCommitProtocol(
 
       val filesToMove = allAbsPathFiles.foldLeft(Map[String, String]())(_ ++ _)
       logDebug(s"Committing files staged for absolute locations $filesToMove")
+      val absParentPaths = filesToMove.values.map(new Path(_).getParent).toSet
       if (dynamicPartitionOverwrite) {
-        val absPartitionPaths = filesToMove.values.map(new Path(_).getParent).toSet
-        logDebug(s"Clean up absolute partition directories for overwriting: $absPartitionPaths")
-        absPartitionPaths.foreach(fs.delete(_, true))
+        logDebug(s"Clean up absolute partition directories for overwriting: $absParentPaths")
+        absParentPaths.foreach(fs.delete(_, true))
       }
+      logDebug(s"Create absolute parent directories: $absParentPaths")
+      absParentPaths.foreach(fs.mkdirs)
       for ((src, dst) <- filesToMove) {
-        fs.rename(new Path(src), new Path(dst))
+        if (!fs.rename(new Path(src), new Path(dst))) {
+          throw new IOException(s"Failed to rename $src to $dst when committing files staged for " +
+            s"absolute locations")
+        }
       }
 
       if (dynamicPartitionOverwrite) {
@@ -213,7 +228,11 @@ class HadoopMapReduceCommitProtocol(
             // a parent that exists, otherwise we may get unexpected result on the rename.
             fs.mkdirs(finalPartPath.getParent)
           }
-          fs.rename(new Path(stagingDir, part), finalPartPath)
+          val stagingPartPath = new Path(stagingDir, part)
+          if (!fs.rename(stagingPartPath, finalPartPath)) {
+            throw new IOException(s"Failed to rename $stagingPartPath to $finalPartPath when " +
+              s"committing files staged for overwriting dynamic partitions")
+          }
         }
       }
 

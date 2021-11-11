@@ -20,7 +20,7 @@ package org.apache.spark.resource
 import org.apache.spark.annotation.{Evolving, Since}
 
 /**
- * An Executor resource request. This is used in conjunction with the ResourceProfile to
+ * An Executor resource request. This is used in conjunction with the [[ResourceProfile]] to
  * programmatically specify the resources needed for an RDD that will be applied at the
  * stage level.
  *
@@ -39,7 +39,7 @@ import org.apache.spark.annotation.{Evolving, Since}
  *
  * See the configuration and cluster specific docs for more details.
  *
- * Use ExecutorResourceRequests class as a convenience API.
+ * Use [[ExecutorResourceRequests]] class as a convenience API.
  *
  * @param resourceName Name of the resource
  * @param amount Amount requesting

@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
@@ -567,7 +567,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     verifyTableProperties(tableDefinition)
 
     if (tableDefinition.tableType == VIEW) {
-      client.alterTable(tableDefinition)
+      val newTableProps = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition).toMap
+      client.alterTable(tableDefinition.copy(properties = newTableProps))
     } else {
       val oldTableDef = getRawTable(db, tableDefinition.identifier.table)
 
@@ -942,9 +943,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   // Hive metastore is not case preserving and the partition columns are always lower cased. We need
   // to lower case the column names in partition specification before calling partition related Hive
   // APIs, to match this behaviour.
-  private def lowerCasePartitionSpec(spec: TablePartitionSpec): TablePartitionSpec = {
+  private def toMetaStorePartitionSpec(spec: TablePartitionSpec): TablePartitionSpec = {
     // scalastyle:off caselocale
-    spec.map { case (k, v) => k.toLowerCase -> v }
+    val lowNames = spec.map { case (k, v) => k.toLowerCase -> v }
+    ExternalCatalogUtils.convertNullPartitionValues(lowNames)
     // scalastyle:on caselocale
   }
 
@@ -993,8 +995,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       }
       p.copy(storage = p.storage.copy(locationUri = Some(partitionPath.toUri)))
     }
-    val lowerCasedParts = partsWithLocation.map(p => p.copy(spec = lowerCasePartitionSpec(p.spec)))
-    client.createPartitions(db, table, lowerCasedParts, ignoreIfExists)
+    val metaStoreParts = partsWithLocation
+      .map(p => p.copy(spec = toMetaStorePartitionSpec(p.spec)))
+    client.createPartitions(db, table, metaStoreParts, ignoreIfExists)
   }
 
   override def dropPartitions(
@@ -1006,7 +1009,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       retainData: Boolean): Unit = withClient {
     requireTableExists(db, table)
     client.dropPartitions(
-      db, table, parts.map(lowerCasePartitionSpec), ignoreIfNotExists, purge, retainData)
+      db, table, parts.map(toMetaStorePartitionSpec), ignoreIfNotExists, purge, retainData)
   }
 
   override def renamePartitions(
@@ -1015,7 +1018,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       specs: Seq[TablePartitionSpec],
       newSpecs: Seq[TablePartitionSpec]): Unit = withClient {
     client.renamePartitions(
-      db, table, specs.map(lowerCasePartitionSpec), newSpecs.map(lowerCasePartitionSpec))
+      db, table, specs.map(toMetaStorePartitionSpec), newSpecs.map(toMetaStorePartitionSpec))
 
     val tableMeta = getTable(db, table)
     val partitionColumnNames = tableMeta.partitionColumnNames
@@ -1031,7 +1034,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       val fs = tablePath.getFileSystem(hadoopConf)
       val newParts = newSpecs.map { spec =>
         val rightPath = renamePartitionDirectory(fs, tablePath, partitionColumnNames, spec)
-        val partition = client.getPartition(db, table, lowerCasePartitionSpec(spec))
+        val partition = client.getPartition(db, table, toMetaStorePartitionSpec(spec))
         partition.copy(storage = partition.storage.copy(locationUri = Some(rightPath.toUri)))
       }
       alterPartitions(db, table, newParts)
@@ -1071,7 +1074,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // scalastyle:on caselocale
         val actualPartitionPath = new Path(currentFullPath, actualPartitionString)
         try {
-          fs.rename(actualPartitionPath, expectedPartitionPath)
+          fs.mkdirs(expectedPartitionPath)
+          if(!fs.rename(actualPartitionPath, expectedPartitionPath)) {
+            throw new IOException(s"Renaming partition path from $actualPartitionPath to " +
+              s"$expectedPartitionPath returned false")
+          }
         } catch {
           case e: IOException =>
             throw new SparkException("Unable to rename partition path from " +
@@ -1141,12 +1148,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       db: String,
       table: String,
       newParts: Seq[CatalogTablePartition]): Unit = withClient {
-    val lowerCasedParts = newParts.map(p => p.copy(spec = lowerCasePartitionSpec(p.spec)))
-
-    val rawTable = getRawTable(db, table)
-
+    val metaStoreParts = newParts.map(p => p.copy(spec = toMetaStorePartitionSpec(p.spec)))
     // convert partition statistics to properties so that we can persist them through hive api
-    val withStatsProps = lowerCasedParts.map { p =>
+    val withStatsProps = metaStoreParts.map { p =>
       if (p.stats.isDefined) {
         val statsProperties = statsToProperties(p.stats.get)
         p.copy(parameters = p.parameters ++ statsProperties)
@@ -1162,7 +1166,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       db: String,
       table: String,
       spec: TablePartitionSpec): CatalogTablePartition = withClient {
-    val part = client.getPartition(db, table, lowerCasePartitionSpec(spec))
+    val part = client.getPartition(db, table, toMetaStorePartitionSpec(spec))
     restorePartitionMetadata(part, getTable(db, table))
   }
 
@@ -1200,7 +1204,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       db: String,
       table: String,
       spec: TablePartitionSpec): Option[CatalogTablePartition] = withClient {
-    client.getPartitionOption(db, table, lowerCasePartitionSpec(spec)).map { part =>
+    client.getPartitionOption(db, table, toMetaStorePartitionSpec(spec)).map { part =>
       restorePartitionMetadata(part, getTable(db, table))
     }
   }
@@ -1215,7 +1219,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val catalogTable = getTable(db, table)
     val partColNameMap = buildLowerCasePartColNameMap(catalogTable).mapValues(escapePathName)
     val clientPartitionNames =
-      client.getPartitionNames(catalogTable, partialSpec.map(lowerCasePartitionSpec))
+      client.getPartitionNames(catalogTable, partialSpec.map(toMetaStorePartitionSpec))
     clientPartitionNames.map { partitionPath =>
       val partSpec = PartitioningUtils.parsePathFragmentAsSeq(partitionPath)
       partSpec.map { case (partName, partValue) =>
@@ -1234,11 +1238,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = withClient {
     val partColNameMap = buildLowerCasePartColNameMap(getTable(db, table))
-    val res = client.getPartitions(db, table, partialSpec.map(lowerCasePartitionSpec)).map { part =>
-      part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
+    val metaStoreSpec = partialSpec.map(toMetaStorePartitionSpec)
+    val res = client.getPartitions(db, table, metaStoreSpec)
+      .map { part => part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
     }
 
-    partialSpec match {
+    metaStoreSpec match {
       // This might be a bug of Hive: When the partition value inside the partial partition spec
       // contains dot, and we ask Hive to list partitions w.r.t. the partial partition spec, Hive
       // treats dot as matching any single character and may return more partitions than we
@@ -1256,13 +1261,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       defaultTimeZoneId: String): Seq[CatalogTablePartition] = withClient {
     val rawTable = getRawTable(db, table)
     val catalogTable = restoreTableMetadata(rawTable)
-    val timeZoneId = CaseInsensitiveMap(catalogTable.storage.properties).getOrElse(
-      DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId)
-
     val partColNameMap = buildLowerCasePartColNameMap(catalogTable)
-
     val clientPrunedPartitions =
-      client.getPartitionsByFilter(rawTable, predicates, timeZoneId).map { part =>
+      client.getPartitionsByFilter(rawTable, predicates).map { part =>
         part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
       }
     prunePartitionsByFilter(catalogTable, clientPrunedPartitions, predicates, defaultTimeZoneId)

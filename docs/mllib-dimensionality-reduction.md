@@ -93,7 +93,7 @@ The same code applies to `IndexedRowMatrix` if `U` is defined as an
 `IndexedRowMatrix`.
 </div>
 <div data-lang="python" markdown="1">
-Refer to the [`SingularValueDecomposition` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.SingularValueDecomposition) for details on the API.
+Refer to the [`SingularValueDecomposition` Python docs](api/python/reference/api/pyspark.mllib.linalg.distributed.SingularValueDecomposition.html) for details on the API.
 
 {% include_example python/mllib/svd_example.py %}
 
@@ -146,7 +146,7 @@ Refer to the [`RowMatrix` Java docs](api/java/org/apache/spark/mllib/linalg/dist
 The following code demonstrates how to compute principal components on a `RowMatrix`
 and use them to project the vectors into a low-dimensional space.
 
-Refer to the [`RowMatrix` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.RowMatrix) for details on the API.
+Refer to the [`RowMatrix` Python docs](api/python/reference/api/pyspark.mllib.linalg.distributed.RowMatrix.html) for details on the API.
 
 {% include_example python/mllib/pca_rowmatrix_example.py %}
 

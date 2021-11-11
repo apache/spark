@@ -297,17 +297,6 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
-  test("InMemoryFileIndex - file filtering") {
-    assert(!InMemoryFileIndex.shouldFilterOut("abcd"))
-    assert(InMemoryFileIndex.shouldFilterOut(".ab"))
-    assert(InMemoryFileIndex.shouldFilterOut("_cd"))
-    assert(!InMemoryFileIndex.shouldFilterOut("_metadata"))
-    assert(!InMemoryFileIndex.shouldFilterOut("_common_metadata"))
-    assert(InMemoryFileIndex.shouldFilterOut("_ab_metadata"))
-    assert(InMemoryFileIndex.shouldFilterOut("_cd_common_metadata"))
-    assert(InMemoryFileIndex.shouldFilterOut("a._COPYING_"))
-  }
-
   test("SPARK-17613 - PartitioningAwareFileIndex: base path w/o '/' at end") {
     class MockCatalog(
       override val rootPaths: Seq[Path])
@@ -414,6 +403,21 @@ class FileIndexSuite extends SharedSparkSession {
     }
     val fileStatusCache = FileStatusCache.getOrCreate(spark)
     fileStatusCache.putLeafFiles(new Path("/tmp", "abc"), files.toArray)
+  }
+
+  test("SPARK-34075: InMemoryFileIndex filters out hidden file on partition inference") {
+    withTempPath { path =>
+      spark
+        .range(2)
+        .select(col("id").as("p"), col("id"))
+        .write
+        .partitionBy("p")
+        .parquet(path.getAbsolutePath)
+      val targetPath = new File(path, "p=1")
+      val hiddenPath = new File(path, "_hidden_path")
+      targetPath.renameTo(hiddenPath)
+      assert(spark.read.parquet(path.getAbsolutePath).count() == 1L)
+    }
   }
 
   test("SPARK-20367 - properly unescape column names in inferPartitioning") {

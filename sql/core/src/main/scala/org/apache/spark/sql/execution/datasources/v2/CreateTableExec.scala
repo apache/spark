@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
 
 case class CreateTableExec(
@@ -32,7 +33,7 @@ case class CreateTableExec(
     tableSchema: StructType,
     partitioning: Seq[Transform],
     tableProperties: Map[String, String],
-    ignoreIfExists: Boolean) extends V2CommandExec {
+    ignoreIfExists: Boolean) extends LeafV2CommandExec {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override protected def run(): Seq[InternalRow] = {
@@ -44,7 +45,7 @@ case class CreateTableExec(
           logWarning(s"Table ${identifier.quoted} was created concurrently. Ignoring.")
       }
     } else if (!ignoreIfExists) {
-      throw new TableAlreadyExistsException(identifier)
+      throw QueryCompilationErrors.tableAlreadyExistsError(identifier)
     }
 
     Seq.empty

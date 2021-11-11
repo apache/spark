@@ -21,7 +21,7 @@ true
 -- !query
 select '1 ' = 1Y
 -- !query schema
-struct<(CAST(1  AS TINYINT) = 1):boolean>
+struct<(1  = 1):boolean>
 -- !query output
 true
 
@@ -29,7 +29,7 @@ true
 -- !query
 select '\t1 ' = 1Y
 -- !query schema
-struct<(CAST(	1  AS TINYINT) = 1):boolean>
+struct<(	1  = 1):boolean>
 -- !query output
 true
 
@@ -37,7 +37,7 @@ true
 -- !query
 select '1 ' = 1S
 -- !query schema
-struct<(CAST(1  AS SMALLINT) = 1):boolean>
+struct<(1  = 1):boolean>
 -- !query output
 true
 
@@ -45,7 +45,7 @@ true
 -- !query
 select '1 ' = 1
 -- !query schema
-struct<(CAST(1  AS INT) = 1):boolean>
+struct<(1  = 1):boolean>
 -- !query output
 true
 
@@ -53,7 +53,7 @@ true
 -- !query
 select ' 1' = 1L
 -- !query schema
-struct<(CAST( 1 AS BIGINT) = 1):boolean>
+struct<( 1 = 1):boolean>
 -- !query output
 true
 
@@ -61,7 +61,7 @@ true
 -- !query
 select ' 1' = cast(1.0 as float)
 -- !query schema
-struct<(CAST( 1 AS FLOAT) = CAST(1.0 AS FLOAT)):boolean>
+struct<( 1 = CAST(1.0 AS FLOAT)):boolean>
 -- !query output
 true
 
@@ -69,7 +69,7 @@ true
 -- !query
 select ' 1.0 ' = 1.0D
 -- !query schema
-struct<(CAST( 1.0  AS DOUBLE) = 1.0):boolean>
+struct<( 1.0  = 1.0):boolean>
 -- !query output
 true
 
@@ -77,6 +77,6 @@ true
 -- !query
 select ' 1.0 ' = 1.0BD
 -- !query schema
-struct<(CAST( 1.0  AS DOUBLE) = CAST(1.0 AS DOUBLE)):boolean>
+struct<( 1.0  = 1.0):boolean>
 -- !query output
 true

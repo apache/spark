@@ -25,6 +25,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Kryo._
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.util.ThreadUtils
@@ -34,7 +35,7 @@ import org.apache.spark.util.ThreadUtils
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar>
+ *      bin/spark-submit --class <this class> <spark core test jar>
  *   2. build/sbt "core/test:runMain <this class>"
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
@@ -57,6 +58,7 @@ object KryoSerializerBenchmark extends BenchmarkBase {
   private def run(usePool: Boolean, benchmark: Benchmark): Unit = {
     lazy val sc = createSparkContext(usePool)
 
+    System.clearProperty(IS_TESTING.key)
     benchmark.addCase(s"KryoPool:$usePool") { _ =>
       val futures = for (_ <- 0 until N) yield {
         Future {

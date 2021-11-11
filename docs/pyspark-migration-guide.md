@@ -19,4 +19,4 @@ license: |
   limitations under the License.
 ---
 
-The migration guide is now archived on [this page](https://spark.apache.org/docs/latest/api/python/migration_guide/index.html).
+The migration guide is now archived on [this page](api/python/migration_guide/index.html).

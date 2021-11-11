@@ -18,12 +18,14 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
+import java.time.{Duration, Period}
+import java.time.temporal.ChronoUnit
 
 import com.google.common.math.LongMath
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.ImplicitTypeCasts.implicitCast
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.implicitCast
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
@@ -158,7 +160,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("conv") {
     checkEvaluation(Conv(Literal("3"), Literal(10), Literal(2)), "11")
     checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(-16)), "-F")
-    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(16)), "-F")
+    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(16)), "FFFFFFFFFFFFFFF1")
     checkEvaluation(Conv(Literal("big"), Literal(36), Literal(16)), "3A48")
     checkEvaluation(Conv(Literal.create(null, StringType), Literal(36), Literal(16)), null)
     checkEvaluation(Conv(Literal("3"), Literal.create(null, IntegerType), Literal(16)), null)
@@ -168,12 +170,10 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       Conv(Literal(""), Literal(10), Literal(16)), null)
     checkEvaluation(
-      Conv(Literal("9223372036854775807"), Literal(36), Literal(16)), "12DDAC15F246BAF8C0D551AC7")
+      Conv(Literal("9223372036854775807"), Literal(36), Literal(16)), "FFFFFFFFFFFFFFFF")
     // If there is an invalid digit in the number, the longest valid prefix should be converted.
     checkEvaluation(
       Conv(Literal("11abc"), Literal(10), Literal(16)), "B")
-    checkEvaluation(Conv(Literal("c8dcdfb41711fc9a1f17928001d7fd61"), Literal(16), Literal(10)),
-      "266992441711411603393340504520074460513")
   }
 
   test("e") {
@@ -187,6 +187,20 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("sin") {
     testUnary(Sin, math.sin)
     checkConsistencyBetweenInterpretedAndCodegen(Sin, DoubleType)
+  }
+
+  test("csc") {
+    def f: (Double) => Double = (x: Double) => 1 / math.sin(x)
+    testUnary(Csc, f)
+    checkConsistencyBetweenInterpretedAndCodegen(Csc, DoubleType)
+    val nullLit = Literal.create(null, NullType)
+    val intNullLit = Literal.create(null, IntegerType)
+    val intLit = Literal.create(1, IntegerType)
+    checkEvaluation(checkDataTypeAndCast(Csc(nullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Csc(intNullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Csc(intLit)), 1 / math.sin(1), EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Csc(-intLit)), 1 / math.sin(-1), EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Csc(0)), 1 / math.sin(0), EmptyRow)
   }
 
   test("asin") {
@@ -215,6 +229,20 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("cos") {
     testUnary(Cos, math.cos)
     checkConsistencyBetweenInterpretedAndCodegen(Cos, DoubleType)
+  }
+
+  test("sec") {
+    def f: (Double) => Double = (x: Double) => 1 / math.cos(x)
+    testUnary(Sec, f)
+    checkConsistencyBetweenInterpretedAndCodegen(Sec, DoubleType)
+    val nullLit = Literal.create(null, NullType)
+    val intNullLit = Literal.create(null, IntegerType)
+    val intLit = Literal.create(1, IntegerType)
+    checkEvaluation(checkDataTypeAndCast(Sec(nullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Sec(intNullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Sec(intLit)), 1 / math.cos(1), EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Sec(-intLit)), 1 / math.cos(-1), EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Sec(0)), 1 / math.cos(0), EmptyRow)
   }
 
   test("acos") {
@@ -677,5 +705,59 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BRound(-3.5, 0), -4.0)
     checkEvaluation(BRound(-0.35, 1), -0.4)
     checkEvaluation(BRound(-35, -1), -40)
+  }
+
+  test("SPARK-36922: Support ANSI intervals for SIGN/SIGNUM") {
+    checkEvaluation(Signum(Literal(Period.ZERO)), 0.0)
+    checkEvaluation(Signum(Literal(Period.ofYears(10))), 1.0)
+    checkEvaluation(Signum(Literal(Period.ofMonths(10))), 1.0)
+    checkEvaluation(Signum(Literal(Period.ofYears(-10))), -1.0)
+    checkEvaluation(Signum(Literal(Period.ofMonths(-10))), -1.0)
+    checkEvaluation(Signum(Literal.create(null, YearMonthIntervalType())), null)
+    checkEvaluation(Signum(Literal(Period.ofMonths(Int.MaxValue))), 1.0)
+    checkEvaluation(Signum(Literal(Period.ofMonths(Int.MinValue))), -1.0)
+
+    checkEvaluation(Signum(Literal(Duration.ZERO)), 0.0)
+    checkEvaluation(Signum(Literal(Duration.ofDays(10))), 1.0)
+    checkEvaluation(Signum(Literal(Duration.ofDays(-10))), -1.0)
+    checkEvaluation(Signum(Literal(Duration.ofDays(-12345))), -1.0)
+    checkEvaluation(Signum(Literal.create(null, DayTimeIntervalType())), null)
+    checkEvaluation(Signum(Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS))), 1.0)
+    checkEvaluation(Signum(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS))), -1.0)
+  }
+
+  test("SPARK-35926: Support YearMonthIntervalType in width-bucket function") {
+    Seq(
+      (Period.ofMonths(-1), Period.ofYears(0), Period.ofYears(10), 10L) -> 0L,
+      (Period.ofMonths(0), Period.ofYears(0), Period.ofYears(10), 10L) -> 1L,
+      (Period.ofMonths(13), Period.ofYears(0), Period.ofYears(10), 10L) -> 2L,
+      (Period.ofYears(1), Period.ofYears(0), Period.ofYears(10), 10L) -> 2L,
+      (Period.ofYears(1), Period.ofYears(0), Period.ofYears(1), 10L) -> 11L,
+      (Period.ofMonths(Int.MaxValue), Period.ofYears(0), Period.ofYears(1), 10L) -> 11L,
+      (Period.ofMonths(0), Period.ofMonths(Int.MinValue), Period.ofMonths(Int.MaxValue), 10L) -> 6L,
+      (Period.ofMonths(-1), Period.ofMonths(Int.MinValue), Period.ofMonths(Int.MaxValue), 10L) -> 5L
+    ).foreach { case ((v, s, e, n), expected) =>
+      checkEvaluation(WidthBucket(Literal(v), Literal(s), Literal(e), Literal(n)), expected)
+    }
+  }
+
+  test("SPARK-35925: Support DayTimeIntervalType in width-bucket function") {
+    Seq(
+      (Duration.ofDays(-1), Duration.ofDays(0), Duration.ofDays(10), 10L) -> 0L,
+      (Duration.ofHours(0), Duration.ofDays(0), Duration.ofDays(10), 10L) -> 1L,
+      (Duration.ofHours(11), Duration.ofHours(0), Duration.ofHours(10), 10L) -> 11L,
+      (Duration.ofMinutes(1), Duration.ofMinutes(0), Duration.ofMinutes(60), 10L) -> 1L,
+      (Duration.ofSeconds(-30), Duration.ofSeconds(-59), Duration.ofSeconds(60), 10L) -> 3L,
+      (Duration.ofDays(0), Duration.of(Long.MinValue, ChronoUnit.MICROS),
+        Duration.of(Long.MaxValue, ChronoUnit.MICROS), 10L) -> 6L,
+      (Duration.ofDays(0), Duration.of(Long.MinValue, ChronoUnit.MICROS),
+        Duration.ofDays(0), 10L) -> 11L,
+      (Duration.of(Long.MinValue, ChronoUnit.MICROS), Duration.of(Long.MinValue, ChronoUnit.MICROS),
+        Duration.ofDays(0), 10L) -> 1L,
+      (Duration.ofDays(-1), Duration.ofDays(0),
+        Duration.of(Long.MaxValue, ChronoUnit.MICROS), 10L) -> 0L
+    ).foreach { case ((v, s, e, n), expected) =>
+      checkEvaluation(WidthBucket(Literal(v), Literal(s), Literal(e), Literal(n)), expected)
+    }
   }
 }

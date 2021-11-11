@@ -20,10 +20,11 @@ package org.apache.spark.sql.execution.adaptive
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruningSubquery, ListQuery, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{ListQuery, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DYNAMIC_PRUNING_SUBQUERY, IN_SUBQUERY, SCALAR_SUBQUERY}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{DataWritingCommandExec, ExecutedCommandExec}
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
@@ -44,6 +45,7 @@ case class InsertAdaptiveSparkPlan(
   private def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
     case _ if !conf.adaptiveExecutionEnabled => plan
     case _: ExecutedCommandExec => plan
+    case _: CommandResultExec => plan
     case c: DataWritingCommandExec => c.copy(child = apply(c.child))
     case c: V2CommandExec => c.withNewChildren(c.children.map(apply))
     case _ if shouldApplyAQE(plan, isSubquery) =>
@@ -66,7 +68,7 @@ case class InsertAdaptiveSparkPlan(
             plan
         }
       } else {
-        logWarning(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is enabled " +
+        logDebug(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is enabled " +
           s"but is not supported for query: $plan.")
         plan
       }
@@ -98,10 +100,8 @@ case class InsertAdaptiveSparkPlan(
   }
 
   private def supportAdaptive(plan: SparkPlan): Boolean = {
-    // TODO migrate dynamic-partition-pruning onto adaptive execution.
     sanityCheck(plan) &&
       !plan.logicalLink.exists(_.isStreaming) &&
-      !plan.expressions.exists(_.find(_.isInstanceOf[DynamicPruningSubquery]).isDefined) &&
     plan.children.forall(supportAdaptive)
   }
 
@@ -113,21 +113,35 @@ case class InsertAdaptiveSparkPlan(
    * For each sub-query, generate the adaptive execution plan for each sub-query by applying this
    * rule, or reuse the execution plan from another sub-query of the same semantics if possible.
    */
-  private def buildSubqueryMap(plan: SparkPlan): Map[Long, SubqueryExec] = {
-    val subqueryMap = mutable.HashMap.empty[Long, SubqueryExec]
+  private def buildSubqueryMap(plan: SparkPlan): Map[Long, BaseSubqueryExec] = {
+    val subqueryMap = mutable.HashMap.empty[Long, BaseSubqueryExec]
+    if (!plan.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY, DYNAMIC_PRUNING_SUBQUERY)) {
+      return subqueryMap.toMap
+    }
     plan.foreach(_.expressions.foreach(_.foreach {
-      case expressions.ScalarSubquery(p, _, exprId)
+      case expressions.ScalarSubquery(p, _, exprId, _)
           if !subqueryMap.contains(exprId.id) =>
         val executedPlan = compileSubquery(p)
         verifyAdaptivePlan(executedPlan, p)
         val subquery = SubqueryExec.createForScalarSubquery(
           s"subquery#${exprId.id}", executedPlan)
         subqueryMap.put(exprId.id, subquery)
-      case expressions.InSubquery(_, ListQuery(query, _, exprId, _))
+      case expressions.InSubquery(_, ListQuery(query, _, exprId, _, _))
           if !subqueryMap.contains(exprId.id) =>
         val executedPlan = compileSubquery(query)
         verifyAdaptivePlan(executedPlan, query)
         val subquery = SubqueryExec(s"subquery#${exprId.id}", executedPlan)
+        subqueryMap.put(exprId.id, subquery)
+      case expressions.DynamicPruningSubquery(value, buildPlan,
+          buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId)
+          if !subqueryMap.contains(exprId.id) =>
+        val executedPlan = compileSubquery(buildPlan)
+        verifyAdaptivePlan(executedPlan, buildPlan)
+
+        val name = s"dynamicpruning#${exprId.id}"
+        val subquery = SubqueryAdaptiveBroadcastExec(
+          name, broadcastKeyIndex, onlyInBroadcast,
+          buildPlan, buildKeys, executedPlan)
         subqueryMap.put(exprId.id, subquery)
       case _ =>
     }))

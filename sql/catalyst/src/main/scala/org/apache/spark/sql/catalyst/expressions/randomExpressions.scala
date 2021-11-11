@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXPRESSION_WITH_RANDOM_SEED, TreePattern}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -62,6 +63,8 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful
  * Usually the random seed needs to be renewed at each execution under streaming queries.
  */
 trait ExpressionWithRandomSeed extends Expression {
+  override val nodePatterns: Seq[TreePattern] = Seq(EXPRESSION_WITH_RANDOM_SEED)
+
   def seedExpression: Expression
   def withNewSeed(seed: Long): Expression
 }
@@ -75,9 +78,9 @@ trait ExpressionWithRandomSeed extends Expression {
       > SELECT _FUNC_();
        0.9629742951434543
       > SELECT _FUNC_(0);
-       0.8446490682263027
+       0.7604953758285915
       > SELECT _FUNC_(null);
-       0.8446490682263027
+       0.7604953758285915
   """,
   note = """
     The function is non-deterministic in general case.
@@ -111,6 +114,8 @@ case class Rand(child: Expression, hideSeed: Boolean = false) extends RDG {
   override def sql: String = {
     s"rand(${if (hideSeed) "" else child.sql})"
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Rand = copy(child = newChild)
 }
 
 object Rand {
@@ -126,9 +131,9 @@ object Rand {
       > SELECT _FUNC_();
        -0.3254147983080288
       > SELECT _FUNC_(0);
-       1.1164209726833079
+       1.6034991609278433
       > SELECT _FUNC_(null);
-       1.1164209726833079
+       1.6034991609278433
   """,
   note = """
     The function is non-deterministic in general case.
@@ -162,6 +167,8 @@ case class Randn(child: Expression, hideSeed: Boolean = false) extends RDG {
   override def sql: String = {
     s"randn(${if (hideSeed) "" else child.sql})"
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Randn = copy(child = newChild)
 }
 
 object Randn {

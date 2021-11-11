@@ -96,7 +96,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     val driverPort = conf.sparkConf.getInt(DRIVER_PORT.key, DEFAULT_DRIVER_PORT)
     val driverBlockManagerPort = conf.sparkConf.getInt(
       DRIVER_BLOCK_MANAGER_PORT.key,
-      DEFAULT_BLOCKMANAGER_PORT
+      conf.sparkConf.getInt(BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
     )
     val driverUIPort = SparkUI.getUIPort(conf.sparkConf)
     val driverContainer = new ContainerBuilder(pod.container)
@@ -142,14 +142,19 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       .editOrNewMetadata()
         .withName(driverPodName)
         .addToLabels(conf.labels.asJava)
+        .addToLabels(SPARK_APP_NAME_LABEL, KubernetesConf.getAppNameLabel(conf.appName))
         .addToAnnotations(conf.annotations.asJava)
         .endMetadata()
       .editOrNewSpec()
         .withRestartPolicy("Never")
         .addToNodeSelector(conf.nodeSelector.asJava)
+        .addToNodeSelector(conf.driverNodeSelector.asJava)
         .addToImagePullSecrets(conf.imagePullSecrets: _*)
         .endSpec()
       .build()
+
+    conf.get(KUBERNETES_DRIVER_SCHEDULER_NAME)
+      .foreach(driverPod.getSpec.setSchedulerName)
 
     SparkPod(driverPod, driverContainer)
   }

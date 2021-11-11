@@ -17,20 +17,22 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.File
+import java.io.{File, IOException}
 import java.nio.file.Files
 import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 import org.apache.hadoop.mapreduce.JobContext
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, DataFrame}
+import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, FileScan, FileTable}
@@ -575,6 +577,75 @@ abstract class FileStreamSinkSuite extends StreamTest {
       }
     }
   }
+
+  test("formatCheck fail should not fail the query") {
+    withSQLConf(
+      "fs.file.impl" -> classOf[FailFormatCheckFileSystem].getName,
+      "fs.file.impl.disable.cache" -> "true") {
+      withTempDir { tempDir =>
+        val path = new File(tempDir, "text").getCanonicalPath
+        Seq("foo").toDF.write.format("text").save(path)
+        spark.read.format("text").load(path)
+      }
+    }
+  }
+
+  test("fail to check glob path should not fail the query") {
+    withSQLConf(
+      "fs.file.impl" -> classOf[FailFormatCheckFileSystem].getName,
+      "fs.file.impl.disable.cache" -> "true") {
+      withTempDir { tempDir =>
+        val path = new File(tempDir, "text").getCanonicalPath
+        Seq("foo").toDF.write.format("text").save(path)
+        spark.read.format("text").load(path + "/*")
+      }
+    }
+  }
+
+  test("SPARK-35565: Ignore metadata directory when reading sink output") {
+    Seq(true, false).foreach { ignoreMetadata =>
+      withSQLConf(SQLConf.FILESTREAM_SINK_METADATA_IGNORED.key -> ignoreMetadata.toString) {
+        val inputData = MemoryStream[String]
+        val df = inputData.toDF()
+
+        withTempDir { outputDir =>
+          withTempDir { checkpointDir =>
+            var query: StreamingQuery = null
+            try {
+              query =
+                df.writeStream
+                  .option("checkpointLocation", checkpointDir.getCanonicalPath)
+                  .format("text")
+                  .start(outputDir.getCanonicalPath)
+
+              inputData.addData("1", "2", "3")
+              inputData.addData("4", "5")
+
+              failAfter(streamingTimeout) {
+                query.processAllAvailable()
+              }
+            } finally {
+              if (query != null) {
+                query.stop()
+              }
+            }
+
+            val additionalFile = new File(outputDir, "additional.txt")
+            stringToFile(additionalFile, "6")
+            additionalFile.exists()
+
+            val outputDf = spark.read.format("text").load(outputDir.getCanonicalPath)
+              .selectExpr("CAST(value AS INT)").as[Int]
+            if (ignoreMetadata) {
+              checkDatasetUnorderly(outputDf, 1, 2, 3, 4, 5, 6)
+            } else {
+              checkDatasetUnorderly(outputDf, 1, 2, 3, 4, 5)
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 object PendingCommitFilesTrackingManifestFileCommitProtocol {
@@ -683,5 +754,21 @@ class FileStreamSinkV2Suite extends FileStreamSinkSuite {
       assert(partitions.flatMap(_.files.map(_.partitionValues)).distinct.size === 3)
     }
     // TODO: test partition pruning when file source V2 supports it.
+  }
+}
+
+/**
+ * A special file system that fails when accessing metadata log directory or using a glob path to
+ * access.
+ */
+class FailFormatCheckFileSystem extends RawLocalFileSystem {
+  override def getFileStatus(f: Path): FileStatus = {
+    if (f.getName == FileStreamSink.metadataDir) {
+      throw new IOException("cannot access metadata log")
+    }
+    if (SparkHadoopUtil.get.isGlobPath(f)) {
+      throw new IOException("fail to access a glob path")
+    }
+    super.getFileStatus(f)
   }
 }

@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io._
 import java.nio.charset.StandardCharsets
-import java.util.ConcurrentModificationException
 
 import scala.reflect.ClassTag
 
@@ -30,6 +29,7 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 
 /**
@@ -150,7 +150,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
         IOUtils.closeQuietly(input)
       }
     } else {
-      throw new FileNotFoundException(s"Unable to find batch $batchMetadataFile")
+      throw QueryExecutionErrors.batchMetadataFileNotFoundError(batchMetadataFile)
     }
   }
 
@@ -179,8 +179,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
           output.cancel()
           // If next batch file already exists, then another concurrently running query has
           // written it.
-          throw new ConcurrentModificationException(
-            s"Multiple streaming queries are concurrently using $path", e)
+          throw QueryExecutionErrors.multiStreamingQueriesUsingPathConcurrentlyError(path, e)
         case e: Throwable =>
           output.cancel()
           throw e
@@ -239,18 +238,33 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
       .reverse
   }
 
+  private var lastPurgedBatchId: Long = -1L
+
   /**
    * Removes all the log entry earlier than thresholdBatchId (exclusive).
    */
   override def purge(thresholdBatchId: Long): Unit = {
-    val batchIds = fileManager.list(metadataPath, batchFilesFilter)
-      .map(f => pathToBatchId(f.getPath))
+    val possibleTargetBatchIds = (lastPurgedBatchId + 1 until thresholdBatchId)
+    if (possibleTargetBatchIds.length <= 3) {
+      // avoid using list if we only need to purge at most 3 elements
+      possibleTargetBatchIds.foreach { batchId =>
+        val path = batchIdToPath(batchId)
+        fileManager.delete(path)
+        logTrace(s"Removed metadata log file: $path")
+      }
+    } else {
+      // using list to retrieve all elements
+      val batchIds = fileManager.list(metadataPath, batchFilesFilter)
+        .map(f => pathToBatchId(f.getPath))
 
-    for (batchId <- batchIds if batchId < thresholdBatchId) {
-      val path = batchIdToPath(batchId)
-      fileManager.delete(path)
-      logTrace(s"Removed metadata log file: $path")
+      for (batchId <- batchIds if batchId < thresholdBatchId) {
+        val path = batchIdToPath(batchId)
+        fileManager.delete(path)
+        logTrace(s"Removed metadata log file: $path")
+      }
     }
+
+    lastPurgedBatchId = thresholdBatchId - 1
   }
 
   /**

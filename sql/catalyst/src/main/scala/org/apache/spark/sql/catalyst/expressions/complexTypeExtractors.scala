@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTRACT_VALUE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -65,13 +66,8 @@ object ExtractValue {
       case (MapType(kt, _, _), _) => GetMapValue(child, extraction)
 
       case (otherType, _) =>
-        val errorMsg = otherType match {
-          case StructType(_) =>
-            s"Field name should be String Literal, but it's $extraction"
-          case other =>
-            s"Can't extract value from $child: need struct type but got ${other.catalogString}"
-        }
-        throw new AnalysisException(errorMsg)
+        throw QueryCompilationErrors.dataTypeUnsupportedByExtractValueError(
+          otherType, extraction, child)
     }
   }
 
@@ -83,18 +79,19 @@ object ExtractValue {
     val checkField = (f: StructField) => resolver(f.name, fieldName)
     val ordinal = fields.indexWhere(checkField)
     if (ordinal == -1) {
-      throw new AnalysisException(
-        s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
+      throw QueryCompilationErrors.noSuchStructFieldInGivenFieldsError(fieldName, fields)
     } else if (fields.indexWhere(checkField, ordinal + 1) != -1) {
-      throw new AnalysisException(
-        s"Ambiguous reference to fields ${fields.filter(checkField).mkString(", ")}")
+      throw QueryCompilationErrors.ambiguousReferenceToFieldsError(
+        fields.filter(checkField).mkString(", "))
     } else {
       ordinal
     }
   }
 }
 
-trait ExtractValue extends Expression
+trait ExtractValue extends Expression with NullIntolerant {
+  final override val nodePatterns: Seq[TreePattern] = Seq(EXTRACT_VALUE)
+}
 
 /**
  * Returns the value of fields in the Struct `child`.
@@ -105,7 +102,7 @@ trait ExtractValue extends Expression
  * For example, when get field `yEAr` from `<year: int, month: int>`, we should pass in `yEAr`.
  */
 case class GetStructField(child: Expression, ordinal: Int, name: Option[String] = None)
-  extends UnaryExpression with ExtractValue with NullIntolerant {
+  extends UnaryExpression with ExtractValue {
 
   lazy val childSchema = child.dataType.asInstanceOf[StructType]
 
@@ -142,6 +139,9 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
       }
     })
   }
+
+  override protected def withNewChildInternal(newChild: Expression): GetStructField =
+    copy(child = newChild)
 }
 
 /**
@@ -155,7 +155,7 @@ case class GetArrayStructFields(
     field: StructField,
     ordinal: Int,
     numFields: Int,
-    containsNull: Boolean) extends UnaryExpression with ExtractValue with NullIntolerant {
+    containsNull: Boolean) extends UnaryExpression with ExtractValue {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
   override def toString: String = s"$child.${field.name}"
@@ -216,6 +216,9 @@ case class GetArrayStructFields(
       """
     })
   }
+
+  override protected def withNewChildInternal(newChild: Expression): GetArrayStructFields =
+    copy(child = newChild)
 }
 
 /**
@@ -227,8 +230,7 @@ case class GetArrayItem(
     child: Expression,
     ordinal: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends BinaryExpression with GetArrayItemUtil with ExpectsInputTypes with ExtractValue
-  with NullIntolerant {
+  extends BinaryExpression with GetArrayItemUtil with ExpectsInputTypes with ExtractValue {
 
   def this(child: Expression, ordinal: Expression) = this(child, ordinal, SQLConf.get.ansiEnabled)
 
@@ -257,8 +259,7 @@ case class GetArrayItem(
     val index = ordinal.asInstanceOf[Number].intValue()
     if (index >= baseValue.numElements() || index < 0) {
       if (failOnError) {
-        throw new ArrayIndexOutOfBoundsException(
-          s"Invalid index: $index, numElements: ${baseValue.numElements()}")
+        throw QueryExecutionErrors.invalidArrayIndexError(index, baseValue.numElements)
       } else {
         null
       }
@@ -282,10 +283,7 @@ case class GetArrayItem(
       }
 
       val indexOutOfBoundBranch = if (failOnError) {
-        s"""throw new ArrayIndexOutOfBoundsException(
-           |  "Invalid index: " + $index + ", numElements: " + $eval1.numElements()
-           |);
-         """.stripMargin
+        s"throw QueryExecutionErrors.invalidArrayIndexError($index, $eval1.numElements());"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -300,6 +298,10 @@ case class GetArrayItem(
       """
     })
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): GetArrayItem =
+    copy(child = newLeft, ordinal = newRight)
 }
 
 /**
@@ -359,7 +361,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 
     if (!found) {
       if (failOnError) {
-        throw new NoSuchElementException(s"Key $ordinal does not exist.")
+        throw QueryExecutionErrors.mapKeyNotExistError(ordinal)
       } else {
         null
       }
@@ -394,7 +396,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     val keyJavaType = CodeGenerator.javaType(keyType)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val keyNotFoundBranch = if (failOnError) {
-        s"""throw new java.util.NoSuchElementException("Key " + $eval2 + " does not exist.");"""
+        s"throw QueryExecutionErrors.mapKeyNotExistError($eval2);"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -434,7 +436,7 @@ case class GetMapValue(
     child: Expression,
     key: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends GetMapValueUtil with ExtractValue with NullIntolerant {
+  extends GetMapValueUtil with ExtractValue {
 
   def this(child: Expression, key: Expression) = this(child, key, SQLConf.get.ansiEnabled)
 
@@ -478,4 +480,8 @@ case class GetMapValue(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     doGetValueGenCode(ctx, ev, child.dataType.asInstanceOf[MapType], failOnError)
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): GetMapValue =
+    copy(child = newLeft, key = newRight)
 }

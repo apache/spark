@@ -23,6 +23,7 @@ import org.json4s.JsonDSL._
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * A field inside a StructType.
@@ -49,7 +50,8 @@ case class StructField(
       stringConcat: StringConcat,
       maxDepth: Int): Unit = {
     if (maxDepth > 0) {
-      stringConcat.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")
+      stringConcat.append(s"$prefix-- ${SchemaUtils.escapeMetaCharacters(name)}: " +
+        s"${dataType.typeName} (nullable = $nullable)\n")
       DataType.buildFormattedString(dataType, s"$prefix    |", stringConcat, maxDepth)
     }
   }
@@ -95,9 +97,12 @@ case class StructField(
 
   /**
    * Returns a string containing a schema in DDL format. For example, the following value:
-   * `StructField("eventId", IntegerType)` will be converted to `eventId` INT.
-   *
+   * `StructField("eventId", IntegerType, false)` will be converted to `eventId` INT NOT NULL.
+   * `StructField("eventId", IntegerType, true)` will be converted to `eventId` INT.
    * @since 2.4.0
    */
-  def toDDL: String = s"${quoteIdentifier(name)} ${dataType.sql}$getDDLComment"
+  def toDDL: String = {
+    val nullString = if (nullable) "" else " NOT NULL"
+    s"${quoteIdentifier(name)} ${dataType.sql}${nullString}$getDDLComment"
+  }
 }

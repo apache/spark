@@ -78,7 +78,7 @@ private[ml] object LSHTest {
     // Perform a cross join and label each pair of same_bucket and distance
     val pairs = transformedData.as("a").crossJoin(transformedData.as("b"))
     val distUDF = udf((x: Vector, y: Vector) => model.keyDistance(x, y))
-    val sameBucket = udf((x: Seq[Vector], y: Seq[Vector]) => model.hashDistance(x, y) == 0.0)
+    val sameBucket = udf((x: Array[Vector], y: Array[Vector]) => model.hashDistance(x, y) == 0.0)
     val result = pairs
       .withColumn("same_bucket", sameBucket(col(s"a.$outputCol"), col(s"b.$outputCol")))
       .withColumn("distance", distUDF(col(s"a.$inputCol"), col(s"b.$inputCol")))

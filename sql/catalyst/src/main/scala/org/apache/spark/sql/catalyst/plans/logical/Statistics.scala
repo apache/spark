@@ -24,6 +24,7 @@ import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream}
 
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -47,11 +48,14 @@ object Statistics {
  *                    defaults to the product of children's `sizeInBytes`.
  * @param rowCount Estimated number of rows.
  * @param attributeStats Statistics for Attributes.
+ * @param isRuntime Whether the statistics is inferred from query stage runtime statistics during
+ *                  adaptive query execution.
  */
 case class Statistics(
     sizeInBytes: BigInt,
     rowCount: Option[BigInt] = None,
-    attributeStats: AttributeMap[ColumnStat] = AttributeMap(Nil)) {
+    attributeStats: AttributeMap[ColumnStat] = AttributeMap(Nil),
+    isRuntime: Boolean = false) {
 
   override def toString: String = "Statistics(" + simpleString + ")"
 
@@ -116,6 +120,18 @@ case class ColumnStat(
       maxLen = maxLen,
       histogram = histogram,
       version = version)
+
+  def updateCountStats(
+      oldNumRows: BigInt,
+      newNumRows: BigInt,
+      updatedColumnStatOpt: Option[ColumnStat] = None): ColumnStat = {
+    val updatedColumnStat = updatedColumnStatOpt.getOrElse(this)
+    val newDistinctCount = EstimationUtils.updateStat(oldNumRows, newNumRows,
+      distinctCount, updatedColumnStat.distinctCount)
+    val newNullCount = EstimationUtils.updateStat(oldNumRows, newNumRows,
+      nullCount, updatedColumnStat.nullCount)
+    updatedColumnStat.copy(distinctCount = newDistinctCount, nullCount = newNullCount)
+  }
 }
 
 /**

@@ -46,14 +46,28 @@ from pyspark.sql.column import Column
 from pyspark.sql.catalog import Catalog
 from pyspark.sql.dataframe import DataFrame, DataFrameNaFunctions, DataFrameStatFunctions
 from pyspark.sql.group import GroupedData
+from pyspark.sql.observation import Observation
 from pyspark.sql.readwriter import DataFrameReader, DataFrameWriter
 from pyspark.sql.window import Window, WindowSpec
 from pyspark.sql.pandas.group_ops import PandasCogroupedOps
 
 
 __all__ = [
-    'SparkSession', 'SQLContext', 'HiveContext', 'UDFRegistration',
-    'DataFrame', 'GroupedData', 'Column', 'Catalog', 'Row',
-    'DataFrameNaFunctions', 'DataFrameStatFunctions', 'Window', 'WindowSpec',
-    'DataFrameReader', 'DataFrameWriter', 'PandasCogroupedOps'
+    "SparkSession",
+    "SQLContext",
+    "HiveContext",
+    "UDFRegistration",
+    "DataFrame",
+    "GroupedData",
+    "Column",
+    "Catalog",
+    "Observation",
+    "Row",
+    "DataFrameNaFunctions",
+    "DataFrameStatFunctions",
+    "Window",
+    "WindowSpec",
+    "DataFrameReader",
+    "DataFrameWriter",
+    "PandasCogroupedOps",
 ]

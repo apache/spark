@@ -22,7 +22,7 @@ import org.apache.spark.annotation.Evolving;
 /**
  * The base interface representing a readable data stream in a Spark streaming query. It's
  * responsible to manage the offsets of the streaming source in the streaming query.
- *
+ * <p>
  * Data sources should implement concrete data stream interfaces:
  * {@link MicroBatchStream} and {@link ContinuousStream}.
  *

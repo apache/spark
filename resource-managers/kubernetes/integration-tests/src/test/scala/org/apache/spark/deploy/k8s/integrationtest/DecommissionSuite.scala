@@ -16,6 +16,13 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
+import scala.collection.JavaConverters._
+
+import io.fabric8.kubernetes.api.model.Pod
+import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
+import org.scalatest.matchers.should.Matchers._
+import org.scalatest.time.{Minutes, Seconds, Span}
+
 import org.apache.spark.internal.config
 
 private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
@@ -45,7 +52,6 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
-      appLocator = appLocator,
       isJVM = false,
       pyFiles = None,
       executorPatience = None,
@@ -75,7 +81,6 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
-      appLocator = appLocator,
       isJVM = false,
       pyFiles = None,
       executorPatience = None,
@@ -96,25 +101,80 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       .set(config.DYN_ALLOCATION_MIN_EXECUTORS.key, "1")
       .set(config.DYN_ALLOCATION_INITIAL_EXECUTORS.key, "2")
       .set(config.DYN_ALLOCATION_ENABLED.key, "true")
-      // The default of 30 seconds is fine, but for testing we just want to get this done fast.
-      .set("spark.storage.decommission.replicationReattemptInterval", "1")
+      // The default of 30 seconds is fine, but for testing we just want to
+      // give enough time to validate the labels are set.
+      .set("spark.storage.decommission.replicationReattemptInterval", "75")
+      // Configure labels for decommissioning pods.
+      .set("spark.kubernetes.executor.decommmissionLabel", "solong")
+      .set("spark.kubernetes.executor.decommmissionLabelValue", "cruelworld")
 
-    var execLogs: String = ""
+    // This is called on all exec pods but we only care about exec 0 since it's the "first."
+    // We only do this inside of this test since the other tests trigger k8s side deletes where we
+    // do not apply labels.
+    def checkFirstExecutorPodGetsLabeled(pod: Pod): Unit = {
+      if (pod.getMetadata.getName.endsWith("-1")) {
+        val client = kubernetesTestComponents.kubernetesClient
+        // The label will be added eventually, but k8s objects don't refresh.
+        Eventually.eventually(
+          PatienceConfiguration.Timeout(Span(1200, Seconds)),
+          PatienceConfiguration.Interval(Span(1, Seconds))) {
+
+          val currentPod = client.pods().withName(pod.getMetadata.getName).get
+          val labels = currentPod.getMetadata.getLabels.asScala
+
+          labels should not be (null)
+          labels should (contain key ("solong") and contain value ("cruelworld"))
+        }
+      }
+      doBasicExecutorPyPodCheck(pod)
+    }
 
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_SCALE,
       mainClass = "",
       expectedDriverLogOnCompletion = Seq(
         "Finished waiting, stopping Spark",
-        "Decommission executors"),
+        "Decommission executors",
+        "Remove reason statistics: (gracefully decommissioned: 1, decommision unfinished: 0, " +
+          "driver killed: 0, unexpectedly exited: 0)."),
+      appArgs = Array.empty[String],
+      driverPodChecker = doBasicDriverPyPodCheck,
+      executorPodChecker = checkFirstExecutorPodGetsLabeled,
+      isJVM = false,
+      pyFiles = None,
+      executorPatience = Some(None, Some(DECOMMISSIONING_FINISHED_TIMEOUT)),
+      decommissioningTest = false)
+  }
+
+  test("Test decommissioning timeouts", k8sTestTag) {
+    sparkAppConf
+      .set(config.DECOMMISSION_ENABLED.key, "true")
+      .set("spark.kubernetes.container.image", pyImage)
+      .set(config.STORAGE_DECOMMISSION_ENABLED.key, "true")
+      .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key, "true")
+      .set(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key, "true")
+      // Ensure we have somewhere to migrate our data too
+      .set("spark.executor.instances", "3")
+      // Set super high so the timeout is triggered
+      .set("spark.storage.decommission.replicationReattemptInterval", "8640000")
+      // Set super low so the timeout is triggered
+      .set(config.EXECUTOR_DECOMMISSION_FORCE_KILL_TIMEOUT.key, "10")
+
+    runSparkApplicationAndVerifyCompletion(
+      appResource = PYSPARK_DECOMISSIONING,
+      mainClass = "",
+      expectedDriverLogOnCompletion = Seq(
+        "Finished waiting, stopping Spark",
+        "Decommission executors",
+        "failed to decommission in 10, killing",
+        "killed by driver."),
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
-      appLocator = appLocator,
       isJVM = false,
       pyFiles = None,
       executorPatience = None,
-      decommissioningTest = false)
+      decommissioningTest = true)
   }
 }
 
@@ -123,4 +183,5 @@ private[spark] object DecommissionSuite {
   val PYSPARK_DECOMISSIONING: String = TEST_LOCAL_PYSPARK + "decommissioning.py"
   val PYSPARK_DECOMISSIONING_CLEANUP: String = TEST_LOCAL_PYSPARK + "decommissioning_cleanup.py"
   val PYSPARK_SCALE: String = TEST_LOCAL_PYSPARK + "autoscale.py"
+  val DECOMMISSIONING_FINISHED_TIMEOUT = PatienceConfiguration.Timeout(Span(4, Minutes))
 }

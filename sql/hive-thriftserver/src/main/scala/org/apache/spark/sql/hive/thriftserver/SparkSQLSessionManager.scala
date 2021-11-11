@@ -20,14 +20,13 @@ package org.apache.spark.sql.hive.thriftserver
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
+import org.apache.hive.service.cli.SessionHandle
 import org.apache.hive.service.cli.session.SessionManager
 import org.apache.hive.service.rpc.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 import org.apache.spark.sql.internal.SQLConf
@@ -64,7 +63,6 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
       } else {
         sqlContext.newSession()
       }
-      ctx.setConf(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
       ctx.setConf(SQLConf.DATETIME_JAVA8API_ENABLED, true)
       val hiveSessionState = session.getSessionState
       setConfMap(ctx, hiveSessionState.getOverriddenConfigurations)
@@ -82,7 +80,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
           case NonFatal(inner) =>
             logWarning("Error closing session", inner)
         }
-        throw new HiveSQLException("Failed to open new session: " + e, e)
+        throw HiveThriftServerErrors.failedToOpenNewSessionError(e)
     }
   }
 

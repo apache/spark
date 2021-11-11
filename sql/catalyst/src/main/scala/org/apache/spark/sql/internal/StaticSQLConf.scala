@@ -195,6 +195,7 @@ object StaticSQLConf {
 
   val SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS =
     buildStaticConf("spark.sql.legacy.sessionInitWithConfigDefaults")
+      .internal()
       .doc("Flag to revert to legacy behavior where a cloned SparkSession receives SparkConf " +
         "defaults, dropping any overrides in its parent SparkSession.")
       .version("3.0.0")
@@ -261,4 +262,12 @@ object StaticSQLConf {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
+
+  val DISABLED_JDBC_CONN_PROVIDER_LIST =
+    buildStaticConf("spark.sql.sources.disabledJdbcConnProviderList")
+      .doc("Configures a list of JDBC connection providers, which are disabled. " +
+        "The list contains the name of the JDBC connection providers separated by comma.")
+      .version("3.1.0")
+      .stringConf
+      .createWithDefault("")
 }

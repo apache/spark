@@ -272,7 +272,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
     val message = intercept[IncompatibleSchemaException] {
       CatalystDataToAvro(Literal("SPADES"), Some("\"long\"")).eval()
     }.getMessage
-    assert(message ==  "Cannot convert Catalyst type StringType to Avro type \"long\".")
+    assert(message === "Cannot convert SQL type STRING to Avro type \"long\".")
   }
 
   private def checkDeserialization(
@@ -284,6 +284,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
     val deserializer = new AvroDeserializer(
       schema,
       dataType,
+      false,
       SQLConf.LegacyBehaviorPolicy.CORRECTED,
       filters)
     val deserialized = deserializer.deserialize(data)

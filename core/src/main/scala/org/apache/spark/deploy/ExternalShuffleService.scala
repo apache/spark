@@ -44,8 +44,7 @@ private[deploy]
 class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityManager)
   extends Logging {
   protected val masterMetricsSystem =
-    MetricsSystem.createMetricsSystem(MetricsSystemInstances.SHUFFLE_SERVICE,
-      sparkConf, securityManager)
+    MetricsSystem.createMetricsSystem(MetricsSystemInstances.SHUFFLE_SERVICE, sparkConf)
 
   private val enabled = sparkConf.get(config.SHUFFLE_SERVICE_ENABLED)
   private val port = sparkConf.get(config.SHUFFLE_SERVICE_PORT)

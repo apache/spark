@@ -23,12 +23,7 @@ license: |
 Apache Spark is a unified analytics engine for large-scale data processing.
 It provides high-level APIs in Java, Scala, Python and R,
 and an optimized engine that supports general execution graphs.
-It also supports a rich set of higher-level tools including [Spark SQL](sql-programming-guide.html) for SQL and structured data processing, [MLlib](ml-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Structured Streaming](structured-streaming-programming-guide.html) for incremental computation and stream processing.
-
-# Security
-
-Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
-Please see [Spark Security](security.html) before downloading and running Spark.
+It also supports a rich set of higher-level tools including [Spark SQL](sql-programming-guide.html) for SQL and structured data processing, [pandas API on Spark](api/python/getting_started/quickstart_ps.html) for pandas workloads, [MLlib](ml-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Structured Streaming](structured-streaming-programming-guide.html) for incremental computation and stream processing.
 
 # Downloading
 
@@ -44,12 +39,13 @@ source, visit [Building Spark](building-spark.html).
 
 Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS), and it should run on any platform that runs a supported version of Java. This should include JVMs on x86_64 and ARM64. It's easy to run locally on one machine --- all you need is to have `java` installed on your system `PATH`, or the `JAVA_HOME` environment variable pointing to a Java installation.
 
-Spark runs on Java 8/11, Scala 2.12, Python 3.6+ and R 3.5+.
-Java 8 prior to version 8u92 support is deprecated as of Spark 3.0.0.
+Spark runs on Java 8/11, Scala 2.12, Python 3.7+ and R 3.5+.
+Java 8 prior to version 8u201 support is deprecated as of Spark 3.2.0.
 For the Scala API, Spark {{site.SPARK_VERSION}}
 uses Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scala version
 ({{site.SCALA_BINARY_VERSION}}.x).
 
+For Python 3.9, Arrow optimization and pandas UDFs might not work due to the supported Python versions in Apache Arrow. Please refer to the latest [Python Compatibility](https://arrow.apache.org/docs/python/install.html#python-compatibility) page.
 For Java 11, `-Dio.netty.tryReflectionSetAccessible=true` is required additionally for Apache Arrow library. This prevents `java.lang.UnsupportedOperationException: sun.misc.Unsafe or java.nio.DirectByteBuffer.(long, int) not available` when Apache Arrow uses Netty internally.
 
 # Running the Examples and Shell
@@ -98,7 +94,7 @@ Spark can run both by itself, or over several existing cluster managers. It curr
 options for deployment:
 
 * [Standalone Deploy Mode](spark-standalone.html): simplest way to deploy Spark on a private cluster
-* [Apache Mesos](running-on-mesos.html)
+* [Apache Mesos](running-on-mesos.html) (deprecated)
 * [Hadoop YARN](running-on-yarn.html)
 * [Kubernetes](running-on-kubernetes.html)
 
@@ -113,6 +109,8 @@ options for deployment:
 * [Spark Streaming](streaming-programming-guide.html): processing data streams using DStreams (old API)
 * [MLlib](ml-guide.html): applying machine learning algorithms
 * [GraphX](graphx-programming-guide.html): processing graphs 
+* [SparkR](sparkr.html): processing data with Spark in R
+* [PySpark](api/python/getting_started/index.html): processing data with Spark in Python
 
 **API Docs:**
 
@@ -156,10 +154,9 @@ options for deployment:
 * [Spark Community](https://spark.apache.org/community.html) resources, including local meetups
 * [StackOverflow tag `apache-spark`](http://stackoverflow.com/questions/tagged/apache-spark)
 * [Mailing Lists](https://spark.apache.org/mailing-lists.html): ask questions about Spark here
-* [AMP Camps](http://ampcamp.berkeley.edu/): a series of training camps at UC Berkeley that featured talks and
-  exercises about Spark, Spark Streaming, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/6/),
-  [slides](http://ampcamp.berkeley.edu/6/) and [exercises](http://ampcamp.berkeley.edu/6/exercises/) are
-  available online for free.
+* AMP Camps: a series of training camps at UC Berkeley that featured talks and
+  exercises about Spark, Spark Streaming, Mesos, and more. [Videos](https://www.youtube.com/user/BerkeleyAMPLab/search?query=amp%20camp),
+  are available online for free.
 * [Code Examples](https://spark.apache.org/examples.html): more are also available in the `examples` subfolder of Spark ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
  [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),

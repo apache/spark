@@ -18,12 +18,13 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.io.{FileNotFoundException, IOException}
 
-import org.apache.parquet.io.ParquetDecodingException
+import scala.util.control.NonFatal
 
+import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.sql.connector.read.PartitionReader
-import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.internal.SQLConf
 
@@ -46,11 +47,7 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
             currentReader = null
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
           case e: FileNotFoundException if !ignoreMissingFiles =>
-            throw new FileNotFoundException(
-              e.getMessage + "\n" +
-                "It is possible the underlying files have been updated. " +
-                "You can explicitly invalidate the cache in Spark by " +
-                "recreating the Dataset/DataFrame involved.")
+            throw QueryExecutionErrors.fileNotFoundError(e)
           case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
             logWarning(
               s"Skipped the rest of the content in the corrupted file.", e)
@@ -67,22 +64,18 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
       currentReader != null && currentReader.next()
     } catch {
       case e: SchemaColumnConvertNotSupportedException =>
-        val message = "Parquet column cannot be converted in " +
-          s"file ${currentReader.file.filePath}. Column: ${e.getColumn}, " +
-          s"Expected: ${e.getLogicalType}, Found: ${e.getPhysicalType}"
-        throw new QueryExecutionException(message, e)
-      case e: ParquetDecodingException =>
-        if (e.getMessage.contains("Can not read value at")) {
-          val message = "Encounter error while reading parquet files. " +
-            "One possible cause: Parquet column cannot be converted in the " +
-            "corresponding files. Details: "
-          throw new QueryExecutionException(message, e)
-        }
-        throw e
+        throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
+          currentReader.file.filePath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
       case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
         logWarning(
           s"Skipped the rest of the content in the corrupted file: $currentReader", e)
         false
+      case sue: SparkUpgradeException => throw sue
+      case NonFatal(e) =>
+        e.getCause match {
+          case sue: SparkUpgradeException => throw sue
+          case _ => throw QueryExecutionErrors.cannotReadFilesError(e, currentReader.file.filePath)
+        }
     }
     if (hasNext) {
       true

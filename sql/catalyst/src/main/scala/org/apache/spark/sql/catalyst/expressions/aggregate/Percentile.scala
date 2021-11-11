@@ -20,12 +20,13 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -42,12 +43,13 @@ import org.apache.spark.util.collection.OpenHashMap
  *                             percentage values. Each percentage value must be in the range
  *                             [0.0, 1.0].
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage =
     """
-      _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric column
-       `col` at the given percentage. The value of percentage must be between 0.0 and 1.0. The
-       value of frequency should be positive integral
+      _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric
+       or ansi interval column `col` at the given percentage. The value of percentage must be
+       between 0.0 and 1.0. The value of frequency should be positive integral
 
       _FUNC_(col, array(percentage1 [, percentage2]...) [, frequency]) - Returns the exact
       percentile value array of numeric column `col` at the given percentage(s). Each value
@@ -61,16 +63,22 @@ import org.apache.spark.util.collection.OpenHashMap
        3.0
       > SELECT _FUNC_(col, array(0.25, 0.75)) FROM VALUES (0), (10) AS tab(col);
        [2.5,7.5]
+      > SELECT _FUNC_(col, 0.5) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
+       5.0
+      > SELECT _FUNC_(col, array(0.2, 0.5)) FROM VALUES (INTERVAL '0' SECOND), (INTERVAL '10' SECOND) AS tab(col);
+       [2000000.0,5000000.0]
   """,
   group = "agg_funcs",
   since = "2.1.0")
+// scalastyle:on line.size.limit
 case class Percentile(
     child: Expression,
     percentageExpression: Expression,
     frequencyExpression : Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] with ImplicitCastInputTypes {
+  extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] with ImplicitCastInputTypes
+  with TernaryLike[Expression] {
 
   def this(child: Expression, percentageExpression: Expression) = {
     this(child, percentageExpression, Literal(1L), 0, 0)
@@ -99,9 +107,9 @@ case class Percentile(
     case arrayData: ArrayData => arrayData.toDoubleArray()
   }
 
-  override def children: Seq[Expression] = {
-    child :: percentageExpression :: frequencyExpression :: Nil
-  }
+  override def first: Expression = child
+  override def second: Expression = percentageExpression
+  override def third: Expression = frequencyExpression
 
   // Returns null for empty inputs
   override def nullable: Boolean = true
@@ -116,7 +124,8 @@ case class Percentile(
       case _: ArrayType => ArrayType(DoubleType, false)
       case _ => DoubleType
     }
-    Seq(NumericType, percentageExpType, IntegralType)
+    Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType),
+      percentageExpType, IntegralType)
   }
 
   // Check the inputTypes are valid, and the percentageExpression satisfies:
@@ -165,7 +174,7 @@ case class Percentile(
       if (frqLong > 0) {
         buffer.changeValue(key, frqLong, _ + frqLong)
       } else if (frqLong < 0) {
-        throw new SparkException(s"Negative values found in ${frequencyExpression.sql}")
+        throw QueryExecutionErrors.negativeValueUnexpectedError(frequencyExpression)
       }
     }
     buffer
@@ -189,8 +198,15 @@ case class Percentile(
       return Seq.empty
     }
 
-    val sortedCounts = buffer.toSeq.sortBy(_._1)(
-      child.dataType.asInstanceOf[NumericType].ordering.asInstanceOf[Ordering[AnyRef]])
+    val ordering =
+      if (child.dataType.isInstanceOf[NumericType]) {
+        child.dataType.asInstanceOf[NumericType].ordering
+      } else if (child.dataType.isInstanceOf[YearMonthIntervalType]) {
+        child.dataType.asInstanceOf[YearMonthIntervalType].ordering
+      } else if (child.dataType.isInstanceOf[DayTimeIntervalType]) {
+        child.dataType.asInstanceOf[DayTimeIntervalType].ordering
+      }
+    val sortedCounts = buffer.toSeq.sortBy(_._1)(ordering.asInstanceOf[Ordering[AnyRef]])
     val accumulatedCounts = sortedCounts.scanLeft((sortedCounts.head._1, 0L)) {
       case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
     }.tail
@@ -302,4 +318,11 @@ case class Percentile(
       bis.close()
     }
   }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Percentile = copy(
+    child = newFirst,
+    percentageExpression = newSecond,
+    frequencyExpression = newThird
+  )
 }

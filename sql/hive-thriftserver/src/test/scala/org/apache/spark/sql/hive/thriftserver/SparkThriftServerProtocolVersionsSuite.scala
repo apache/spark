@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.thriftserver
 import java.sql.{Date, Timestamp}
 import java.util.{List => JList, Properties}
 
+import org.apache.hadoop.hive.common.`type`.{HiveIntervalDayTime, HiveIntervalYearMonth}
 import org.apache.hive.jdbc.{HiveConnection, HiveQueryResultSet}
 import org.apache.hive.service.auth.PlainSaslHelper
 import org.apache.hive.service.cli.GetInfoType
@@ -361,14 +362,26 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
     }
 
     test(s"$version get interval type") {
-      testExecuteStatementWithProtocolVersion(version, "SELECT interval '1' year '2' day") { rs =>
+      testExecuteStatementWithProtocolVersion(version,
+        "SELECT interval '1' year '2' month") { rs =>
         assert(rs.next())
-        assert(rs.getString(1) === "1 years 2 days")
+        assert(rs.getString(1) === "1-2")
         val metaData = rs.getMetaData
-        assert(metaData.getColumnName(1) === "INTERVAL '1 years 2 days'")
-        assert(metaData.getColumnTypeName(1) === "string")
-        assert(metaData.getColumnType(1) === java.sql.Types.VARCHAR)
-        assert(metaData.getPrecision(1) === Int.MaxValue)
+        assert(metaData.getColumnName(1) === "INTERVAL '1-2' YEAR TO MONTH")
+        assert(metaData.getColumnTypeName(1) === "interval_year_month")
+        assert(metaData.getColumnType(1) === java.sql.Types.OTHER)
+        assert(metaData.getPrecision(1) === 11)
+        assert(metaData.getScale(1) === 0)
+      }
+      testExecuteStatementWithProtocolVersion(version,
+        "SELECT interval '1' day '2' hour '3' minute '4.005006' second") { rs =>
+        assert(rs.next())
+        assert(rs.getString(1) === "1 02:03:04.005006000")
+        val metaData = rs.getMetaData
+        assert(metaData.getColumnName(1) === "INTERVAL '1 02:03:04.005006' DAY TO SECOND")
+        assert(metaData.getColumnTypeName(1) === "interval_day_time")
+        assert(metaData.getColumnType(1) === java.sql.Types.OTHER)
+        assert(metaData.getPrecision(1) === 29)
         assert(metaData.getScale(1) === 0)
       }
     }
@@ -456,6 +469,30 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
         testGetTablesWithProtocolVersion(version, "%", "table1", null) { rs =>
           checkResult(Seq("table1"), rs)
         }
+      }
+    }
+
+    test(s"SPARK-35017: $version get day-time interval type") {
+      testExecuteStatementWithProtocolVersion(
+        version, "SELECT INTERVAL '1 10:11:12' DAY TO SECOND AS dt") { rs =>
+        assert(rs.next())
+        assert(rs.getObject(1) === new HiveIntervalDayTime(1, 10, 11, 12, 0))
+        val metaData = rs.getMetaData
+        assert(metaData.getColumnName(1) === "dt")
+        assert(metaData.getColumnTypeName(1) === "interval_day_time")
+        assert(metaData.getColumnType(1) === java.sql.Types.OTHER)
+      }
+    }
+
+    test(s"SPARK-35018: $version get year-month interval type") {
+      testExecuteStatementWithProtocolVersion(
+        version, "SELECT INTERVAL '1-1' YEAR TO MONTH AS ym") { rs =>
+        assert(rs.next())
+        assert(rs.getObject(1) === new HiveIntervalYearMonth(1, 1))
+        val metaData = rs.getMetaData
+        assert(metaData.getColumnName(1) === "ym")
+        assert(metaData.getColumnTypeName(1) === "interval_year_month")
+        assert(metaData.getColumnType(1) === java.sql.Types.OTHER)
       }
     }
   }

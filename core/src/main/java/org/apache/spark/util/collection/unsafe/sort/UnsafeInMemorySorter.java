@@ -20,7 +20,7 @@ package org.apache.spark.util.collection.unsafe.sort;
 import java.util.Comparator;
 import java.util.LinkedList;
 
-import org.apache.avro.reflect.Nullable;
+import javax.annotation.Nullable;
 
 import org.apache.spark.TaskContext;
 import org.apache.spark.memory.MemoryConsumer;

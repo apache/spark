@@ -128,7 +128,7 @@ private[streaming] class ReceiverSchedulingPolicy {
     }
 
     // Assign idle executors to receivers that have less executors
-    val idleExecutors = numReceiversOnExecutor.filter(_._2 == 0).map(_._1)
+    val idleExecutors = numReceiversOnExecutor.filter(_._2 == 0).keys
     for (executor <- idleExecutors) {
       // Assign an idle executor to the receiver that has least candidate executors.
       val leastScheduledExecutors = scheduledLocations.minBy(_.size)

@@ -18,6 +18,7 @@
 package org.apache.spark.ui.scope
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.rdd.DeterministicLevel
 
 class RDDOperationGraphSuite extends SparkFunSuite {
   test("Test simple cluster equals") {
@@ -25,7 +26,8 @@ class RDDOperationGraphSuite extends SparkFunSuite {
     val c1 = new RDDOperationCluster("1", false, "Bender")
     val c2 = new RDDOperationCluster("2", false, "Hal")
     c1.attachChildCluster(c2)
-    c1.attachChildNode(new RDDOperationNode(3, "Marvin", false, false, "collect!"))
+    c1.attachChildNode(new RDDOperationNode(3, "Marvin", false, false, "collect!",
+      DeterministicLevel.DETERMINATE))
 
     // create an equal cluster, but without the child node
     val c1copy = new RDDOperationCluster("1", false, "Bender")

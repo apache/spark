@@ -17,7 +17,7 @@ TakeOrderedAndProject [i_product_name]
                       WholeStageCodegen (2)
                         Project [i_manufact]
                           Filter [item_cnt]
-                            HashAggregate [i_manufact,count] [count(1),item_cnt,i_manufact,count]
+                            HashAggregate [i_manufact,count] [count(1),item_cnt,count]
                               InputAdapter
                                 Exchange [i_manufact] #3
                                   WholeStageCodegen (1)

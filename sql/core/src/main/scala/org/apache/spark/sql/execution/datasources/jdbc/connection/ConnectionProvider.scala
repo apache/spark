@@ -19,17 +19,19 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 import java.sql.{Connection, Driver}
 import java.util.ServiceLoader
+import javax.security.auth.login.Configuration
 
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.security.SecurityConfigurationLock
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcConnectionProvider
 import org.apache.spark.util.Utils
 
-private[jdbc] object ConnectionProvider extends Logging {
-  private val providers = loadProviders()
+protected abstract class ConnectionProviderBase extends Logging {
+  protected val providers = loadProviders()
 
   def loadProviders(): Seq[JdbcConnectionProvider] = {
     val loader = ServiceLoader.load(classOf[JdbcConnectionProvider],
@@ -54,13 +56,48 @@ private[jdbc] object ConnectionProvider extends Logging {
     providers.filterNot(p => disabledProviders.contains(p.name)).toSeq
   }
 
-  def create(driver: Driver, options: Map[String, String]): Connection = {
+  def create(
+      driver: Driver,
+      options: Map[String, String],
+      connectionProviderName: Option[String]): Connection = {
     val filteredProviders = providers.filter(_.canHandle(driver, options))
-    require(filteredProviders.size == 1,
-      "JDBC connection initiated but not exactly one connection provider found which can handle " +
-        s"it. Found active providers: ${filteredProviders.mkString(", ")}")
+
+    if (filteredProviders.isEmpty) {
+      throw new IllegalArgumentException(
+        "Empty list of JDBC connection providers for the specified driver and options")
+    }
+
+    val selectedProvider = connectionProviderName match {
+      case Some(providerName) =>
+        // It is assumed that no two providers will have the same name
+        filteredProviders.filter(_.name == providerName).headOption.getOrElse {
+          throw new IllegalArgumentException(
+            s"Could not find a JDBC connection provider with name '$providerName' " +
+            "that can handle the specified driver and options. " +
+            s"Available providers are ${providers.mkString("[", ", ", "]")}")
+        }
+      case None =>
+        if (filteredProviders.size != 1) {
+          throw new IllegalArgumentException(
+            "JDBC connection initiated but more than one connection provider was found. Use " +
+            s"'${JDBCOptions.JDBC_CONNECTION_PROVIDER}' option to select a specific provider. " +
+            s"Found active providers ${filteredProviders.mkString("[", ", ", "]")}")
+        }
+        filteredProviders.head
+    }
+
     SecurityConfigurationLock.synchronized {
-      filteredProviders.head.getConnection(driver, options)
+      // Inside getConnection it's safe to get parent again because SecurityConfigurationLock
+      // makes sure it's untouched
+      val parent = Configuration.getConfiguration
+      try {
+        selectedProvider.getConnection(driver, options)
+      } finally {
+        logDebug("Restoring original security configuration")
+        Configuration.setConfiguration(parent)
+      }
     }
   }
 }
+
+private[jdbc] object ConnectionProvider extends ConnectionProviderBase

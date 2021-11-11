@@ -31,8 +31,10 @@ class CombineConcatsSuite extends PlanTest {
   }
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
-    val correctAnswer = Project(Alias(e2, "out")() :: Nil, OneRowRelation()).analyze
-    val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, OneRowRelation()).analyze)
+    val correctAnswer = Limit(Literal(1), Project(Alias(e2, "out")() :: Nil, OneRowRelation()))
+      .analyze
+    val actual = Optimize.execute(Limit(Literal(1), Project(Alias(e1, "out")() :: Nil,
+      OneRowRelation())).analyze)
     comparePlans(actual, correctAnswer)
   }
 

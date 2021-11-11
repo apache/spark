@@ -24,8 +24,6 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable.{HashSet, TreeSet}
 import scala.collection.mutable.HashMap
 
-import com.google.common.collect.Interners
-
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, ResourceProfile, TaskResourceRequest}
@@ -34,6 +32,7 @@ import org.apache.spark.status.api.v1
 import org.apache.spark.storage.{RDDInfo, StorageLevel}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{AccumulatorContext, Utils}
+import org.apache.spark.util.Utils.weakIntern
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -393,14 +392,13 @@ private class LiveExecutorStageSummary(
 
 }
 
-private class LiveStage extends LiveEntity {
+private class LiveStage(var info: StageInfo) extends LiveEntity {
 
   import LiveEntityHelpers._
 
   var jobs = Seq[LiveJob]()
   var jobIds = Set[Int]()
 
-  var info: StageInfo = null
   var status = v1.StageStatus.PENDING
 
   var description: Option[String] = None
@@ -430,7 +428,7 @@ private class LiveStage extends LiveEntity {
 
   // Used for cleanup of tasks after they reach the configured limit. Not written to the store.
   @volatile var cleaning = false
-  var savedTasks = new AtomicInteger(0)
+  val savedTasks = new AtomicInteger(0)
 
   def executorSummary(executorId: String): LiveExecutorStageSummary = {
     executorSummaries.getOrElseUpdate(executorId,
@@ -493,7 +491,9 @@ private class LiveStage extends LiveEntity {
       executorSummary = None,
       killedTasksSummary = killedSummary,
       resourceProfileId = info.resourceProfileId,
-      Some(peakExecutorMetrics).filter(_.isSet))
+      peakExecutorMetrics = Some(peakExecutorMetrics).filter(_.isSet),
+      taskMetricsDistributions = None,
+      executorMetricsDistributions = None)
   }
 
   override protected def doUpdate(): Any = {
@@ -509,8 +509,6 @@ private class LiveStage extends LiveEntity {
  * by the application.
  */
 private class LiveRDDPartition(val blockName: String, rddLevel: StorageLevel) {
-
-  import LiveEntityHelpers._
 
   // Pointers used by RDDPartitionSeq.
   @volatile var prev: LiveRDDPartition = null
@@ -542,8 +540,6 @@ private class LiveRDDPartition(val blockName: String, rddLevel: StorageLevel) {
 
 private class LiveRDDDistribution(exec: LiveExecutor) {
 
-  import LiveEntityHelpers._
-
   val executorId = exec.executorId
   var memoryUsed = 0L
   var diskUsed = 0L
@@ -557,7 +553,7 @@ private class LiveRDDDistribution(exec: LiveExecutor) {
   def toApi(): v1.RDDDataDistribution = {
     if (lastUpdate == null) {
       lastUpdate = new v1.RDDDataDistribution(
-        weakIntern(exec.hostPort),
+        weakIntern(if (exec.hostPort != null) exec.hostPort else exec.host),
         memoryUsed,
         exec.maxMemory - exec.memoryUsed,
         diskUsed,
@@ -580,8 +576,6 @@ private class LiveRDDDistribution(exec: LiveExecutor) {
  * it started after the RDD is marked for caching.
  */
 private class LiveRDD(val info: RDDInfo, storageLevel: StorageLevel) extends LiveEntity {
-
-  import LiveEntityHelpers._
 
   var memoryUsed = 0L
   var diskUsed = 0L
@@ -656,8 +650,6 @@ private class SchedulerPool(name: String) extends LiveEntity {
 
 private[spark] object LiveEntityHelpers {
 
-  private val stringInterner = Interners.newWeakInterner[String]()
-
   private def accuValuetoString(value: Any): String = value match {
     case list: java.util.List[_] =>
       // SPARK-30379: For collection accumulator, string representation might
@@ -686,11 +678,6 @@ private[spark] object LiveEntityHelpers {
           acc.value.map(accuValuetoString).orNull)
       }
       .toSeq
-  }
-
-  /** String interning to reduce the memory usage. */
-  def weakIntern(s: String): String = {
-    stringInterner.intern(s)
   }
 
   // scalastyle:off argcount
@@ -912,4 +899,28 @@ private class RDDPartitionSeq extends Seq[v1.RDDPartitionInfo] {
     }
   }
 
+}
+
+private[spark] class LiveMiscellaneousProcess(val processId: String,
+    creationTime: Long) extends LiveEntity {
+
+  var hostPort: String = null
+  var isActive = true
+  var totalCores = 0
+  val addTime = new Date(creationTime)
+  var removeTime: Date = null
+  var processLogs = Map[String, String]()
+
+  override protected def doUpdate(): Any = {
+
+    val info = new v1.ProcessSummary(
+      processId,
+      hostPort,
+      isActive,
+      totalCores,
+      addTime,
+      Option(removeTime),
+      processLogs)
+    new ProcessSummaryWrapper(info)
+  }
 }

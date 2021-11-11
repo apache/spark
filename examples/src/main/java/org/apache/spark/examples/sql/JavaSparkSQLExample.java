@@ -65,7 +65,7 @@ public class JavaSparkSQLExample {
   // $example on:create_ds$
   public static class Person implements Serializable {
     private String name;
-    private int age;
+    private long age;
 
     public String getName() {
       return name;
@@ -75,11 +75,11 @@ public class JavaSparkSQLExample {
       this.name = name;
     }
 
-    public int getAge() {
+    public long getAge() {
       return age;
     }
 
-    public void setAge(int age) {
+    public void setAge(long age) {
       this.age = age;
     }
   }
@@ -225,11 +225,11 @@ public class JavaSparkSQLExample {
     // +---+----+
 
     // Encoders for most common types are provided in class Encoders
-    Encoder<Integer> integerEncoder = Encoders.INT();
-    Dataset<Integer> primitiveDS = spark.createDataset(Arrays.asList(1, 2, 3), integerEncoder);
-    Dataset<Integer> transformedDS = primitiveDS.map(
-        (MapFunction<Integer, Integer>) value -> value + 1,
-        integerEncoder);
+    Encoder<Long> longEncoder = Encoders.LONG();
+    Dataset<Long> primitiveDS = spark.createDataset(Arrays.asList(1L, 2L, 3L), longEncoder);
+    Dataset<Long> transformedDS = primitiveDS.map(
+        (MapFunction<Long, Long>) value -> value + 1L,
+        longEncoder);
     transformedDS.collect(); // Returns [2, 3, 4]
 
     // DataFrames can be converted to a Dataset by providing a class. Mapping based on name

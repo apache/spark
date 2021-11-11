@@ -29,8 +29,10 @@ class KafkaTokenSparkConfSuite extends SparkFunSuite with BeforeAndAfterEach {
   private val targetServersRegex = "127.0.0.*:0"
   private val securityProtocol = SSL.name
   private val kerberosServiceName = "kafka1"
+  private val trustStoreType = "customTrustStoreType"
   private val trustStoreLocation = "/path/to/trustStore"
   private val trustStorePassword = "trustStoreSecret"
+  private val keyStoreType = "customKeyStoreType"
   private val keyStoreLocation = "/path/to/keyStore"
   private val keyStorePassword = "keyStoreSecret"
   private val keyPassword = "keySecret"
@@ -60,8 +62,10 @@ class KafkaTokenSparkConfSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(clusterConfig.securityProtocol === SASL_SSL.name)
     assert(clusterConfig.kerberosServiceName ===
       KafkaTokenSparkConf.DEFAULT_SASL_KERBEROS_SERVICE_NAME)
+    assert(clusterConfig.trustStoreType === None)
     assert(clusterConfig.trustStoreLocation === None)
     assert(clusterConfig.trustStorePassword === None)
+    assert(clusterConfig.keyStoreType === None)
     assert(clusterConfig.keyStoreLocation === None)
     assert(clusterConfig.keyStorePassword === None)
     assert(clusterConfig.keyPassword === None)
@@ -75,8 +79,10 @@ class KafkaTokenSparkConfSuite extends SparkFunSuite with BeforeAndAfterEach {
     sparkConf.set(s"spark.kafka.clusters.$identifier1.security.protocol", securityProtocol)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.sasl.kerberos.service.name",
       kerberosServiceName)
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.ssl.truststore.type", trustStoreType)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.ssl.truststore.location", trustStoreLocation)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.ssl.truststore.password", trustStorePassword)
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.ssl.keystore.type", keyStoreType)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.ssl.keystore.location", keyStoreLocation)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.ssl.keystore.password", keyStorePassword)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.ssl.key.password", keyPassword)
@@ -88,8 +94,10 @@ class KafkaTokenSparkConfSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(clusterConfig.targetServersRegex === targetServersRegex)
     assert(clusterConfig.securityProtocol === securityProtocol)
     assert(clusterConfig.kerberosServiceName === kerberosServiceName)
+    assert(clusterConfig.trustStoreType === Some(trustStoreType))
     assert(clusterConfig.trustStoreLocation === Some(trustStoreLocation))
     assert(clusterConfig.trustStorePassword === Some(trustStorePassword))
+    assert(clusterConfig.keyStoreType === Some(keyStoreType))
     assert(clusterConfig.keyStoreLocation === Some(keyStoreLocation))
     assert(clusterConfig.keyStorePassword === Some(keyStorePassword))
     assert(clusterConfig.keyPassword === Some(keyPassword))
@@ -127,8 +135,10 @@ class KafkaTokenSparkConfSuite extends SparkFunSuite with BeforeAndAfterEach {
       assert(clusterConfig.securityProtocol === SASL_SSL.name)
       assert(clusterConfig.kerberosServiceName ===
         KafkaTokenSparkConf.DEFAULT_SASL_KERBEROS_SERVICE_NAME)
+      assert(clusterConfig.trustStoreType === None)
       assert(clusterConfig.trustStoreLocation === None)
       assert(clusterConfig.trustStorePassword === None)
+      assert(clusterConfig.keyStoreType === None)
       assert(clusterConfig.keyStoreLocation === None)
       assert(clusterConfig.keyStorePassword === None)
       assert(clusterConfig.keyPassword === None)

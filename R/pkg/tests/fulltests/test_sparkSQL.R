@@ -1397,7 +1397,8 @@ test_that("column operators", {
 test_that("column functions", {
   c <- column("a")
   c1 <- abs(c) + acos(c) + approx_count_distinct(c) + ascii(c) + asin(c) + atan(c)
-  c2 <- avg(c) + base64(c) + bin(c) + bitwiseNOT(c) + cbrt(c) + ceil(c) + cos(c)
+  c2 <- avg(c) + base64(c) + bin(c) + suppressWarnings(bitwiseNOT(c)) +
+    bitwise_not(c) + cbrt(c) + ceil(c) + cos(c)
   c3 <- cosh(c) + count(c) + crc32(c) + hash(c) + exp(c)
   c4 <- explode(c) + expm1(c) + factorial(c) + first(c) + floor(c) + hex(c)
   c5 <- hour(c) + initcap(c) + last(c) + last_day(c) + length(c)
@@ -1405,7 +1406,8 @@ test_that("column functions", {
   c7 <- mean(c) + min(c) + month(c) + negate(c) + posexplode(c) + quarter(c)
   c8 <- reverse(c) + rint(c) + round(c) + rtrim(c) + sha1(c) + monotonically_increasing_id()
   c9 <- signum(c) + sin(c) + sinh(c) + size(c) + stddev(c) + soundex(c) + sqrt(c) + sum(c)
-  c10 <- sumDistinct(c) + tan(c) + tanh(c) + degrees(c) + radians(c)
+  c10 <- suppressWarnings(sumDistinct(c)) + sum_distinct(c) + tan(c) + tanh(c) +
+    degrees(c) + radians(c)
   c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c)
   c12 <- variance(c) + xxhash64(c) + ltrim(c, "a") + rtrim(c, "b") + trim(c, "c")
   c13 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
@@ -1432,6 +1434,8 @@ test_that("column functions", {
   c28 <- asc_nulls_first(c1) + asc_nulls_last(c1) +
     desc_nulls_first(c1) + desc_nulls_last(c1)
   c29 <- acosh(c1) + asinh(c1) + atanh(c1)
+  c30 <- product(c1) + product(c1 * 0.5)
+  c31 <- sec(c1) + csc(c1) + cot(c1)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1448,7 +1452,7 @@ test_that("column functions", {
   expect_equal(collect(df2)[[3, 2]], TRUE)
 
   # Test that input_file_name()
-  actual_names <- sort(collect(distinct(select(df, input_file_name()))))
+  actual_names <- collect(distinct(select(df, input_file_name())))
   expect_equal(length(actual_names), 1)
   expect_equal(basename(actual_names[1, 1]), basename(jsonPath))
 
@@ -1457,6 +1461,8 @@ test_that("column functions", {
   expect_equal(collect(df3)[[2, 1]], FALSE)
   expect_equal(collect(df3)[[3, 1]], TRUE)
 
+  df4 <- select(df, count_distinct(df$age, df$name))
+  expect_equal(collect(df4)[[1, 1]], 2)
   df4 <- select(df, countDistinct(df$age, df$name))
   expect_equal(collect(df4)[[1, 1]], 2)
 
@@ -1887,9 +1893,12 @@ test_that("column binary mathfunctions", {
   expect_equal(collect(select(df, hypot(df$a, df$b)))[3, "HYPOT(a, b)"], sqrt(3^2 + 7^2))
   expect_equal(collect(select(df, hypot(df$a, df$b)))[4, "HYPOT(a, b)"], sqrt(4^2 + 8^2))
   ## nolint end
-  expect_equal(collect(select(df, shiftLeft(df$b, 1)))[4, 1], 16)
-  expect_equal(collect(select(df, shiftRight(df$b, 1)))[4, 1], 4)
-  expect_equal(collect(select(df, shiftRightUnsigned(df$b, 1)))[4, 1], 4)
+  expect_equal(collect(select(df, shiftleft(df$b, 1)))[4, 1], 16)
+  expect_equal(collect(select(df, shiftright(df$b, 1)))[4, 1], 4)
+  expect_equal(collect(select(df, shiftrightunsigned(df$b, 1)))[4, 1], 4)
+  expect_equal(collect(select(df, suppressWarnings(shiftLeft(df$b, 1))))[4, 1], 16)
+  expect_equal(collect(select(df, suppressWarnings(shiftRight(df$b, 1))))[4, 1], 4)
+  expect_equal(collect(select(df, suppressWarnings(shiftRightUnsigned(df$b, 1))))[4, 1], 4)
   expect_equal(class(collect(select(df, rand()))[2, 1]), "numeric")
   expect_equal(collect(select(df, rand(1)))[1, 1], 0.636, tolerance = 0.01)
   expect_equal(class(collect(select(df, randn()))[2, 1]), "numeric")
@@ -1979,6 +1988,17 @@ test_that("string operators", {
     collect(select(df5, repeat_string(df5$a, -1)))[1, 1],
     ""
   )
+
+  l6 <- list(list("cat"), list("\ud83d\udc08"))
+  df6 <- createDataFrame(l6)
+  expect_equal(
+    collect(select(df6, octet_length(df6$"_1")))[, 1],
+    c(3, 4)
+  )
+  expect_equal(
+    collect(select(df6, bit_length(df6$"_1")))[, 1],
+    c(24, 32)
+  )
 })
 
 test_that("date functions on a DataFrame", {
@@ -2028,6 +2048,20 @@ test_that("date functions on a DataFrame", {
   result32 <- collect(select(df3, from_unixtime(df3$a, "yyyy")))
   expect_equal(grep("\\d{4}", result32[, 1]), c(1, 2))
   Sys.setenv(TZ = .originalTimeZone)
+})
+
+test_that("SPARK-37108: expose make_date expression in R", {
+  df <- createDataFrame(
+    list(list(2021, 10, 22), list(2021, 13, 1),
+         list(2021, 2, 29), list(2020, 2, 29)),
+    list("year", "month", "day")
+  )
+  expect <- createDataFrame(
+    list(list(as.Date("2021-10-22")), NA, NA, list(as.Date("2020-02-29"))),
+    list("make_date(year, month, day)")
+  )
+  actual <- select(df, make_date(df$year, df$month, df$day))
+  expect_equal(collect(expect), collect(actual))
 })
 
 test_that("greatest() and least() on a DataFrame", {
@@ -2110,6 +2144,8 @@ test_that("higher order functions", {
       expr("transform(xs, (x, i) -> CASE WHEN ((i % 2.0) = 0.0) THEN x ELSE (- x) END)"),
     array_exists("vs", function(v) rlike(v, "FAILED")) ==
       expr("exists(vs, v -> (v RLIKE 'FAILED'))"),
+    array_exists("vs", function(v) ilike(v, "failed")) ==
+      expr("exists(vs, v -> (v ILIKE 'failed'))"),
     array_forall("xs", function(x) x > 0) ==
       expr("forall(xs, x -> x > 0)"),
     array_filter("xs", function(x, i) x > 0 | i %% 2 == 0) ==
@@ -2151,6 +2187,20 @@ test_that("higher order functions", {
   expect_true(all(unlist(result)))
 
   expect_error(array_transform("xs", function(...) 42))
+})
+
+test_that("SPARK-34794: lambda vars must be resolved properly in nested higher order functions", {
+  df <- sql("SELECT array(1, 2, 3) as numbers, array('a', 'b', 'c') as letters")
+  ret <- first(select(
+    df,
+    array_transform("numbers", function(number) {
+      array_transform("letters", function(latter) {
+        struct(alias(number, "n"), alias(latter, "l"))
+      })
+    })
+  ))
+
+  expect_equal(1, ret[[1]][[1]][[1]][[1]]$n)
 })
 
 test_that("group by, agg functions", {
@@ -2254,6 +2304,22 @@ test_that("group by, agg functions", {
 
   unlink(jsonPath2)
   unlink(jsonPath3)
+})
+
+test_that("SPARK-36976: Add max_by/min_by API to SparkR", {
+  df <- createDataFrame(
+    list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
+         list("dotNET", 2013, 48000), list("Java", 2013, 30000))
+  )
+  gd <- groupBy(df, df$"_1")
+
+  actual1 <- agg(gd, "_2" = max_by(df$"_2", df$"_3"))
+  expect1 <- createDataFrame(list(list("dotNET", 2013), list("Java", 2013)))
+  expect_equal(collect(actual1), collect(expect1))
+
+  actual2 <- agg(gd, "_2" = min_by(df$"_2", df$"_3"))
+  expect2 <- createDataFrame(list(list("dotNET", 2012), list("Java", 2012)))
+  expect_equal(collect(actual2), collect(expect2))
 })
 
 test_that("pivot GroupedData column", {
@@ -3520,6 +3586,8 @@ test_that("repartition by columns on DataFrame", {
   conf <- callJMethod(sparkSession, "conf")
   shufflepartitionsvalue <- callJMethod(conf, "get", "spark.sql.shuffle.partitions")
   callJMethod(conf, "set", "spark.sql.shuffle.partitions", "5")
+  coalesceEnabled <- callJMethod(conf, "get", "spark.sql.adaptive.coalescePartitions.enabled")
+  callJMethod(conf, "set", "spark.sql.adaptive.coalescePartitions.enabled", "false")
   tryCatch({
     df <- createDataFrame(
       list(list(1L, 1, "1", 0.1), list(1L, 2, "2", 0.2), list(3L, 3, "3", 0.3)),
@@ -3561,6 +3629,7 @@ test_that("repartition by columns on DataFrame", {
   finally = {
     # Resetting the conf back to default value
     callJMethod(conf, "set", "spark.sql.shuffle.partitions", shufflepartitionsvalue)
+    callJMethod(conf, "set", "spark.sql.adaptive.coalescePartitions.enabled", coalesceEnabled)
   })
 })
 
@@ -3983,7 +4052,8 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
 
   # recoverPartitions does not work with temporary view
   expect_error(recoverPartitions("cars"),
-               "no such table - Table or view 'cars' not found in database 'default'")
+               paste("Error in recoverPartitions : analysis error - cars is a temp view.",
+                     "'recoverPartitions()' expects a table"), fixed = TRUE)
   expect_error(refreshTable("cars"), NA)
   expect_error(refreshByPath("/"), NA)
 

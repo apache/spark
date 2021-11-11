@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
+import java.math.BigDecimal
+import java.time.{Duration, Period}
 import java.util.concurrent.TimeUnit
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -28,7 +30,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.FileSourceScanExec
-import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
+import org.apache.spark.sql.execution.datasources.{SchemaColumnConvertNotSupportedException, SQLHadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT, SingleElement}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -839,6 +841,102 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
 
     testMigration(fromTsType = "INT96", toTsType = "TIMESTAMP_MICROS")
     testMigration(fromTsType = "TIMESTAMP_MICROS", toTsType = "INT96")
+  }
+
+  test("SPARK-34212 Parquet should read decimals correctly") {
+    def readParquet(schema: String, path: File): DataFrame = {
+      spark.read.schema(schema).parquet(path.toString)
+    }
+
+    withTempPath { path =>
+      // a is int-decimal (4 bytes), b is long-decimal (8 bytes), c is binary-decimal (16 bytes)
+      val df = sql("SELECT 1.0 a, CAST(1.23 AS DECIMAL(17, 2)) b, CAST(1.23 AS DECIMAL(36, 2)) c")
+      df.write.parquet(path.toString)
+
+      withAllParquetReaders {
+        // We can read the decimal parquet field with a larger precision, if scale is the same.
+        val schema = "a DECIMAL(9, 1), b DECIMAL(18, 2), c DECIMAL(38, 2)"
+        checkAnswer(readParquet(schema, path), df)
+      }
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        val schema1 = "a DECIMAL(3, 2), b DECIMAL(18, 3), c DECIMAL(37, 3)"
+        checkAnswer(readParquet(schema1, path), df)
+        val schema2 = "a DECIMAL(3, 0), b DECIMAL(18, 1), c DECIMAL(37, 1)"
+        checkAnswer(readParquet(schema2, path), Row(1, 1.2, 1.2))
+      }
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        Seq("a DECIMAL(3, 2)", "b DECIMAL(18, 1)", "c DECIMAL(37, 1)").foreach { schema =>
+          val e = intercept[SparkException] {
+            readParquet(schema, path).collect()
+          }.getCause.getCause
+          assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        }
+      }
+    }
+
+    // tests for parquet types without decimal metadata.
+    withTempPath { path =>
+      val df = sql(s"SELECT 1 a, 123456 b, ${Int.MaxValue.toLong * 10} c, CAST('1.2' AS BINARY) d")
+      df.write.parquet(path.toString)
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        checkAnswer(readParquet("a DECIMAL(3, 2)", path), sql("SELECT 1.00"))
+        checkAnswer(readParquet("b DECIMAL(3, 2)", path), Row(null))
+        checkAnswer(readParquet("b DECIMAL(11, 1)", path), sql("SELECT 123456.0"))
+        checkAnswer(readParquet("c DECIMAL(11, 1)", path), Row(null))
+        checkAnswer(readParquet("c DECIMAL(13, 0)", path), df.select("c"))
+        val e = intercept[SparkException] {
+          readParquet("d DECIMAL(3, 2)", path).collect()
+        }.getCause
+        assert(e.getMessage.contains("Please read this column/field as Spark BINARY type"))
+      }
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        Seq("a DECIMAL(3, 2)", "c DECIMAL(18, 1)", "d DECIMAL(37, 1)").foreach { schema =>
+          val e = intercept[SparkException] {
+            readParquet(schema, path).collect()
+          }.getCause.getCause
+          assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        }
+      }
+    }
+  }
+
+  test("SPARK-37191: Merge schema for DecimalType with different precision") {
+    withTempPath { path =>
+      val data1 = Seq(Row(new BigDecimal("123456789.11")))
+      val schema1 = StructType(StructField("col", DecimalType(12, 2)) :: Nil)
+
+      val data2 = Seq(Row(new BigDecimal("1234567890000.11")))
+      val schema2 = StructType(StructField("col", DecimalType(17, 2)) :: Nil)
+
+      spark.createDataFrame(sparkContext.parallelize(data1, 1), schema1)
+        .write.parquet(path.toString)
+      spark.createDataFrame(sparkContext.parallelize(data2, 1), schema2)
+        .write.mode("append").parquet(path.toString)
+
+      withAllParquetReaders {
+        val res = spark.read.option("mergeSchema", "true").parquet(path.toString)
+        assert(res.schema("col").dataType == DecimalType(17, 2))
+        checkAnswer(res, data1 ++ data2)
+      }
+    }
+  }
+
+  test("SPARK-36825, SPARK-36852: create table with ANSI intervals") {
+    withTable("tbl") {
+      sql("create table tbl (c1 interval day, c2 interval year to month) using parquet")
+      sql("insert into tbl values (interval '100' day, interval '1-11' year to month)")
+      sql("insert into tbl values (null, null)")
+      sql("insert into tbl values (interval '-100' day, interval -'1-11' year to month)")
+      val expected = Seq(
+        (Duration.ofDays(100), Period.ofYears(1).plusMonths(11)),
+        (null, null),
+        (Duration.ofDays(100).negated(), Period.ofYears(1).plusMonths(11).negated())).toDF()
+      checkAnswer(sql("select * from tbl"), expected)
+    }
   }
 }
 

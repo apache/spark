@@ -17,14 +17,21 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.SQLFeatureNotSupportedException
 import java.util.Locale
 
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
 private object MsSqlServerDialect extends JdbcDialect {
+
+  // Special JDBC types in Microsoft SQL Server.
+  // https://github.com/microsoft/mssql-jdbc/blob/v8.2.2/src/main/java/microsoft/sql/Types.java
+  private object SpecificTypes {
+    val GEOMETRY = -157
+    val GEOGRAPHY = -158
+  }
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")
@@ -41,6 +48,7 @@ private object MsSqlServerDialect extends JdbcDialect {
         sqlType match {
           case java.sql.Types.SMALLINT => Some(ShortType)
           case java.sql.Types.REAL => Some(FloatType)
+          case SpecificTypes.GEOMETRY | SpecificTypes.GEOGRAPHY => Some(BinaryType)
           case _ => None
         }
       }
@@ -100,7 +108,7 @@ private object MsSqlServerDialect extends JdbcDialect {
       tableName: String,
       columnName: String,
       isNullable: Boolean): String = {
-    throw new SQLFeatureNotSupportedException(s"UpdateColumnNullability is not supported")
+    throw QueryExecutionErrors.unsupportedUpdateColumnNullabilityError()
   }
 
   // scalastyle:off line.size.limit
@@ -108,6 +116,9 @@ private object MsSqlServerDialect extends JdbcDialect {
   // scalastyle:on line.size.limit
   // need to use the stored procedure called sp_addextendedproperty to add comments to tables
   override def getTableCommentQuery(table: String, comment: String): String = {
-    throw new SQLFeatureNotSupportedException(s"comment on table is not supported")
+    throw QueryExecutionErrors.commentOnTableUnsupportedError()
   }
+
+  // ToDo: use top n to get limit, e.g. select top 100 * from employee;
+  override def supportsLimit(): Boolean = false
 }

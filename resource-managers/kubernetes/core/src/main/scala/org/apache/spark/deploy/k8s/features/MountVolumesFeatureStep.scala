@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.deploy.k8s._
-import org.apache.spark.deploy.k8s.Constants.ENV_EXECUTOR_ID
+import org.apache.spark.deploy.k8s.Constants.{ENV_EXECUTOR_ID, SPARK_APP_ID_LABEL}
 
 private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
@@ -85,6 +85,7 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
               .withApiVersion("v1")
               .withNewMetadata()
                 .withName(claimName)
+                .addToLabels(SPARK_APP_ID_LABEL, conf.sparkConf.getAppId)
                 .endMetadata()
               .withNewSpec()
                 .withStorageClassName(storageClass.get)

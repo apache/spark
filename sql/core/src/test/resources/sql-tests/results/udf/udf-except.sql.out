@@ -32,7 +32,7 @@ struct<>
 -- !query
 SELECT udf(k), udf(v) FROM t1 EXCEPT SELECT udf(k), udf(v) FROM t2
 -- !query schema
-struct<CAST(udf(cast(k as string)) AS STRING):string,CAST(udf(cast(v as string)) AS INT):int>
+struct<udf(k):string,udf(v):int>
 -- !query output
 three	3
 two	2
@@ -100,6 +100,15 @@ WHERE  udf(t1.v) >= (SELECT   min(udf(t2.v))
                 FROM     t2
                 WHERE    t2.k = t1.k)
 -- !query schema
-struct<k:string>
+struct<>
 -- !query output
-two
+org.apache.spark.sql.AnalysisException
+Correlated column is not allowed in predicate (CAST(udf(cast(k as string)) AS STRING) = CAST(udf(cast(outer(k#x) as string)) AS STRING)):
+Aggregate [cast(udf(cast(max(cast(udf(cast(v#x as string)) as int)) as string)) as int) AS udf(max(udf(v)))#x]
++- Filter (cast(udf(cast(k#x as string)) as string) = cast(udf(cast(outer(k#x) as string)) as string))
+   +- SubqueryAlias t2
+      +- View (`t2`, [k#x,v#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias t2
+                  +- LocalRelation [k#x, v#x]

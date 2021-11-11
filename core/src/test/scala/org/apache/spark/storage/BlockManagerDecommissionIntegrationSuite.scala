@@ -48,8 +48,9 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
         .setMaster("local-cluster[2, 1, 1024]")
         .set(config.DECOMMISSION_ENABLED, true)
         .set(config.STORAGE_DECOMMISSION_ENABLED, isEnabled)
+        .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, isEnabled)
       sc = new SparkContext(conf)
-      TestUtils.waitUntilExecutorsUp(sc, 2, 6000)
+      TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
       val executors = sc.getExecutorIds().toArray
       val decommissionListener = new SparkListener {
         override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
@@ -98,12 +99,22 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     runDecomTest(true, true, JobEnded)
   }
 
+  test(s"SPARK-36782 not deadlock if MapOutput uses broadcast") {
+    runDecomTest(false, true, JobEnded, forceMapOutputBroadcast = true)
+  }
+
   private def runDecomTest(
       persist: Boolean,
       shuffle: Boolean,
-      whenToDecom: String): Unit = {
+      whenToDecom: String,
+      forceMapOutputBroadcast: Boolean = false): Unit = {
     val migrateDuring = whenToDecom != JobEnded
     val master = s"local-cluster[${numExecs}, 1, 1024]"
+    val minBroadcastSize = if (forceMapOutputBroadcast) {
+      0
+    } else {
+      config.SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST.defaultValue.get
+    }
     val conf = new SparkConf().setAppName("test").setMaster(master)
       .set(config.DECOMMISSION_ENABLED, true)
       .set(config.STORAGE_DECOMMISSION_ENABLED, true)
@@ -114,6 +125,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       // Just replicate blocks quickly during testing, there isn't another
       // workload we need to worry about.
       .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 10L)
+      .set(config.SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST, minBroadcastSize)
 
     if (whenToDecom == TaskStarted) {
       // We are using accumulators below, make sure those are reported frequently.
@@ -281,21 +293,21 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
           (update.blockUpdatedInfo.blockId.name,
             update.blockUpdatedInfo.blockManagerId)}
         val blocksToManagers = blockLocs.groupBy(_._1).mapValues(_.size)
-        assert(!blocksToManagers.filter(_._2 > 1).isEmpty,
+        assert(blocksToManagers.exists(_._2 > 1),
           s"We should have a block that has been on multiple BMs in rdds:\n ${rddUpdates} from:\n" +
           s"${blocksUpdated}\n but instead we got:\n ${blocksToManagers}")
       }
       // If we're migrating shuffles we look for any shuffle block updates
       // as there is no block update on the initial shuffle block write.
       if (shuffle) {
-        val numDataLocs = blocksUpdated.filter { update =>
+        val numDataLocs = blocksUpdated.count { update =>
           val blockId = update.blockUpdatedInfo.blockId
           blockId.isInstanceOf[ShuffleDataBlockId]
-        }.size
-        val numIndexLocs = blocksUpdated.filter { update =>
+        }
+        val numIndexLocs = blocksUpdated.count { update =>
           val blockId = update.blockUpdatedInfo.blockId
           blockId.isInstanceOf[ShuffleIndexBlockId]
-        }.size
+        }
         assert(numDataLocs === 1, s"Expect shuffle data block updates in ${blocksUpdated}")
         assert(numIndexLocs === 1, s"Expect shuffle index block updates in ${blocksUpdated}")
       }

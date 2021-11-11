@@ -22,7 +22,7 @@ import java.sql.Driver
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 class MSSQLConnectionProviderSuite extends ConnectionProviderSuiteBase {
-  test("setAuthenticationConfigIfNeeded default parser must set authentication if not set") {
+  test("setAuthenticationConfig default parser must set authentication all the time") {
     val provider = new MSSQLConnectionProvider()
     val driver = registerDriver(provider.driverClass)
 
@@ -30,7 +30,7 @@ class MSSQLConnectionProviderSuite extends ConnectionProviderSuiteBase {
       options("jdbc:sqlserver://localhost/mssql;jaasConfigurationName=custommssql"))
   }
 
-  test("setAuthenticationConfigIfNeeded custom parser must set authentication if not set") {
+  test("setAuthenticationConfig custom parser must set authentication all the time") {
     val provider = new MSSQLConnectionProvider() {
       override val parserMethod: String = "IntentionallyNotExistingMethod"
     }

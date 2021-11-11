@@ -47,7 +47,7 @@ import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler._
-import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.shuffle.{FetchFailedException, ShuffleBlockPusher}
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -55,7 +55,7 @@ import org.apache.spark.util.io.ChunkedByteBuffer
 /**
  * Spark executor, backed by a threadpool to run tasks.
  *
- * This can be used with Mesos, YARN, and the standalone scheduler.
+ * This can be used with Mesos, YARN, kubernetes and the standalone scheduler.
  * An internal RPC interface is used for communication with the driver,
  * except in the case of Mesos fine-grained mode.
  */
@@ -72,7 +72,7 @@ private[spark] class Executor(
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
 
   private val executorShutdown = new AtomicBoolean(false)
-  ShutdownHookManager.addShutdownHook(
+  val stopHookReference = ShutdownHookManager.addShutdownHook(
     () => stop()
   )
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
@@ -312,24 +312,33 @@ private[spark] class Executor(
 
   def stop(): Unit = {
     if (!executorShutdown.getAndSet(true)) {
+      ShutdownHookManager.removeShutdownHook(stopHookReference)
       env.metricsSystem.report()
       try {
-        metricsPoller.stop()
+        if (metricsPoller != null) {
+          metricsPoller.stop()
+        }
       } catch {
         case NonFatal(e) =>
           logWarning("Unable to stop executor metrics poller", e)
       }
       try {
-        heartbeater.stop()
+        if (heartbeater != null) {
+          heartbeater.stop()
+        }
       } catch {
         case NonFatal(e) =>
           logWarning("Unable to stop heartbeater", e)
       }
-      threadPool.shutdown()
-
-      // Notify plugins that executor is shutting down so they can terminate cleanly
-      Utils.withContextClassLoader(replClassLoader) {
-        plugins.foreach(_.shutdown())
+      ShuffleBlockPusher.stop()
+      if (threadPool != null) {
+        threadPool.shutdown()
+      }
+      if (replClassLoader != null && plugins != null) {
+        // Notify plugins that executor is shutting down so they can terminate cleanly
+        Utils.withContextClassLoader(replClassLoader) {
+          plugins.foreach(_.shutdown())
+        }
       }
       if (!isLocal) {
         env.stop()
@@ -493,6 +502,7 @@ private[spark] class Executor(
             taskAttemptId = taskId,
             attemptNumber = taskDescription.attemptNumber,
             metricsSystem = env.metricsSystem,
+            cpus = taskDescription.cpus,
             resources = taskDescription.resources,
             plugins = plugins)
           threwException = false
@@ -995,7 +1005,7 @@ private[spark] class Executor(
     try {
       val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
         message, new RpcTimeout(HEARTBEAT_INTERVAL_MS.millis, EXECUTOR_HEARTBEAT_INTERVAL.key))
-      if (response.reregisterBlockManager) {
+      if (!executorShutdown.get && response.reregisterBlockManager) {
         logInfo("Told to re-register on heartbeat")
         env.blockManager.reregister()
       }

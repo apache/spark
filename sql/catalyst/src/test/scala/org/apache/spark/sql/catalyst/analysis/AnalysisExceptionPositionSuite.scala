@@ -40,12 +40,54 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
     verifyViewPosition("ALTER VIEW unknown AS SELECT 1", "unknown")
   }
 
+  test("SPARK-34057: UnresolvedTableOrView should retain sql text position") {
+    verifyTableOrViewPosition("DROP TABLE unknown", "unknown")
+    verifyTableOrViewPosition("DESCRIBE TABLE unknown", "unknown")
+    verifyTableOrPermanentViewPosition("ANALYZE TABLE unknown COMPUTE STATISTICS", "unknown")
+    verifyTableOrViewPosition("ANALYZE TABLE unknown COMPUTE STATISTICS FOR COLUMNS col", "unknown")
+    verifyTableOrViewPosition("ANALYZE TABLE unknown COMPUTE STATISTICS FOR ALL COLUMNS", "unknown")
+    verifyTableOrPermanentViewPosition("SHOW CREATE TABLE unknown", "unknown")
+    verifyTableOrViewPosition("REFRESH TABLE unknown", "unknown")
+    verifyTableOrViewPosition("SHOW COLUMNS FROM unknown", "unknown")
+    // Special case where namespace is prepended to the table name.
+    assertAnalysisError(
+      parsePlan("SHOW COLUMNS FROM unknown IN db"),
+      Seq(s"Table or view not found: db.unknown; line 1 pos 18"))
+    verifyTableOrViewPosition("ALTER TABLE unknown RENAME TO t", "unknown")
+    verifyTableOrViewPosition("ALTER VIEW unknown RENAME TO v", "unknown")
+  }
+
+  test("SPARK-34139: UnresolvedRelation should retain sql text position") {
+    verifyTableOrViewPosition("CACHE TABLE unknown", "unknown")
+    verifyTableOrViewPosition("UNCACHE TABLE unknown", "unknown")
+    verifyTableOrViewPosition("DELETE FROM unknown", "unknown")
+    verifyTableOrViewPosition("UPDATE unknown SET name='abc'", "unknown")
+    verifyTableOrViewPosition(
+      "MERGE INTO unknownTarget AS target USING TaBlE AS source " +
+        "ON target.col = source.col WHEN MATCHED THEN DELETE",
+      "unknownTarget")
+    verifyTableOrViewPosition(
+      "MERGE INTO TaBlE AS target USING unknownSource AS source " +
+        "ON target.col = source.col WHEN MATCHED THEN DELETE",
+      "unknownSource")
+    verifyTablePosition("INSERT INTO TABLE unknown SELECT 1", "unknown")
+    verifyTablePosition("INSERT OVERWRITE TABLE unknown VALUES (1, 'a')", "unknown")
+  }
+
   private def verifyTablePosition(sql: String, table: String): Unit = {
     verifyPosition(sql, table, "Table")
   }
 
   private def verifyViewPosition(sql: String, table: String): Unit = {
     verifyPosition(sql, table, "View")
+  }
+
+  private def verifyTableOrViewPosition(sql: String, table: String): Unit = {
+    verifyPosition(sql, table, "Table or view")
+  }
+
+  private def verifyTableOrPermanentViewPosition(sql: String, table: String): Unit = {
+    verifyPosition(sql, table, "Table or permanent view")
   }
 
   private def verifyPosition(sql: String, table: String, msgPrefix: String): Unit = {

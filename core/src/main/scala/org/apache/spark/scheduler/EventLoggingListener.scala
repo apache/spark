@@ -27,7 +27,7 @@ import org.apache.hadoop.conf.Configuration
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{SPARK_VERSION, SparkConf}
+import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogFileWriter
 import org.apache.spark.executor.ExecutorMetrics
@@ -130,7 +130,7 @@ private[spark] class EventLoggingListener(
   }
 
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
-    logEvent(redactEvent(event))
+    logEvent(redactEvent(sparkConf, event))
   }
 
   // Events that trigger a flush
@@ -250,6 +250,9 @@ private[spark] class EventLoggingListener(
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
     if (shouldLogStageExecutorMetrics) {
+      if (event.execId == SparkContext.DRIVER_IDENTIFIER) {
+        logEvent(event)
+      }
       event.executorUpdates.foreach { case (stageKey1, newPeaks) =>
         liveStageExecutorMetrics.foreach { case (stageKey2, metricsPerExecutor) =>
           // If the update came from the driver, stageKey1 will be the dummy key (-1, -1),
@@ -295,8 +298,15 @@ private[spark] class EventLoggingListener(
     }
     redactedProperties
   }
+}
+
+private[spark] object EventLoggingListener extends Logging {
+  val DEFAULT_LOG_DIR = "/tmp/spark-events"
+  // Dummy stage key used by driver in executor metrics updates
+  val DRIVER_STAGE_KEY = (-1, -1)
 
   private[spark] def redactEvent(
+      sparkConf: SparkConf,
       event: SparkListenerEnvironmentUpdate): SparkListenerEnvironmentUpdate = {
     // environmentDetails maps a string descriptor to a set of properties
     // Similar to:
@@ -312,11 +322,4 @@ private[spark] class EventLoggingListener(
     }
     SparkListenerEnvironmentUpdate(redactedProps)
   }
-
-}
-
-private[spark] object EventLoggingListener extends Logging {
-  val DEFAULT_LOG_DIR = "/tmp/spark-events"
-  // Dummy stage key used by driver in executor metrics updates
-  val DRIVER_STAGE_KEY = (-1, -1)
 }

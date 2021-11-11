@@ -29,11 +29,11 @@ import org.apache.commons.crypto.stream.CryptoOutputStream;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 import org.hamcrest.CoreMatchers;
+import org.hamcrest.MatcherAssert;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -81,7 +81,7 @@ public class TransportCipherSuite {
       channel.writeInbound(buffer2);
       fail("Should have raised an exception");
     } catch (Throwable expected) {
-      assertThat(expected, CoreMatchers.instanceOf(IOException.class));
+      MatcherAssert.assertThat(expected, CoreMatchers.instanceOf(IOException.class));
       assertEquals(0, buffer2.refCnt());
     }
 

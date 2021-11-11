@@ -55,7 +55,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
   protected var rpcEnv: RpcEnv = null
   protected var master: BlockManagerMaster = null
   protected lazy val securityMgr = new SecurityManager(conf)
-  protected lazy val bcastManager = new BroadcastManager(true, conf, securityMgr)
+  protected lazy val bcastManager = new BroadcastManager(true, conf)
   protected lazy val mapOutputTracker = new MapOutputTrackerMaster(conf, bcastManager, true)
   protected lazy val shuffleManager = new SortShuffleManager(conf)
 
@@ -102,7 +102,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(conf), None, blockManagerInfo, mapOutputTracker)),
+        new LiveListenerBus(conf), None, blockManagerInfo, mapOutputTracker, isDriver = true)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true)
     allStores.clear()

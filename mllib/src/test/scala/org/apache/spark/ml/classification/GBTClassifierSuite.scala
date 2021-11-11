@@ -17,12 +17,10 @@
 
 package org.apache.spark.ml.classification
 
-import com.github.fommil.netlib.BLAS
-
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.classification.LinearSVCSuite.generateSVMInput
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
@@ -170,8 +168,6 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val numFeatures = trainingDataset.select(featuresCol).first().getAs[Vector](0).size
     assert(gbtModel.numFeatures === numFeatures)
 
-    val blas = BLAS.getInstance()
-
     val validationDataset = validationData.toDF(labelCol, featuresCol)
     testTransformer[(Double, Vector)](validationDataset, gbtModel,
       "rawPrediction", "features", "probability", "prediction") {
@@ -179,7 +175,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
         assert(raw.size === 2)
         // check that raw prediction is tree predictions dot tree weights
         val treePredictions = gbtModel.trees.map(_.rootNode.predictImpl(features).prediction)
-        val prediction = blas.ddot(gbtModel.getNumTrees, treePredictions, 1,
+        val prediction = BLAS.nativeBLAS.ddot(gbtModel.getNumTrees, treePredictions, 1,
           gbtModel.treeWeights, 1)
         assert(raw ~== Vectors.dense(-prediction, prediction) relTol eps)
 

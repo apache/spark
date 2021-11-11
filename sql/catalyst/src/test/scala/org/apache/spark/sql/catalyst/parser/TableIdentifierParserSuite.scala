@@ -16,11 +16,10 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{SQLKeywordUtils, TableIdentifier}
 import org.apache.spark.sql.internal.SQLConf
 
-class TableIdentifierParserSuite extends SparkFunSuite with SQLKeywordUtils {
+class TableIdentifierParserSuite extends SQLKeywordUtils {
   import CatalystSqlParser._
 
   // Add "$elem$", "$value$" & "$key$"
@@ -315,6 +314,15 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLKeywordUtils {
         assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.`$keyword`"))
       }
       nonReservedKeywordsInAnsiMode.foreach { keyword =>
+        assert(TableIdentifier(keyword) === parseTableIdentifier(s"$keyword"))
+        assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.$keyword"))
+      }
+    }
+
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "false") {
+      reservedKeywordsInAnsiMode.foreach { keyword =>
         assert(TableIdentifier(keyword) === parseTableIdentifier(s"$keyword"))
         assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.$keyword"))
       }

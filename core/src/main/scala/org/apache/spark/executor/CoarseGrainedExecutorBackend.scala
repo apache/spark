@@ -26,6 +26,7 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
+import io.netty.util.internal.PlatformDependent
 import org.json4s.DefaultFormats
 
 import org.apache.spark._
@@ -39,7 +40,7 @@ import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceProfile._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc._
-import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
+import org.apache.spark.scheduler.{ExecutorLossMessage, ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, SignalUtils, ThreadUtils, Utils}
@@ -61,7 +62,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   private implicit val formats = DefaultFormats
 
-  private[this] val stopping = new AtomicBoolean(false)
+  private[spark] val stopping = new AtomicBoolean(false)
   var executor: Executor = null
   @volatile var driver: Option[RpcEndpointRef] = None
 
@@ -90,6 +91,14 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     logInfo("Connecting to driver: " + driverUrl)
     try {
+      if (PlatformDependent.directBufferPreferred() &&
+          PlatformDependent.maxDirectMemory() < env.conf.get(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)) {
+        throw new SparkException(s"Netty direct memory should at least be bigger than " +
+          s"'${MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key}', but got " +
+          s"${PlatformDependent.maxDirectMemory()} bytes < " +
+          s"${env.conf.get(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)}")
+      }
+
       _resources = parseOrFindResources(resourcesFileOpt)
     } catch {
       case NonFatal(e) =>
@@ -192,11 +201,17 @@ private[spark] class CoarseGrainedExecutorBackend(
       stopping.set(true)
       new Thread("CoarseGrainedExecutorBackend-stop-executor") {
         override def run(): Unit = {
-          // executor.stop() will call `SparkEnv.stop()` which waits until RpcEnv stops totally.
-          // However, if `executor.stop()` runs in some thread of RpcEnv, RpcEnv won't be able to
-          // stop until `executor.stop()` returns, which becomes a dead-lock (See SPARK-14180).
-          // Therefore, we put this line in a new thread.
-          executor.stop()
+          // `executor` can be null if there's any error in `CoarseGrainedExecutorBackend.onStart`
+          // or fail to create `Executor`.
+          if (executor == null) {
+            System.exit(1)
+          } else {
+            // executor.stop() will call `SparkEnv.stop()` which waits until RpcEnv stops totally.
+            // However, if `executor.stop()` runs in some thread of RpcEnv, RpcEnv won't be able to
+            // stop until `executor.stop()` returns, which becomes a dead-lock (See SPARK-14180).
+            // Therefore, we put this line in a new thread.
+            executor.stop()
+          }
         }
       }.start()
 
@@ -261,18 +276,25 @@ private[spark] class CoarseGrainedExecutorBackend(
                              reason: String,
                              throwable: Throwable = null,
                              notifyDriver: Boolean = true) = {
-    val message = "Executor self-exiting due to : " + reason
-    if (throwable != null) {
-      logError(message, throwable)
+    if (stopping.compareAndSet(false, true)) {
+      val message = "Executor self-exiting due to : " + reason
+      if (throwable != null) {
+        logError(message, throwable)
+      } else {
+        if (code == 0) {
+          logInfo(message)
+        } else {
+          logError(message)
+        }
+      }
+
+      if (notifyDriver && driver.nonEmpty) {
+        driver.get.send(RemoveExecutor(executorId, new ExecutorLossReason(reason)))
+      }
+      self.send(Shutdown)
     } else {
-      logError(message)
+      logInfo("Skip exiting executor since it's been already asked to exit before.")
     }
-
-    if (notifyDriver && driver.nonEmpty) {
-      driver.get.send(RemoveExecutor(executorId, new ExecutorLossReason(reason)))
-    }
-
-    System.exit(code)
   }
 
   private def decommissionSelf(): Unit = {
@@ -287,8 +309,15 @@ private[spark] class CoarseGrainedExecutorBackend(
     logInfo(msg)
     try {
       decommissioned = true
-      if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {
+      val migrationEnabled = env.conf.get(STORAGE_DECOMMISSION_ENABLED) &&
+        (env.conf.get(STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED) ||
+          env.conf.get(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED))
+      if (migrationEnabled) {
         env.blockManager.decommissionBlockManager()
+      } else if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {
+        logError(s"Storage decommissioning attempted but neither " +
+          s"${STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key} or " +
+          s"${STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key} is enabled ")
       }
       if (executor != null) {
         executor.decommission()
@@ -315,23 +344,23 @@ private[spark] class CoarseGrainedExecutorBackend(
           while (true) {
             logInfo("Checking to see if we can shutdown.")
             if (executor == null || executor.numRunningTasks == 0) {
-              if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {
+              if (migrationEnabled) {
                 logInfo("No running tasks, checking migrations")
                 val (migrationTime, allBlocksMigrated) = env.blockManager.lastMigrationInfo()
                 // We can only trust allBlocksMigrated boolean value if there were no tasks running
                 // since the start of computing it.
                 if (allBlocksMigrated && (migrationTime > lastTaskRunningTime)) {
                   logInfo("No running tasks, all blocks migrated, stopping.")
-                  exitExecutor(0, "Finished decommissioning", notifyDriver = true)
+                  exitExecutor(0, ExecutorLossMessage.decommissionFinished, notifyDriver = true)
                 } else {
                   logInfo("All blocks not yet migrated.")
                 }
               } else {
                 logInfo("No running tasks, no block migration configured, stopping.")
-                exitExecutor(0, "Finished decommissioning", notifyDriver = true)
+                exitExecutor(0, ExecutorLossMessage.decommissionFinished, notifyDriver = true)
               }
             } else {
-              logInfo("Blocked from shutdown by running ${executor.numRunningtasks} tasks")
+              logInfo(s"Blocked from shutdown by ${executor.numRunningTasks} running tasks")
               // If there is a running task it could store blocks, so make sure we wait for a
               // migration loop to complete after the last task is done.
               // Note: this is only advanced if there is a running task, if there
@@ -441,11 +470,16 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       driverConf.set(EXECUTOR_ID, arguments.executorId)
       val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
-
-      env.rpcEnv.setupEndpoint("Executor",
-        backendCreateFn(env.rpcEnv, arguments, env, cfg.resourceProfile))
+      // Set the application attemptId in the BlockStoreClient if available.
+      val appAttemptId = env.conf.get(APP_ATTEMPT_ID)
+      appAttemptId.foreach(attemptId =>
+        env.blockManager.blockStoreClient.setAppAttemptId(attemptId)
+      )
+      val backend = backendCreateFn(env.rpcEnv, arguments, env, cfg.resourceProfile)
+      env.rpcEnv.setupEndpoint("Executor", backend)
       arguments.workerUrl.foreach { url =>
-        env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
+        env.rpcEnv.setupEndpoint("WorkerWatcher",
+          new WorkerWatcher(env.rpcEnv, url, isChildProcessStopping = backend.stopping))
       }
       env.rpcEnv.awaitTermination()
     }

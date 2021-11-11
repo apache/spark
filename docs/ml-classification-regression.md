@@ -85,7 +85,7 @@ More details on parameters can be found in the [Java API documentation](api/java
 
 <div data-lang="python" markdown="1">
 
-More details on parameters can be found in the [Python API documentation](api/python/pyspark.ml.html#pyspark.ml.classification.LogisticRegression).
+More details on parameters can be found in the [Python API documentation](api/python/reference/api/pyspark.ml.classification.LogisticRegression.html).
 
 {% include_example python/ml/logistic_regression_with_elastic_net.py %}
 </div>
@@ -135,11 +135,11 @@ Continuing the earlier example:
 </div>
 
 <div data-lang="python" markdown="1">
-[`LogisticRegressionTrainingSummary`](api/python/pyspark.ml.html#pyspark.ml.classification.LogisticRegressionSummary)
+[`LogisticRegressionTrainingSummary`](api/python/reference/api/pyspark.ml.classification.LogisticRegressionSummary.html)
 provides a summary for a
-[`LogisticRegressionModel`](api/python/pyspark.ml.html#pyspark.ml.classification.LogisticRegressionModel).
+[`LogisticRegressionModel`](api/python/reference/api/pyspark.ml.classification.LogisticRegressionModel.html).
 In the case of binary classification, certain additional metrics are
-available, e.g. ROC curve. See [`BinaryLogisticRegressionTrainingSummary`](api/python/pyspark.ml.html#pyspark.ml.classification.BinaryLogisticRegressionTrainingSummary).
+available, e.g. ROC curve. See [`BinaryLogisticRegressionTrainingSummary`](api/python/reference/api/pyspark.ml.classification.BinaryLogisticRegressionTrainingSummary.html).
 
 Continuing the earlier example:
 
@@ -232,7 +232,7 @@ More details on parameters can be found in the [Java API documentation](api/java
 
 <div data-lang="python" markdown="1">
 
-More details on parameters can be found in the [Python API documentation](api/python/pyspark.ml.html#pyspark.ml.classification.DecisionTreeClassifier).
+More details on parameters can be found in the [Python API documentation](api/python/reference/api/pyspark.ml.classification.DecisionTreeClassifier.html).
 
 {% include_example python/ml/decision_tree_classification_example.py %}
 
@@ -275,7 +275,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/RandomF
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.RandomForestClassifier) for more details.
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.RandomForestClassifier.html) for more details.
 
 {% include_example python/ml/random_forest_classifier_example.py %}
 </div>
@@ -316,7 +316,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/GBTClas
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.GBTClassifier) for more details.
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.GBTClassifier.html) for more details.
 
 {% include_example python/ml/gradient_boosted_tree_classifier_example.py %}
 </div>
@@ -372,7 +372,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/Multila
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.MultilayerPerceptronClassifier) for more details.
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.MultilayerPerceptronClassifier.html) for more details.
 
 {% include_example python/ml/multilayer_perceptron_classification.py %}
 </div>
@@ -417,7 +417,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/LinearS
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.LinearSVC) for more details.
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.LinearSVC.html) for more details.
 
 {% include_example python/ml/linearsvc.py %}
 </div>
@@ -461,7 +461,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/OneVsRe
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.OneVsRest) for more details.
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.OneVsRest.html) for more details.
 
 {% include_example python/ml/one_vs_rest_example.py %}
 </div>
@@ -515,7 +515,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/NaiveBa
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.NaiveBayes) for more details.
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.NaiveBayes.html) for more details.
 
 {% include_example python/ml/naive_bayes_example.py %}
 </div>
@@ -558,7 +558,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/FMClass
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.FMClassifier) for more details.
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.FMClassifier.html) for more details.
 
 {% include_example python/ml/fm_classifier_example.py %}
 </div>
@@ -609,7 +609,7 @@ More details on parameters can be found in the [Java API documentation](api/java
 <div data-lang="python" markdown="1">
 <!--- TODO: Add python model summaries once implemented -->
 
-More details on parameters can be found in the [Python API documentation](api/python/pyspark.ml.html#pyspark.ml.regression.LinearRegression).
+More details on parameters can be found in the [Python API documentation](api/python/reference/api/pyspark.ml.regression.LinearRegression.html#pyspark.ml.regression.LinearRegression).
 
 {% include_example python/ml/linear_regression_with_elastic_net.py %}
 </div>
@@ -756,7 +756,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/Generalized
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.GeneralizedLinearRegression) for more details.
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.GeneralizedLinearRegression.html#pyspark.ml.regression.GeneralizedLinearRegression) for more details.
 
 {% include_example python/ml/generalized_linear_regression_example.py %}
 </div>
@@ -798,7 +798,7 @@ More details on parameters can be found in the [Java API documentation](api/java
 
 <div data-lang="python" markdown="1">
 
-More details on parameters can be found in the [Python API documentation](api/python/pyspark.ml.html#pyspark.ml.regression.DecisionTreeRegressor).
+More details on parameters can be found in the [Python API documentation](api/python/reference/api/pyspark.ml.regression.DecisionTreeRegressor.html#pyspark.ml.regression.DecisionTreeRegressor).
 
 {% include_example python/ml/decision_tree_regression_example.py %}
 </div>
@@ -840,7 +840,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/RandomFores
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.RandomForestRegressor) for more details.
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.RandomForestRegressor.html#pyspark.ml.regression.RandomForestRegressor) for more details.
 
 {% include_example python/ml/random_forest_regressor_example.py %}
 </div>
@@ -881,7 +881,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/GBTRegresso
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.GBTRegressor) for more details.
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.GBTRegressor.html#pyspark.ml.regression.GBTRegressor) for more details.
 
 {% include_example python/ml/gradient_boosted_tree_regressor_example.py %}
 </div>
@@ -975,7 +975,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/AFTSurvival
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.AFTSurvivalRegression) for more details.
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.AFTSurvivalRegression.html#pyspark.ml.regression.AFTSurvivalRegression) for more details.
 
 {% include_example python/ml/aft_survival_regression.py %}
 </div>
@@ -1053,7 +1053,7 @@ Refer to the [`IsotonicRegression` Java docs](api/java/org/apache/spark/ml/regre
 </div>
 <div data-lang="python" markdown="1">
 
-Refer to the [`IsotonicRegression` Python docs](api/python/pyspark.ml.html#pyspark.ml.regression.IsotonicRegression) for more details on the API.
+Refer to the [`IsotonicRegression` Python docs](api/python/reference/api/pyspark.ml.regression.IsotonicRegression.html#pyspark.ml.regression.IsotonicRegression) for more details on the API.
 
 {% include_example python/ml/isotonic_regression_example.py %}
 </div>
@@ -1096,7 +1096,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/FMRegressor
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.FMRegressor) for more details.
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.FMRegressor.html#pyspark.ml.regression.FMRegressor) for more details.
 
 {% include_example python/ml/fm_regressor_example.py %}
 </div>

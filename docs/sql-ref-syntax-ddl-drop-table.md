@@ -26,6 +26,8 @@ if the table is not `EXTERNAL` table. If the table is not present it throws an e
 
 In case of an external table, only the associated metadata information is removed from the metastore database.
 
+If the table is cached, the command uncaches the table and all its dependents.
+
 ### Syntax
 
 ```sql

@@ -88,7 +88,7 @@ SELECT * FROM testdata LIMIT key > 3
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must evaluate to a constant value, but got (spark_catalog.default.testdata.`key` > 3)
+The limit expression must evaluate to a constant value, but got (spark_catalog.default.testdata.key > 3)
 
 
 -- !query

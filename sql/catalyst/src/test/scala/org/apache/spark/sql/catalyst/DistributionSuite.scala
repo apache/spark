@@ -42,7 +42,7 @@ class DistributionSuite extends SparkFunSuite {
   }
 
   test("UnspecifiedDistribution and AllTuples") {
-    // except `BroadcastPartitioning`, all other partitioning can satisfy UnspecifiedDistribution
+    // all partitioning can satisfy UnspecifiedDistribution
     checkSatisfied(
       UnknownPartitioning(-1),
       UnspecifiedDistribution,
@@ -71,7 +71,7 @@ class DistributionSuite extends SparkFunSuite {
     checkSatisfied(
       BroadcastPartitioning(IdentityBroadcastMode),
       UnspecifiedDistribution,
-      false)
+      true)
 
     // except `BroadcastPartitioning`, all other partitioning can satisfy AllTuples if they have
     // only one partition.

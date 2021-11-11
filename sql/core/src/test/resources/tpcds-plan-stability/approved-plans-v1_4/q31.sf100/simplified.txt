@@ -24,17 +24,19 @@ WholeStageCodegen (43)
                                               WholeStageCodegen (2)
                                                 Project [ss_addr_sk,ss_ext_sales_price,d_year,d_qoy]
                                                   BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                                    Filter [ss_sold_date_sk,ss_addr_sk]
+                                                    Filter [ss_addr_sk]
                                                       ColumnarToRow
                                                         InputAdapter
-                                                          Scan parquet default.store_sales [ss_sold_date_sk,ss_addr_sk,ss_ext_sales_price]
+                                                          Scan parquet default.store_sales [ss_addr_sk,ss_ext_sales_price,ss_sold_date_sk]
+                                                            SubqueryBroadcast [d_date_sk] #1
+                                                              BroadcastExchange #4
+                                                                WholeStageCodegen (1)
+                                                                  Filter [d_qoy,d_year,d_date_sk]
+                                                                    ColumnarToRow
+                                                                      InputAdapter
+                                                                        Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]
                                                     InputAdapter
-                                                      BroadcastExchange #4
-                                                        WholeStageCodegen (1)
-                                                          Filter [d_qoy,d_year,d_date_sk]
-                                                            ColumnarToRow
-                                                              InputAdapter
-                                                                Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]
+                                                      ReusedExchange [d_date_sk,d_year,d_qoy] #4
                                     InputAdapter
                                       WholeStageCodegen (5)
                                         Sort [ca_address_sk]
@@ -63,17 +65,19 @@ WholeStageCodegen (43)
                                                     WholeStageCodegen (8)
                                                       Project [ss_addr_sk,ss_ext_sales_price,d_year,d_qoy]
                                                         BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                                          Filter [ss_sold_date_sk,ss_addr_sk]
+                                                          Filter [ss_addr_sk]
                                                             ColumnarToRow
                                                               InputAdapter
-                                                                Scan parquet default.store_sales [ss_sold_date_sk,ss_addr_sk,ss_ext_sales_price]
+                                                                Scan parquet default.store_sales [ss_addr_sk,ss_ext_sales_price,ss_sold_date_sk]
+                                                                  SubqueryBroadcast [d_date_sk] #2
+                                                                    BroadcastExchange #9
+                                                                      WholeStageCodegen (1)
+                                                                        Filter [d_qoy,d_year,d_date_sk]
+                                                                          ColumnarToRow
+                                                                            InputAdapter
+                                                                              Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]
                                                           InputAdapter
-                                                            BroadcastExchange #9
-                                                              WholeStageCodegen (7)
-                                                                Filter [d_qoy,d_year,d_date_sk]
-                                                                  ColumnarToRow
-                                                                    InputAdapter
-                                                                      Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]
+                                                            ReusedExchange [d_date_sk,d_year,d_qoy] #9
                                           InputAdapter
                                             WholeStageCodegen (11)
                                               Sort [ca_address_sk]
@@ -97,17 +101,19 @@ WholeStageCodegen (43)
                                                 WholeStageCodegen (15)
                                                   Project [ss_addr_sk,ss_ext_sales_price,d_year,d_qoy]
                                                     BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                                      Filter [ss_sold_date_sk,ss_addr_sk]
+                                                      Filter [ss_addr_sk]
                                                         ColumnarToRow
                                                           InputAdapter
-                                                            Scan parquet default.store_sales [ss_sold_date_sk,ss_addr_sk,ss_ext_sales_price]
+                                                            Scan parquet default.store_sales [ss_addr_sk,ss_ext_sales_price,ss_sold_date_sk]
+                                                              SubqueryBroadcast [d_date_sk] #3
+                                                                BroadcastExchange #13
+                                                                  WholeStageCodegen (1)
+                                                                    Filter [d_qoy,d_year,d_date_sk]
+                                                                      ColumnarToRow
+                                                                        InputAdapter
+                                                                          Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]
                                                       InputAdapter
-                                                        BroadcastExchange #13
-                                                          WholeStageCodegen (14)
-                                                            Filter [d_qoy,d_year,d_date_sk]
-                                                              ColumnarToRow
-                                                                InputAdapter
-                                                                  Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]
+                                                        ReusedExchange [d_date_sk,d_year,d_qoy] #13
                                       InputAdapter
                                         WholeStageCodegen (18)
                                           Sort [ca_address_sk]
@@ -135,10 +141,11 @@ WholeStageCodegen (43)
                                                     WholeStageCodegen (22)
                                                       Project [ws_bill_addr_sk,ws_ext_sales_price,d_year,d_qoy]
                                                         BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
-                                                          Filter [ws_sold_date_sk,ws_bill_addr_sk]
+                                                          Filter [ws_bill_addr_sk]
                                                             ColumnarToRow
                                                               InputAdapter
-                                                                Scan parquet default.web_sales [ws_sold_date_sk,ws_bill_addr_sk,ws_ext_sales_price]
+                                                                Scan parquet default.web_sales [ws_bill_addr_sk,ws_ext_sales_price,ws_sold_date_sk]
+                                                                  ReusedSubquery [d_date_sk] #3
                                                           InputAdapter
                                                             ReusedExchange [d_date_sk,d_year,d_qoy] #13
                                           InputAdapter
@@ -164,10 +171,11 @@ WholeStageCodegen (43)
                                                           WholeStageCodegen (28)
                                                             Project [ws_bill_addr_sk,ws_ext_sales_price,d_year,d_qoy]
                                                               BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
-                                                                Filter [ws_sold_date_sk,ws_bill_addr_sk]
+                                                                Filter [ws_bill_addr_sk]
                                                                   ColumnarToRow
                                                                     InputAdapter
-                                                                      Scan parquet default.web_sales [ws_sold_date_sk,ws_bill_addr_sk,ws_ext_sales_price]
+                                                                      Scan parquet default.web_sales [ws_bill_addr_sk,ws_ext_sales_price,ws_sold_date_sk]
+                                                                        ReusedSubquery [d_date_sk] #1
                                                                 InputAdapter
                                                                   ReusedExchange [d_date_sk,d_year,d_qoy] #4
                                                 InputAdapter
@@ -193,10 +201,11 @@ WholeStageCodegen (43)
                                                       WholeStageCodegen (35)
                                                         Project [ws_bill_addr_sk,ws_ext_sales_price,d_year,d_qoy]
                                                           BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
-                                                            Filter [ws_sold_date_sk,ws_bill_addr_sk]
+                                                            Filter [ws_bill_addr_sk]
                                                               ColumnarToRow
                                                                 InputAdapter
-                                                                  Scan parquet default.web_sales [ws_sold_date_sk,ws_bill_addr_sk,ws_ext_sales_price]
+                                                                  Scan parquet default.web_sales [ws_bill_addr_sk,ws_ext_sales_price,ws_sold_date_sk]
+                                                                    ReusedSubquery [d_date_sk] #2
                                                             InputAdapter
                                                               ReusedExchange [d_date_sk,d_year,d_qoy] #9
                                             InputAdapter

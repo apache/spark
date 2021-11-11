@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.aggregate.ScalaUDAF
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
@@ -49,6 +50,8 @@ import org.apache.spark.util.Utils
 @Stable
 class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends Logging {
 
+  import UDFRegistration._
+
   protected[sql] def registerPython(name: String, udf: UserDefinedPythonFunction): Unit = {
     log.debug(
       s"""
@@ -63,7 +66,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         | udfDeterministic: ${udf.udfDeterministic}
       """.stripMargin)
 
-    functionRegistry.createOrReplaceTempFunction(name, udf.builder)
+    functionRegistry.createOrReplaceTempFunction(name, udf.builder, "python_udf")
   }
 
   /**
@@ -80,8 +83,8 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   @deprecated("Aggregator[IN, BUF, OUT] should now be registered as a UDF" +
     " via the functions.udaf(agg) method.", "3.0.0")
   def register(name: String, udaf: UserDefinedAggregateFunction): UserDefinedAggregateFunction = {
-    def builder(children: Seq[Expression]) = ScalaUDAF(children, udaf)
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    def builder(children: Seq[Expression]) = ScalaUDAF(children, udaf, udafName = Some(name))
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     udaf
   }
 
@@ -107,15 +110,15 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 2.2.0
    */
   def register(name: String, udf: UserDefinedFunction): UserDefinedFunction = {
-    udf match {
+    udf.withName(name) match {
       case udaf: UserDefinedAggregator[_, _, _] =>
         def builder(children: Seq[Expression]) = udaf.scalaAggregator(children)
-        functionRegistry.createOrReplaceTempFunction(name, builder)
-        udf
-      case _ =>
-        def builder(children: Seq[Expression]) = udf.apply(children.map(Column.apply) : _*).expr
-        functionRegistry.createOrReplaceTempFunction(name, builder)
-        udf
+        functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
+        udaf
+      case other =>
+        def builder(children: Seq[Expression]) = other.apply(children.map(Column.apply) : _*).expr
+        functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
+        other
     }
   }
 
@@ -135,7 +138,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         | */
         |def register[$typeTags](name: String, func: Function$x[$types]): UserDefinedFunction = {
         |  val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-        |  val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+        |  val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
         |  val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = $inputEncoders
         |  val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
         |  val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -145,7 +148,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         |    throw new AnalysisException("Invalid number of arguments for function " + name +
         |      ". Expected: $x; Found: " + e.length)
         |  }
-        |  functionRegistry.createOrReplaceTempFunction(name, builder)
+        |  functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
         |  finalUdf
         |}""".stripMargin)
     }
@@ -171,7 +174,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         |    throw new AnalysisException("Invalid number of arguments for function " + name +
         |      ". Expected: $i; Found: " + e.length)
         |  }
-        |  functionRegistry.createOrReplaceTempFunction(name, builder)
+        |  functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
         |}""".stripMargin)
     }
     */
@@ -183,17 +186,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag](name: String, func: Function0[RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 0) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 0; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "0", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -204,17 +206,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag](name: String, func: Function1[A1, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 1) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 1; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "1", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -225,17 +226,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag](name: String, func: Function2[A1, A2, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 2) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 2; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "2", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -246,17 +246,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](name: String, func: Function3[A1, A2, A3, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 3) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 3; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "3", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -267,17 +266,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](name: String, func: Function4[A1, A2, A3, A4, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 4) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 4; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "4", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -288,17 +286,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](name: String, func: Function5[A1, A2, A3, A4, A5, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 5) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 5; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "5", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -309,17 +306,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag](name: String, func: Function6[A1, A2, A3, A4, A5, A6, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 6) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 6; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "6", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -330,17 +326,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag](name: String, func: Function7[A1, A2, A3, A4, A5, A6, A7, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 7) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 7; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "7", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -351,17 +346,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag](name: String, func: Function8[A1, A2, A3, A4, A5, A6, A7, A8, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 8) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 8; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "8", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -372,17 +366,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag](name: String, func: Function9[A1, A2, A3, A4, A5, A6, A7, A8, A9, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 9) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 9; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "9", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -393,17 +386,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag](name: String, func: Function10[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 10) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 10; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "10", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -414,17 +406,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag](name: String, func: Function11[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 11) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 11; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "11", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -435,17 +426,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag](name: String, func: Function12[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 12) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 12; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "12", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -456,17 +446,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag](name: String, func: Function13[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 13) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 13; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "13", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -477,17 +466,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag](name: String, func: Function14[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Try(ExpressionEncoder[A14]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 14) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 14; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "14", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -498,17 +486,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag](name: String, func: Function15[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Try(ExpressionEncoder[A14]()).toOption :: Try(ExpressionEncoder[A15]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 15) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 15; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "15", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -519,17 +506,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag](name: String, func: Function16[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Try(ExpressionEncoder[A14]()).toOption :: Try(ExpressionEncoder[A15]()).toOption :: Try(ExpressionEncoder[A16]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 16) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 16; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "16", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -540,17 +526,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag](name: String, func: Function17[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Try(ExpressionEncoder[A14]()).toOption :: Try(ExpressionEncoder[A15]()).toOption :: Try(ExpressionEncoder[A16]()).toOption :: Try(ExpressionEncoder[A17]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 17) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 17; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "17", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -561,17 +546,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag](name: String, func: Function18[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Try(ExpressionEncoder[A14]()).toOption :: Try(ExpressionEncoder[A15]()).toOption :: Try(ExpressionEncoder[A16]()).toOption :: Try(ExpressionEncoder[A17]()).toOption :: Try(ExpressionEncoder[A18]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 18) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 18; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "18", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -582,17 +566,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag](name: String, func: Function19[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Try(ExpressionEncoder[A14]()).toOption :: Try(ExpressionEncoder[A15]()).toOption :: Try(ExpressionEncoder[A16]()).toOption :: Try(ExpressionEncoder[A17]()).toOption :: Try(ExpressionEncoder[A18]()).toOption :: Try(ExpressionEncoder[A19]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 19) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 19; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "19", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -603,17 +586,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag](name: String, func: Function20[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Try(ExpressionEncoder[A14]()).toOption :: Try(ExpressionEncoder[A15]()).toOption :: Try(ExpressionEncoder[A16]()).toOption :: Try(ExpressionEncoder[A17]()).toOption :: Try(ExpressionEncoder[A18]()).toOption :: Try(ExpressionEncoder[A19]()).toOption :: Try(ExpressionEncoder[A20]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 20) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 20; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "20", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -624,17 +606,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag, A21: TypeTag](name: String, func: Function21[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, A21, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Try(ExpressionEncoder[A14]()).toOption :: Try(ExpressionEncoder[A15]()).toOption :: Try(ExpressionEncoder[A16]()).toOption :: Try(ExpressionEncoder[A17]()).toOption :: Try(ExpressionEncoder[A18]()).toOption :: Try(ExpressionEncoder[A19]()).toOption :: Try(ExpressionEncoder[A20]()).toOption :: Try(ExpressionEncoder[A21]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 21) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 21; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "21", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -645,17 +626,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag, A21: TypeTag, A22: TypeTag](name: String, func: Function22[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, A21, A22, RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
-    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
+    val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(outputSchema).getOrElse(ScalaReflection.schemaFor[RT])
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Try(ExpressionEncoder[A14]()).toOption :: Try(ExpressionEncoder[A15]()).toOption :: Try(ExpressionEncoder[A16]()).toOption :: Try(ExpressionEncoder[A17]()).toOption :: Try(ExpressionEncoder[A18]()).toOption :: Try(ExpressionEncoder[A19]()).toOption :: Try(ExpressionEncoder[A20]()).toOption :: Try(ExpressionEncoder[A21]()).toOption :: Try(ExpressionEncoder[A22]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
     def builder(e: Seq[Expression]) = if (e.length == 22) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 22; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "22", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
   }
 
@@ -679,9 +659,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         .map(_.asInstanceOf[ParameterizedType])
         .filter(e => e.getRawType.isInstanceOf[Class[_]] && e.getRawType.asInstanceOf[Class[_]].getCanonicalName.startsWith("org.apache.spark.sql.api.java.UDF"))
       if (udfInterfaces.length == 0) {
-        throw new AnalysisException(s"UDF class $className doesn't implement any UDF interface")
+        throw QueryCompilationErrors.udfClassDoesNotImplementAnyUDFInterfaceError(className)
       } else if (udfInterfaces.length > 1) {
-        throw new AnalysisException(s"It is invalid to implement multiple UDF interfaces, UDF class $className")
+        throw QueryCompilationErrors.udfClassNotAllowedToImplementMultiUDFInterfacesError(className)
       } else {
         try {
           val udf = clazz.getConstructor().newInstance()
@@ -716,15 +696,15 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
             case 22 => register(name, udf.asInstanceOf[UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
             case 23 => register(name, udf.asInstanceOf[UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
             case n =>
-              throw new AnalysisException(s"UDF class with $n type arguments is not supported.")
+              throw QueryCompilationErrors.udfClassWithTooManyTypeArgumentsError(n)
           }
         } catch {
           case e @ (_: InstantiationException | _: IllegalArgumentException) =>
-            throw new AnalysisException(s"Can not instantiate class $className, please make sure it has public non argument constructor")
+            throw QueryCompilationErrors.classWithoutPublicNonArgumentConstructorError(className)
         }
       }
     } catch {
-      case e: ClassNotFoundException => throw new AnalysisException(s"Can not load class $className, please make sure it is on the classpath")
+      case e: ClassNotFoundException => throw QueryCompilationErrors.cannotLoadClassNotOnClassPathError(className)
     }
 
   }
@@ -739,14 +719,14 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     try {
       val clazz = Utils.classForName[AnyRef](className)
       if (!classOf[UserDefinedAggregateFunction].isAssignableFrom(clazz)) {
-        throw new AnalysisException(s"class $className doesn't implement interface UserDefinedAggregateFunction")
+        throw QueryCompilationErrors.classDoesNotImplementUserDefinedAggregateFunctionError(className)
       }
       val udaf = clazz.getConstructor().newInstance().asInstanceOf[UserDefinedAggregateFunction]
       register(name, udaf)
     } catch {
-      case e: ClassNotFoundException => throw new AnalysisException(s"Can not load class ${className}, please make sure it is on the classpath")
+      case e: ClassNotFoundException => throw QueryCompilationErrors.cannotLoadClassNotOnClassPathError(className)
       case e @ (_: InstantiationException | _: IllegalArgumentException) =>
-        throw new AnalysisException(s"Can not instantiate class ${className}, please make sure it has public non argument constructor")
+        throw QueryCompilationErrors.classWithoutPublicNonArgumentConstructorError(className)
     }
   }
 
@@ -760,10 +740,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 0) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 0; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "0", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -776,10 +755,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 1) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 1; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "1", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -792,10 +770,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 2) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 2; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "2", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -808,10 +785,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 3) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 3; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "3", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -824,10 +800,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 4) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 4; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "4", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -840,10 +815,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 5) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 5; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "5", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -856,10 +830,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 6) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 6; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "6", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -872,10 +845,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 7) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 7; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "7", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -888,10 +860,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 8) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 8; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "8", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -904,10 +875,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 9) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 9; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "9", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -920,10 +890,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 10) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 10; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "10", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -936,10 +905,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 11) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 11; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "11", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -952,10 +920,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 12) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 12; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "12", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -968,10 +935,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 13) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 13; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "13", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -984,10 +950,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 14) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 14; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "14", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -1000,10 +965,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 15) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 15; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "15", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -1016,10 +980,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 16) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 16; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "16", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -1032,10 +995,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 17) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 17; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "17", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -1048,10 +1010,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 18) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 18; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "18", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -1064,10 +1025,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 19) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 19; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "19", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -1080,10 +1040,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 20) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 20; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "20", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -1096,10 +1055,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 21) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 21; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "21", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   /**
@@ -1112,12 +1070,25 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 22) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw new AnalysisException("Invalid number of arguments for function " + name +
-        ". Expected: 22; Found: " + e.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "22", e.length)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
 
   // scalastyle:on line.size.limit
 
+}
+
+private[sql] object UDFRegistration {
+  /**
+   * Obtaining the schema of output encoder for `ScalaUDF`.
+   *
+   * As the serialization in `ScalaUDF` is for individual column, not the whole row,
+   * we just take the data type of vanilla object serializer, not `serializer` which
+   * is transformed somehow for top-level row.
+   */
+  def outputSchema(outputEncoder: ExpressionEncoder[_]): ScalaReflection.Schema = {
+    ScalaReflection.Schema(outputEncoder.objSerializer.dataType,
+      outputEncoder.objSerializer.nullable)
+  }
 }

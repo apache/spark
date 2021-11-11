@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark._
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
@@ -38,7 +39,9 @@ private[spark] class ExecutorMonitor(
     conf: SparkConf,
     client: ExecutorAllocationClient,
     listenerBus: LiveListenerBus,
-    clock: Clock) extends SparkListener with CleanerListener with Logging {
+    clock: Clock,
+    metrics: ExecutorAllocationManagerSource = null)
+  extends SparkListener with CleanerListener with Logging {
 
   private val idleTimeoutNs = TimeUnit.SECONDS.toNanos(
     conf.get(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT))
@@ -183,7 +186,7 @@ private[spark] class ExecutorMonitor(
   def pendingRemovalCount: Int = executors.asScala.count { case (_, exec) => exec.pendingRemoval }
 
   def pendingRemovalCountPerResourceProfileId(id: Int): Int = {
-    executors.asScala.filter { case (k, v) => v.resourceProfileId == id && v.pendingRemoval }.size
+    executors.asScala.count { case (k, v) => v.resourceProfileId == id && v.pendingRemoval }
   }
 
   def decommissioningCount: Int = executors.asScala.count { case (_, exec) =>
@@ -191,9 +194,9 @@ private[spark] class ExecutorMonitor(
   }
 
   def decommissioningPerResourceProfileId(id: Int): Int = {
-    executors.asScala.filter { case (k, v) =>
+    executors.asScala.count { case (k, v) =>
       v.resourceProfileId == id && v.decommissioning
-    }.size
+    }
   }
 
   override def onJobStart(event: SparkListenerJobStart): Unit = {
@@ -227,7 +230,7 @@ private[spark] class ExecutorMonitor(
     }
 
     if (updateExecutors) {
-      val activeShuffleIds = shuffleStages.map(_._2).toSeq
+      val activeShuffleIds = shuffleStages.map(_._2)
       var needTimeoutUpdate = false
       val activatedExecs = new ExecutorIdCollector()
       executors.asScala.foreach { case (id, exec) =>
@@ -251,7 +254,7 @@ private[spark] class ExecutorMonitor(
     }
 
     stageToShuffleID ++= shuffleStages
-    jobToStageIDs(event.jobId) = shuffleStages.map(_._1).toSeq
+    jobToStageIDs(event.jobId) = shuffleStages.map(_._1)
   }
 
   override def onJobEnd(event: SparkListenerJobEnd): Unit = {
@@ -352,6 +355,22 @@ private[spark] class ExecutorMonitor(
     val removed = executors.remove(event.executorId)
     if (removed != null) {
       decrementExecResourceProfileCount(removed.resourceProfileId)
+      if (removed.decommissioning) {
+        if (event.reason == ExecutorLossMessage.decommissionFinished) {
+          metrics.gracefullyDecommissioned.inc()
+        } else {
+          metrics.decommissionUnfinished.inc()
+        }
+      } else if (removed.pendingRemoval) {
+        metrics.driverKilled.inc()
+      } else {
+        metrics.exitedUnexpectedly.inc()
+      }
+      logInfo(s"Executor ${event.executorId} is removed. Remove reason statistics: (" +
+        s"gracefully decommissioned: ${metrics.gracefullyDecommissioned.getCount()}, " +
+        s"decommision unfinished: ${metrics.decommissionUnfinished.getCount()}, " +
+        s"driver killed: ${metrics.driverKilled.getCount()}, " +
+        s"unexpectedly exited: ${metrics.exitedUnexpectedly.getCount()}).")
       if (!removed.pendingRemoval || !removed.decommissioning) {
         nextTimeout.set(Long.MinValue)
       }
@@ -442,7 +461,7 @@ private[spark] class ExecutorMonitor(
 
   // Visible for testing.
   private[dynalloc] def isExecutorIdle(id: String): Boolean = {
-    Option(executors.get(id)).map(_.isIdle).getOrElse(throw new NoSuchElementException(id))
+    Option(executors.get(id)).map(_.isIdle).getOrElse(throw SparkCoreErrors.noExecutorIdleError(id))
   }
 
   // Visible for testing

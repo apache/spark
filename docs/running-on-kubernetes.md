@@ -8,9 +8,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -25,8 +25,10 @@ Kubernetes scheduler that has been added to Spark.
 
 # Security
 
-Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
-Please see [Spark Security](security.html) and the specific advice below before running Spark.
+Security features like authentication are not enabled by default. When deploying a cluster that is open to the internet
+or an untrusted network, it's important to secure access to the cluster to prevent unauthorized applications
+from running on the cluster.
+Please see [Spark Security](security.html) and the specific security sections in this doc before running Spark.
 
 ## User Identity
 
@@ -51,6 +53,7 @@ you may set up a test cluster on your local machine using
   * Be aware that the default minikube configuration is not enough for running Spark applications.
   We recommend 3 CPUs and 4g of memory to be able to start a simple Spark application with a single
   executor.
+  * Check [kubernetes-client library](https://github.com/fabric8io/kubernetes-client)'s version of your Spark environment, and its compatibility with your Kubernetes cluster's version.
 * You must have appropriate permissions to list, create, edit and delete
 [pods](https://kubernetes.io/docs/user-guide/pods/) in your cluster. You can verify that you can list these resources
 by running `kubectl auth can-i <list|create|edit|delete> pods`.
@@ -193,6 +196,9 @@ for any reason, these pods will remain in the cluster. The executor processes sh
 driver, so the executor pods should not consume compute resources (cpu and memory) in the cluster after your application
 exits.
 
+You may use `spark.kubernetes.executor.podNamePrefix` to fully control the executor pod names.
+When this property is set, it's highly recommended to make it unique across all jobs in the same namespace.
+
 ### Authentication Parameters
 
 Use the exact prefix `spark.kubernetes.authenticate` for Kubernetes authentication parameters in client mode.
@@ -209,7 +215,7 @@ A typical example of this using S3 is via passing the following options:
 
 ```
 ...
---packages com.amazonaws:aws-java-sdk:1.7.4,org.apache.hadoop:hadoop-aws:2.7.6
+--packages org.apache.hadoop:hadoop-aws:3.2.2
 --conf spark.kubernetes.file.upload.path=s3a://<s3-bucket>/path
 --conf spark.hadoop.fs.s3a.access.key=...
 --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
@@ -253,7 +259,14 @@ To use a secret through an environment variable use the following options to the
 Kubernetes allows defining pods from [template files](https://kubernetes.io/docs/concepts/workloads/pods/pod-overview/#pod-templates).
 Spark users can similarly use template files to define the driver or executor pod configurations that Spark configurations do not support.
 To do so, specify the spark properties `spark.kubernetes.driver.podTemplateFile` and `spark.kubernetes.executor.podTemplateFile`
-to point to local files accessible to the `spark-submit` process. To allow the driver pod access the executor pod template
+to point to files accessible to the `spark-submit` process.
+
+```
+--conf spark.kubernetes.driver.podTemplateFile=s3a://bucket/driver.yml
+--conf spark.kubernetes.executor.podTemplateFile=s3a://bucket/executor.yml
+```
+
+To allow the driver pod access the executor pod template
 file, the file will be automatically mounted onto a volume in the driver pod when it's created.
 Spark does not do any validation after unmarshalling these template files and relies on the Kubernetes API server for validation.
 
@@ -409,7 +422,7 @@ Your Kubernetes config file typically lives under `.kube/config` in your home di
 
 ### Contexts
 
-Kubernetes configuration files can contain multiple contexts that allow for switching between different clusters and/or user identities.  By default Spark on Kubernetes will use your current context (which can be checked by running `kubectl config current-context`) when doing the initial auto-configuration of the Kubernetes client.  
+Kubernetes configuration files can contain multiple contexts that allow for switching between different clusters and/or user identities.  By default Spark on Kubernetes will use your current context (which can be checked by running `kubectl config current-context`) when doing the initial auto-configuration of the Kubernetes client.
 
 In order to use an alternative context users can specify the desired context via the Spark configuration property `spark.kubernetes.context` e.g. `spark.kubernetes.context=minikube`.
 
@@ -874,6 +887,17 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.executor.podNamePrefix</code></td>
+  <td>(none)</td>
+  <td>
+    Prefix to use in front of the executor pod names. It must conform the rules defined by the Kubernetes
+    <a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names">DNS Label Names</a>.
+    The prefix will be used to generate executor pod names in the form of <code>$podNamePrefix-exec-$id</code>, where the `id` is
+    a positive int value, so the length of the `podNamePrefix` needs to be less than or equal to 47(= 63 - 10 - 6).
+  </td>
+  <td>2.3.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.lostCheck.maxAttempts</code></td>
   <td><code>10</code></td>
   <td>
@@ -949,6 +973,28 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.node.selector.[labelKey]</code></td>
+  <td>(none)</td>
+  <td>
+    Adds to the driver node selector of the driver pod, with key <code>labelKey</code> and the value as the
+    configuration's value. For example, setting <code>spark.kubernetes.driver.node.selector.identifier</code> to <code>myIdentifier</code>
+    will result in the driver pod having a node selector with key <code>identifier</code> and value
+     <code>myIdentifier</code>. Multiple driver node selector keys can be added by setting multiple configurations with this prefix.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.node.selector.[labelKey]</code></td>
+  <td>(none)</td>
+  <td>
+    Adds to the executor node selector of the executor pods, with key <code>labelKey</code> and the value as the
+    configuration's value. For example, setting <code>spark.kubernetes.executor.node.selector.identifier</code> to <code>myIdentifier</code>
+    will result in the executors having a node selector with key <code>identifier</code> and value
+     <code>myIdentifier</code>. Multiple executor node selector keys can be added by setting multiple configurations with this prefix.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.driverEnv.[EnvironmentVariableName]</code></td>
   <td>(none)</td>
   <td>
@@ -992,7 +1038,7 @@ See the [configuration page](configuration.html) for information on Spark config
    <code>spark.kubernetes.executor.secrets.ENV_VAR=spark-secret:key</code>.
   </td>
   <td>2.4.0</td>
-</tr>   
+</tr>
 <tr>
   <td><code>spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.path</code></td>
   <td>(none)</td>
@@ -1224,7 +1270,7 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
   <td>3.0.0</td>
 </tr>
-<tr>  
+<tr>
   <td><code>spark.kubernetes.appKillPodDeletionGracePeriod</code></td>
   <td>(none)</td>
   <td>
@@ -1241,6 +1287,40 @@ See the [configuration page](configuration.html) for information on Spark config
     File should specified as <code>file://path/to/file </code> or absolute path.
   </td>
   <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.decommmissionLabel<code></td>
+  <td>(none)</td>
+  <td>
+    Label to be applied to pods which are exiting or being decommissioned. Intended for use
+    with pod disruption budgets, deletion costs, and similar.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.decommmissionLabelValue<code></td>
+  <td>(none)</td>
+  <td>
+    Value to be applied with the label when
+    <code>spark.kubernetes.executor.decommmissionLabel</code> is enabled.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.scheduler.name<code></td>
+  <td>(none)</td>
+  <td>
+	Specify the scheduler name for each executor pod.
+  </td>
+  <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.scheduler.name<code></td>
+  <td>(none)</td>
+  <td>
+    Specify the scheduler name for driver pod.
+  </td>
+  <td>3.3.0</td>
 </tr>
 </table>
 

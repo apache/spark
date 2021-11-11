@@ -35,7 +35,7 @@ import org.apache.spark.util.collection.OpenHashMap
  * information on ANOVA test.
  */
 @Since("3.1.0")
-object ANOVATest {
+private[ml] object ANOVATest {
 
   /**
    * @param dataset  DataFrame of categorical labels and continuous features.

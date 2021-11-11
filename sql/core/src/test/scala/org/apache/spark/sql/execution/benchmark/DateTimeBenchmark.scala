@@ -32,7 +32,8 @@ import org.apache.spark.sql.internal.SQLConf
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark catalyst test jar> <sql core test jar>
  *   2. build/sbt "sql/test:runMain <this class>"
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
@@ -60,7 +61,8 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     withDefaultTimeZone(LA) {
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> LA.getId) {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> LA.getId,
+        SQLConf.LEGACY_INTERVAL_ENABLED.key -> true.toString) {
         val N = 10000000
         runBenchmark("datetime +/- interval") {
           val benchmark = new Benchmark("datetime +/- interval", N, output = output)

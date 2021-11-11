@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArra
 import org.apache.spark.sql.types._
 
 /**
- * User-defined type for [[Vector]] in [[mllib-local]] which allows easy interaction with SQL
+ * User-defined type for [[Vector]] in mllib-local which allows easy interaction with SQL
  * via [[org.apache.spark.sql.Dataset]].
  */
 private[spark] class VectorUDT extends UserDefinedType[Vector] {

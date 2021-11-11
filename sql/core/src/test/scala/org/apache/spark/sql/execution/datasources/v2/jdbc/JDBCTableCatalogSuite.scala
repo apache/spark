@@ -34,6 +34,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   val tempDir = Utils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
+  val defaultMetadata = new MetadataBuilder().putLong("scale", 0).build()
   var conn: java.sql.Connection = null
 
   override def sparkConf: SparkConf = super.sparkConf
@@ -67,7 +68,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   }
 
   test("show tables") {
-    checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people")))
+    checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people", false)))
     // Check not existing namespace
     checkAnswer(sql("SHOW TABLES IN h2.bad_test"), Seq())
   }
@@ -76,9 +77,10 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     withConnection { conn =>
       conn.prepareStatement("""CREATE TABLE "test"."to_drop" (id INTEGER)""").executeUpdate()
     }
-    checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "to_drop"), Row("test", "people")))
+    checkAnswer(sql("SHOW TABLES IN h2.test"),
+      Seq(Row("test", "to_drop", false), Row("test", "people", false)))
     sql("DROP TABLE h2.test.to_drop")
-    checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people")))
+    checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people", false)))
     Seq(
       "h2.test.not_existing_table" ->
         "Table or view not found: h2.test.not_existing_table",
@@ -99,11 +101,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }
       checkAnswer(
         sql("SHOW TABLES IN h2.test"),
-        Seq(Row("test", "src_table"), Row("test", "people")))
+        Seq(Row("test", "src_table", false), Row("test", "people", false)))
       sql("ALTER TABLE h2.test.src_table RENAME TO test.dst_table")
       checkAnswer(
         sql("SHOW TABLES IN h2.test"),
-        Seq(Row("test", "dst_table"), Row("test", "people")))
+        Seq(Row("test", "dst_table", false), Row("test", "people", false)))
     }
     // Rename not existing table or namespace
     val exp1 = intercept[AnalysisException] {
@@ -138,8 +140,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("load a table") {
     val t = spark.table("h2.test.people")
     val expectedSchema = new StructType()
-      .add("NAME", StringType)
-      .add("ID", IntegerType)
+      .add("NAME", StringType, true, defaultMetadata)
+      .add("ID", IntegerType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
       val msg = intercept[AnalysisException] {
@@ -154,7 +156,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql("CREATE TABLE h2.test.new_table(i INT, j STRING)")
       checkAnswer(
         sql("SHOW TABLES IN h2.test"),
-        Seq(Row("test", "people"), Row("test", "new_table")))
+        Seq(Row("test", "people", false), Row("test", "new_table", false)))
     }
     withTable("h2.test.new_table") {
       sql("CREATE TABLE h2.test.new_table(i INT, j STRING)")
@@ -177,13 +179,13 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql(s"ALTER TABLE $tableName ADD COLUMNS (C1 INTEGER, C2 STRING)")
       var t = spark.table(tableName)
       var expectedSchema = new StructType()
-        .add("ID", IntegerType)
-        .add("C1", IntegerType)
-        .add("C2", StringType)
+        .add("ID", IntegerType, true, defaultMetadata)
+        .add("C1", IntegerType, true, defaultMetadata)
+        .add("C2", StringType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
       sql(s"ALTER TABLE $tableName ADD COLUMNS (c3 DOUBLE)")
       t = spark.table(tableName)
-      expectedSchema = expectedSchema.add("c3", DoubleType)
+      expectedSchema = expectedSchema.add("c3", DoubleType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
       // Add already existing column
       val msg = intercept[AnalysisException] {
@@ -207,8 +209,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql(s"ALTER TABLE $tableName RENAME COLUMN id TO C")
       val t = spark.table(tableName)
       val expectedSchema = new StructType()
-        .add("C", IntegerType)
-        .add("C0", IntegerType)
+        .add("C", IntegerType, true, defaultMetadata)
+        .add("C0", IntegerType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
       // Rename to already existing column
       val msg = intercept[AnalysisException] {
@@ -232,13 +234,13 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql(s"ALTER TABLE $tableName DROP COLUMN C1")
       sql(s"ALTER TABLE $tableName DROP COLUMN c3")
       val t = spark.table(tableName)
-      val expectedSchema = new StructType().add("C2", IntegerType)
+      val expectedSchema = new StructType().add("C2", IntegerType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
       // Drop not existing column
       val msg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tableName DROP COLUMN bad_column")
       }.getMessage
-      assert(msg.contains("Cannot delete missing field bad_column in test.alt_table schema"))
+      assert(msg.contains("Missing field bad_column in table h2.test.alt_table"))
     }
     // Drop a column to not existing table and namespace
     Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
@@ -256,13 +258,15 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql(s"ALTER TABLE $tableName ALTER COLUMN id TYPE DOUBLE")
       sql(s"ALTER TABLE $tableName ALTER COLUMN deptno TYPE DOUBLE")
       val t = spark.table(tableName)
-      val expectedSchema = new StructType().add("ID", DoubleType).add("deptno", DoubleType)
+      val expectedSchema = new StructType()
+        .add("ID", DoubleType, true, defaultMetadata)
+        .add("deptno", DoubleType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
       // Update not existing column
       val msg1 = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN bad_column TYPE DOUBLE")
       }.getMessage
-      assert(msg1.contains("Cannot update missing field bad_column in test.alt_table schema"))
+      assert(msg1.contains("Missing field bad_column in table h2.test.alt_table"))
       // Update column to wrong type
       val msg2 = intercept[ParseException] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN id TYPE bad_type")
@@ -286,13 +290,14 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql(s"ALTER TABLE $tableName ALTER COLUMN deptno DROP NOT NULL")
       val t = spark.table(tableName)
       val expectedSchema = new StructType()
-        .add("ID", IntegerType, nullable = true).add("deptno", IntegerType, nullable = true)
+        .add("ID", IntegerType, true, defaultMetadata)
+        .add("deptno", IntegerType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
       // Update nullability of not existing column
       val msg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN bad_column DROP NOT NULL")
       }.getMessage
-      assert(msg.contains("Cannot update missing field bad_column in test.alt_table"))
+      assert(msg.contains("Missing field bad_column in table h2.test.alt_table"))
     }
     // Update column nullability in not existing table and namespace
     Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
@@ -316,7 +321,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val msg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN bad_column COMMENT 'test'")
       }.getMessage
-      assert(msg.contains("Cannot update missing field bad_column in test.alt_table"))
+      assert(msg.contains("Missing field bad_column in table h2.test.alt_table"))
     }
     // Update column comments in not existing table and namespace
     Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
@@ -332,19 +337,23 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName (c1 INTEGER NOT NULL, c2 INTEGER)")
       var t = spark.table(tableName)
-      var expectedSchema = new StructType().add("c1", IntegerType).add("c2", IntegerType)
+      var expectedSchema = new StructType()
+        .add("c1", IntegerType, true, defaultMetadata)
+        .add("c2", IntegerType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         val msg = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName RENAME COLUMN C2 TO c3")
         }.getMessage
-        assert(msg.contains("Cannot rename missing field C2 in test.alt_table schema"))
+        assert(msg.contains("Missing field C2 in table h2.test.alt_table"))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         sql(s"ALTER TABLE $tableName RENAME COLUMN C2 TO c3")
-        expectedSchema = new StructType().add("c1", IntegerType).add("c3", IntegerType)
+        expectedSchema = new StructType()
+          .add("c1", IntegerType, true, defaultMetadata)
+          .add("c3", IntegerType, true, defaultMetadata)
         t = spark.table(tableName)
         assert(t.schema === expectedSchema)
       }
@@ -353,12 +362,12 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         val msg = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName DROP COLUMN C3")
         }.getMessage
-        assert(msg.contains("Cannot delete missing field C3 in test.alt_table schema"))
+        assert(msg.contains("Missing field C3 in table h2.test.alt_table"))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         sql(s"ALTER TABLE $tableName DROP COLUMN C3")
-        expectedSchema = new StructType().add("c1", IntegerType)
+        expectedSchema = new StructType().add("c1", IntegerType, true, defaultMetadata)
         t = spark.table(tableName)
         assert(t.schema === expectedSchema)
       }
@@ -367,12 +376,12 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         val msg = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName ALTER COLUMN C1 TYPE DOUBLE")
         }.getMessage
-        assert(msg.contains("Cannot update missing field C1 in test.alt_table schema"))
+        assert(msg.contains("Missing field C1 in table h2.test.alt_table"))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         sql(s"ALTER TABLE $tableName ALTER COLUMN C1 TYPE DOUBLE")
-        expectedSchema = new StructType().add("c1", DoubleType)
+        expectedSchema = new StructType().add("c1", DoubleType, true, defaultMetadata)
         t = spark.table(tableName)
         assert(t.schema === expectedSchema)
       }
@@ -381,12 +390,12 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         val msg = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName ALTER COLUMN C1 DROP NOT NULL")
         }.getMessage
-        assert(msg.contains("Cannot update missing field C1 in test.alt_table schema"))
+        assert(msg.contains("Missing field C1 in table h2.test.alt_table"))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         sql(s"ALTER TABLE $tableName ALTER COLUMN C1 DROP NOT NULL")
-        expectedSchema = new StructType().add("c1", DoubleType, nullable = true)
+        expectedSchema = new StructType().add("c1", DoubleType, true, defaultMetadata)
         t = spark.table(tableName)
         assert(t.schema === expectedSchema)
       }

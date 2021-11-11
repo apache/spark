@@ -77,6 +77,8 @@ abstract class EventLogFileReadersSuite extends SparkFunSuite with LocalSparkCon
         }
       } else {
         fileSystem.mkdirs(path)
+        fileSystem.create(getAppStatusFilePath(path, "app", None, true))
+        fileSystem.create(getEventLogFilePath(path, "app", None, 1, None))
       }
 
       val reader = EventLogFileReader(fileSystem, path)
@@ -216,7 +218,7 @@ class SingleFileEventLogFileReaderSuite extends EventLogFileReadersSuite {
     Utils.tryWithResource(new ZipInputStream(
         new ByteArrayInputStream(underlyingStream.toByteArray))) { is =>
 
-      var entry = is.getNextEntry
+      val entry = is.getNextEntry
       assert(entry != null)
       val actual = new String(ByteStreams.toByteArray(is), StandardCharsets.UTF_8)
       val expected = Files.toString(new File(logPath.toString), StandardCharsets.UTF_8)

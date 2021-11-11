@@ -1,6 +1,6 @@
 TakeOrderedAndProject [s_store_name,s_store_id,sun_sales,mon_sales,tue_sales,wed_sales,thu_sales,fri_sales,sat_sales]
   WholeStageCodegen (4)
-    HashAggregate [s_store_name,s_store_id,sum,sum,sum,sum,sum,sum,sum] [sum(UnscaledValue(CASE WHEN (d_day_name = Sunday) THEN ss_sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Monday) THEN ss_sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Tuesday) THEN ss_sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Wednesday) THEN ss_sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Thursday) THEN ss_sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Friday) THEN ss_sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Saturday) THEN ss_sales_price ELSE null END)),sun_sales,mon_sales,tue_sales,wed_sales,thu_sales,fri_sales,sat_sales,sum,sum,sum,sum,sum,sum,sum]
+    HashAggregate [s_store_name,s_store_id,sum,sum,sum,sum,sum,sum,sum] [sum(UnscaledValue(CASE WHEN (d_day_name = Sunday   ) THEN ss_sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Monday   ) THEN ss_sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Tuesday  ) THEN ss_sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Wednesday) THEN ss_sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Thursday ) THEN ss_sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Friday   ) THEN ss_sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Saturday ) THEN ss_sales_price ELSE null END)),sun_sales,mon_sales,tue_sales,wed_sales,thu_sales,fri_sales,sat_sales,sum,sum,sum,sum,sum,sum,sum]
       InputAdapter
         Exchange [s_store_name,s_store_id] #1
           WholeStageCodegen (3)
@@ -17,10 +17,10 @@ TakeOrderedAndProject [s_store_name,s_store_id,sun_sales,mon_sales,tue_sales,wed
                       InputAdapter
                         BroadcastExchange #2
                           WholeStageCodegen (1)
-                            Filter [ss_sold_date_sk,ss_store_sk]
+                            Filter [ss_store_sk]
                               ColumnarToRow
                                 InputAdapter
-                                  Scan parquet default.store_sales [ss_sold_date_sk,ss_store_sk,ss_sales_price]
+                                  Scan parquet default.store_sales [ss_store_sk,ss_sales_price,ss_sold_date_sk]
                   InputAdapter
                     BroadcastExchange #3
                       WholeStageCodegen (2)

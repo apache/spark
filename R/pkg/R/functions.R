@@ -41,16 +41,21 @@ NULL
 #' @param x Column to compute on. In \code{window}, it must be a time Column of
 #'          \code{TimestampType}. This is not used with \code{current_date} and
 #'          \code{current_timestamp}
+#' @param y Column to compute on.
+#' @param z Column to compute on.
 #' @param format The format for the given dates or timestamps in Column \code{x}. See the
 #'               format used in the following methods:
 #'               \itemize{
 #'               \item \code{to_date} and \code{to_timestamp}: it is the string to use to parse
 #'                    Column \code{x} to DateType or TimestampType.
 #'               \item \code{trunc}: it is the string to use to specify the truncation method.
-#'                    For example, "year", "yyyy", "yy" for truncate by year, or "month", "mon",
-#'                    "mm" for truncate by month.
+#'                    'year', 'yyyy', 'yy' to truncate by year,
+#'                    or 'month', 'mon', 'mm' to truncate by month
+#'                    Other options are: 'week', 'quarter'
 #'               \item \code{date_trunc}: it is similar with \code{trunc}'s but additionally
-#'                    supports "day", "dd", "second", "minute", "hour", "week" and "quarter".
+#'                    supports
+#'                    'day', 'dd' to truncate by day,
+#'                    'microsecond', 'millisecond', 'second', 'minute' and 'hour'
 #'               }
 #' @param ... additional argument(s).
 #' @name column_datetime_functions
@@ -247,7 +252,7 @@ NULL
 #'            used to transform the data.  The first argument is the key, the second argument
 #'            is the value.
 #'          }
-#' @param zero a \code{Column} used as the initial value in \code{array_aggregate}
+#' @param initialValue a \code{Column} used as the initial value in \code{array_aggregate}
 #' @param merge a \code{function} a binary function \code{(Column, Column) -> Column}
 #'          used in \code{array_aggregate}to merge values (the second argument)
 #'          into accumulator (the first argument).
@@ -258,11 +263,19 @@ NULL
 #'          \item \code{to_json}, \code{from_json} and \code{schema_of_json}: this contains
 #'              additional named properties to control how it is converted and accepts the
 #'              same options as the JSON data source.
+#'              You can find the JSON-specific options for reading/writing JSON files in
+#'              \url{
+#'              https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
+#'              Data Source Option} in the version you use.
 #'          \item \code{to_json}: it supports the "pretty" option which enables pretty
 #'              JSON generation.
 #'          \item \code{to_csv}, \code{from_csv} and \code{schema_of_csv}: this contains
 #'              additional named properties to control how it is converted and accepts the
 #'              same options as the CSV data source.
+#'              You can find the CSV-specific options for reading/writing CSV files in
+#'              \url{
+#'              https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option}{
+#'              Data Source Option} in the version you use.
 #'          \item \code{arrays_zip}, this contains additional Columns of arrays to be merged.
 #'          \item \code{map_concat}, this contains additional Columns of maps to be unioned.
 #'          }
@@ -484,7 +497,7 @@ setMethod("acosh",
 #' \dontrun{
 #' head(select(df, approx_count_distinct(df$gear)))
 #' head(select(df, approx_count_distinct(df$gear, 0.02)))
-#' head(select(df, countDistinct(df$gear, df$cyl)))
+#' head(select(df, count_distinct(df$gear, df$cyl)))
 #' head(select(df, n_distinct(df$gear)))
 #' head(distinct(select(df, "gear")))}
 #' @note approx_count_distinct(Column) since 3.0.0
@@ -636,20 +649,46 @@ setMethod("bin",
           })
 
 #' @details
+#' \code{bit_length}: Calculates the bit length for the specified string column.
+#'
+#' @rdname column_string_functions
+#' @aliases bit_length bit_length,Column-method
+#' @note length since 3.3.0
+setMethod("bit_length",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "bit_length", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{bitwise_not}: Computes bitwise NOT.
+#'
+#' @rdname column_nonaggregate_functions
+#' @aliases bitwise_not bitwise_not,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, bitwise_not(cast(df$vs, "int"))))}
+#' @note bitwise_not since 3.2.0
+setMethod("bitwise_not",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "bitwise_not", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{bitwiseNOT}: Computes bitwise NOT.
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases bitwiseNOT bitwiseNOT,Column-method
-#' @examples
-#'
-#' \dontrun{
-#' head(select(df, bitwiseNOT(cast(df$vs, "int"))))}
 #' @note bitwiseNOT since 1.5.0
 setMethod("bitwiseNOT",
           signature(x = "Column"),
           function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "bitwiseNOT", x@jc)
-            column(jc)
+            .Deprecated("bitwise_not")
+            bitwise_not(x)
           })
 
 #' @details
@@ -846,6 +885,19 @@ setMethod("cosh",
             column(jc)
           })
 
+#' @details
+#' \code{cot}: Returns the cotangent of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases cot cot,Column-method
+#' @note cot since 3.3.0
+setMethod("cot",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "cot", x@jc)
+            column(jc)
+          })
+
 #' Returns the number of items in a group
 #'
 #' This can be used as a column aggregate function with \code{Column} as input,
@@ -875,6 +927,19 @@ setMethod("crc32",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "crc32", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{csc}: Returns the cosecant of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases csc csc,Column-method
+#' @note csc since 3.3.0
+setMethod("csc",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "csc", x@jc)
             column(jc)
           })
 
@@ -990,6 +1055,7 @@ setMethod("dayofmonth",
 #' @details
 #' \code{dayofweek}: Extracts the day of the week as an integer from a
 #' given date/timestamp/string.
+#' Ranges from 1 for a Sunday through to 7 for a Saturday
 #'
 #' @rdname column_datetime_functions
 #' @aliases dayofweek dayofweek,Column-method
@@ -1403,6 +1469,30 @@ setMethod("ltrim",
           })
 
 #' @details
+#' \code{make_date}: Create date from year, month and day fields.
+#'
+#' @rdname column_datetime_functions
+#' @aliases make_date make_date,Column-method
+#' @note make_date since 3.3.0
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(
+#'   list(list(2021, 10, 22), list(2021, 13, 1),
+#'        list(2021, 2, 29), list(2020, 2, 29)),
+#'   list("year", "month", "day")
+#' )
+#' tmp <- head(select(df, make_date(df$year, df$month, df$day)))
+#' head(tmp)}
+setMethod("make_date",
+          signature(x = "Column", y = "Column", z = "Column"),
+          function(x, y, z) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "make_date",
+                              x@jc, y@jc, z@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{max}: Returns the maximum value of the expression in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -1412,6 +1502,29 @@ setMethod("max",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "max", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{max_by}: Returns the value associated with the maximum value of ord.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases max_by max_by,Column-method
+#' @note max_by since 3.3.0
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(
+#'   list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
+#'        list("dotNET", 2013, 48000), list("Java", 2013, 30000)),
+#'   list("course", "year", "earnings")
+#' )
+#' tmp <- agg(groupBy(df, df$"course"), "max_by" = max_by(df$"year", df$"earnings"))
+#' head(tmp)}
+setMethod("max_by",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "max_by", x@jc, y@jc)
             column(jc)
           })
 
@@ -1464,6 +1577,29 @@ setMethod("min",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "min", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{min_by}: Returns the value associated with the minimum value of ord.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases min_by min_by,Column-method
+#' @note min_by since 3.3.0
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(
+#'   list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
+#'        list("dotNET", 2013, 48000), list("Java", 2013, 30000)),
+#'   list("course", "year", "earnings")
+#' )
+#' tmp <- agg(groupBy(df, df$"course"), "min_by" = min_by(df$"year", df$"earnings"))
+#' head(tmp)}
+setMethod("min_by",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "min_by", x@jc, y@jc)
             column(jc)
           })
 
@@ -1532,6 +1668,19 @@ setMethod("negate",
           })
 
 #' @details
+#' \code{octet_length}: Calculates the byte length for the specified string column.
+#'
+#' @rdname column_string_functions
+#' @aliases octet_length octet_length,Column-method
+#' @note length since 3.3.0
+setMethod("octet_length",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "octet_length", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{overlay}: Overlay the specified portion of \code{x} with \code{replace},
 #' starting from byte position \code{pos} of \code{src} and proceeding for
 #' \code{len} bytes.
@@ -1559,6 +1708,19 @@ setMethod("overlay",
 
     column(jc)
   })
+
+#' @details
+#' \code{product}: Returns the product of the values in a group.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases product product,Column-method
+#' @note product since 3.2.0
+setMethod("product",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "product", x@jc)
+            column(jc)
+          })
 
 #' @details
 #' \code{quarter}: Extracts the quarter as an integer from a given date/timestamp/string.
@@ -1937,21 +2099,34 @@ setMethod("sum",
           })
 
 #' @details
+#' \code{sum_distinct}: Returns the sum of distinct values in the expression.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases sum_distinct sum_distinct,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, sum_distinct(df$gear)))
+#' head(distinct(select(df, "gear")))}
+#' @note sum_distinct since 3.2.0
+setMethod("sum_distinct",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "sum_distinct", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{sumDistinct}: Returns the sum of distinct values in the expression.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases sumDistinct sumDistinct,Column-method
-#' @examples
-#'
-#' \dontrun{
-#' head(select(df, sumDistinct(df$gear)))
-#' head(distinct(select(df, "gear")))}
 #' @note sumDistinct since 1.4.0
 setMethod("sumDistinct",
           signature(x = "Column"),
           function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "sumDistinct", x@jc)
-            column(jc)
+            .Deprecated("sum_distinct")
+            sum_distinct(x)
           })
 
 #' @details
@@ -2286,6 +2461,8 @@ setMethod("var_samp",
 
 #' @details
 #' \code{weekofyear}: Extracts the week number as an integer from a given date/timestamp/string.
+#' A week is considered to start on a Monday and week 1 is the first week with more than 3 days,
+#' as defined by ISO 8601
 #'
 #' @rdname column_datetime_functions
 #' @aliases weekofyear weekofyear,Column-method
@@ -2469,7 +2646,27 @@ setMethod("approxCountDistinct",
           })
 
 #' @details
+#' \code{count_distinct}: Returns the number of distinct items in a group.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases count_distinct count_distinct,Column-method
+#' @note count_distinct since 3.2.0
+setMethod("count_distinct",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(...), function(x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "count_distinct", x@jc,
+                              jcols)
+            column(jc)
+          })
+
+#' @details
 #' \code{countDistinct}: Returns the number of distinct items in a group.
+#'
+#' An alias of \code{count_distinct}, and it is encouraged to use \code{count_distinct} directly.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases countDistinct countDistinct,Column-method
@@ -2477,13 +2674,7 @@ setMethod("approxCountDistinct",
 setMethod("countDistinct",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(...), function(x) {
-              stopifnot(class(x) == "Column")
-              x@jc
-            })
-            jc <- callJStatic("org.apache.spark.sql.functions", "countDistinct", x@jc,
-                              jcols)
-            column(jc)
+            count_distinct(x, ...)
           })
 
 #' @details
@@ -2550,7 +2741,7 @@ setMethod("least",
 #' @note n_distinct since 1.4.0
 setMethod("n_distinct", signature(x = "Column"),
           function(x, ...) {
-            countDistinct(x, ...)
+            count_distinct(x, ...)
           })
 
 #' @rdname count
@@ -2894,6 +3085,21 @@ setMethod("sha2", signature(y = "Column", x = "numeric"),
           })
 
 #' @details
+#' \code{shiftleft}: Shifts the given value numBits left. If the given value is a long value,
+#' this function will return a long value else it will return an integer value.
+#'
+#' @rdname column_math_functions
+#' @aliases shiftleft shiftleft,Column,numeric-method
+#' @note shiftleft since 3.2.0
+setMethod("shiftleft", signature(y = "Column", x = "numeric"),
+          function(y, x) {
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "shiftleft",
+                              y@jc, as.integer(x))
+            column(jc)
+          })
+
+#' @details
 #' \code{shiftLeft}: Shifts the given value numBits left. If the given value is a long value,
 #' this function will return a long value else it will return an integer value.
 #'
@@ -2902,8 +3108,21 @@ setMethod("sha2", signature(y = "Column", x = "numeric"),
 #' @note shiftLeft since 1.5.0
 setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
           function(y, x) {
+            .Deprecated("shiftleft")
+            shiftleft(y, x)
+          })
+
+#' @details
+#' \code{shiftright}: (Signed) shifts the given value numBits right. If the given value is a long
+#' value, it will return a long value else it will return an integer value.
+#'
+#' @rdname column_math_functions
+#' @aliases shiftright shiftright,Column,numeric-method
+#' @note shiftright since 3.2.0
+setMethod("shiftright", signature(y = "Column", x = "numeric"),
+          function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
-                              "shiftLeft",
+                              "shiftright",
                               y@jc, as.integer(x))
             column(jc)
           })
@@ -2917,8 +3136,21 @@ setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
 #' @note shiftRight since 1.5.0
 setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           function(y, x) {
+            .Deprecated("shiftright")
+            shiftright(y, x)
+          })
+
+#' @details
+#' \code{shiftrightunsigned}: (Unsigned) shifts the given value numBits right. If the given value is
+#' a long value, it will return a long value else it will return an integer value.
+#'
+#' @rdname column_math_functions
+#' @aliases shiftrightunsigned shiftrightunsigned,Column,numeric-method
+#' @note shiftrightunsigned since 3.2.0
+setMethod("shiftrightunsigned", signature(y = "Column", x = "numeric"),
+          function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
-                              "shiftRight",
+                              "shiftrightunsigned",
                               y@jc, as.integer(x))
             column(jc)
           })
@@ -2932,10 +3164,8 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
 #' @note shiftRightUnsigned since 1.5.0
 setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
           function(y, x) {
-            jc <- callJStatic("org.apache.spark.sql.functions",
-                              "shiftRightUnsigned",
-                              y@jc, as.integer(x))
-            column(jc)
+            .Deprecated("shiftrightunsigned")
+            shiftrightunsigned(y, x)
           })
 
 #' @details
@@ -3242,6 +3472,19 @@ setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "rpad",
                               x@jc, as.integer(len), pad)
+            column(jc)
+          })
+
+#' @details
+#' \code{sec}: Returns the secant of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases sec sec,Column-method
+#' @note sec since 3.3.0
+setMethod("sec",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "sec", x@jc)
             column(jc)
           })
 
@@ -3578,7 +3821,12 @@ unresolved_named_lambda_var <- function(...) {
     "org.apache.spark.sql.Column",
     newJObject(
       "org.apache.spark.sql.catalyst.expressions.UnresolvedNamedLambdaVariable",
-      list(...)
+      lapply(list(...), function(x) {
+        handledCallJStatic(
+          "org.apache.spark.sql.catalyst.expressions.UnresolvedNamedLambdaVariable",
+          "freshVarName",
+          x)
+      })
     )
   )
   column(jc)
@@ -3666,11 +3914,11 @@ invoke_higher_order_function <- function(name, cols, funs) {
 #' @aliases array_aggregate array_aggregate,characterOrColumn,Column,function-method
 #' @note array_aggregate since 3.1.0
 setMethod("array_aggregate",
-          signature(x = "characterOrColumn", zero = "Column", merge = "function"),
-          function(x, zero, merge, finish = NULL) {
+          signature(x = "characterOrColumn", initialValue = "Column", merge = "function"),
+          function(x, initialValue, merge, finish = NULL) {
             invoke_higher_order_function(
               "ArrayAggregate",
-              cols = list(x, zero),
+              cols = list(x, initialValue),
               funs = if (is.null(finish)) {
                 list(merge)
               } else {

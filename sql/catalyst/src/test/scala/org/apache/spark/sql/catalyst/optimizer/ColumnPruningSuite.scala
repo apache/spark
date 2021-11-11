@@ -218,30 +218,6 @@ class ColumnPruningSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
-  test("Column pruning for ScriptTransformation") {
-    val input = LocalRelation('a.int, 'b.string, 'c.double)
-    val query =
-      ScriptTransformation(
-        Seq('a, 'b),
-        "func",
-        Seq.empty,
-        input,
-        null).analyze
-    val optimized = Optimize.execute(query)
-
-    val expected =
-      ScriptTransformation(
-        Seq('a, 'b),
-        "func",
-        Seq.empty,
-        Project(
-          Seq('a, 'b),
-          input),
-        null).analyze
-
-    comparePlans(optimized, expected)
-  }
-
   test("Column pruning on Filter") {
     val input = LocalRelation('a.int, 'b.string, 'c.double)
     val plan1 = Filter('a > 1, input).analyze
@@ -476,5 +452,11 @@ class ColumnPruningSuite extends PlanTest {
     val expected = input.where(rand(0L) > 0.5).where('key < 10).select('key).analyze
     comparePlans(optimized, expected)
   }
-  // todo: add more tests for column pruning
+
+  test("SPARK-36559 Prune and drop distributed-sequence if the produced column is not referred") {
+    val input = LocalRelation('a.int, 'b.int, 'c.int)
+    val plan1 = AttachDistributedSequence('d.int, input).select('a)
+    val correctAnswer1 = Project(Seq('a), input).analyze
+    comparePlans(Optimize.execute(plan1.analyze), correctAnswer1)
+  }
 }

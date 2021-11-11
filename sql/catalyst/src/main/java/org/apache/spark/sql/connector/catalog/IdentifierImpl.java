@@ -25,6 +25,7 @@ import java.util.stream.Stream;
 import com.google.common.base.Preconditions;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalyst.util.package$;
 
 /**
  *  An {@link Identifier} implementation.
@@ -55,7 +56,7 @@ class IdentifierImpl implements Identifier {
   @Override
   public String toString() {
     return Stream.concat(Stream.of(namespace), Stream.of(name))
-      .map(CatalogV2Implicits::quoteIfNeeded)
+      .map(package$.MODULE$::quoteIfNeeded)
       .collect(Collectors.joining("."));
   }
 

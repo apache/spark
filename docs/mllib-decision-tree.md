@@ -219,7 +219,7 @@ Refer to the [`DecisionTree` Java docs](api/java/org/apache/spark/mllib/tree/Dec
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`DecisionTree` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.DecisionTree) and [`DecisionTreeModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.DecisionTreeModel) for more details on the API.
+Refer to the [`DecisionTree` Python docs](api/python/reference/api/pyspark.mllib.tree.DecisionTree.html) and [`DecisionTreeModel` Python docs](api/python/reference/api/pyspark.mllib.tree.DecisionTreeModel.html) for more details on the API.
 
 {% include_example python/mllib/decision_tree_classification_example.py %}
 </div>
@@ -250,7 +250,7 @@ Refer to the [`DecisionTree` Java docs](api/java/org/apache/spark/mllib/tree/Dec
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`DecisionTree` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.DecisionTree) and [`DecisionTreeModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.DecisionTreeModel) for more details on the API.
+Refer to the [`DecisionTree` Python docs](api/python/reference/api/pyspark.mllib.tree.DecisionTree.html) and [`DecisionTreeModel` Python docs](api/python/reference/api/pyspark.mllib.tree.DecisionTreeModel.html) for more details on the API.
 
 {% include_example python/mllib/decision_tree_regression_example.py %}
 </div>

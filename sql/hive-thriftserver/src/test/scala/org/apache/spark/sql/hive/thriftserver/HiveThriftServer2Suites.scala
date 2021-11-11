@@ -44,13 +44,13 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
-import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{ShutdownHookManager, ThreadUtils, Utils}
 
 object TestData {
   def getTestDataFilePath(name: String): URL = {
@@ -389,6 +389,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
           statement.executeQuery("SELECT key FROM test_table ORDER BY KEY DESC")
         }
 
+        // The cached temporary table can be used indirectly if the query matches.
         val plan = statement.executeQuery("explain select key from test_map ORDER BY key DESC")
         plan.next()
         plan.next()
@@ -546,7 +547,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
         conf += resultSet.getString(1) -> resultSet.getString(2)
       }
 
-      assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.7"))
+      assert(conf.get(HiveUtils.BUILTIN_HIVE_VERSION.key) === Some(HiveUtils.builtinHiveVersion))
     }
   }
 
@@ -559,7 +560,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
         conf += resultSet.getString(1) -> resultSet.getString(2)
       }
 
-      assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.7"))
+      assert(conf.get(HiveUtils.BUILTIN_HIVE_VERSION.key) === Some(HiveUtils.builtinHiveVersion))
     }
   }
 
@@ -636,12 +637,11 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
       val user = System.getProperty("user.name")
       val sessionHandle = client.openSession(user, "")
       val sessionID = sessionHandle.getSessionId
-
-      assert(pipeoutFileList(sessionID).length == 2)
+      assert(pipeoutFileList(sessionID) === null)
 
       client.closeSession(sessionHandle)
 
-      assert(pipeoutFileList(sessionID).length == 0)
+      assert(pipeoutFileList(sessionID) === null)
     }
   }
 
@@ -663,32 +663,87 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
 
   test("Support interval type") {
     withJdbcStatement() { statement =>
-      val rs = statement.executeQuery("SELECT interval 3 months 1 hours")
+      val rs = statement.executeQuery("SELECT interval 5 years 7 months")
       assert(rs.next())
-      assert(rs.getString(1) === "3 months 1 hours")
+      assert(rs.getString(1) === "5-7")
     }
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT interval 8 days 10 hours 5 minutes 10 seconds")
+      assert(rs.next())
+      assert(rs.getString(1) === "8 10:05:10.000000000")
+    }
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT interval 3 days 1 hours")
+      assert(rs.next())
+      assert(rs.getString(1) === "3 01:00:00.000000000")
+    }
+
     // Invalid interval value
+    withJdbcStatement() { statement =>
+      val e = intercept[SQLException] {
+        statement.executeQuery("SELECT interval 5 yea 7 months")
+      }
+      assert(e.getMessage.contains("org.apache.spark.sql.catalyst.parser.ParseException"))
+    }
+    withJdbcStatement() { statement =>
+      val e = intercept[SQLException] {
+        statement.executeQuery("SELECT interval 8 days 10 hours 5 minutes 10 secon")
+      }
+      assert(e.getMessage.contains("org.apache.spark.sql.catalyst.parser.ParseException"))
+    }
     withJdbcStatement() { statement =>
       val e = intercept[SQLException] {
         statement.executeQuery("SELECT interval 3 months 1 hou")
       }
       assert(e.getMessage.contains("org.apache.spark.sql.catalyst.parser.ParseException"))
     }
+
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT interval '3-1' year to month;")
+      assert(rs.next())
+      assert(rs.getString(1) === "3-1")
+    }
+
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT interval '3 1:1:1' day to second;")
+      assert(rs.next())
+      assert(rs.getString(1) === "3 01:01:01.000000000")
+    }
   }
 
   test("Query Intervals in VIEWs through thrift server") {
     val viewName1 = "view_interval_1"
     val viewName2 = "view_interval_2"
-    val ddl1 = s"CREATE GLOBAL TEMP VIEW $viewName1 AS SELECT INTERVAL 1 DAY AS i"
+    val ddl1 =
+      s"""
+         |CREATE GLOBAL TEMP VIEW $viewName1
+         |AS SELECT
+         | INTERVAL 1 DAY AS a,
+         | INTERVAL '2-1' YEAR TO MONTH AS b,
+         | INTERVAL '3 1:1:1' DAY TO SECOND AS c
+       """.stripMargin
     val ddl2 = s"CREATE TEMP VIEW $viewName2 as select * from global_temp.$viewName1"
     withJdbcStatement(viewName1, viewName2) { statement =>
       statement.executeQuery(ddl1)
       statement.executeQuery(ddl2)
-      val rs = statement.executeQuery(s"SELECT v1.i as a, v2.i as b FROM global_temp.$viewName1" +
-        s" v1 join $viewName2 v2 on date_part('DAY', v1.i) = date_part('DAY', v2.i)")
+      val rs = statement.executeQuery(
+        s"""
+           |SELECT v1.a AS a1, v2.a AS a2,
+           | v1.b AS b1, v2.b AS b2,
+           | v1.c AS c1, v2.c AS c2
+           |FROM global_temp.$viewName1 v1
+           |JOIN $viewName2 v2
+           |ON date_part('DAY', v1.a) = date_part('DAY', v2.a)
+           |  AND v1.b = v2.b
+           |  AND v1.c = v2.c
+           |""".stripMargin)
       while (rs.next()) {
-        assert(rs.getString("a") === "1 days")
-        assert(rs.getString("b") === "1 days")
+        assert(rs.getString("a1") === "1 00:00:00.000000000")
+        assert(rs.getString("a2") === "1 00:00:00.000000000")
+        assert(rs.getString("b1") === "2-1")
+        assert(rs.getString("b2") === "2-1")
+        assert(rs.getString("c1") === "3 01:01:01.000000000")
+        assert(rs.getString("c2") === "3 01:01:01.000000000")
       }
     }
   }
@@ -1283,33 +1338,36 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
       process
     }
 
+    ShutdownHookManager.addShutdownHook(stopThriftServer _)
     ThreadUtils.awaitResult(serverStarted.future, SERVER_STARTUP_TIMEOUT)
   }
 
   private def stopThriftServer(): Unit = {
-    // The `spark-daemon.sh' script uses kill, which is not synchronous, have to wait for a while.
-    Utils.executeAndGetOutput(
-      command = Seq(stopScript),
-      extraEnvironment = Map("SPARK_PID_DIR" -> pidDir.getCanonicalPath))
-    Thread.sleep(3.seconds.toMillis)
+    if (pidDir.list.nonEmpty) {
+      // The `spark-daemon.sh' script uses kill, which is not synchronous, have to wait for a while.
+      Utils.executeAndGetOutput(
+        command = Seq(stopScript),
+        extraEnvironment = Map("SPARK_PID_DIR" -> pidDir.getCanonicalPath))
+      Thread.sleep(3.seconds.toMillis)
 
-    warehousePath.delete()
-    warehousePath = null
+      warehousePath.delete()
+      warehousePath = null
 
-    metastorePath.delete()
-    metastorePath = null
+      metastorePath.delete()
+      metastorePath = null
 
-    operationLogPath.delete()
-    operationLogPath = null
+      operationLogPath.delete()
+      operationLogPath = null
 
-    lScratchDir.delete()
-    lScratchDir = null
+      lScratchDir.delete()
+      lScratchDir = null
 
-    Option(logPath).foreach(_.delete())
-    logPath = null
+      Option(logPath).foreach(_.delete())
+      logPath = null
 
-    Option(logTailingProcess).foreach(_.destroy())
-    logTailingProcess = null
+      Option(logTailingProcess).foreach(_.destroy())
+      logTailingProcess = null
+    }
   }
 
   private def dumpLogs(): Unit = {

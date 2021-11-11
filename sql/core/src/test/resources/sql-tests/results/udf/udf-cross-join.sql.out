@@ -76,7 +76,7 @@ SELECT udf(a.key), udf(b.key) FROM
 CROSS JOIN
 (SELECT udf(k) key FROM nt2 WHERE v2 = 22) b
 -- !query schema
-struct<CAST(udf(cast(key as string)) AS STRING):string,CAST(udf(cast(key as string)) AS STRING):string>
+struct<udf(key):string,udf(key):string>
 -- !query output
 one	two
 

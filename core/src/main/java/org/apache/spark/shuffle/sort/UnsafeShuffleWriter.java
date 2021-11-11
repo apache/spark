@@ -45,6 +45,7 @@ import org.apache.spark.io.CompressionCodec;
 import org.apache.spark.io.CompressionCodec$;
 import org.apache.spark.io.NioBufferedFileInputStream;
 import org.apache.spark.memory.TaskMemoryManager;
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.network.util.LimitedInputStream;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
@@ -88,6 +89,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   @Nullable private MapStatus mapStatus;
   @Nullable private ShuffleExternalSorter sorter;
+  @Nullable private long[] partitionLengths;
   private long peakMemoryUsedBytes = 0;
 
   /** Subclass of ByteArrayOutputStream that exposes `buf` directly. */
@@ -114,7 +116,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       TaskContext taskContext,
       SparkConf sparkConf,
       ShuffleWriteMetricsReporter writeMetrics,
-      ShuffleExecutorComponents shuffleExecutorComponents) {
+      ShuffleExecutorComponents shuffleExecutorComponents) throws SparkException {
     final int numPartitions = handle.dependency().partitioner().numPartitions();
     if (numPartitions > SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE()) {
       throw new IllegalArgumentException(
@@ -197,7 +199,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
   }
 
-  private void open() {
+  private void open() throws SparkException {
     assert (sorter == null);
     sorter = new ShuffleExternalSorter(
       memoryManager,
@@ -218,11 +220,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     serBuffer = null;
     serOutputStream = null;
     final SpillInfo[] spills = sorter.closeAndGetSpills();
-    sorter = null;
-    final long[] partitionLengths;
     try {
       partitionLengths = mergeSpills(spills);
     } finally {
+      sorter = null;
       for (SpillInfo spill : spills) {
         if (spill.file.exists() && !spill.file.delete()) {
           logger.error("Error while deleting spill file {}", spill.file.getPath());
@@ -267,7 +268,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     if (spills.length == 0) {
       final ShuffleMapOutputWriter mapWriter = shuffleExecutorComponents
           .createMapOutputWriter(shuffleId, mapId, partitioner.numPartitions());
-      return mapWriter.commitAllPartitions().getPartitionLengths();
+      return mapWriter.commitAllPartitions(
+        ShuffleChecksumHelper.EMPTY_CHECKSUM_VALUE).getPartitionLengths();
     } else if (spills.length == 1) {
       Optional<SingleSpillShuffleMapOutputWriter> maybeSingleFileWriter =
           shuffleExecutorComponents.createSingleFileMapOutputWriter(shuffleId, mapId);
@@ -277,7 +279,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         partitionLengths = spills[0].partitionLengths;
         logger.debug("Merge shuffle spills for mapId {} with length {}", mapId,
             partitionLengths.length);
-        maybeSingleFileWriter.get().transferMapSpillFile(spills[0].file, partitionLengths);
+        maybeSingleFileWriter.get()
+          .transferMapSpillFile(spills[0].file, partitionLengths, sorter.getChecksums());
       } else {
         partitionLengths = mergeSpillsUsingStandardWriter(spills);
       }
@@ -330,7 +333,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       // to be counted as shuffle write, but this will lead to double-counting of the final
       // SpillInfo's bytes.
       writeMetrics.decBytesWritten(spills[spills.length - 1].file.length());
-      partitionLengths = mapWriter.commitAllPartitions().getPartitionLengths();
+      partitionLengths = mapWriter.commitAllPartitions(sorter.getChecksums()).getPartitionLengths();
     } catch (Exception e) {
       try {
         mapWriter.abort(e);
@@ -542,5 +545,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     public void close() throws IOException {
       channel.close();
     }
+  }
+
+  @Override
+  public long[] getPartitionLengths() {
+    return partitionLengths;
   }
 }

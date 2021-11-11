@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql
 
+import java.time.{Duration, LocalDateTime, Period}
+
 import scala.util.Random
 
 import org.scalatest.matchers.must.Matchers.the
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -31,6 +34,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
+import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
@@ -188,9 +193,27 @@ class DataFrameAggregateSuite extends QueryTest
     intercept[AnalysisException] {
       courseSales.groupBy().agg(grouping("course")).explain()
     }
+
     intercept[AnalysisException] {
       courseSales.groupBy().agg(grouping_id("course")).explain()
     }
+
+    val groupingColMismatchEx = intercept[AnalysisException] {
+      courseSales.cube("course", "year").agg(grouping("earnings")).explain()
+    }
+    assert(groupingColMismatchEx.getErrorClass == "GROUPING_COLUMN_MISMATCH")
+    assert(groupingColMismatchEx.getMessage.matches(
+      "Column of grouping \\(earnings.*\\) can't be found in grouping columns course.*,year.*"))
+
+
+    val groupingIdColMismatchEx = intercept[AnalysisException] {
+      courseSales.cube("course", "year").agg(grouping_id("earnings")).explain()
+    }
+    assert(groupingIdColMismatchEx.getErrorClass == "GROUPING_ID_COLUMN_MISMATCH")
+    assert(groupingIdColMismatchEx.getMessage.matches(
+      "Columns of grouping_id \\(earnings.*\\) does not match " +
+        "grouping columns \\(course.*,year.*\\)"),
+      groupingIdColMismatchEx.getMessage)
   }
 
   test("grouping/grouping_id inside window function") {
@@ -297,7 +320,7 @@ class DataFrameAggregateSuite extends QueryTest
       Row(2.0, 2.0))
 
     checkAnswer(
-      testData2.agg(avg($"a"), sumDistinct($"a")), // non-partial
+      testData2.agg(avg($"a"), sumDistinct($"a")), // non-partial and test deprecated version
       Row(2.0, 6.0) :: Nil)
 
     checkAnswer(
@@ -305,7 +328,7 @@ class DataFrameAggregateSuite extends QueryTest
       Row(new java.math.BigDecimal(2)))
 
     checkAnswer(
-      decimalData.agg(avg($"a"), sumDistinct($"a")), // non-partial
+      decimalData.agg(avg($"a"), sum_distinct($"a")), // non-partial
       Row(new java.math.BigDecimal(2), new java.math.BigDecimal(6)) :: Nil)
 
     checkAnswer(
@@ -314,7 +337,7 @@ class DataFrameAggregateSuite extends QueryTest
     // non-partial
     checkAnswer(
       decimalData.agg(
-        avg($"a" cast DecimalType(10, 2)), sumDistinct($"a" cast DecimalType(10, 2))),
+        avg($"a" cast DecimalType(10, 2)), sum_distinct($"a" cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2), new java.math.BigDecimal(6)) :: Nil)
   }
 
@@ -324,11 +347,11 @@ class DataFrameAggregateSuite extends QueryTest
       Row(2.0))
 
     checkAnswer(
-      testData3.agg(avg($"b"), countDistinct($"b")),
+      testData3.agg(avg($"b"), count_distinct($"b")),
       Row(2.0, 1))
 
     checkAnswer(
-      testData3.agg(avg($"b"), sumDistinct($"b")), // non-partial
+      testData3.agg(avg($"b"), sum_distinct($"b")), // non-partial
       Row(2.0, 2.0))
   }
 
@@ -339,7 +362,7 @@ class DataFrameAggregateSuite extends QueryTest
       Row(null))
 
     checkAnswer(
-      emptyTableData.agg(avg($"a"), sumDistinct($"b")), // non-partial
+      emptyTableData.agg(avg($"a"), sum_distinct($"b")), // non-partial
       Row(null, null))
   }
 
@@ -347,7 +370,7 @@ class DataFrameAggregateSuite extends QueryTest
     assert(testData2.count() === testData2.rdd.map(_ => 1).count())
 
     checkAnswer(
-      testData2.agg(count($"a"), sumDistinct($"a")), // non-partial
+      testData2.agg(count($"a"), sum_distinct($"a")), // non-partial
       Row(6, 6.0))
   }
 
@@ -364,12 +387,12 @@ class DataFrameAggregateSuite extends QueryTest
 
     checkAnswer(
       testData3.agg(
-        count($"a"), count($"b"), count(lit(1)), countDistinct($"a"), countDistinct($"b")),
+        count($"a"), count($"b"), count(lit(1)), count_distinct($"a"), count_distinct($"b")),
       Row(2, 1, 2, 2, 1)
     )
 
     checkAnswer(
-      testData3.agg(count($"b"), countDistinct($"b"), sumDistinct($"b")), // non-partial
+      testData3.agg(count($"b"), count_distinct($"b"), sum_distinct($"b")), // non-partial
       Row(1, 1, 2)
     )
   }
@@ -384,17 +407,17 @@ class DataFrameAggregateSuite extends QueryTest
       .toDF("key1", "key2", "key3")
 
     checkAnswer(
-      df1.agg(countDistinct($"key1", $"key2")),
+      df1.agg(count_distinct($"key1", $"key2")),
       Row(3)
     )
 
     checkAnswer(
-      df1.agg(countDistinct($"key1", $"key2", $"key3")),
+      df1.agg(count_distinct($"key1", $"key2", $"key3")),
       Row(3)
     )
 
     checkAnswer(
-      df1.groupBy($"key1").agg(countDistinct($"key2", $"key3")),
+      df1.groupBy($"key1").agg(count_distinct($"key2", $"key3")),
       Seq(Row("a", 2), Row("x", 1))
     )
   }
@@ -402,7 +425,7 @@ class DataFrameAggregateSuite extends QueryTest
   test("zero count") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(
-      emptyTableData.agg(count($"a"), sumDistinct($"a")), // non-partial
+      emptyTableData.agg(count($"a"), sum_distinct($"a")), // non-partial
       Row(0, null))
   }
 
@@ -433,7 +456,7 @@ class DataFrameAggregateSuite extends QueryTest
   test("zero sum distinct") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(
-      emptyTableData.agg(sumDistinct($"a")),
+      emptyTableData.agg(sum_distinct($"a")),
       Row(null))
   }
 
@@ -622,7 +645,7 @@ class DataFrameAggregateSuite extends QueryTest
     val df = Seq((1, 3, "a"), (1, 2, "b"), (3, 4, "c"), (3, 4, "c"), (3, 5, "d"))
       .toDF("x", "y", "z")
     checkAnswer(
-      df.groupBy($"x").agg(countDistinct($"y"), sort_array(collect_list($"z"))),
+      df.groupBy($"x").agg(count_distinct($"y"), sort_array(collect_list($"z"))),
       Seq(Row(1, 2, Seq("a", "b")), Row(3, 2, Seq("c", "c", "d"))))
   }
 
@@ -837,7 +860,7 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
-  test("SPARK-27581: DataFrame countDistinct(\"*\") shouldn't fail with AnalysisException") {
+  test("SPARK-27581: DataFrame count_distinct(\"*\") shouldn't fail with AnalysisException") {
     val df = sql("select id % 100 from range(100000)")
     val distinctCount1 = df.select(expr("count(distinct(*))"))
     val distinctCount2 = df.select(countDistinct("*"))
@@ -851,6 +874,11 @@ class DataFrameAggregateSuite extends QueryTest
     val yearOfMaxEarnings =
       sql("SELECT course, max_by(year, earnings) FROM courseSales GROUP BY course")
     checkAnswer(yearOfMaxEarnings, Row("dotNET", 2013) :: Row("Java", 2013) :: Nil)
+
+    checkAnswer(
+      courseSales.groupBy("course").agg(max_by(col("year"), col("earnings"))),
+      Row("dotNET", 2013) :: Row("Java", 2013) :: Nil
+    )
 
     checkAnswer(
       sql("SELECT max_by(x, y) FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)"),
@@ -907,6 +935,11 @@ class DataFrameAggregateSuite extends QueryTest
     val yearOfMinEarnings =
       sql("SELECT course, min_by(year, earnings) FROM courseSales GROUP BY course")
     checkAnswer(yearOfMinEarnings, Row("dotNET", 2012) :: Row("Java", 2012) :: Nil)
+
+    checkAnswer(
+      courseSales.groupBy("course").agg(min_by(col("year"), col("earnings"))),
+      Row("dotNET", 2012) :: Row("Java", 2012) :: Nil
+    )
 
     checkAnswer(
       sql("SELECT min_by(x, y) FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)"),
@@ -1076,6 +1109,339 @@ class DataFrameAggregateSuite extends QueryTest
     assert(aggs.length == 2)
     assert(aggs.head.output.map(_.dataType.simpleString).head ===
       aggs.last.output.map(_.dataType.simpleString).head)
+  }
+
+  test("SPARK-33726: Aggregation on a table where a column name is reused") {
+    val query =
+      """|with T as (
+         |select id as a, -id as x from range(3)),
+         |U as (
+         |select id as b, cast(id as string) as x from range(3))
+         |select T.x, U.x, min(a) as ma, min(b) as mb
+         |from T join U on a=b
+         |group by U.x, T.x
+      """.stripMargin
+    val df = spark.sql(query)
+    checkAnswer(df, Row(0, "0", 0, 0) :: Row(-1, "1", 1, 1) :: Row(-2, "2", 2, 2) :: Nil)
+  }
+
+  test("SPARK-34713: group by CreateStruct with ExtractValue") {
+    val structDF = Seq(Tuple1(1 -> 1)).toDF("col")
+    checkAnswer(structDF.groupBy(struct($"col._1")).count().select("count"), Row(1))
+
+    val arrayOfStructDF = Seq(Tuple1(Seq(1 -> 1))).toDF("col")
+    checkAnswer(arrayOfStructDF.groupBy(struct($"col._1")).count().select("count"), Row(1))
+
+    val mapDF = Seq(Tuple1(Map("a" -> "a"))).toDF("col")
+    checkAnswer(mapDF.groupBy(struct($"col.a")).count().select("count"), Row(1))
+
+    val nonStringMapDF = Seq(Tuple1(Map(1 -> 1))).toDF("col")
+    // Spark implicit casts string literal "a" to int to match the key type.
+    checkAnswer(nonStringMapDF.groupBy(struct($"col.a")).count().select("count"), Row(1))
+
+    val arrayDF = Seq(Tuple1(Seq(1))).toDF("col")
+    val e = intercept[AnalysisException](arrayDF.groupBy(struct($"col.a")).count())
+    assert(e.message.contains("requires integral type"))
+  }
+
+  test("SPARK-34716: Support ANSI SQL intervals by the aggregate function `sum`") {
+    val sumDF = intervalData.select(
+      sum($"year-month"),
+      sum($"year"),
+      sum($"month"),
+      sum($"day-second"),
+      sum($"day-minute"),
+      sum($"day-hour"),
+      sum($"day"),
+      sum($"hour-second"),
+      sum($"hour-minute"),
+      sum($"hour"),
+      sum($"minute-second"),
+      sum($"minute"),
+      sum($"second"))
+    checkAnswer(sumDF,
+      Row(
+        Period.of(2, 5, 0),
+        Period.ofYears(28),
+        Period.of(1, 1, 0),
+        Duration.ofDays(9).plusHours(23).plusMinutes(29).plusSeconds(4),
+        Duration.ofDays(23).plusHours(8).plusMinutes(27),
+        Duration.ofDays(-8).plusHours(-7),
+        Duration.ofDays(1),
+        Duration.ofDays(1).plusHours(12).plusMinutes(2).plusSeconds(33),
+        Duration.ofMinutes(43),
+        Duration.ofHours(12),
+        Duration.ofMinutes(18).plusSeconds(3),
+        Duration.ofMinutes(52),
+        Duration.ofSeconds(20)))
+    assert(find(sumDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
+    assert(sumDF.schema == StructType(Seq(
+      StructField("sum(year-month)", YearMonthIntervalType()),
+      StructField("sum(year)", YearMonthIntervalType(YEAR)),
+      StructField("sum(month)", YearMonthIntervalType(MONTH)),
+      StructField("sum(day-second)", DayTimeIntervalType()),
+      StructField("sum(day-minute)", DayTimeIntervalType(DAY, MINUTE)),
+      StructField("sum(day-hour)", DayTimeIntervalType(DAY, HOUR)),
+      StructField("sum(day)", DayTimeIntervalType(DAY)),
+      StructField("sum(hour-second)", DayTimeIntervalType(HOUR, SECOND)),
+      StructField("sum(hour-minute)", DayTimeIntervalType(HOUR, MINUTE)),
+      StructField("sum(hour)", DayTimeIntervalType(HOUR)),
+      StructField("sum(minute-second)", DayTimeIntervalType(MINUTE, SECOND)),
+      StructField("sum(minute)", DayTimeIntervalType(MINUTE)),
+      StructField("sum(second)", DayTimeIntervalType(SECOND)))))
+
+    val sumDF2 =
+      intervalData.groupBy($"class").agg(
+        sum($"year-month"),
+        sum($"year"),
+        sum($"month"),
+        sum($"day-second"),
+        sum($"day-minute"),
+        sum($"day-hour"),
+        sum($"day"),
+        sum($"hour-second"),
+        sum($"hour-minute"),
+        sum($"hour"),
+        sum($"minute-second"),
+        sum($"minute"),
+        sum($"second"))
+    checkAnswer(sumDF2,
+      Row(1,
+        Period.ofMonths(10),
+        Period.ofYears(8),
+        Period.ofMonths(10),
+        Duration.ofDays(7).plusHours(13).plusMinutes(3).plusSeconds(18),
+        Duration.ofDays(5).plusHours(21).plusMinutes(12),
+        Duration.ofDays(1).plusHours(8),
+        Duration.ofDays(10),
+        Duration.ofHours(20).plusMinutes(11).plusSeconds(33),
+        Duration.ofHours(3).plusMinutes(18),
+        Duration.ofHours(13),
+        Duration.ofMinutes(2).plusSeconds(59),
+        Duration.ofMinutes(38),
+        Duration.ofSeconds(5)) ::
+      Row(2,
+        Period.ofMonths(1),
+        Period.ofYears(1),
+        Period.ofMonths(1),
+        Duration.ofSeconds(1),
+        Duration.ofMinutes(1),
+        Duration.ofHours(1),
+        Duration.ofDays(1),
+        Duration.ofSeconds(1),
+        Duration.ofMinutes(1),
+        Duration.ofHours(1),
+        Duration.ofSeconds(1),
+        Duration.ofMinutes(1),
+        Duration.ofSeconds(1)) ::
+      Row(3,
+        Period.of(1, 6, 0),
+        Period.ofYears(19),
+        Period.ofMonths(2),
+        Duration.ofDays(2).plusHours(10).plusMinutes(25).plusSeconds(45),
+        Duration.ofDays(17).plusHours(11).plusMinutes(14),
+        Duration.ofDays(-9).plusHours(-16),
+        Duration.ofDays(-10),
+        Duration.ofHours(15).plusMinutes(50).plusSeconds(59),
+        Duration.ofHours(-2).plusMinutes(-36),
+        Duration.ofHours(-2),
+        Duration.ofMinutes(15).plusSeconds(3),
+        Duration.ofMinutes(13),
+        Duration.ofSeconds(14)) ::
+      Nil)
+    assert(find(sumDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
+    assert(sumDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
+      StructField("sum(year-month)", YearMonthIntervalType()),
+      StructField("sum(year)", YearMonthIntervalType(YEAR)),
+      StructField("sum(month)", YearMonthIntervalType(MONTH)),
+      StructField("sum(day-second)", DayTimeIntervalType()),
+      StructField("sum(day-minute)", DayTimeIntervalType(DAY, MINUTE)),
+      StructField("sum(day-hour)", DayTimeIntervalType(DAY, HOUR)),
+      StructField("sum(day)", DayTimeIntervalType(DAY)),
+      StructField("sum(hour-second)", DayTimeIntervalType(HOUR, SECOND)),
+      StructField("sum(hour-minute)", DayTimeIntervalType(HOUR, MINUTE)),
+      StructField("sum(hour)", DayTimeIntervalType(HOUR)),
+      StructField("sum(minute-second)", DayTimeIntervalType(MINUTE, SECOND)),
+      StructField("sum(minute)", DayTimeIntervalType(MINUTE)),
+      StructField("sum(second)", DayTimeIntervalType(SECOND)))))
+
+    val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
+      (Period.ofMonths(10), Duration.ofDays(10)))
+      .toDF("year-month", "day")
+    val error = intercept[SparkException] {
+      checkAnswer(df2.select(sum($"year-month")), Nil)
+    }
+    assert(error.toString contains "java.lang.ArithmeticException: integer overflow")
+
+    val error2 = intercept[SparkException] {
+      checkAnswer(df2.select(sum($"day")), Nil)
+    }
+    assert(error2.toString contains "java.lang.ArithmeticException: long overflow")
+  }
+
+  test("SPARK-34837: Support ANSI SQL intervals by the aggregate function `avg`") {
+    val avgDF = intervalData.select(
+      avg($"year-month"),
+      avg($"year"),
+      avg($"month"),
+      avg($"day-second"),
+      avg($"day-minute"),
+      avg($"day-hour"),
+      avg($"day"),
+      avg($"hour-second"),
+      avg($"hour-minute"),
+      avg($"hour"),
+      avg($"minute-second"),
+      avg($"minute"),
+      avg($"second"))
+    checkAnswer(avgDF,
+      Row(Period.ofMonths(7),
+        Period.of(5, 7, 0),
+        Period.ofMonths(3),
+        Duration.ofDays(2).plusHours(11).plusMinutes(52).plusSeconds(16),
+        Duration.ofDays(4).plusHours(16).plusMinutes(5).plusSeconds(24),
+        Duration.ofDays(-1).plusHours(-15).plusMinutes(-48),
+        Duration.ofHours(4).plusMinutes(48),
+        Duration.ofHours(9).plusSeconds(38).plusMillis(250),
+        Duration.ofMinutes(8).plusSeconds(36),
+        Duration.ofHours(2).plusMinutes(24),
+        Duration.ofMinutes(4).plusSeconds(30).plusMillis(750),
+        Duration.ofMinutes(10).plusSeconds(24),
+        Duration.ofSeconds(5)))
+    assert(find(avgDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
+    assert(avgDF.schema == StructType(Seq(
+      StructField("avg(year-month)", YearMonthIntervalType()),
+      StructField("avg(year)", YearMonthIntervalType()),
+      StructField("avg(month)", YearMonthIntervalType()),
+      StructField("avg(day-second)", DayTimeIntervalType()),
+      StructField("avg(day-minute)", DayTimeIntervalType()),
+      StructField("avg(day-hour)", DayTimeIntervalType()),
+      StructField("avg(day)", DayTimeIntervalType()),
+      StructField("avg(hour-second)", DayTimeIntervalType()),
+      StructField("avg(hour-minute)", DayTimeIntervalType()),
+      StructField("avg(hour)", DayTimeIntervalType()),
+      StructField("avg(minute-second)", DayTimeIntervalType()),
+      StructField("avg(minute)", DayTimeIntervalType()),
+      StructField("avg(second)", DayTimeIntervalType()))))
+
+    val avgDF2 =
+      intervalData.groupBy($"class").agg(
+        avg($"year-month"),
+        avg($"year"),
+        avg($"month"),
+        avg($"day-second"),
+        avg($"day-minute"),
+        avg($"day-hour"),
+        avg($"day"),
+        avg($"hour-second"),
+        avg($"hour-minute"),
+        avg($"hour"),
+        avg($"minute-second"),
+        avg($"minute"),
+        avg($"second"))
+    checkAnswer(avgDF2,
+      Row(1,
+        Period.ofMonths(10),
+        Period.ofYears(8),
+        Period.ofMonths(10),
+        Duration.ofDays(7).plusHours(13).plusMinutes(3).plusSeconds(18),
+        Duration.ofDays(5).plusHours(21).plusMinutes(12),
+        Duration.ofDays(1).plusHours(8),
+        Duration.ofDays(10),
+        Duration.ofHours(20).plusMinutes(11).plusSeconds(33),
+        Duration.ofHours(3).plusMinutes(18),
+        Duration.ofHours(13),
+        Duration.ofMinutes(2).plusSeconds(59),
+        Duration.ofMinutes(38),
+        Duration.ofSeconds(5)) ::
+      Row(2,
+        Period.ofMonths(1),
+        Period.ofYears(1),
+        Period.ofMonths(1),
+        Duration.ofSeconds(1),
+        Duration.ofMinutes(1),
+        Duration.ofHours(1),
+        Duration.ofDays(1),
+        Duration.ofSeconds(1),
+        Duration.ofMinutes(1),
+        Duration.ofHours(1),
+        Duration.ofSeconds(1),
+        Duration.ofMinutes(1),
+        Duration.ofSeconds(1)) ::
+      Row(3,
+        Period.ofMonths(9),
+        Period.of(6, 4, 0),
+        Period.ofMonths(1),
+        Duration.ofDays(1).plusHours(5).plusMinutes(12).plusSeconds(52).plusMillis(500),
+        Duration.ofDays(5).plusHours(19).plusMinutes(44).plusSeconds(40),
+        Duration.ofDays(-3).plusHours(-5).plusMinutes(-20),
+        Duration.ofDays(-3).plusHours(-8),
+        Duration.ofHours(7).plusMinutes(55).plusSeconds(29).plusMillis(500),
+        Duration.ofMinutes(-52),
+        Duration.ofMinutes(-40),
+        Duration.ofMinutes(7).plusSeconds(31).plusMillis(500),
+        Duration.ofMinutes(4).plusSeconds(20),
+        Duration.ofSeconds(7)) :: Nil)
+    assert(find(avgDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
+    assert(avgDF2.schema == StructType(Seq(
+      StructField("class", IntegerType, false),
+      StructField("avg(year-month)", YearMonthIntervalType()),
+      StructField("avg(year)", YearMonthIntervalType()),
+      StructField("avg(month)", YearMonthIntervalType()),
+      StructField("avg(day-second)", DayTimeIntervalType()),
+      StructField("avg(day-minute)", DayTimeIntervalType()),
+      StructField("avg(day-hour)", DayTimeIntervalType()),
+      StructField("avg(day)", DayTimeIntervalType()),
+      StructField("avg(hour-second)", DayTimeIntervalType()),
+      StructField("avg(hour-minute)", DayTimeIntervalType()),
+      StructField("avg(hour)", DayTimeIntervalType()),
+      StructField("avg(minute-second)", DayTimeIntervalType()),
+      StructField("avg(minute)", DayTimeIntervalType()),
+      StructField("avg(second)", DayTimeIntervalType()))))
+
+    val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
+      (Period.ofMonths(10), Duration.ofDays(10)))
+      .toDF("year-month", "day")
+    val error = intercept[SparkException] {
+      checkAnswer(df2.select(avg($"year-month")), Nil)
+    }
+    assert(error.toString contains "java.lang.ArithmeticException: integer overflow")
+
+    val error2 = intercept[SparkException] {
+      checkAnswer(df2.select(avg($"day")), Nil)
+    }
+    assert(error2.toString contains "java.lang.ArithmeticException: long overflow")
+
+    val df3 = intervalData.filter($"class" > 4)
+    val avgDF3 = df3.select(avg($"year-month"), avg($"day"))
+    checkAnswer(avgDF3, Row(null, null) :: Nil)
+
+    val avgDF4 = df3.groupBy($"class").agg(avg($"year-month"), avg($"day"))
+    checkAnswer(avgDF4, Nil)
+  }
+
+  test("SPARK-35412: groupBy of year-month/day-time intervals should work") {
+    val df1 = Seq(Duration.ofDays(1)).toDF("a").groupBy("a").count()
+    checkAnswer(df1, Row(Duration.ofDays(1), 1))
+    val df2 = Seq(Period.ofYears(1)).toDF("a").groupBy("a").count()
+    checkAnswer(df2, Row(Period.ofYears(1), 1))
+  }
+
+  test("SPARK-36054: Support group by TimestampNTZ column") {
+    val ts1 = "2021-01-01T00:00:00"
+    val ts2 = "2021-01-01T00:00:01"
+    val localDateTime = Seq(ts1, ts1, ts2).map(LocalDateTime.parse)
+    val df = localDateTime.toDF("ts").groupBy("ts").count().orderBy("ts")
+    val expectedSchema =
+      new StructType().add(StructField("ts", TimestampNTZType)).add("count", LongType, false)
+    assert (df.schema == expectedSchema)
+    checkAnswer(df, Seq(Row(LocalDateTime.parse(ts1), 2), Row(LocalDateTime.parse(ts2), 1)))
+  }
+
+  test("SPARK-36926: decimal average mistakenly overflow") {
+    val df = (1 to 10).map(_ => "9999999999.99").toDF("d")
+    val res = df.select($"d".cast("decimal(12, 2)").as("d")).agg(avg($"d").cast("string"))
+    checkAnswer(res, Row("9999999999.990000"))
   }
 }
 

@@ -18,9 +18,6 @@
 package org.apache.spark.sql.streaming.sources
 
 import java.util
-import java.util.Collections
-
-import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
@@ -28,7 +25,7 @@ import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReaderFactory, ContinuousStream, MicroBatchStream, Offset, PartitionOffset}
-import org.apache.spark.sql.connector.write.{LogicalWriteInfo, PhysicalWriteInfo, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, PhysicalWriteInfo, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{ContinuousTrigger, RateStreamOffset, Sink, StreamingQueryWrapper}
@@ -68,8 +65,15 @@ class FakeScanBuilder extends ScanBuilder with Scan {
   override def toContinuousStream(checkpointLocation: String): ContinuousStream = new FakeDataStream
 }
 
-class FakeWriteBuilder extends WriteBuilder with StreamingWrite {
-  override def buildForStreaming(): StreamingWrite = this
+class FakeWriteBuilder extends WriteBuilder {
+  override def build(): Write = {
+    new Write {
+      override def toStreaming: StreamingWrite = new FakeStreamingWrite
+    }
+  }
+}
+
+class FakeStreamingWrite extends StreamingWrite {
   override def createStreamingWriterFactory(
       info: PhysicalWriteInfo): StreamingDataWriterFactory = {
     throw new IllegalStateException("fake sink - cannot actually write")
@@ -86,7 +90,7 @@ trait FakeStreamingWriteTable extends Table with SupportsWrite {
   override def name(): String = "fake"
   override def schema(): StructType = StructType(Seq())
   override def capabilities(): util.Set[TableCapability] = {
-    Set(STREAMING_WRITE).asJava
+    util.EnumSet.of(STREAMING_WRITE)
   }
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     new FakeWriteBuilder
@@ -107,7 +111,7 @@ class FakeReadMicroBatchOnly
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Seq())
       override def capabilities(): util.Set[TableCapability] = {
-        Set(MICRO_BATCH_READ).asJava
+        util.EnumSet.of(MICRO_BATCH_READ)
       }
       override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
         new FakeScanBuilder
@@ -130,7 +134,7 @@ class FakeReadContinuousOnly
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Seq())
       override def capabilities(): util.Set[TableCapability] = {
-        Set(CONTINUOUS_READ).asJava
+        util.EnumSet.of(CONTINUOUS_READ)
       }
       override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
         new FakeScanBuilder
@@ -147,7 +151,7 @@ class FakeReadBothModes extends DataSourceRegister with SimpleTableProvider {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Seq())
       override def capabilities(): util.Set[TableCapability] = {
-        Set(MICRO_BATCH_READ, CONTINUOUS_READ).asJava
+        util.EnumSet.of(MICRO_BATCH_READ, CONTINUOUS_READ)
       }
       override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
         new FakeScanBuilder
@@ -163,7 +167,8 @@ class FakeReadNeitherMode extends DataSourceRegister with SimpleTableProvider {
     new Table {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Nil)
-      override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
+      override def capabilities(): util.Set[TableCapability] =
+        util.EnumSet.noneOf(classOf[TableCapability])
     }
   }
 }
@@ -191,7 +196,8 @@ class FakeNoWrite extends DataSourceRegister with SimpleTableProvider {
     new Table {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Nil)
-      override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
+      override def capabilities(): util.Set[TableCapability] =
+        util.EnumSet.noneOf(classOf[TableCapability])
     }
   }
 }
@@ -346,7 +352,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
       Trigger.Once()) { v2Query =>
       val sink = v2Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
       assert(sink.isInstanceOf[Table])
-      assert(sink.asInstanceOf[Table].schema() == StructType(Nil))
+      assert(sink.schema() == StructType(Nil))
     }
   }
 

@@ -41,10 +41,6 @@ private object ResourceRequestHelper extends Logging {
   private val AMOUNT_AND_UNIT_REGEX = "([0-9]+)([A-Za-z]*)".r
   private val RESOURCE_INFO_CLASS = "org.apache.hadoop.yarn.api.records.ResourceInformation"
   private val RESOURCE_NOT_FOUND = "org.apache.hadoop.yarn.exceptions.ResourceNotFoundException"
-  val YARN_GPU_RESOURCE_CONFIG = "yarn.io/gpu"
-  val YARN_FPGA_RESOURCE_CONFIG = "yarn.io/fpga"
-  private[yarn] val resourceNameMapping =
-    Map(GPU -> YARN_GPU_RESOURCE_CONFIG, FPGA -> YARN_FPGA_RESOURCE_CONFIG)
   @volatile private var numResourceErrors: Int = 0
 
   private[yarn] def getYarnResourcesAndAmounts(
@@ -68,6 +64,10 @@ private object ResourceRequestHelper extends Logging {
     }.toMap
   }
 
+  private[yarn] def getResourceNameMapping(sparkConf: SparkConf): Map[String, String] = {
+    Map(GPU -> sparkConf.get(YARN_GPU_DEVICE), FPGA -> sparkConf.get(YARN_FPGA_DEVICE))
+  }
+
   /**
    * Convert Spark resources into YARN resources.
    * The only resources we know how to map from spark configs to yarn configs are
@@ -78,7 +78,7 @@ private object ResourceRequestHelper extends Logging {
       confPrefix: String,
       sparkConf: SparkConf
   ): Map[String, String] = {
-    resourceNameMapping.map {
+    getResourceNameMapping(sparkConf).map {
       case (rName, yarnName) =>
         (yarnName -> sparkConf.get(new ResourceID(confPrefix, rName).amountConf, "0"))
     }.filter { case (_, count) => count.toLong > 0 }
@@ -113,13 +113,13 @@ private object ResourceRequestHelper extends Logging {
       (DRIVER_CORES.key, YARN_DRIVER_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
       (EXECUTOR_CORES.key, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
       (new ResourceID(SPARK_EXECUTOR_PREFIX, "fpga").amountConf,
-        s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${YARN_FPGA_RESOURCE_CONFIG}"),
+        s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${sparkConf.get(YARN_FPGA_DEVICE)}"),
       (new ResourceID(SPARK_DRIVER_PREFIX, "fpga").amountConf,
-        s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${YARN_FPGA_RESOURCE_CONFIG}"),
+        s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${sparkConf.get(YARN_FPGA_DEVICE)}"),
       (new ResourceID(SPARK_EXECUTOR_PREFIX, "gpu").amountConf,
-        s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${YARN_GPU_RESOURCE_CONFIG}"),
+        s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${sparkConf.get(YARN_GPU_DEVICE)}"),
       (new ResourceID(SPARK_DRIVER_PREFIX, "gpu").amountConf,
-        s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${YARN_GPU_RESOURCE_CONFIG}"))
+        s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${sparkConf.get(YARN_GPU_DEVICE)}"))
 
     val errorMessage = new mutable.StringBuilder()
 

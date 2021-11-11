@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.sql.Timestamp
+import java.time.{Duration, Period}
 
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -27,9 +29,15 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 class TypeCoercionSuite extends AnalysisTest {
   import TypeCoercionSuite._
+
+  // When Utils.isTesting is true, RuleIdCollection adds individual type coercion rules. Otherwise,
+  // RuleIdCollection doesn't add them because they are called in a train inside
+  // CombinedTypeCoercionRule.
+  assert(Utils.isTesting, s"${IS_TESTING.key} is not set to true")
 
   // scalastyle:off line.size.limit
   // The following table shows all implicit data type conversions that are not visible to the user.
@@ -61,13 +69,13 @@ class TypeCoercionSuite extends AnalysisTest {
 
   private def shouldCast(from: DataType, to: AbstractDataType, expected: DataType): Unit = {
     // Check default value
-    val castDefault = TypeCoercion.ImplicitTypeCasts.implicitCast(default(from), to)
+    val castDefault = TypeCoercion.implicitCast(default(from), to)
     assert(DataType.equalsIgnoreCompatibleNullability(
       castDefault.map(_.dataType).getOrElse(null), expected),
       s"Failed to cast $from to $to")
 
     // Check null value
-    val castNull = TypeCoercion.ImplicitTypeCasts.implicitCast(createNull(from), to)
+    val castNull = TypeCoercion.implicitCast(createNull(from), to)
     assert(DataType.equalsIgnoreCaseAndNullability(
       castNull.map(_.dataType).getOrElse(null), expected),
       s"Failed to cast $from to $to")
@@ -75,11 +83,11 @@ class TypeCoercionSuite extends AnalysisTest {
 
   private def shouldNotCast(from: DataType, to: AbstractDataType): Unit = {
     // Check default value
-    val castDefault = TypeCoercion.ImplicitTypeCasts.implicitCast(default(from), to)
+    val castDefault = TypeCoercion.implicitCast(default(from), to)
     assert(castDefault.isEmpty, s"Should not be able to cast $from to $to, but got $castDefault")
 
     // Check null value
-    val castNull = TypeCoercion.ImplicitTypeCasts.implicitCast(createNull(from), to)
+    val castNull = TypeCoercion.implicitCast(createNull(from), to)
     assert(castNull.isEmpty, s"Should not be able to cast $from to $to, but got $castNull")
   }
 
@@ -274,7 +282,7 @@ class TypeCoercionSuite extends AnalysisTest {
         Literal.create(null, sourceType.valueType)))
     targetNotNullableTypes.foreach { targetType =>
       val castDefault =
-        TypeCoercion.ImplicitTypeCasts.implicitCast(sourceMapExprWithValueNull, targetType)
+        TypeCoercion.implicitCast(sourceMapExprWithValueNull, targetType)
       assert(castDefault.isEmpty,
         s"Should not be able to cast $sourceType to $targetType, but got $castDefault")
     }
@@ -1354,7 +1362,8 @@ class TypeCoercionSuite extends AnalysisTest {
 
     assert(unionRelation.children.head.isInstanceOf[Project])
     assert(unionRelation.children(1).isInstanceOf[Project])
-    assert(unionRelation.children(2).isInstanceOf[Project])
+    // thirdTable has same datatypes as expected ones, so no need to add extra Project.
+    assert(unionRelation.children(2).isInstanceOf[LocalRelation])
     assert(unionRelation.children(3).isInstanceOf[Project])
   }
 
@@ -1597,6 +1606,52 @@ class TypeCoercionSuite extends AnalysisTest {
     ruleTest(TypeCoercion.IntegralDivision, IntegralDivide(2, 1L),
       IntegralDivide(Cast(2, LongType), 1L))
   }
+
+  test("SPARK-36431: Support TypeCoercion of ANSI intervals with different fields") {
+    DataTypeTestUtils.yearMonthIntervalTypes.foreach { ym1 =>
+      DataTypeTestUtils.yearMonthIntervalTypes.foreach { ym2 =>
+        val literal1 = Literal.create(Period.ofMonths(12), ym1)
+        val literal2 = Literal.create(Period.ofMonths(12), ym2)
+        val commonType = YearMonthIntervalType(
+          ym1.startField.min(ym2.startField), ym1.endField.max(ym2.endField))
+        if (commonType == ym1 && commonType == ym2) {
+          ruleTest(TypeCoercion.ImplicitTypeCasts, EqualTo(literal1, literal2),
+            EqualTo(literal1, literal2))
+        } else if (commonType == ym1) {
+          ruleTest(TypeCoercion.ImplicitTypeCasts, EqualTo(literal1, literal2),
+            EqualTo(literal1, Cast(literal2, commonType)))
+        } else if (commonType == ym2) {
+          ruleTest(TypeCoercion.ImplicitTypeCasts, EqualTo(literal1, literal2),
+            EqualTo(Cast(literal1, commonType), literal2))
+        } else {
+          ruleTest(TypeCoercion.ImplicitTypeCasts, EqualTo(literal1, literal2),
+            EqualTo(Cast(literal1, commonType), Cast(literal2, commonType)))
+        }
+      }
+    }
+
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt1 =>
+      DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt2 =>
+        val literal1 = Literal.create(Duration.ofSeconds(1111), dt1)
+        val literal2 = Literal.create(Duration.ofSeconds(1111), dt2)
+        val commonType = DayTimeIntervalType(
+          dt1.startField.min(dt2.startField), dt1.endField.max(dt2.endField))
+        if (commonType == dt1 && commonType == dt2) {
+          ruleTest(TypeCoercion.ImplicitTypeCasts, EqualTo(literal1, literal2),
+            EqualTo(literal1, literal2))
+        } else if (commonType == dt1) {
+          ruleTest(TypeCoercion.ImplicitTypeCasts, EqualTo(literal1, literal2),
+            EqualTo(literal1, Cast(literal2, commonType)))
+        } else if (commonType == dt2) {
+          ruleTest(TypeCoercion.ImplicitTypeCasts, EqualTo(literal1, literal2),
+            EqualTo(Cast(literal1, commonType), literal2))
+        } else {
+          ruleTest(TypeCoercion.ImplicitTypeCasts, EqualTo(literal1, literal2),
+            EqualTo(Cast(literal1, commonType), Cast(literal2, commonType)))
+        }
+      }
+    }
+  }
 }
 
 
@@ -1607,8 +1662,9 @@ object TypeCoercionSuite {
   val fractionalTypes: Seq[DataType] =
     Seq(DoubleType, FloatType, DecimalType.SYSTEM_DEFAULT, DecimalType(10, 2))
   val numericTypes: Seq[DataType] = integralTypes ++ fractionalTypes
+  val datetimeTypes: Seq[DataType] = Seq(DateType, TimestampType)
   val atomicTypes: Seq[DataType] =
-    numericTypes ++ Seq(BinaryType, BooleanType, StringType, DateType, TimestampType)
+    numericTypes ++ datetimeTypes ++ Seq(BinaryType, BooleanType, StringType)
   val complexTypes: Seq[DataType] =
     Seq(ArrayType(IntegerType),
       ArrayType(StringType),
@@ -1622,12 +1678,16 @@ object TypeCoercionSuite {
     extends UnaryExpression with ExpectsInputTypes with Unevaluable {
     override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
     override def dataType: DataType = NullType
+    override protected def withNewChildInternal(newChild: Expression): AnyTypeUnaryExpression =
+      copy(child = newChild)
   }
 
   case class NumericTypeUnaryExpression(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with Unevaluable {
     override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
     override def dataType: DataType = NullType
+    override protected def withNewChildInternal(newChild: Expression): NumericTypeUnaryExpression =
+      copy(child = newChild)
   }
 
   case class AnyTypeBinaryOperator(left: Expression, right: Expression)
@@ -1635,6 +1695,9 @@ object TypeCoercionSuite {
     override def dataType: DataType = NullType
     override def inputType: AbstractDataType = AnyDataType
     override def symbol: String = "anytype"
+    override protected def withNewChildrenInternal(
+        newLeft: Expression, newRight: Expression): AnyTypeBinaryOperator =
+      copy(left = newLeft, right = newRight)
   }
 
   case class NumericTypeBinaryOperator(left: Expression, right: Expression)
@@ -1642,5 +1705,8 @@ object TypeCoercionSuite {
     override def dataType: DataType = NullType
     override def inputType: AbstractDataType = NumericType
     override def symbol: String = "numerictype"
+    override protected def withNewChildrenInternal(
+        newLeft: Expression, newRight: Expression): NumericTypeBinaryOperator =
+      copy(left = newLeft, right = newRight)
   }
 }

@@ -94,6 +94,8 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(bytes) === 1024L)
     conf.set(bytes.key, "1k")
     assert(conf.get(bytes) === 1L)
+    conf.set(bytes.key, "2048")
+    assert(conf.get(bytes) === 2048)
   }
 
   test("conf entry: regex") {
@@ -155,12 +157,14 @@ class ConfigEntrySuite extends SparkFunSuite {
     val e1 = intercept[IllegalArgumentException] {
       conf.get(entry)
     }
-    assert(e1.getMessage == "value must be non-negative")
+    assert(e1.getMessage ===
+      s"'-1' in ${testKey("checkValue")} is invalid. value must be non-negative")
 
     val e2 = intercept[IllegalArgumentException] {
       createEntry(-1)
     }
-    assert(e2.getMessage == "value must be non-negative")
+    assert(e2.getMessage ===
+      s"'-1' in ${testKey("checkValue")} is invalid. value must be non-negative")
   }
 
   test("conf entry: valid values check") {

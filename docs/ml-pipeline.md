@@ -240,7 +240,7 @@ This section gives code examples illustrating the functionality discussed above.
 For more info, please refer to the API documentation
 ([Scala](api/scala/org/apache/spark/ml/package.html),
 [Java](api/java/org/apache/spark/ml/package-summary.html),
-and [Python](api/python/pyspark.ml.html)).
+and [Python](api/python/reference/pyspark.ml.html)).
 
 ## Example: Estimator, Transformer, and Param
 
@@ -268,9 +268,9 @@ the [`Params` Java docs](api/java/org/apache/spark/ml/param/Params.html) for det
 
 <div data-lang="python" markdown="1">
 
-Refer to the [`Estimator` Python docs](api/python/pyspark.ml.html#pyspark.ml.Estimator),
-the [`Transformer` Python docs](api/python/pyspark.ml.html#pyspark.ml.Transformer) and
-the [`Params` Python docs](api/python/pyspark.ml.html#pyspark.ml.param.Params) for more details on the API.
+Refer to the [`Estimator` Python docs](api/python/reference/api/pyspark.ml.Estimator.html),
+the [`Transformer` Python docs](api/python/reference/api/pyspark.ml.Transformer.html) and
+the [`Params` Python docs](api/python/reference/api/pyspark.ml.param.Params.html) for more details on the API.
 
 {% include_example python/ml/estimator_transformer_param_example.py %}
 </div>
@@ -300,7 +300,7 @@ Refer to the [`Pipeline` Java docs](api/java/org/apache/spark/ml/Pipeline.html) 
 
 <div data-lang="python" markdown="1">
 
-Refer to the [`Pipeline` Python docs](api/python/pyspark.ml.html#pyspark.ml.Pipeline) for more details on the API.
+Refer to the [`Pipeline` Python docs](api/python/reference/api/pyspark.ml.Pipeline.html) for more details on the API.
 
 {% include_example python/ml/pipeline_example.py %}
 </div>

@@ -31,7 +31,7 @@ case class DescribeNamespaceExec(
     output: Seq[Attribute],
     catalog: SupportsNamespaces,
     namespace: Seq[String],
-    isExtended: Boolean) extends V2CommandExec {
+    isExtended: Boolean) extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     val ns = namespace.toArray
@@ -45,9 +45,13 @@ case class DescribeNamespaceExec(
 
     if (isExtended) {
       val properties = metadata.asScala -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
-      if (properties.nonEmpty) {
-        rows += toCatalystRow("Properties", properties.toSeq.mkString("(", ",", ")"))
-      }
+      val propertiesStr =
+        if (properties.isEmpty) {
+          ""
+        } else {
+          properties.toSeq.sortBy(_._1).mkString("(", ", ", ")")
+        }
+      rows += toCatalystRow("Properties", propertiesStr)
     }
     rows.toSeq
   }

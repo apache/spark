@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+/* global $, getBaseURI */
+
 var baseParams;
 
 var curLogLength;
@@ -56,14 +58,15 @@ function getRESTEndPoint() {
   // If the worker is served from the master through a proxy (see doc on spark.ui.reverseProxy), 
   // we need to retain the leading ../proxy/<workerid>/ part of the URL when making REST requests.
   // Similar logic is contained in executorspage.js function createRESTEndPoint.
-  var words = document.baseURI.split('/');
+  var words = getBaseURI().split('/');
   var ind = words.indexOf("proxy");
   if (ind > 0) {
-      return words.slice(0, ind + 2).join('/') + "/log";
+    return words.slice(0, ind + 2).join('/') + "/log";
   }
   return "/log"
 }
 
+/* eslint-disable no-unused-vars */
 function loadMore() {
   var offset = Math.max(startByte - byteLength, 0);
   var moreByteLength = Math.min(byteLength, startByte);
@@ -140,3 +143,4 @@ function initLogPage(params, logLen, start, end, totLogLen, defaultLen) {
     disableMoreButton();
   }
 }
+/* eslint-enable no-unused-vars */

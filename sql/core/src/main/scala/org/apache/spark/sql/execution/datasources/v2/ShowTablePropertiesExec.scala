@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table}
 case class ShowTablePropertiesExec(
     output: Seq[Attribute],
     catalogTable: Table,
-    propertyKey: Option[String]) extends V2CommandExec {
+    propertyKey: Option[String]) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
     import scala.collection.JavaConverters._
@@ -41,8 +41,8 @@ case class ShowTablePropertiesExec(
           .getOrElse(p, s"Table ${catalogTable.name} does not have property: $p")
         Seq(toCatalystRow(p, propValue))
       case None =>
-        properties.keys.map(k =>
-          toCatalystRow(k, properties(k))).toSeq
+        properties.toSeq.sortBy(_._1).map(kv =>
+          toCatalystRow(kv._1, kv._2)).toSeq
     }
   }
 }

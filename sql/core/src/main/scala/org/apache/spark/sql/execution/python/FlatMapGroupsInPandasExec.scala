@@ -94,4 +94,7 @@ case class FlatMapGroupsInPandasExec(
       executePython(data, output, runner)
     }}
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): FlatMapGroupsInPandasExec =
+    copy(child = newChild)
 }

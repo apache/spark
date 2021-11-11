@@ -51,6 +51,7 @@ import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.launcher.JavaModuleOptions
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
@@ -352,7 +353,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // Thread Local variable that can be used by users to pass information down the stack
   protected[spark] val localProperties = new InheritableThreadLocal[Properties] {
-    override protected def childValue(parent: Properties): Properties = {
+    override def childValue(parent: Properties): Properties = {
       // Note: make a clone such that changes in the parent properties aren't reflected in
       // the those of the children threads, which has confusing semantics (SPARK-10563).
       Utils.cloneProperties(parent)
@@ -396,6 +397,10 @@ class SparkContext(config: SparkConf) extends Logging {
     if (!_conf.contains("spark.app.name")) {
       throw new SparkException("An application name must be set in your configuration")
     }
+    // This should be set as early as possible.
+    SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
+
+    SparkContext.supplementJavaModuleOptions(_conf)
 
     _driverLogger = DriverLogger(_conf)
 
@@ -581,6 +586,10 @@ class SparkContext(config: SparkConf) extends Logging {
     _applicationId = _taskScheduler.applicationId()
     _applicationAttemptId = _taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
+    _applicationAttemptId.foreach { attemptId =>
+      _conf.set(APP_ATTEMPT_ID, attemptId)
+      _env.blockManager.blockStoreClient.setAppAttemptId(attemptId)
+    }
     if (_conf.get(UI_REVERSE_PROXY)) {
       val proxyUrl = _conf.get(UI_REVERSE_PROXY_URL.key, "").stripSuffix("/") +
         "/proxy/" + _applicationId
@@ -593,8 +602,6 @@ class SparkContext(config: SparkConf) extends Logging {
     // The metrics system for Driver need to be set spark.app.id to app ID.
     // So it should start after we get app ID from the task scheduler and set spark.app.id.
     _env.metricsSystem.start(_conf.get(METRICS_STATIC_SOURCES_ENABLED))
-    // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
-    _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
     _eventLogger =
       if (isEventLogEnabled) {
@@ -636,20 +643,11 @@ class SparkContext(config: SparkConf) extends Logging {
     postEnvironmentUpdate()
     postApplicationStart()
 
-    // Post init
-    _taskScheduler.postStartHook()
-    if (isLocal) {
-      _env.metricsSystem.registerSource(Executor.executorSourceLocalModeOnly)
-    }
-    _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
-    _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
-    _env.metricsSystem.registerSource(new JVMCPUSource())
-    _executorMetricsSource.foreach(_.register(_env.metricsSystem))
-    _executorAllocationManager.foreach { e =>
-      _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
-    }
-    appStatusSource.foreach(_env.metricsSystem.registerSource(_))
-    _plugins.foreach(_.registerMetrics(applicationId))
+    // After application started, attach handlers to started server and start handler.
+    _ui.foreach(_.attachAllHandler())
+    // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
+    _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
+
     // Make sure the context is stopped if the user forgets about it. This avoids leaving
     // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
     // is killed, though.
@@ -664,6 +662,21 @@ class SparkContext(config: SparkConf) extends Logging {
           logWarning("Ignoring Exception while stopping SparkContext from shutdown hook", e)
       }
     }
+
+    // Post init
+    _taskScheduler.postStartHook()
+    if (isLocal) {
+      _env.metricsSystem.registerSource(Executor.executorSourceLocalModeOnly)
+    }
+    _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
+    _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
+    _env.metricsSystem.registerSource(new JVMCPUSource())
+    _executorMetricsSource.foreach(_.register(_env.metricsSystem))
+    _executorAllocationManager.foreach { e =>
+      _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
+    }
+    appStatusSource.foreach(_env.metricsSystem.registerSource(_))
+    _plugins.foreach(_.registerMetrics(applicationId))
   } catch {
     case NonFatal(e) =>
       logError("Error initializing SparkContext.", e)
@@ -688,8 +701,14 @@ class SparkContext(config: SparkConf) extends Logging {
       if (executorId == SparkContext.DRIVER_IDENTIFIER) {
         Some(Utils.getThreadDump())
       } else {
-        val endpointRef = env.blockManager.master.getExecutorEndpointRef(executorId).get
-        Some(endpointRef.askSync[Array[ThreadStackTrace]](TriggerThreadDump))
+        env.blockManager.master.getExecutorEndpointRef(executorId) match {
+          case Some(endpointRef) =>
+            Some(endpointRef.askSync[Array[ThreadStackTrace]](TriggerThreadDump))
+          case None =>
+            logWarning(s"Executor $executorId might already have stopped and " +
+              "can not request thread dump from it.")
+            None
+        }
       }
     } catch {
       case e: Exception =>
@@ -1583,11 +1602,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private def addFile(
       path: String, recursive: Boolean, addedOnSubmit: Boolean, isArchive: Boolean = false
     ): Unit = {
-    val uri = if (!isArchive) {
-      new Path(path).toUri
-    } else {
-      Utils.resolveURI(path)
-    }
+    val uri = Utils.resolveURI(path)
     val schemeCorrectedURI = uri.getScheme match {
       case null => new File(path).getCanonicalFile.toURI
       case "local" =>
@@ -1619,10 +1634,8 @@ class SparkContext(config: SparkConf) extends Logging {
       env.rpcEnv.fileServer.addFile(new File(uri.getPath))
     } else if (uri.getScheme == null) {
       schemeCorrectedURI.toString
-    } else if (isArchive) {
-      uri.toString
     } else {
-      path
+      uri.toString
     }
 
     val timestamp = if (addedOnSubmit) startTime else System.currentTimeMillis
@@ -1977,7 +1990,7 @@ class SparkContext(config: SparkConf) extends Logging {
         // For local paths with backslashes on Windows, URI throws an exception
         (addLocalJarFile(new File(path)), "local")
       } else {
-        val uri = new Path(path).toUri
+        val uri = Utils.resolveURI(path)
         // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
         Utils.validateURL(uri)
         val uriScheme = uri.getScheme
@@ -2070,11 +2083,6 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.tryLogNonFatalError {
       _ui.foreach(_.stop())
     }
-    if (env != null) {
-      Utils.tryLogNonFatalError {
-        env.metricsSystem.report()
-      }
-    }
     Utils.tryLogNonFatalError {
       _cleaner.foreach(_.stop())
     }
@@ -2093,9 +2101,15 @@ class SparkContext(config: SparkConf) extends Logging {
         _listenerBusStarted = false
       }
     }
+    if (env != null) {
+      Utils.tryLogNonFatalError {
+        env.metricsSystem.report()
+      }
+    }
     Utils.tryLogNonFatalError {
       _plugins.foreach(_.shutdown())
     }
+    FallbackStorage.cleanUp(_conf, _hadoopConfiguration)
     Utils.tryLogNonFatalError {
       _eventLogger.foreach(_.stop())
     }
@@ -2939,7 +2953,7 @@ object SparkContext extends Logging {
         val memoryPerWorkerInt = memoryPerWorker.toInt
         if (sc.executorMemory > memoryPerWorkerInt) {
           throw new SparkException(
-            "Asked to launch cluster with %d MiB RAM / worker but requested %d MiB/worker".format(
+            "Asked to launch cluster with %d MiB/worker but requested %d MiB/executor".format(
               memoryPerWorkerInt, sc.executorMemory))
         }
 
@@ -2989,6 +3003,46 @@ object SparkContext extends Logging {
         s"Multiple external cluster managers registered for the url $url: $serviceLoaders")
     }
     serviceLoaders.headOption
+  }
+
+  /**
+   * This is a helper function to complete the missing S3A magic committer configurations
+   * based on a single conf: `spark.hadoop.fs.s3a.bucket.<bucket>.committer.magic.enabled`
+   */
+  private def fillMissingMagicCommitterConfsIfNeeded(conf: SparkConf): Unit = {
+    val magicCommitterConfs = conf
+      .getAllWithPrefix("spark.hadoop.fs.s3a.bucket.")
+      .filter(_._1.endsWith(".committer.magic.enabled"))
+      .filter(_._2.equalsIgnoreCase("true"))
+    if (magicCommitterConfs.nonEmpty) {
+      // Try to enable S3 magic committer if missing
+      conf.setIfMissing("spark.hadoop.fs.s3a.committer.magic.enabled", "true")
+      if (conf.get("spark.hadoop.fs.s3a.committer.magic.enabled").equals("true")) {
+        conf.setIfMissing("spark.hadoop.fs.s3a.committer.name", "magic")
+        conf.setIfMissing("spark.hadoop.mapreduce.outputcommitter.factory.scheme.s3a",
+          "org.apache.hadoop.fs.s3a.commit.S3ACommitterFactory")
+        conf.setIfMissing("spark.sql.parquet.output.committer.class",
+          "org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter")
+        conf.setIfMissing("spark.sql.sources.commitProtocolClass",
+          "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol")
+      }
+    }
+  }
+
+  /**
+   * SPARK-36796: This is a helper function to supplement `--add-opens` options to
+   * `spark.driver.extraJavaOptions` and `spark.executor.extraJavaOptions`.
+   */
+  private def supplementJavaModuleOptions(conf: SparkConf): Unit = {
+    def supplement(key: OptionalConfigEntry[String]): Unit = {
+      val v = conf.get(key) match {
+        case Some(opts) => s"${JavaModuleOptions.defaultModuleOptions()} $opts"
+        case None => JavaModuleOptions.defaultModuleOptions()
+      }
+      conf.set(key.key, v)
+    }
+    supplement(DRIVER_JAVA_OPTIONS)
+    supplement(EXECUTOR_JAVA_OPTIONS)
   }
 }
 

@@ -33,14 +33,19 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{CacheTable, InsertIntoDir, InsertIntoStatement, LogicalPlan, Project, UncacheTable}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Count, CountStar, Max, Min, Sum}
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.sources._
@@ -76,28 +81,19 @@ object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
     // The sum of the number of static partition columns and columns provided in the SELECT
     // clause needs to match the number of columns of the target table.
     if (staticPartitions.size + sourceAttributes.size != targetAttributes.size) {
-      throw new AnalysisException(
-        s"The data to be inserted needs to have the same number of " +
-          s"columns as the target table: target table has ${targetAttributes.size} " +
-          s"column(s) but the inserted data has ${sourceAttributes.size + staticPartitions.size} " +
-          s"column(s), which contain ${staticPartitions.size} partition column(s) having " +
-          s"assigned constant values.")
+      throw QueryCompilationErrors.insertMismatchedColumnNumberError(
+        targetAttributes, sourceAttributes, staticPartitions.size)
     }
 
     if (providedPartitions.size != targetPartitionSchema.fields.size) {
-      throw new AnalysisException(
-        s"The data to be inserted needs to have the same number of " +
-          s"partition columns as the target table: target table " +
-          s"has ${targetPartitionSchema.fields.size} partition column(s) but the inserted " +
-          s"data has ${providedPartitions.size} partition columns specified.")
+      throw QueryCompilationErrors.insertMismatchedPartitionNumberError(
+        targetPartitionSchema, providedPartitions.size)
     }
 
     staticPartitions.foreach {
-      case (partKey, partValue) =>
+      case (partKey, _) =>
         if (!targetPartitionSchema.fields.exists(field => resolver(field.name, partKey))) {
-          throw new AnalysisException(
-            s"$partKey is not a partition column. Partition columns are " +
-              s"${targetPartitionSchema.fields.map(_.name).mkString("[", ",", "]")}")
+          throw QueryCompilationErrors.invalidPartitionColumnError(partKey, targetPartitionSchema)
         }
     }
 
@@ -121,9 +117,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
             Some(Alias(cast(Literal(partValue), field.dataType), field.name)())
         }
       } else {
-        throw new AnalysisException(
-          s"Partition column ${field.name} have multiple values specified, " +
-            s"${potentialSpecs.mkString("[", ", ", "]")}. Please only specify a single value.")
+        throw QueryCompilationErrors.multiplePartitionColumnValuesSpecifiedError(
+          field, potentialSpecs)
       }
     }
 
@@ -131,11 +126,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
     // any static partition appear after dynamic partitions.
     partitionList.dropWhile(_.isDefined).collectFirst {
       case Some(_) =>
-        throw new AnalysisException(
-          s"The ordering of partition columns is " +
-            s"${targetPartitionSchema.fields.map(_.name).mkString("[", ",", "]")}. " +
-            "All partition columns having constant values need to appear before other " +
-            "partition columns that do not have an assigned constant value.")
+        throw QueryCompilationErrors.invalidOrderingForConstantValuePartitionColumnError(
+          targetPartitionSchema)
     }
 
     assert(partitionList.take(staticPartitions.size).forall(_.isDefined))
@@ -199,7 +191,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
 
       // Sanity check
       if (t.location.rootPaths.size != 1) {
-        throw new AnalysisException("Can only write data to relations with a single path.")
+        throw QueryCompilationErrors.cannotWriteDataToRelationsWithMultiplePathsError()
       }
 
       val outputPath = t.location.rootPaths.head
@@ -283,20 +275,6 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false), _, _, _, _, _) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
-    case c @ CacheTable(UnresolvedCatalogRelation(tableMeta, options, false), _, _, _)
-      if DDLUtils.isDatasourceTable(tableMeta) =>
-      c.copy(table = readDataSourceTable(tableMeta, options))
-
-    case c @ CacheTable(UnresolvedCatalogRelation(tableMeta, _, false), _, _, _) =>
-      c.copy(table = DDLUtils.readHiveTable(tableMeta))
-
-    case u @ UncacheTable(UnresolvedCatalogRelation(tableMeta, options, false), _, _)
-        if DDLUtils.isDatasourceTable(tableMeta) =>
-      u.copy(table = readDataSourceTable(tableMeta, options))
-
-    case u @ UncacheTable(UnresolvedCatalogRelation(tableMeta, _, false), _, _) =>
-      u.copy(table = DDLUtils.readHiveTable(tableMeta))
-
     case UnresolvedCatalogRelation(tableMeta, options, false)
         if DDLUtils.isDatasourceTable(tableMeta) =>
       readDataSourceTable(tableMeta, options)
@@ -358,6 +336,7 @@ object DataSourceStrategy
         l.output.toStructType,
         Set.empty,
         Set.empty,
+        PushedDownOperators(None, None, None),
         toCatalystRDD(l, baseRelation.buildScan()),
         baseRelation,
         None) :: Nil
@@ -431,6 +410,7 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
+        PushedDownOperators(None, None, None),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.catalogTable.map(_.identifier))
@@ -453,6 +433,7 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
+        PushedDownOperators(None, None, None),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.catalogTable.map(_.identifier))
@@ -485,7 +466,7 @@ object DataSourceStrategy
    */
   protected[sql] def normalizeExprs(
       exprs: Seq[Expression],
-      attributes: Seq[AttributeReference]): Seq[Expression] = {
+      attributes: Seq[Attribute]): Seq[Expression] = {
     exprs.map { e =>
       e transform {
         case a: AttributeReference =>
@@ -572,6 +553,9 @@ object DataSourceStrategy
     case expressions.Literal(false, BooleanType) =>
       Some(sources.AlwaysFalse)
 
+    case e @ pushableColumn(name) if e.dataType.isInstanceOf[BooleanType] =>
+      Some(sources.EqualTo(name, true))
+
     case _ => None
   }
 
@@ -653,9 +637,27 @@ object DataSourceStrategy
         expressions.Not(rebuildExpressionFromFilter(pred, translatedFilterToExpr))
       case other =>
         translatedFilterToExpr.getOrElse(other,
-          throw new AnalysisException(
-            s"Fail to rebuild expression: missing key $filter in `translatedFilterToExpr`"))
+          throw QueryCompilationErrors.failedToRebuildExpressionError(filter))
     }
+  }
+
+  /**
+   * Translates a runtime filter into a data source filter.
+   *
+   * Runtime filters usually contain a subquery that must be evaluated before the translation.
+   * If the underlying subquery hasn't completed yet, this method will throw an exception.
+   */
+  protected[sql] def translateRuntimeFilter(expr: Expression): Option[Filter] = expr match {
+    case in @ InSubqueryExec(e @ PushableColumnAndNestedColumn(name), _, _, _, _, _) =>
+      val values = in.values().getOrElse {
+        throw new IllegalStateException(s"Can't translate $in to source filter, no subquery result")
+      }
+      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
+      Some(sources.In(name, values.map(toScala)))
+
+    case other =>
+      logWarning(s"Can't translate $other to source filter, unsupported expression")
+      None
   }
 
   /**
@@ -700,6 +702,30 @@ object DataSourceStrategy
     (nonconvertiblePredicates ++ unhandledPredicates, pushedFilters, handledFilters)
   }
 
+  protected[sql] def translateAggregate(agg: AggregateExpression): Option[AggregateFunc] = {
+    if (agg.filter.isEmpty) {
+      agg.aggregateFunction match {
+        case aggregate.Min(PushableColumnWithoutNestedColumn(name)) =>
+          Some(new Min(FieldReference(name)))
+        case aggregate.Max(PushableColumnWithoutNestedColumn(name)) =>
+          Some(new Max(FieldReference(name)))
+        case count: aggregate.Count if count.children.length == 1 =>
+          count.children.head match {
+            // COUNT(any literal) is the same as COUNT(*)
+            case Literal(_, _) => Some(new CountStar())
+            case PushableColumnWithoutNestedColumn(name) =>
+              Some(new Count(FieldReference(name), agg.isDistinct))
+            case _ => None
+          }
+        case sum @ aggregate.Sum(PushableColumnWithoutNestedColumn(name), _) =>
+          Some(new Sum(FieldReference(name), agg.isDistinct))
+        case _ => None
+      }
+    } else {
+      None
+    }
+  }
+
   /**
    * Convert RDD of Row into RDD of InternalRow with objects in catalyst types
    */
@@ -726,20 +752,25 @@ abstract class PushableColumnBase {
 
   def unapply(e: Expression): Option[String] = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-    def helper(e: Expression): Option[Seq[String]] = e match {
-      case a: Attribute =>
-        // Attribute that contains dot "." in name is supported only when
-        // nested predicate pushdown is enabled.
-        if (nestedPredicatePushdownEnabled || !a.name.contains(".")) {
-          Some(Seq(a.name))
-        } else {
-          None
-        }
-      case s: GetStructField if nestedPredicatePushdownEnabled =>
-        helper(s.child).map(_ :+ s.childSchema(s.ordinal).name)
-      case _ => None
+    if (nestedPredicatePushdownEnabled) {
+      extractNestedCol(e).map(_.quoted)
+    } else {
+      extractTopLevelCol(e)
     }
-    helper(e).map(_.quoted)
+  }
+
+  private def extractTopLevelCol(e: Expression): Option[String] = e match {
+    // Attribute that contains dot "." in name is supported only when nested predicate pushdown
+    // is enabled.
+    case a: Attribute if !a.name.contains(".") => Some(a.name)
+    case _ => None
+  }
+
+  private def extractNestedCol(e: Expression): Option[Seq[String]] = e match {
+    case a: Attribute => Some(Seq(a.name))
+    case s: GetStructField =>
+      extractNestedCol(s.child).map(_ :+ s.childSchema(s.ordinal).name)
+    case _ => None
   }
 }
 

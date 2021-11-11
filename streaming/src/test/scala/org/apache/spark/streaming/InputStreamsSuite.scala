@@ -264,7 +264,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
         def write(path: Path, text: String): Unit = {
           val out = fs.create(path, true)
-          IOUtils.write(text, out)
+          IOUtils.write(text, out, StandardCharsets.UTF_8)
           out.close()
         }
 

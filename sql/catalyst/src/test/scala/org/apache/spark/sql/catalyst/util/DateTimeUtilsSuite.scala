@@ -123,8 +123,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkFromToJavaDate(new Date(df2.parse("1776-07-04 18:30:00 UTC").getTime))
   }
 
-  private def toDate(s: String, zoneId: ZoneId = UTC): Option[Int] = {
-    stringToDate(UTF8String.fromString(s), zoneId)
+  private def toDate(s: String): Option[Int] = {
+    stringToDate(UTF8String.fromString(s))
   }
 
   test("string to date") {
@@ -142,13 +142,32 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(toDate("2015.03.18").isEmpty)
     assert(toDate("20150318").isEmpty)
     assert(toDate("2015-031-8").isEmpty)
-    assert(toDate("02015-03-18").isEmpty)
     assert(toDate("015-03-18").isEmpty)
     assert(toDate("015").isEmpty)
-    assert(toDate("02015").isEmpty)
     assert(toDate("1999 08 01").isEmpty)
     assert(toDate("1999-08 01").isEmpty)
     assert(toDate("1999 08").isEmpty)
+    assert(toDate("1999-08-").isEmpty)
+    assert(toDate("").isEmpty)
+    assert(toDate("   ").isEmpty)
+  }
+
+  test("SPARK-35780: support full range of date string") {
+    assert(toDate("02015-03-18").get === days(2015, 3, 18))
+    assert(toDate("02015").get === days(2015, 1, 1))
+    assert(toDate("-02015").get === days(-2015, 1, 1))
+    assert(toDate("999999-1-28").get === days(999999, 1, 28))
+    assert(toDate("-999999-1-28").get === days(-999999, 1, 28))
+    assert(toDate("0001-1-28").get === days(1, 1, 28))
+    // Int.MaxValue and Int.MaxValue + 1 day
+    assert(toDate("5881580-7-11").get === days(5881580, 7, 11))
+    assert(toDate("5881580-7-12").isEmpty)
+    // Int.MinValue and Int.MinValue - 1 day
+    assert(toDate("-5877641-6-23").get === days(-5877641, 6, 23))
+    assert(toDate("-5877641-6-22").isEmpty)
+    // Check overflow of single segment in date format
+    assert(toDate("4294967297").isEmpty)
+    assert(toDate("2021-4294967297-11").isEmpty)
   }
 
   private def toTimestamp(str: String, zoneId: ZoneId): Option[Long] = {
@@ -164,7 +183,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("1969-12-31 16:00:00", Option(date(1969, 12, 31, 16, zid = zid)))
       checkStringToTimestamp("0001", Option(date(1, 1, 1, 0, zid = zid)))
       checkStringToTimestamp("2015-03", Option(date(2015, 3, 1, zid = zid)))
-      Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18T").foreach { s =>
+      Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ").foreach { s =>
         checkStringToTimestamp(s, Option(date(2015, 3, 18, zid = zid)))
       }
 
@@ -178,6 +197,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       expected = Option(date(2015, 3, 18, 12, 3, 17, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17-13:53", expected)
       checkStringToTimestamp("2015-03-18T12:03:17GMT-13:53", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17-1353", expected)
 
       expected = Option(date(2015, 3, 18, 12, 3, 17, zid = UTC))
       checkStringToTimestamp("2015-03-18T12:03:17Z", expected)
@@ -189,16 +209,19 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("2015-03-18T12:03:17-1:0", expected)
       checkStringToTimestamp("2015-03-18T12:03:17-01:00", expected)
       checkStringToTimestamp("2015-03-18T12:03:17GMT-01:00", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17-0100", expected)
 
       zoneId = getZoneId("+07:30")
       expected = Option(date(2015, 3, 18, 12, 3, 17, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17+07:30", expected)
       checkStringToTimestamp("2015-03-18T12:03:17 GMT+07:30", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17+0730", expected)
 
       zoneId = getZoneId("+07:03")
       expected = Option(date(2015, 3, 18, 12, 3, 17, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17+07:03", expected)
       checkStringToTimestamp("2015-03-18T12:03:17GMT+07:03", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17+0703", expected)
 
       // tests for the string including milliseconds.
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, zid = zid))
@@ -217,16 +240,19 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("2015-03-18T12:03:17.123-1:0", expected)
       checkStringToTimestamp("2015-03-18T12:03:17.123-01:00", expected)
       checkStringToTimestamp("2015-03-18T12:03:17.123 GMT-01:00", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.123-0100", expected)
 
       zoneId = getZoneId("+07:30")
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.123+07:30", expected)
       checkStringToTimestamp("2015-03-18T12:03:17.123 GMT+07:30", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.123+0730", expected)
 
       zoneId = getZoneId("+07:30")
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.123+07:30", expected)
       checkStringToTimestamp("2015-03-18T12:03:17.123GMT+07:30", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.123+0730", expected)
 
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123121, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.123121+7:30", expected)
@@ -236,6 +262,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123120, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.12312+7:30", expected)
       checkStringToTimestamp("2015-03-18T12:03:17.12312 UT+07:30", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.12312+0730", expected)
 
       expected = Option(time(18, 12, 15, zid = zid))
       checkStringToTimestamp("18:12:15", expected)
@@ -244,17 +271,18 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       expected = Option(time(18, 12, 15, 123120, zid = zoneId))
       checkStringToTimestamp("T18:12:15.12312+7:30", expected)
       checkStringToTimestamp("T18:12:15.12312 UTC+07:30", expected)
+      checkStringToTimestamp("T18:12:15.12312+0730", expected)
 
       zoneId = getZoneId("+07:30")
       expected = Option(time(18, 12, 15, 123120, zid = zoneId))
       checkStringToTimestamp("18:12:15.12312+7:30", expected)
       checkStringToTimestamp("18:12:15.12312 GMT+07:30", expected)
+      checkStringToTimestamp("18:12:15.12312+0730", expected)
 
       expected = Option(date(2011, 5, 6, 7, 8, 9, 100000, zid = zid))
       checkStringToTimestamp("2011-05-06 07:08:09.1000", expected)
 
       checkStringToTimestamp("238", None)
-      checkStringToTimestamp("00238", None)
       checkStringToTimestamp("2015-03-18 123142", None)
       checkStringToTimestamp("2015-03-18T123123", None)
       checkStringToTimestamp("2015-03-18X", None)
@@ -262,7 +290,6 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("2015.03.18", None)
       checkStringToTimestamp("20150318", None)
       checkStringToTimestamp("2015-031-8", None)
-      checkStringToTimestamp("02015-01-18", None)
       checkStringToTimestamp("015-01-18", None)
       checkStringToTimestamp("2015-03-18T12:03.17-20:0", None)
       checkStringToTimestamp("2015-03-18T12:03.17-0:70", None)
@@ -270,6 +297,14 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("1999 08 01", None)
       checkStringToTimestamp("1999-08 01", None)
       checkStringToTimestamp("1999 08", None)
+      checkStringToTimestamp("", None)
+      checkStringToTimestamp("    ", None)
+      checkStringToTimestamp("+", None)
+      checkStringToTimestamp("T", None)
+      checkStringToTimestamp("2015-03-18T", None)
+      checkStringToTimestamp("12::", None)
+      checkStringToTimestamp("2015-03-18T12:03:17-8:", None)
+      checkStringToTimestamp("2015-03-18T12:03:17-8:30:", None)
 
       // Truncating the fractional seconds
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123456, zid = UTC))
@@ -281,6 +316,45 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123456, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.123456 Europe/Moscow", expected)
     }
+  }
+
+  test("SPARK-35780: support full range of timestamp string") {
+    def checkStringToTimestamp(str: String, expected: Option[Long]): Unit = {
+      assert(toTimestamp(str, UTC) === expected)
+    }
+
+    checkStringToTimestamp("-1969-12-31 16:00:00", Option(date(-1969, 12, 31, 16, zid = UTC)))
+    checkStringToTimestamp("02015-03-18 16:00:00", Option(date(2015, 3, 18, 16, zid = UTC)))
+    checkStringToTimestamp("000001", Option(date(1, 1, 1, 0, zid = UTC)))
+    checkStringToTimestamp("-000001", Option(date(-1, 1, 1, 0, zid = UTC)))
+    checkStringToTimestamp("00238", Option(date(238, 1, 1, 0, zid = UTC)))
+    checkStringToTimestamp("99999-03-01T12:03:17", Option(date(99999, 3, 1, 12, 3, 17, zid = UTC)))
+    checkStringToTimestamp("+12:12:12", None)
+    checkStringToTimestamp("-12:12:12", None)
+    checkStringToTimestamp("", None)
+    checkStringToTimestamp("    ", None)
+    checkStringToTimestamp("+", None)
+    // Long.MaxValue and Long.MaxValue + 1 micro seconds
+    checkStringToTimestamp(
+      "294247-01-10T04:00:54.775807Z",
+      Option(date(294247, 1, 10, 4, 0, 54, 775807, zid = UTC)))
+    checkStringToTimestamp("294247-01-10T04:00:54.775808Z", None)
+    // Long.MinValue and Long.MinValue - 1 micro seconds
+    checkStringToTimestamp(
+      "-290308-12-21T19:59:05.224192Z",
+      Option(date(-290308, 12, 21, 19, 59, 5, 224192, zid = UTC)))
+    // Check overflow of single segment in timestamp format
+    checkStringToTimestamp("-290308-12-21T19:59:05.224191Z", None)
+    checkStringToTimestamp("4294967297", None)
+    checkStringToTimestamp("2021-4294967297-11", None)
+    checkStringToTimestamp("4294967297:30:00", None)
+    checkStringToTimestamp("2021-11-4294967297T12:30:00", None)
+    checkStringToTimestamp("2021-01-01T12:4294967297:00", None)
+    checkStringToTimestamp("2021-01-01T12:30:4294967297", None)
+    checkStringToTimestamp("2021-01-01T12:30:4294967297.123456", None)
+    checkStringToTimestamp("2021-01-01T12:30:4294967297+07:30", None)
+    checkStringToTimestamp("2021-01-01T12:30:4294967297UTC", None)
+    checkStringToTimestamp("2021-01-01T12:30:4294967297+4294967297:30", None)
   }
 
   test("SPARK-15379: special invalid date string") {
@@ -393,6 +467,22 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(dateAddMonths(input, -13) === days(1996, 1, 28))
   }
 
+  test("SPARK-34739: timestamp add months") {
+    outstandingZoneIds.foreach { zid =>
+      Seq(
+        (date(2021, 3, 13, 21, 28, 13, 123456, zid), 0, date(2021, 3, 13, 21, 28, 13, 123456, zid)),
+        (date(2021, 3, 31, 0, 0, 0, 123, zid), -1, date(2021, 2, 28, 0, 0, 0, 123, zid)),
+        (date(2020, 2, 29, 1, 2, 3, 4, zid), 12, date(2021, 2, 28, 1, 2, 3, 4, zid)),
+        (date(1, 1, 1, 0, 0, 0, 1, zid), 2020 * 12, date(2021, 1, 1, 0, 0, 0, 1, zid)),
+        (date(1581, 10, 7, 23, 59, 59, 999, zid), 12, date(1582, 10, 7, 23, 59, 59, 999, zid)),
+        (date(9999, 12, 31, 23, 59, 59, 999999, zid), -11,
+          date(9999, 1, 31, 23, 59, 59, 999999, zid))
+      ).foreach { case (timestamp, months, expected) =>
+        assert(timestampAddMonths(timestamp, months, zid) === expected)
+      }
+    }
+  }
+
   test("date add interval with day precision") {
     val input = days(1997, 2, 28)
     assert(dateAddInterval(input, new CalendarInterval(36, 0, 0)) === days(2000, 2, 28))
@@ -401,7 +491,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     intercept[IllegalArgumentException](dateAddInterval(input, new CalendarInterval(36, 47, 1)))
   }
 
-  test("timestamp add months") {
+  test("timestamp add interval") {
     val ts1 = date(1997, 2, 28, 10, 30, 0)
     val ts2 = date(2000, 2, 28, 10, 30, 0, 123000)
     assert(timestampAddInterval(ts1, 36, 0, 123000, defaultZoneId) === ts2)
@@ -471,6 +561,13 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         test("2011-12-25 09:00:00.123456", JST.getId, "2011-12-25 18:00:00.123456")
         test("2011-12-25 09:00:00.123456", LA.getId, "2011-12-25 01:00:00.123456")
         test("2011-12-25 09:00:00.123456", "Asia/Shanghai", "2011-12-25 17:00:00.123456")
+        test("2011-12-25 09:00:00.123456", "-7", "2011-12-25 02:00:00.123456")
+        test("2011-12-25 09:00:00.123456", "+8:00", "2011-12-25 17:00:00.123456")
+        test("2011-12-25 09:00:00.123456", "+8:00:00", "2011-12-25 17:00:00.123456")
+        test("2011-12-25 09:00:00.123456", "+0800", "2011-12-25 17:00:00.123456")
+        test("2011-12-25 09:00:00.123456", "-071020", "2011-12-25 01:49:40.123456")
+        test("2011-12-25 09:00:00.123456", "-07:10:20", "2011-12-25 01:49:40.123456")
+
       }
     }
 
@@ -496,6 +593,12 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         test("2011-12-25 18:00:00.123456", JST.getId, "2011-12-25 09:00:00.123456")
         test("2011-12-25 01:00:00.123456", LA.getId, "2011-12-25 09:00:00.123456")
         test("2011-12-25 17:00:00.123456", "Asia/Shanghai", "2011-12-25 09:00:00.123456")
+        test("2011-12-25 02:00:00.123456", "-7", "2011-12-25 09:00:00.123456")
+        test("2011-12-25 17:00:00.123456", "+8:00", "2011-12-25 09:00:00.123456")
+        test("2011-12-25 17:00:00.123456", "+8:00:00", "2011-12-25 09:00:00.123456")
+        test("2011-12-25 17:00:00.123456", "+0800", "2011-12-25 09:00:00.123456")
+        test("2011-12-25 01:49:40.123456", "-071020", "2011-12-25 09:00:00.123456")
+        test("2011-12-25 01:49:40.123456", "-07:10:20", "2011-12-25 09:00:00.123456")
       }
     }
 
@@ -605,6 +708,39 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("SPARK-35664: microseconds to LocalDateTime") {
+    assert(microsToLocalDateTime(0) ==  LocalDateTime.parse("1970-01-01T00:00:00"))
+    assert(microsToLocalDateTime(100) ==  LocalDateTime.parse("1970-01-01T00:00:00.0001"))
+    assert(microsToLocalDateTime(100000000) ==  LocalDateTime.parse("1970-01-01T00:01:40"))
+    assert(microsToLocalDateTime(100000000000L) ==  LocalDateTime.parse("1970-01-02T03:46:40"))
+    assert(microsToLocalDateTime(253402300799999999L) ==
+      LocalDateTime.parse("9999-12-31T23:59:59.999999"))
+    assert(microsToLocalDateTime(Long.MinValue) ==
+      LocalDateTime.parse("-290308-12-21T19:59:05.224192"))
+    assert(microsToLocalDateTime(Long.MaxValue) ==
+      LocalDateTime.parse("+294247-01-10T04:00:54.775807"))
+  }
+
+  test("SPARK-35664: LocalDateTime to microseconds") {
+    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("1970-01-01T00:00:00")) == 0)
+    assert(
+      DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("1970-01-01T00:00:00.0001")) == 100)
+    assert(
+      DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("1970-01-01T00:01:40")) == 100000000)
+    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("1970-01-02T03:46:40")) ==
+      100000000000L)
+    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("9999-12-31T23:59:59.999999"))
+      == 253402300799999999L)
+    assert(DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("-1000-12-31T23:59:59.999999"))
+      == -93692592000000001L)
+    Seq(LocalDateTime.MIN, LocalDateTime.MAX).foreach { dt =>
+      val msg = intercept[ArithmeticException] {
+        DateTimeUtils.localDateTimeToMicros(dt)
+      }.getMessage
+      assert(msg == "long overflow")
+    }
+  }
+
   test("daysToMicros and microsToDays") {
     val input = date(2015, 12, 31, 16, zid = LA)
     assert(microsToDays(input, LA) === 16800)
@@ -644,35 +780,52 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(DateTimeUtils.microsToMillis(-157700927876544L) === -157700927877L)
   }
 
-  test("special timestamp values") {
+  test("SPARK-29012: special timestamp values") {
     testSpecialDatetimeValues { zoneId =>
       val tolerance = TimeUnit.SECONDS.toMicros(30)
 
-      assert(toTimestamp("Epoch", zoneId).get === 0)
+      assert(convertSpecialTimestamp("Epoch", zoneId).get === 0)
       val now = instantToMicros(Instant.now())
-      toTimestamp("NOW", zoneId).get should be(now +- tolerance)
-      assert(toTimestamp("now UTC", zoneId) === None)
+      convertSpecialTimestamp("NOW", zoneId).get should be(now +- tolerance)
+      assert(convertSpecialTimestamp("now UTC", zoneId) === None)
       val localToday = LocalDateTime.now(zoneId)
         .`with`(LocalTime.MIDNIGHT)
         .atZone(zoneId)
       val yesterday = instantToMicros(localToday.minusDays(1).toInstant)
-      toTimestamp(" Yesterday", zoneId).get should be(yesterday +- tolerance)
+      convertSpecialTimestamp(" Yesterday", zoneId).get should be(yesterday +- tolerance)
       val today = instantToMicros(localToday.toInstant)
-      toTimestamp("Today ", zoneId).get should be(today +- tolerance)
+      convertSpecialTimestamp("Today ", zoneId).get should be(today +- tolerance)
       val tomorrow = instantToMicros(localToday.plusDays(1).toInstant)
-      toTimestamp(" tomorrow CET ", zoneId).get should be(tomorrow +- tolerance)
+      convertSpecialTimestamp(" tomorrow CET ", zoneId).get should be(tomorrow +- tolerance)
     }
   }
 
-  test("special date values") {
+  test("SPARK-35979: special timestamp without time zone values") {
+    val tolerance = TimeUnit.SECONDS.toMicros(30)
+
     testSpecialDatetimeValues { zoneId =>
-      assert(toDate("epoch", zoneId).get === 0)
+      assert(convertSpecialTimestampNTZ("Epoch", zoneId).get === 0)
+      val now = DateTimeUtils.localDateTimeToMicros(LocalDateTime.now(zoneId))
+      convertSpecialTimestampNTZ("NOW", zoneId).get should be(now +- tolerance)
+      val localToday = LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT)
+      val yesterday = DateTimeUtils.localDateTimeToMicros(localToday.minusDays(1))
+      convertSpecialTimestampNTZ(" Yesterday", zoneId).get should be(yesterday)
+      val today = DateTimeUtils.localDateTimeToMicros(localToday)
+      convertSpecialTimestampNTZ("Today ", zoneId).get should be(today)
+      val tomorrow = DateTimeUtils.localDateTimeToMicros(localToday.plusDays(1))
+      convertSpecialTimestampNTZ(" tomorrow ", zoneId).get should be(tomorrow)
+    }
+  }
+
+  test("SPARK-28141: special date values") {
+    testSpecialDatetimeValues { zoneId =>
+      assert(convertSpecialDate("epoch", zoneId).get === 0)
       val today = localDateToDays(LocalDate.now(zoneId))
-      assert(toDate("YESTERDAY", zoneId).get === today - 1)
-      assert(toDate(" Now ", zoneId).get === today)
-      assert(toDate("now UTC", zoneId) === None) // "now" does not accept time zones
-      assert(toDate("today", zoneId).get === today)
-      assert(toDate("tomorrow CET ", zoneId).get === today + 1)
+      assert(convertSpecialDate("YESTERDAY", zoneId).get === today - 1)
+      assert(convertSpecialDate(" Now ", zoneId).get === today)
+      assert(convertSpecialDate("now UTC", zoneId) === None) // "now" does not accept time zones
+      assert(convertSpecialDate("today", zoneId).get === today)
+      assert(convertSpecialDate("tomorrow CET ", zoneId).get === today + 1)
     }
   }
 
@@ -681,5 +834,86 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(getDayOfWeekFromString(UTF8String.fromString("MONDAY")) == 4)
     intercept[IllegalArgumentException](getDayOfWeekFromString(UTF8String.fromString("xx")))
     intercept[IllegalArgumentException](getDayOfWeekFromString(UTF8String.fromString("\"quote")))
+  }
+
+  test("SPARK-34761: timestamp add day-time interval") {
+    // transit from Pacific Standard Time to Pacific Daylight Time
+    assert(timestampAddDayTime(
+      // 2019-3-9 is the end of Pacific Standard Time
+      date(2019, 3, 9, 12, 0, 0, 123000, LA),
+      MICROS_PER_DAY, LA) ===
+      // 2019-3-10 is the start of Pacific Daylight Time
+      date(2019, 3, 10, 12, 0, 0, 123000, LA))
+    // just normal days
+    outstandingZoneIds.foreach { zid =>
+      assert(timestampAddDayTime(
+        date(2021, 3, 18, 19, 44, 1, 100000, zid), 0, zid) ===
+        date(2021, 3, 18, 19, 44, 1, 100000, zid))
+      assert(timestampAddDayTime(
+        date(2021, 1, 19, 0, 0, 0, 0, zid), -18 * MICROS_PER_DAY, zid) ===
+        date(2021, 1, 1, 0, 0, 0, 0, zid))
+      assert(timestampAddDayTime(
+        date(2021, 3, 18, 19, 44, 1, 999999, zid), 10 * MICROS_PER_MINUTE, zid) ===
+        date(2021, 3, 18, 19, 54, 1, 999999, zid))
+      assert(timestampAddDayTime(
+        date(2021, 3, 18, 19, 44, 1, 1, zid), -MICROS_PER_DAY - 1, zid) ===
+        date(2021, 3, 17, 19, 44, 1, 0, zid))
+      assert(timestampAddDayTime(
+        date(2019, 5, 9, 12, 0, 0, 123456, zid), 2 * MICROS_PER_DAY + 1, zid) ===
+        date(2019, 5, 11, 12, 0, 0, 123457, zid))
+    }
+    // transit from Pacific Daylight Time to Pacific Standard Time
+    assert(timestampAddDayTime(
+      // 2019-11-2 is the end of Pacific Daylight Time
+      date(2019, 11, 2, 12, 0, 0, 123000, LA),
+      MICROS_PER_DAY, LA) ===
+      // 2019-11-3 is the start of Pacific Standard Time
+      date(2019, 11, 3, 12, 0, 0, 123000, LA))
+  }
+
+  test("SPARK-34903: subtract timestamps") {
+    DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
+      Seq(
+        // 1000-02-29 exists in Julian calendar because 1000 is a leap year
+        (LocalDateTime.of(1000, 2, 28, 1, 2, 3, 456789000),
+          LocalDateTime.of(1000, 3, 1, 1, 2, 3, 456789000)) -> TimeUnit.DAYS.toMicros(1),
+        // The range 1582-10-04 .. 1582-10-15 doesn't exist in Julian calendar
+        (LocalDateTime.of(1582, 10, 4, 23, 59, 59, 999999000),
+          LocalDateTime.of(1582, 10, 15, 23, 59, 59, 999999000)) -> TimeUnit.DAYS.toMicros(11),
+        // America/Los_Angeles -08:00 zone offset
+        (LocalDateTime.of(1883, 11, 20, 0, 0, 0, 123456000),
+          // America/Los_Angeles -08:00 zone offset
+          LocalDateTime.of(1883, 11, 10, 0, 0, 0)) -> (TimeUnit.DAYS.toMicros(-10) - 123456),
+        // No difference between Proleptic Gregorian and Julian calendars after 1900-01-01
+        (LocalDateTime.of(1900, 1, 1, 0, 0, 0, 1000),
+          LocalDateTime.of(1899, 12, 31, 23, 59, 59, 999999000)) -> -2,
+        // The 'Asia/Hong_Kong' time zone switched from 'Japan Standard Time' (JST = UTC+9)
+        // to 'Hong Kong Time' (HKT = UTC+8). After Sunday, 18 November, 1945 01:59:59 AM,
+        // clocks were moved backward to become Sunday, 18 November, 1945 01:00:00 AM.
+        // In this way, the overlap happened w/o Daylight Saving Time.
+        (LocalDateTime.of(1945, 11, 18, 0, 30, 30),
+          LocalDateTime.of(1945, 11, 18, 1, 30, 30)) -> TimeUnit.HOURS.toMicros(1),
+        (LocalDateTime.of(1945, 11, 18, 2, 0, 0),
+          LocalDateTime.of(1945, 11, 18, 1, 0, 0)) -> TimeUnit.HOURS.toMicros(-1),
+        // The epoch has zero offset in microseconds
+        (LocalDateTime.of(1970, 1, 1, 0, 0, 0), LocalDateTime.of(1970, 1, 1, 0, 0, 0)) -> 0,
+        // 2020 is a leap year
+        (LocalDateTime.of(2020, 2, 29, 0, 0, 0),
+          LocalDateTime.of(2021, 3, 1, 0, 0, 0)) -> TimeUnit.DAYS.toMicros(366),
+        // Daylight saving in America/Los_Angeles: from winter to summer time
+        (LocalDateTime.of(2021, 3, 14, 1, 0, 0), LocalDateTime.of(2021, 3, 14, 3, 0, 0)) ->
+          TimeUnit.HOURS.toMicros(2)
+      ).foreach { case ((start, end), expected) =>
+        val startMicros = DateTimeTestUtils.localDateTimeToMicros(start, zid)
+        val endMicros = DateTimeTestUtils.localDateTimeToMicros(end, zid)
+        val result = subtractTimestamps(endMicros, startMicros, zid)
+        assert(result === expected)
+      }
+    }
+  }
+
+  test("SPARK-35679: instantToMicros should be able to return microseconds of Long.MinValue") {
+    assert(instantToMicros(microsToInstant(Long.MaxValue)) === Long.MaxValue)
+    assert(instantToMicros(microsToInstant(Long.MinValue)) === Long.MinValue)
   }
 }

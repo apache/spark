@@ -23,18 +23,21 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
+import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOptions)
-  extends Table with SupportsRead with SupportsWrite {
+  extends Table with SupportsRead with SupportsWrite with SupportsIndex {
 
   override def name(): String = ident.toString
 
   override def capabilities(): util.Set[TableCapability] = {
-    Set(BATCH_READ, V1_BATCH_WRITE, TRUNCATE).asJava
+    util.EnumSet.of(BATCH_READ, V1_BATCH_WRITE, TRUNCATE)
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): JDBCScanBuilder = {
@@ -47,5 +50,40 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
     val mergedOptions = new JdbcOptionsInWrite(
       jdbcOptions.parameters.originalMap ++ info.options.asCaseSensitiveMap().asScala)
     JDBCWriteBuilder(schema, mergedOptions)
+  }
+
+  override def createIndex(
+      indexName: String,
+      columns: Array[NamedReference],
+      columnsProperties: util.Map[NamedReference, util.Map[String, String]],
+      properties: util.Map[String, String]): Unit = {
+    JdbcUtils.withConnection(jdbcOptions) { conn =>
+      JdbcUtils.classifyException(s"Failed to create index $indexName in $name",
+        JdbcDialects.get(jdbcOptions.url)) {
+        JdbcUtils.createIndex(
+          conn, indexName, name, columns, columnsProperties, properties, jdbcOptions)
+      }
+    }
+  }
+
+  override def indexExists(indexName: String): Boolean = {
+    JdbcUtils.withConnection(jdbcOptions) { conn =>
+      JdbcUtils.indexExists(conn, indexName, name, jdbcOptions)
+    }
+  }
+
+  override def dropIndex(indexName: String): Unit = {
+    JdbcUtils.withConnection(jdbcOptions) { conn =>
+      JdbcUtils.classifyException(s"Failed to drop index $indexName in $name",
+        JdbcDialects.get(jdbcOptions.url)) {
+        JdbcUtils.dropIndex(conn, indexName, name, jdbcOptions)
+      }
+    }
+  }
+
+  override def listIndexes(): Array[TableIndex] = {
+    JdbcUtils.withConnection(jdbcOptions) { conn =>
+      JdbcUtils.listIndexes(conn, name, jdbcOptions)
+    }
   }
 }

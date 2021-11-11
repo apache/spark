@@ -22,7 +22,7 @@ struct<min(unique1) FILTER (WHERE (unique1 > 100)):int>
 -- !query
 select sum(1/ten) filter (where ten > 0) from tenk1
 -- !query schema
-struct<sum((CAST(1 AS DOUBLE) / CAST(ten AS DOUBLE))) FILTER (WHERE (ten > 0)):double>
+struct<sum((1 / ten)) FILTER (WHERE (ten > 0)):double>
 -- !query output
 2828.9682539682954
 

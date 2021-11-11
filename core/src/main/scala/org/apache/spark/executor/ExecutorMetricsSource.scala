@@ -52,7 +52,7 @@ private[spark] class ExecutorMetricsSource extends Source {
   def register(metricsSystem: MetricsSystem): Unit = {
     val gauges: IndexedSeq[ExecutorMetricGauge] = (0 until ExecutorMetricType.numMetrics).map {
       idx => new ExecutorMetricGauge(idx)
-    }.toIndexedSeq
+    }
 
     ExecutorMetricType.metricToOffset.foreach {
       case (name, idx) =>

@@ -24,6 +24,7 @@ import java.util.{Properties, TimeZone}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCRelation}
@@ -33,41 +34,46 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * The following would be the steps to test this
- * 1. Build Oracle database in Docker, please refer below link about how to.
- *    https://github.com/oracle/docker-images/blob/master/OracleDatabase/SingleInstance/README.md
- * 2. export ORACLE_DOCKER_IMAGE_NAME=$ORACLE_DOCKER_IMAGE_NAME
- *    Pull oracle $ORACLE_DOCKER_IMAGE_NAME image - docker pull $ORACLE_DOCKER_IMAGE_NAME
- * 3. Start docker - sudo service docker start
- * 4. Run spark test - ./build/sbt -Pdocker-integration-tests
+ * The following are the steps to test this:
+ *
+ * 1. Choose to use a prebuilt image or build Oracle database in a container
+ *    - The documentation on how to build Oracle RDBMS in a container is at
+ *      https://github.com/oracle/docker-images/blob/master/OracleDatabase/SingleInstance/README.md
+ *    - Official Oracle container images can be found at https://container-registry.oracle.com
+ *    - A trustable and streamlined Oracle XE database image can be found on Docker Hub at
+ *      https://hub.docker.com/r/gvenzl/oracle-xe see also https://github.com/gvenzl/oci-oracle-xe
+ * 2. Run: export ORACLE_DOCKER_IMAGE_NAME=image_you_want_to_use_for_testing
+ *    - Example: export ORACLE_DOCKER_IMAGE_NAME=gvenzl/oracle-xe:latest
+ * 3. Run: export ENABLE_DOCKER_INTEGRATION_TESTS=1
+ * 4. Start docker: sudo service docker start
+ *    - Optionally, docker pull $ORACLE_DOCKER_IMAGE_NAME
+ * 5. Run Spark integration tests for Oracle with: ./build/sbt -Pdocker-integration-tests
  *    "testOnly org.apache.spark.sql.jdbc.OracleIntegrationSuite"
  *
- * An actual sequence of commands to run the test is as follows
- *
+ * A sequence of commands to build the Oracle XE database container image:
  *  $ git clone https://github.com/oracle/docker-images.git
- *  // Head SHA: 3e352a22618070595f823977a0fd1a3a8071a83c
  *  $ cd docker-images/OracleDatabase/SingleInstance/dockerfiles
- *  $ ./buildDockerImage.sh -v 18.4.0 -x
+ *  $ ./buildContainerImage.sh -v 18.4.0 -x
  *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:18.4.0-xe
- *  $ cd $SPARK_HOME
- *  $ ./build/sbt -Pdocker-integration-tests
- *    "testOnly org.apache.spark.sql.jdbc.OracleIntegrationSuite"
  *
- * It has been validated with 18.4.0 Express Edition.
+ * This procedure has been validated with Oracle 18.4.0 Express Edition.
  */
 @DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkSession {
   import testImplicits._
 
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env("ORACLE_DOCKER_IMAGE_NAME")
+    lazy override val imageName =
+      sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-xe:18.4.0")
+    val oracle_password = "Th1s1sThe0racle#Pass"
     override val env = Map(
-      "ORACLE_PWD" -> "oracle"
+      "ORACLE_PWD" -> oracle_password,      // oracle images uses this
+      "ORACLE_PASSWORD" -> oracle_password  // gvenzl/oracle-xe uses this
     )
     override val usesIpc = false
     override val jdbcPort: Int = 1521
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:oracle:thin:system/oracle@//$ip:$port/xe"
+      s"jdbc:oracle:thin:system/$oracle_password@//$ip:$port/xe"
   }
 
   override val connectionTimeout = timeout(7.minutes)
@@ -288,23 +294,6 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     }
   }
 
-  /**
-   * Change the Time Zone `timeZoneId` of JVM before executing `f`, then switches back to the
-   * original after `f` returns.
-   * @param timeZoneId the ID for a TimeZone, either an abbreviation such as "PST", a full name such
-   *                   as "America/Los_Angeles", or a custom ID such as "GMT-8:00".
-   */
-  private def withTimeZone(timeZoneId: String)(f: => Unit): Unit = {
-    val originalLocale = TimeZone.getDefault
-    try {
-      // Add Locale setting
-      TimeZone.setDefault(TimeZone.getTimeZone(timeZoneId))
-      f
-    } finally {
-      TimeZone.setDefault(originalLocale)
-    }
-  }
-
   test("Column TIMESTAMP with TIME ZONE(JVM timezone)") {
     def checkRow(row: Row, ts: String): Unit = {
       assert(row.getTimestamp(1).equals(Timestamp.valueOf(ts)))
@@ -312,14 +301,14 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> TimeZone.getDefault.getID) {
       val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
-      withTimeZone("PST") {
+      withDefaultTimeZone(PST) {
         assert(dfRead.collect().toSet ===
           Set(
             Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 03:00:00")),
             Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 12:00:00"))))
       }
 
-      withTimeZone("UTC") {
+      withDefaultTimeZone(UTC) {
         assert(dfRead.collect().toSet ===
           Set(
             Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 11:00:00")),
@@ -462,9 +451,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
-          """"D" < '2018-07-10' or "D" is null""",
-          """"D" >= '2018-07-10' AND "D" < '2018-07-14'""",
-          """"D" >= '2018-07-14'"""))
+          """"D" < '2018-07-11' or "D" is null""",
+          """"D" >= '2018-07-11' AND "D" < '2018-07-15'""",
+          """"D" >= '2018-07-15'"""))
     }
     assert(df1.collect.toSet === expectedResult)
 

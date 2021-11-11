@@ -25,6 +25,8 @@ import org.apache.spark.sql.internal.SQLConf
  * V1 Hive external table catalog.
  */
 class ShowNamespacesSuite extends v1.ShowNamespacesSuiteBase with CommandSuiteBase {
+  override def commandVersion: String = "V2" // There is only V2 variant of SHOW NAMESPACES.
+
   test("case sensitivity") {
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
@@ -37,6 +39,17 @@ class ShowNamespacesSuite extends v1.ShowNamespacesSuiteBase with CommandSuiteBa
           runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'AAA'", Seq("aaa"))
           runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'aaa'", Seq("aaa"))
         }
+      }
+    }
+  }
+
+  test("hive client calls") {
+    withNamespace(s"$catalog.ns1", s"$catalog.ns2") {
+      sql(s"CREATE NAMESPACE $catalog.ns1")
+      sql(s"CREATE NAMESPACE $catalog.ns2")
+
+      checkHiveClientCalls(expected = 1) {
+        sql(s"SHOW NAMESPACES IN $catalog")
       }
     }
   }

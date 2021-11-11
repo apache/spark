@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, CurrentDate, CurrentTimestamp, MonotonicallyIncreasingID, Now}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, GroupingSets, LocalTimestamp, MonotonicallyIncreasingID, SessionWindow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -169,6 +169,21 @@ object UnsupportedOperationChecker extends Logging {
                 s"streaming DataFrames/DataSets without watermark")(plan)
         }
 
+      case InternalOutputModes.Update if aggregates.nonEmpty =>
+        val aggregate = aggregates.head
+
+        val existingSessionWindow = aggregate.groupingExpressions.exists {
+          case attr: AttributeReference
+            if attr.metadata.contains(SessionWindow.marker) &&
+               attr.metadata.getBoolean(SessionWindow.marker) => true
+          case _ => false
+        }
+
+        if (existingSessionWindow) {
+          throwError(s"$outputMode output mode not supported for session window on " +
+            "streaming DataFrames/DataSets")(plan)
+        }
+
       case InternalOutputModes.Complete if aggregates.isEmpty =>
         throwError(
           s"$outputMode output mode not supported when there are no streaming aggregations on " +
@@ -203,14 +218,21 @@ object UnsupportedOperationChecker extends Logging {
       // Operations that cannot exists anywhere in a streaming plan
       subPlan match {
 
-        case Aggregate(_, aggregateExpressions, child) =>
+        case Aggregate(groupingExpressions, aggregateExpressions, child) =>
           val distinctAggExprs = aggregateExpressions.flatMap { expr =>
             expr.collect { case ae: AggregateExpression if ae.isDistinct => ae }
           }
+          val haveGroupingSets = groupingExpressions.exists(_.isInstanceOf[GroupingSets])
+
           throwErrorIf(
             child.isStreaming && distinctAggExprs.nonEmpty,
             "Distinct aggregations are not supported on streaming DataFrames/Datasets. Consider " +
               "using approx_count_distinct() instead.")
+
+          throwErrorIf(
+            child.isStreaming && haveGroupingSets,
+            "Grouping Sets is not supported on streaming DataFrames/Datasets"
+          )
 
         case _: Command =>
           throwError("Commands like CreateTable*, AlterTable*, Show* are not supported with " +
@@ -225,6 +247,12 @@ object UnsupportedOperationChecker extends Logging {
           // Check compatibility with output modes and aggregations in query
           val aggsInQuery = collectStreamingAggregates(plan)
 
+          if (m.initialState.isStreaming) {
+            // initial state has to be a batch relation
+            throwError("Non-streaming DataFrame/Dataset is not supported as the" +
+              " initial state in [flatMap|map]GroupsWithState operation on a streaming" +
+              " DataFrame/Dataset")
+          }
           if (m.isMapGroupsWithState) {                       // check mapGroupsWithState
             // allowed only in update query output mode and without aggregation
             if (aggsInQuery.nonEmpty) {
@@ -350,11 +378,8 @@ object UnsupportedOperationChecker extends Logging {
         case Except(left, right, _) if right.isStreaming =>
           throwError("Except on a streaming DataFrame/Dataset on the right is not supported")
 
-        case Intersect(left, right, _) if left.isStreaming && right.isStreaming =>
-          throwError("Intersect between two streaming DataFrames/Datasets is not supported")
-
-        case GroupingSets(_, _, child, _) if child.isStreaming =>
-          throwError("GroupingSets is not supported on streaming DataFrames/Datasets")
+        case Intersect(left, right, _) if left.isStreaming || right.isStreaming =>
+          throwError("Intersect of streaming DataFrames/Datasets is not supported")
 
         case GlobalLimit(_, _) | LocalLimit(_, _)
             if subPlan.children.forall(_.isStreaming) && outputMode == InternalOutputModes.Update =>
@@ -393,6 +418,7 @@ object UnsupportedOperationChecker extends Logging {
         case (_: Project | _: Filter | _: MapElements | _: MapPartitions |
               _: DeserializeToObject | _: SerializeFromObject | _: SubqueryAlias |
               _: TypedFilter) =>
+        case v: View if v.isTempViewStoringAnalyzedPlan =>
         case node if node.nodeName == "StreamingRelationV2" =>
         case node =>
           throwError(s"Continuous processing does not support ${node.nodeName} operations.")
@@ -400,7 +426,7 @@ object UnsupportedOperationChecker extends Logging {
 
       subPlan.expressions.foreach { e =>
         if (e.collectLeaves().exists {
-          case (_: CurrentTimestamp | _: Now | _: CurrentDate) => true
+          case (_: CurrentTimestampLike | _: CurrentDate | _: LocalTimestamp) => true
           case _ => false
         }) {
           throwError(s"Continuous processing does not support current time operations.")

@@ -23,7 +23,7 @@ Python Package Management
 When you want to run your PySpark application on a cluster such as YARN, Kubernetes, Mesos, etc., you need to make
 sure that your code and all used libraries are available on the executors.
 
-As an example let's say you may want to run the `Pandas UDF's examples <arrow_pandas.rst#series-to-scalar>`_.
+As an example let's say you may want to run the `Pandas UDF's examples <sql/arrow_pandas.rst#series-to-scalar>`_.
 As it uses pyarrow as an underlying implementation we need to make sure to have pyarrow installed on each executor
 on the cluster. Otherwise you may get errors such as ``ModuleNotFoundError: No module named 'pyarrow'``.
 
@@ -63,7 +63,7 @@ Using PySpark Native Features
 -----------------------------
 
 PySpark allows to upload Python files (``.py``), zipped Python packages (``.zip``), and Egg files (``.egg``)
-to the executors by:
+to the executors by one of the following:
 
 - Setting the configuration setting ``spark.submit.pyFiles``
 - Setting ``--py-files`` option in Spark scripts
@@ -107,7 +107,7 @@ In the case of a ``spark-submit`` script, you can use it as follows:
 
 Note that ``PYSPARK_DRIVER_PYTHON`` above should not be set for cluster modes in YARN or Kubernetes.
 
-If you’re on a regular Python shell or notebook, you can try it as shown below:
+If you're on a regular Python shell or notebook, you can try it as shown below:
 
 .. code-block:: python
 
@@ -140,8 +140,9 @@ Python dependencies in their clusters by using `venv-pack <https://jcristharif.c
 in a similar way as conda-pack.
 
 A virtual environment to use on both driver and executor can be created as demonstrated below.
-It packs the current virtual environment to an archive file, and It self-contains both Python interpreter
-and the dependencies.
+It packs the current virtual environment to an archive file, and it contains both Python interpreter and the dependencies.
+However, it requires all nodes in a cluster to have the same Python interpreter installed because
+`venv-pack packs Python interpreter as a symbolic link <https://github.com/jcrist/venv-pack/issues/5>`_.
 
 
 .. code-block:: bash
@@ -248,5 +249,5 @@ For the interactive pyspark shell, the commands are almost the same:
 
 An end-to-end Docker example for deploying a standalone PySpark with ``SparkSession.builder`` and PEX
 can be found `here <https://github.com/criteo/cluster-pack/blob/master/examples/spark-with-S3/README.md>`_
-- it uses cluster-pack, a library on top of PEX that automatizes the the intermediate step of having
+- it uses cluster-pack, a library on top of PEX that automatizes the intermediate step of having
 to create & upload the PEX manually.

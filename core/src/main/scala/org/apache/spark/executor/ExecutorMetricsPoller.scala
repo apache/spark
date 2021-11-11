@@ -53,10 +53,10 @@ private[spark] class ExecutorMetricsPoller(
 
   type StageKey = (Int, Int)
   // Task Count and Metric Peaks
-  private case class TCMP(count: AtomicLong, peaks: AtomicLongArray)
+  private[executor] case class TCMP(count: AtomicLong, peaks: AtomicLongArray)
 
   // Map of (stageId, stageAttemptId) to (count of running tasks, executor metric peaks)
-  private val stageTCMP = new ConcurrentHashMap[StageKey, TCMP]
+  private[executor] val stageTCMP = new ConcurrentHashMap[StageKey, TCMP]
 
   // Map of taskId to executor metric peaks
   private val taskMetricPeaks = new ConcurrentHashMap[Long, AtomicLongArray]
@@ -124,17 +124,12 @@ private[spark] class ExecutorMetricsPoller(
    */
   def onTaskCompletion(taskId: Long, stageId: Int, stageAttemptId: Int): Unit = {
     // Decrement the task count.
-    // Remove the entry from stageTCMP if the task count reaches zero.
 
     def decrementCount(stage: StageKey, countAndPeaks: TCMP): TCMP = {
       val countValue = countAndPeaks.count.decrementAndGet()
-      if (countValue == 0L) {
-        logDebug(s"removing (${stage._1}, ${stage._2}) from stageTCMP")
-        null
-      } else {
-        logDebug(s"stageTCMP: (${stage._1}, ${stage._2}) -> " + countValue)
-        countAndPeaks
-      }
+      assert(countValue >= 0, "task count shouldn't below 0")
+      logDebug(s"stageTCMP: (${stage._1}, ${stage._2}) -> " + countValue)
+      countAndPeaks
     }
 
     stageTCMP.computeIfPresent((stageId, stageAttemptId), decrementCount)
@@ -175,6 +170,20 @@ private[spark] class ExecutorMetricsPoller(
     }
 
     stageTCMP.replaceAll(getUpdateAndResetPeaks)
+
+    def removeIfInactive(k: StageKey, v: TCMP): TCMP = {
+      if (v.count.get == 0) {
+        logDebug(s"removing (${k._1}, ${k._2}) from stageTCMP")
+        null
+      } else {
+        v
+      }
+    }
+
+    // Remove the entry from stageTCMP if the task count reaches zero.
+    executorUpdates.foreach { case (k, _) =>
+      stageTCMP.computeIfPresent(k, removeIfInactive)
+    }
 
     executorUpdates
   }

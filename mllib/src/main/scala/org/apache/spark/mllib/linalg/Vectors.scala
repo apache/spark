@@ -250,6 +250,13 @@ sealed trait Vector extends Serializable {
    */
   private[spark] def nonZeroIterator: Iterator[(Int, Double)] =
     activeIterator.filter(_._2 != 0)
+
+  /**
+   * Returns the ratio of number of zeros by total number of values.
+   */
+  private[spark] def sparsity(): Double = {
+    1.0 - numNonzeros.toDouble / size
+  }
 }
 
 /**
@@ -956,7 +963,7 @@ class SparseVector @Since("1.0.0") (
       currentIdx += 1
       i_v
     }.unzip
-    new SparseVector(selectedIndices.length, sliceInds.toArray, sliceVals.toArray)
+    new SparseVector(selectedIndices.length, sliceInds, sliceVals)
   }
 
   @Since("1.6.0")

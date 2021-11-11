@@ -169,38 +169,23 @@ class Column(val expr: Expression) extends Logging {
    * Returns the expression for this column either with an existing or auto assigned name.
    */
   private[sql] def named: NamedExpression = expr match {
-    // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
-    // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
-    // make it a NamedExpression.
-    case u: UnresolvedAttribute => UnresolvedAlias(u)
-
-    case u: UnresolvedExtractValue => UnresolvedAlias(u)
-
     case expr: NamedExpression => expr
 
     // Leave an unaliased generator with an empty list of names since the analyzer will generate
     // the correct defaults after the nested expression's type has been resolved.
     case g: Generator => MultiAlias(g, Nil)
 
-    case func: UnresolvedFunction => UnresolvedAlias(func, Some(Column.generateAlias))
-
     // If we have a top level Cast, there is a chance to give it a better alias, if there is a
     // NamedExpression under this Cast.
     case c: Cast =>
       c.transformUp {
-        case c @ Cast(_: NamedExpression, _, _) => UnresolvedAlias(c)
+        case c @ Cast(_: NamedExpression, _, _, _) => UnresolvedAlias(c)
       } match {
         case ne: NamedExpression => ne
-        case _ => Alias(expr, toPrettySQL(expr))()
+        case _ => UnresolvedAlias(expr, Some(Column.generateAlias))
       }
 
-    case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
-      UnresolvedAlias(a, Some(Column.generateAlias))
-
-    // Wait until the struct is resolved. This will generate a nicer looking alias.
-    case struct: CreateNamedStruct => UnresolvedAlias(struct)
-
-    case expr: Expression => Alias(expr, toPrettySQL(expr))()
+    case expr: Expression => UnresolvedAlias(expr, Some(Column.generateAlias))
   }
 
   /**
@@ -862,6 +847,14 @@ class Column(val expr: Expression) extends Logging {
   def rlike(literal: String): Column = withExpr { RLike(expr, lit(literal).expr) }
 
   /**
+   * SQL ILIKE expression (case insensitive LIKE).
+   *
+   * @group expr_ops
+   * @since 3.3.0
+   */
+  def ilike(literal: String): Column = withExpr { new ILike(expr, lit(literal).expr) }
+
+  /**
    * An expression that gets an item at position `ordinal` out of an array,
    * or gets a value by key `key` in a `MapType`.
    *
@@ -1123,7 +1116,7 @@ class Column(val expr: Expression) extends Logging {
    * Gives the column an alias.
    * {{{
    *   // Renames colA to colB in select output.
-   *   df.select($"colA".as('colB))
+   *   df.select($"colA".as("colB"))
    * }}}
    *
    * If the current column has metadata associated with it, this metadata will be propagated
@@ -1186,7 +1179,9 @@ class Column(val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def cast(to: DataType): Column = withExpr {
-    Cast(expr, CharVarcharUtils.replaceCharVarcharWithStringForCast(to))
+    val cast = Cast(expr, CharVarcharUtils.replaceCharVarcharWithStringForCast(to))
+    cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+    cast
   }
 
   /**

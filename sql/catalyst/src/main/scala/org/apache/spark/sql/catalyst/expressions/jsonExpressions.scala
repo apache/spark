@@ -29,7 +29,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.json._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -334,6 +336,10 @@ case class GetJsonObject(json: Expression, path: Expression)
         false
     }
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): GetJsonObject =
+    copy(json = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit line.contains.tab
@@ -426,12 +432,15 @@ case class JsonTuple(children: Seq[Expression])
       foldableFieldNames.map(_.orNull)
     } else if (constantFields == 0) {
       // none are foldable so all field names need to be evaluated from the input row
-      fieldExpressions.map(_.eval(input).asInstanceOf[UTF8String].toString)
+      fieldExpressions.map { expr =>
+        Option(expr.eval(input)).map(_.asInstanceOf[UTF8String].toString).orNull
+      }
     } else {
       // if there is a mix of constant and non-constant expressions
       // prefer the cached copy when available
       foldableFieldNames.zip(fieldExpressions).map {
-        case (null, expr) => expr.eval(input).asInstanceOf[UTF8String].toString
+        case (null, expr) =>
+          Option(expr.eval(input)).map(_.asInstanceOf[UTF8String].toString).orNull
         case (fieldName, _) => fieldName.orNull
       }
     }
@@ -490,13 +499,16 @@ case class JsonTuple(children: Seq[Expression])
         // a special case that needs to be handled outside of this method.
         // if a requested field is null, the result must be null. the easiest
         // way to achieve this is just by ignoring null tokens entirely
-        throw new IllegalStateException("Do not attempt to copy a null field")
+        throw QueryExecutionErrors.copyNullFieldNotAllowedError
 
       case _ =>
         // handle other types including objects, arrays, booleans and numbers
         generator.copyCurrentStructure(parser)
     }
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): JsonTuple =
+    copy(children = newChildren)
 }
 
 /**
@@ -531,6 +543,8 @@ case class JsonToStructs(
 
   override def nullable: Boolean = true
 
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(JSON_TO_STRUCT)
+
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
@@ -550,7 +564,11 @@ case class JsonToStructs(
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
     case _: StructType | _: ArrayType | _: MapType =>
-      super.checkInputDataTypes()
+      ExprUtils.checkJsonSchema(nullableSchema).map { e =>
+        TypeCheckResult.TypeCheckFailure(e.getMessage)
+      } getOrElse {
+        super.checkInputDataTypes()
+      }
     case _ => TypeCheckResult.TypeCheckFailure(
       s"Input schema ${nullableSchema.catalogString} must be a struct, an array or a map.")
   }
@@ -571,8 +589,7 @@ case class JsonToStructs(
     val parsedOptions = new JSONOptions(options, timeZoneId.get, nameOfCorruptRecord)
     val mode = parsedOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
-      throw new IllegalArgumentException(s"from_json() doesn't support the ${mode.name} mode. " +
-        s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
+      throw QueryCompilationErrors.parseModeUnsupportedError("from_json", mode)
     }
     val (parserSchema, actualSchema) = nullableSchema match {
       case s: StructType =>
@@ -609,6 +626,9 @@ case class JsonToStructs(
   }
 
   override def prettyName: String = "from_json"
+
+  override protected def withNewChildInternal(newChild: Expression): JsonToStructs =
+    copy(child = newChild)
 }
 
 /**
@@ -731,6 +751,9 @@ case class StructsToJson(
   override def inputTypes: Seq[AbstractDataType] = TypeCollection(ArrayType, StructType) :: Nil
 
   override def prettyName: String = "to_json"
+
+  override protected def withNewChildInternal(newChild: Expression): StructsToJson =
+    copy(child = newChild)
 }
 
 /**
@@ -805,6 +828,9 @@ case class SchemaOfJson(
   }
 
   override def prettyName: String = "schema_of_json"
+
+  override protected def withNewChildInternal(newChild: Expression): SchemaOfJson =
+    copy(child = newChild)
 }
 
 /**
@@ -874,6 +900,9 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
     }
     length
   }
+
+  override protected def withNewChildInternal(newChild: Expression): LengthOfJsonArray =
+    copy(child = newChild)
 }
 
 /**
@@ -943,4 +972,7 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
     }
     new GenericArrayData(arrayBufferOfKeys.toArray)
   }
+
+  override protected def withNewChildInternal(newChild: Expression): JsonObjectKeys =
+    copy(child = newChild)
 }

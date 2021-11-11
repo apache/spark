@@ -83,8 +83,8 @@ abstract class PodBuilderSuite extends SparkFunSuite {
   private def mockKubernetesClient(pod: Pod = podWithSupportedFeatures()): KubernetesClient = {
     val kubernetesClient = mock(classOf[KubernetesClient])
     val pods =
-      mock(classOf[MixedOperation[Pod, PodList, DoneablePod, PodResource[Pod, DoneablePod]]])
-    val podResource = mock(classOf[PodResource[Pod, DoneablePod]])
+      mock(classOf[MixedOperation[Pod, PodList, PodResource[Pod]]])
+    val podResource = mock(classOf[PodResource[Pod]])
     when(kubernetesClient.pods()).thenReturn(pods)
     when(pods.load(any(classOf[File]))).thenReturn(podResource)
     when(podResource.get()).thenReturn(pod)

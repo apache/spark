@@ -29,7 +29,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveM
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable, SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, V1Scan}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1Write, WriteBuilder}
@@ -331,11 +331,11 @@ class InMemoryTableWithV1Fallback(
     }
   }
 
-  override def capabilities: util.Set[TableCapability] = Set(
+  override def capabilities: util.Set[TableCapability] = util.EnumSet.of(
     TableCapability.BATCH_READ,
     TableCapability.V1_BATCH_WRITE,
     TableCapability.OVERWRITE_BY_FILTER,
-    TableCapability.TRUNCATE).asJava
+    TableCapability.TRUNCATE)
 
   @volatile private var dataMap: mutable.Map[Seq[Any], Seq[Row]] = mutable.Map.empty
   private val partFieldNames = partitioning.flatMap(_.references).toSeq.flatMap(_.fieldNames)

@@ -20,14 +20,17 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{LocalDate, LocalDateTime, ZoneId}
+import java.time.{Duration, LocalDate, LocalDateTime, Period, ZoneId}
 
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.hadoop.fs.Path
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
+import org.apache.parquet.hadoop.{ParquetFileReader, ParquetInputFormat, ParquetOutputFormat}
+import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -37,16 +40,19 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.InferFiltersFromConstraints
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
+import org.apache.spark.sql.execution.ExplainMode
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.{CORRECTED, LEGACY}
+import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType.{INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
-import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
 
 /**
  * A test suite that tests Parquet filter2 API based filter pushdown optimization.
@@ -70,11 +76,14 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
   protected def createParquetFilters(
       schema: MessageType,
-      caseSensitive: Option[Boolean] = None): ParquetFilters =
+      caseSensitive: Option[Boolean] = None,
+      datetimeRebaseMode: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.CORRECTED
+    ): ParquetFilters =
     new ParquetFilters(schema, conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
       conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
       conf.parquetFilterPushDownInFilterThreshold,
-      caseSensitive.getOrElse(conf.caseSensitiveAnalysis))
+      caseSensitive.getOrElse(conf.caseSensitiveAnalysis),
+      datetimeRebaseMode)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -185,6 +194,15 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       checkFilterPredicate(!(tsAttr < ts4.ts), classOf[GtEq[_]], resultFun(ts4))
       checkFilterPredicate(tsAttr < ts2.ts || tsAttr > ts3.ts, classOf[Operators.Or],
         Seq(Row(resultFun(ts1)), Row(resultFun(ts4))))
+
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(
+            In(tsAttr, Array(ts2.ts, ts3.ts, ts4.ts, "2021-05-01 00:01:02".ts).map(Literal.apply)),
+            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            Seq(Row(resultFun(ts2)), Row(resultFun(ts3)), Row(resultFun(ts4))))
+        }
+      }
     }
   }
 
@@ -333,6 +351,15 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       checkFilterPredicate(!(intAttr < 4), classOf[GtEq[_]], resultFun(4))
       checkFilterPredicate(intAttr < 2 || intAttr > 3, classOf[Operators.Or],
         Seq(Row(resultFun(1)), Row(resultFun(4))))
+
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(
+            In(intAttr, Array(2, 3, 4, 5, 6, 7).map(Literal.apply)),
+            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            Seq(Row(resultFun(2)), Row(resultFun(3)), Row(resultFun(4))))
+        }
+      }
     }
   }
 
@@ -368,6 +395,15 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       checkFilterPredicate(!(longAttr < 4), classOf[GtEq[_]], resultFun(4))
       checkFilterPredicate(longAttr < 2 || longAttr > 3, classOf[Operators.Or],
         Seq(Row(resultFun(1)), Row(resultFun(4))))
+
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(
+            In(longAttr, Array(2L, 3L, 4L, 5L, 6L, 7L).map(Literal.apply)),
+            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            Seq(Row(resultFun(2L)), Row(resultFun(3L)), Row(resultFun(4L))))
+        }
+      }
     }
   }
 
@@ -403,6 +439,15 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       checkFilterPredicate(!(floatAttr < 4), classOf[GtEq[_]], resultFun(4))
       checkFilterPredicate(floatAttr < 2 || floatAttr > 3, classOf[Operators.Or],
         Seq(Row(resultFun(1)), Row(resultFun(4))))
+
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(
+            In(floatAttr, Array(2F, 3F, 4F, 5F, 6F, 7F).map(Literal.apply)),
+            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            Seq(Row(resultFun(2F)), Row(resultFun(3F)), Row(resultFun(4F))))
+        }
+      }
     }
   }
 
@@ -438,6 +483,15 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       checkFilterPredicate(!(doubleAttr < 4), classOf[GtEq[_]], resultFun(4))
       checkFilterPredicate(doubleAttr < 2 || doubleAttr > 3, classOf[Operators.Or],
         Seq(Row(resultFun(1)), Row(resultFun(4))))
+
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(
+            In(doubleAttr, Array(2.0D, 3.0D, 4.0D, 5.0D, 6.0D, 7.0D).map(Literal.apply)),
+            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            Seq(Row(resultFun(2D)), Row(resultFun(3D)), Row(resultFun(4F))))
+        }
+      }
     }
   }
 
@@ -473,6 +527,15 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       checkFilterPredicate(!(stringAttr < "4"), classOf[GtEq[_]], resultFun("4"))
       checkFilterPredicate(stringAttr < "2" || stringAttr > "3", classOf[Operators.Or],
         Seq(Row(resultFun("1")), Row(resultFun("4"))))
+
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(
+            In(stringAttr, Array("2", "3", "4", "5", "6", "7").map(Literal.apply)),
+            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            Seq(Row(resultFun("2")), Row(resultFun("3")), Row(resultFun("4"))))
+        }
+      }
     }
   }
 
@@ -513,6 +576,15 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       checkFilterPredicate(!(binaryAttr < 4.b), classOf[GtEq[_]], resultFun(4.b))
       checkFilterPredicate(binaryAttr < 2.b || binaryAttr > 3.b, classOf[Operators.Or],
         Seq(Row(resultFun(1.b)), Row(resultFun(4.b))))
+
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(
+            In(binaryAttr, Array(2.b, 3.b, 4.b, 5.b, 6.b, 7.b).map(Literal.apply)),
+            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            Seq(Row(resultFun(2.b)), Row(resultFun(3.b)), Row(resultFun(4.b))))
+        }
+      }
     }
   }
 
@@ -521,62 +593,77 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       def date: Date = Date.valueOf(s)
     }
 
-    val data = Seq("2018-03-18", "2018-03-19", "2018-03-20", "2018-03-21")
+    val data = Seq("1000-01-01", "2018-03-19", "2018-03-20", "2018-03-21")
     import testImplicits._
 
     Seq(false, true).foreach { java8Api =>
-      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
-        val dates = data.map(i => Tuple1(Date.valueOf(i))).toDF()
-        withNestedParquetDataFrame(dates) { case (inputDF, colName, fun) =>
-          implicit val df: DataFrame = inputDF
+      Seq(CORRECTED, LEGACY).foreach { rebaseMode =>
+        withSQLConf(
+          SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
+          SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> rebaseMode.toString) {
+          val dates = data.map(i => Tuple1(Date.valueOf(i))).toDF()
+          withNestedParquetDataFrame(dates) { case (inputDF, colName, fun) =>
+            implicit val df: DataFrame = inputDF
 
-          def resultFun(dateStr: String): Any = {
-            val parsed = if (java8Api) LocalDate.parse(dateStr) else Date.valueOf(dateStr)
-            fun(parsed)
+            def resultFun(dateStr: String): Any = {
+              val parsed = if (java8Api) LocalDate.parse(dateStr) else Date.valueOf(dateStr)
+              fun(parsed)
+            }
+
+            val dateAttr: Expression = df(colName).expr
+            assert(df(colName).expr.dataType === DateType)
+
+            checkFilterPredicate(dateAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+            checkFilterPredicate(dateAttr.isNotNull, classOf[NotEq[_]],
+              data.map(i => Row.apply(resultFun(i))))
+
+            checkFilterPredicate(dateAttr === "1000-01-01".date, classOf[Eq[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(dateAttr <=> "1000-01-01".date, classOf[Eq[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(dateAttr =!= "1000-01-01".date, classOf[NotEq[_]],
+              Seq("2018-03-19", "2018-03-20", "2018-03-21").map(i => Row.apply(resultFun(i))))
+
+            checkFilterPredicate(dateAttr < "2018-03-19".date, classOf[Lt[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(dateAttr > "2018-03-20".date, classOf[Gt[_]],
+              resultFun("2018-03-21"))
+            checkFilterPredicate(dateAttr <= "1000-01-01".date, classOf[LtEq[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(dateAttr >= "2018-03-21".date, classOf[GtEq[_]],
+              resultFun("2018-03-21"))
+
+            checkFilterPredicate(Literal("1000-01-01".date) === dateAttr, classOf[Eq[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(Literal("1000-01-01".date) <=> dateAttr, classOf[Eq[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(Literal("2018-03-19".date) > dateAttr, classOf[Lt[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(Literal("2018-03-20".date) < dateAttr, classOf[Gt[_]],
+              resultFun("2018-03-21"))
+            checkFilterPredicate(Literal("1000-01-01".date) >= dateAttr, classOf[LtEq[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(Literal("2018-03-21".date) <= dateAttr, classOf[GtEq[_]],
+              resultFun("2018-03-21"))
+
+            checkFilterPredicate(!(dateAttr < "2018-03-21".date), classOf[GtEq[_]],
+              resultFun("2018-03-21"))
+            checkFilterPredicate(
+              dateAttr < "2018-03-19".date || dateAttr > "2018-03-20".date,
+              classOf[Operators.Or],
+              Seq(Row(resultFun("1000-01-01")), Row(resultFun("2018-03-21"))))
+
+            Seq(3, 20).foreach { threshold =>
+              withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+                checkFilterPredicate(
+                  In(dateAttr, Array("2018-03-19".date, "2018-03-20".date, "2018-03-21".date,
+                    "2018-03-22".date).map(Literal.apply)),
+                  if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+                  Seq(Row(resultFun("2018-03-19")), Row(resultFun("2018-03-20")),
+                    Row(resultFun("2018-03-21"))))
+              }
+            }
           }
-
-          val dateAttr: Expression = df(colName).expr
-          assert(df(colName).expr.dataType === DateType)
-
-          checkFilterPredicate(dateAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
-          checkFilterPredicate(dateAttr.isNotNull, classOf[NotEq[_]],
-            data.map(i => Row.apply(resultFun(i))))
-
-          checkFilterPredicate(dateAttr === "2018-03-18".date, classOf[Eq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(dateAttr <=> "2018-03-18".date, classOf[Eq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(dateAttr =!= "2018-03-18".date, classOf[NotEq[_]],
-            Seq("2018-03-19", "2018-03-20", "2018-03-21").map(i => Row.apply(resultFun(i))))
-
-          checkFilterPredicate(dateAttr < "2018-03-19".date, classOf[Lt[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(dateAttr > "2018-03-20".date, classOf[Gt[_]],
-            resultFun("2018-03-21"))
-          checkFilterPredicate(dateAttr <= "2018-03-18".date, classOf[LtEq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(dateAttr >= "2018-03-21".date, classOf[GtEq[_]],
-            resultFun("2018-03-21"))
-
-          checkFilterPredicate(Literal("2018-03-18".date) === dateAttr, classOf[Eq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(Literal("2018-03-18".date) <=> dateAttr, classOf[Eq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(Literal("2018-03-19".date) > dateAttr, classOf[Lt[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(Literal("2018-03-20".date) < dateAttr, classOf[Gt[_]],
-            resultFun("2018-03-21"))
-          checkFilterPredicate(Literal("2018-03-18".date) >= dateAttr, classOf[LtEq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(Literal("2018-03-21".date) <= dateAttr, classOf[GtEq[_]],
-            resultFun("2018-03-21"))
-
-          checkFilterPredicate(!(dateAttr < "2018-03-21".date), classOf[GtEq[_]],
-            resultFun("2018-03-21"))
-          checkFilterPredicate(
-            dateAttr < "2018-03-19".date || dateAttr > "2018-03-20".date,
-            classOf[Operators.Or],
-            Seq(Row(resultFun("2018-03-18")), Row(resultFun("2018-03-21"))))
         }
       }
     }
@@ -584,35 +671,36 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
   test("filter pushdown - timestamp") {
     Seq(true, false).foreach { java8Api =>
-      withSQLConf(
-        SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
-        SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED",
-        SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
-        // spark.sql.parquet.outputTimestampType = TIMESTAMP_MILLIS
+      Seq(CORRECTED, LEGACY).foreach { rebaseMode =>
         val millisData = Seq(
           "1000-06-14 08:28:53.123",
           "1582-06-15 08:28:53.001",
           "1900-06-16 08:28:53.0",
           "2018-06-17 08:28:53.999")
-        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
-          ParquetOutputTimestampType.TIMESTAMP_MILLIS.toString) {
+        withSQLConf(
+          SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
+          SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> rebaseMode.toString,
+          SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> TIMESTAMP_MILLIS.toString) {
           testTimestampPushdown(millisData, java8Api)
         }
 
-        // spark.sql.parquet.outputTimestampType = TIMESTAMP_MICROS
         val microsData = Seq(
           "1000-06-14 08:28:53.123456",
           "1582-06-15 08:28:53.123456",
           "1900-06-16 08:28:53.123456",
           "2018-06-17 08:28:53.123456")
-        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
-          ParquetOutputTimestampType.TIMESTAMP_MICROS.toString) {
+        withSQLConf(
+          SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
+          SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> rebaseMode.toString,
+          SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> TIMESTAMP_MICROS.toString) {
           testTimestampPushdown(microsData, java8Api)
         }
 
-        // spark.sql.parquet.outputTimestampType = INT96 doesn't support pushdown
-        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
-          ParquetOutputTimestampType.INT96.toString) {
+        // INT96 doesn't support pushdown
+        withSQLConf(
+          SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
+          SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> rebaseMode.toString,
+          SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> INT96.toString) {
           import testImplicits._
           withTempPath { file =>
             millisData.map(i => Tuple1(Timestamp.valueOf(i))).toDF
@@ -670,6 +758,19 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           checkFilterPredicate(!(decimalAttr < 4), classOf[GtEq[_]], resultFun(4))
           checkFilterPredicate(decimalAttr < 2 || decimalAttr > 3, classOf[Operators.Or],
             Seq(Row(resultFun(1)), Row(resultFun(4))))
+
+          Array(1, 2, 3, 4).map(JBigDecimal.valueOf(_).setScale(2))
+            .map(Literal.create(_, DecimalType(precision, 2)))
+
+          Seq(3, 20).foreach { threshold =>
+            withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+              checkFilterPredicate(
+                In(decimalAttr, Array(2, 3, 4, 5).map(Literal.apply)
+                  .map(_.cast(DecimalType(precision, 2)))),
+                if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+                Seq(Row(resultFun(2)), Row(resultFun(3)), Row(resultFun(4))))
+            }
+          }
         }
       }
     }
@@ -1410,10 +1511,12 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       parquetFilters.createFilter(sources.In("a", Array(10, 20, 30)))
     }
 
-    assert(parquetFilters.createFilter(sources.In("a",
-      Range(0, conf.parquetFilterPushDownInFilterThreshold).toArray)).isDefined)
-    assert(parquetFilters.createFilter(sources.In("a",
-      Range(0, conf.parquetFilterPushDownInFilterThreshold + 1).toArray)).isEmpty)
+    Seq(0, 10).foreach { threshold =>
+      withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> threshold.toString) {
+        assert(createParquetFilters(parquetSchema)
+          .createFilter(sources.In("a", Array(10, 20, 30))).nonEmpty === threshold > 0)
+      }
+    }
 
     import testImplicits._
     withTempPath { path =>
@@ -1425,11 +1528,12 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       Seq(true, false).foreach { pushEnabled =>
         withSQLConf(
           SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> pushEnabled.toString) {
-          Seq(1, 5, 10, 11).foreach { count =>
+          Seq(1, 5, 10, 11, 100).foreach { count =>
             val filter = s"a in(${Range(0, count).mkString(",")})"
             assert(df.where(filter).count() === count)
             val actual = stripSparkFilter(df.where(filter)).collect().length
-            if (pushEnabled && count <= conf.parquetFilterPushDownInFilterThreshold) {
+            if (pushEnabled) {
+              // We support push down In predicate if its value exceeds threshold since SPARK-32792.
               assert(actual > 1 && actual < data.length)
             } else {
               assert(actual === data.length)
@@ -1439,6 +1543,50 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           assert(df.where("a = null").count() === 0)
           assert(df.where("a is null").count() === 1)
         }
+      }
+    }
+  }
+
+  test("SPARK-32792: Pushdown IN predicate to min-max filter") {
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> "2") {
+      val parquetFilters = createParquetFilters(
+        new SparkToParquetSchemaConverter(conf).convert(StructType.fromDDL("a int")))
+
+      assertResult(Some(and(
+        FilterApi.gtEq(intColumn("a"), 1: Integer),
+        FilterApi.ltEq(intColumn("a"), 20: Integer)))
+      ) {
+        parquetFilters.createFilter(sources.In("a", (1 to 20).toArray))
+      }
+
+      assertResult(Some(and(
+        FilterApi.gtEq(intColumn("a"), -200: Integer),
+        FilterApi.ltEq(intColumn("a"), 40: Integer)))
+      ) {
+        parquetFilters.createFilter(sources.In("A", Array(-100, 10, -200, 40)))
+      }
+
+      assertResult(Some(or(
+        FilterApi.eq(intColumn("a"), null: Integer),
+        and(
+          FilterApi.gtEq(intColumn("a"), 2: Integer),
+          FilterApi.ltEq(intColumn("a"), 7: Integer))))
+      ) {
+        parquetFilters.createFilter(sources.In("a", Array(2, 3, 7, null, 6)))
+      }
+
+      assertResult(
+        Some(FilterApi.not(or(
+          FilterApi.eq(intColumn("a"), 2: Integer),
+          FilterApi.eq(intColumn("a"), 3: Integer))))
+      ) {
+        parquetFilters.createFilter(sources.Not(sources.In("a", Array(2, 3))))
+      }
+
+      assertResult(
+        None
+      ) {
+        parquetFilters.createFilter(sources.Not(sources.In("a", Array(2, 3, 7))))
       }
     }
   }
@@ -1567,6 +1715,187 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           checkAnswer(
             spark.sql("SELECT * FROM t1 WHERE col LIKE '4%'"),
             Row("42"))
+        }
+      }
+    }
+  }
+
+  test("Support Parquet column index") {
+    // block 1:
+    //                      null count  min                                       max
+    // page-0                         0  0                                         99
+    // page-1                         0  100                                       199
+    // page-2                         0  200                                       299
+    // page-3                         0  300                                       399
+    // page-4                         0  400                                       449
+    //
+    // block 2:
+    //                      null count  min                                       max
+    // page-0                         0  450                                       549
+    // page-1                         0  550                                       649
+    // page-2                         0  650                                       749
+    // page-3                         0  750                                       849
+    // page-4                         0  850                                       899
+    withTempPath { path =>
+      spark.range(900)
+        .repartition(1)
+        .write
+        .option(ParquetOutputFormat.PAGE_SIZE, "500")
+        .option(ParquetOutputFormat.BLOCK_SIZE, "2000")
+        .parquet(path.getCanonicalPath)
+
+      val parquetFile = path.listFiles().filter(_.getName.startsWith("part")).last
+      val in = HadoopInputFile.fromPath(
+        new Path(parquetFile.getCanonicalPath),
+        spark.sessionState.newHadoopConf())
+
+      Utils.tryWithResource(ParquetFileReader.open(in)) { reader =>
+        val blocks = reader.getFooter.getBlocks
+        assert(blocks.size() > 1)
+        val columns = blocks.get(0).getColumns
+        assert(columns.size() === 1)
+        val columnIndex = reader.readColumnIndex(columns.get(0))
+        assert(columnIndex.getMinValues.size() > 1)
+
+        val rowGroupCnt = blocks.get(0).getRowCount
+        // Page count = Second page min value - first page min value
+        val pageCnt = columnIndex.getMinValues.get(1).asLongBuffer().get() -
+          columnIndex.getMinValues.get(0).asLongBuffer().get()
+        assert(pageCnt < rowGroupCnt)
+        Seq(true, false).foreach { columnIndex =>
+          withSQLConf(ParquetInputFormat.COLUMN_INDEX_FILTERING_ENABLED -> s"$columnIndex") {
+            val df = spark.read.parquet(parquetFile.getCanonicalPath).where("id = 1")
+            df.collect()
+            val plan = df.queryExecution.executedPlan
+            val metrics = plan.collectLeaves().head.metrics
+            val numOutputRows = metrics("numOutputRows").value
+            if (columnIndex) {
+              assert(numOutputRows === pageCnt)
+            } else {
+              assert(numOutputRows === rowGroupCnt)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-34562: Bloom filter push down") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(100).selectExpr("id * 2 AS id")
+        .write
+        .option(ParquetOutputFormat.BLOOM_FILTER_ENABLED + "#id", true)
+        // Disable dictionary because the distinct values less than 40000.
+        .option(ParquetOutputFormat.ENABLE_DICTIONARY, false)
+        .parquet(path)
+
+      Seq(true, false).foreach { bloomFilterEnabled =>
+        withSQLConf(ParquetInputFormat.BLOOM_FILTERING_ENABLED -> bloomFilterEnabled.toString) {
+          val accu = new NumRowGroupsAcc
+          sparkContext.register(accu)
+
+          val df = spark.read.parquet(path).filter("id = 19")
+          df.foreachPartition((it: Iterator[Row]) => it.foreach(_ => accu.add(0)))
+          if (bloomFilterEnabled) {
+            assert(accu.value === 0)
+          } else {
+            assert(accu.value > 0)
+          }
+
+          AccumulatorContext.remove(accu.id)
+        }
+      }
+    }
+  }
+
+  test("SPARK-36866: filter pushdown - year-month interval") {
+    def months(m: Int): Period = Period.ofMonths(m)
+    def monthsLit(m: Int): Literal = Literal(months(m))
+    val data = (1 to 4).map(i => Tuple1(Option(months(i))))
+    withNestedParquetDataFrame(data) { case (inputDF, colName, resultFun) =>
+      implicit val df: DataFrame = inputDF
+
+      val iAttr = df(colName).expr
+      assert(df(colName).expr.dataType === YearMonthIntervalType())
+
+      checkFilterPredicate(iAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+      checkFilterPredicate(iAttr.isNotNull, classOf[NotEq[_]],
+        (1 to 4).map(i => Row.apply(resultFun(months(i)))))
+
+      checkFilterPredicate(iAttr === monthsLit(1), classOf[Eq[_]], resultFun(months(1)))
+      checkFilterPredicate(iAttr <=> monthsLit(1), classOf[Eq[_]], resultFun(months(1)))
+      checkFilterPredicate(iAttr =!= monthsLit(1), classOf[NotEq[_]],
+        (2 to 4).map(i => Row.apply(resultFun(months(i)))))
+
+      checkFilterPredicate(iAttr < monthsLit(2), classOf[Lt[_]], resultFun(months(1)))
+      checkFilterPredicate(iAttr > monthsLit(3), classOf[Gt[_]], resultFun(months(4)))
+      checkFilterPredicate(iAttr <= monthsLit(1), classOf[LtEq[_]], resultFun(months(1)))
+      checkFilterPredicate(iAttr >= monthsLit(4), classOf[GtEq[_]], resultFun(months(4)))
+
+      checkFilterPredicate(monthsLit(1) === iAttr, classOf[Eq[_]], resultFun(months(1)))
+      checkFilterPredicate(monthsLit(1) <=> iAttr, classOf[Eq[_]], resultFun(months(1)))
+      checkFilterPredicate(monthsLit(2) > iAttr, classOf[Lt[_]], resultFun(months(1)))
+      checkFilterPredicate(monthsLit(3) < iAttr, classOf[Gt[_]], resultFun(months(4)))
+      checkFilterPredicate(monthsLit(1) >= iAttr, classOf[LtEq[_]], resultFun(months(1)))
+      checkFilterPredicate(monthsLit(4) <= iAttr, classOf[GtEq[_]], resultFun(months(4)))
+
+      checkFilterPredicate(!(iAttr < monthsLit(4)), classOf[GtEq[_]], resultFun(months(4)))
+      checkFilterPredicate(iAttr < monthsLit(2) || iAttr > monthsLit(3), classOf[Operators.Or],
+        Seq(Row(resultFun(months(1))), Row(resultFun(months(4)))))
+
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(
+            In(iAttr, Array(2, 3, 4, 5, 6, 7).map(monthsLit)),
+            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            Seq(Row(resultFun(months(2))), Row(resultFun(months(3))), Row(resultFun(months(4)))))
+        }
+      }
+    }
+  }
+
+  test("SPARK-36866: filter pushdown - day-time interval") {
+    def secs(m: Int): Duration = Duration.ofSeconds(m)
+    def secsLit(m: Int): Literal = Literal(secs(m))
+    val data = (1 to 4).map(i => Tuple1(Option(secs(i))))
+    withNestedParquetDataFrame(data) { case (inputDF, colName, resultFun) =>
+      implicit val df: DataFrame = inputDF
+
+      val iAttr = df(colName).expr
+      assert(df(colName).expr.dataType === DayTimeIntervalType())
+
+      checkFilterPredicate(iAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+      checkFilterPredicate(iAttr.isNotNull, classOf[NotEq[_]],
+        (1 to 4).map(i => Row.apply(resultFun(secs(i)))))
+
+      checkFilterPredicate(iAttr === secsLit(1), classOf[Eq[_]], resultFun(secs(1)))
+      checkFilterPredicate(iAttr <=> secsLit(1), classOf[Eq[_]], resultFun(secs(1)))
+      checkFilterPredicate(iAttr =!= secsLit(1), classOf[NotEq[_]],
+        (2 to 4).map(i => Row.apply(resultFun(secs(i)))))
+
+      checkFilterPredicate(iAttr < secsLit(2), classOf[Lt[_]], resultFun(secs(1)))
+      checkFilterPredicate(iAttr > secsLit(3), classOf[Gt[_]], resultFun(secs(4)))
+      checkFilterPredicate(iAttr <= secsLit(1), classOf[LtEq[_]], resultFun(secs(1)))
+      checkFilterPredicate(iAttr >= secsLit(4), classOf[GtEq[_]], resultFun(secs(4)))
+
+      checkFilterPredicate(secsLit(1) === iAttr, classOf[Eq[_]], resultFun(secs(1)))
+      checkFilterPredicate(secsLit(1) <=> iAttr, classOf[Eq[_]], resultFun(secs(1)))
+      checkFilterPredicate(secsLit(2) > iAttr, classOf[Lt[_]], resultFun(secs(1)))
+      checkFilterPredicate(secsLit(3) < iAttr, classOf[Gt[_]], resultFun(secs(4)))
+      checkFilterPredicate(secsLit(1) >= iAttr, classOf[LtEq[_]], resultFun(secs(1)))
+      checkFilterPredicate(secsLit(4) <= iAttr, classOf[GtEq[_]], resultFun(secs(4)))
+
+      checkFilterPredicate(!(iAttr < secsLit(4)), classOf[GtEq[_]], resultFun(secs(4)))
+      checkFilterPredicate(iAttr < secsLit(2) || iAttr > secsLit(3), classOf[Operators.Or],
+        Seq(Row(resultFun(secs(1))), Row(resultFun(secs(4)))))
+
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(
+            In(iAttr, Array(2, 3, 4, 5, 6, 7).map(secsLit)),
+            if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+            Seq(Row(resultFun(secs(2))), Row(resultFun(secs(3))), Row(resultFun(secs(4)))))
         }
       }
     }
@@ -1708,6 +2037,18 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
 
         case _ =>
           throw new AnalysisException("Can not match ParquetTable in the query.")
+      }
+    }
+  }
+
+  test("SPARK-36889: Respect disabling of filters pushdown for DSv2 by explain") {
+    import testImplicits._
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false") {
+      withTempPath { path =>
+        Seq(1, 2).toDF("c0").write.parquet(path.getAbsolutePath)
+        val readback = spark.read.parquet(path.getAbsolutePath).where("c0 == 1")
+        val explain = readback.queryExecution.explainString(ExplainMode.fromString("extended"))
+        assert(explain.contains("PushedFilters: []"))
       }
     }
   }

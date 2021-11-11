@@ -37,8 +37,9 @@ an existing Spark workload and running on this release candidate, then
 reporting any regressions.
 
 If you're working in PySpark you can set up a virtual env and install
-the current RC and see if anything important breaks, in the Java/Scala
-you can add the staging repository to your projects resolvers and test
+the current RC via "pip install https://dist.apache.org/repos/dist/dev/spark/{tag}-bin/pyspark-{version}.tar.gz"
+and see if anything important breaks.
+In the Java/Scala, you can add the staging repository to your projects resolvers and test
 with the RC (make sure to clean up the artifact cache before/after so
 you don't end up building with a out of date RC going forward).
 

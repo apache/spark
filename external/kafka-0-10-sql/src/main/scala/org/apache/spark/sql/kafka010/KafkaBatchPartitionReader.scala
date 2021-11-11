@@ -22,6 +22,7 @@ import java.{util => ju}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer
 
@@ -104,5 +105,17 @@ private case class KafkaBatchPartitionReader(
     } else {
       range
     }
+  }
+
+  override def currentMetricsValues(): Array[CustomTaskMetric] = {
+    val offsetOutOfRange = new CustomTaskMetric {
+      override def name(): String = "offsetOutOfRange"
+      override def value(): Long = consumer.getNumOffsetOutOfRange()
+    }
+    val dataLoss = new CustomTaskMetric {
+      override def name(): String = "dataLoss"
+      override def value(): Long = consumer.getNumDataLoss()
+    }
+    Array(offsetOutOfRange, dataLoss)
   }
 }

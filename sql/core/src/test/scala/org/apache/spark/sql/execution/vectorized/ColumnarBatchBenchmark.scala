@@ -32,7 +32,9 @@ import org.apache.spark.util.collection.BitSet
  * Benchmark to low level memory access using different ways to manage buffers.
  * To run this benchmark:
  * {{{
- *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar> <spark sql test jar>
  *   2. build/sbt "sql/test:runMain <this class>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
  *      Results will be written to "benchmarks/ColumnarBatchBenchmark-results.txt".

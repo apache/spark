@@ -29,9 +29,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.4.0):
+ * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.6.0a):
  * {{{
- *   DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.4.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.6.0a
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.DB2IntegrationSuite"
  * }}}
  */
@@ -39,7 +39,7 @@ import org.apache.spark.tags.DockerTest
 class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override val catalogName: String = "db2"
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("DB2_DOCKER_IMAGE_NAME", "ibmcom/db2:11.5.4.0")
+    override val imageName = sys.env.getOrElse("DB2_DOCKER_IMAGE_NAME", "ibmcom/db2:11.5.6.0a")
     override val env = Map(
       "DB2INST1_PASSWORD" -> "rootpass",
       "LICENSE" -> "accept",
@@ -65,24 +65,25 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", IntegerType)
+    var expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE DOUBLE")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", DoubleType)
+    expectedSchema = new StructType().add("ID", DoubleType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from DOUBLE to STRING
     val msg1 = intercept[AnalysisException] {
       sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE VARCHAR(10)")
     }.getMessage
-    assert(msg1.contains("Cannot update alt_table field ID: double cannot be cast to varchar"))
+    assert(msg1.contains(
+      s"Cannot update $catalogName.alt_table field ID: double cannot be cast to varchar"))
   }
 
   override def testCreateTableWithProperty(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INT)" +
       s" TBLPROPERTIES('CCSID'='UNICODE')")
-    var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", IntegerType)
+    val t = spark.table(tbl)
+    val expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
   }
 }

@@ -23,5 +23,8 @@ package org.apache.spark.sql
  *  - Using HiveQL to express queries.
  *  - Reading metadata from the Hive Metastore using HiveSerDes.
  *  - Hive UDFs, UDAs, UDTs
+ *
+ * Note that this is a private package. All classes in this package are considered an internal API
+ * to Spark and are subject to change between minor releases.
  */
 package object hive
