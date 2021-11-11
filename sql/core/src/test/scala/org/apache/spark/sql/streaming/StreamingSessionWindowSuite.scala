@@ -52,7 +52,8 @@ class StreamingSessionWindowSuite extends StreamTest
     // RocksDB doesn't support Apple Silicon yet
     if (System.getProperty("os.name").equals("Mac OS X") &&
         System.getProperty("os.arch").equals("aarch64")) {
-      providerOptions = providerOptions.take(1)
+      providerOptions = providerOptions
+        .filterNot(_._2.contains(classOf[RocksDBStateStoreProvider].getSimpleName))
     }
 
     val availableOptions = for (
