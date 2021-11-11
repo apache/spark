@@ -2214,6 +2214,7 @@ class AdaptiveQueryExecSuite
           assert(read.size == 1)
           assert(read.head.partitionSpecs.count(_.isInstanceOf[PartialReducerPartitionSpec]) ==
             numShufflePartitions)
+          assert(read.head.partitionSpecs.size == numShufflePartitions)
         }
 
         withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "50") {
