@@ -78,7 +78,7 @@ The `CAST` clause of Spark ANSI mode follows the syntax rules of section 6.13 "c
 * MapType => String
 * StructType => String
 
- The valid combinations of target data type and source data type in a `CAST` expression are given by the following table.
+ The valid combinations of source and target data type in a `CAST` expression are given by the following table.
 “Y” indicates that the combination is syntactically valid without restriction and “N” indicates that the combination is not valid.
 
 | Source\Target | Numeric | String | Date | Timestamp | Interval | Boolean | Binary | Array | Map | Struct |
@@ -156,7 +156,32 @@ SELECT * FROM t;
 ```
 
 ### Store assignment
-As mentioned at the beginning, when `spark.sql.storeAssignmentPolicy` is set to `ANSI`(which is the default value), Spark SQL complies with the ANSI store assignment rules. During table insertion, Spark will throw exception on numeric value overflow or the source value can't be stored as the target type. 
+As mentioned at the beginning, when `spark.sql.storeAssignmentPolicy` is set to `ANSI`(which is the default value), Spark SQL complies with the ANSI store assignment rules on table insertions. The valid combinations of source and target data type in table insertions are given by the following table.
+
+| Source\Target | Numeric | String | Date | Timestamp | Interval | Boolean | Binary | Array | Map | Struct |
+|:-------------:|:-------:|:------:|:----:|:---------:|:--------:|:-------:|:------:|:-----:|:---:|:------:|
+| Numeric       | Y       | Y      | N    | N         | N        | N       | N      | N     | N   | N      |
+| String        | N       | Y      | N    | N         | N        | N       | N      | N     | N   | N      |
+| Date          | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Timestamp     | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Interval      | N       | Y      | N    | N         | N*        | N       | N      | N     | N   | N      |
+| Boolean       | N       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| Binary        | N       | Y      | N    | N         | N        | N       | Y      | N     | N   | N      |
+| Array         | N       | N      | N    | N         | N        | N       | N      | Y**     | N   | N      |
+| Map           | N       | N      | N    | N         | N        | N       | N      | N     | Y**   | N      |
+| Struct        | N       | N      | N    | N         | N        | N       | N      | N     | N   | Y**      |
+
+\* Spark doesn't support interval type table column.
+
+\*\* For Array/Map/Struct types, the data type check rule applies recursively to its component elements.
+
+During table insertion, Spark will throw exception on numeric value overflow.
+```sql
+CREATE TABLE test(i INT);
+
+INSERT INTO test VALUES (2147483648L);
+java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
+```
 
 ### Type coercion
 #### Type Promotion and Precedence
@@ -274,7 +299,9 @@ When the ANSI mode is disabled, Spark SQL has two kinds of keywords:
 * Non-reserved keywords: Same definition as the one when the ANSI mode enabled.
 * Strict-non-reserved keywords: A strict version of non-reserved keywords, which can not be used as table alias.
 
-By default `spark.sql.ansi.enabled` is false.
+If you want to still use reserved keywords as identifiers with ANSI mode, you can set `spark.sql.ansi.enforceReservedKeywords` to false.
+
+By default `spark.sql.ansi.enabled` is false and `spark.sql.ansi.enforceReservedKeywords` is true.
 
 Below is a list of all the keywords in Spark SQL.
 
@@ -303,6 +330,8 @@ Below is a list of all the keywords in Spark SQL.
 |CASCADE|non-reserved|non-reserved|non-reserved|
 |CASE|reserved|non-reserved|reserved|
 |CAST|reserved|non-reserved|reserved|
+|CATALOG|non-reserved|non-reserved|non-reserved|
+|CATALOGS|non-reserved|non-reserved|non-reserved|
 |CHANGE|non-reserved|non-reserved|non-reserved|
 |CHECK|reserved|non-reserved|reserved|
 |CLEAR|non-reserved|non-reserved|non-reserved|
@@ -402,6 +431,7 @@ Below is a list of all the keywords in Spark SQL.
 |LEADING|reserved|non-reserved|reserved|
 |LEFT|reserved|strict-non-reserved|reserved|
 |LIKE|non-reserved|non-reserved|reserved|
+|ILIKE|non-reserved|non-reserved|non-reserved|
 |LIMIT|non-reserved|non-reserved|non-reserved|
 |LINES|non-reserved|non-reserved|non-reserved|
 |LIST|non-reserved|non-reserved|non-reserved|
@@ -463,6 +493,7 @@ Below is a list of all the keywords in Spark SQL.
 |REGEXP|non-reserved|non-reserved|not a keyword|
 |RENAME|non-reserved|non-reserved|non-reserved|
 |REPAIR|non-reserved|non-reserved|non-reserved|
+|REPEATABLE|non-reserved|non-reserved|non-reserved|
 |REPLACE|non-reserved|non-reserved|non-reserved|
 |RESET|non-reserved|non-reserved|non-reserved|
 |RESPECT|non-reserved|non-reserved|non-reserved|

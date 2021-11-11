@@ -139,7 +139,7 @@ object FunctionRegistryBase {
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
           throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-            validParametersCount, name, params)
+            validParametersCount, name, params.length)
         }
         try {
           f.newInstance(expressions : _*).asInstanceOf[T]
@@ -361,6 +361,7 @@ object FunctionRegistry {
     expression[Ceil]("ceil"),
     expression[Ceil]("ceiling", true),
     expression[Cos]("cos"),
+    expression[Sec]("sec"),
     expression[Cosh]("cosh"),
     expression[Conv]("conv"),
     expression[ToDegrees]("degrees"),
@@ -392,6 +393,7 @@ object FunctionRegistry {
     expression[Signum]("sign", true),
     expression[Signum]("signum"),
     expression[Sin]("sin"),
+    expression[Csc]("csc"),
     expression[Sinh]("sinh"),
     expression[StringToMap]("str_to_map"),
     expression[Sqrt]("sqrt"),
@@ -431,6 +433,7 @@ object FunctionRegistry {
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
     expression[ApproximatePercentile]("approx_percentile", true),
+    expression[HistogramNumeric]("histogram_numeric"),
     expression[StddevSamp]("std", true),
     expression[StddevSamp]("stddev", true),
     expression[StddevPop]("stddev_pop"),
@@ -470,10 +473,11 @@ object FunctionRegistry {
     expression[Length]("length"),
     expression[Levenshtein]("levenshtein"),
     expression[Like]("like"),
+    expression[ILike]("ilike"),
     expression[Lower]("lower"),
     expression[OctetLength]("octet_length"),
     expression[StringLocate]("locate"),
-    expression[StringLPad]("lpad"),
+    expressionBuilder("lpad", LPadExpressionBuilder),
     expression[StringTrimLeft]("ltrim"),
     expression[JsonTuple]("json_tuple"),
     expression[ParseUrl]("parse_url"),
@@ -488,7 +492,7 @@ object FunctionRegistry {
     expression[RLike]("rlike"),
     expression[RLike]("regexp_like", true, Some("3.2.0")),
     expression[RLike]("regexp", true, Some("3.2.0")),
-    expression[StringRPad]("rpad"),
+    expressionBuilder("rpad", RPadExpressionBuilder),
     expression[StringTrimRight]("rtrim"),
     expression[Sentences]("sentences"),
     expression[SoundEx]("soundex"),
@@ -631,6 +635,8 @@ object FunctionRegistry {
     expression[Sha1]("sha", true),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
+    expression[AesEncrypt]("aes_encrypt"),
+    expression[AesDecrypt]("aes_decrypt"),
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
     expression[InputFileBlockStart]("input_file_block_start"),
@@ -748,6 +754,16 @@ object FunctionRegistry {
     (name, (expressionInfo, newBuilder))
   }
 
+  private def expressionBuilder[T <: ExpressionBuilder : ClassTag](
+      name: String, builder: T): (String, (ExpressionInfo, FunctionBuilder)) = {
+    val info = FunctionRegistryBase.expressionInfo[T](name, None)
+    val funcBuilder = (expressions: Seq[Expression]) => {
+      assert(expressions.forall(_.resolved), "function arguments must be resolved.")
+      builder.build(expressions)
+    }
+    (name, (info, funcBuilder))
+  }
+
   /**
    * Creates a function registry lookup entry for cast aliases (SPARK-16730).
    * For example, if name is "int", and dataType is IntegerType, this means int(x) would become
@@ -842,4 +858,8 @@ object TableFunctionRegistry {
   }
 
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
+}
+
+trait ExpressionBuilder {
+  def build(expressions: Seq[Expression]): Expression
 }

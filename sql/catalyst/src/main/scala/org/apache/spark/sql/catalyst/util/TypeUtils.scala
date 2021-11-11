@@ -87,17 +87,6 @@ object TypeUtils {
     }
   }
 
-  def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
-    val limit = if (x.length <= y.length) x.length else y.length
-    var i = 0
-    while (i < limit) {
-      val res = (x(i) & 0xff) - (y(i) & 0xff)
-      if (res != 0) return res
-      i += 1
-    }
-    x.length - y.length
-  }
-
   /**
    * Returns true if the equals method of the elements of the data type is implemented properly.
    * This also means that they can be safely used in collections relying on the equals method,
@@ -109,15 +98,16 @@ object TypeUtils {
     case _ => false
   }
 
-  def failWithIntervalType(dataType: DataType): Unit = {
-    invokeOnceForInterval(dataType) {
+  def failWithIntervalType(dataType: DataType, forbidAnsiIntervals: Boolean = true): Unit = {
+    invokeOnceForInterval(dataType, forbidAnsiIntervals) {
       throw QueryCompilationErrors.cannotUseIntervalTypeInTableSchemaError()
     }
   }
 
-  def invokeOnceForInterval(dataType: DataType)(f: => Unit): Unit = {
+  def invokeOnceForInterval(dataType: DataType, forbidAnsiIntervals: Boolean)(f: => Unit): Unit = {
     def isInterval(dataType: DataType): Boolean = dataType match {
-      case CalendarIntervalType | _: AnsiIntervalType => true
+      case _: AnsiIntervalType => forbidAnsiIntervals
+      case CalendarIntervalType => true
       case _ => false
     }
     if (dataType.existsRecursively(isInterval)) f

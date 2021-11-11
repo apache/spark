@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -165,11 +165,21 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             }
         }
 
-        operator transformExpressionsUp {
+        val exprs = operator match {
+          // `groupingExpressions` may rely on `aggregateExpressions`, due to the GROUP BY alias
+          // feature. We should check errors in `aggregateExpressions` first.
+          case a: Aggregate => a.aggregateExpressions ++ a.groupingExpressions
+          case _ => operator.expressions
+        }
+
+        exprs.foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
-            val from = operator.inputSet.toSeq.map(_.qualifiedName).mkString(", ")
-            // cannot resolve '${a.sql}' given input columns: [$from]
-            a.failAnalysis(errorClass = "MISSING_COLUMN", messageParameters = Array(a.sql, from))
+            val missingCol = a.sql
+            val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
+            val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates)
+            a.failAnalysis(
+              errorClass = "MISSING_COLUMN",
+              messageParameters = Array(missingCol, orderedCandidates.mkString(", ")))
 
           case s: Star =>
             withPosition(s) {
@@ -206,27 +216,26 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis(s"${wf.prettyName} function can only be evaluated in an ordered " +
               s"row-based window frame with a single offset: $w")
 
-          case w @ WindowExpression(e, s) =>
+          case w: WindowExpression =>
             // Only allow window functions with an aggregate expression or an offset window
             // function or a Pandas window UDF.
-            e match {
+            w.windowFunction match {
               case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
-                  _: AggregateWindowFunction =>
-                w
-              case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) =>
-                w
-              case _ =>
-                failAnalysis(s"Expression '$e' not supported within a window function.")
+                  _: AggregateWindowFunction => // OK
+              case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) => // OK
+              case other =>
+                failAnalysis(s"Expression '$other' not supported within a window function.")
             }
 
           case s: SubqueryExpression =>
             checkSubqueryExpression(operator, s)
-            s
 
           case e: ExpressionWithRandomSeed if !e.seedExpression.foldable =>
             failAnalysis(
               s"Input argument to ${e.prettyName} must be a constant.")
-        }
+
+          case _ =>
+        })
 
         operator match {
           case etw: EventTimeWatermark =>
@@ -248,6 +257,20 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis(
               s"join condition '${condition.sql}' " +
                 s"of type ${condition.dataType.catalogString} is not a boolean.")
+
+          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _)
+              if condition.dataType != BooleanType =>
+            failAnalysis(
+              s"join condition '${condition.sql}' " +
+                s"of type ${condition.dataType.catalogString} is not a boolean.")
+
+          case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion)) =>
+            if (!toleranceAssertion.foldable) {
+              failAnalysis("Input argument tolerance must be a constant.")
+            }
+            if (!toleranceAssertion.eval().asInstanceOf[Boolean]) {
+              failAnalysis("Input argument tolerance must be non-negative.")
+            }
 
           case a @ Aggregate(groupingExprs, aggregateExprs, child) =>
             def isAggregateExpression(expr: Expression): Boolean = {
@@ -401,15 +424,26 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                     |the ${ordinalNumber(ti + 1)} table has ${child.output.length} columns
                   """.stripMargin.replace("\n", " ").trim())
               }
+              val isUnion = operator.isInstanceOf[Union]
+              val dataTypesAreCompatibleFn = if (isUnion) {
+                (dt1: DataType, dt2: DataType) =>
+                  !DataType.equalsStructurally(dt1, dt2, true)
+              } else {
+                // SPARK-18058: we shall not care about the nullability of columns
+                (dt1: DataType, dt2: DataType) =>
+                  TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty
+              }
+
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
-                if (TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty) {
+                if (dataTypesAreCompatibleFn(dt1, dt2)) {
                   failAnalysis(
                     s"""
-                      |${operator.nodeName} can only be performed on tables with the compatible
-                      |column types. ${dt1.catalogString} <> ${dt2.catalogString} at the
-                      |${ordinalNumber(ci)} column of the ${ordinalNumber(ti + 1)} table
+                       |${operator.nodeName} can only be performed on tables with the compatible
+                       |column types. The ${ordinalNumber(ci)} column of the
+                       |${ordinalNumber(ti + 1)} table is ${dt1.catalogString} type which is not
+                       |compatible with ${dt2.catalogString} at same column of first table
                     """.stripMargin.replace("\n", " ").trim())
                 }
               }
@@ -430,10 +464,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               failAnalysis(s"Invalid partitioning: ${badReferences.mkString(", ")}")
             }
 
-            create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
+            create.tableSchema.foreach(f =>
+              TypeUtils.failWithIntervalType(f.dataType, forbidAnsiIntervals = false))
 
           case write: V2WriteCommand if write.resolved =>
-            write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
+            write.query.schema.foreach(f =>
+              TypeUtils.failWithIntervalType(f.dataType, forbidAnsiIntervals = false))
 
           case alter: AlterTableCommand =>
             checkAlterTableCommand(alter)
@@ -494,6 +530,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                """.stripMargin)
+
+          case j: AsOfJoin if !j.duplicateResolved =>
+            val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
+            failAnalysis(
+              s"""
+                 |Failure when resolving conflicting references in AsOfJoin:
+                 |$plan
+                 |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+                 |""".stripMargin)
 
           // TODO: although map type is not orderable, technically map type should be able to be
           // used in equality comparison, remove this type check once we support it.

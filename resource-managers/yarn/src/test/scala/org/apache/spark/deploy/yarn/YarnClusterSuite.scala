@@ -18,9 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
-import java.net.URL
 import java.nio.charset.StandardCharsets
-import java.nio.file.Paths
 import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
@@ -152,48 +150,12 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     checkResult(finalState, result)
   }
 
-  test("SPARK-35672: run Spark in yarn-client mode with additional jar using URI scheme 'local'") {
-    testWithAddJar(clientMode = true, "local")
+  test("run Spark in yarn-client mode with additional jar") {
+    testWithAddJar(true)
   }
 
-  test("SPARK-35672: run Spark in yarn-cluster mode with additional jar using URI scheme 'local'") {
-    testWithAddJar(clientMode = false, "local")
-  }
-
-  test("SPARK-35672: run Spark in yarn-client mode with additional jar using URI scheme 'local' " +
-      "and gateway-replacement path") {
-    // Use the original jar URL, but set up the gateway/replacement configs such that if
-    // replacement occurs, things will break. This ensures the replacement doesn't apply to the
-    // driver in 'client' mode. Executors will fail in this case because they still apply the
-    // replacement in client mode.
-    testWithAddJar(clientMode = true, "local", Some(jarUrl => {
-      (jarUrl.getPath, Map(
-        GATEWAY_ROOT_PATH.key -> Paths.get(jarUrl.toURI).getParent.toString,
-        REPLACEMENT_ROOT_PATH.key -> "/nonexistent/path/"
-      ))
-    }), expectExecutorFailure = true)
-  }
-
-  test("SPARK-35672: run Spark in yarn-cluster mode with additional jar using URI scheme 'local' " +
-      "and gateway-replacement path") {
-    // Put a prefix in front of the original jar URL which causes it to be an invalid path.
-    // Set up the gateway/replacement configs such that if replacement occurs, it is a valid
-    // path again (by removing the prefix). This ensures the replacement is applied.
-    val gatewayPath = "/replaceme/nonexistent/"
-    testWithAddJar(clientMode = false, "local", Some(jarUrl => {
-      (gatewayPath + jarUrl.getPath, Map(
-        GATEWAY_ROOT_PATH.key -> gatewayPath,
-        REPLACEMENT_ROOT_PATH.key -> ""
-      ))
-    }))
-  }
-
-  test("SPARK-35672: run Spark in yarn-client mode with additional jar using URI scheme 'file'") {
-    testWithAddJar(clientMode = true, "file")
-  }
-
-  test("SPARK-35672: run Spark in yarn-cluster mode with additional jar using URI scheme 'file'") {
-    testWithAddJar(clientMode = false, "file")
+  test("run Spark in yarn-cluster mode with additional jar") {
+    testWithAddJar(false)
   }
 
   test("run Spark in yarn-cluster mode unsuccessfully") {
@@ -324,23 +286,16 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     checkResult(finalState, result)
   }
 
-  private def testWithAddJar(
-      clientMode: Boolean,
-      jarUriScheme: String,
-      jarUrlToPathAndConfs: Option[URL => (String, Map[String, String])] = None,
-      expectExecutorFailure: Boolean = false): Unit = {
+  private def testWithAddJar(clientMode: Boolean): Unit = {
     val originalJar = TestUtils.createJarWithFiles(Map("test.resource" -> "ORIGINAL"), tempDir)
-    val (jarPath, extraConf) = jarUrlToPathAndConfs
-        .map(_.apply(originalJar))
-        .getOrElse((originalJar.getPath, Map[String, String]()))
     val driverResult = File.createTempFile("driver", null, tempDir)
     val executorResult = File.createTempFile("executor", null, tempDir)
     val finalState = runSpark(clientMode, mainClassName(YarnClasspathTest.getClass),
-      appArgs = Seq(driverResult.getAbsolutePath, executorResult.getAbsolutePath),
-      extraJars = Seq(s"$jarUriScheme:$jarPath"),
-      extraConf = extraConf)
+      appArgs = Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath()),
+      extraClassPath = Seq(originalJar.getPath()),
+      extraJars = Seq("local:" + originalJar.getPath()))
     checkResult(finalState, driverResult, "ORIGINAL")
-    checkResult(finalState, executorResult, if (expectExecutorFailure) "failure" else "ORIGINAL")
+    checkResult(finalState, executorResult, "ORIGINAL")
   }
 
   private def testPySpark(

@@ -15,19 +15,23 @@
 # limitations under the License.
 #
 
+from typing import Generic, Tuple, TypeVar
+
 from pyspark.mllib.common import inherit_doc, JavaModelWrapper
 
 
 __all__ = ["ChiSqTestResult", "KolmogorovSmirnovTestResult"]
 
+DF = TypeVar("DF", int, float, Tuple[int, ...], Tuple[float, ...])
 
-class TestResult(JavaModelWrapper):
+
+class TestResult(JavaModelWrapper, Generic[DF]):
     """
     Base class for all test results.
     """
 
     @property
-    def pValue(self):
+    def pValue(self) -> float:
         """
         The probability of obtaining a test statistic result at least as
         extreme as the one that was actually observed, assuming that the
@@ -36,7 +40,7 @@ class TestResult(JavaModelWrapper):
         return self._java_model.pValue()
 
     @property
-    def degreesOfFreedom(self):
+    def degreesOfFreedom(self) -> DF:
         """
         Returns the degree(s) of freedom of the hypothesis test.
         Return type should be Number(e.g. Int, Double) or tuples of Numbers.
@@ -44,31 +48,31 @@ class TestResult(JavaModelWrapper):
         return self._java_model.degreesOfFreedom()
 
     @property
-    def statistic(self):
+    def statistic(self) -> float:
         """
         Test statistic.
         """
         return self._java_model.statistic()
 
     @property
-    def nullHypothesis(self):
+    def nullHypothesis(self) -> str:
         """
         Null hypothesis of the test.
         """
         return self._java_model.nullHypothesis()
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self._java_model.toString()
 
 
 @inherit_doc
-class ChiSqTestResult(TestResult):
+class ChiSqTestResult(TestResult[int]):
     """
     Contains test results for the chi-squared hypothesis test.
     """
 
     @property
-    def method(self):
+    def method(self) -> str:
         """
         Name of the test method
         """
@@ -76,7 +80,7 @@ class ChiSqTestResult(TestResult):
 
 
 @inherit_doc
-class KolmogorovSmirnovTestResult(TestResult):
+class KolmogorovSmirnovTestResult(TestResult[int]):
     """
     Contains test results for the Kolmogorov-Smirnov test.
     """

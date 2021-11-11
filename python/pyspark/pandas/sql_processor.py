@@ -15,12 +15,12 @@
 # limitations under the License.
 #
 
-import _string  # type: ignore
-from typing import Any, Dict, Optional, Union, List  # noqa: F401 (SPARK-34943)
+import _string  # type: ignore[import]
+from typing import Any, Dict, Optional, Union, List
 import inspect
 import pandas as pd
 
-from pyspark.sql import SparkSession, DataFrame as SDataFrame  # noqa: F401 (SPARK-34943)
+from pyspark.sql import SparkSession, DataFrame as SDataFrame
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.utils import default_session
@@ -41,7 +41,7 @@ def sql(
     index_col: Optional[Union[str, List[str]]] = None,
     globals: Optional[Dict[str, Any]] = None,
     locals: Optional[Dict[str, Any]] = None,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> DataFrame:
     """
     Execute a SQL query and return the result as a pandas-on-Spark DataFrame.
@@ -214,7 +214,7 @@ def _get_ipython_scope() -> Dict[str, Any]:
     in an IPython notebook environment.
     """
     try:
-        from IPython import get_ipython  # type: ignore
+        from IPython import get_ipython  # type: ignore[import]
 
         shell = get_ipython()
         return shell.user_ns
@@ -257,14 +257,14 @@ class SQLProcessor(object):
         # All the temporary views created when executing this statement
         # The key is the name of the variable in {}
         # The value is the cached Spark Dataframe.
-        self._temp_views = {}  # type: Dict[str, SDataFrame]
+        self._temp_views: Dict[str, SDataFrame] = {}
         # All the other variables, converted to a normalized form.
         # The normalized form is typically a string
-        self._cached_vars = {}  # type: Dict[str, Any]
+        self._cached_vars: Dict[str, Any] = {}
         # The SQL statement after:
         # - all the dataframes have been registered as temporary views
         # - all the values have been converted normalized to equivalent SQL representations
-        self._normalized_statement = None  # type: Optional[str]
+        self._normalized_statement: Optional[str] = None
         self._session = session
 
     def execute(self, index_col: Optional[Union[str, List[str]]]) -> DataFrame:

@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, JarResource}
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
@@ -1193,15 +1193,6 @@ class DDLParserSuite extends AnalysisTest {
         "DESC TABLE COLUMN for a specific partition is not supported"))
   }
 
-  test("describe database") {
-    val sql1 = "DESCRIBE DATABASE EXTENDED a.b"
-    val sql2 = "DESCRIBE DATABASE a.b"
-    comparePlans(parsePlan(sql1),
-      DescribeNamespace(UnresolvedNamespace(Seq("a", "b")), extended = true))
-    comparePlans(parsePlan(sql2),
-      DescribeNamespace(UnresolvedNamespace(Seq("a", "b")), extended = false))
-  }
-
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
     comparePlans(parsePlan("describe t"),
       DescribeRelation(
@@ -2101,12 +2092,6 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin)
   }
 
-  test("show current namespace") {
-    comparePlans(
-      parsePlan("SHOW CURRENT NAMESPACE"),
-      ShowCurrentNamespaceStatement())
-  }
-
   test("alter table: SerDe properties") {
     val sql1 = "ALTER TABLE table_name SET SERDE 'org.apache.class'"
     val hint = Some("Please use ALTER VIEW instead.")
@@ -2207,115 +2192,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsed, expected)
   }
 
-  test("create view -- basic") {
-    val v1 = "CREATE VIEW view1 AS SELECT * FROM tab1"
-    val parsed1 = parsePlan(v1)
-
-    val expected1 = CreateViewStatement(
-      Seq("view1"),
-      Seq.empty[(String, Option[String])],
-      None,
-      Map.empty[String, String],
-      Some("SELECT * FROM tab1"),
-      parsePlan("SELECT * FROM tab1"),
-      false,
-      false,
-      PersistedView)
-    comparePlans(parsed1, expected1)
-
-    val v2 = "CREATE TEMPORARY VIEW a.b.c AS SELECT * FROM tab1"
-    val parsed2 = parsePlan(v2)
-
-    val expected2 = CreateViewStatement(
-      Seq("a", "b", "c"),
-      Seq.empty[(String, Option[String])],
-      None,
-      Map.empty[String, String],
-      Some("SELECT * FROM tab1"),
-      parsePlan("SELECT * FROM tab1"),
-      false,
-      false,
-      LocalTempView)
-    comparePlans(parsed2, expected2)
-  }
-
-  test("create view - full") {
-    val v1 =
-      """
-        |CREATE OR REPLACE VIEW view1
-        |(col1, col3 COMMENT 'hello')
-        |TBLPROPERTIES('prop1Key'="prop1Val")
-        |COMMENT 'BLABLA'
-        |AS SELECT * FROM tab1
-      """.stripMargin
-    val parsed1 = parsePlan(v1)
-    val expected1 = CreateViewStatement(
-      Seq("view1"),
-      Seq("col1" -> None, "col3" -> Some("hello")),
-      Some("BLABLA"),
-      Map("prop1Key" -> "prop1Val"),
-      Some("SELECT * FROM tab1"),
-      parsePlan("SELECT * FROM tab1"),
-      false,
-      true,
-      PersistedView)
-    comparePlans(parsed1, expected1)
-
-    val v2 =
-      """
-        |CREATE OR REPLACE GLOBAL TEMPORARY VIEW a.b.c
-        |(col1, col3 COMMENT 'hello')
-        |COMMENT 'BLABLA'
-        |AS SELECT * FROM tab1
-      """.stripMargin
-    val parsed2 = parsePlan(v2)
-    val expected2 = CreateViewStatement(
-      Seq("a", "b", "c"),
-      Seq("col1" -> None, "col3" -> Some("hello")),
-      Some("BLABLA"),
-      Map(),
-      Some("SELECT * FROM tab1"),
-      parsePlan("SELECT * FROM tab1"),
-      false,
-      true,
-      GlobalTempView)
-    comparePlans(parsed2, expected2)
-  }
-
-  test("create view -- partitioned view") {
-    val v1 = "CREATE VIEW view1 partitioned on (ds, hr) as select * from srcpart"
-    intercept[ParseException] {
-      parsePlan(v1)
-    }
-  }
-
-  test("create view - duplicate clauses") {
-    def createViewStatement(duplicateClause: String): String = {
-      s"""
-         |CREATE OR REPLACE VIEW view1
-         |(col1, col3 COMMENT 'hello')
-         |$duplicateClause
-         |$duplicateClause
-         |AS SELECT * FROM tab1
-      """.stripMargin
-    }
-    val sql1 = createViewStatement("COMMENT 'BLABLA'")
-    val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
-    intercept(sql1, "Found duplicate clauses: COMMENT")
-    intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
-  }
-
-  test("SPARK-32374: create temporary view with properties not allowed") {
-    assertUnsupported(
-      sql = """
-        |CREATE OR REPLACE TEMPORARY VIEW a.b.c
-        |(col1, col3 COMMENT 'hello')
-        |TBLPROPERTIES('prop1Key'="prop1Val")
-        |AS SELECT * FROM tab1
-      """.stripMargin,
-      containsThesePhrases = Seq("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"))
-  }
-
   test("SHOW TBLPROPERTIES table") {
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c"),
@@ -2388,43 +2264,6 @@ class DDLParserSuite extends AnalysisTest {
       DropFunction(UnresolvedFunc(Seq("a", "b", "c")), true, true))
   }
 
-  test("CREATE FUNCTION") {
-    parseCompare("CREATE FUNCTION a as 'fun'",
-      CreateFunctionStatement(Seq("a"), "fun", Seq(), false, false, false))
-
-    parseCompare("CREATE FUNCTION a.b.c as 'fun'",
-      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), false, false, false))
-
-    parseCompare("CREATE OR REPLACE FUNCTION a.b.c as 'fun'",
-      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), false, false, true))
-
-    parseCompare("CREATE TEMPORARY FUNCTION a.b.c as 'fun'",
-      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), true, false, false))
-
-    parseCompare("CREATE FUNCTION IF NOT EXISTS a.b.c as 'fun'",
-      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), false, true, false))
-
-    parseCompare("CREATE FUNCTION a as 'fun' USING JAR 'j'",
-      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(JarResource, "j")),
-        false, false, false))
-
-    parseCompare("CREATE FUNCTION a as 'fun' USING ARCHIVE 'a'",
-      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(ArchiveResource, "a")),
-        false, false, false))
-
-    parseCompare("CREATE FUNCTION a as 'fun' USING FILE 'f'",
-      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(FileResource, "f")),
-        false, false, false))
-
-    parseCompare("CREATE FUNCTION a as 'fun' USING JAR 'j', ARCHIVE 'a', FILE 'f'",
-      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(JarResource, "j"),
-        FunctionResource(ArchiveResource, "a"), FunctionResource(FileResource, "f")),
-        false, false, false))
-
-    intercept("CREATE FUNCTION a as 'fun' USING OTHER 'o'",
-      "Operation not allowed: CREATE FUNCTION with resource type 'other'")
-  }
-
   test("REFRESH FUNCTION") {
     parseCompare("REFRESH FUNCTION c",
       RefreshFunction(UnresolvedFunc(Seq("c"))))
@@ -2432,6 +2271,32 @@ class DDLParserSuite extends AnalysisTest {
       RefreshFunction(UnresolvedFunc(Seq("b", "c"))))
     parseCompare("REFRESH FUNCTION a.b.c",
       RefreshFunction(UnresolvedFunc(Seq("a", "b", "c"))))
+  }
+
+  test("CREATE INDEX") {
+    parseCompare("CREATE index i1 ON a.b.c USING BTREE (col1)",
+      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", "BTREE", false,
+        Seq(UnresolvedFieldName(Seq("col1"))).zip(Seq(Map.empty[String, String])), Map.empty))
+
+    parseCompare("CREATE index IF NOT EXISTS i1 ON TABLE a.b.c USING BTREE" +
+      " (col1 OPTIONS ('k1'='v1'), col2 OPTIONS ('k2'='v2')) ",
+      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", "BTREE", true,
+        Seq(UnresolvedFieldName(Seq("col1")), UnresolvedFieldName(Seq("col2")))
+          .zip(Seq(Map("k1" -> "v1"), Map("k2" -> "v2"))), Map.empty))
+
+    parseCompare("CREATE index i1 ON a.b.c" +
+      " (col1 OPTIONS ('k1'='v1'), col2 OPTIONS ('k2'='v2')) OPTIONS ('k3'='v3', 'k4'='v4')",
+      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", "", false,
+        Seq(UnresolvedFieldName(Seq("col1")), UnresolvedFieldName(Seq("col2")))
+          .zip(Seq(Map("k1" -> "v1"), Map("k2" -> "v2"))), Map("k3" -> "v3", "k4" -> "v4")))
+  }
+
+  test("DROP INDEX") {
+    parseCompare("DROP index i1 ON a.b.c",
+      DropIndex(UnresolvedTable(Seq("a", "b", "c"), "DROP INDEX", None), "i1", false))
+
+    parseCompare("DROP index IF EXISTS i1 ON a.b.c",
+      DropIndex(UnresolvedTable(Seq("a", "b", "c"), "DROP INDEX", None), "i1", true))
   }
 
   private case class TableSpec(

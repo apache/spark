@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
+import org.apache.spark.sql.execution.joins.ShuffledJoin
 
 /**
  * A simple implementation of [[Cost]], which takes a number of [[Long]] as the cost value.
@@ -35,15 +36,24 @@ case class SimpleCost(value: Long) extends Cost {
 }
 
 /**
- * A simple implementation of [[CostEvaluator]], which counts the number of
- * [[ShuffleExchangeLike]] nodes in the plan.
+ * A skew join aware implementation of [[CostEvaluator]], which counts the number of
+ * [[ShuffleExchangeLike]] nodes and skew join nodes in the plan.
  */
-object SimpleCostEvaluator extends CostEvaluator {
-
+case class SimpleCostEvaluator(forceOptimizeSkewedJoin: Boolean) extends CostEvaluator {
   override def evaluateCost(plan: SparkPlan): Cost = {
-    val cost = plan.collect {
+    val numShuffles = plan.collect {
       case s: ShuffleExchangeLike => s
     }.size
-    SimpleCost(cost)
+
+    if (forceOptimizeSkewedJoin) {
+      val numSkewJoins = plan.collect {
+        case j: ShuffledJoin if j.isSkewJoin => j
+      }.size
+      // We put `-numSkewJoins` in the first 32 bits of the long value, so that it's compared first
+      // when comparing the cost, and larger `numSkewJoins` means lower cost.
+      SimpleCost(-numSkewJoins.toLong << 32 | numShuffles)
+    } else {
+      SimpleCost(numShuffles)
+    }
   }
 }

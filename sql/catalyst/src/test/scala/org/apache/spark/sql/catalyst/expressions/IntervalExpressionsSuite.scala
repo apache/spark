@@ -412,8 +412,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     Seq(
-      (Period.ofMonths(1), 0) -> "/ by zero",
-      (Period.ofMonths(Int.MinValue), 0d) -> "input is infinite or NaN",
+      (Period.ofMonths(1), 0) -> "divide by zero",
+      (Period.ofMonths(Int.MinValue), 0d) -> "divide by zero",
       (Period.ofMonths(-100), Float.NaN) -> "input is infinite or NaN"
     ).foreach { case ((period, num), expectedErrMsg) =>
       checkExceptionInExpression[ArithmeticException](
@@ -447,8 +447,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     Seq(
-      (Duration.ofDays(1), 0) -> "/ by zero",
-      (Duration.ofMillis(Int.MinValue), 0d) -> "input is infinite or NaN",
+      (Duration.ofDays(1), 0) -> "divide by zero",
+      (Duration.ofMillis(Int.MinValue), 0d) -> "divide by zero",
       (Duration.ofSeconds(-100), Float.NaN) -> "input is infinite or NaN"
     ).foreach { case ((period, num), expectedErrMsg) =>
       checkExceptionInExpression[ArithmeticException](

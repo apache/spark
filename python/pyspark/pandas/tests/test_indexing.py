@@ -417,6 +417,15 @@ class IndexingTest(PandasOnSparkTestCase):
         self.assertRaises(KeyError, lambda: psdf.loc[0:30])
         self.assertRaises(KeyError, lambda: psdf.loc[10:100])
 
+    def test_loc_getitem_boolean_series(self):
+        pdf = pd.DataFrame(
+            {"A": [0, 1, 2, 3, 4], "B": [100, 200, 300, 400, 500]}, index=[20, 10, 30, 0, 50]
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf.A.loc[pdf.B > 200], psdf.A.loc[psdf.B > 200])
+        self.assert_eq(pdf.B.loc[pdf.B > 200], psdf.B.loc[psdf.B > 200])
+        self.assert_eq(pdf.loc[pdf.B > 200], psdf.loc[psdf.B > 200])
+
     def test_loc_non_informative_index(self):
         pdf = pd.DataFrame({"x": [1, 2, 3, 4]}, index=[10, 20, 30, 40])
         psdf = ps.from_pandas(pdf)

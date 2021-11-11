@@ -120,6 +120,8 @@ class RocksDB(
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
+      // reset resources to prevent side-effects from previous loaded version
+      closePrefixScanIterators()
       writeBatch.clear()
       logInfo(s"Loaded $version")
     } catch {
@@ -290,8 +292,7 @@ class RocksDB(
    * Drop uncommitted changes, and roll back to previous version.
    */
   def rollback(): Unit = {
-    prefixScanReuseIter.entrySet().asScala.foreach(_.getValue.close())
-    prefixScanReuseIter.clear()
+    closePrefixScanIterators()
     writeBatch.clear()
     numKeysOnWritingVersion = numKeysOnLoadedVersion
     release()
@@ -307,8 +308,7 @@ class RocksDB(
 
   /** Release all resources */
   def close(): Unit = {
-    prefixScanReuseIter.entrySet().asScala.foreach(_.getValue.close())
-    prefixScanReuseIter.clear()
+    closePrefixScanIterators()
     try {
       closeDB()
 
@@ -411,6 +411,11 @@ class RocksDB(
     acquireLock.notifyAll()
   }
 
+  private def closePrefixScanIterators(): Unit = {
+    prefixScanReuseIter.entrySet().asScala.foreach(_.getValue.close())
+    prefixScanReuseIter.clear()
+  }
+
   private def getDBProperty(property: String): Long = {
     db.getProperty(property).toLong
   }
@@ -494,7 +499,6 @@ class ByteArrayPair(var key: Array[Byte] = null, var value: Array[Byte] = null) 
 case class RocksDBConf(
     minVersionsToRetain: Int,
     compactOnCommit: Boolean,
-    pauseBackgroundWorkForCommit: Boolean,
     blockSizeKB: Long,
     blockCacheSizeMB: Long,
     lockAcquireTimeoutMs: Long,
@@ -511,7 +515,6 @@ object RocksDBConf {
 
   // Configuration that specifies whether to compact the RocksDB data every time data is committed
   private val COMPACT_ON_COMMIT_CONF = ConfEntry("compactOnCommit", "false")
-  private val PAUSE_BG_WORK_FOR_COMMIT_CONF = ConfEntry("pauseBackgroundWorkForCommit", "true")
   private val BLOCK_SIZE_KB_CONF = ConfEntry("blockSizeKB", "4")
   private val BLOCK_CACHE_SIZE_MB_CONF = ConfEntry("blockCacheSizeMB", "8")
   private val LOCK_ACQUIRE_TIMEOUT_MS_CONF = ConfEntry("lockAcquireTimeoutMs", "60000")
@@ -555,7 +558,6 @@ object RocksDBConf {
     RocksDBConf(
       storeConf.minVersionsToRetain,
       getBooleanConf(COMPACT_ON_COMMIT_CONF),
-      getBooleanConf(PAUSE_BG_WORK_FOR_COMMIT_CONF),
       getPositiveLongConf(BLOCK_SIZE_KB_CONF),
       getPositiveLongConf(BLOCK_CACHE_SIZE_MB_CONF),
       getPositiveLongConf(LOCK_ACQUIRE_TIMEOUT_MS_CONF),

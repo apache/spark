@@ -18,12 +18,16 @@
 import unittest
 
 from pyspark.sql.types import DoubleType, IntegerType
-from pyspark.testing.mlutils import MockDataset, MockEstimator, MockUnaryTransformer, \
-    MockTransformer, SparkSessionTestCase
+from pyspark.testing.mlutils import (
+    MockDataset,
+    MockEstimator,
+    MockUnaryTransformer,
+    MockTransformer,
+    SparkSessionTestCase,
+)
 
 
 class TransformerTests(unittest.TestCase):
-
     def test_transform_invalid_type(self):
         transformer = MockTransformer()
         data = MockDataset()
@@ -31,11 +35,11 @@ class TransformerTests(unittest.TestCase):
 
 
 class UnaryTransformerTests(SparkSessionTestCase):
-
     def test_unary_transformer_validate_input_type(self):
         shiftVal = 3
-        transformer = MockUnaryTransformer(shiftVal=shiftVal) \
-            .setInputCol("input").setOutputCol("output")
+        transformer = (
+            MockUnaryTransformer(shiftVal=shiftVal).setInputCol("input").setOutputCol("output")
+        )
 
         # should not raise any errors
         transformer.validateInputType(DoubleType())
@@ -46,10 +50,11 @@ class UnaryTransformerTests(SparkSessionTestCase):
 
     def test_unary_transformer_transform(self):
         shiftVal = 3
-        transformer = MockUnaryTransformer(shiftVal=shiftVal) \
-            .setInputCol("input").setOutputCol("output")
+        transformer = (
+            MockUnaryTransformer(shiftVal=shiftVal).setInputCol("input").setOutputCol("output")
+        )
 
-        df = self.spark.range(0, 10).toDF('input')
+        df = self.spark.range(0, 10).toDF("input")
         df = df.withColumn("input", df.input.cast(dataType="double"))
 
         transformed_df = transformer.transform(df)
@@ -84,7 +89,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

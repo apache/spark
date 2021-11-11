@@ -53,7 +53,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
       case Array(db) =>
         catalog
           .listTables(db)
-          .map(ident => Identifier.of(Array(ident.database.getOrElse("")), ident.table))
+          .map(ident => Identifier.of(ident.database.map(Array(_)).getOrElse(Array()), ident.table))
           .toArray
       case _ =>
         throw QueryCompilationErrors.noSuchNamespaceError(namespace)
@@ -188,8 +188,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
       ident.namespace match {
         case Array(db) =>
           TableIdentifier(ident.name, Some(db))
-        case _ =>
-          throw QueryCompilationErrors.requiresSinglePartNamespaceError(ident)
+        case other =>
+          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other)
       }
     }
   }
@@ -275,6 +275,10 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
     case _ =>
       throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+  }
+
+  def isTempView(ident: Identifier): Boolean = {
+    catalog.isTempView(ident.namespace() :+ ident.name())
   }
 
   override def toString: String = s"V2SessionCatalog($name)"

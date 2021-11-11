@@ -52,6 +52,7 @@ class MLUtils(object):
     def _convert_labeled_point_to_libsvm(p):
         """Converts a LabeledPoint to a string in LIBSVM format."""
         from pyspark.mllib.regression import LabeledPoint
+
         assert isinstance(p, LabeledPoint)
         items = [str(p.label)]
         v = _convert_to_vector(p.features)
@@ -540,8 +541,7 @@ class LinearDataGenerator(object):
     """
 
     @staticmethod
-    def generateLinearInput(intercept, weights, xMean, xVariance,
-                            nPoints, seed, eps):
+    def generateLinearInput(intercept, weights, xMean, xVariance, nPoints, seed, eps):
         """
         .. versionadded:: 1.5.0
 
@@ -571,34 +571,46 @@ class LinearDataGenerator(object):
         weights = [float(weight) for weight in weights]
         xMean = [float(mean) for mean in xMean]
         xVariance = [float(var) for var in xVariance]
-        return list(callMLlibFunc(
-            "generateLinearInputWrapper", float(intercept), weights, xMean,
-            xVariance, int(nPoints), int(seed), float(eps)))
+        return list(
+            callMLlibFunc(
+                "generateLinearInputWrapper",
+                float(intercept),
+                weights,
+                xMean,
+                xVariance,
+                int(nPoints),
+                int(seed),
+                float(eps),
+            )
+        )
 
     @staticmethod
     @since("1.5.0")
-    def generateLinearRDD(sc, nexamples, nfeatures, eps,
-                          nParts=2, intercept=0.0):
+    def generateLinearRDD(sc, nexamples, nfeatures, eps, nParts=2, intercept=0.0):
         """
         Generate an RDD of LabeledPoints.
         """
         return callMLlibFunc(
-            "generateLinearRDDWrapper", sc, int(nexamples), int(nfeatures),
-            float(eps), int(nParts), float(intercept))
+            "generateLinearRDDWrapper",
+            sc,
+            int(nexamples),
+            int(nfeatures),
+            float(eps),
+            int(nParts),
+            float(intercept),
+        )
 
 
 def _test():
     import doctest
     from pyspark.sql import SparkSession
+
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    spark = SparkSession.builder\
-        .master("local[2]")\
-        .appName("mllib.util tests")\
-        .getOrCreate()
-    globs['spark'] = spark
-    globs['sc'] = spark.sparkContext
+    spark = SparkSession.builder.master("local[2]").appName("mllib.util tests").getOrCreate()
+    globs["spark"] = spark
+    globs["sc"] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:

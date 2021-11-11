@@ -72,7 +72,7 @@ insert into datetimes values
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-failed to evaluate expression CAST('11:00 BST' AS TIMESTAMP): Cannot cast 11:00 BST to TimestampType.; line 1 pos 22
+failed to evaluate expression CAST('11:00 BST' AS TIMESTAMP): Cannot cast 11:00 BST to TimestampType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.; line 1 pos 22
 
 
 -- !query

@@ -610,7 +610,7 @@ private[spark] class TaskSchedulerImpl(
           taskSet.getCompletelyExcludedTaskIfAny(hostToExecutors).foreach { taskIndex =>
               // If the taskSet is unschedulable we try to find an existing idle excluded
               // executor and kill the idle executor and kick off an abortTimer which if it doesn't
-              // schedule a task within the the timeout will abort the taskSet if we were unable to
+              // schedule a task within the timeout will abort the taskSet if we were unable to
               // schedule any task from the taskSet.
               // Note 1: We keep track of schedulability on a per taskSet basis rather than on a per
               // task basis.
@@ -686,7 +686,7 @@ private[spark] class TaskSchedulerImpl(
                 s"${LEGACY_LOCALITY_WAIT_RESET.key} to false to get rid of this error."
               logWarning(errorMsg)
               taskSet.abort(errorMsg)
-              throw SparkCoreErrors.failResourceOffersForBarrierStageError(errorMsg)
+              throw SparkCoreErrors.sparkError(errorMsg)
             } else {
               val curTime = clock.getTimeMillis()
               if (curTime - taskSet.lastResourceOfferFailLogTime >
@@ -801,7 +801,8 @@ private[spark] class TaskSchedulerImpl(
                 val errorMsg =
                   "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)"
                 taskSet.abort(errorMsg)
-                throw SparkCoreErrors.markExecutorAsFailedError(errorMsg)
+                throw new SparkException(
+                  "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)")
               })
               if (executorIdToRunningTaskIds.contains(execId)) {
                 reason = Some(

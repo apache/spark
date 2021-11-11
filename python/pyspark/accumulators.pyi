@@ -32,9 +32,7 @@ _accumulatorRegistry: Dict[int, Accumulator]
 class Accumulator(Generic[T]):
     aid: int
     accum_param: AccumulatorParam[T]
-    def __init__(
-        self, aid: int, value: T, accum_param: AccumulatorParam[T]
-    ) -> None: ...
+    def __init__(self, aid: int, value: T, accum_param: AccumulatorParam[T]) -> None: ...
     def __reduce__(
         self,
     ) -> Tuple[
