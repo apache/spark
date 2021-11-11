@@ -328,7 +328,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val expected_plan_fragment =
           "PushedAggregates: [MAX(SALARY), MIN(BONUS)], " +
             "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
-            "PushedGroupby: [DEPT]"
+            "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(10000, 1000), Row(12000, 1200), Row(12000, 1200)))
@@ -344,7 +344,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [MAX(ID), MIN(ID)], " +
-            "PushedFilters: [IsNotNull(ID), GreaterThan(ID,0)]"
+            "PushedFilters: [IsNotNull(ID), GreaterThan(ID,0)], " +
+            "PushedGroupByColumns: []"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(2, 1)))
@@ -423,7 +424,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val expected_plan_fragment =
           "PushedAggregates: [SUM(SALARY)], " +
             "PushedFilters: [], " +
-            "PushedGroupby: [DEPT]"
+            "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(19000), Row(22000), Row(12000)))
@@ -436,7 +437,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val expected_plan_fragment =
           "PushedAggregates: [SUM(DISTINCT SALARY)], " +
             "PushedFilters: [], " +
-            "PushedGroupby: [DEPT]"
+            "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(19000), Row(22000), Row(12000)))
@@ -454,7 +455,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val expected_plan_fragment =
           "PushedAggregates: [MAX(SALARY), MIN(BONUS)], " +
             "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
-            "PushedGroupby: [DEPT, NAME]"
+            "PushedGroupByColumns: [DEPT, NAME]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(9000, 1200), Row(12000, 1200), Row(10000, 1300),
@@ -473,7 +474,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val expected_plan_fragment =
           "PushedAggregates: [MAX(SALARY), MIN(BONUS)], " +
           "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
-          "PushedGroupby: [DEPT]"
+          "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(12000, 1200), Row(12000, 1200)))
@@ -488,7 +489,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val expected_plan_fragment =
           "PushedAggregates: [MIN(SALARY)], " +
             "PushedFilters: [], " +
-            "PushedGroupby: [DEPT]"
+            "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(1, 9000), Row(2, 10000), Row(6, 12000)))
@@ -511,7 +512,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val expected_plan_fragment =
           "PushedAggregates: [SUM(SALARY)], " +
             "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
-            "PushedGroupby: [DEPT]"
+            "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(query, expected_plan_fragment)
     }
     checkAnswer(query, Seq(Row(6, 12000), Row(1, 19000), Row(2, 22000)))
