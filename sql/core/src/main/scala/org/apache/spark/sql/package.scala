@@ -56,11 +56,6 @@ package object sql {
   private[sql] val SPARK_VERSION_METADATA_KEY = "org.apache.spark.version"
 
   /**
-   * Metadata key which is used to write Spark data types in the ORC file metadata.
-   */
-  private[sql] val SPARK_DATA_TYPE_METADATA_KEY = "org.apache.spark.dataType"
-
-  /**
    * Parquet/Avro file metadata key to indicate that the file was written with legacy datetime
    * values.
    */
