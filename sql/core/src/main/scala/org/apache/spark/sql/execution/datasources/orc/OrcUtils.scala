@@ -81,6 +81,8 @@ object OrcUtils extends Logging {
               UTF_8.decode(reader.getMetadataValue(SPARK_DATA_TYPE_METADATA_KEY)).toString
             (schema, Some(DataType.fromJson(dataTypeMetadata).asInstanceOf[StructType]))
           } else {
+            // If metadata keys of ORC not contains `org.apache.spark.dataType`,
+            // it means the timestamp written by the legacy code and we respect the ORC schema.
             (schema, None)
           }
         }
