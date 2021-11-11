@@ -161,6 +161,12 @@ object AnalysisContext {
     try f finally { set(originContext) }
   }
 
+  def withNewAnalysisContext[A](f: => A): A = {
+    val originContext = value.get()
+    reset()
+    try f finally { set(originContext) }
+  }
+
   def withOuterPlan[A](outerPlan: LogicalPlan)(f: => A): A = {
     val originContext = value.get()
     val context = originContext.copy(outerPlan = Some(outerPlan))
@@ -177,10 +183,6 @@ class Analyzer(override val catalogManager: CatalogManager)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis with SQLConfHelper {
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
-
-  private var analysisContext: AnalysisContext = AnalysisContext.get
-
-  def getAnalysisContext: AnalysisContext = analysisContext
 
   override protected def isPlanIntegral(
       previousPlan: LogicalPlan,
@@ -212,12 +214,8 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   override def execute(plan: LogicalPlan): LogicalPlan = {
-    AnalysisContext.reset()
-    try {
+    AnalysisContext.withNewAnalysisContext {
       executeSameContext(plan)
-    } finally {
-      analysisContext = AnalysisContext.get.copy()
-      AnalysisContext.reset()
     }
   }
 
@@ -3660,7 +3658,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       _.containsPattern(COMMAND)) {
       case c: AnalysisOnlyCommand if c.resolved =>
         checkAnalysis(c)
-        c.markAsAnalyzed()
+        c.applyAnalysisContext(AnalysisContext.get).markAsAnalyzed()
     }
   }
 }
