@@ -291,7 +291,8 @@ class SparkSession(SparkConversionMixin):
         self,
         sparkContext: SparkContext,
         jsparkSession: Optional[JavaObject] = None,
-        options: Optional[Dict[str, Any]] = None):
+        options: Optional[Dict[str, Any]] = None
+    ):
         from pyspark.sql.context import SQLContext
 
         self._sc = sparkContext
