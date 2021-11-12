@@ -276,7 +276,7 @@ class SparkSession(SparkConversionMixin):
                         sc = SparkContext.getOrCreate(sparkConf)
                     # Do not update `SparkConf` for existing `SparkContext`, as it's shared
                     # by all sessions.
-                    session = SparkSession(sc, options = self._options)
+                    session = SparkSession(sc, options=self._options)
                 return session
 
     builder = Builder()
