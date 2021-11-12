@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, NamedRelation, PartitionSpec, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
@@ -987,7 +987,7 @@ case class CacheTable(
 
   override def childrenToAnalyze: Seq[LogicalPlan] = table :: Nil
 
-  override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
+  override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
 }
 
 /**
@@ -1008,7 +1008,7 @@ case class CacheTableAsSelect(
 
   override def childrenToAnalyze: Seq[LogicalPlan] = plan :: Nil
 
-  override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
+  override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
 }
 
 /**
@@ -1026,5 +1026,5 @@ case class UncacheTable(
 
   override def childrenToAnalyze: Seq[LogicalPlan] = table :: Nil
 
-  override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
+  override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
 }
