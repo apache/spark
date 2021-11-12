@@ -24,7 +24,6 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.catalyst.util.{fileToString, resourceToString, stringToFile}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.TestSparkSession
-import org.apache.spark.util.Utils
 
 /**
  * End-to-end tests to check TPCDS query results.
