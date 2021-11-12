@@ -21,6 +21,8 @@ import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.Callable
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -172,21 +174,28 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
   }
 
   test("SPARK-37210: Concurrent write to different static partitions") {
-    withTable("t") {
-      sql("CREATE TABLE t (c1 int, c2 int) PARTITIONED BY (c3 int, c4 int) STORED AS PARQUET")
-      val selectStatement = "SELECT 1 AS c1, 2 AS c2"
-      val tasks: Seq[Callable[Unit]] = (1 to 4).map(i => {
-        new Callable[Unit] {
-          override def call(): Unit = {
-            sql(s"INSERT OVERWRITE TABLE t PARTITION(c3=3$i, c4=4$i) $selectStatement")
+    System.setProperty("spark.sql.test.master", "local[10]")
+    import testImplicits._
+    withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1",
+      SQLConf.MAX_RECORDS_PER_FILE.key -> "1000") {
+      withTable("t") {
+        (1 to 10000).map(i => (i, i))
+          .toDF("_1", "_2").createOrReplaceTempView("s")
+        sql("CREATE TABLE t (c1 int, c2 int) PARTITIONED BY (c3 int, c4 int) STORED AS PARQUET")
+        val selectStatement = "SELECT _1 AS c1, _2 AS c2 FROM s"
+        val tasks: Seq[Callable[Unit]] = (1 to 5).map(i => {
+          new Callable[Unit] {
+            override def call(): Unit = {
+              sql(s"INSERT OVERWRITE TABLE t PARTITION(c3=3$i, c4=4$i) " +
+                s"$selectStatement LIMIT ${i * 2000}")
+            }
           }
-        }
-      })
-      import scala.collection.JavaConverters._
-      ThreadUtils.newForkJoinPool("test-thread-pool", 5).invokeAll(tasks.toList.asJava)
-      checkAnswer(
-        sql("SELECT c1, c2, c3, c4 FROM t order by c3, c4"),
-        (1 to 4).map(i => Row(1, 2, s"3$i".toInt, s"4$i".toInt)))
+        })
+        ThreadUtils.newForkJoinPool("test-thread-pool", 5).invokeAll(tasks.toList.asJava)
+        checkAnswer(
+          sql("SELECT count(*), c3, c4 FROM t GROUP BY c3, c4 ORDER BY c3, c4"),
+          (1 to 5).map(i => Row(i * 2000, s"3$i".toInt, s"4$i".toInt)))
+      }
     }
   }
 }
