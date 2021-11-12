@@ -338,7 +338,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         s"stop.")
       return false
     } else {
-      if (remainingBlocks.isEmpty && pushRequests.isEmpty && deferredPushRequests.isEmpty) {
+      if (reqsInFlight <= 0 && pushRequests.isEmpty && deferredPushRequests.isEmpty) {
         notifyDriverAboutPushCompletion()
       }
       remainingBlocks.isEmpty && (pushRequests.nonEmpty || deferredPushRequests.nonEmpty)

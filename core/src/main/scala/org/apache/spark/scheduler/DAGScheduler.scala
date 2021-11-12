@@ -1652,6 +1652,53 @@ private[spark] class DAGScheduler(
     }
   }
 
+  private[scheduler] def checkAndScheduleShuffleMergeFinalize(
+      shuffleStage: ShuffleMapStage): Unit = {
+    // Check if a finalize task has already been scheduled. This is to prevent the
+    // following scenario: Stage A attempt 0 fails and gets retried. Stage A attempt 1
+    // succeeded, triggering the scheduling of shuffle merge finalization. However,
+    // tasks from Stage A attempt 0 might still be running and sending task completion
+    // events to DAGScheduler. This check prevents multiple attempts to schedule merge
+    // finalization get triggered due to this.
+    if (shuffleStage.shuffleDep.getFinalizeTask.isEmpty) {
+      // 1. Stage indeterminate and some map outputs are not available - finalize
+      // immediately without registering shuffle merge results.
+      // 2. Stage determinate and some map outputs are not available - decide to
+      // register merge results based on map outputs size available and
+      // shuffleMergeWaitMinSizeThreshold.
+      // 3. All shuffle outputs available - decide to register merge results based
+      // on map outputs size available and shuffleMergeWaitMinSizeThreshold.
+      val totalSize = {
+        lazy val computedTotalSize =
+          mapOutputTracker.getStatistics(shuffleStage.shuffleDep).
+            bytesByPartitionId.filter(_ > 0).sum
+        if (shuffleStage.isAvailable) {
+          computedTotalSize
+        } else {
+          if (shuffleStage.isIndeterminate) {
+            0L
+          } else {
+            computedTotalSize
+          }
+        }
+      }
+
+      if (totalSize < shuffleMergeWaitMinSizeThreshold) {
+        // Check if we can process map stage completion. If shuffle merge finalization
+        // is already triggered because push completion ratio was reached earlier,
+        // we cannot process map stage completion, but have to wait for the finalization
+        // to finish. This is because it's not straightforward to interrupt the
+        // finalization task and undo what it might have already done.
+        if (scheduleShuffleMergeFinalize(shuffleStage, delay = 0,
+          registerMergeResults = false)) {
+          handleShuffleMergeFinalized(shuffleStage)
+        }
+      } else {
+        scheduleShuffleMergeFinalize(shuffleStage, shuffleMergeFinalizeWaitSec)
+      }
+    }
+  }
+
   /**
    * Responds to a task finishing. This is called inside the event loop so it assumes that it can
    * modify the scheduler's internal state. Use taskEnded() to post a task end event from outside.
@@ -1783,49 +1830,7 @@ private[spark] class DAGScheduler(
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
               if (!shuffleStage.shuffleDep.shuffleMergeFinalized &&
                 shuffleStage.shuffleDep.getMergerLocs.nonEmpty) {
-                // Check if a finalize task has already been scheduled. This is to prevent the
-                // following scenario: Stage A attempt 0 fails and gets retried. Stage A attempt 1
-                // succeeded, triggering the scheduling of shuffle merge finalization. However,
-                // tasks from Stage A attempt 0 might still be running and sending task completion
-                // events to DAGScheduler. This check prevents multiple attempts to schedule merge
-                // finalization get triggered due to this.
-                if (shuffleStage.shuffleDep.getFinalizeTask.isEmpty) {
-                  // 1. Stage indeterminate and some map outputs are not available - finalize
-                  // immediately without registering shuffle merge results.
-                  // 2. Stage determinate and some map outputs are not available - decide to
-                  // register merge results based on map outputs size available and
-                  // shuffleMergeWaitMinSizeThreshold.
-                  // 3. All shuffle outputs available - decide to register merge results based
-                  // on map outputs size available and shuffleMergeWaitMinSizeThreshold.
-                  val totalSize = {
-                    lazy val computedTotalSize =
-                      mapOutputTracker.getStatistics(shuffleStage.shuffleDep).
-                        bytesByPartitionId.filter(_ > 0).sum
-                    if (shuffleStage.isAvailable) {
-                      computedTotalSize
-                    } else {
-                      if (shuffleStage.isIndeterminate) {
-                        0L
-                      } else {
-                        computedTotalSize
-                      }
-                    }
-                  }
-
-                  if (totalSize < shuffleMergeWaitMinSizeThreshold) {
-                    // Check if we can process map stage completion. If shuffle merge finalization
-                    // is already triggered because push completion ratio was reached earlier,
-                    // we cannot process map stage completion, but have to wait for the finalization
-                    // to finish. This is because it's not straightforward to interrupt the
-                    // finalization task and undo what it might have already done.
-                    if (scheduleShuffleMergeFinalize(shuffleStage, delay = 0,
-                      registerMergeResults = false)) {
-                      handleShuffleMergeFinalized(shuffleStage)
-                    }
-                  } else {
-                    scheduleShuffleMergeFinalize(shuffleStage, shuffleMergeFinalizeWaitSec)
-                  }
-                }
+                checkAndScheduleShuffleMergeFinalize(shuffleStage)
               } else {
                 processShuffleMapStageCompletion(shuffleStage)
               }
