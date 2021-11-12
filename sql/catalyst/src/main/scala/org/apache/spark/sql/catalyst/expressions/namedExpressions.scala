@@ -438,3 +438,70 @@ object VirtualColumn {
   val groupingIdName: String = "spark_grouping_id"
   val groupingIdAttribute: UnresolvedAttribute = UnresolvedAttribute(groupingIdName)
 }
+
+/**
+ * The internal representation of the hidden metadata column
+ */
+class MetadataAttribute(
+    override val name: String,
+    override val dataType: DataType,
+    override val nullable: Boolean = true,
+    override val metadata: Metadata = Metadata.empty)(
+    override val exprId: ExprId = NamedExpression.newExprId,
+    override val qualifier: Seq[String] = Seq.empty[String])
+  extends AttributeReference(name, dataType, nullable, metadata)(exprId, qualifier) {
+
+  // use to resolve supported metadata column references (e.g. different casings)
+  override def withName(newName: String): MetadataAttribute = {
+    if (name == newName) {
+      this
+    } else {
+      MetadataAttribute(newName, dataType, nullable, metadata)(exprId, qualifier)
+    }
+  }
+
+  override def withNullability(newNullability: Boolean): MetadataAttribute = {
+    if (nullable == newNullability) {
+      this
+    } else {
+      MetadataAttribute(name, dataType, newNullability, metadata)(exprId, qualifier)
+    }
+  }
+
+  override def withQualifier(newQualifier: Seq[String]): MetadataAttribute = {
+    if (qualifier == newQualifier) {
+      this
+    } else {
+      MetadataAttribute(name, dataType, nullable, metadata)(exprId, newQualifier)
+    }
+  }
+
+  override def withExprId(newExprId: ExprId): MetadataAttribute = {
+    if (exprId == newExprId) {
+      this
+    } else {
+      MetadataAttribute(name, dataType, nullable, metadata)(newExprId, qualifier)
+    }
+  }
+
+  override def withDataType(newType: DataType): MetadataAttribute = {
+    MetadataAttribute(name, newType, nullable, metadata)(exprId, qualifier)
+  }
+
+  override def newInstance(): MetadataAttribute =
+    MetadataAttribute(name, dataType, nullable, metadata)(exprId, qualifier)
+
+  override def withMetadata(newMetadata: Metadata): MetadataAttribute = {
+    MetadataAttribute(name, dataType, nullable, newMetadata)(exprId, qualifier)
+  }
+}
+
+object MetadataAttribute {
+
+  def apply(name: String, dataType: DataType): MetadataAttribute =
+    new MetadataAttribute(name, dataType, true)()
+
+  def apply(name: String, dataType: DataType, nullable: Boolean, metadata: Metadata)
+           (exprId: ExprId, qualifier: Seq[String]): MetadataAttribute =
+    new MetadataAttribute(name, dataType, nullable, metadata)(exprId, qualifier)
+}

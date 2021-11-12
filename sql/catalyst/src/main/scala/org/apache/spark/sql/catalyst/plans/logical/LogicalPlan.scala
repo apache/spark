@@ -276,3 +276,10 @@ object LogicalPlanIntegrity {
     checkIfSameExprIdNotReused(plan) && hasUniqueExprIdsForOutput(plan)
   }
 }
+
+/**
+ * A logical plan node with exposed metadata columns
+ */
+trait ExposesMetadataColumns extends LogicalPlan {
+  def withMetadataColumns(): ExposesMetadataColumns
+}
