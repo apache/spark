@@ -3658,7 +3658,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       _.containsPattern(COMMAND)) {
       case c: AnalysisOnlyCommand if c.resolved =>
         checkAnalysis(c)
-        c.applyAnalysisContext(AnalysisContext.get).markAsAnalyzed()
+        c.markAsAnalyzed(AnalysisContext.get)
     }
   }
 }
