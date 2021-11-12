@@ -100,8 +100,6 @@ class InformationValueModel private[ml](override val uid: String,
 
   /**
    * get the IV of input features
-   *
-   * @return columnName -> iv
    */
   def getOrCalculateIV: Map[String, Double] = {
     if (iv == null) {
