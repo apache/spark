@@ -37,13 +37,13 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
-import org.apache.spark.sql.execution.datasources.{BucketingUtils, FileFormatWriter}
+import org.apache.spark.sql.execution.datasources.FileFormatWriter
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.HiveVersion
 
 // Base trait from which all hive insert statement physical execution extends.
-private[hive] trait SaveAsHiveFile extends DataWritingCommand {
+private[hive] trait SaveAsHiveFile extends DataWritingCommand with V1HiveWritesHelper {
 
   var createdTempDir: Option[Path] = None
 
@@ -86,10 +86,6 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = outputLocation)
 
-    val options = bucketSpec
-      .map(_ => Map(BucketingUtils.optionForHiveCompatibleBucketWrite -> "true"))
-      .getOrElse(Map.empty)
-
     FileFormatWriter.write(
       sparkSession = sparkSession,
       plan = plan,
@@ -99,9 +95,10 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
         FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations, outputColumns),
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
+      staticPartitionColumns = Seq.empty,
       bucketSpec = bucketSpec,
       statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
-      options = options)
+      options = options(bucketSpec))
   }
 
   protected def getExternalTmpPath(

@@ -20,21 +20,37 @@ package org.apache.spark.sql.hive.execution
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, SessionCatalog}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.{DataWritingCommand, DDLUtils}
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation, V1Write}
 import org.apache.spark.sql.hive.HiveSessionCatalog
 import org.apache.spark.util.Utils
 
-trait CreateHiveTableAsSelectBase extends DataWritingCommand {
+trait CreateHiveTableAsSelectBase extends V1Write with V1HiveWritesHelper {
   val tableDesc: CatalogTable
   val query: LogicalPlan
   val outputColumnNames: Seq[String]
   val mode: SaveMode
+
+  override lazy val partitionColumns: Seq[Attribute] = {
+    // if table is not exists the schema should always be empty
+    val table = if (tableDesc.schema.isEmpty) {
+      val tableSchema = CharVarcharUtils.getRawSchema(outputColumns.toStructType, conf)
+      tableDesc.copy(schema = tableSchema)
+    } else {
+      tableDesc
+    }
+    // For CTAS, there is no static partition values to insert.
+    val partition = tableDesc.partitionColumnNames.map(_ -> None).toMap
+    getDynamicPartitionColumns(table, query, partition)
+  }
+  override lazy val bucketSpec: Option[BucketSpec] = tableDesc.bucketSpec
+  override lazy val options: Map[String, String] = options(tableDesc.bucketSpec)
 
   protected val tableIdentifier = tableDesc.identifier
 

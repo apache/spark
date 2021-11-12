@@ -48,16 +48,16 @@ case class InsertIntoHadoopFsRelationCommand(
     outputPath: Path,
     staticPartitions: TablePartitionSpec,
     ifPartitionNotExists: Boolean,
-    partitionColumns: Seq[Attribute],
-    bucketSpec: Option[BucketSpec],
+    override val partitionColumns: Seq[Attribute],
+    override val bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
-    options: Map[String, String],
+    override val options: Map[String, String],
     query: LogicalPlan,
     mode: SaveMode,
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex],
     outputColumnNames: Seq[String])
-  extends DataWritingCommand {
+  extends V1Write {
 
   private lazy val parameters = CaseInsensitiveMap(options)
 
@@ -73,6 +73,8 @@ case class InsertIntoHadoopFsRelationCommand(
     enableDynamicOverwrite && mode == SaveMode.Overwrite &&
       staticPartitions.size < partitionColumns.length
   }
+
+  override lazy val numStaticPartitions: Int = staticPartitions.size
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     // Most formats don't do well with duplicate columns, so lets not allow that
@@ -181,6 +183,7 @@ case class InsertIntoHadoopFsRelationCommand(
             committerOutputPath.toString, customPartitionLocations, outputColumns),
           hadoopConf = hadoopConf,
           partitionColumns = partitionColumns,
+          staticPartitionColumns = partitionColumns.take(staticPartitions.size),
           bucketSpec = bucketSpec,
           statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
           options = options)

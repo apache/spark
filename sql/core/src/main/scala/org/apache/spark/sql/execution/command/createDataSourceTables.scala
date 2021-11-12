@@ -21,6 +21,7 @@ import java.net.URI
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -141,7 +142,18 @@ case class CreateDataSourceTableAsSelectCommand(
     mode: SaveMode,
     query: LogicalPlan,
     outputColumnNames: Seq[String])
-  extends DataWritingCommand {
+  extends V1Write {
+
+  override lazy val partitionColumns: Seq[Attribute] = {
+    table.partitionColumnNames.map { name =>
+      query.resolve(name :: Nil, SparkSession.active.sessionState.analyzer.resolver).getOrElse {
+        throw QueryCompilationErrors.cannotResolveAttributeError(
+          name, query.output.map(_.name).mkString(", "))
+      }.asInstanceOf[Attribute]
+    }
+  }
+  override lazy val bucketSpec: Option[BucketSpec] = table.bucketSpec
+  override lazy val options: Map[String, String] = table.storage.properties
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)
