@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.TreePattern._
 
 /**
  * Replaces logical [[AsOfJoin]] operator using a combination of Join and Aggregate operator.
@@ -49,9 +48,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
  * }}}
  */
 object RewriteAsOfJoin extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(AS_OF_JOIN), ruleId) {
-    case AsOfJoin(left, right, asOfCondition, condition, joinType, orderExpression, _) =>
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithNewOutput {
+    case j @ AsOfJoin(left, right, asOfCondition, condition, joinType, orderExpression, _) =>
       val conditionWithOuterReference =
         condition.map(And(_, asOfCondition)).getOrElse(asOfCondition).transformUp {
           case a: AttributeReference if left.outputSet.contains(a) =>
@@ -79,11 +77,14 @@ object RewriteAsOfJoin extends Rule[LogicalPlan] {
           Filter(IsNotNull(projectWithScalarSubquery.output.last), projectWithScalarSubquery)
       }
 
-      Project(
+      val project = Project(
         left.output ++ right.output.zipWithIndex.map {
           case (out, idx) =>
-            Alias(GetStructField(filterRight.output.last, idx), out.name)(exprId = out.exprId)
+            Alias(GetStructField(filterRight.output.last, idx), out.name)()
         },
         filterRight)
+      val attrMapping = j.output.zip(project.output)
+
+      project -> attrMapping
   }
 }
