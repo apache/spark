@@ -990,12 +990,18 @@ private[spark] class Executor(
       if (taskRunner.task != null) {
         taskRunner.task.metrics.mergeShuffleReadMetrics()
         taskRunner.task.metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
-        val accumulatorsToReport =
-          if (HEARTBEAT_DROP_ZEROES) {
-            taskRunner.task.metrics.accumulators().filterNot(_.isZero)
-          } else {
-            taskRunner.task.metrics.accumulators()
+        val accumulatorsToReport = {
+          val accs = if (HEARTBEAT_DROP_ZEROES) {
+              taskRunner.task.metrics.accumulators().filterNot(_.isZero)
+            } else {
+              taskRunner.task.metrics.accumulators()
+            }
+          accs.map {
+            case acc: CollectionAccumulator[_] =>
+              acc.copyAndSetMetadata()
+            case other => other
           }
+        }
         accumUpdates += ((taskRunner.taskId, accumulatorsToReport))
       }
     }

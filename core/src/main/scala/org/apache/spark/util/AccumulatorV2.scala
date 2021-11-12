@@ -43,7 +43,7 @@ private[spark] case class AccumulatorMetadata(
  */
 abstract class AccumulatorV2[IN, OUT] extends Serializable {
   private[spark] var metadata: AccumulatorMetadata = _
-  private[this] var atDriverSide = true
+  protected[spark] var atDriverSide = true
 
   private[spark] def register(
       sc: SparkContext,
@@ -489,6 +489,13 @@ class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
     this.synchronized {
       newAcc.getOrCreate.addAll(getOrCreate)
     }
+    newAcc
+  }
+
+  def copyAndSetMetadata(): CollectionAccumulator[T] = {
+    val newAcc = copy()
+    newAcc.metadata = metadata
+    newAcc.atDriverSide = atDriverSide
     newAcc
   }
 
