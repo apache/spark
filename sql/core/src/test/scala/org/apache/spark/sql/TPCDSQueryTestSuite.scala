@@ -152,7 +152,7 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
           val configs = conf.map {
             case (k, v) => s"$k=$v"
           }
-          throw new Exception(s"${e.getMessage} \nError using configs:\n${configs.mkString("\n")}")
+          throw new Exception(s"${e.getMessage}\nError using configs:\n${configs.mkString("\n")}")
       }
     }
   }
@@ -168,7 +168,7 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
     "spark.sql.join.forceApplyShuffledHashJoin" -> "true")
 
   val joinConfSet: Set[Map[String, String]] =
-    Set(broadcastHashJoinConf, shuffleHashJoinConf);
+    Set(sortMergeJoinConf, broadcastHashJoinConf, shuffleHashJoinConf);
 
   if (tpcdsDataPath.nonEmpty) {
     tpcdsQueries.foreach { name =>
@@ -176,9 +176,9 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
         classLoader = Thread.currentThread().getContextClassLoader)
       test(name) {
         val goldenFile = new File(s"$baseResourcePath/v1_4", s"$name.sql.out")
-        runQuery(queryString, goldenFile, sortMergeJoinConf.toSeq, false)
+        runQuery(queryString, goldenFile, joinConfSet.head.toSeq, false)
         if (!regenerateGoldenFiles) {
-          joinConfSet.foreach { conf =>
+          joinConfSet.tail.foreach { conf =>
             runQuery(queryString, goldenFile, conf.toSeq, true)
           }
         }
@@ -190,9 +190,9 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
         classLoader = Thread.currentThread().getContextClassLoader)
       test(s"$name-v2.7") {
         val goldenFile = new File(s"$baseResourcePath/v2_7", s"$name.sql.out")
-        runQuery(queryString, goldenFile, sortMergeJoinConf.toSeq, false)
+        runQuery(queryString, goldenFile, joinConfSet.head.toSeq, false)
         if (!regenerateGoldenFiles) {
-          joinConfSet.foreach { conf =>
+          joinConfSet.tail.foreach { conf =>
             runQuery(queryString, goldenFile, conf.toSeq, true)
           }
         }
