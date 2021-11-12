@@ -1423,13 +1423,13 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             |  c4 INT,
             |  c5 INTERVAL HOUR,
             |  c6 INTERVAL MONTH,
-            |  c7 struct<a: int, b: string>,
-            |  c8 struct<a: int, b: interval hour to second>,
-            |  c9 array<int>,
-            |  c10 array<interval year>,
-            |  c11 map<int, string>,
-            |  c12 map<int, interval day>,
-            |  c13 map<interval minute to second, string>
+            |  c7 STRUCT<a: INT, b: STRING>,
+            |  c8 STRUCT<a: INT, b: INTERVAL HOUR TO SECOND>,
+            |  c9 ARRAY<INT>,
+            |  c10 ARRAY<INTERVAL YEAR>,
+            |  c11 MAP<INT, STRING>,
+            |  c12 MAP<INT, INTERVAL DAY>,
+            |  c13 MAP<INTERVAL MINUTE TO SECOND, STRING>
             |) USING Parquet""".stripMargin)
       }
       val expectedMsg = "Hive incompatible types found: interval day to minute, " +
