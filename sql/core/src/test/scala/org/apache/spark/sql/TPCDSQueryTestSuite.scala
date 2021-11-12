@@ -97,7 +97,7 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
        """.stripMargin)
   }
 
-  private def runQuery(query: String, goldenFile: File, conf: Seq[(String, String)]): Unit = {
+  private def runQuery(query: String, goldenFile: File, conf: Seq[(String, String)], needSort: Boolean): Unit = {
     withSQLConf(conf: _*) {
       try {
         val (schema, output) = handleExceptions(getNormalizedResult(spark, query))
@@ -152,28 +152,23 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
           val configs = conf.map {
             case (k, v) => s"$k=$v"
           }
-          logError(s"Error using configs:\n${configs.mkString("\n")}")
-          throw e
+          throw new Exception(s"${e.getMessage} \nError using configs:\n${configs.mkString("\n")}")
       }
     }
   }
 
   val sortMergeJoinConf = Map(
     SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-    SQLConf.PREFER_SORTMERGEJOIN.key -> "true",
-    "spark.sql.needSortTestResults" -> "false")
+    SQLConf.PREFER_SORTMERGEJOIN.key -> "true")
 
-  val broadcastHashJoinConf = Map(
-    SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760",
-    "spark.sql.needSortTestResults" -> "true")
+  val broadcastHashJoinConf = Map(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760")
 
   val shuffleHashJoinConf = Map(
     SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-    "spark.sql.join.forceApplyShuffledHashJoin" -> "true",
-    "spark.sql.needSortTestResults" -> "true")
+    "spark.sql.join.forceApplyShuffledHashJoin" -> "true")
 
   val joinConfSet: Set[Map[String, String]] =
-    Set(sortMergeJoinConf, broadcastHashJoinConf, shuffleHashJoinConf);
+    Set(broadcastHashJoinConf, shuffleHashJoinConf);
 
   if (tpcdsDataPath.nonEmpty) {
     tpcdsQueries.foreach { name =>
@@ -181,11 +176,10 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
         classLoader = Thread.currentThread().getContextClassLoader)
       test(name) {
         val goldenFile = new File(s"$baseResourcePath/v1_4", s"$name.sql.out")
-        if (regenerateGoldenFiles) {
-          runQuery(queryString, goldenFile, joinConfSet.head.toSeq)
-        } else {
+        runQuery(queryString, goldenFile, sortMergeJoinConf.toSeq, false)
+        if (!regenerateGoldenFiles) {
           joinConfSet.foreach { conf =>
-            runQuery(queryString, goldenFile, conf.toSeq)
+            runQuery(queryString, goldenFile, conf.toSeq, true)
           }
         }
       }
@@ -196,20 +190,15 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
         classLoader = Thread.currentThread().getContextClassLoader)
       test(s"$name-v2.7") {
         val goldenFile = new File(s"$baseResourcePath/v2_7", s"$name.sql.out")
-        if (regenerateGoldenFiles) {
-          runQuery(queryString, goldenFile, joinConfSet.head.toSeq)
-        } else {
+        runQuery(queryString, goldenFile, joinConfSet.head.toSeq, false)
+        if (!regenerateGoldenFiles) {
           joinConfSet.foreach { conf =>
-            runQuery(queryString, goldenFile, conf.toSeq)
+            runQuery(queryString, goldenFile, conf.toSeq, true)
           }
         }
       }
     }
   } else {
     ignore("skipped because env `SPARK_TPCDS_DATA` is not set") {}
-  }
-
-  private def needSort(): Boolean = {
-    SQLConf.get.getConfString("spark.sql.needSortTestResults", "false").toBoolean
   }
 }
