@@ -82,11 +82,12 @@ case class CreateViewCommand(
   // `plan` needs to be analyzed, but shouldn't be optimized so that caching works correctly.
   override def childrenToAnalyze: Seq[LogicalPlan] = plan :: Nil
 
-  override def applyAnalysisContext(analysisContext: AnalysisContext): AnalysisOnlyCommand = {
-    copy(referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq)
+  def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan = {
+    copy(
+      isAnalyzed = true,
+      // Collect the referred temporary functions from AnalysisContext
+      referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq)
   }
-
-  def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
 
   private def isTemporary = viewType == LocalTempView || viewType == GlobalTempView
 
@@ -242,12 +243,12 @@ case class AlterViewAsCommand(
 
   override def childrenToAnalyze: Seq[LogicalPlan] = query :: Nil
 
-  override def applyAnalysisContext(analysisContext: AnalysisContext): AnalysisOnlyCommand = {
-    // Collect the referred temporary functions from AnalysisContext
-    copy(referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq)
+  def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan = {
+    copy(
+      isAnalyzed = true,
+      // Collect the referred temporary functions from AnalysisContext
+      referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq)
   }
-
-  def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
 
   override def run(session: SparkSession): Seq[Row] = {
     val isTemporary = session.sessionState.catalog.isTempView(name)

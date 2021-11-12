@@ -53,6 +53,5 @@ trait AnalysisOnlyCommand extends Command {
   override def innerChildren: Seq[QueryPlan[_]] = if (isAnalyzed) childrenToAnalyze else Nil
   // After the analysis finished, we give the command a chance to update it's state based
   // on the `AnalysisContext`
-  def applyAnalysisContext(analysisContext: AnalysisContext): AnalysisOnlyCommand = { this }
-  def markAsAnalyzed(): LogicalPlan
+  def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan
 }
