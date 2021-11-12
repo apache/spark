@@ -776,9 +776,7 @@ class SparkSession(SparkConversionMixin):
             a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is None.  The data type string format equals to
             :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
-            omit the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use
-            ``byte`` instead of ``tinyint`` for :class:`pyspark.sql.types.ByteType`.
-            We can also use ``int`` as a short name for :class:`pyspark.sql.types.IntegerType`.
+            omit the ``struct<>``.
         samplingRatio : float, optional
             the sample ratio of rows used for inferring
         verifySchema : bool, optional
