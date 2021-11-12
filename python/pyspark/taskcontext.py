@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Type, Dict, List, Optional, Union, cast
+from typing import ClassVar, Type, Dict, List, Optional, Union, cast
 
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.resource import ResourceInformation
@@ -29,7 +29,7 @@ class TaskContext(object):
     :meth:`TaskContext.get`.
     """
 
-    _taskContext: Optional["TaskContext"] = None
+    _taskContext: ClassVar[Optional["TaskContext"]] = None
 
     _attemptNumber: Optional[int] = None
     _partitionId: Optional[int] = None
@@ -171,8 +171,8 @@ class BarrierTaskContext(TaskContext):
     This API is experimental
     """
 
-    _port = None
-    _secret = None
+    _port: ClassVar[Optional[Union[str, int]]] = None
+    _secret: ClassVar[Optional[str]] = None
 
     @classmethod
     def _getOrCreate(cls: Type["BarrierTaskContext"]) -> "BarrierTaskContext":
