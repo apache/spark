@@ -27,8 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
-import org.apache.spark.sql.connector.catalog.TimeTravelSpec
-import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, TimeTravelSpec, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -2445,7 +2444,7 @@ class DDLParserSuite extends AnalysisTest {
 
   test("as of syntax") {
     val properties = new util.HashMap[String, String]
-    var timeTravel = new TimeTravelSpec(Long.MinValue, "123456789")
+    var timeTravel = new TimeTravelSpec(None, Some("123456789"))
     comparePlans(
       parsePlan("SELECT * FROM a.b.c VERSION AS OF 123456789"),
       Project(Seq(UnresolvedStar(None)),
@@ -2464,7 +2463,7 @@ class DDLParserSuite extends AnalysisTest {
 
     val ts1 = DateTimeUtils.stringToTimestampWithoutTimeZone(
       UTF8String.fromString("2019-01-29 00:37:58"))
-    timeTravel = new TimeTravelSpec(ts1.get, "")
+    timeTravel = new TimeTravelSpec(ts1, None)
     comparePlans(
       parsePlan("SELECT * FROM a.b.c TIMESTAMP AS OF '2019-01-29 00:37:58'"),
       Project(Seq(UnresolvedStar(None)),
@@ -2481,7 +2480,7 @@ class DDLParserSuite extends AnalysisTest {
           timeTravelSpec = Some(timeTravel))))
 
     val ts2 = DateTimeUtils.stringToTimestampWithoutTimeZone(UTF8String.fromString("2019-01-29"))
-    timeTravel = new TimeTravelSpec(ts2.get, "")
+    timeTravel = new TimeTravelSpec(ts2, None)
     comparePlans(
       parsePlan("SELECT * FROM a.b.c TIMESTAMP AS OF '2019-01-29'"),
       Project(Seq(UnresolvedStar(None)),

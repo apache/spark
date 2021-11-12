@@ -42,9 +42,9 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
-import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog, TimeTravelSpec}
+import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
-import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, TimeTravelSpec, Transform, YearsTransform}
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1261,7 +1261,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
     val properties = new util.HashMap[String, String]
     val timeTravel = if (ctx.temporalClause != null && ctx.temporalClause.version != null) {
-      Some(new TimeTravelSpec(Long.MinValue, ctx.temporalClause.version.getText))
+      Some(TimeTravelSpec(None, Some(ctx.temporalClause.version.getText)))
     } else if (ctx.temporalClause != null && ctx.temporalClause.timestamp != null) {
       val tsWithQuotation = ctx.temporalClause.timestamp.getText
       val ts = tsWithQuotation.substring(1, tsWithQuotation.length - 1)
@@ -1276,7 +1276,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       if (tsInLong.isEmpty) {
         throw new IllegalArgumentException(s"Illegal timestamp value $ts in TIMESTAMP AS OF")
       }
-      Some(new TimeTravelSpec(tsInLong.get, ""))
+      Some(TimeTravelSpec(tsInLong, None))
     } else {
       None
     }

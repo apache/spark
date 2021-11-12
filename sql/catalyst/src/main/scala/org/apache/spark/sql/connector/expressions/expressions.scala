@@ -357,3 +357,5 @@ private[sql] object SortValue {
       None
   }
 }
+
+private[sql] final case class TimeTravelSpec(timestamp: Option[Long], version: Option[String])

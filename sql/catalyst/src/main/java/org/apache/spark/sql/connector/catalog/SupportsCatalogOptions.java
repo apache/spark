@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.Optional;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
@@ -54,13 +56,18 @@ public interface SupportsCatalogOptions extends TableProvider {
   }
 
   /**
-   * Return a {@link TimeTravelSpec} instance given DataFrameReader options.
-   *
-   * @param options the user-specified options that can identify a table. It's an immutable
-   * case-insensitive string-to-string map. The version or timestamp in the options
-   * is used to construct a TimeTravelSpec.
+   * Return a Timestamp String given DataFrameReader options.
+   * If this is implemented by data source, then extractTimeTravelVersion can't be implemented.
    */
-  default TimeTravelSpec extractTimeTravelSpec(CaseInsensitiveStringMap options) {
-    return new TimeTravelSpec(Long.MIN_VALUE, "");
+  default Optional<String> extractTimeTravelTimestamp(CaseInsensitiveStringMap options) {
+    return Optional.ofNullable(null);
+  }
+
+  /**
+   * Return a version String given DataFrameReader options.
+   * If this is implemented by data source, then extractTimeTravelTimestamp can't be implemented.
+   */
+  default Optional<String> extractTimeTravelVersion(CaseInsensitiveStringMap options) {
+    return Optional.ofNullable(null);
   }
 }
