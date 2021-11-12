@@ -1067,9 +1067,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-37294: insert ANSI intervals into a table partitioned by the interval columns") {
     val tbl = "interval_table"
-    Seq(PartitionOverwriteMode.DYNAMIC.toString,
-      PartitionOverwriteMode.STATIC.toString).foreach { mode =>
-      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> mode) {
+    Seq(PartitionOverwriteMode.DYNAMIC, PartitionOverwriteMode.STATIC).foreach { mode =>
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> mode.toString) {
         withTable(tbl) {
           sql(
             s"""
