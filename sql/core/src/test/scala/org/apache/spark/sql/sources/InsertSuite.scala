@@ -1072,7 +1072,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         withTable(tbl) {
           sql(
             s"""
-              |CREATE TABLE $tbl (i int, part1 INTERVAL YEAR, part2 INTERVAL DAY) USING PARQUET
+              |CREATE TABLE $tbl (i INT, part1 INTERVAL YEAR, part2 INTERVAL DAY) USING PARQUET
               |PARTITIONED BY (part1, part2)
               """.stripMargin)
 

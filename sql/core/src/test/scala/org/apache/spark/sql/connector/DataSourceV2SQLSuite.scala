@@ -2923,7 +2923,7 @@ class DataSourceV2SQLSuite
         withTable(tbl) {
           sql(
             s"""
-               |CREATE TABLE $tbl (i int, part1 INTERVAL YEAR, part2 INTERVAL DAY) USING $v2Format
+               |CREATE TABLE $tbl (i INT, part1 INTERVAL YEAR, part2 INTERVAL DAY) USING $v2Format
                |PARTITIONED BY (part1, part2)
               """.stripMargin)
 
