@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import java.sql.Timestamp
-import java.time.LocalDate
+import java.time.{Duration, LocalDate, Period}
 
 import scala.collection.JavaConverters._
 
@@ -2941,9 +2941,9 @@ class DataSourceV2SQLSuite
 
           checkAnswer(
             spark.table(tbl),
-            Seq(Row(1, java.time.Period.ofYears(2), java.time.Duration.ofDays(3)),
-              Row(4, java.time.Period.ofYears(5), java.time.Duration.ofDays(6)),
-              Row(7, java.time.Period.ofYears(8), java.time.Duration.ofDays(9))))
+            Seq(Row(1, Period.ofYears(2), Duration.ofDays(3)),
+              Row(4, Period.ofYears(5), Duration.ofDays(6)),
+              Row(7, Period.ofYears(8), Duration.ofDays(9))))
         }
       }
     }

@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources
 
 import java.io.{File, IOException}
 import java.sql.Date
+import java.time.{Duration, Period}
 
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataOutputStream, Path, RawLocalFileSystem}
 
@@ -1090,9 +1091,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
           checkAnswer(
             spark.table(tbl),
-            Seq(Row(1, java.time.Period.ofYears(2), java.time.Duration.ofDays(3)),
-              Row(4, java.time.Period.ofYears(5), java.time.Duration.ofDays(6)),
-              Row(7, java.time.Period.ofYears(8), java.time.Duration.ofDays(9))))
+            Seq(Row(1, Period.ofYears(2), Duration.ofDays(3)),
+              Row(4, Period.ofYears(5), Duration.ofDays(6)),
+              Row(7, Period.ofYears(8), Duration.ofDays(9))))
         }
       }
     }
