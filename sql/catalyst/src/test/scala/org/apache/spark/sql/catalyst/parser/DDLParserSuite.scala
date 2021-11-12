@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
+import org.apache.spark.sql.connector.catalog.TimeTravelSpec
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
@@ -2444,45 +2444,58 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("as of syntax") {
-    var properties = new util.HashMap[String, String]
-    properties.put(TableCatalog.PROP_VERSION, "123456789")
+    val properties = new util.HashMap[String, String]
+    var timeTravel = new TimeTravelSpec(Long.MinValue, "123456789")
     comparePlans(
       parsePlan("SELECT * FROM a.b.c VERSION AS OF 123456789"),
       Project(Seq(UnresolvedStar(None)),
-        UnresolvedRelation(Seq("a", "b", "c"), new CaseInsensitiveStringMap(properties))))
+        UnresolvedRelation(
+          Seq("a", "b", "c"),
+          new CaseInsensitiveStringMap(properties),
+          timeTravelSpec = Some(timeTravel))))
 
     comparePlans(
-      parsePlan("SELECT * FROM a.b.c SYSTEM_VERSION AS OF 123456789"),
+      parsePlan("SELECT * FROM a.b.c FOR SYSTEM_VERSION AS OF 123456789"),
       Project(Seq(UnresolvedStar(None)),
-        UnresolvedRelation(Seq("a", "b", "c"), new CaseInsensitiveStringMap(properties))))
+        UnresolvedRelation(
+          Seq("a", "b", "c"),
+          new CaseInsensitiveStringMap(properties),
+          timeTravelSpec = Some(timeTravel))))
 
-    val ts1 = DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2019-01-29 00:37:58"),
-      DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
-    properties = new util.HashMap[String, String]
-    properties.put(TableCatalog.PROP_TIMESTAMP, ts1.get.toString)
+    val ts1 = DateTimeUtils.stringToTimestampWithoutTimeZone(
+      UTF8String.fromString("2019-01-29 00:37:58"))
+    timeTravel = new TimeTravelSpec(ts1.get, "")
     comparePlans(
       parsePlan("SELECT * FROM a.b.c TIMESTAMP AS OF '2019-01-29 00:37:58'"),
       Project(Seq(UnresolvedStar(None)),
-        UnresolvedRelation(Seq("a", "b", "c"), new CaseInsensitiveStringMap(properties))))
+        UnresolvedRelation(
+          Seq("a", "b", "c"),
+          new CaseInsensitiveStringMap(properties),
+          timeTravelSpec = Some(timeTravel))))
     comparePlans(
-      parsePlan("SELECT * FROM a.b.c SYSTEM_TIME AS OF '2019-01-29 00:37:58'"),
+      parsePlan("SELECT * FROM a.b.c FOR SYSTEM_TIME AS OF '2019-01-29 00:37:58'"),
       Project(Seq(UnresolvedStar(None)),
-        UnresolvedRelation(Seq("a", "b", "c"), new CaseInsensitiveStringMap(properties))))
+        UnresolvedRelation(
+          Seq("a", "b", "c"),
+          new CaseInsensitiveStringMap(properties),
+          timeTravelSpec = Some(timeTravel))))
 
-    val ts2 = DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2019-01-29"),
-      DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
-    properties = new util.HashMap[String, String]
-    properties.put(TableCatalog.PROP_TIMESTAMP, ts2.get.toString)
+    val ts2 = DateTimeUtils.stringToTimestampWithoutTimeZone(UTF8String.fromString("2019-01-29"))
+    timeTravel = new TimeTravelSpec(ts2.get, "")
     comparePlans(
       parsePlan("SELECT * FROM a.b.c TIMESTAMP AS OF '2019-01-29'"),
       Project(Seq(UnresolvedStar(None)),
-        UnresolvedRelation(Seq("a", "b", "c"), new CaseInsensitiveStringMap(properties))))
+        UnresolvedRelation(
+          Seq("a", "b", "c"),
+          new CaseInsensitiveStringMap(properties),
+          timeTravelSpec = Some(timeTravel))))
     comparePlans(
-      parsePlan("SELECT * FROM a.b.c SYSTEM_TIME AS OF '2019-01-29'"),
+      parsePlan("SELECT * FROM a.b.c FOR SYSTEM_TIME AS OF '2019-01-29'"),
       Project(Seq(UnresolvedStar(None)),
-        UnresolvedRelation(Seq("a", "b", "c"), new CaseInsensitiveStringMap(properties))))
+        UnresolvedRelation(
+          Seq("a", "b", "c"),
+          new CaseInsensitiveStringMap(properties),
+          timeTravelSpec = Some(timeTravel))))
 
     val e = intercept[IllegalArgumentException] {
       parsePlan("SELECT * FROM a.b.c TIMESTAMP AS OF '2019-01-11111'")

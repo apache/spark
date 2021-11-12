@@ -279,15 +279,13 @@ private[sql] object CatalogV2Util {
   def loadTable(
       catalog: CatalogPlugin,
       ident: Identifier,
-      options: Option[CaseInsensitiveStringMap] = None): Option[Table] =
+      timeTravelSpec: Option[TimeTravelSpec] = None): Option[Table] =
     try {
-      if (options.nonEmpty) {
-        if (options.get.containsKey(TableCatalog.PROP_VERSION)) {
-          Option(catalog.asTableCatalog
-            .loadTable(ident, options.get.get(TableCatalog.PROP_VERSION)))
-        } else if (options.get.containsKey(TableCatalog.PROP_TIMESTAMP)) {
-          Option(catalog.asTableCatalog.loadTable(
-            ident, options.get.get(TableCatalog.PROP_TIMESTAMP).toLong))
+      if (timeTravelSpec.nonEmpty) {
+        if (timeTravelSpec.get.version.nonEmpty) {
+          Option(catalog.asTableCatalog.loadTable(ident, timeTravelSpec.get.version))
+        } else if (timeTravelSpec.get.timeStamp != Long.MinValue) {
+          Option(catalog.asTableCatalog.loadTable(ident, timeTravelSpec.get.timeStamp))
         } else {
           Option(catalog.asTableCatalog.loadTable(ident))
         }

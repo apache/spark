@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
-import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog, TimeTravelSpec}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.errors.QueryParsingErrors
@@ -1260,39 +1260,31 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
     val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
     val properties = new util.HashMap[String, String]
-    if (ctx.temporalClause != null && ctx.temporalClause.version != null) {
-      properties.put(TableCatalog.PROP_VERSION, ctx.temporalClause.version.getText)
+    val timeTravel = if (ctx.temporalClause != null && ctx.temporalClause.version != null) {
+      Some(new TimeTravelSpec(Long.MinValue, ctx.temporalClause.version.getText))
     } else if (ctx.temporalClause != null && ctx.temporalClause.timestamp != null) {
       val tsWithQuotation = ctx.temporalClause.timestamp.getText
       val ts = tsWithQuotation.substring(1, tsWithQuotation.length - 1)
-      val tsInLong = SQLConf.get.timestampType match {
-        case TimestampNTZType =>
-          val containsTimeZonePart =
-            DateTimeUtils.parseTimestampString(UTF8String.fromString(ts))._2.isDefined
-          // If the input string contains time zone part, return a timestamp with local time
-          // zone literal.
-          if (containsTimeZonePart) {
-            val zoneId = getZoneId(conf.sessionLocalTimeZone)
-            stringToTimestamp(UTF8String.fromString(ts), zoneId)
-          } else {
-            stringToTimestampWithoutTimeZone(UTF8String.fromString(ts))
-          }
-
-        case TimestampType =>
-          val zoneId = getZoneId(conf.sessionLocalTimeZone)
-          stringToTimestamp(UTF8String.fromString(ts), zoneId)
+      val timeZoneId = DateTimeUtils.parseTimestampString(UTF8String.fromString(ts))._2
+      val tsInLong = if (timeZoneId.isDefined) {
+        // If the input string contains time zone part, return a timestamp with the
+        // specified TimeZone
+        stringToTimestamp(UTF8String.fromString(ts), timeZoneId.get)
+      } else {
+        stringToTimestampWithoutTimeZone(UTF8String.fromString(ts))
       }
-
       if (tsInLong.isEmpty) {
         throw new IllegalArgumentException(s"Illegal timestamp value $ts in TIMESTAMP AS OF")
       }
-      properties.put(
-        TableCatalog.PROP_TIMESTAMP,
-        tsInLong.get.toString)
+      Some(new TimeTravelSpec(tsInLong.get, ""))
+    } else {
+      None
     }
 
     val table = mayApplyAliasPlan(ctx.tableAlias,
-      UnresolvedRelation(tableId, new CaseInsensitiveStringMap(properties)))
+      UnresolvedRelation(tableId,
+        new CaseInsensitiveStringMap(properties),
+        timeTravelSpec = timeTravel))
     table.optionalMap(ctx.sample)(withSample)
   }
 

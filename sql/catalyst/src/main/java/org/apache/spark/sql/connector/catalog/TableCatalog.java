@@ -72,16 +72,6 @@ public interface TableCatalog extends CatalogPlugin {
   String OPTION_PREFIX = "option.";
 
   /**
-   * A reserved property to specify the version of the table.
-   */
-  String PROP_VERSION = "versionAsOf";
-
-  /**
-   * A reserved property to specify the timestamp of the table.
-   */
-  String PROP_TIMESTAMP = "timestampAsOf";
-
-  /**
    * List the tables in a namespace from the catalog.
    * <p>
    * If the catalog supports views, this must return identifiers for only tables and not views.
@@ -126,7 +116,7 @@ public interface TableCatalog extends CatalogPlugin {
    * must throw {@link NoSuchTableException}.
    *
    * @param ident a table identifier
-   * @param timestamp timestamp of the table
+   * @param timestamp timestamp of the table, which is microseconds since 1970-01-01 00:00:00 UTC
    * @return the table's metadata
    * @throws NoSuchTableException If the table doesn't exist or is a view
    */

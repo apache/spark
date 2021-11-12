@@ -52,4 +52,15 @@ public interface SupportsCatalogOptions extends TableProvider {
   default String extractCatalog(CaseInsensitiveStringMap options) {
     return CatalogManager.SESSION_CATALOG_NAME();
   }
+
+  /**
+   * Return a {@link TimeTravelSpec} instance given DataFrameReader options.
+   *
+   * @param options the user-specified options that can identify a table. It's an immutable
+   * case-insensitive string-to-string map. The version or timestamp in the options
+   * is used to construct a TimeTravelSpec.
+   */
+  default TimeTravelSpec extractTimeTravelSpec(CaseInsensitiveStringMap options) {
+    return new TimeTravelSpec(Long.MIN_VALUE, "");
+  }
 }
