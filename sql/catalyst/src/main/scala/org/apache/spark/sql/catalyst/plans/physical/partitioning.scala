@@ -299,9 +299,10 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
       defaultNumPartitions: Int,
       distribution: ClusteredDistribution): ShuffleSpec = {
     // Since range partitioning is not even compatible with itself, we need to treat it especially.
-    // For instance, if left hand side is HashPartitioning(_, 100), while right hand side is
-    // RangePartitioning(_, 150), we should probably only shuffle the right hand side.
-    // However, if `spark.sql.shuffle.partitions` is 200, we should probably shuffle both sides.
+    // For instance, suppose `spark.sql.shuffle.partitions` is 50, left hand side is
+    // HashPartitioning(_, 100), while right hand side is RangePartitioning(_, 150), we should
+    // probably only shuffle the right hand side. However, if `spark.sql.shuffle.partitions` is
+    // 200, we should probably shuffle both sides.
     //
     // To achieve this, here we use the default number of partitions instead of `numPartitions`.
     RangeShuffleSpec(defaultNumPartitions, distribution)
