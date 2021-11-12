@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, LongType, StringType, StructField, StructType}
 
 
 /**
@@ -173,11 +173,21 @@ trait FileFormat {
 
 object FileFormat {
 
+  val FILE_PATH = "file_path"
+
+  val FILE_NAME = "file_name"
+
+  val FILE_SIZE = "file_size"
+
+  val FILE_MODIFICATION_TIME = "file_modification_time"
+
   // supported metadata columns for hadoop fs relation
   val FILE_METADATA_COLUMNS: MetadataAttribute = MetadataAttribute("_metadata",
     new StructType()
-      .add(StructField("file_path", StringType))
-      .add(StructField("file_name", StringType)))
+      .add(StructField(FILE_PATH, StringType))
+      .add(StructField(FILE_NAME, StringType))
+      .add(StructField(FILE_SIZE, LongType))
+      .add(StructField(FILE_MODIFICATION_TIME, LongType)))
 }
 
 /**

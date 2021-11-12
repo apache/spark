@@ -44,14 +44,17 @@ import org.apache.spark.util.NextIterator
  * @param filePath URI of the file to read
  * @param start the beginning offset (in bytes) of the block.
  * @param length number of bytes to read.
- * @param locations locality information (list of nodes that have the data).
+ * @param modificationTime The modification time of the input file, in milliseconds.
+ * @param fileSize The length of the input file (not the block), in bytes.
  */
 case class PartitionedFile(
     partitionValues: InternalRow,
     filePath: String,
     start: Long,
     length: Long,
-    @transient locations: Array[String] = Array.empty) {
+    @transient locations: Array[String] = Array.empty,
+    modificationTime: Long = 0L,
+    fileSize: Long = 0L) {
   override def toString: String = {
     s"path: $filePath, range: $start-${start + length}, partition values: $partitionValues"
   }
@@ -144,11 +147,16 @@ class FileScanRDD(
               metadataStructGenericRow = new GenericRow(1)
             } else {
               // make an generic row
-              metadataStructGenericRow = Row.fromSeq(Seq(
-                // file_path
-                UTF8String.fromString(new File(currentFile.filePath).toString),
-                // file_name
-                UTF8String.fromString(currentFile.filePath.split("/").last)))
+              assert(meta.dataType.isInstanceOf[StructType])
+              metadataStructGenericRow = Row.fromSeq(
+                meta.dataType.asInstanceOf[StructType].names.map {
+                  case FILE_PATH => UTF8String.fromString(new File(currentFile.filePath).toString)
+                  case FILE_NAME => UTF8String.fromString(
+                    currentFile.filePath.split("/").last)
+                  case FILE_SIZE => currentFile.fileSize
+                  case FILE_MODIFICATION_TIME => currentFile.modificationTime
+                }
+              )
 
               // convert the generic row to an unsafe row
               val unsafeRowConverter = {
@@ -167,19 +175,35 @@ class FileScanRDD(
       /**
        * Create a writable column vector containing all required metadata fields
        */
-      private def createMetadataStructColumnVector(c: ColumnarBatch): WritableColumnVector = {
+      private def createMetadataStructColumnVector(
+          c: ColumnarBatch, meta: MetadataAttribute): WritableColumnVector = {
         val columnVector = createColumnVector(c.numRows(), FILE_METADATA_COLUMNS.dataType)
         val filePathBytes = new File(currentFile.filePath).toString.getBytes
         val fileNameBytes = currentFile.filePath.split("/").last.getBytes
-
         var rowId = 0
-        // use a tight-loop for better performance
-        while (rowId < c.numRows()) {
-          // _file_path
-          columnVector.getChild(0).putByteArray(rowId, filePathBytes)
-          // _file_name
-          columnVector.getChild(1).putByteArray(rowId, fileNameBytes)
-          rowId += 1
+
+        assert(meta.dataType.isInstanceOf[StructType])
+        meta.dataType.asInstanceOf[StructType].names.zipWithIndex.foreach { case (name, ind) =>
+          name match {
+            case FILE_PATH =>
+              rowId = 0
+              // use a tight-loop for better performance
+              while (rowId < c.numRows()) {
+                columnVector.getChild(ind).putByteArray(rowId, filePathBytes)
+                rowId += 1
+              }
+            case FILE_NAME =>
+              rowId = 0
+              // use a tight-loop for better performance
+              while (rowId < c.numRows()) {
+                columnVector.getChild(ind).putByteArray(rowId, fileNameBytes)
+                rowId += 1
+              }
+            case FILE_SIZE =>
+              columnVector.getChild(ind).putLongs(0, c.numRows(), currentFile.fileSize)
+            case FILE_MODIFICATION_TIME =>
+              columnVector.getChild(ind).putLongs(0, c.numRows(), currentFile.modificationTime)
+          }
         }
         columnVector
       }
@@ -194,7 +218,7 @@ class FileScanRDD(
             nextElement match {
               case c: ColumnarBatch =>
                 val columnVectorArr = Array.tabulate(c.numCols())(c.column) ++
-                  Array(createMetadataStructColumnVector(c))
+                  Array(createMetadataStructColumnVector(c, meta))
                 new ColumnarBatch(columnVectorArr, c.numRows())
               case u: UnsafeRow =>
                 val joiner =

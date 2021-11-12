@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.File
 import java.nio.file.Files
+import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.functions._
@@ -46,12 +47,16 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
   val schemaWithNameConflicts: StructType = new StructType()
     .add(StructField("name", StringType))
     .add(StructField("age", IntegerType))
-    .add(StructField("id", LongType))
+    .add(StructField("_metadata.file_size", LongType))
     .add(StructField("_metadata.FILE_NAME", StringType))
 
   private val METADATA_FILE_PATH = "_metadata.file_path"
 
   private val METADATA_FILE_NAME = "_metadata.file_name"
+
+  private val METADATA_FILE_SIZE = "_metadata.file_size"
+
+  private val METADATA_FILE_MODIFICATION_TIME = "_metadata.file_modification_time"
 
   /**
    * Create a CSV file named `fileName` with `data` under `dir` directory.
@@ -104,17 +109,22 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
 
           val realF0 = new File(dir, "data/f0").listFiles()
             .filter(_.getName.endsWith(s".$testFileFormat")).head
+
           val realF1 = new File(dir, "data/f1").listFiles()
             .filter(_.getName.endsWith(s".$testFileFormat")).head
 
           // construct f0 and f1 metadata data
           val f0Metadata = Map(
             METADATA_FILE_PATH -> realF0.toURI.toString,
-            METADATA_FILE_NAME -> realF0.getName
+            METADATA_FILE_NAME -> realF0.getName,
+            METADATA_FILE_SIZE -> realF0.length(),
+            METADATA_FILE_MODIFICATION_TIME -> realF0.lastModified()
           )
           val f1Metadata = Map(
             METADATA_FILE_PATH -> realF1.toURI.toString,
-            METADATA_FILE_NAME -> realF1.getName
+            METADATA_FILE_NAME -> realF1.getName,
+            METADATA_FILE_SIZE -> realF1.length(),
+            METADATA_FILE_MODIFICATION_TIME -> realF1.lastModified()
           )
 
           f(df, f0Metadata, f1Metadata)
@@ -127,19 +137,22 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
     // read all available metadata columns
     checkAnswer(
       df.select("name", "age", "id", "university",
-        METADATA_FILE_NAME, METADATA_FILE_PATH),
+        METADATA_FILE_NAME, METADATA_FILE_PATH,
+        METADATA_FILE_SIZE, METADATA_FILE_MODIFICATION_TIME),
       Seq(
-        Row("jack", 24, 12345L, "uom", f0(METADATA_FILE_NAME), f0(METADATA_FILE_PATH)),
-        Row("lily", 31, null, "ucb", f1(METADATA_FILE_NAME), f1(METADATA_FILE_PATH))
+        Row("jack", 24, 12345L, "uom", f0(METADATA_FILE_NAME), f0(METADATA_FILE_PATH),
+          f0(METADATA_FILE_SIZE), f0(METADATA_FILE_MODIFICATION_TIME)),
+        Row("lily", 31, null, "ucb", f1(METADATA_FILE_NAME), f1(METADATA_FILE_PATH),
+          f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME))
       )
     )
 
     // read a part of metadata columns
     checkAnswer(
-      df.select("name", "university", METADATA_FILE_NAME),
+      df.select("name", "university", METADATA_FILE_NAME, METADATA_FILE_SIZE),
       Seq(
-        Row("jack", "uom", f0(METADATA_FILE_NAME)),
-        Row("lily", "ucb", f1(METADATA_FILE_NAME))
+        Row("jack", "uom", f0(METADATA_FILE_NAME), f0(METADATA_FILE_SIZE)),
+        Row("lily", "ucb", f1(METADATA_FILE_NAME), f1(METADATA_FILE_SIZE))
       )
     )
   }
@@ -147,10 +160,10 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
   metadataColumnsTest("read metadata columns with random ordering", schema) { (df, f0, f1) =>
     // read a part of metadata columns with random ordering
     checkAnswer(
-      df.select(METADATA_FILE_NAME, "name", METADATA_FILE_PATH, "university"),
+      df.select(METADATA_FILE_NAME, "name", METADATA_FILE_SIZE, "university"),
       Seq(
-        Row(f0(METADATA_FILE_NAME), "jack", f0(METADATA_FILE_PATH), "uom"),
-        Row(f1(METADATA_FILE_NAME), "lily", f1(METADATA_FILE_PATH), "ucb")
+        Row(f0(METADATA_FILE_NAME), "jack", f0(METADATA_FILE_SIZE), "uom"),
+        Row(f1(METADATA_FILE_NAME), "lily", f1(METADATA_FILE_SIZE), "ucb")
       )
     )
   }
@@ -160,16 +173,25 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
       df.select(
         // substring of file name
         substring(col(METADATA_FILE_NAME), 1, 3),
+        // convert timestamp in millis to unixtime and to date format
+        from_unixtime(col(METADATA_FILE_MODIFICATION_TIME).divide(lit(1000)), "yyyy-MM")
+          .as("_file_modification_date"),
+        // convert to kb
+        col(METADATA_FILE_SIZE).divide(lit(1024)).as("_file_size_kb"),
         // get the file format
         substring_index(col(METADATA_FILE_PATH), ".", -1).as("_file_format")
       ),
       Seq(
         Row(
           f0(METADATA_FILE_NAME).toString.substring(0, 3), // sql substring vs scala substring
+          new SimpleDateFormat("yyyy-MM").format(f0(METADATA_FILE_MODIFICATION_TIME)),
+          f0(METADATA_FILE_SIZE).asInstanceOf[Long] / 1024.toDouble,
           f0(METADATA_FILE_PATH).toString.split("\\.").takeRight(1).head
         ),
         Row(
           f1(METADATA_FILE_NAME).toString.substring(0, 3), // sql substring vs scala substring
+          new SimpleDateFormat("yyyy-MM").format(f1(METADATA_FILE_MODIFICATION_TIME)),
+          f1(METADATA_FILE_SIZE).asInstanceOf[Long] / 1024.toDouble,
           f1(METADATA_FILE_PATH).toString.split("\\.").takeRight(1).head
         )
       )
@@ -186,31 +208,37 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  metadataColumnsTest("metadata columns is struct, user data column is string",
-    schemaWithNameConflicts) { (df, f0, f1) =>
-    // here: the data has the schema: name, age, id, _metadata.file_name
+  metadataColumnsTest("metadata columns will not " +
+    "overwrite user data schema", schemaWithNameConflicts) { (df, f0, f1) =>
+    // here: the data has the schema: name, age, _metadata.file_size, _metadata.file_name
     checkAnswer(
-      df.select("name", "age", "id", "`_metadata.FILE_NAME`",
-        METADATA_FILE_NAME, METADATA_FILE_PATH),
+      df.select("name", "age", "`_metadata.file_size`", "`_metadata.FILE_NAME`",
+        METADATA_FILE_NAME, METADATA_FILE_PATH,
+        METADATA_FILE_SIZE, METADATA_FILE_MODIFICATION_TIME),
       Seq(
         Row("jack", 24, 12345L, "uom",
-          // user data will not be overwritten,
+          // uom and 12345L will not be overwritten,
           // and we still can read metadata columns correctly
-          f0(METADATA_FILE_NAME), f0(METADATA_FILE_PATH)),
+          f0(METADATA_FILE_NAME), f0(METADATA_FILE_PATH),
+          f0(METADATA_FILE_SIZE), f0(METADATA_FILE_MODIFICATION_TIME)),
         Row("lily", 31, null, "ucb",
-          // user data will not be overwritten,
+          // ucb and `null` will not be overwritten,
           // and we still can read metadata columns correctly
-          f1(METADATA_FILE_NAME), f1(METADATA_FILE_PATH))
+          f1(METADATA_FILE_NAME), f1(METADATA_FILE_PATH),
+          f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME))
       )
     )
   }
 
   metadataColumnsTest("select only metadata columns", schema) { (df, f0, f1) =>
     checkAnswer(
-      df.select(METADATA_FILE_NAME, METADATA_FILE_PATH),
+      df.select(METADATA_FILE_NAME, METADATA_FILE_PATH,
+        METADATA_FILE_SIZE, METADATA_FILE_MODIFICATION_TIME),
       Seq(
-        Row(f0(METADATA_FILE_NAME), f0(METADATA_FILE_PATH)),
-        Row(f1(METADATA_FILE_NAME), f1(METADATA_FILE_PATH))
+        Row(f0(METADATA_FILE_NAME), f0(METADATA_FILE_PATH),
+          f0(METADATA_FILE_SIZE), f0(METADATA_FILE_MODIFICATION_TIME)),
+        Row(f1(METADATA_FILE_NAME), f1(METADATA_FILE_PATH),
+          f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME))
       )
     )
   }
@@ -220,7 +248,8 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
     // to the more general internal row, thus it will fail to re-select
     checkAnswer(
       df.select("name", "age", "id", "university",
-        METADATA_FILE_NAME, METADATA_FILE_PATH)
+        METADATA_FILE_NAME, METADATA_FILE_PATH,
+        METADATA_FILE_SIZE, METADATA_FILE_MODIFICATION_TIME)
         .select("name", "file_path"), // cast _metadata.file_path as file_path
       Seq(
         Row("jack", f0(METADATA_FILE_PATH)),
@@ -234,7 +263,8 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
     val aliasDF = df.select(
       Column("name").as("myName"),
       Column("age").as("myAge"),
-      Column(METADATA_FILE_NAME).as("myFileName")
+      Column(METADATA_FILE_NAME).as("myFileName"),
+      Column(METADATA_FILE_SIZE).as("myFileSize")
     )
 
     // check schema
@@ -242,6 +272,7 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
       .add(StructField("myName", StringType))
       .add(StructField("myAge", IntegerType))
       .add(StructField("myFileName", StringType))
+      .add(StructField("myFileSize", LongType))
 
     assert(aliasDF.schema.fields.toSet == expectedSchema.fields.toSet)
 
@@ -249,8 +280,8 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       aliasDF,
       Seq(
-        Row("jack", 24, f0(METADATA_FILE_NAME)),
-        Row("lily", 31, f1(METADATA_FILE_NAME))
+        Row("jack", 24, f0(METADATA_FILE_NAME), f0(METADATA_FILE_SIZE)),
+        Row("lily", 31, f1(METADATA_FILE_NAME), f1(METADATA_FILE_SIZE))
       )
     )
   }
@@ -271,40 +302,49 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
       s"sensitive is $caseSensitive", schemaWithNameConflicts) { (df, f0, f1) =>
       withSQLConf("spark.sql.caseSensitive" -> caseSensitive.toString) {
 
-        // file schema: name, age, id, _metadata._FILE_NAME
+        // file schema: name, age, _file_size, _FILE_NAME
         if (caseSensitive) {
           // for case sensitive mode:
-          // _METADATA.FILE_PATH is not a part of user schema or metadata columns
+          // _METADATA.FILE_SIZE is not a part of user schema or metadata columns
           val ex = intercept[Exception] {
-            df.select("name", "age", "_METADATA.FILE_PATH").show()
+            df.select("name", "age", "_METADATA.FILE_SIZE").show()
           }
-          assert(ex.getMessage.contains("_METADATA.FILE_PATH"))
+          assert(ex.getMessage.contains("_METADATA.FILE_SIZE"))
 
           // for case sensitive mode:
-          // `_metadata.FILE_NAME` is in the user schema
-          // _metadata.file_name is metadata columns
+          // `_metadata.file_size` and `_metadata.FILE_NAME` are in the user schema
+          // _metadata.file_name and _metadata.file_modification_time are metadata columns
           checkAnswer(
-            df.select("name", "age", "id", "`_metadata.FILE_NAME`",
-              "_metadata.file_name"),
+            df.select("name", "age", "`_metadata.file_size`", "`_metadata.FILE_NAME`",
+              "_metadata.file_name", "_metadata.file_modification_time"),
             Seq(
-              Row("jack", 24, 12345L, "uom", f0(METADATA_FILE_NAME)),
-              Row("lily", 31, null, "ucb", f1(METADATA_FILE_NAME))
+              Row("jack", 24, 12345L, "uom",
+                f0(METADATA_FILE_NAME), f0(METADATA_FILE_MODIFICATION_TIME)),
+              Row("lily", 31, null, "ucb",
+                f1(METADATA_FILE_NAME), f1(METADATA_FILE_MODIFICATION_TIME))
             )
           )
         } else {
           // for case insensitive mode:
+          // `_metadata.file_size`, `_metadata.FILE_SIZE`,
           // `_metadata.file_name`, `_metadata.FILE_NAME` are all from the user schema.
-          // different casings of _metadata.file_path is metadata columns
+          // different casings of _metadata.file_path and
+          // _metadata.file_modification_time are metadata columns
           checkAnswer(
-            df.select("name", "age", "id",
+            df.select("name", "age",
+              // user columns
+              "`_metadata.file_size`", "`_metadata.FILE_SIZE`",
               "`_metadata.file_name`", "`_metadata.FILE_NAME`",
               // metadata columns
-              "_metadata.file_path", "_metadata.FILE_PATH"),
+              "_metadata.file_path", "_metadata.FILE_PATH",
+              "_metadata.file_modification_time", "_metadata.FILE_modification_TiMe"),
             Seq(
-              Row("jack", 24, 12345L, "uom", "uom",
-                f0(METADATA_FILE_PATH), f0(METADATA_FILE_PATH)),
-              Row("lily", 31, null, "ucb", "ucb",
-                f1(METADATA_FILE_PATH), f1(METADATA_FILE_PATH))
+              Row("jack", 24, 12345L, 12345L, "uom", "uom",
+                f0(METADATA_FILE_PATH), f0(METADATA_FILE_PATH),
+                f0(METADATA_FILE_MODIFICATION_TIME), f0(METADATA_FILE_MODIFICATION_TIME)),
+              Row("lily", 31, null, null, "ucb", "ucb",
+                f1(METADATA_FILE_PATH), f1(METADATA_FILE_PATH),
+                f1(METADATA_FILE_MODIFICATION_TIME), f1(METADATA_FILE_MODIFICATION_TIME))
             )
           )
         }
@@ -312,28 +352,35 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  Seq("true", "false").foreach { offHeapColumnVectorEnabled =>
-    withSQLConf("spark.sql.columnVector.offheap.enabled" -> offHeapColumnVectorEnabled) {
-      metadataColumnsTest(s"read metadata with " +
-        s"offheap set to $offHeapColumnVectorEnabled", schema) { (df, f0, f1) =>
-        // read all available metadata columns
-        checkAnswer(
-          df.select("name", "age", "id", "university",
-            METADATA_FILE_NAME, METADATA_FILE_PATH),
-          Seq(
-            Row("jack", 24, 12345L, "uom", f0(METADATA_FILE_NAME), f0(METADATA_FILE_PATH)),
-            Row("lily", 31, null, "ucb", f1(METADATA_FILE_NAME), f1(METADATA_FILE_PATH))
+  Seq("true", "false").foreach { photonEnabled =>
+    Seq("true", "false").foreach { offHeapColumnVectorEnabled =>
+      withSQLConf("spark.sql.columnVector.offheap.enabled" -> offHeapColumnVectorEnabled,
+        "spark.databricks.photon.enabled" -> photonEnabled) {
+        metadataColumnsTest(s"read metadata with " +
+          s"offheap set to $offHeapColumnVectorEnabled, " +
+          s"photon set to $photonEnabled", schema) { (df, f0, f1) =>
+          // read all available metadata columns
+          checkAnswer(
+            df.select("name", "age", "id", "university",
+              METADATA_FILE_NAME, METADATA_FILE_PATH,
+              METADATA_FILE_SIZE, METADATA_FILE_MODIFICATION_TIME),
+            Seq(
+              Row("jack", 24, 12345L, "uom", f0(METADATA_FILE_NAME), f0(METADATA_FILE_PATH),
+                f0(METADATA_FILE_SIZE), f0(METADATA_FILE_MODIFICATION_TIME)),
+              Row("lily", 31, null, "ucb", f1(METADATA_FILE_NAME), f1(METADATA_FILE_PATH),
+                f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME))
+            )
           )
-        )
 
-        // read a part of metadata columns
-        checkAnswer(
-          df.select("name", "university", METADATA_FILE_NAME),
-          Seq(
-            Row("jack", "uom", f0(METADATA_FILE_NAME)),
-            Row("lily", "ucb", f1(METADATA_FILE_NAME))
+          // read a part of metadata columns
+          checkAnswer(
+            df.select("name", "university", METADATA_FILE_NAME, METADATA_FILE_SIZE),
+            Seq(
+              Row("jack", "uom", f0(METADATA_FILE_NAME), f0(METADATA_FILE_SIZE)),
+              Row("lily", "ucb", f1(METADATA_FILE_NAME), f1(METADATA_FILE_SIZE))
+            )
           )
-        )
+        }
       }
     }
   }
@@ -410,18 +457,23 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
       val f1 = new File(dir, "temp/1")
       val metadata = Map(
         METADATA_FILE_PATH -> f1.toURI.toString,
-        METADATA_FILE_NAME -> f1.getName
+        METADATA_FILE_NAME -> f1.getName,
+        METADATA_FILE_SIZE -> f1.length(),
+        METADATA_FILE_MODIFICATION_TIME -> f1.lastModified()
       )
 
       checkAnswer(
         df1.select("name", "metadata.file_name",
           "_metadata.file_path", "_metadata.file_name",
+          "_metadata.file_size", "_metadata.file_modification_time",
           "_metadata"),
         Row("jack", "jack.json",
           metadata(METADATA_FILE_PATH), metadata(METADATA_FILE_NAME),
+          metadata(METADATA_FILE_SIZE), metadata(METADATA_FILE_MODIFICATION_TIME),
           // struct of _metadata
           Row(
-            metadata(METADATA_FILE_PATH), metadata(METADATA_FILE_NAME))
+            metadata(METADATA_FILE_PATH), metadata(METADATA_FILE_NAME),
+            metadata(METADATA_FILE_SIZE), metadata(METADATA_FILE_MODIFICATION_TIME))
         )
       )
     }
