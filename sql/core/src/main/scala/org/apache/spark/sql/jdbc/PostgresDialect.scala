@@ -17,15 +17,23 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Types}
+import java.sql.{Connection, SQLException, Types}
+import java.util
 import java.util.Locale
 
+import scala.collection.JavaConverters._
+
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
+import org.apache.spark.sql.connector.catalog.index.SupportsIndex
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
 
 
-private object PostgresDialect extends JdbcDialect {
+private object PostgresDialect extends JdbcDialect with SQLConfHelper {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql")
@@ -163,5 +171,79 @@ private object PostgresDialect extends JdbcDialect {
     // method name
     s"TABLESAMPLE BERNOULLI" +
       s" (${(sample.upperBound - sample.lowerBound) * 100}) REPEATABLE (${sample.seed})"
+  }
+
+  // CREATE INDEX syntax
+  // https://www.postgresql.org/docs/14/sql-createindex.html
+  override def createIndex(
+      indexName: String,
+      tableName: String,
+      columns: Array[NamedReference],
+      columnsProperties: util.Map[NamedReference, util.Map[String, String]],
+      properties: util.Map[String, String]): String = {
+    val columnList = columns.map(col => quoteIdentifier(col.fieldNames.head))
+    var indexPropertiesStr: String = ""
+    var hasIndexProperties: Boolean = false
+    var indexType = ""
+
+    if (!properties.isEmpty) {
+      var indexPropertyList: Array[String] = Array.empty
+      properties.asScala.foreach { case (k, v) =>
+        if (k.equals(SupportsIndex.PROP_TYPE)) {
+          if (v.equalsIgnoreCase("BTREE") || v.equalsIgnoreCase("HASH")) {
+            indexType = s"USING $v"
+          } else {
+            throw new UnsupportedOperationException(s"Index Type $v is not supported." +
+              " The supported Index Types are: BTREE and HASH")
+          }
+        } else {
+          hasIndexProperties = true
+          indexPropertyList = indexPropertyList :+ s"$k = $v"
+        }
+      }
+      if (hasIndexProperties) {
+        indexPropertiesStr += "WITH (" + indexPropertyList.mkString(", ") + ")"
+      }
+    }
+
+    s"CREATE INDEX ${quoteIdentifier(indexName)} ON ${quoteIdentifier(tableName)}" +
+      s" $indexType (${columnList.mkString(", ")}) $indexPropertiesStr"
+  }
+
+  // SHOW INDEX syntax
+  // https://www.postgresql.org/docs/14/view-pg-indexes.html
+  override def indexExists(
+      conn: Connection,
+      indexName: String,
+      tableName: String,
+      options: JDBCOptions): Boolean = {
+    val sql = s"SELECT * FROM pg_indexes WHERE tablename = '$tableName'"
+    try {
+      JdbcUtils.checkIfIndexExists(conn, indexName, sql, "indexname", options)
+    } catch {
+      case _: Exception =>
+        logWarning("Cannot retrieved index info.")
+        false
+    }
+  }
+
+  // DROP INDEX syntax
+  // https://www.postgresql.org/docs/14/sql-dropindex.html
+  override def dropIndex(indexName: String, tableName: String): String = {
+    s"DROP INDEX ${quoteIdentifier(indexName)}"
+  }
+
+  override def classifyException(message: String, e: Throwable): AnalysisException = {
+    e match {
+      case sqlException: SQLException =>
+        sqlException.getSQLState match {
+          // https://www.postgresql.org/docs/14/errcodes-appendix.html
+          case "42P07" => throw new IndexAlreadyExistsException(message, cause = Some(e))
+          case "42704" => throw new NoSuchIndexException(message, cause = Some(e))
+          case _ => super.classifyException(message, e)
+        }
+      case unsupported: UnsupportedOperationException => throw unsupported
+      case _ => super.classifyException(message, e)
+    }
   }
 }

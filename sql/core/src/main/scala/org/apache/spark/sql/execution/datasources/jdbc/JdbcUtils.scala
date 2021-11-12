@@ -1073,6 +1073,31 @@ object JdbcUtils extends Logging with SQLConfHelper {
     }
   }
 
+  /**
+   * Check if index exists in a table
+   */
+  def checkIfIndexExists(
+      conn: Connection,
+      indexName: String,
+      sql: String,
+      indexColumnName: String,
+      options: JDBCOptions): Boolean = {
+    val statement = conn.createStatement
+    try {
+      statement.setQueryTimeout(options.queryTimeout)
+      val rs = statement.executeQuery(sql)
+      while (rs.next()) {
+        val retrievedIndexName = rs.getString(indexColumnName)
+        if (conf.resolver(retrievedIndexName, indexName)) {
+          return true
+        }
+      }
+      false
+    } finally {
+      statement.close()
+    }
+  }
+
   def executeQuery(conn: Connection, options: JDBCOptions, sql: String): ResultSet = {
     val statement = conn.createStatement
     try {

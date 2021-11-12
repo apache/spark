@@ -150,14 +150,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       options: JDBCOptions): Boolean = {
     val sql = s"SHOW INDEXES FROM ${quoteIdentifier(tableName)}"
     try {
-      val rs = JdbcUtils.executeQuery(conn, options, sql)
-      while (rs.next()) {
-        val retrievedIndexName = rs.getString("key_name")
-        if (conf.resolver(retrievedIndexName, indexName)) {
-          return true
-        }
-      }
-      false
+      JdbcUtils.checkIfIndexExists(conn, indexName, sql, "key_name", options)
     } catch {
       case _: Exception =>
         logWarning("Cannot retrieved index info.")
