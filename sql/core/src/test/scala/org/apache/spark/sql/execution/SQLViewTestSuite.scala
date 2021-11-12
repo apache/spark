@@ -20,7 +20,9 @@ package org.apache.spark.sql.execution
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog.CatalogFunction
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.Repartition
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.internal.SQLConf._
@@ -378,7 +380,25 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   }
 }
 
-class LocalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
+abstract class TempViewTestSuite extends SQLViewTestSuite {
+  test("SPARK-37202: temp view should capture the function registered by catalog API") {
+    val funcName = "tempFunc"
+    withUserDefinedFunction(funcName -> true) {
+      val catalogFunction = CatalogFunction(
+        FunctionIdentifier(funcName, None), "org.apache.spark.myFunc", Seq.empty)
+      val functionBuilder = (e: Seq[Expression]) => e.head
+      spark.sessionState.catalog.registerFunction(
+        catalogFunction, overrideIfExists = false, functionBuilder = Some(functionBuilder))
+      val query = s"SELECT $funcName(max(a), min(a)) FROM VALUES (1), (2), (3) t(a)"
+      val viewName = createView("tempView", query)
+      withView(viewName) {
+        checkViewOutput(viewName, sql(query).collect())
+      }
+    }
+  }
+}
+
+class LocalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession {
   override protected def viewTypeString: String = "TEMPORARY VIEW"
   override protected def formattedViewName(viewName: String): String = viewName
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
@@ -386,7 +406,7 @@ class LocalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   }
 }
 
-class GlobalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
+class GlobalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession {
   private def db: String = spark.sharedState.globalTempViewManager.database
   override protected def viewTypeString: String = "GLOBAL TEMPORARY VIEW"
   override protected def formattedViewName(viewName: String): String = {

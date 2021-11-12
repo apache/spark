@@ -125,7 +125,11 @@ case class AnalysisContext(
     maxNestedViewDepth: Int = -1,
     relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
-    referredTempFunctionNames: Seq[String] = Seq.empty,
+    // 1. If we are resolving a view, this field will be restored from the view metadata,
+    //    by calling `AnalysisContext.withAnalysisContext(viewDesc)`.
+    // 2. If we are not resolving a view, this field will be updated everytime the analyzer
+    //    lookup a temporary function. And export to the view metadata.
+    referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     outerPlan: Option[LogicalPlan] = None)
 
 object AnalysisContext {
@@ -152,8 +156,14 @@ object AnalysisContext {
       maxNestedViewDepth,
       originContext.relationCache,
       viewDesc.viewReferredTempViewNames,
-      viewDesc.viewReferredTempFunctionNames)
+      mutable.Set(viewDesc.viewReferredTempFunctionNames: _*))
     set(context)
+    try f finally { set(originContext) }
+  }
+
+  def withNewAnalysisContext[A](f: => A): A = {
+    val originContext = value.get()
+    reset()
     try f finally { set(originContext) }
   }
 
@@ -204,11 +214,8 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   override def execute(plan: LogicalPlan): LogicalPlan = {
-    AnalysisContext.reset()
-    try {
+    AnalysisContext.withNewAnalysisContext {
       executeSameContext(plan)
-    } finally {
-      AnalysisContext.reset()
     }
   }
 
@@ -3651,7 +3658,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       _.containsPattern(COMMAND)) {
       case c: AnalysisOnlyCommand if c.resolved =>
         checkAnalysis(c)
-        c.markAsAnalyzed()
+        c.markAsAnalyzed(AnalysisContext.get)
     }
   }
 }
