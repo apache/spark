@@ -982,7 +982,10 @@ case class Aggregate(
 
   // Whether this Aggregate operator is group only. For example: SELECT a, a FROM t GROUP BY a
   private[sql] def groupOnly: Boolean = {
-    aggregateExpressions.forall(a => groupingExpressions.exists(g => a.semanticEquals(g)))
+    aggregateExpressions.map {
+      case Alias(child, _) => child
+      case e => e
+    }.forall(a => groupingExpressions.exists(g => a.semanticEquals(g)))
   }
 }
 
