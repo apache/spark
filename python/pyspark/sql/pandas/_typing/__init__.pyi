@@ -332,12 +332,4 @@ ArrowMapIterFunction = Callable[[Iterable[pyarrow.RecordBatch]], Iterable[pyarro
 
 PandasCogroupedMapFunction = Callable[[DataFrameLike, DataFrameLike], DataFrameLike]
 
-MapIterPandasUserDefinedFunction = NewType("MapIterPandasUserDefinedFunction", FunctionType)
-
-MapIterArrowUserDefinedFunction = NewType("MapIterArrowUserDefinedFunction", FunctionType)
-
 GroupedMapPandasUserDefinedFunction = NewType("GroupedMapPandasUserDefinedFunction", FunctionType)
-
-CogroupedMapPandasUserDefinedFunction = NewType(
-    "CogroupedMapPandasUserDefinedFunction", FunctionType
-)

@@ -24,9 +24,6 @@ import org.apache.spark.sql.execution.SparkPlan
 /**
  * A relation produced by applying a function that takes an iterator of PyArrow's record batches
  * and outputs an iterator of PyArrow's record batches.
- *
- * This is somewhat similar with [[FlatMapGroupsInPandasExec]] and
- * `org.apache.spark.sql.catalyst.plans.logical.MapPartitionsInRWithArrow`
  */
 case class PythonMapInArrowExec(
     func: Expression,

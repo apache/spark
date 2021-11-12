@@ -33,12 +33,15 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 /**
  * A relation produced by applying a function that takes an iterator of batches
  * such as pandas DataFrame or PyArrow's record batches, and outputs an iterator of them.
+ *
+ * This is somewhat similar with [[FlatMapGroupsInPandasExec]] and
+ * `org.apache.spark.sql.catalyst.plans.logical.MapPartitionsInRWithArrow`
  */
 trait MapInBatchExec extends UnaryExecNode {
   protected val func: Expression
   protected val pythonEvalType: Int
 
-  private val pandasFunction = func.asInstanceOf[PythonUDF].func
+  private val pythonFunction = func.asInstanceOf[PythonUDF].func
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
@@ -50,7 +53,7 @@ trait MapInBatchExec extends UnaryExecNode {
     child.execute().mapPartitionsInternal { inputIter =>
       // Single function with one struct.
       val argOffsets = Array(Array(0))
-      val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
+      val chainedFunc = Seq(ChainedPythonFunctions(Seq(pythonFunction)))
       val sessionLocalTimeZone = conf.sessionLocalTimeZone
       val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
       val outputTypes = child.schema

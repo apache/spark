@@ -125,25 +125,24 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
         """
         import pyarrow as pa
 
-        def init_stream_yield_batches():
+        def wrap_and_init_stream():
             should_write_start_length = True
             for batch, _ in iterator:
-                # Wrap the root struct
                 assert isinstance(batch, pa.RecordBatch)
+
+                # Wrap the root struct
                 struct = pa.StructArray.from_arrays(
                     batch.columns, fields=pa.struct(list(batch.schema))
                 )
                 batch = pa.RecordBatch.from_arrays([struct], ["_0"])
 
-                # Write the first record batch first.
+                # Write the first record batch with initialization.
                 if should_write_start_length:
                     write_int(SpecialLengths.START_ARROW_STREAM, stream)
                     should_write_start_length = False
                 yield batch
 
-        return super(ArrowStreamUDFSerializer, self).dump_stream(
-            init_stream_yield_batches(), stream
-        )
+        return super(ArrowStreamUDFSerializer, self).dump_stream(wrap_and_init_stream(), stream)
 
 
 class ArrowStreamPandasSerializer(ArrowStreamSerializer):

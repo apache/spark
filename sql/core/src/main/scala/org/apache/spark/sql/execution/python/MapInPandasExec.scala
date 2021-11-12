@@ -24,9 +24,6 @@ import org.apache.spark.sql.execution.SparkPlan
 /**
  * A relation produced by applying a function that takes an iterator of pandas DataFrames
  * and outputs an iterator of pandas DataFrames.
- *
- * This is somewhat similar with [[FlatMapGroupsInPandasExec]] and
- * `org.apache.spark.sql.catalyst.plans.logical.MapPartitionsInRWithArrow`
  */
 case class MapInPandasExec(
     func: Expression,

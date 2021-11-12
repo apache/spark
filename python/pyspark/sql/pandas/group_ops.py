@@ -347,9 +347,11 @@ class PandasCogroupedOps(object):
         """
         from pyspark.sql.pandas.functions import pandas_udf
 
+        # The usage of the pandas_udf is internal so type checking is disabled.
         udf = pandas_udf(
             func, returnType=schema, functionType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF
-        )
+        )  # type: ignore[call-overload]
+
         all_cols = self._extract_cols(self._gd1) + self._extract_cols(self._gd2)
         udf_column = udf(*all_cols)
         jdf = self._gd1._jgd.flatMapCoGroupsInPandas(  # type: ignore[attr-defined]

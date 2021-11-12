@@ -84,9 +84,10 @@ class PandasMapOpsMixin(object):
 
         assert isinstance(self, DataFrame)
 
+        # The usage of the pandas_udf is internal so type checking is disabled.
         udf = pandas_udf(
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
-        )
+        )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
         jdf = self._jdf.mapInPandas(udf_column._jc.expr())  # type: ignore[operator]
         return DataFrame(jdf, self.sql_ctx)
@@ -124,7 +125,7 @@ class PandasMapOpsMixin(object):
         >>> def filter_func(iterator):
         ...     for batch in iterator:
         ...         pdf = batch.to_pandas()
-        ...         yield pyarrow.RecordBatch.from_pandas(pdf[df.id == 1])
+        ...         yield pyarrow.RecordBatch.from_pandas(pdf[pdf.id == 1])
         >>> df.mapInArrow(filter_func, df.schema).show()  # doctest: +SKIP
         +---+---+
         | id|age|
@@ -146,9 +147,10 @@ class PandasMapOpsMixin(object):
 
         assert isinstance(self, DataFrame)
 
+        # The usage of the pandas_udf is internal so type checking is disabled.
         udf = pandas_udf(
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_ARROW_ITER_UDF
-        )
+        )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
         jdf = self._jdf.pythonMapInArrow(udf_column._jc.expr())
         return DataFrame(jdf, self.sql_ctx)

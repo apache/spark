@@ -372,14 +372,14 @@ def read_udfs(pickleSer, infile, eval_type):
     num_udfs = read_int(infile)
 
     is_scalar_iter = eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
-    is_map_iter = eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
+    is_map_pandas_iter = eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
     is_map_arrow_iter = eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF
 
-    if is_scalar_iter or is_map_iter or is_map_arrow_iter:
+    if is_scalar_iter or is_map_pandas_iter or is_map_arrow_iter:
         if is_scalar_iter:
             assert num_udfs == 1, "One SCALAR_ITER UDF expected here."
-        if is_map_iter:
-            assert num_udfs == 1, "One MAP_ITER UDF expected here."
+        if is_map_pandas_iter:
+            assert num_udfs == 1, "One MAP_PANDAS_ITER UDF expected here."
         if is_map_arrow_iter:
             assert num_udfs == 1, "One MAP_ARROW_ITER UDF expected here."
 
@@ -410,7 +410,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 # it's very unlikely the output length is higher than
                 # input length.
                 assert (
-                    is_map_iter or is_map_arrow_iter or num_output_rows <= num_input_rows
+                    is_map_pandas_iter or is_map_arrow_iter or num_output_rows <= num_input_rows
                 ), "Pandas SCALAR_ITER UDF outputted more rows than input rows."
                 yield (result_batch, result_type)
 
