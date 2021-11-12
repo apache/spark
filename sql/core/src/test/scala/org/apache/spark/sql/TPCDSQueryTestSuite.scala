@@ -97,7 +97,11 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
        """.stripMargin)
   }
 
-  private def runQuery(query: String, goldenFile: File, conf: Seq[(String, String)], needSort: Boolean): Unit = {
+  private def runQuery(
+      query: String,
+      goldenFile: File,
+      conf: Seq[(String, String)],
+      needSort: Boolean): Unit = {
     withSQLConf(conf: _*) {
       try {
         val (schema, output) = handleExceptions(getNormalizedResult(spark, query))
