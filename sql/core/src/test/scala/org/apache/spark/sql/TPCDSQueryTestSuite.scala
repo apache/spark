@@ -190,7 +190,7 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
         classLoader = Thread.currentThread().getContextClassLoader)
       test(s"$name-v2.7") {
         val goldenFile = new File(s"$baseResourcePath/v2_7", s"$name.sql.out")
-        runQuery(queryString, goldenFile, joinConfSet.head.toSeq, false)
+        runQuery(queryString, goldenFile, sortMergeJoinConf.toSeq, false)
         if (!regenerateGoldenFiles) {
           joinConfSet.foreach { conf =>
             runQuery(queryString, goldenFile, conf.toSeq, true)
