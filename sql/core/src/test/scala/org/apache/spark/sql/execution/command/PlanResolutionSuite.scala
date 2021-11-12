@@ -2307,7 +2307,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val cmdNotAnalyzed = DummyAnalysisOnlyCommand(isAnalyzed = false, childrenToAnalyze = Seq(null))
     assert(cmdNotAnalyzed.innerChildren.isEmpty)
     assert(cmdNotAnalyzed.children.length == 1)
-    val cmdAnalyzed = cmdNotAnalyzed.markAsAnalyzed()
+    val cmdAnalyzed = cmdNotAnalyzed.markAsAnalyzed(AnalysisContext.get)
     assert(cmdAnalyzed.innerChildren.length == 1)
     assert(cmdAnalyzed.children.isEmpty)
   }
