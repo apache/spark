@@ -1256,16 +1256,19 @@ object IntervalUtils {
     intervalString
   }
 
-  def intToYearMonthInterval(v: Int, endField: Byte): Int = {
+  def integralToYearMonthInterval(v: Long, endField: Byte): Int = {
+    if (v != v.toInt) {
+      throw QueryExecutionErrors.castingCauseOverflowError(v, YM(endField).catalogString)
+    }
     endField match {
       case YEAR =>
         try {
-          Math.multiplyExact(v, MONTHS_PER_YEAR)
+          Math.multiplyExact(v.toInt, MONTHS_PER_YEAR)
         } catch {
           case _: ArithmeticException =>
             throw QueryExecutionErrors.castingCauseOverflowError(v, YM(endField).catalogString)
         }
-      case MONTH => v
+      case MONTH => v.toInt
     }
   }
 
@@ -1276,7 +1279,7 @@ object IntervalUtils {
     }
   }
 
-  def longToDayTimeInterval(v: Long, endField: Byte): Long = {
+  def integralToDayTimeInterval(v: Long, endField: Byte): Long = {
     try {
       endField match {
         case DAY => Math.multiplyExact(v, MICROS_PER_DAY)

@@ -586,50 +586,160 @@ class CastSuite extends CastSuiteBase {
   }
 
   test("SPARK-36924: Cast DayTimeIntervalType to IntegralType") {
-    Seq(
-      (Duration.ZERO, DayTimeIntervalType(DAY), 0.toByte, 0.toShort, 0, 0L),
-      (Duration.ofDays(1), DayTimeIntervalType(DAY), 1.toByte, 1.toShort, 1, 1L),
-      (Duration.ZERO, DayTimeIntervalType(HOUR), 0.toByte, 0.toShort, 0, 0L),
-      (Duration.ofHours(1), DayTimeIntervalType(HOUR), 1.toByte, 1.toShort, 1, 1L),
-      (Duration.ZERO, DayTimeIntervalType(MINUTE), 0.toByte, 0.toShort, 0, 0L),
-      (Duration.ofMinutes(1), DayTimeIntervalType(MINUTE), 1.toByte, 1.toShort, 1, 1L),
-      (Duration.ZERO, DayTimeIntervalType(SECOND), 0.toByte, 0.toShort, 0, 0L),
-      (Duration.ofSeconds(1), DayTimeIntervalType(SECOND), 1.toByte, 1.toShort, 1, 1L)
-    ).foreach { case(v, dt, r1, r2, r3, r4) =>
-      val value = Literal.create(v, dt)
-      checkEvaluation(cast(value, ByteType), r1)
-      checkEvaluation(cast(value, ShortType), r2)
-      checkEvaluation(cast(value, IntegerType), r3)
-      checkEvaluation(cast(value, LongType), r4)
-    }
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt =>
+      val v1 = Literal.create(Duration.ZERO, dt)
+      checkEvaluation(cast(v1, ByteType), 0.toByte)
+      checkEvaluation(cast(v1, ShortType), 0.toShort)
+      checkEvaluation(cast(v1, IntegerType), 0)
+      checkEvaluation(cast(v1, LongType), 0L)
 
-    Seq(
-      (Duration.of(Long.MaxValue, ChronoUnit.MICROS),
-        DayTimeIntervalType(DAY), ByteType, 9223372022400000000L),
-      (Duration.of(Long.MaxValue, ChronoUnit.MICROS),
-        DayTimeIntervalType(HOUR), ShortType, 9223372036800000000L),
-      (Duration.of(Long.MaxValue, ChronoUnit.MICROS),
-        DayTimeIntervalType(MINUTE), IntegerType, 9223372036800000000L),
-      (Duration.of(Long.MinValue, ChronoUnit.MICROS),
-        DayTimeIntervalType(DAY), ByteType, -9223372022400000000L),
-      (Duration.of(Long.MinValue, ChronoUnit.MICROS),
-        DayTimeIntervalType(HOUR), ShortType, -9223372036800000000L),
-      (Duration.of(Long.MinValue, ChronoUnit.MICROS),
-        DayTimeIntervalType(MINUTE), IntegerType, -9223372036800000000L)
-    ).foreach { case(v, dt, toType, overflow) =>
-      val value = Literal.create(v, dt)
-      val e = intercept[ArithmeticException] {
-        cast(value, toType).eval()
-      }.getMessage
-      assert(e.contains(s"Casting ${overflow} to ${toType.catalogString} causes overflow"))
-    }
+      val num = SECONDS_PER_DAY + SECONDS_PER_HOUR + SECONDS_PER_MINUTE + 1
+      val v2 = Literal.create(Duration.ofSeconds(num), dt)
+      dt.endField match {
+        case DAY =>
+          checkEvaluation(cast(v2, ByteType), 1.toByte)
+          checkEvaluation(cast(v2, ShortType), 1.toShort)
+          checkEvaluation(cast(v2, IntegerType), 1)
+          checkEvaluation(cast(v2, LongType), 1L)
+        case HOUR =>
+          checkEvaluation(cast(v2, ByteType), 25.toByte)
+          checkEvaluation(cast(v2, ShortType), 25.toShort)
+          checkEvaluation(cast(v2, IntegerType), 25)
+          checkEvaluation(cast(v2, LongType), 25L)
+        case MINUTE =>
+          val e = intercept[ArithmeticException] {
+            cast(v2, ByteType).eval()
+          }.getMessage
+          assert(e.contains(s"Casting 90060000000 to tinyint causes overflow"))
+          checkEvaluation(cast(v2, ShortType), (MINUTES_PER_HOUR * 25 + 1).toShort)
+          checkEvaluation(cast(v2, IntegerType), (MINUTES_PER_HOUR * 25 + 1).toInt)
+          checkEvaluation(cast(v2, LongType), MINUTES_PER_HOUR * 25 + 1)
+        case SECOND =>
+          val e1 = intercept[ArithmeticException] {
+            cast(v2, ByteType).eval()
+          }.getMessage
+          assert(e1.contains(s"Casting 90061000000 to tinyint causes overflow"))
+          val e2 = intercept[ArithmeticException] {
+            cast(v2, ShortType).eval()
+          }.getMessage
+          assert(e2.contains(s"Casting 90061000000 to smallint causes overflow"))
+          checkEvaluation(cast(v2, IntegerType), num.toInt)
+          checkEvaluation(cast(v2, LongType), num)
+      }
 
-    Seq(
-      (Duration.of(Long.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType(SECOND), 9223372036854L),
-      (Duration.of(Long.MinValue, ChronoUnit.MICROS), DayTimeIntervalType(SECOND), -9223372036854L)
-    ).foreach {
-      case (v, dt, expect) =>
-        checkEvaluation(cast(Literal.create(v, dt), LongType), expect)
+      val v3 = Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), dt)
+      dt.endField match {
+        case DAY =>
+          val e1 = intercept[ArithmeticException] {
+            cast(v3, ByteType).eval()
+          }.getMessage
+          assert(e1.contains("Casting 9223372022400000000 to tinyint causes overflow"))
+          val e2 = intercept[ArithmeticException] {
+            cast(v3, ShortType).eval()
+          }.getMessage
+          assert(e2.contains("Casting 9223372022400000000 to smallint causes overflow"))
+          checkEvaluation(cast(v3, IntegerType), 106751991)
+          checkEvaluation(cast(v3, LongType), 106751991L)
+        case HOUR =>
+          val e1 = intercept[ArithmeticException] {
+            cast(v3, ByteType).eval()
+          }.getMessage
+          assert(e1.contains("Casting 9223372036800000000 to tinyint causes overflow"))
+          val e2 = intercept[ArithmeticException] {
+            cast(v3, ShortType).eval()
+          }.getMessage
+          assert(e2.contains("Casting 9223372036800000000 to smallint causes overflow"))
+          val e3 = intercept[ArithmeticException] {
+            cast(v3, IntegerType).eval()
+          }.getMessage
+          assert(e3.contains("Casting 9223372036800000000 to int causes overflow"))
+          checkEvaluation(cast(v3, LongType), 2562047788L)
+        case MINUTE =>
+          val e1 = intercept[ArithmeticException] {
+            cast(v3, ByteType).eval()
+          }.getMessage
+          assert(e1.contains("Casting 9223372036800000000 to tinyint causes overflow"))
+          val e2 = intercept[ArithmeticException] {
+            cast(v3, ShortType).eval()
+          }.getMessage
+          assert(e2.contains("Casting 9223372036800000000 to smallint causes overflow"))
+          val e3 = intercept[ArithmeticException] {
+            cast(v3, IntegerType).eval()
+          }.getMessage
+          assert(e3.contains("Casting 9223372036800000000 to int causes overflow"))
+          checkEvaluation(cast(v3, LongType), 153722867280L)
+        case SECOND =>
+          val e1 = intercept[ArithmeticException] {
+            cast(v3, ByteType).eval()
+          }.getMessage
+          assert(e1.contains("Casting 9223372036854775807 to tinyint causes overflow"))
+          val e2 = intercept[ArithmeticException] {
+            cast(v3, ShortType).eval()
+          }.getMessage
+          assert(e2.contains("Casting 9223372036854775807 to smallint causes overflow"))
+          val e3 = intercept[ArithmeticException] {
+            cast(v3, IntegerType).eval()
+          }.getMessage
+          assert(e3.contains("Casting 9223372036854775807 to int causes overflow"))
+          checkEvaluation(cast(v3, LongType), 9223372036854L)
+      }
+
+      val v4 = Literal.create(Duration.of(Long.MinValue, ChronoUnit.MICROS), dt)
+      dt.endField match {
+        case DAY =>
+          val e1 = intercept[ArithmeticException] {
+            cast(v4, ByteType).eval()
+          }.getMessage
+          assert(e1.contains("Casting -9223372022400000000 to tinyint causes overflow"))
+          val e2 = intercept[ArithmeticException] {
+            cast(v4, ShortType).eval()
+          }.getMessage
+          assert(e2.contains("Casting -9223372022400000000 to smallint causes overflow"))
+          checkEvaluation(cast(v4, IntegerType), -106751991)
+          checkEvaluation(cast(v4, LongType), -106751991L)
+        case HOUR =>
+          val e1 = intercept[ArithmeticException] {
+            cast(v4, ByteType).eval()
+          }.getMessage
+          assert(e1.contains("Casting -9223372036800000000 to tinyint causes overflow"))
+          val e2 = intercept[ArithmeticException] {
+            cast(v4, ShortType).eval()
+          }.getMessage
+          assert(e2.contains("Casting -9223372036800000000 to smallint causes overflow"))
+          val e3 = intercept[ArithmeticException] {
+            cast(v4, IntegerType).eval()
+          }.getMessage
+          assert(e3.contains("Casting -9223372036800000000 to int causes overflow"))
+          checkEvaluation(cast(v4, LongType), -2562047788L)
+        case MINUTE =>
+          val e1 = intercept[ArithmeticException] {
+            cast(v4, ByteType).eval()
+          }.getMessage
+          assert(e1.contains("Casting -9223372036800000000 to tinyint causes overflow"))
+          val e2 = intercept[ArithmeticException] {
+            cast(v4, ShortType).eval()
+          }.getMessage
+          assert(e2.contains("Casting -9223372036800000000 to smallint causes overflow"))
+          val e3 = intercept[ArithmeticException] {
+            cast(v4, IntegerType).eval()
+          }.getMessage
+          assert(e3.contains("Casting -9223372036800000000 to int causes overflow"))
+          checkEvaluation(cast(v4, LongType), -153722867280L)
+        case SECOND =>
+          val e1 = intercept[ArithmeticException] {
+            cast(v4, ByteType).eval()
+          }.getMessage
+          assert(e1.contains("Casting -9223372036854775808 to tinyint causes overflow"))
+          val e2 = intercept[ArithmeticException] {
+            cast(v4, ShortType).eval()
+          }.getMessage
+          assert(e2.contains("Casting -9223372036854775808 to smallint causes overflow"))
+          val e3 = intercept[ArithmeticException] {
+            cast(v4, IntegerType).eval()
+          }.getMessage
+          assert(e3.contains("Casting -9223372036854775808 to int causes overflow"))
+          checkEvaluation(cast(v4, LongType), -9223372036854L)
+      }
     }
   }
 
@@ -701,6 +811,8 @@ class CastSuite extends CastSuiteBase {
     Seq(
       (Period.ofYears(0), YearMonthIntervalType(YEAR), 0.toByte, 0.toShort, 0, 0L),
       (Period.ofYears(1), YearMonthIntervalType(YEAR), 1.toByte, 1.toShort, 1, 1L),
+      (Period.ofYears(0), YearMonthIntervalType(YEAR, MONTH), 0.toByte, 0.toShort, 0, 0L),
+      (Period.ofMonths(1), YearMonthIntervalType(YEAR, MONTH), 1.toByte, 1.toShort, 1, 1L),
       (Period.ofMonths(0), YearMonthIntervalType(MONTH), 0.toByte, 0.toShort, 0, 0L),
       (Period.ofMonths(1), YearMonthIntervalType(MONTH), 1.toByte, 1.toShort, 1, 1L)
     ).foreach { case (v, dt, r1, r2, r3, r4) =>
@@ -716,6 +828,10 @@ class CastSuite extends CastSuiteBase {
       (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR), ShortType, 2147483640),
       (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR), ByteType, -2147483640),
       (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR), ShortType, -2147483640),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR, MONTH), ByteType, Int.MaxValue),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR, MONTH), ShortType, Int.MaxValue),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR, MONTH), ByteType, Int.MinValue),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR, MONTH), ShortType, Int.MinValue),
       (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(MONTH), ByteType, Int.MaxValue),
       (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(MONTH), ShortType, Int.MaxValue),
       (Period.ofMonths(Int.MinValue), YearMonthIntervalType(MONTH), ByteType, Int.MinValue),
@@ -734,6 +850,14 @@ class CastSuite extends CastSuiteBase {
       (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR), LongType, Int.MaxValue /12L),
       (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR), IntegerType, Int.MinValue / 12),
       (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR), LongType, Int.MinValue /12L),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR, MONTH),
+        IntegerType, Int.MaxValue),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR, MONTH),
+        LongType, Int.MaxValue.toLong),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR, MONTH),
+        IntegerType, Int.MinValue),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR, MONTH),
+        LongType, Int.MinValue.toLong),
       (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(MONTH), IntegerType, Int.MaxValue),
       (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(MONTH), LongType, Int.MaxValue.toLong),
       (Period.ofMonths(Int.MinValue), YearMonthIntervalType(MONTH), IntegerType, Int.MinValue),
