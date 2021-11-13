@@ -949,7 +949,7 @@ case class SortMergeJoinExec(
     val consumeFullOuterJoinRow = ctx.freshName("consumeFullOuterJoinRow")
     ctx.addNewFunction(consumeFullOuterJoinRow,
       s"""
-         |private void $consumeFullOuterJoinRow() {
+         |private void $consumeFullOuterJoinRow() throws java.io.IOException {
          |  ${metricTerm(ctx, "numOutputRows")}.add(1);
          |  ${consume(ctx, resultVars)}
          |}
@@ -992,7 +992,7 @@ case class SortMergeJoinExec(
       s"""
          |private void $findNextJoinRowsFuncName(
          |    scala.collection.Iterator leftIter,
-         |    scala.collection.Iterator rightIter) {
+         |    scala.collection.Iterator rightIter) throws java.io.IOException {
          |  int comp = 0;
          |  $leftBuffer.clear();
          |  $rightBuffer.clear();
