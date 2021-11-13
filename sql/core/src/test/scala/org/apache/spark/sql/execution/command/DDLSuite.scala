@@ -778,18 +778,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
 
         withTempDir { tmpDir =>
-          if (isUsingHiveMetastore) {
-            val e1 = intercept[AnalysisException] {
-              sql(s"ALTER DATABASE $dbName SET LOCATION '${tmpDir.toURI}'")
-            }
-            assert(e1.getMessage.contains("does not support altering database location"))
-          } else {
-            sql(s"ALTER DATABASE $dbName SET LOCATION '${tmpDir.toURI}'")
-            val uriInCatalog = catalog.getDatabaseMetadata(dbNameWithoutBackTicks).locationUri
-            assert("file" === uriInCatalog.getScheme)
-            assert(new Path(tmpDir.getPath).toUri.getPath === uriInCatalog.getPath)
-          }
-
           intercept[NoSuchDatabaseException] {
             sql(s"ALTER DATABASE `db-not-exist` SET LOCATION '${tmpDir.toURI}'")
           }
