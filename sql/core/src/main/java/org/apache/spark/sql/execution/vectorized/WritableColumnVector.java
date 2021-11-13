@@ -189,7 +189,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    *    return ByteBuffer.wrap(a).getLong();
    */
   protected final long toBitPerByte(int bits) {
-    return ((bits * 0x100804020100804L) | (bits >> 7)) & 0x101010101010101L;
+    return ((bits * 0x8040201008040201L) >>> 7) & 0x101010101010101L;
   }
 
   /**
