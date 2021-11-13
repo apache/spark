@@ -1555,15 +1555,17 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           val aliasAttr = alias.toAttribute
           val limitValue = splitConjunctivePredicates(condition).collectFirst {
             case LessThanOrEqual(e, IntegerLiteral(v)) if e.semanticEquals(aliasAttr) => v
-            case EqualTo(e, IntegerLiteral(v)) if e.semanticEquals(aliasAttr) => v
+            case Equality(e, IntegerLiteral(v)) if e.semanticEquals(aliasAttr) => v
             case LessThan(e, IntegerLiteral(v)) if e.semanticEquals(aliasAttr) => v - 1
           }
 
           limitValue match {
+            case Some(lv) if lv <= 0 =>
+              LocalRelation(filter.output, data = Seq.empty, isStreaming = filter.isStreaming)
             case Some(lv)
                 if lv < conf.topKSortFallbackThreshold && w.child.maxRows.forall(_ > lv) =>
               filter.copy(child =
-                w.copy(child = Limit(Literal(limitValue.get), Sort(orderSpec, true, w.child))))
+                w.copy(child = Limit(Literal(lv), Sort(orderSpec, true, w.child))))
             case _ =>
               filter
           }
