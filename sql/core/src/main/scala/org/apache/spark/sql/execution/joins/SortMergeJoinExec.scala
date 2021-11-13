@@ -1631,15 +1631,19 @@ private class SortMergeFullOuterJoinScanner(
       advancedRight()
       true
     } else if (leftRow != null && rightRow != null) {
-      // Both rows are present and neither have null values,
-      // so we populate the buffers with rows matching the next key
+      // Both rows are present and neither have null values.
       val comp = keyOrdering.compare(leftRowKey, rightRowKey)
-      if (comp <= 0) {
-        findMatchingRows(leftRowKey.copy())
+      if (comp < 0) {
+        joinedRow(leftRow.copy(), rightNullRow)
+        advancedLeft()
+      } else if (comp > 0) {
+        joinedRow(leftNullRow, rightRow.copy())
+        advancedRight()
       } else {
-        findMatchingRows(rightRowKey.copy())
+        // Populate the buffers with rows matching the next key.
+        findMatchingRows(leftRowKey.copy())
+        scanNextInBuffered()
       }
-      scanNextInBuffered()
       true
     } else {
       // Both iterators have been consumed
