@@ -167,12 +167,12 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
 
   val broadcastHashJoinConf = Map(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760")
 
-  val shuffleHashJoinConf = Map(
+  val shuffledHashJoinConf = Map(
     SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
     "spark.sql.join.forceApplyShuffledHashJoin" -> "true")
 
   val joinConfSet: Set[Map[String, String]] =
-    Set(sortMergeJoinConf, broadcastHashJoinConf, shuffleHashJoinConf);
+    Set(sortMergeJoinConf, broadcastHashJoinConf, shuffledHashJoinConf);
 
   if (tpcdsDataPath.nonEmpty) {
     tpcdsQueries.foreach { name =>
