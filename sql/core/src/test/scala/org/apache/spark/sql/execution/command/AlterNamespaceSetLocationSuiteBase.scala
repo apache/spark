@@ -45,15 +45,4 @@ trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUt
     }.getMessage
     assert(message.contains(s"$notFoundMsgPrefix '$ns' not found"))
   }
-
-  test ("Empty location string") {
-    val ns = "db1"
-    withNamespace(ns) {
-      sql(s"CREATE NAMESPACE $catalog.$ns")
-      val message = intercept[IllegalArgumentException] {
-        sql(s"ALTER DATABASE $catalog.$ns SET LOCATION ''")
-      }.getMessage
-      assert(message.contains("Can not create a Path from an empty string"))
-    }
-  }
 }

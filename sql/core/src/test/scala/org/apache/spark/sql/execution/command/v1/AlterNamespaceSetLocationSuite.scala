@@ -34,6 +34,17 @@ import org.apache.spark.sql.execution.command
 trait AlterNamespaceSetLocationSuiteBase extends command.AlterNamespaceSetLocationSuiteBase
     with command.TestsV1AndV2Commands {
   override def notFoundMsgPrefix: String = "Database"
+
+  test ("Empty location string") {
+    val ns = "db1"
+    withNamespace(ns) {
+      sql(s"CREATE NAMESPACE $catalog.$ns")
+      val message = intercept[IllegalArgumentException] {
+        sql(s"ALTER DATABASE $catalog.$ns SET LOCATION ''")
+      }.getMessage
+      assert(message.contains("Can not create a Path from an empty string"))
+    }
+  }
 }
 
 /**
