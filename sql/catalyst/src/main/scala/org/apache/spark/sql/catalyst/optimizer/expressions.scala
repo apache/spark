@@ -681,7 +681,8 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
           if supportedUnaryExpression(u) && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = u.withNewChildren(Array(e._2)))),
-          elseValue.orElse(if (u.isInstanceOf[Predicate]) Some(Literal(null, c.dataType)) else None)
+          elseValue
+            .orElse { if (u.isInstanceOf[Predicate]) Some(Literal(null, c.dataType)) else None }
             .map(e => u.withNewChildren(Array(e))))
 
       case b @ BinaryExpression(i @ If(_, trueValue, falseValue), right)
