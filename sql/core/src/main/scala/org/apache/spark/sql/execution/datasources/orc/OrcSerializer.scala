@@ -149,8 +149,7 @@ class OrcSerializer(dataSchema: StructType) {
       result
 
     case TimestampNTZType => (getter, ordinal) =>
-      val result = new OrcTimestamp(getter.getLong(ordinal))
-      result
+      new OrcTimestamp(getter.getLong(ordinal))
 
     case DecimalType.Fixed(precision, scale) =>
       OrcShimUtils.getHiveDecimalWritable(precision, scale)
@@ -218,6 +217,6 @@ class OrcSerializer(dataSchema: StructType) {
    * Return a Orc value object for the given Spark schema.
    */
   private def createOrcValue(dataType: DataType) = {
-    OrcStruct.createValue(TypeDescription.fromString(OrcFileFormat.getQuotedSchemaString(dataType)))
+    OrcStruct.createValue(TypeDescription.fromString(OrcUtils.orcTypeDescriptionString(dataType)))
   }
 }

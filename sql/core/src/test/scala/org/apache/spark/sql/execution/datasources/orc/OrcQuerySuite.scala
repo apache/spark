@@ -776,7 +776,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
   test("Read/write all timestamp types") {
     val data = (0 to 255).map { i =>
       (new Timestamp(i), LocalDateTime.of(2019, 3, 21, 0, 2, 3, 456000000 + i))
-    }
+    } :+ (null, null)
 
     Seq("true", "false").foreach { key =>
       withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> key) {
@@ -784,40 +784,6 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
           checkAnswer(
             spark.read.orc(file),
             data.toDF().collect())
-        }
-      }
-    }
-  }
-
-  test("Read/write all timestamp types with non-primitive type") {
-    val data: Seq[TimestampsWithNonPrimitiveType] = (0 to 255).map { i =>
-      TimestampsWithNonPrimitiveType(
-        new Timestamp(i), LocalDateTime.of(2019, 3, 21, 0, 2, 3, 456000000 + i))
-    }
-
-    Seq("true", "false").foreach { key =>
-      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> key) {
-        withOrcFile(data) { file =>
-          checkAnswer(
-            spark.read.orc(file),
-            data.toDF().collect())
-        }
-      }
-    }
-  }
-
-  test("test for timestamp types: save and load case class RDD with `None`s as orc") {
-    val data = (
-      Option.empty[Timestamp],
-      Option.empty[LocalDateTime]
-    ) :: Nil
-
-    Seq("true", "false").foreach { key =>
-      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> key) {
-        withOrcFile(data) { file =>
-          checkAnswer(
-            spark.read.orc(file),
-            Row(Seq.fill(2)(null): _*))
         }
       }
     }

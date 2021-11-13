@@ -287,12 +287,12 @@ object OrcUtils extends Logging {
     def getInnerTypeDecription(dt: DataType): Option[TypeDescription] = {
       dt match {
         case y: YearMonthIntervalType =>
-          val typeDesc = orcTypeDescription(IntegerType)
+          val typeDesc = new TypeDescription(TypeDescription.Category.INT)
           typeDesc.setAttribute(
             CATALYST_TYPE_ATTRIBUTE_NAME, y.typeName)
           Some(typeDesc)
         case d: DayTimeIntervalType =>
-          val typeDesc = orcTypeDescription(LongType)
+          val typeDesc = new TypeDescription(TypeDescription.Category.LONG)
           typeDesc.setAttribute(
             CATALYST_TYPE_ATTRIBUTE_NAME, d.typeName)
           Some(typeDesc)
