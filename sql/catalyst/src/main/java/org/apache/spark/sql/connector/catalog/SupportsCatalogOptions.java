@@ -59,7 +59,7 @@ public interface SupportsCatalogOptions extends TableProvider {
    * Extracts the timestamp string for time travel from the given options.
    */
   default Optional<String> extractTimeTravelTimestamp(CaseInsensitiveStringMap options) {
-    return Optional.ofNullable(null);
+    return Optional.empty();
   }
 
   /**
