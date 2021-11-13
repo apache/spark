@@ -56,8 +56,7 @@ public interface SupportsCatalogOptions extends TableProvider {
   }
 
   /**
-   * Return a Timestamp String given DataFrameReader options.
-   * If this is implemented by data source, then extractTimeTravelVersion can't be implemented.
+   * Extracts the timestamp string for time travel from the given options.
    */
   default Optional<String> extractTimeTravelTimestamp(CaseInsensitiveStringMap options) {
     return Optional.ofNullable(null);
