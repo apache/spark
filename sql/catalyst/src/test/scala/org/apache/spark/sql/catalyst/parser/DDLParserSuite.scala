@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, TimeTravelSpec, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
@@ -2444,14 +2443,14 @@ class DDLParserSuite extends AnalysisTest {
 
   test("as of syntax") {
     val properties = new util.HashMap[String, String]
-    var timeTravel = new TimeTravelSpec(None, Some("123456789"))
+    var timeTravel = TimeTravelSpec.create(None, Some("123456789"))
     comparePlans(
       parsePlan("SELECT * FROM a.b.c VERSION AS OF 123456789"),
       Project(Seq(UnresolvedStar(None)),
         UnresolvedRelation(
           Seq("a", "b", "c"),
           new CaseInsensitiveStringMap(properties),
-          timeTravelSpec = Some(timeTravel))))
+          timeTravelSpec = timeTravel)))
 
     comparePlans(
       parsePlan("SELECT * FROM a.b.c FOR SYSTEM_VERSION AS OF 123456789"),
@@ -2459,46 +2458,48 @@ class DDLParserSuite extends AnalysisTest {
         UnresolvedRelation(
           Seq("a", "b", "c"),
           new CaseInsensitiveStringMap(properties),
-          timeTravelSpec = Some(timeTravel))))
+          timeTravelSpec = timeTravel)))
 
-    val ts1 = DateTimeUtils.stringToTimestampWithoutTimeZone(
-      UTF8String.fromString("2019-01-29 00:37:58"))
-    timeTravel = new TimeTravelSpec(ts1, None)
+    timeTravel = TimeTravelSpec.create(Some("2019-01-29 00:37:58"), None)
     comparePlans(
       parsePlan("SELECT * FROM a.b.c TIMESTAMP AS OF '2019-01-29 00:37:58'"),
       Project(Seq(UnresolvedStar(None)),
         UnresolvedRelation(
           Seq("a", "b", "c"),
           new CaseInsensitiveStringMap(properties),
-          timeTravelSpec = Some(timeTravel))))
+          timeTravelSpec = timeTravel)))
     comparePlans(
       parsePlan("SELECT * FROM a.b.c FOR SYSTEM_TIME AS OF '2019-01-29 00:37:58'"),
       Project(Seq(UnresolvedStar(None)),
         UnresolvedRelation(
           Seq("a", "b", "c"),
           new CaseInsensitiveStringMap(properties),
-          timeTravelSpec = Some(timeTravel))))
+          timeTravelSpec = timeTravel)))
 
-    val ts2 = DateTimeUtils.stringToTimestampWithoutTimeZone(UTF8String.fromString("2019-01-29"))
-    timeTravel = new TimeTravelSpec(ts2, None)
+    timeTravel = TimeTravelSpec.create(Some("2019-01-29"), None)
     comparePlans(
       parsePlan("SELECT * FROM a.b.c TIMESTAMP AS OF '2019-01-29'"),
       Project(Seq(UnresolvedStar(None)),
         UnresolvedRelation(
           Seq("a", "b", "c"),
           new CaseInsensitiveStringMap(properties),
-          timeTravelSpec = Some(timeTravel))))
+          timeTravelSpec = timeTravel)))
     comparePlans(
       parsePlan("SELECT * FROM a.b.c FOR SYSTEM_TIME AS OF '2019-01-29'"),
       Project(Seq(UnresolvedStar(None)),
         UnresolvedRelation(
           Seq("a", "b", "c"),
           new CaseInsensitiveStringMap(properties),
-          timeTravelSpec = Some(timeTravel))))
+          timeTravelSpec = timeTravel)))
 
-    val e = intercept[IllegalArgumentException] {
+    val e1 = intercept[IllegalArgumentException] {
       parsePlan("SELECT * FROM a.b.c TIMESTAMP AS OF '2019-01-11111'")
     }.getMessage
-    assert(e.contains("Illegal timestamp value 2019-01-11111 in TIMESTAMP AS OF"))
+    assert(e1.contains("Illegal timestamp value 2019-01-11111 in TIMESTAMP AS OF"))
+
+    val e2 = intercept[IllegalArgumentException] {
+      timeTravel = TimeTravelSpec.create(Some("2019-01-29 00:37:58"), Some("123456789"))
+    }.getMessage
+    assert(e2.contains("Version and Timestamp can't both be set in TimeTravelSpec"))
   }
 }

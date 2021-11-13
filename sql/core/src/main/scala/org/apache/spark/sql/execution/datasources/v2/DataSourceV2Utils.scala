@@ -23,10 +23,10 @@ import scala.collection.JavaConverters._
 
 import com.fasterxml.jackson.databind.ObjectMapper
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{stringToTimestamp, stringToTimestampWithoutTimeZone}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSupport, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.connector.expressions.TimeTravelSpec
@@ -34,7 +34,6 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] object DataSourceV2Utils extends Logging {
 
@@ -120,26 +119,20 @@ private[sql] object DataSourceV2Utils extends Logging {
           hasCatalog,
           catalogManager,
           dsOptions)
-        val hasVersion = hasCatalog.extractTimeTravelVersion(dsOptions).isPresent
-        val hasTimestamp = hasCatalog.extractTimeTravelTimestamp(dsOptions).isPresent
-        if (hasVersion) {
-          val version = Some(hasCatalog.extractTimeTravelVersion(dsOptions).get)
-          (CatalogV2Util.loadTable(catalog, ident, Some(TimeTravelSpec(None, version))).get,
-            Some(catalog), Some(ident))
-        } else if (hasTimestamp) {
-          val ts = hasCatalog.extractTimeTravelTimestamp(dsOptions).get
-          val timeZoneId = DateTimeUtils.parseTimestampString(UTF8String.fromString(ts))._2
-          val tsInLong = if (timeZoneId.isDefined) {
-            // If the input string contains time zone part, return a timestamp with the
-            // specified TimeZone
-            stringToTimestamp(UTF8String.fromString(ts), timeZoneId.get)
-          } else {
-            stringToTimestampWithoutTimeZone(UTF8String.fromString(ts))
-          }
-          if (tsInLong.isEmpty) {
-            throw new IllegalArgumentException(s"Illegal timestamp value $ts in TIMESTAMP AS OF")
-          }
-          (CatalogV2Util.loadTable(catalog, ident, Some(TimeTravelSpec(tsInLong, None))).get,
+
+        val version = hasCatalog.extractTimeTravelVersion(dsOptions)
+        val timestamp = hasCatalog.extractTimeTravelTimestamp(dsOptions)
+
+        if (version.isPresent && timestamp.isPresent) {
+           throw new SparkException(
+             "Version and Timestamp can't both be set for the underlying data source.")
+        } else if (version.isPresent) {
+          val timeTravelVersion = Some(version.get)
+          (CatalogV2Util.loadTable(catalog, ident,
+            TimeTravelSpec.create(None, timeTravelVersion)).get, Some(catalog), Some(ident))
+        } else if (timestamp.isPresent) {
+          val ts = Some(timestamp.get)
+          (CatalogV2Util.loadTable(catalog, ident, TimeTravelSpec.create(ts, None)).get,
             Some(catalog), Some(ident))
         } else {
           (CatalogV2Util.loadTable(catalog, ident).get, Some(catalog), Some(ident))

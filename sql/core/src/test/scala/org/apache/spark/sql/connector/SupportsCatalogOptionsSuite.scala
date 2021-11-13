@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector
 
+import java.util.Optional
+
 import scala.language.implicitConversions
 import scala.util.Try
 
@@ -26,6 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestampWithoutTimeZone
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, SupportsCatalogOptions, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
@@ -35,6 +38,7 @@ import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, QueryExecutionListener}
+import org.apache.spark.unsafe.types.UTF8String
 
 class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
 
@@ -271,6 +275,47 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     }
   }
 
+  test("mock time travel test") {
+    sql(s"create table $catalogName.t123456789 (id bigint) using $format")
+    sql(s"create table $catalogName.t234567891 (id bigint) using $format")
+
+    val df1 = spark.range(10)
+    df1.write.format(format).option("name", "t123456789").option("catalog", catalogName)
+      .mode(SaveMode.Append).save()
+
+    val df2 = spark.range(10, 20)
+    df2.write.format(format).option("name", "t234567891").option("catalog", catalogName)
+      .mode(SaveMode.Overwrite).save()
+
+    // load with version
+    checkAnswer(load("t", Some(catalogName), Some("123456789")), df1.toDF())
+    checkAnswer(load("t", Some(catalogName), Some("234567891")), df2.toDF())
+
+    val ts1 = stringToTimestampWithoutTimeZone(UTF8String.fromString("2019-01-29 00:37:58")).get
+    val ts2 = stringToTimestampWithoutTimeZone(UTF8String.fromString("2021-01-29 00:37:58")).get
+
+    sql(s"create table $catalogName.t$ts1 (id bigint) using $format")
+    sql(s"create table $catalogName.t$ts2 (id bigint) using $format")
+
+    val df3 = spark.range(30, 40)
+    df3.write.format(format).option("name", s"t$ts1").option("catalog", catalogName)
+      .mode(SaveMode.Append).save()
+
+    val df4 = spark.range(50, 60)
+    df4.write.format(format).option("name", s"t$ts2").option("catalog", catalogName)
+      .mode(SaveMode.Overwrite).save()
+
+    // load with timestamp
+    checkAnswer(load("t", Some(catalogName), None, Some("2019-01-29 00:37:58")), df3.toDF())
+    checkAnswer(load("t", Some(catalogName), None, Some("2021-01-29 00:37:58")), df4.toDF())
+
+    val e = intercept[SparkException] {
+      load("t", Some(catalogName), Some("12345678"), Some("2019-01-29 00:37:58"))
+    }
+    assert(e.getMessage
+      .contains("Version and Timestamp can't both be set for the underlying data source"))
+  }
+
   private def checkV2Identifiers(
       plan: LogicalPlan,
       identifier: String = "t1",
@@ -281,9 +326,19 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     assert(v2.catalog.exists(_ == catalogPlugin))
   }
 
-  private def load(name: String, catalogOpt: Option[String]): DataFrame = {
+  private def load(
+      name: String,
+      catalogOpt: Option[String],
+      version: Option[String] = None,
+      timestamp: Option[String] = None): DataFrame = {
     val dfr = spark.read.format(format).option("name", name)
     catalogOpt.foreach(cName => dfr.option("catalog", cName))
+    if (version.nonEmpty) {
+      dfr.option("versionAsOf", version.get)
+    }
+    if (timestamp.nonEmpty) {
+      dfr.option("timestampAsOf", timestamp.get)
+    }
     dfr.load()
   }
 
@@ -311,5 +366,21 @@ class CatalogSupportingInMemoryTableProvider
 
   override def extractCatalog(options: CaseInsensitiveStringMap): String = {
     options.get("catalog")
+  }
+
+  override def extractTimeTravelVersion(options: CaseInsensitiveStringMap): Optional[String] = {
+    if (options.get("versionAsOf") != null) {
+      Optional.of(options.get("versionAsOf"))
+    } else {
+      Optional.empty[String]
+    }
+  }
+
+  override def extractTimeTravelTimestamp(options: CaseInsensitiveStringMap): Optional[String] = {
+    if (options.get("timestampAsOf") != null) {
+      Optional.of(options.get("timestampAsOf"))
+    } else {
+      Optional.empty[String]
+    }
   }
 }

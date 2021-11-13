@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelectStatement, CreateTableStatement, ReplaceTableAsSelectStatement, ReplaceTableStatement, SerdeInfo}
 import org.apache.spark.sql.connector.catalog.TableChange._
-import org.apache.spark.sql.connector.expressions.TimeTravelSpec
+import org.apache.spark.sql.connector.expressions.{AsOfTimestamp, AsOfVersion, TimeTravelSpec}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -283,12 +283,13 @@ private[sql] object CatalogV2Util {
       timeTravelSpec: Option[TimeTravelSpec] = None): Option[Table] =
     try {
       if (timeTravelSpec.nonEmpty) {
-        if (timeTravelSpec.get.version.nonEmpty) {
-          Option(catalog.asTableCatalog.loadTable(ident, timeTravelSpec.get.version.get))
-        } else if (timeTravelSpec.get.timestamp.nonEmpty) {
-          Option(catalog.asTableCatalog.loadTable(ident, timeTravelSpec.get.timestamp.get))
-        } else {
-          Option(catalog.asTableCatalog.loadTable(ident))
+        timeTravelSpec.get match {
+          case v: AsOfVersion =>
+            Option(catalog.asTableCatalog.loadTable(ident, v.version))
+          case ts: AsOfTimestamp =>
+            Option(catalog.asTableCatalog.loadTable(ident, ts.timestamp))
+          case _ =>
+            Option(catalog.asTableCatalog.loadTable(ident))
         }
       } else {
         Option(catalog.asTableCatalog.loadTable(ident))

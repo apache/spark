@@ -1261,22 +1261,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
     val properties = new util.HashMap[String, String]
     val timeTravel = if (ctx.temporalClause != null && ctx.temporalClause.version != null) {
-      Some(TimeTravelSpec(None, Some(ctx.temporalClause.version.getText)))
+      TimeTravelSpec.create(None, Some(ctx.temporalClause.version.getText))
     } else if (ctx.temporalClause != null && ctx.temporalClause.timestamp != null) {
       val tsWithQuotation = ctx.temporalClause.timestamp.getText
       val ts = tsWithQuotation.substring(1, tsWithQuotation.length - 1)
-      val timeZoneId = DateTimeUtils.parseTimestampString(UTF8String.fromString(ts))._2
-      val tsInLong = if (timeZoneId.isDefined) {
-        // If the input string contains time zone part, return a timestamp with the
-        // specified TimeZone
-        stringToTimestamp(UTF8String.fromString(ts), timeZoneId.get)
-      } else {
-        stringToTimestampWithoutTimeZone(UTF8String.fromString(ts))
-      }
-      if (tsInLong.isEmpty) {
-        throw new IllegalArgumentException(s"Illegal timestamp value $ts in TIMESTAMP AS OF")
-      }
-      Some(TimeTravelSpec(tsInLong, None))
+      TimeTravelSpec.create(Some(ts), None)
     } else {
       None
     }
