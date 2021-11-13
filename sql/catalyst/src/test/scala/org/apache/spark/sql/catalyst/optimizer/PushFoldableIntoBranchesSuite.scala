@@ -356,4 +356,12 @@ class PushFoldableIntoBranchesSuite
       EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(1)),
       Not('a > 10 <=> TrueLiteral))
   }
+
+  test("SPARK-37270: Fix push foldable into CaseWhen branches if elseValue is empty") {
+    assertEquivalent(IsNull(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1))), FalseLiteral)
+    assertEquivalent(IsNull(CaseWhen(Seq(('a > 10, Literal(0))))), !('a > 10 <=> true))
+
+    assertEquivalent(IsNotNull(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1))), TrueLiteral)
+    assertEquivalent(IsNotNull(CaseWhen(Seq(('a > 10, Literal(0))))), 'a > 10 <=> true)
+  }
 }
