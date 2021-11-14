@@ -47,7 +47,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
       InetAddress.getByName(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.host)
       assume(false)
     } catch {
-      case e: UnknownHostException =>
+      case _: UnknownHostException =>
     }
     new SparkConf(false)
       .setAppName(getClass.getName)
