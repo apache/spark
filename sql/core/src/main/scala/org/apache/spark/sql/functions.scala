@@ -2197,13 +2197,15 @@ object functions {
   def round(e: Column): Column = round(e, 0)
 
   /**
-   * Round the value of `e` to `scale` decimal places with HALF_UP round mode
+   * Round the value of `e` to `scale` decimal places with given round mode, default: HALF_UP
    * if `scale` is greater than or equal to 0 or at integral part when `scale` is less than 0.
    *
    * @group math_funcs
    * @since 1.5.0
    */
-  def round(e: Column, scale: Int): Column = withExpr { Round(e.expr, Literal(scale)) }
+  def round(e: Column, scale: Int, mode: String = "half_up"): Column = withExpr {
+    Round(e.expr, Literal(scale), Literal(mode))
+  }
 
   /**
    * Returns the value of the column `e` rounded to 0 decimal places with HALF_EVEN round mode.
@@ -2220,7 +2222,7 @@ object functions {
    * @group math_funcs
    * @since 2.0.0
    */
-  def bround(e: Column, scale: Int): Column = withExpr { BRound(e.expr, Literal(scale)) }
+  def bround(e: Column, scale: Int): Column = round(e, scale, "half_even")
 
   /**
    * @param e angle in radians

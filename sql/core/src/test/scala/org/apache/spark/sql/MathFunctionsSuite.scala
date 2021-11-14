@@ -278,6 +278,18 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(bround('a), bround('a, -1), bround('a, -2)),
       Seq(Row(5, 0, 0), Row(55, 60, 100), Row(555, 560, 600))
     )
+    checkAnswer(
+      df.select(round('a, 0, "up"), round('a, -1, "up"), round('a, -2, "up")),
+      Seq(Row(5, 10, 100), Row(55, 60, 100), Row(555, 560, 600))
+    )
+    checkAnswer(
+      df.select(round('a, 0, "down"), round('a, -1, "down"), round('a, -2, "down")),
+      Seq(Row(5, 0, 0), Row(55, 50, 0), Row(555, 550, 500))
+    )
+    checkAnswer(
+      df.select(round('a), round('a, -1, "half_down"), round('a, -2, "half_down")),
+      Seq(Row(5, 0, 0), Row(55, 50, 100), Row(555, 550, 600))
+    )
 
     withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
       val pi = "3.1415"
@@ -293,6 +305,26 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
         Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
           BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.142")))
       )
+      checkAnswer(
+        sql(s"SELECT round($pi, -3, 'up'), round($pi, -2, 'up'), round($pi, -1, 'up'), " +
+          s"round($pi, 0, 'up'), round($pi, 1, 'up'), round($pi, 2, 'up'), round($pi, 3, 'up')"),
+        Seq(Row(BigDecimal("1E3"), BigDecimal("1E2"), BigDecimal("1E1"), BigDecimal(4),
+          BigDecimal("3.2"), BigDecimal("3.15"), BigDecimal("3.142")))
+      )
+      checkAnswer(
+        sql(s"SELECT round($pi, -3, 'down'), round($pi, -2, 'down'), round($pi, -1, 'down'), " +
+          s"round($pi, 0, 'down'), round($pi, 1, 'down'), round($pi, 2, 'down'), " +
+          s"round($pi, 3, 'down')"),
+        Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
+          BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.141")))
+      )
+      checkAnswer(
+        sql(s"SELECT round($pi, -3, 'half_down'), round($pi, -2, 'half_down'), " +
+          s"round($pi, -1, 'half_down'), round($pi, 0, 'half_down'), round($pi, 1, 'half_down'), " +
+          s"round($pi, 2, 'half_down'), round($pi, 3, 'half_down')"),
+        Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
+          BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.141")))
+      )
     }
 
     val bdPi: BigDecimal = BigDecimal(31415925L, 7)
@@ -307,6 +339,25 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
         s"bround($bdPi, 100), bround($bdPi, 6), bround(null, 8)"),
       Seq(Row(bdPi, bdPi, bdPi, bdPi, bdPi, BigDecimal("3.141592"), null))
     )
+    checkAnswer(
+      sql(s"SELECT round($bdPi, 7, 'up'), round($bdPi, 8, 'up'), round($bdPi, 9, 'up'), " +
+        s"round($bdPi, 10, 'up'), round($bdPi, 100, 'up'), round($bdPi, 6, 'up')," +
+        s" round(null, 8, 'up')"),
+      Seq(Row(bdPi, bdPi, bdPi, bdPi, bdPi, BigDecimal("3.141593"), null))
+    )
+    checkAnswer(
+      sql(s"SELECT round($bdPi, 7, 'down'), round($bdPi, 8, 'down'), round($bdPi, 9, 'down'), " +
+        s"round($bdPi, 10, 'down'), round($bdPi, 100, 'down'), round($bdPi, 6, 'down'), " +
+        s"round(null, 8, 'down')"),
+      Seq(Row(bdPi, bdPi, bdPi, bdPi, bdPi, BigDecimal("3.141592"), null))
+    )
+    checkAnswer(
+      sql(s"SELECT round($bdPi, 7, 'half_down'), round($bdPi, 8, 'half_down'), " +
+        s"round($bdPi, 9, 'half_down'), round($bdPi, 10, 'half_down'), " +
+        s"round($bdPi, 100, 'half_down'), round($bdPi, 6, 'half_down'), " +
+        s"round(null, 8, 'half_down')"),
+      Seq(Row(bdPi, bdPi, bdPi, bdPi, bdPi, BigDecimal("3.141592"), null))
+    )
   }
 
   test("round/bround with data frame from a local Seq of Product") {
@@ -319,6 +370,18 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
       df.withColumn("value_brounded", bround('value)),
       Seq(Row(BigDecimal("5.9"), BigDecimal("6")))
     )
+    checkAnswer(
+      df.withColumn("value_rounded", round('value, 0, "up")),
+      Seq(Row(BigDecimal("5.9"), BigDecimal("6")))
+    )
+    checkAnswer(
+      df.withColumn("value_brounded", round('value, 0, "down")),
+      Seq(Row(BigDecimal("5.9"), BigDecimal("5")))
+    )
+    checkAnswer(
+      df.withColumn("value_rounded", round('value, 0, "half_down")),
+      Seq(Row(BigDecimal("5.9"), BigDecimal("6")))
+    )
   }
 
   test("round/bround with table columns") {
@@ -329,6 +392,15 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
         Seq(Row(BigDecimal("5.9"), BigDecimal("6"))))
       checkAnswer(
         sql("select i, bround(i) from t"),
+        Seq(Row(BigDecimal("5.9"), BigDecimal("6"))))
+      checkAnswer(
+        sql("select i, round(i, 0, 'up') from t"),
+        Seq(Row(BigDecimal("5.9"), BigDecimal("6"))))
+      checkAnswer(
+        sql("select i, round(i, 0, 'down') from t"),
+        Seq(Row(BigDecimal("5.9"), BigDecimal("5"))))
+      checkAnswer(
+        sql("select i, round(i, 0, 'half_down') from t"),
         Seq(Row(BigDecimal("5.9"), BigDecimal("6"))))
     }
   }

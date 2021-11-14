@@ -1338,12 +1338,26 @@ case class Logarithm(left: Expression, right: Expression)
  * @param mode rounding mode (e.g. HALF_UP, HALF_EVEN)
  * @param modeStr rounding mode string name (e.g. "ROUND_HALF_UP", "ROUND_HALF_EVEN")
  */
-abstract class RoundBase(child: Expression, scale: Expression,
-    mode: BigDecimal.RoundingMode.Value, modeStr: String)
-  extends BinaryExpression with Serializable with ImplicitCastInputTypes {
+abstract class RoundBase(child: Expression, scale: Expression, modeExpr: Expression)
+  extends TernaryExpression with Serializable with ImplicitCastInputTypes {
 
-  override def left: Expression = child
-  override def right: Expression = scale
+  override def first: Expression = child
+
+  override def second: Expression = scale
+
+  override def third: Expression = modeExpr
+
+  val (mode: BigDecimal.RoundingMode.Value, modeStr: String) = modeExpr.toString match {
+    case "up" => (BigDecimal.RoundingMode.UP, "ROUND_UP")
+    case "down" => (BigDecimal.RoundingMode.DOWN, "ROUND_DOWN")
+    case "half_up" => (BigDecimal.RoundingMode.HALF_UP, "ROUND_HALF_UP")
+    case "half_down" => (BigDecimal.RoundingMode.HALF_DOWN, "ROUND_HALF_DOWN")
+    case "half_even" => (BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN")
+    case _ =>
+      val supported = Seq("up", "down", "half_up", "half_down", "half_even")
+      throw new IllegalArgumentException(s"Unsupported rounding mode '${modeExpr.toString}'. " +
+        "Supported rounding modes include: " + supported.mkString("'", "', '", "'") + ".")
+  }
 
   // round of Decimal would eval to null if it fails to `changePrecision`
   override def nullable: Boolean = true
@@ -1357,7 +1371,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
     case t => t
   }
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegerType, StringType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
@@ -1500,26 +1514,38 @@ abstract class RoundBase(child: Expression, scale: Expression,
 }
 
 /**
- * Round an expression to d decimal places using HALF_UP rounding mode.
- * round(2.5) == 3.0, round(3.5) == 4.0.
+ * Round an expression to d decimal places using given rounding mode, default rounding mode HALF_UP.
+ * round(2.5) == 3.0, round(3.5) == 4.0,
+ * round(3.6, 0, 'half_down') == 4.0, round(3.6, 0, 'down') == 3.0.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr, d) - Returns `expr` rounded to `d` decimal places using HALF_UP rounding mode.",
+  usage = "_FUNC_(expr, d) - Returns `expr` rounded to `d` decimal places using given rounding mode.",
   examples = """
     Examples:
       > SELECT _FUNC_(2.5, 0);
        3
+      > SELECT _FUNC_(2.6, 0, 'down');
+       2
   """,
   since = "1.5.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
-case class Round(child: Expression, scale: Expression)
-  extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_UP, "ROUND_HALF_UP")
-    with Serializable with ImplicitCastInputTypes {
+case class Round(
+    child: Expression,
+    scale: Expression,
+    modeExpr: Expression)
+  extends RoundBase(child, scale, modeExpr) with Serializable with ImplicitCastInputTypes {
+  def this(child: Expression, scale: Expression) = this(child, scale, Literal("half_up"))
   def this(child: Expression) = this(child, Literal(0))
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Round =
-    copy(child = newLeft, scale = newRight)
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
+    copy(child = newFirst, scale = newSecond, modeExpr = newThird)
+}
+
+object Round {
+  def apply(child: Expression, scale: Expression): Round =
+    this(child, scale, Literal("half_up"))
 }
 
 /**
@@ -1538,12 +1564,14 @@ case class Round(child: Expression, scale: Expression)
   since = "2.0.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
-case class BRound(child: Expression, scale: Expression)
-  extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN")
-    with Serializable with ImplicitCastInputTypes {
+class BRound(child: Expression, scale: Expression, modeExpr: Expression)
+  extends Round(child, scale, modeExpr) {
+  def this(child: Expression, scale: Expression) = this(child, scale, Literal("half_even"))
   def this(child: Expression) = this(child, Literal(0))
-  override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): BRound = copy(child = newLeft, scale = newRight)
+}
+
+object BRound {
+  def apply(child: Expression, scale: Expression): Round = this(child, scale)
 }
 
 object WidthBucket {

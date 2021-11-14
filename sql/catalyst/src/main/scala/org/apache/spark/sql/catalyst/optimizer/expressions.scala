@@ -668,7 +668,7 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
     case _: BinaryMathExpression => true
     case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |
          _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd => true
-    case _: FindInSet | _: RoundBase => true
+    case _: FindInSet => true
     case _ => false
   }
 

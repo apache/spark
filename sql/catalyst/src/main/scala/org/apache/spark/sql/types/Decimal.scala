@@ -413,6 +413,18 @@ final class Decimal extends Ordered[Decimal] with Serializable {
             if (doubled > pow10diff || doubled == pow10diff && longVal % 2 != 0) {
               longVal += (if (droppedDigits < 0) -1L else 1L)
             }
+          case ROUND_UP =>
+            if (math.abs(droppedDigits) * 2 >= pow10diff) {
+              longVal += (if (droppedDigits < 0) -1L else 1L)
+            }
+          case ROUND_DOWN =>
+            if (math.abs(droppedDigits) * 2 >= pow10diff) {
+              longVal += (if (droppedDigits < 0) -1L else 1L)
+            }
+          case ROUND_HALF_DOWN =>
+            if (math.abs(droppedDigits) * 2 >= pow10diff) {
+              longVal += (if (droppedDigits < 0) -1L else 1L)
+            }
           case _ =>
             throw QueryExecutionErrors.unsupportedRoundingMode(roundMode)
         }
@@ -531,6 +543,9 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
 @Unstable
 object Decimal {
+  val ROUND_UP = BigDecimal.RoundingMode.UP
+  val ROUND_DOWN = BigDecimal.RoundingMode.DOWN
+  val ROUND_HALF_DOWN = BigDecimal.RoundingMode.HALF_DOWN
   val ROUND_HALF_UP = BigDecimal.RoundingMode.HALF_UP
   val ROUND_HALF_EVEN = BigDecimal.RoundingMode.HALF_EVEN
   val ROUND_CEILING = BigDecimal.RoundingMode.CEILING
