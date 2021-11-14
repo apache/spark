@@ -35,6 +35,8 @@ from pyspark.sql.pandas._typing.protocols.series import SeriesLike as SeriesLike
 import pandas.core.frame  # type: ignore[import]
 import pandas.core.series  # type: ignore[import]
 
+import pyarrow  # type: ignore[import]
+
 # POC compatibility annotations
 PandasDataFrame: Type[DataFrameLike] = pandas.core.frame.DataFrame
 PandasSeries: Type[SeriesLike] = pandas.core.series.Series
@@ -48,6 +50,7 @@ PandasGroupedMapUDFType = Literal[201]
 PandasCogroupedMapUDFType = Literal[206]
 PandasGroupedAggUDFType = Literal[202]
 PandasMapIterUDFType = Literal[205]
+ArrowMapIterUDFType = Literal[207]
 
 class PandasVariadicScalarToScalarFunction(Protocol):
     def __call__(self, *_: DataFrameOrSeriesLike) -> SeriesLike: ...
@@ -325,10 +328,8 @@ PandasGroupedAggFunction = Union[
 
 PandasMapIterFunction = Callable[[Iterable[DataFrameLike]], Iterable[DataFrameLike]]
 
+ArrowMapIterFunction = Callable[[Iterable[pyarrow.RecordBatch]], Iterable[pyarrow.RecordBatch]]
+
 PandasCogroupedMapFunction = Callable[[DataFrameLike, DataFrameLike], DataFrameLike]
 
-MapIterPandasUserDefinedFunction = NewType("MapIterPandasUserDefinedFunction", FunctionType)
 GroupedMapPandasUserDefinedFunction = NewType("GroupedMapPandasUserDefinedFunction", FunctionType)
-CogroupedMapPandasUserDefinedFunction = NewType(
-    "CogroupedMapPandasUserDefinedFunction", FunctionType
-)
