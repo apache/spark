@@ -469,7 +469,8 @@ def run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, inc
     `determine_test_suites` function"""
     set_title_and_block("Running Spark unit tests", "BLOCK_SPARK_UNIT_TESTS")
 
-    test_modules = set(test_modules)
+    # Remove duplicates while keeping the test module order
+    test_modules = list(dict.fromkeys(test_modules))
 
     test_profiles = extra_profiles + \
         list(set(itertools.chain.from_iterable(m.build_profile_flags for m in test_modules)))
