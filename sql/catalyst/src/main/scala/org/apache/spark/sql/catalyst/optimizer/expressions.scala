@@ -682,7 +682,7 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
         c.copy(
           branches.map(e => e.copy(_2 = u.withNewChildren(Array(e._2)))),
           elseValue
-            .orElse { if (u.isInstanceOf[Predicate]) Some(Literal(null, c.dataType)) else None }
+            .orElse { if (u.isInstanceOf[IsNull]) Some(Literal(null, c.dataType)) else None }
             .map(e => u.withNewChildren(Array(e))))
 
       case b @ BinaryExpression(i @ If(_, trueValue, falseValue), right)
@@ -704,14 +704,18 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
             atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(e._2, right)))),
-          elseValue.map(e => b.withNewChildren(Array(e, right))))
+          elseValue
+            .orElse { if (b.isInstanceOf[EqualNullSafe]) Some(Literal(null, c.dataType)) else None }
+            .map(e => b.withNewChildren(Array(e, right))))
 
       case b @ BinaryExpression(left, c @ CaseWhen(branches, elseValue))
           if supportedBinaryExpression(b) && left.foldable &&
             atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(left, e._2)))),
-          elseValue.map(e => b.withNewChildren(Array(left, e))))
+          elseValue
+            .orElse { if (b.isInstanceOf[EqualNullSafe]) Some(Literal(null, c.dataType)) else None }
+            .map(e => b.withNewChildren(Array(left, e))))
     }
   }
 }
