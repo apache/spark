@@ -101,7 +101,7 @@ class RepartitionWritingDataSourceSuite extends QueryTest
           |PARTITIONED BY (key)
           |AS (SELECT id AS key, id AS value FROM range(5))
           |""".stripMargin).queryExecution.analyzed match {
-        case CreateDataSourceTableAsSelectCommand(_, _, RebalancePartitions(partExps, _), _)
+        case CreateDataSourceTableAsSelectCommand(_, _, RepartitionByExpression(partExps, _, _), _)
           if partExps.flatMap(_.references.map(_.name)) == Seq("key") =>
         case other =>
           fail(
@@ -148,7 +148,7 @@ class RepartitionWritingDataSourceSuite extends QueryTest
           |SELECT id, id AS  p1, id AS p2 FROM range(5)
           |""".stripMargin).queryExecution.analyzed match {
         case InsertIntoHadoopFsRelationCommand(
-            _, _, _, _, _, _, _, RebalancePartitions(partExps, _), _, _, _, _)
+            _, _, _, _, _, _, _, RepartitionByExpression(partExps, _, _), _, _, _, _)
           if partExps.flatMap(_.references.map(_.name)) == Seq("p1", "p2") =>
         case other =>
           fail(
@@ -165,7 +165,7 @@ class RepartitionWritingDataSourceSuite extends QueryTest
           |SELECT id, id AS p2 FROM range(5)
           |""".stripMargin).queryExecution.analyzed match {
         case InsertIntoHadoopFsRelationCommand(
-            _, _, _, _, _, _, _, RebalancePartitions(partExps, _), _, _, _, _)
+            _, _, _, _, _, _, _, RepartitionByExpression(partExps, _, _), _, _, _, _)
           if partExps.flatMap(_.references.map(_.name)) == Seq("p2") =>
         case other =>
           fail(
@@ -182,7 +182,7 @@ class RepartitionWritingDataSourceSuite extends QueryTest
           |SELECT id, id % 2 AS P2 FROM range(5)
           |""".stripMargin).queryExecution.analyzed match {
         case InsertIntoHadoopFsRelationCommand(
-            _, _, _, _, _, _, _, RebalancePartitions(partExps, _), _, _, _, _)
+            _, _, _, _, _, _, _, RepartitionByExpression(partExps, _, _), _, _, _, _)
           if partExps.flatMap(_.references.map(_.name)) == Seq("p2") =>
         case other =>
           fail(

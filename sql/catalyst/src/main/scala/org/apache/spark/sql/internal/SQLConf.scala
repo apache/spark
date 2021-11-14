@@ -2647,6 +2647,7 @@ object SQLConf {
         "2. Repartition by dynamic partition column when writing dynamic partition " +
         "table/directory. 3. Repartition by bucket column with bucket number and sort by sort " +
         "column when writing bucket table/directory.")
+      .version("3.3.0")
       .booleanConf
       .createWithDefault(false)
 

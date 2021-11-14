@@ -267,11 +267,12 @@ object RepartitionWritingDataSource extends Rule[LogicalPlan] {
     (bucketSpec, partitionColumns) match {
       case (None, partExps) if partExps.nonEmpty =>
         query match {
-          case RebalancePartitions(partitionExpressions, _) if partitionExpressions == partExps =>
+          case RepartitionByExpression(partitionExpressions, _, _)
+              if partitionExpressions == partExps =>
             dataWriting
           case _ =>
-            dataWriting.withNewChildrenInternal(
-              IndexedSeq(RebalancePartitions(partExps, query)))
+            dataWriting.withNewChildren(
+              Seq(RepartitionByExpression(partExps, query, conf.numShufflePartitions)))
         }
 
       case (Some(bucket), partExps) =>
@@ -284,9 +285,9 @@ object RepartitionWritingDataSource extends Rule[LogicalPlan] {
                 if order == sortExps && partExpr == bucketExps =>
               dataWriting
             case _ =>
-              dataWriting.withNewChildrenInternal(
-                IndexedSeq(Sort(sortExps, false,
-                  RepartitionByExpression(bucketExps, query, Some(bucket.numBuckets)))))
+              dataWriting.withNewChildren(
+                Seq(Sort(sortExps, false,
+                  RepartitionByExpression(bucketExps, query, bucket.numBuckets))))
           }
         } else {
           query match {
@@ -294,15 +295,14 @@ object RepartitionWritingDataSource extends Rule[LogicalPlan] {
                 if partExpr == bucketExps =>
               dataWriting
             case _ =>
-              dataWriting.withNewChildrenInternal(
-                IndexedSeq(RepartitionByExpression(bucketExps, query, Some(bucket.numBuckets))))
+              dataWriting.withNewChildren(
+                Seq(RepartitionByExpression(bucketExps, query, bucket.numBuckets)))
           }
         }
 
       case _ =>
         if (canApplyRebalancePartitions(query)) {
-          dataWriting.withNewChildrenInternal(
-            IndexedSeq(RebalancePartitions(Nil, query)))
+          dataWriting.withNewChildren(Seq(RebalancePartitions(Nil, query)))
         } else {
           dataWriting
         }
@@ -320,7 +320,7 @@ object RepartitionWritingDataSource extends Rule[LogicalPlan] {
 
   private def canApplyRebalancePartitions(plan: LogicalPlan): Boolean = {
     plan match {
-      case _: RepartitionOperation | _: Sort => false
+      case _: RebalancePartitions | _: RepartitionOperation | _: Sort => false
       case _ => conf.adaptiveExecutionEnabled && conf.coalesceShufflePartitionsEnabled
     }
   }
