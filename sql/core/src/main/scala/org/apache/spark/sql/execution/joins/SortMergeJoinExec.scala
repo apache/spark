@@ -375,6 +375,12 @@ case class SortMergeJoinExec(
   private lazy val streamedOutput = streamedPlan.output
   private lazy val bufferedOutput = bufferedPlan.output
 
+  // TODO(SPARK-37316): Add code-gen for existence sort merge join.
+  override def supportCodegen: Boolean = joinType match {
+    case _: ExistenceJoin => false
+    case _ => true
+  }
+
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     streamedPlan.execute() :: bufferedPlan.execute() :: Nil
   }
