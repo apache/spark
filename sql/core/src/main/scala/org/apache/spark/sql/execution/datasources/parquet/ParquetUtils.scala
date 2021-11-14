@@ -203,7 +203,9 @@ object ParquetUtils {
     }
 
     if (aggregation.groupByColumns.nonEmpty) {
-      new JoinedRow(partitionValues, converter.currentRecord)
+      val reorderedPartitionValues = AggregatePushDownUtils.reOrderPartitionCol(
+        partitionSchema, aggregation, partitionValues)
+      new JoinedRow(reorderedPartitionValues, converter.currentRecord)
     } else {
       converter.currentRecord
     }

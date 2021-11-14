@@ -168,6 +168,11 @@ object AggregatePushDownUtils {
       aggregation: Aggregation,
       partitionValues: InternalRow): InternalRow = {
     val groupByColNames = aggregation.groupByColumns.map(_.fieldNames.head)
+    assert(groupByColNames.length == partitionSchema.length &&
+      groupByColNames.length == partitionValues.numFields, "The number of group by columns " +
+      s"${groupByColNames.length} should be the same as partition schema length " +
+      s"${partitionSchema.length} and the number of fields ${partitionValues.numFields} " +
+      s"in partitionValues")
     var reorderedPartColValues = Array.empty[Any]
     if (!partitionSchema.names.sameElements(groupByColNames)) {
       groupByColNames.foreach { col =>
