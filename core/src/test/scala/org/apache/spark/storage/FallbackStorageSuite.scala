@@ -17,6 +17,7 @@
 package org.apache.spark.storage
 
 import java.io.{DataOutputStream, File, FileOutputStream, IOException}
+import java.net.{InetAddress, UnknownHostException}
 import java.nio.file.Files
 
 import scala.concurrent.duration._
@@ -41,6 +42,13 @@ import org.apache.spark.util.Utils.tryWithResource
 class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
 
   def getSparkConf(initialExecutor: Int = 1, minExecutor: Int = 1): SparkConf = {
+    // Some DNS always replies for all hostnames including unknown host names
+    try {
+      InetAddress.getByName(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.host)
+      assume(false)
+    } catch {
+      case _: UnknownHostException =>
+    }
     new SparkConf(false)
       .setAppName(getClass.getName)
       .set(SPARK_MASTER, s"local-cluster[$initialExecutor,1,1024]")
