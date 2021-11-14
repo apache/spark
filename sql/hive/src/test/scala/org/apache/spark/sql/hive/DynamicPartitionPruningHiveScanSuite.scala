@@ -33,12 +33,6 @@ abstract class DynamicPartitionPruningHiveScanSuite
 
   override protected def collectDynamicPruningExpressions(plan: SparkPlan): Seq[Expression] = {
     flatMap(plan) {
-      case s: FileSourceScanExec => s.partitionFilters.collect {
-        case d: DynamicPruningExpression => d.child
-      }
-      case s: BatchScanExec => s.runtimeFilters.collect {
-        case d: DynamicPruningExpression => d.child
-      }
       case h: HiveTableScanExec => h.partitionPruningPred.collect {
         case d: DynamicPruningExpression => d.child
       }
