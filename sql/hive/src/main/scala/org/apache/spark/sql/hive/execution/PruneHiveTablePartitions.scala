@@ -57,22 +57,6 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
   }
 
   /**
-   * Prune the hive table using filters on the partitions of the table.
-   */
-  private def prunePartitions(
-      relation: HiveTableRelation,
-      partitionFilters: ExpressionSet): Seq[CatalogTablePartition] = {
-    if (conf.metastorePartitionPruning) {
-      session.sessionState.catalog.listPartitionsByFilter(
-        relation.tableMeta.identifier, partitionFilters.toSeq)
-    } else {
-      ExternalCatalogUtils.prunePartitionsByFilter(relation.tableMeta,
-        session.sessionState.catalog.listPartitions(relation.tableMeta.identifier),
-        partitionFilters.toSeq, conf.sessionLocalTimeZone)
-    }
-  }
-
-  /**
    * Update the statistics of the table.
    */
   private def updateTableMeta(
@@ -111,7 +95,8 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
       if filters.nonEmpty && relation.isPartitioned && relation.prunedPartitions.isEmpty =>
       val partitionKeyFilters = getPartitionKeyFilters(filters, relation)
       if (partitionKeyFilters.nonEmpty) {
-        val newPartitions = prunePartitions(relation, partitionKeyFilters)
+        val newPartitions = ExternalCatalogUtils.listPartitionsByFilter(conf,
+          session.sessionState.catalog, relation.tableMeta, partitionKeyFilters.toSeq)
         val newTableMeta = updateTableMeta(relation, newPartitions, partitionKeyFilters)
         val newRelation = relation.copy(
           tableMeta = newTableMeta, prunedPartitions = Some(newPartitions))

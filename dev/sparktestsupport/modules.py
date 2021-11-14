@@ -177,6 +177,9 @@ catalyst = Module(
     sbt_test_goals=[
         "catalyst/test",
     ],
+    environ=None if "GITHUB_ACTIONS" not in os.environ else {
+        "ENABLE_DOCKER_INTEGRATION_TESTS": "1"
+    },
 )
 
 sql = Module(
@@ -188,6 +191,9 @@ sql = Module(
     sbt_test_goals=[
         "sql/test",
     ],
+    environ=None if "GITHUB_ACTIONS" not in os.environ else {
+        "ENABLE_DOCKER_INTEGRATION_TESTS": "1"
+    },
 )
 
 hive = Module(
@@ -431,6 +437,7 @@ pyspark_sql = Module(
         "pyspark.sql.pandas.serializers",
         "pyspark.sql.pandas.typehints",
         "pyspark.sql.pandas.utils",
+        "pyspark.sql.observation",
         # unittests
         "pyspark.sql.tests.test_arrow",
         "pyspark.sql.tests.test_catalog",
@@ -616,7 +623,6 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.data_type_ops.test_complex_ops",
         "pyspark.pandas.tests.data_type_ops.test_date_ops",
         "pyspark.pandas.tests.data_type_ops.test_datetime_ops",
-        "pyspark.pandas.tests.data_type_ops.test_decimal_ops",
         "pyspark.pandas.tests.data_type_ops.test_null_ops",
         "pyspark.pandas.tests.data_type_ops.test_num_ops",
         "pyspark.pandas.tests.data_type_ops.test_string_ops",
@@ -649,6 +655,7 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.test_series_conversion",
         "pyspark.pandas.tests.test_series_datetime",
         "pyspark.pandas.tests.test_series_string",
+        "pyspark.pandas.tests.test_spark_functions",
         "pyspark.pandas.tests.test_sql",
         "pyspark.pandas.tests.test_typedef",
         "pyspark.pandas.tests.test_utils",
@@ -768,7 +775,7 @@ spark_ganglia_lgpl = Module(
 
 docker_integration_tests = Module(
     name="docker-integration-tests",
-    dependencies=[],
+    dependencies=[sql],
     build_profile_flags=["-Pdocker-integration-tests"],
     source_file_regexes=["external/docker-integration-tests"],
     sbt_test_goals=["docker-integration-tests/test"],

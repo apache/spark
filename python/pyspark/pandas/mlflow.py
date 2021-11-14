@@ -18,13 +18,14 @@
 """
 MLflow-related functions to load models and apply them to pandas-on-Spark dataframes.
 """
-from typing import List, Tuple, Union  # noqa: F401 (SPARK-34943)
+from typing import List, Union
 
 from pyspark.sql.types import DataType
 import pandas as pd
 import numpy as np
 from typing import Any
 
+from pyspark.pandas._typing import Label, Dtype
 from pyspark.pandas.utils import lazy_property, default_session
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.series import Series, first_series
@@ -41,7 +42,7 @@ class PythonModelWrapper(object):
 
     """
 
-    def __init__(self, model_uri: str, return_type_hint: str):
+    def __init__(self, model_uri: str, return_type_hint: Union[str, type, Dtype]):
         self._model_uri = model_uri
         self._return_type_hint = return_type_hint
 
@@ -97,9 +98,9 @@ class PythonModelWrapper(object):
             # However, this is only possible with spark >= 3.0
             # s = F.struct(*data.columns)
             # return_col = self._model_udf(s)
-            column_labels = [
+            column_labels: List[Label] = [
                 (col,) for col in data._internal.spark_frame.select(return_col).columns
-            ]  # type: List[Tuple]
+            ]
             internal = data._internal.copy(
                 column_labels=column_labels, data_spark_columns=[return_col], data_fields=None
             )
@@ -108,7 +109,9 @@ class PythonModelWrapper(object):
             raise ValueError("unknown data type: {}".format(type(data).__name__))
 
 
-def load_model(model_uri: str, predict_type: str = "infer") -> PythonModelWrapper:
+def load_model(
+    model_uri: str, predict_type: Union[str, type, Dtype] = "infer"
+) -> PythonModelWrapper:
     """
     Loads an MLflow model into an wrapper that can be used both for pandas and pandas-on-Spark
     DataFrame.

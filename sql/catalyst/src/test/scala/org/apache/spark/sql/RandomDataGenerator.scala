@@ -271,7 +271,7 @@ object RandomDataGenerator {
             getRandomTimestamp,
             specialTs.map(java.sql.Timestamp.valueOf))
         }
-      case TimestampWithoutTZType =>
+      case TimestampNTZType =>
         randomNumeric[LocalDateTime](
           rand,
           (rand: Random) => {

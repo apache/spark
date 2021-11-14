@@ -42,6 +42,9 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(PLAN_EXPRESSION) ++ nodePatternsInternal
 
+  override lazy val deterministic: Boolean = children.forall(_.deterministic) &&
+    plan.deterministic
+
   // Subclasses can override this function to provide more TreePatterns.
   def nodePatternsInternal(): Seq[TreePattern] = Seq()
 
@@ -76,6 +79,7 @@ abstract class SubqueryExpression(
     AttributeSet.fromAttributeSets(outerAttrs.map(_.references))
   override def children: Seq[Expression] = outerAttrs ++ joinCond
   override def withNewPlan(plan: LogicalPlan): SubqueryExpression
+  def isCorrelated: Boolean = outerAttrs.nonEmpty
 }
 
 object SubqueryExpression {
@@ -86,7 +90,7 @@ object SubqueryExpression {
   def hasInOrCorrelatedExistsSubquery(e: Expression): Boolean = {
     e.find {
       case _: ListQuery => true
-      case _: Exists if e.children.nonEmpty => true
+      case ex: Exists => ex.isCorrelated
       case _ => false
     }.isDefined
   }
@@ -98,7 +102,7 @@ object SubqueryExpression {
    */
   def hasCorrelatedSubquery(e: Expression): Boolean = {
     e.find {
-      case s: SubqueryExpression => s.children.nonEmpty
+      case s: SubqueryExpression => s.isCorrelated
       case _ => false
     }.isDefined
   }
@@ -126,13 +130,15 @@ object SubExprUtils extends PredicateHelper {
   /**
    * Returns an expression after removing the OuterReference shell.
    */
-  def stripOuterReference(e: Expression): Expression = e.transform { case OuterReference(r) => r }
+  def stripOuterReference[E <: Expression](e: E): E = {
+    e.transform { case OuterReference(r) => r }.asInstanceOf[E]
+  }
 
   /**
    * Returns the list of expressions after removing the OuterReference shell from each of
    * the expression.
    */
-  def stripOuterReferences(e: Seq[Expression]): Seq[Expression] = e.map(stripOuterReference)
+  def stripOuterReferences[E <: Expression](e: Seq[E]): Seq[E] = e.map(stripOuterReference)
 
   /**
    * Returns the logical plan after removing the OuterReference shell from all the expressions
@@ -142,6 +148,13 @@ object SubExprUtils extends PredicateHelper {
     p.transformAllExpressionsWithPruning(_.containsPattern(OUTER_REFERENCE)) {
       case OuterReference(a) => a
     }
+  }
+
+  /**
+   * Wrap attributes in the expression with [[OuterReference]]s.
+   */
+  def wrapOuterReference[E <: Expression](e: E): E = {
+    e.transform { case a: Attribute => OuterReference(a) }.asInstanceOf[E]
   }
 
   /**
@@ -270,7 +283,7 @@ case class ScalarSubquery(
 object ScalarSubquery {
   def hasCorrelatedScalarSubquery(e: Expression): Boolean = {
     e.find {
-      case s: ScalarSubquery => s.children.nonEmpty
+      case s: ScalarSubquery => s.isCorrelated
       case _ => false
     }.isDefined
   }

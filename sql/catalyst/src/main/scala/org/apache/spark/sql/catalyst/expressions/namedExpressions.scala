@@ -123,6 +123,7 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
   def withName(newName: String): Attribute
   def withMetadata(newMetadata: Metadata): Attribute
   def withExprId(newExprId: ExprId): Attribute
+  def withDataType(newType: DataType): Attribute
 
   override def toAttribute: Attribute = this
   def newInstance(): Attribute
@@ -185,6 +186,14 @@ case class Alias(child: Expression, name: String)(
         case _ => Metadata.empty
       }
     }
+  }
+
+  def withName(newName: String): NamedExpression = {
+    Alias(child, newName)(
+      exprId = exprId,
+      qualifier = qualifier,
+      explicitMetadata = explicitMetadata,
+      nonInheritableMetadataKeys = nonInheritableMetadataKeys)
   }
 
   def newInstance(): NamedExpression =
@@ -339,6 +348,10 @@ case class AttributeReference(
     AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier)
   }
 
+  override def withDataType(newType: DataType): Attribute = {
+    AttributeReference(name, newType, nullable, metadata)(exprId, qualifier)
+  }
+
   override protected final def otherCopyArgs: Seq[AnyRef] = {
     exprId :: qualifier :: Nil
   }
@@ -394,6 +407,8 @@ case class PrettyAttribute(
   override def qualifier: Seq[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
   override def withExprId(newExprId: ExprId): Attribute =
+    throw new UnsupportedOperationException
+  override def withDataType(newType: DataType): Attribute =
     throw new UnsupportedOperationException
   override def nullable: Boolean = true
 }

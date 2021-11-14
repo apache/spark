@@ -29,12 +29,12 @@ import scala.concurrent.duration._
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils._
 import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.internal.StaticSQLConf
-import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -76,7 +76,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
    *                       `hive.metastore.warehouse.dir`.
    * @param useExternalHiveFile whether to load the hive-site.xml from `src/test/noclasspath` or
    *                            not, disabled by default
-   * @param metastore which path the embedded derby database for metastore locates. Use the the
+   * @param metastore which path the embedded derby database for metastore locates. Use the
    *                  global `metastorePath` by default
    * @param queriesAndExpectedAnswers one or more tuples of query + answer
    */

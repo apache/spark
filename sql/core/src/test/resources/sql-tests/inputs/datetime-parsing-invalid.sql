@@ -26,4 +26,16 @@ select to_timestamp('2020-10-350', 'yyyy-MM-DDD');
 select to_timestamp('2020-11-31-366', 'yyyy-MM-dd-DDD');
 -- add a special case to test csv, because the legacy formatter it uses is lenient then Spark should
 -- throw SparkUpgradeException
-select from_csv('2018-366', 'date Date', map('dateFormat', 'yyyy-DDD'))
+select from_csv('2018-366', 'date Date', map('dateFormat', 'yyyy-DDD'));
+
+-- Datetime types parse error
+select to_date("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_date("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
+select unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
+select unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
+select cast("Unparseable" as timestamp);
+select cast("Unparseable" as date);

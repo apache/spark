@@ -10,6 +10,7 @@ cache
 .generated-mima-member-excludes
 .rat-excludes
 .*md
+.java-version
 derby.log
 licenses/*
 licenses-binary/*
@@ -134,4 +135,5 @@ flights_tiny.txt.1
 over1k
 over10k
 exported_table/*
+ansible-for-test-node/*
 node_modules

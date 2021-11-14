@@ -180,11 +180,11 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addInteger(dateRebaseFunc(row.getInt(ordinal)))
 
-      case IntegerType =>
+      case IntegerType | _: YearMonthIntervalType =>
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addInteger(row.getInt(ordinal))
 
-      case LongType =>
+      case LongType | _: DayTimeIntervalType =>
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addLong(row.getLong(ordinal))
 
@@ -222,6 +222,11 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
               val millis = DateTimeUtils.microsToMillis(timestampRebaseFunc(micros))
               recordConsumer.addLong(millis)
         }
+
+      case TimestampNTZType =>
+        // For TimestampNTZType column, Spark always output as INT64 with Timestamp annotation in
+        // MICROS time unit.
+        (row: SpecializedGetters, ordinal: Int) => recordConsumer.addLong(row.getLong(ordinal))
 
       case BinaryType =>
         (row: SpecializedGetters, ordinal: Int) =>
@@ -482,7 +487,6 @@ object ParquetWriteSupport {
   val SPARK_ROW_SCHEMA: String = "org.apache.spark.sql.parquet.row.attributes"
 
   def setSchema(schema: StructType, configuration: Configuration): Unit = {
-    schema.map(_.name).foreach(ParquetSchemaConverter.checkFieldName)
     configuration.set(SPARK_ROW_SCHEMA, schema.json)
     configuration.setIfUnset(
       ParquetOutputFormat.WRITER_VERSION,

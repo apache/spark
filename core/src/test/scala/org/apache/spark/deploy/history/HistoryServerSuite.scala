@@ -86,12 +86,15 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set(EVENT_LOG_STAGE_EXECUTOR_METRICS, true)
       .set(EXECUTOR_PROCESS_TREE_METRICS_ENABLED, true)
     conf.setAll(extraConf)
+    // Since LevelDB doesn't support Apple Silicon yet, fallback to in-memory provider
+    if (Utils.isMac && System.getProperty("os.arch").equals("aarch64")) {
+      conf.remove(LOCAL_STORE_DIR)
+    }
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
     val securityManager = HistoryServer.createSecurityManager(conf)
 
     server = new HistoryServer(conf, provider, securityManager, 18080)
-    server.initialize()
     server.bind()
     provider.start()
     port = server.boundPort
@@ -385,6 +388,10 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set(EVENT_LOG_ENABLED, true)
       .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
       .remove(IS_TESTING)
+    // Since LevelDB doesn't support Apple Silicon yet, fallback to in-memory provider
+    if (Utils.isMac && System.getProperty("os.arch").equals("aarch64")) {
+      myConf.remove(LOCAL_STORE_DIR)
+    }
     val provider = new FsHistoryProvider(myConf)
     val securityManager = HistoryServer.createSecurityManager(myConf)
 
@@ -410,7 +417,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     }
 
     server = new HistoryServer(myConf, provider, securityManager, 0)
-    server.initialize()
     server.bind()
     provider.start()
     val port = server.boundPort

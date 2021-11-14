@@ -39,8 +39,14 @@ import org.apache.spark.sql.types._
   """,
   group = "agg_funcs",
   since = "1.0.0")
-case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes
+case class Sum(
+    child: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
+  extends DeclarativeAggregate
+  with ImplicitCastInputTypes
   with UnaryLike[Expression] {
+
+  def this(child: Expression) = this(child, failOnError = SQLConf.get.ansiEnabled)
 
   override def nullable: Boolean = true
 
@@ -151,9 +157,12 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
   override lazy val evaluateExpression: Expression = resultType match {
     case d: DecimalType =>
       If(isEmpty, Literal.create(null, resultType),
-        CheckOverflowInSum(sum, d, !SQLConf.get.ansiEnabled))
+        CheckOverflowInSum(sum, d, !failOnError))
     case _ => sum
   }
 
   override protected def withNewChildInternal(newChild: Expression): Sum = copy(child = newChild)
+
+  // The flag `failOnError` won't be shown in the `toString` or `toAggString` methods
+  override def flatArguments: Iterator[Any] = Iterator(child)
 }

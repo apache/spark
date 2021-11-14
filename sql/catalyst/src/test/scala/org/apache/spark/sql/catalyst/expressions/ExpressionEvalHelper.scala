@@ -114,7 +114,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
       case (result: Array[Byte], expected: Array[Byte]) =>
         java.util.Arrays.equals(result, expected)
       case (result: Double, expected: Spread[Double @unchecked]) =>
-        expected.asInstanceOf[Spread[Double]].isWithin(result)
+        expected.isWithin(result)
       case (result: InternalRow, expected: InternalRow) =>
         val st = dataType.asInstanceOf[StructType]
         assert(result.numFields == st.length && expected.numFields == st.length)

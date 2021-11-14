@@ -72,7 +72,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
       val genVars = ctx.withSubExprEliminationExprs(subExprs.states) {
         exprs.map(_.genCode(ctx))
       }
-      (subExprs.codes.mkString("\n"), genVars, subExprs.exprCodesNeedEvaluate)
+      (ctx.evaluateSubExprEliminationState(subExprs.states.values), genVars,
+        subExprs.exprCodesNeedEvaluate)
     } else {
       ("", exprs.map(_.genCode(ctx)), Seq.empty)
     }
@@ -683,7 +684,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
     children.map(_.output).transpose.map { attrs =>
       val firstAttr = attrs.head
       val nullable = attrs.exists(_.nullable)
-      val newDt = attrs.map(_.dataType).reduce(StructType.merge)
+      val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
       if (firstAttr.dataType == newDt) {
         firstAttr.withNullability(nullable)
       } else {

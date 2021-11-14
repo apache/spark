@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.time.{Duration, Period}
+import java.time.{Duration, LocalDateTime, Period}
 
 import scala.util.Random
 
@@ -193,9 +193,27 @@ class DataFrameAggregateSuite extends QueryTest
     intercept[AnalysisException] {
       courseSales.groupBy().agg(grouping("course")).explain()
     }
+
     intercept[AnalysisException] {
       courseSales.groupBy().agg(grouping_id("course")).explain()
     }
+
+    val groupingColMismatchEx = intercept[AnalysisException] {
+      courseSales.cube("course", "year").agg(grouping("earnings")).explain()
+    }
+    assert(groupingColMismatchEx.getErrorClass == "GROUPING_COLUMN_MISMATCH")
+    assert(groupingColMismatchEx.getMessage.matches(
+      "Column of grouping \\(earnings.*\\) can't be found in grouping columns course.*,year.*"))
+
+
+    val groupingIdColMismatchEx = intercept[AnalysisException] {
+      courseSales.cube("course", "year").agg(grouping_id("earnings")).explain()
+    }
+    assert(groupingIdColMismatchEx.getErrorClass == "GROUPING_ID_COLUMN_MISMATCH")
+    assert(groupingIdColMismatchEx.getMessage.matches(
+      "Columns of grouping_id \\(earnings.*\\) does not match " +
+        "grouping columns \\(course.*,year.*\\)"),
+      groupingIdColMismatchEx.getMessage)
   }
 
   test("grouping/grouping_id inside window function") {
@@ -858,6 +876,11 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(yearOfMaxEarnings, Row("dotNET", 2013) :: Row("Java", 2013) :: Nil)
 
     checkAnswer(
+      courseSales.groupBy("course").agg(max_by(col("year"), col("earnings"))),
+      Row("dotNET", 2013) :: Row("Java", 2013) :: Nil
+    )
+
+    checkAnswer(
       sql("SELECT max_by(x, y) FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)"),
       Row("b") :: Nil
     )
@@ -912,6 +935,11 @@ class DataFrameAggregateSuite extends QueryTest
     val yearOfMinEarnings =
       sql("SELECT course, min_by(year, earnings) FROM courseSales GROUP BY course")
     checkAnswer(yearOfMinEarnings, Row("dotNET", 2012) :: Row("Java", 2012) :: Nil)
+
+    checkAnswer(
+      courseSales.groupBy("course").agg(min_by(col("year"), col("earnings"))),
+      Row("dotNET", 2012) :: Row("Java", 2012) :: Nil
+    )
 
     checkAnswer(
       sql("SELECT min_by(x, y) FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)"),
@@ -1397,6 +1425,23 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(df1, Row(Duration.ofDays(1), 1))
     val df2 = Seq(Period.ofYears(1)).toDF("a").groupBy("a").count()
     checkAnswer(df2, Row(Period.ofYears(1), 1))
+  }
+
+  test("SPARK-36054: Support group by TimestampNTZ column") {
+    val ts1 = "2021-01-01T00:00:00"
+    val ts2 = "2021-01-01T00:00:01"
+    val localDateTime = Seq(ts1, ts1, ts2).map(LocalDateTime.parse)
+    val df = localDateTime.toDF("ts").groupBy("ts").count().orderBy("ts")
+    val expectedSchema =
+      new StructType().add(StructField("ts", TimestampNTZType)).add("count", LongType, false)
+    assert (df.schema == expectedSchema)
+    checkAnswer(df, Seq(Row(LocalDateTime.parse(ts1), 2), Row(LocalDateTime.parse(ts2), 1)))
+  }
+
+  test("SPARK-36926: decimal average mistakenly overflow") {
+    val df = (1 to 10).map(_ => "9999999999.99").toDF("d")
+    val res = df.select($"d".cast("decimal(12, 2)").as("d")).agg(avg($"d").cast("string"))
+    checkAnswer(res, Row("9999999999.990000"))
   }
 }
 

@@ -68,7 +68,7 @@ case class InsertAdaptiveSparkPlan(
             plan
         }
       } else {
-        logWarning(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is enabled " +
+        logDebug(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is enabled " +
           s"but is not supported for query: $plan.")
         plan
       }
@@ -140,7 +140,8 @@ case class InsertAdaptiveSparkPlan(
 
         val name = s"dynamicpruning#${exprId.id}"
         val subquery = SubqueryAdaptiveBroadcastExec(
-          name, broadcastKeyIndex, buildKeys, executedPlan)
+          name, broadcastKeyIndex, onlyInBroadcast,
+          buildPlan, buildKeys, executedPlan)
         subqueryMap.put(exprId.id, subquery)
       case _ =>
     }))

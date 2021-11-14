@@ -31,8 +31,16 @@ from pyspark.sql import DataFrame
 from pyspark.storagelevel import StorageLevel
 
 
-__all__ = ['BlockMatrix', 'CoordinateMatrix', 'DistributedMatrix', 'IndexedRow',
-           'IndexedRowMatrix', 'MatrixEntry', 'RowMatrix', 'SingularValueDecomposition']
+__all__ = [
+    "BlockMatrix",
+    "CoordinateMatrix",
+    "DistributedMatrix",
+    "IndexedRow",
+    "IndexedRowMatrix",
+    "MatrixEntry",
+    "RowMatrix",
+    "SingularValueDecomposition",
+]
 
 
 class DistributedMatrix(object):
@@ -41,6 +49,7 @@ class DistributedMatrix(object):
     more RDDs.
 
     """
+
     def numRows(self):
         """Get or compute the number of rows."""
         raise NotImplementedError
@@ -72,6 +81,7 @@ class RowMatrix(DistributedMatrix):
         of columns will be determined by the size of
         the first row.
     """
+
     def __init__(self, rows, numRows=0, numCols=0):
         """
         Note: This docstring is not shown publicly.
@@ -103,8 +113,7 @@ class RowMatrix(DistributedMatrix):
             java_matrix = callMLlibFunc("createRowMatrix", rows, int(numRows), int(numCols))
         elif isinstance(rows, DataFrame):
             java_matrix = callMLlibFunc("createRowMatrix", rows, int(numRows), int(numCols))
-        elif (isinstance(rows, JavaObject)
-              and rows.getClass().getSimpleName() == "RowMatrix"):
+        elif isinstance(rows, JavaObject) and rows.getClass().getSimpleName() == "RowMatrix":
             java_matrix = rows
         else:
             raise TypeError("rows should be an RDD of vectors, got %s" % type(rows))
@@ -227,7 +236,7 @@ class RowMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("computeGramianMatrix")
 
-    @since('2.0.0')
+    @since("2.0.0")
     def columnSimilarities(self, threshold=0.0):
         """
         Compute similarities between columns of this matrix.
@@ -402,8 +411,7 @@ class RowMatrix(DistributedMatrix):
         >>> svd_model.V
         DenseMatrix(3, 2, [-0.4082, -0.8165, -0.4082, 0.8944, -0.4472, 0.0], 0)
         """
-        j_model = self._java_matrix_wrapper.call(
-            "computeSVD", int(k), bool(computeU), float(rCond))
+        j_model = self._java_matrix_wrapper.call("computeSVD", int(k), bool(computeU), float(rCond))
         return SingularValueDecomposition(j_model)
 
     def computePrincipalComponents(self, k):
@@ -478,7 +486,7 @@ class SingularValueDecomposition(JavaModelWrapper):
     """
 
     @property
-    @since('2.2.0')
+    @since("2.2.0")
     def U(self):
         """
         Returns a distributed matrix whose columns are the left
@@ -495,7 +503,7 @@ class SingularValueDecomposition(JavaModelWrapper):
                 raise TypeError("Expected RowMatrix/IndexedRowMatrix got %s" % mat_name)
 
     @property
-    @since('2.2.0')
+    @since("2.2.0")
     def s(self):
         """
         Returns a DenseVector with singular values in descending order.
@@ -503,7 +511,7 @@ class SingularValueDecomposition(JavaModelWrapper):
         return self.call("s")
 
     @property
-    @since('2.2.0')
+    @since("2.2.0")
     def V(self):
         """
         Returns a DenseMatrix whose columns are the right singular
@@ -525,6 +533,7 @@ class IndexedRow(object):
     vector : :py:class:`pyspark.mllib.linalg.Vector` or convertible
         The row in the matrix at the given index.
     """
+
     def __init__(self, index, vector):
         self.index = int(index)
         self.vector = _convert_to_vector(vector)
@@ -562,6 +571,7 @@ class IndexedRowMatrix(DistributedMatrix):
         of columns will be determined by the size of
         the first row.
     """
+
     def __init__(self, rows, numRows=0, numCols=0):
         """
         Note: This docstring is not shown publicly.
@@ -597,16 +607,18 @@ class IndexedRowMatrix(DistributedMatrix):
             # containing the 'index' and 'vector' values, which can
             # both be easily serialized.  We will convert back to
             # IndexedRows on the Scala side.
-            java_matrix = callMLlibFunc("createIndexedRowMatrix", rows.toDF(),
-                                        int(numRows), int(numCols))
+            java_matrix = callMLlibFunc(
+                "createIndexedRowMatrix", rows.toDF(), int(numRows), int(numCols)
+            )
         elif isinstance(rows, DataFrame):
             java_matrix = callMLlibFunc("createIndexedRowMatrix", rows, int(numRows), int(numCols))
-        elif (isinstance(rows, JavaObject)
-              and rows.getClass().getSimpleName() == "IndexedRowMatrix"):
+        elif isinstance(rows, JavaObject) and rows.getClass().getSimpleName() == "IndexedRowMatrix":
             java_matrix = rows
         else:
-            raise TypeError("rows should be an RDD of IndexedRows or (int, vector) tuples, "
-                            "got %s" % type(rows))
+            raise TypeError(
+                "rows should be an RDD of IndexedRows or (int, vector) tuples, "
+                "got %s" % type(rows)
+            )
 
         self._java_matrix_wrapper = JavaModelWrapper(java_matrix)
 
@@ -770,9 +782,9 @@ class IndexedRowMatrix(DistributedMatrix):
         >>> print(mat.numCols())
         3
         """
-        java_block_matrix = self._java_matrix_wrapper.call("toBlockMatrix",
-                                                           rowsPerBlock,
-                                                           colsPerBlock)
+        java_block_matrix = self._java_matrix_wrapper.call(
+            "toBlockMatrix", rowsPerBlock, colsPerBlock
+        )
         return BlockMatrix(java_block_matrix, rowsPerBlock, colsPerBlock)
 
     def computeSVD(self, k, computeU=False, rCond=1e-9):
@@ -826,8 +838,7 @@ class IndexedRowMatrix(DistributedMatrix):
         >>> svd_model.V
         DenseMatrix(3, 2, [-0.4082, -0.8165, -0.4082, 0.8944, -0.4472, 0.0], 0)
         """
-        j_model = self._java_matrix_wrapper.call(
-            "computeSVD", int(k), bool(computeU), float(rCond))
+        j_model = self._java_matrix_wrapper.call("computeSVD", int(k), bool(computeU), float(rCond))
         return SingularValueDecomposition(j_model)
 
     def multiply(self, matrix):
@@ -872,6 +883,7 @@ class MatrixEntry(object):
     value : float
         The (i, j)th entry of the matrix, as a float.
     """
+
     def __init__(self, i, j, value):
         self.i = int(i)
         self.j = int(j)
@@ -910,6 +922,7 @@ class CoordinateMatrix(DistributedMatrix):
         of columns will be determined by the max row
         index plus one.
     """
+
     def __init__(self, entries, numRows=0, numCols=0):
         """
         Note: This docstring is not shown publicly.
@@ -945,14 +958,19 @@ class CoordinateMatrix(DistributedMatrix):
             # containing the 'i', 'j', and 'value' values, which can
             # each be easily serialized. We will convert back to
             # MatrixEntry inputs on the Scala side.
-            java_matrix = callMLlibFunc("createCoordinateMatrix", entries.toDF(),
-                                        int(numRows), int(numCols))
-        elif (isinstance(entries, JavaObject)
-              and entries.getClass().getSimpleName() == "CoordinateMatrix"):
+            java_matrix = callMLlibFunc(
+                "createCoordinateMatrix", entries.toDF(), int(numRows), int(numCols)
+            )
+        elif (
+            isinstance(entries, JavaObject)
+            and entries.getClass().getSimpleName() == "CoordinateMatrix"
+        ):
             java_matrix = entries
         else:
-            raise TypeError("entries should be an RDD of MatrixEntry entries or "
-                            "(int, int, float) tuples, got %s" % type(entries))
+            raise TypeError(
+                "entries should be an RDD of MatrixEntry entries or "
+                "(int, int, float) tuples, got %s" % type(entries)
+            )
 
         self._java_matrix_wrapper = JavaModelWrapper(java_matrix)
 
@@ -1125,16 +1143,20 @@ class CoordinateMatrix(DistributedMatrix):
         >>> print(mat.numCols())
         5
         """
-        java_block_matrix = self._java_matrix_wrapper.call("toBlockMatrix",
-                                                           rowsPerBlock,
-                                                           colsPerBlock)
+        java_block_matrix = self._java_matrix_wrapper.call(
+            "toBlockMatrix", rowsPerBlock, colsPerBlock
+        )
         return BlockMatrix(java_block_matrix, rowsPerBlock, colsPerBlock)
 
 
 def _convert_to_matrix_block_tuple(block):
-    if (isinstance(block, tuple) and len(block) == 2
-            and isinstance(block[0], tuple) and len(block[0]) == 2
-            and isinstance(block[1], Matrix)):
+    if (
+        isinstance(block, tuple)
+        and len(block) == 2
+        and isinstance(block[0], tuple)
+        and len(block[0]) == 2
+        and isinstance(block[1], Matrix)
+    ):
         blockRowIndex = int(block[0][0])
         blockColIndex = int(block[0][1])
         subMatrix = block[1]
@@ -1175,6 +1197,7 @@ class BlockMatrix(DistributedMatrix):
         of columns will be calculated when `numCols` is
         invoked.
     """
+
     def __init__(self, blocks, rowsPerBlock, colsPerBlock, numRows=0, numCols=0):
         """
         Note: This docstring is not shown publicly.
@@ -1212,15 +1235,21 @@ class BlockMatrix(DistributedMatrix):
             # each be easily serialized.  We will convert back to
             # ((blockRowIndex, blockColIndex), sub-matrix) tuples on
             # the Scala side.
-            java_matrix = callMLlibFunc("createBlockMatrix", blocks.toDF(),
-                                        int(rowsPerBlock), int(colsPerBlock),
-                                        int(numRows), int(numCols))
-        elif (isinstance(blocks, JavaObject)
-              and blocks.getClass().getSimpleName() == "BlockMatrix"):
+            java_matrix = callMLlibFunc(
+                "createBlockMatrix",
+                blocks.toDF(),
+                int(rowsPerBlock),
+                int(colsPerBlock),
+                int(numRows),
+                int(numCols),
+            )
+        elif isinstance(blocks, JavaObject) and blocks.getClass().getSimpleName() == "BlockMatrix":
             java_matrix = blocks
         else:
-            raise TypeError("blocks should be an RDD of sub-matrix blocks as "
-                            "((int, int), matrix) tuples, got %s" % type(blocks))
+            raise TypeError(
+                "blocks should be an RDD of sub-matrix blocks as "
+                "((int, int), matrix) tuples, got %s" % type(blocks)
+            )
 
         self._java_matrix_wrapper = JavaModelWrapper(java_matrix)
 
@@ -1347,7 +1376,7 @@ class BlockMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("numCols")
 
-    @since('2.0.0')
+    @since("2.0.0")
     def cache(self):
         """
         Caches the underlying RDD.
@@ -1355,7 +1384,7 @@ class BlockMatrix(DistributedMatrix):
         self._java_matrix_wrapper.call("cache")
         return self
 
-    @since('2.0.0')
+    @since("2.0.0")
     def persist(self, storageLevel):
         """
         Persists the underlying RDD with the specified storage level.
@@ -1366,7 +1395,7 @@ class BlockMatrix(DistributedMatrix):
         self._java_matrix_wrapper.call("persist", javaStorageLevel)
         return self
 
-    @since('2.0.0')
+    @since("2.0.0")
     def validate(self):
         """
         Validates the block matrix info against the matrix data (`blocks`)
@@ -1575,22 +1604,25 @@ def _test():
     from pyspark.sql import SparkSession
     from pyspark.mllib.linalg import Matrices
     import pyspark.mllib.linalg.distributed
+
     try:
         # Numpy 1.14+ changed it's string format.
-        numpy.set_printoptions(legacy='1.13')
+        numpy.set_printoptions(legacy="1.13")
     except TypeError:
         pass
     globs = pyspark.mllib.linalg.distributed.__dict__.copy()
-    spark = SparkSession.builder\
-        .master("local[2]")\
-        .appName("mllib.linalg.distributed tests")\
+    spark = (
+        SparkSession.builder.master("local[2]")
+        .appName("mllib.linalg.distributed tests")
         .getOrCreate()
-    globs['sc'] = spark.sparkContext
-    globs['Matrices'] = Matrices
+    )
+    globs["sc"] = spark.sparkContext
+    globs["Matrices"] = Matrices
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
         sys.exit(-1)
+
 
 if __name__ == "__main__":
     _test()

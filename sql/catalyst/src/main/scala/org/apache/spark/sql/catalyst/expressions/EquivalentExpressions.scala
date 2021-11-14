@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Objects
+
 import scala.collection.mutable
 
 import org.apache.spark.TaskContext
@@ -29,20 +31,8 @@ import org.apache.spark.sql.catalyst.expressions.objects.LambdaVariable
  * considered equal if for the same input(s), the same result is produced.
  */
 class EquivalentExpressions {
-  /**
-   * Wrapper around an Expression that provides semantic equality.
-   */
-  case class Expr(e: Expression) {
-    override def equals(o: Any): Boolean = o match {
-      case other: Expr => e.semanticEquals(other.e)
-      case _ => false
-    }
-
-    override def hashCode: Int = e.semanticHash()
-  }
-
   // For each expression, the set of equivalent expressions.
-  private val equivalenceMap = mutable.HashMap.empty[Expr, mutable.ArrayBuffer[Expression]]
+  private val equivalenceMap = mutable.HashMap.empty[ExpressionEquals, ExpressionStats]
 
   /**
    * Adds each expression to this data structure, grouping them with existing equivalent
@@ -50,29 +40,44 @@ class EquivalentExpressions {
    * Returns true if there was already a matching expression.
    */
   def addExpr(expr: Expression): Boolean = {
-    if (expr.deterministic) {
-      val e: Expr = Expr(expr)
-      val f = equivalenceMap.get(e)
-      if (f.isDefined) {
-        f.get += expr
-        true
-      } else {
-        equivalenceMap.put(e, mutable.ArrayBuffer(expr))
-        false
-      }
-    } else {
-      false
-    }
+    updateExprInMap(expr, equivalenceMap)
   }
 
-  private def addExprToSet(expr: Expression, set: mutable.Set[Expr]): Boolean = {
+  /**
+   * Adds or removes an expression to/from the map and updates `useCount`.
+   * Returns true
+   * - if there was a matching expression in the map before add or
+   * - if there remained a matching expression in the map after remove (`useCount` remained > 0)
+   * to indicate there is no need to recurse in `updateExprTree`.
+   */
+  private def updateExprInMap(
+      expr: Expression,
+      map: mutable.HashMap[ExpressionEquals, ExpressionStats],
+      useCount: Int = 1): Boolean = {
     if (expr.deterministic) {
-      val e = Expr(expr)
-      if (set.contains(e)) {
-        true
-      } else {
-        set.add(e)
-        false
+      val wrapper = ExpressionEquals(expr)
+      map.get(wrapper) match {
+        case Some(stats) =>
+          stats.useCount += useCount
+          if (stats.useCount > 0) {
+            true
+          } else if (stats.useCount == 0) {
+            map -= wrapper
+            false
+          } else {
+            // Should not happen
+            throw new IllegalStateException(
+              s"Cannot update expression: $expr in map: $map with use count: $useCount")
+          }
+        case _ =>
+          if (useCount > 0) {
+            map.put(wrapper, ExpressionStats(expr)(useCount))
+          } else {
+            // Should not happen
+            throw new IllegalStateException(
+              s"Cannot update expression: $expr in map: $map with use count: $useCount")
+          }
+          false
       }
     } else {
       false
@@ -80,38 +85,44 @@ class EquivalentExpressions {
   }
 
   /**
-   * Adds only expressions which are common in each of given expressions, in a recursive way.
-   * For example, given two expressions `(a + (b + (c + 1)))` and `(d + (e + (c + 1)))`,
-   * the common expression `(c + 1)` will be added into `equivalenceMap`.
+   * Adds or removes only expressions which are common in each of given expressions, in a recursive
+   * way.
+   * For example, given two expressions `(a + (b + (c + 1)))` and `(d + (e + (c + 1)))`, the common
+   * expression `(c + 1)` will be added into `equivalenceMap`.
    *
-   * Note that as we don't know in advance if any child node of an expression will be common
-   * across all given expressions, we count all child nodes when looking through the given
-   * expressions. But when we call `addExprTree` to add common expressions into the map, we
-   * will add recursively the child nodes. So we need to filter the child expressions first.
-   * For example, if `((a + b) + c)` and `(a + b)` are common expressions, we only add
-   * `((a + b) + c)`.
+   * Note that as we don't know in advance if any child node of an expression will be common across
+   * all given expressions, we compute local equivalence maps for all given expressions and filter
+   * only the common nodes.
+   * Those common nodes are then removed from the local map and added to the final map of
+   * expressions.
    */
-  private def addCommonExprs(
+  private def updateCommonExprs(
       exprs: Seq[Expression],
-      addFunc: Expression => Boolean = addExpr): Unit = {
-    val exprSetForAll = mutable.Set[Expr]()
-    addExprTree(exprs.head, addExprToSet(_, exprSetForAll))
+      map: mutable.HashMap[ExpressionEquals, ExpressionStats],
+      useCount: Int): Unit = {
+    assert(exprs.length > 1)
+    var localEquivalenceMap = mutable.HashMap.empty[ExpressionEquals, ExpressionStats]
+    updateExprTree(exprs.head, localEquivalenceMap)
 
-    val candidateExprs = exprs.tail.foldLeft(exprSetForAll) { (exprSet, expr) =>
-      val otherExprSet = mutable.Set[Expr]()
-      addExprTree(expr, addExprToSet(_, otherExprSet))
-      exprSet.intersect(otherExprSet)
-    }
-
-    // Not all expressions in the set should be added. We should filter out the related
-    // children nodes.
-    val commonExprSet = candidateExprs.filter { candidateExpr =>
-      candidateExprs.forall { expr =>
-        expr == candidateExpr || expr.e.find(_.semanticEquals(candidateExpr.e)).isEmpty
+    exprs.tail.foreach { expr =>
+      val otherLocalEquivalenceMap = mutable.HashMap.empty[ExpressionEquals, ExpressionStats]
+      updateExprTree(expr, otherLocalEquivalenceMap)
+      localEquivalenceMap = localEquivalenceMap.filter { case (key, _) =>
+        otherLocalEquivalenceMap.contains(key)
       }
     }
 
-    commonExprSet.foreach(expr => addExprTree(expr.e, addFunc))
+    // Start with the highest expression, remove it from `localEquivalenceMap` and add it to `map`.
+    // The remaining highest expression in `localEquivalenceMap` is also common expression so loop
+    // until `localEquivalenceMap` is not empty.
+    var statsOption = Some(localEquivalenceMap).filter(_.nonEmpty).map(_.maxBy(_._1.height)._2)
+    while (statsOption.nonEmpty) {
+      val stats = statsOption.get
+      updateExprTree(stats.expr, localEquivalenceMap, -stats.useCount)
+      updateExprTree(stats.expr, map, useCount)
+
+      statsOption = Some(localEquivalenceMap).filter(_.nonEmpty).map(_.maxBy(_._1.height)._2)
+    }
   }
 
   // There are some special expressions that we should not recurse into all of its children.
@@ -135,6 +146,7 @@ class EquivalentExpressions {
   // For some special expressions we cannot just recurse into all of its children, but we can
   // recursively add the common expressions shared between all of its children.
   private def commonChildrenToRecurse(expr: Expression): Seq[Seq[Expression]] = expr match {
+    case _: CodegenFallback => Nil
     case i: If => Seq(Seq(i.trueValue, i.falseValue))
     case c: CaseWhen =>
       // We look at subexpressions in conditions and values of `CaseWhen` separately. It is
@@ -142,7 +154,13 @@ class EquivalentExpressions {
       // if it is shared among conditions, but it doesn't need to be shared in values. Similarly,
       // a subexpression among values doesn't need to be in conditions because no matter which
       // condition is true, it will be evaluated.
-      val conditions = c.branches.tail.map(_._1)
+      val conditions = if (c.branches.length > 1) {
+        c.branches.map(_._1)
+      } else {
+        // If there is only one branch, the first condition is already covered by
+        // `childrenToRecurse` and we should exclude it here.
+        Nil
+      }
       // For an expression to be in all branch values of a CaseWhen statement, it must also be in
       // the elseValue.
       val values = if (c.elseValue.nonEmpty) {
@@ -150,8 +168,11 @@ class EquivalentExpressions {
       } else {
         Nil
       }
+
       Seq(conditions, values)
-    case c: Coalesce => Seq(c.children.tail)
+    // If there is only one child, the first child is already covered by
+    // `childrenToRecurse` and we should exclude it here.
+    case c: Coalesce if c.children.length > 1 => Seq(c.children)
     case _ => Nil
   }
 
@@ -161,8 +182,16 @@ class EquivalentExpressions {
    */
   def addExprTree(
       expr: Expression,
-      addFunc: Expression => Boolean = addExpr): Unit = {
-    val skip = expr.isInstanceOf[LeafExpression] ||
+      map: mutable.HashMap[ExpressionEquals, ExpressionStats] = equivalenceMap): Unit = {
+    updateExprTree(expr, map)
+  }
+
+  private def updateExprTree(
+      expr: Expression,
+      map: mutable.HashMap[ExpressionEquals, ExpressionStats] = equivalenceMap,
+      useCount: Int = 1): Unit = {
+    val skip = useCount == 0 ||
+      expr.isInstanceOf[LeafExpression] ||
       // `LambdaVariable` is usually used as a loop variable, which can't be evaluated ahead of the
       // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
       expr.find(_.isInstanceOf[LambdaVariable]).isDefined ||
@@ -170,27 +199,31 @@ class EquivalentExpressions {
       // can cause error like NPE.
       (expr.isInstanceOf[PlanExpression[_]] && TaskContext.get != null)
 
-    if (!skip && !addFunc(expr)) {
-      childrenToRecurse(expr).foreach(addExprTree(_, addFunc))
-      commonChildrenToRecurse(expr).filter(_.nonEmpty).foreach(addCommonExprs(_, addFunc))
+    if (!skip && !updateExprInMap(expr, map, useCount)) {
+      val uc = useCount.signum
+      childrenToRecurse(expr).foreach(updateExprTree(_, map, uc))
+      commonChildrenToRecurse(expr).filter(_.nonEmpty).foreach(updateCommonExprs(_, map, uc))
     }
   }
 
   /**
-   * Returns all of the expression trees that are equivalent to `e`. Returns
-   * an empty collection if there are none.
+   * Returns the state of the given expression in the `equivalenceMap`. Returns None if there is no
+   * equivalent expressions.
    */
-  def getEquivalentExprs(e: Expression): Seq[Expression] = {
-    equivalenceMap.getOrElse(Expr(e), Seq.empty).toSeq
+  def getExprState(e: Expression): Option[ExpressionStats] = {
+    equivalenceMap.get(ExpressionEquals(e))
+  }
+
+  // Exposed for testing.
+  private[sql] def getAllExprStates(count: Int = 0): Seq[ExpressionStats] = {
+    equivalenceMap.filter(_._2.useCount > count).toSeq.sortBy(_._1.height).map(_._2)
   }
 
   /**
-   * Returns all the equivalent sets of expressions which appear more than given `repeatTimes`
-   * times.
+   * Returns a sequence of expressions that more than one equivalent expressions.
    */
-  def getAllEquivalentExprs(repeatTimes: Int = 0): Seq[Seq[Expression]] = {
-    equivalenceMap.values.map(_.toSeq).filter(_.size > repeatTimes).toSeq
-      .sortBy(_.head)(new ExpressionContainmentOrdering)
+  def getCommonSubexpressions: Seq[Expression] = {
+    getAllExprStates(1).map(_.expr)
   }
 
   /**
@@ -198,37 +231,40 @@ class EquivalentExpressions {
    * equivalent expressions with cardinality 1.
    */
   def debugString(all: Boolean = false): String = {
-    val sb: mutable.StringBuilder = new StringBuilder()
+    val sb = new java.lang.StringBuilder()
     sb.append("Equivalent expressions:\n")
-    equivalenceMap.foreach { case (k, v) =>
-      if (all || v.length > 1) {
-        sb.append("  " + v.mkString(", ")).append("\n")
-      }
+    equivalenceMap.values.filter(stats => all || stats.useCount > 1).foreach { stats =>
+      sb.append("  ").append(s"${stats.expr}: useCount = ${stats.useCount}").append('\n')
     }
     sb.toString()
   }
 }
 
 /**
- * Orders `Expression` by parent/child relations. The child expression is smaller
- * than parent expression. If there is child-parent relationships among the subexpressions,
- * we want the child expressions come first than parent expressions, so we can replace
- * child expressions in parent expressions with subexpression evaluation. Note that
- * this is not for general expression ordering. For example, two irrelevant or semantically-equal
- * expressions will be considered as equal by this ordering. But for the usage here, the order of
- * irrelevant expressions does not matter.
+ * Wrapper around an Expression that provides semantic equality.
  */
-class ExpressionContainmentOrdering extends Ordering[Expression] {
-  override def compare(x: Expression, y: Expression): Int = {
-    if (x.find(_.semanticEquals(y)).isDefined) {
-      // `y` is child expression of `x`.
-      1
-    } else if (y.find(_.semanticEquals(x)).isDefined) {
-      // `x` is child expression of `y`.
-      -1
-    } else {
-      // Irrelevant or semantically-equal expressions
-      0
-    }
+case class ExpressionEquals(e: Expression) {
+  private def getHeight(tree: Expression): Int = {
+    tree.children.map(getHeight).reduceOption(_ max _).getOrElse(0) + 1
   }
+
+  // This is used to do a fast pre-check for child-parent relationship. For example, expr1 can
+  // only be a parent of expr2 if expr1.height is larger than expr2.height.
+  lazy val height = getHeight(e)
+
+  override def equals(o: Any): Boolean = o match {
+    case other: ExpressionEquals => e.semanticEquals(other.e) && height == other.height
+    case _ => false
+  }
+
+  override def hashCode: Int = Objects.hash(e.semanticHash(): Integer, height: Integer)
 }
+
+/**
+ * A wrapper in place of using Seq[Expression] to record a group of equivalent expressions.
+ *
+ * This saves a lot of memory when there are a lot of expressions in a same equivalence group.
+ * Instead of appending to a mutable list/buffer of Expressions, just update the "flattened"
+ * useCount in this wrapper in-place.
+ */
+case class ExpressionStats(expr: Expression)(var useCount: Int)

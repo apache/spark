@@ -28,8 +28,10 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.status.KVUtils._
+import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.kvstore._
 
+@ExtendedLevelDBTest
 class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits {
 
   private var db: LevelDB = _

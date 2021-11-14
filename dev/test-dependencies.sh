@@ -28,8 +28,10 @@ export LC_ALL=C
 
 # TODO: This would be much nicer to do in SBT, once SBT supports Maven-style resolution.
 
-# NOTE: These should match those in the release publishing script
-HADOOP_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pkubernetes -Pyarn -Phive"
+# NOTE: These should match those in the release publishing script, and be kept in sync with
+#   dev/create-release/release-build.sh
+HADOOP_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pkubernetes -Pyarn -Phive \
+    -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud"
 MVN="build/mvn"
 HADOOP_HIVE_PROFILES=(
     hadoop-2.7-hive-2.3
@@ -47,12 +49,27 @@ OLD_VERSION=$($MVN -q \
     -Dexec.args='${project.version}' \
     --non-recursive \
     org.codehaus.mojo:exec-maven-plugin:1.6.0:exec | grep -E '[0-9]+\.[0-9]+\.[0-9]+')
+# dependency:get for guava and jetty-io are workaround for SPARK-37302.
+GUAVA_VERSION=`build/mvn help:evaluate -Dexpression=guava.version -q -DforceStdout`
+build/mvn dependency:get -Dartifact=com.google.guava:guava:${GUAVA_VERSION} -q
+JETTY_VERSION=`build/mvn help:evaluate -Dexpression=jetty.version -q -DforceStdout`
+build/mvn dependency:get -Dartifact=org.eclipse.jetty:jetty-io:${JETTY_VERSION} -q
 if [ $? != 0 ]; then
     echo -e "Error while getting version string from Maven:\n$OLD_VERSION"
     exit 1
 fi
+SCALA_BINARY_VERSION=$($MVN -q \
+    -Dexec.executable="echo" \
+    -Dexec.args='${scala.binary.version}' \
+    --non-recursive \
+    org.codehaus.mojo:exec-maven-plugin:1.6.0:exec | grep -E '[0-9]+\.[0-9]+')
+if [[ "$SCALA_BINARY_VERSION" != "2.12" ]]; then
+  # TODO(SPARK-36168) Support Scala 2.13 in dev/test-dependencies.sh
+  echo "Skip dependency testing on $SCALA_BINARY_VERSION"
+  exit 0
+fi
 set -e
-TEMP_VERSION="spark-$(python -S -c "import random; print(random.randrange(100000, 999999))")"
+TEMP_VERSION="spark-$(python3 -S -c "import random; print(random.randrange(100000, 999999))")"
 
 function reset_version {
   # Delete the temporary POMs that we wrote to the local Maven repo:

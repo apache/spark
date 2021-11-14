@@ -29,6 +29,7 @@ import scala.util.DynamicVariable
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.MetricsSystem
@@ -208,7 +209,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
     val deadline = System.currentTimeMillis + timeoutMillis
     queues.asScala.foreach { queue =>
       if (!queue.waitUntilEmpty(deadline)) {
-        throw new TimeoutException(s"The event queue is not empty after $timeoutMillis ms.")
+        throw SparkCoreErrors.nonEmptyEventQueueAfterTimeoutError(timeoutMillis)
       }
     }
   }

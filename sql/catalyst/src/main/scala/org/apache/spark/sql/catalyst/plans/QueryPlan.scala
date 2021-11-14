@@ -85,6 +85,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /**
+   * Returns true when the all the expressions in the current node as well as all of its children
+   * are deterministic
+   */
+  lazy val deterministic: Boolean = expressions.forall(_.deterministic) &&
+    children.forall(_.deterministic)
+
+  /**
    * Attributes that are referenced by expressions but not provided by this node's children.
    */
   final def missingInput: AttributeSet = references -- inputSet
@@ -433,6 +440,23 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   def subqueriesAll: Seq[PlanType] = {
     val subqueries = this.flatMap(_.subqueries)
     subqueries ++ subqueries.flatMap(_.subqueriesAll)
+  }
+
+  /**
+   * Returns a copy of this node where the given partial function has been recursively applied
+   * first to the subqueries in this node's children, then this node's children, and finally
+   * this node itself (post-order). When the partial function does not apply to a given node,
+   * it is left unchanged.
+   */
+  def transformUpWithSubqueries(f: PartialFunction[PlanType, PlanType]): PlanType = {
+    transformUp { case plan =>
+      val transformed = plan transformExpressionsUp {
+        case planExpression: PlanExpression[PlanType] =>
+          val newPlan = planExpression.plan.transformUpWithSubqueries(f)
+          planExpression.withNewPlan(newPlan)
+      }
+      f.applyOrElse[PlanType, PlanType](transformed, identity)
+    }
   }
 
   /**

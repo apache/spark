@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model.{ContainerPort, ContainerPortBuilder, LocalObjectReferenceBuilder, Quantity}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.TestResourceInformation
@@ -116,7 +116,10 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
 
     val driverPodMetadata = configuredPod.pod.getMetadata
     assert(driverPodMetadata.getName === "spark-driver-pod")
-    DRIVER_LABELS.foreach { case (k, v) =>
+    val DEFAULT_LABELS = Map(
+      SPARK_APP_NAME_LABEL-> KubernetesConf.getAppNameLabel(kubernetesConf.appName)
+    )
+    (DRIVER_LABELS ++ DEFAULT_LABELS).foreach { case (k, v) =>
       assert(driverPodMetadata.getLabels.get(k) === v)
     }
     assert(driverPodMetadata.getAnnotations.asScala === DRIVER_ANNOTATIONS)
@@ -230,6 +233,21 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val portMap2 =
       pod2.container.getPorts.asScala.map { cp => (cp.getName -> cp.getContainerPort) }.toMap
     assert(portMap2(BLOCK_MANAGER_PORT_NAME) === 1235)
+  }
+
+  test("SPARK-36075: Check driver pod respects nodeSelector/driverNodeSelector") {
+    val initPod = SparkPod.initialPod()
+    val sparkConf = new SparkConf()
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(s"${KUBERNETES_NODE_SELECTOR_PREFIX}nodeLabelKey", "nodeLabelValue")
+      .set(s"${KUBERNETES_DRIVER_NODE_SELECTOR_PREFIX}driverNodeLabelKey", "driverNodeLabelValue")
+      .set(s"${KUBERNETES_EXECUTOR_NODE_SELECTOR_PREFIX}execNodeLabelKey", "execNodeLabelValue")
+    val driverConf = KubernetesTestConf.createDriverConf(sparkConf)
+    val driver = new BasicDriverFeatureStep(driverConf).configurePod(initPod)
+    assert(driver.pod.getSpec.getNodeSelector.asScala === Map(
+      "nodeLabelKey" -> "nodeLabelValue",
+      "driverNodeLabelKey" -> "driverNodeLabelValue"
+    ))
   }
 
   def containerPort(name: String, portNumber: Int): ContainerPort =

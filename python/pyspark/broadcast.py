@@ -27,7 +27,7 @@ from pyspark.serializers import ChunkedStream, pickle_protocol
 from pyspark.util import print_exec
 
 
-__all__ = ['Broadcast']
+__all__ = ["Broadcast"]
 
 
 # Holds broadcasted data received from Java, keyed by its id.
@@ -36,6 +36,7 @@ _broadcastRegistry = {}
 
 def _from_id(bid):
     from pyspark.broadcast import _broadcastRegistry
+
     if bid not in _broadcastRegistry:
         raise RuntimeError("Broadcast variable '%s' not loaded!" % bid)
     return _broadcastRegistry[bid]
@@ -61,8 +62,7 @@ class Broadcast(object):
     >>> large_broadcast = sc.broadcast(range(10000))
     """
 
-    def __init__(self, sc=None, value=None, pickle_registry=None, path=None,
-                 sock_file=None):
+    def __init__(self, sc=None, value=None, pickle_registry=None, path=None, sock_file=None):
         """
         Should not be called directly by users -- use :meth:`SparkContext.broadcast`
         instead.
@@ -99,7 +99,7 @@ class Broadcast(object):
             else:
                 # the jvm just dumps the pickled data in path -- we'll unpickle lazily when
                 # the value is requested
-                assert(path is not None)
+                assert path is not None
                 self._path = path
 
     def dump(self, value, f):
@@ -108,14 +108,13 @@ class Broadcast(object):
         except pickle.PickleError:
             raise
         except Exception as e:
-            msg = "Could not serialize broadcast: %s: %s" \
-                  % (e.__class__.__name__, str(e))
+            msg = "Could not serialize broadcast: %s: %s" % (e.__class__.__name__, str(e))
             print_exec(sys.stderr)
             raise pickle.PicklingError(msg)
         f.close()
 
     def load_from_path(self, path):
-        with open(path, 'rb', 1 << 20) as f:
+        with open(path, "rb", 1 << 20) as f:
             return self.load(f)
 
     def load(self, file):
@@ -128,8 +127,7 @@ class Broadcast(object):
 
     @property
     def value(self):
-        """ Return the broadcasted value
-        """
+        """Return the broadcasted value"""
         if not hasattr(self, "_value") and self._path is not None:
             # we only need to decrypt it here when encryption is enabled and
             # if its on the driver, since executor decryption is handled already
@@ -185,8 +183,7 @@ class Broadcast(object):
 
 
 class BroadcastPickleRegistry(threading.local):
-    """ Thread-local registry for broadcast variables that have been pickled
-    """
+    """Thread-local registry for broadcast variables that have been pickled"""
 
     def __init__(self):
         self.__dict__.setdefault("_registry", set())
@@ -204,6 +201,7 @@ class BroadcastPickleRegistry(threading.local):
 
 if __name__ == "__main__":
     import doctest
+
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
         sys.exit(-1)

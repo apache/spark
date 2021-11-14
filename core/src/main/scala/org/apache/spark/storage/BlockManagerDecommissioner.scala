@@ -25,6 +25,7 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark._
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.shuffle.ShuffleBlockInfo
@@ -90,7 +91,7 @@ private[storage] class BlockManagerDecommissioner(
           case None => Thread.sleep(1000)
         }
       }
-      throw new InterruptedException()
+      throw SparkCoreErrors.interruptedError()
     }
 
     override def run(): Unit = {

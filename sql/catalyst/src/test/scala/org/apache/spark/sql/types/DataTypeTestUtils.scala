@@ -81,7 +81,7 @@ object DataTypeTestUtils {
   val ordered: Set[DataType] = numericTypeWithoutDecimal ++ Set(
     BooleanType,
     TimestampType,
-    TimestampWithoutTZType,
+    TimestampNTZType,
     DateType,
     StringType,
     BinaryType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes
@@ -100,7 +100,7 @@ object DataTypeTestUtils {
     DateType,
     StringType,
     TimestampType,
-    TimestampWithoutTZType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes
+    TimestampNTZType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes
 
   /**
    * Instances of [[ArrayType]] for all [[AtomicType]]s. Arrays of these types may contain null.

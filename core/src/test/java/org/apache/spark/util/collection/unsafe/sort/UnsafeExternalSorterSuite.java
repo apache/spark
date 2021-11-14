@@ -343,12 +343,12 @@ public class UnsafeExternalSorterSuite {
     for (int i = 0; i < n / 3; i++) {
       iter.hasNext();
       iter.loadNext();
-      assertTrue(Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()) == i);
+      assertEquals(i, Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()));
       lastv = i;
     }
     assertTrue(iter.spill() > 0);
     assertEquals(0, iter.spill());
-    assertTrue(Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()) == lastv);
+    assertEquals(lastv, Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()));
     for (int i = n / 3; i < n; i++) {
       iter.hasNext();
       iter.loadNext();
@@ -492,7 +492,7 @@ public class UnsafeExternalSorterSuite {
     // We will have at-least 2 memory pages allocated because of rounding happening due to
     // integer division of pageSizeBytes and recordSize.
     assertTrue(sorter.getNumberOfAllocatedPages() >= 2);
-    assertTrue(taskContext.taskMetrics().diskBytesSpilled() == 0);
+    assertEquals(0, taskContext.taskMetrics().diskBytesSpilled());
     UnsafeExternalSorter.SpillableIterator iter =
             (UnsafeExternalSorter.SpillableIterator) sorter.getSortedIterator();
     assertTrue(iter.spill() > 0);

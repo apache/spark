@@ -89,13 +89,7 @@ public class JavaKafkaRDDSuite implements Serializable {
     leaders.put(offsetRanges[0].topicPartition(), broker);
     leaders.put(offsetRanges[1].topicPartition(), broker);
 
-    Function<ConsumerRecord<String, String>, String> handler =
-      new Function<ConsumerRecord<String, String>, String>() {
-        @Override
-        public String call(ConsumerRecord<String, String> r) {
-          return r.value();
-        }
-      };
+    Function<ConsumerRecord<String, String>, String> handler = ConsumerRecord::value;
 
     JavaRDD<String> rdd1 = KafkaUtils.<String, String>createRDD(
         sc,

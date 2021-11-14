@@ -27,6 +27,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark._
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.security.SocketAuthHelper
@@ -95,11 +96,12 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     envVars.getOrElse("PYTHONPATH", ""),
     sys.env.getOrElse("PYTHONPATH", ""))
 
-  def create(): Socket = {
+  def create(): (Socket, Option[Int]) = {
     if (useDaemon) {
       self.synchronized {
         if (idleWorkers.nonEmpty) {
-          return idleWorkers.dequeue()
+          val worker = idleWorkers.dequeue()
+          return (worker, daemonWorkers.get(worker))
         }
       }
       createThroughDaemon()
@@ -113,9 +115,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
    * processes itself to avoid the high cost of forking from Java. This currently only works
    * on UNIX-based systems.
    */
-  private def createThroughDaemon(): Socket = {
+  private def createThroughDaemon(): (Socket, Option[Int]) = {
 
-    def createSocket(): Socket = {
+    def createSocket(): (Socket, Option[Int]) = {
       val socket = new Socket(daemonHost, daemonPort)
       val pid = new DataInputStream(socket.getInputStream).readInt()
       if (pid < 0) {
@@ -124,7 +126,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
       authHelper.authToServer(socket)
       daemonWorkers.put(socket, pid)
-      socket
+      (socket, Some(pid))
     }
 
     self.synchronized {
@@ -148,7 +150,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   /**
    * Launch a worker by executing worker.py (by default) directly and telling it to connect to us.
    */
-  private def createSimpleWorker(): Socket = {
+  private def createSimpleWorker(): (Socket, Option[Int]) = {
     var serverSocket: ServerSocket = null
     try {
       serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array(127, 0, 0, 1)))
@@ -173,10 +175,15 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       try {
         val socket = serverSocket.accept()
         authHelper.authClient(socket)
+        // TODO: When we drop JDK 8, we can just use worker.pid()
+        val pid = new DataInputStream(socket.getInputStream).readInt()
+        if (pid < 0) {
+          throw new IllegalStateException("Python failed to launch worker with code " + pid)
+        }
         self.synchronized {
           simpleWorkers.put(socket, worker)
         }
-        return socket
+        return (socket, Some(pid))
       } catch {
         case e: Exception =>
           throw new SparkException("Python worker failed to connect back.", e)
@@ -213,12 +220,11 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
           daemonPort = in.readInt()
         } catch {
           case _: EOFException if daemon.isAlive =>
-            throw new SparkException("EOFException occurred while reading the port number " +
-              s"from $daemonModule's stdout")
+            throw SparkCoreErrors.eofExceptionWhileReadPortNumberError(
+              daemonModule)
           case _: EOFException =>
-            throw new SparkException(
-              s"EOFException occurred while reading the port number from $daemonModule's" +
-              s" stdout and terminated with code: ${daemon.exitValue}.")
+            throw SparkCoreErrors.
+              eofExceptionWhileReadPortNumberError(daemonModule, Some(daemon.exitValue))
         }
 
         // test that the returned port number is within a valid range.

@@ -106,7 +106,9 @@ object FunctionRegistryBase {
    * Return an expression info and a function builder for the function as defined by
    * T using the given name.
    */
-  def build[T : ClassTag](name: String): (ExpressionInfo, Seq[Expression] => T) = {
+  def build[T : ClassTag](
+      name: String,
+      since: Option[String]): (ExpressionInfo, Seq[Expression] => T) = {
     val runtimeClass = scala.reflect.classTag[T].runtimeClass
     // For `RuntimeReplaceable`, skip the constructor with most arguments, which is the main
     // constructor and contains non-parameter `child` and should not be used as function builder.
@@ -137,7 +139,7 @@ object FunctionRegistryBase {
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
           throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-            validParametersCount, name, params)
+            validParametersCount, name, params.length)
         }
         try {
           f.newInstance(expressions : _*).asInstanceOf[T]
@@ -149,13 +151,13 @@ object FunctionRegistryBase {
       }
     }
 
-    (expressionInfo(name), builder)
+    (expressionInfo(name, since), builder)
   }
 
   /**
    * Creates an [[ExpressionInfo]] for the function as defined by T using the given name.
    */
-  def expressionInfo[T : ClassTag](name: String): ExpressionInfo = {
+  def expressionInfo[T : ClassTag](name: String, since: Option[String]): ExpressionInfo = {
     val clazz = scala.reflect.classTag[T].runtimeClass
     val df = clazz.getAnnotation(classOf[ExpressionDescription])
     if (df != null) {
@@ -169,7 +171,7 @@ object FunctionRegistryBase {
           df.examples(),
           df.note(),
           df.group(),
-          df.since(),
+          since.getOrElse(df.since()),
           df.deprecated(),
           df.source())
       } else {
@@ -359,6 +361,7 @@ object FunctionRegistry {
     expression[Ceil]("ceil"),
     expression[Ceil]("ceiling", true),
     expression[Cos]("cos"),
+    expression[Sec]("sec"),
     expression[Cosh]("cosh"),
     expression[Conv]("conv"),
     expression[ToDegrees]("degrees"),
@@ -390,6 +393,7 @@ object FunctionRegistry {
     expression[Signum]("sign", true),
     expression[Signum]("signum"),
     expression[Sin]("sin"),
+    expression[Csc]("csc"),
     expression[Sinh]("sinh"),
     expression[StringToMap]("str_to_map"),
     expression[Sqrt]("sqrt"),
@@ -429,6 +433,7 @@ object FunctionRegistry {
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
     expression[ApproximatePercentile]("approx_percentile", true),
+    expression[HistogramNumeric]("histogram_numeric"),
     expression[StddevSamp]("std", true),
     expression[StddevSamp]("stddev", true),
     expression[StddevPop]("stddev_pop"),
@@ -468,10 +473,11 @@ object FunctionRegistry {
     expression[Length]("length"),
     expression[Levenshtein]("levenshtein"),
     expression[Like]("like"),
+    expression[ILike]("ilike"),
     expression[Lower]("lower"),
     expression[OctetLength]("octet_length"),
     expression[StringLocate]("locate"),
-    expression[StringLPad]("lpad"),
+    expressionBuilder("lpad", LPadExpressionBuilder),
     expression[StringTrimLeft]("ltrim"),
     expression[JsonTuple]("json_tuple"),
     expression[ParseUrl]("parse_url"),
@@ -480,13 +486,13 @@ object FunctionRegistry {
     expression[RegExpExtract]("regexp_extract"),
     expression[RegExpExtractAll]("regexp_extract_all"),
     expression[RegExpReplace]("regexp_replace"),
-    expression[RLike]("regexp_like", true),
-    expression[RLike]("regexp", true),
     expression[StringRepeat]("repeat"),
     expression[StringReplace]("replace"),
     expression[Overlay]("overlay"),
     expression[RLike]("rlike"),
-    expression[StringRPad]("rpad"),
+    expression[RLike]("regexp_like", true, Some("3.2.0")),
+    expression[RLike]("regexp", true, Some("3.2.0")),
+    expressionBuilder("rpad", RPadExpressionBuilder),
     expression[StringTrimRight]("rtrim"),
     expression[Sentences]("sentences"),
     expression[SoundEx]("soundex"),
@@ -519,6 +525,7 @@ object FunctionRegistry {
     expression[CurrentDate]("current_date"),
     expression[CurrentTimestamp]("current_timestamp"),
     expression[CurrentTimeZone]("current_timezone"),
+    expression[LocalTimestamp]("localtimestamp"),
     expression[DateDiff]("datediff"),
     expression[DateAdd]("date_add"),
     expression[DateFormatClass]("date_format"),
@@ -541,7 +548,8 @@ object FunctionRegistry {
     expression[ParseToDate]("to_date"),
     expression[ToUnixTimestamp]("to_unix_timestamp"),
     expression[ToUTCTimestamp]("to_utc_timestamp"),
-    expression[ParseToTimestampWithoutTZ]("to_timestamp_ntz"),
+    expression[ParseToTimestampNTZ]("to_timestamp_ntz"),
+    expression[ParseToTimestampLTZ]("to_timestamp_ltz"),
     expression[TruncDate]("trunc"),
     expression[TruncTimestamp]("date_trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
@@ -550,8 +558,11 @@ object FunctionRegistry {
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
     expression[TimeWindow]("window"),
+    expression[SessionWindow]("session_window"),
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
+    expression[MakeTimestampNTZ]("make_timestamp_ntz"),
+    expression[MakeTimestampLTZ]("make_timestamp_ltz"),
     expression[MakeInterval]("make_interval"),
     expression[MakeDTInterval]("make_dt_interval"),
     expression[MakeYMInterval]("make_ym_interval"),
@@ -624,6 +635,8 @@ object FunctionRegistry {
     expression[Sha1]("sha", true),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
+    expression[AesEncrypt]("aes_encrypt"),
+    expression[AesDecrypt]("aes_decrypt"),
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
     expression[InputFileBlockStart]("input_file_block_start"),
@@ -720,16 +733,35 @@ object FunctionRegistry {
 
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
 
-  /** See usage above. */
-  private def expression[T <: Expression : ClassTag](name: String, setAlias: Boolean = false)
-      : (String, (ExpressionInfo, FunctionBuilder)) = {
-    val (expressionInfo, builder) = FunctionRegistryBase.build[T](name)
+  /**
+   * Create a SQL function builder and corresponding `ExpressionInfo`.
+   * @param name The function name.
+   * @param setAlias The alias name used in SQL representation string.
+   * @param since The Spark version since the function is added.
+   * @tparam T The actual expression class.
+   * @return (function name, (expression information, function builder))
+   */
+  private def expression[T <: Expression : ClassTag](
+      name: String,
+      setAlias: Boolean = false,
+      since: Option[String] = None): (String, (ExpressionInfo, FunctionBuilder)) = {
+    val (expressionInfo, builder) = FunctionRegistryBase.build[T](name, since)
     val newBuilder = (expressions: Seq[Expression]) => {
       val expr = builder(expressions)
       if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
       expr
     }
     (name, (expressionInfo, newBuilder))
+  }
+
+  private def expressionBuilder[T <: ExpressionBuilder : ClassTag](
+      name: String, builder: T): (String, (ExpressionInfo, FunctionBuilder)) = {
+    val info = FunctionRegistryBase.expressionInfo[T](name, None)
+    val funcBuilder = (expressions: Seq[Expression]) => {
+      assert(expressions.forall(_.resolved), "function arguments must be resolved.")
+      builder.build(expressions)
+    }
+    (name, (info, funcBuilder))
   }
 
   /**
@@ -798,7 +830,7 @@ object TableFunctionRegistry {
 
   private def logicalPlan[T <: LogicalPlan : ClassTag](name: String)
       : (String, (ExpressionInfo, TableFunctionBuilder)) = {
-    val (info, builder) = FunctionRegistryBase.build[T](name)
+    val (info, builder) = FunctionRegistryBase.build[T](name, since = None)
     val newBuilder = (expressions: Seq[Expression]) => {
       try {
         builder(expressions)
@@ -826,4 +858,8 @@ object TableFunctionRegistry {
   }
 
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
+}
+
+trait ExpressionBuilder {
+  def build(expressions: Seq[Expression]): Expression
 }

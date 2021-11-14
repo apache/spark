@@ -16,12 +16,16 @@
 #
 import unittest
 import inspect
-from typing import Union, Iterator, Tuple
+from typing import Union, Iterator, Tuple, cast
 
 from pyspark.sql.functions import mean, lit
-from pyspark.testing.sqlutils import ReusedSQLTestCase, \
-    have_pandas, have_pyarrow, pandas_requirement_message, \
-    pyarrow_requirement_message
+from pyspark.testing.sqlutils import (
+    ReusedSQLTestCase,
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 from pyspark.sql.pandas.typehints import infer_eval_type
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType
 from pyspark.sql import Row
@@ -34,144 +38,153 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
+    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+)
 class PandasUDFTypeHintsTests(ReusedSQLTestCase):
     def test_type_annotation_scalar(self):
         def func(col: pd.Series) -> pd.Series:
             pass
-        self.assertEqual(
-            infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR)
+
+        self.assertEqual(infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR)
 
         def func(col: pd.DataFrame, col1: pd.Series) -> pd.DataFrame:
             pass
-        self.assertEqual(
-            infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR)
+
+        self.assertEqual(infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR)
 
         def func(col: pd.DataFrame, *args: pd.Series) -> pd.Series:
             pass
-        self.assertEqual(
-            infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR)
+
+        self.assertEqual(infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR)
 
         def func(col: pd.Series, *args: pd.Series, **kwargs: pd.DataFrame) -> pd.Series:
             pass
-        self.assertEqual(
-            infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR)
+
+        self.assertEqual(infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR)
 
         def func(col: pd.Series, *, col2: pd.DataFrame) -> pd.DataFrame:
             pass
-        self.assertEqual(
-            infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR)
+
+        self.assertEqual(infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR)
 
         def func(col: Union[pd.Series, pd.DataFrame], *, col2: pd.DataFrame) -> pd.Series:
             pass
-        self.assertEqual(
-            infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR)
+
+        self.assertEqual(infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR)
 
     def test_type_annotation_scalar_iter(self):
         def func(iter: Iterator[pd.Series]) -> Iterator[pd.Series]:
             pass
-        self.assertEqual(
-            infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR_ITER)
+
+        self.assertEqual(infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR_ITER)
 
         def func(iter: Iterator[Tuple[pd.DataFrame, pd.Series]]) -> Iterator[pd.DataFrame]:
             pass
-        self.assertEqual(
-            infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR_ITER)
+
+        self.assertEqual(infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR_ITER)
 
         def func(iter: Iterator[Tuple[pd.DataFrame, ...]]) -> Iterator[pd.Series]:
             pass
-        self.assertEqual(
-            infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR_ITER)
 
-        def func(
-            iter: Iterator[Tuple[Union[pd.DataFrame, pd.Series], ...]]
-        ) -> Iterator[pd.Series]:
+        self.assertEqual(infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR_ITER)
+
+        def func(iter: Iterator[Tuple[Union[pd.DataFrame, pd.Series], ...]]) -> Iterator[pd.Series]:
             pass
-        self.assertEqual(
-            infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR_ITER)
+
+        self.assertEqual(infer_eval_type(inspect.signature(func)), PandasUDFType.SCALAR_ITER)
 
     def test_type_annotation_group_agg(self):
-
         def func(col: pd.Series) -> str:
             pass
-        self.assertEqual(
-            infer_eval_type(inspect.signature(func)), PandasUDFType.GROUPED_AGG)
+
+        self.assertEqual(infer_eval_type(inspect.signature(func)), PandasUDFType.GROUPED_AGG)
 
         def func(col: pd.DataFrame, col1: pd.Series) -> int:
             pass
-        self.assertEqual(
-            infer_eval_type(inspect.signature(func)), PandasUDFType.GROUPED_AGG)
+
+        self.assertEqual(infer_eval_type(inspect.signature(func)), PandasUDFType.GROUPED_AGG)
 
         def func(col: pd.DataFrame, *args: pd.Series) -> Row:
             pass
-        self.assertEqual(
-            infer_eval_type(inspect.signature(func)), PandasUDFType.GROUPED_AGG)
+
+        self.assertEqual(infer_eval_type(inspect.signature(func)), PandasUDFType.GROUPED_AGG)
 
         def func(col: pd.Series, *args: pd.Series, **kwargs: pd.DataFrame) -> str:
             pass
-        self.assertEqual(
-            infer_eval_type(inspect.signature(func)), PandasUDFType.GROUPED_AGG)
+
+        self.assertEqual(infer_eval_type(inspect.signature(func)), PandasUDFType.GROUPED_AGG)
 
         def func(col: pd.Series, *, col2: pd.DataFrame) -> float:
             pass
-        self.assertEqual(
-            infer_eval_type(inspect.signature(func)), PandasUDFType.GROUPED_AGG)
+
+        self.assertEqual(infer_eval_type(inspect.signature(func)), PandasUDFType.GROUPED_AGG)
 
         def func(col: Union[pd.Series, pd.DataFrame], *, col2: pd.DataFrame) -> float:
             pass
-        self.assertEqual(
-            infer_eval_type(inspect.signature(func)), PandasUDFType.GROUPED_AGG)
+
+        self.assertEqual(infer_eval_type(inspect.signature(func)), PandasUDFType.GROUPED_AGG)
 
     def test_type_annotation_negative(self):
-
         def func(col: str) -> pd.Series:
             pass
+
         self.assertRaisesRegex(
             NotImplementedError,
             "Unsupported signature.*str",
-            infer_eval_type, inspect.signature(func))
+            infer_eval_type,
+            inspect.signature(func),
+        )
 
         def func(col: pd.DataFrame, col1: int) -> pd.DataFrame:
             pass
+
         self.assertRaisesRegex(
             NotImplementedError,
             "Unsupported signature.*int",
-            infer_eval_type, inspect.signature(func))
+            infer_eval_type,
+            inspect.signature(func),
+        )
 
         def func(col: Union[pd.DataFrame, str], col1: int) -> pd.DataFrame:
             pass
+
         self.assertRaisesRegex(
             NotImplementedError,
             "Unsupported signature.*str",
-            infer_eval_type, inspect.signature(func))
+            infer_eval_type,
+            inspect.signature(func),
+        )
 
         def func(col: pd.Series) -> Tuple[pd.DataFrame]:
             pass
+
         self.assertRaisesRegex(
             NotImplementedError,
             "Unsupported signature.*Tuple",
-            infer_eval_type, inspect.signature(func))
+            infer_eval_type,
+            inspect.signature(func),
+        )
 
         def func(col, *args: pd.Series) -> pd.Series:
             pass
+
         self.assertRaisesRegex(
-            ValueError,
-            "should be specified.*Series",
-            infer_eval_type, inspect.signature(func))
+            ValueError, "should be specified.*Series", infer_eval_type, inspect.signature(func)
+        )
 
         def func(col: pd.Series, *args: pd.Series, **kwargs: pd.DataFrame):
             pass
+
         self.assertRaisesRegex(
-            ValueError,
-            "should be specified.*Series",
-            infer_eval_type, inspect.signature(func))
+            ValueError, "should be specified.*Series", infer_eval_type, inspect.signature(func)
+        )
 
         def func(col: pd.Series, *, col2) -> pd.DataFrame:
             pass
+
         self.assertRaisesRegex(
-            ValueError,
-            "should be specified.*Series",
-            infer_eval_type, inspect.signature(func))
+            ValueError, "should be specified.*Series", infer_eval_type, inspect.signature(func)
+        )
 
     def test_scalar_udf_type_hint(self):
         df = self.spark.range(10).selectExpr("id", "id as v")
@@ -205,8 +218,8 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
 
         weighted_mean = pandas_udf("double")(weighted_mean)
 
-        actual = df.groupby('id').agg(weighted_mean(df.v, lit(1.0))).sort('id')
-        expected = df.groupby('id').agg(mean(df.v).alias('weighted_mean(v, 1.0)')).sort('id')
+        actual = df.groupby("id").agg(weighted_mean(df.v, lit(1.0))).sort("id")
+        expected = df.groupby("id").agg(mean(df.v).alias("weighted_mean(v, 1.0)")).sort("id")
         assert_frame_equal(expected.toPandas(), actual.toPandas())
 
     def test_ignore_type_hint_in_group_apply_in_pandas(self):
@@ -215,7 +228,7 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
         def pandas_plus_one(v: pd.DataFrame) -> pd.DataFrame:
             return v + 1
 
-        actual = df.groupby('id').applyInPandas(pandas_plus_one, schema=df.schema).sort('id')
+        actual = df.groupby("id").applyInPandas(pandas_plus_one, schema=df.schema).sort("id")
         expected = df.selectExpr("id + 1 as id")
         assert_frame_equal(expected.toPandas(), actual.toPandas())
 
@@ -225,9 +238,12 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
         def pandas_plus_one(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
             return left + 1
 
-        actual = df.groupby('id').cogroup(
-            self.spark.range(10).groupby("id")
-        ).applyInPandas(pandas_plus_one, schema=df.schema).sort('id')
+        actual = (
+            df.groupby("id")
+            .cogroup(self.spark.range(10).groupby("id"))
+            .applyInPandas(pandas_plus_one, schema=df.schema)
+            .sort("id")
+        )
         expected = df.selectExpr("id + 1 as id")
         assert_frame_equal(expected.toPandas(), actual.toPandas())
 
@@ -247,7 +263,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

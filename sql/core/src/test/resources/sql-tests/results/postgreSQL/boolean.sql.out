@@ -56,7 +56,7 @@ SELECT boolean('test') AS error
 struct<>
 -- !query output
 java.lang.UnsupportedOperationException
-invalid input syntax for type boolean: test
+invalid input syntax for type boolean: test. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -73,7 +73,7 @@ SELECT boolean('foo') AS error
 struct<>
 -- !query output
 java.lang.UnsupportedOperationException
-invalid input syntax for type boolean: foo
+invalid input syntax for type boolean: foo. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -98,7 +98,7 @@ SELECT boolean('yeah') AS error
 struct<>
 -- !query output
 java.lang.UnsupportedOperationException
-invalid input syntax for type boolean: yeah
+invalid input syntax for type boolean: yeah. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -123,7 +123,7 @@ SELECT boolean('nay') AS error
 struct<>
 -- !query output
 java.lang.UnsupportedOperationException
-invalid input syntax for type boolean: nay
+invalid input syntax for type boolean: nay. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -132,7 +132,7 @@ SELECT boolean('on') AS true
 struct<>
 -- !query output
 java.lang.UnsupportedOperationException
-invalid input syntax for type boolean: on
+invalid input syntax for type boolean: on. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -141,7 +141,7 @@ SELECT boolean('off') AS `false`
 struct<>
 -- !query output
 java.lang.UnsupportedOperationException
-invalid input syntax for type boolean: off
+invalid input syntax for type boolean: off. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -150,7 +150,7 @@ SELECT boolean('of') AS `false`
 struct<>
 -- !query output
 java.lang.UnsupportedOperationException
-invalid input syntax for type boolean: of
+invalid input syntax for type boolean: of. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -159,7 +159,7 @@ SELECT boolean('o') AS error
 struct<>
 -- !query output
 java.lang.UnsupportedOperationException
-invalid input syntax for type boolean: o
+invalid input syntax for type boolean: o. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -168,7 +168,7 @@ SELECT boolean('on_') AS error
 struct<>
 -- !query output
 java.lang.UnsupportedOperationException
-invalid input syntax for type boolean: on_
+invalid input syntax for type boolean: on_. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -177,7 +177,7 @@ SELECT boolean('off_') AS error
 struct<>
 -- !query output
 java.lang.UnsupportedOperationException
-invalid input syntax for type boolean: off_
+invalid input syntax for type boolean: off_. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -194,7 +194,7 @@ SELECT boolean('11') AS error
 struct<>
 -- !query output
 java.lang.UnsupportedOperationException
-invalid input syntax for type boolean: 11
+invalid input syntax for type boolean: 11. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -211,7 +211,7 @@ SELECT boolean('000') AS error
 struct<>
 -- !query output
 java.lang.UnsupportedOperationException
-invalid input syntax for type boolean: 000
+invalid input syntax for type boolean: 000. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -220,7 +220,7 @@ SELECT boolean('') AS error
 struct<>
 -- !query output
 java.lang.UnsupportedOperationException
-invalid input syntax for type boolean:
+invalid input syntax for type boolean: . To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -326,7 +326,7 @@ SELECT boolean(string('  tru e ')) AS invalid
 struct<>
 -- !query output
 java.lang.UnsupportedOperationException
-invalid input syntax for type boolean:   tru e
+invalid input syntax for type boolean:   tru e . To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -335,7 +335,7 @@ SELECT boolean(string('')) AS invalid
 struct<>
 -- !query output
 java.lang.UnsupportedOperationException
-invalid input syntax for type boolean:
+invalid input syntax for type boolean: . To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -479,7 +479,7 @@ INSERT INTO BOOLTBL2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-failed to evaluate expression CAST('XXX' AS BOOLEAN): invalid input syntax for type boolean: XXX; line 2 pos 3
+failed to evaluate expression CAST('XXX' AS BOOLEAN): invalid input syntax for type boolean: XXX. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.; line 2 pos 3
 
 
 -- !query

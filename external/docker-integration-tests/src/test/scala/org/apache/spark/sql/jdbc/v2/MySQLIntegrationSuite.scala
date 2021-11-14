@@ -30,9 +30,9 @@ import org.apache.spark.tags.DockerTest
 
 /**
  *
- * To run this test suite for a specific version (e.g., mysql:5.7.31):
+ * To run this test suite for a specific version (e.g., mysql:5.7.36):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:5.7.31
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:5.7.36
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2*MySQLIntegrationSuite"
  *
  * }}}
@@ -42,7 +42,7 @@ import org.apache.spark.tags.DockerTest
 class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override val catalogName: String = "mysql"
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:5.7.31")
+    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:5.7.36")
     override val env = Map(
       "MYSQL_ROOT_PASSWORD" -> "rootpass"
     )
@@ -79,7 +79,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     val msg1 = intercept[AnalysisException] {
       sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER")
     }.getMessage
-    assert(msg1.contains("Cannot update alt_table field ID: string cannot be cast to int"))
+    assert(msg1.contains(
+      s"Cannot update $catalogName.alt_table field ID: string cannot be cast to int"))
   }
 
   override def testRenameColumn(tbl: String): Unit = {
@@ -114,4 +115,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     val expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
   }
+
+  override def supportsIndex: Boolean = true
 }

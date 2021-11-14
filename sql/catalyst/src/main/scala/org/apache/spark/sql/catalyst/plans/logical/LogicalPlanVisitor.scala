@@ -43,6 +43,7 @@ trait LogicalPlanVisitor[T] {
     case p: Window => visitWindow(p)
     case p: Tail => visitTail(p)
     case p: Sort => visitSort(p)
+    case p: WithCTE => visitWithCTE(p)
     case p: LogicalPlan => default(p)
   }
 
@@ -87,4 +88,6 @@ trait LogicalPlanVisitor[T] {
   def visitTail(p: Tail): T
 
   def visitSort(sort: Sort): T
+
+  def visitWithCTE(p: WithCTE): T
 }

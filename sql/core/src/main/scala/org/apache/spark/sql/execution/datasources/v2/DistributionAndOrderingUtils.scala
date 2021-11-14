@@ -29,12 +29,10 @@ object DistributionAndOrderingUtils {
 
   def prepareQuery(write: Write, query: LogicalPlan, conf: SQLConf): LogicalPlan = write match {
     case write: RequiresDistributionAndOrdering =>
-      val resolver = conf.resolver
-
       val numPartitions = write.requiredNumPartitions()
       val distribution = write.requiredDistribution match {
-        case d: OrderedDistribution => d.ordering.map(e => toCatalyst(e, query, resolver))
-        case d: ClusteredDistribution => d.clustering.map(e => toCatalyst(e, query, resolver))
+        case d: OrderedDistribution => d.ordering.map(e => toCatalyst(e, query))
+        case d: ClusteredDistribution => d.clustering.map(e => toCatalyst(e, query))
         case _: UnspecifiedDistribution => Array.empty[Expression]
       }
 
@@ -55,7 +53,7 @@ object DistributionAndOrderingUtils {
       }
 
       val ordering = write.requiredOrdering.toSeq
-        .map(e => toCatalyst(e, query, resolver))
+        .map(e => toCatalyst(e, query))
         .asInstanceOf[Seq[SortOrder]]
 
       val queryWithDistributionAndOrdering = if (ordering.nonEmpty) {

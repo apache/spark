@@ -33,14 +33,30 @@ import org.apache.spark.sql.util.SchemaUtils
  */
 object ResolveUnion extends Rule[LogicalPlan] {
   /**
+   * Transform the array of structs to the target struct type.
+   */
+  private def transformArray(arrayCol: Expression, targetType: ArrayType,
+      allowMissing: Boolean) = {
+    assert(arrayCol.dataType.isInstanceOf[ArrayType], "Only support ArrayType.")
+
+    val arrayType = arrayCol.dataType.asInstanceOf[ArrayType]
+
+    val x = NamedLambdaVariable(UnresolvedNamedLambdaVariable.freshVarName("x"),
+      arrayType.elementType,
+      arrayType.containsNull)
+    val function = mergeFields(x, targetType.elementType, allowMissing)
+    ArrayTransform(arrayCol, LambdaFunction(function, Seq(x)))
+  }
+
+  /**
    * Adds missing fields recursively into given `col` expression, based on the expected struct
    * fields from merging the two schemas. This is called by `compareAndAddFields` when we find two
    * struct columns with same name but different nested fields. This method will recursively
    * return a new struct with all of the expected fields, adding null values when `col` doesn't
-   * already contain them. Currently we don't support merging structs nested inside of arrays
-   * or maps.
+   * already contain them. Currently we don't support merging structs nested inside of maps.
    */
-  private def addFields(col: Expression, targetType: StructType): Expression = {
+  private def addFields(col: Expression,
+     targetType: StructType, allowMissing: Boolean): Expression = {
     assert(col.dataType.isInstanceOf[StructType], "Only support StructType.")
 
     val resolver = conf.resolver
@@ -52,13 +68,17 @@ object ResolveUnion extends Rule[LogicalPlan] {
       val currentField = colType.fields.find(f => resolver(f.name, expectedField.name))
 
       val newExpression = (currentField, expectedField.dataType) match {
-        case (Some(cf), expectedType: StructType) if cf.dataType.isInstanceOf[StructType] =>
-          val extractedValue = ExtractValue(col, Literal(cf.name), resolver)
-          addFields(extractedValue, expectedType)
-        case (Some(cf), _) =>
-          ExtractValue(col, Literal(cf.name), resolver)
+        case (Some(cf), expectedType) =>
+          mergeFields(ExtractValue(col, Literal(cf.name), resolver), expectedType, allowMissing)
         case (None, expectedType) =>
-          Literal(null, expectedType)
+          if (allowMissing) {
+            // for allowMissingCol allow the null values
+            Literal(null, expectedType)
+          } else {
+            // for allowMissingCol as false throw exception for missing col
+            throw QueryCompilationErrors.noSuchStructFieldInGivenFieldsError(
+              expectedField.name, colType.fields)
+          }
       }
       newStructFields ++= Literal(expectedField.name) :: newExpression :: Nil
     }
@@ -77,6 +97,25 @@ object ResolveUnion extends Rule[LogicalPlan] {
     }
   }
 
+  /**
+   * Handles the merging of complex types. Currently supports structs and arrays recursively.
+   */
+  private def mergeFields(col: Expression, targetType: DataType,
+      allowMissing: Boolean): Expression = {
+    if (!DataType.equalsStructurallyByName(col.dataType, targetType, conf.resolver)) {
+      (col.dataType, targetType) match {
+        case (_: StructType, targetStruct: StructType) =>
+          addFields(col, targetStruct, allowMissing)
+        case (_: ArrayType, targetArray: ArrayType) =>
+          transformArray(col, targetArray, allowMissing)
+        case _ =>
+          // Unsupported combination, let the resulting union analyze
+          col
+      }
+    } else {
+      col
+    }
+  }
 
   /**
    * This method will compare right to left plan's outputs. If there is one struct attribute
@@ -99,29 +138,21 @@ object ResolveUnion extends Rule[LogicalPlan] {
       if (found.isDefined) {
         val foundAttr = found.get
         val foundDt = foundAttr.dataType
-        (foundDt, lattr.dataType) match {
-          case (source: StructType, target: StructType)
-              if allowMissingCol && !source.sameType(target) =>
-            // We have two structs with different types, so make sure the two structs have their
-            // fields in the same order by using `target`'s fields and then inluding any remaining
-            // in `foundAttr`.
-            aliased += foundAttr
-            Alias(addFields(foundAttr, target), foundAttr.name)()
-          case _ =>
-            // We don't need/try to add missing fields if:
-            // 1. The attributes of left and right side are the same struct type
-            // 2. The attributes are not struct types. They might be primitive types, or array, map
-            //    types. We don't support adding missing fields of nested structs in array or map
-            //    types now.
-            // 3. `allowMissingCol` is disabled.
-            foundAttr
+        if (!DataType.equalsStructurallyByName(foundDt, lattr.dataType, resolver)) {
+          // The two types are complex and have different nested structs at some level.
+          // Map types are currently not supported and will return the existing attribute.
+          aliased += foundAttr
+          Alias(mergeFields(foundAttr, lattr.dataType, allowMissingCol), foundAttr.name)()
+        } else {
+          // Either both sides are primitive types or equivalent complex types
+          foundAttr
         }
       } else {
         if (allowMissingCol) {
           Alias(Literal(null, lattr.dataType), lattr.name)()
         } else {
           throw QueryCompilationErrors.cannotResolveColumnNameAmongAttributesError(
-            lattr, rightOutputAttrs)
+            lattr.name, rightOutputAttrs.map(_.name).mkString(", "))
         }
       }
     }

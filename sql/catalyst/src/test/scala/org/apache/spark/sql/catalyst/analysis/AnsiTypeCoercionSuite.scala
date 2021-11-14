@@ -1425,4 +1425,14 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
       In(timestampLiteral, Seq(stringLiteral)),
       In(timestampLiteral, Seq(castStringLiteralAsTimestamp)))
   }
+
+  test("SPARK-35937: GetDateFieldOperations") {
+    val ts = Literal(Timestamp.valueOf("2021-01-01 01:30:00"))
+    Seq(
+      DayOfYear, Year, YearOfWeek, Quarter, Month, DayOfMonth, DayOfWeek, WeekDay, WeekOfYear
+    ).foreach { operation =>
+      ruleTest(
+        AnsiTypeCoercion.GetDateFieldOperations, operation(ts), operation(Cast(ts, DateType)))
+    }
+  }
 }

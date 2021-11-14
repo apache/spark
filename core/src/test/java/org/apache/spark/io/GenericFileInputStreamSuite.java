@@ -59,8 +59,8 @@ public abstract class GenericFileInputStreamSuite {
   @Test
   public void testReadOneByte() throws IOException {
     for (InputStream inputStream: inputStreams) {
-      for (int i = 0; i < randomBytes.length; i++) {
-        assertEquals(randomBytes[i], (byte) inputStream.read());
+      for (byte randomByte : randomBytes) {
+        assertEquals(randomByte, (byte) inputStream.read());
       }
     }
   }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.time.LocalDateTime
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -116,6 +117,12 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     // as we store Spark SQL schema in the extra metadata.
     withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "false")(checkParquetFile(data))
     withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "true")(checkParquetFile(data))
+  }
+
+  test("SPARK-36182: TimestampNTZ") {
+    val data = Seq("2021-01-01T00:00:00", "1970-07-15T01:02:03.456789")
+      .map(ts => Tuple1(LocalDateTime.parse(ts)))
+    checkParquetFile(data)
   }
 
   testStandardAndLegacyModes("fixed-length decimals") {
@@ -368,7 +375,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   private def createParquetWriter(
       schema: MessageType,
       path: Path,
-      dictionaryEnabled: Boolean = false): ParquetWriter[Group] = {
+      dictionaryEnabled: Boolean = false,
+      pageSize: Int = 1024,
+      dictionaryPageSize: Int = 1024): ParquetWriter[Group] = {
     val hadoopConf = spark.sessionState.newHadoopConf()
 
     ExampleParquetWriter
@@ -378,9 +387,75 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       .withWriterVersion(PARQUET_1_0)
       .withCompressionCodec(GZIP)
       .withRowGroupSize(1024 * 1024)
-      .withPageSize(1024)
+      .withPageSize(pageSize)
+      .withDictionaryPageSize(dictionaryPageSize)
       .withConf(hadoopConf)
       .build()
+  }
+
+  test("SPARK-34859: test multiple pages with different sizes and nulls") {
+    def makeRawParquetFile(
+        path: Path,
+        dictionaryEnabled: Boolean,
+        n: Int,
+        pageSize: Int): Seq[Option[Int]] = {
+      val schemaStr =
+        """
+          |message root {
+          |  optional boolean _1;
+          |  optional int32   _2;
+          |  optional int64   _3;
+          |  optional float   _4;
+          |  optional double  _5;
+          |}
+        """.stripMargin
+
+      val schema = MessageTypeParser.parseMessageType(schemaStr)
+      val writer = createParquetWriter(schema, path,
+        dictionaryEnabled = dictionaryEnabled, pageSize = pageSize, dictionaryPageSize = pageSize)
+
+      val rand = scala.util.Random
+      val expected = (0 until n).map { i =>
+        if (rand.nextBoolean()) {
+          None
+        } else {
+          Some(i)
+        }
+      }
+      expected.foreach { opt =>
+        val record = new SimpleGroup(schema)
+        opt match {
+          case Some(i) =>
+            record.add(0, i % 2 == 0)
+            record.add(1, i)
+            record.add(2, i.toLong)
+            record.add(3, i.toFloat)
+            record.add(4, i.toDouble)
+          case _ =>
+        }
+        writer.write(record)
+      }
+
+      writer.close()
+      expected
+    }
+
+    Seq(true, false).foreach { dictionaryEnabled =>
+      Seq(64, 128, 89).foreach { pageSize =>
+        withTempDir { dir =>
+          val path = new Path(dir.toURI.toString, "part-r-0.parquet")
+          val expected = makeRawParquetFile(path, dictionaryEnabled, 1000, pageSize)
+          readParquetFile(path.toString) { df =>
+            checkAnswer(df, expected.map {
+              case None =>
+                Row(null, null, null, null, null)
+              case Some(i) =>
+                Row(i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
+            })
+          }
+        }
+      }
+    }
   }
 
   test("read raw Parquet file") {
@@ -784,6 +859,12 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           }
         }
       }
+    }
+  }
+
+  test("SPARK-36726: test incorrect Parquet row group file offset") {
+    readParquetFile(testFile("test-data/malformed-file-offset.parquet")) { df =>
+      assert(df.count() == 3650)
     }
   }
 

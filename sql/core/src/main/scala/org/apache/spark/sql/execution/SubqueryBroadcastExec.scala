@@ -24,6 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.joins.{HashedRelation, HashJoin, LongHashedRelation}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.ThreadUtils
@@ -105,8 +106,7 @@ case class SubqueryBroadcastExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException(
-      "SubqueryBroadcastExec does not support the execute() code path.")
+    throw QueryExecutionErrors.executeCodePathUnsupportedError("SubqueryBroadcastExec")
   }
 
   override def executeCollect(): Array[InternalRow] = {
