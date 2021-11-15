@@ -778,8 +778,8 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
       (new Timestamp(i), LocalDateTime.of(2019, 3, 21, 0, 2, 3, 456000000 + i))
     } :+ (null, null)
 
-    withAllOrcReaders {
-      withOrcFile(data) { file =>
+    withOrcFile(data) { file =>
+      withAllOrcReaders {
         checkAnswer(spark.read.orc(file), data.toDF().collect())
       }
     }
