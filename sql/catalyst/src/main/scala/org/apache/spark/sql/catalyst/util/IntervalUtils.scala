@@ -1256,20 +1256,25 @@ object IntervalUtils {
     intervalString
   }
 
-  def integralToYearMonthInterval(v: Long, endField: Byte): Int = {
-    if (v != v.toInt) {
-      throw QueryExecutionErrors.castingCauseOverflowError(v, YM(endField).catalogString)
-    }
+  def intToYearMonthInterval(v: Int, endField: Byte): Int = {
     endField match {
       case YEAR =>
         try {
-          Math.multiplyExact(v.toInt, MONTHS_PER_YEAR)
+          Math.multiplyExact(v, MONTHS_PER_YEAR)
         } catch {
           case _: ArithmeticException =>
             throw QueryExecutionErrors.castingCauseOverflowError(v, YM(endField).catalogString)
         }
-      case MONTH => v.toInt
+      case MONTH => v
     }
+  }
+
+  def longToYearMonthInterval(v: Long, endField: Byte): Int = {
+    val vInt = v.toInt
+    if (v != vInt) {
+      throw QueryExecutionErrors.castingCauseOverflowError(v, YM(endField).catalogString)
+    }
+    intToYearMonthInterval(vInt, endField)
   }
 
   def yearMonthIntervalToInt(v: Int, endFiled: Byte): Int = {
@@ -1279,7 +1284,40 @@ object IntervalUtils {
     }
   }
 
-  def integralToDayTimeInterval(v: Long, endField: Byte): Long = {
+  def yearMonthIntervalToShort(v: Int, endFiled: Byte): Short = {
+    val vInt = yearMonthIntervalToInt(v, endFiled)
+    val vShort = vInt.toShort
+    if (vInt != vShort) {
+      throw QueryExecutionErrors.castingCauseOverflowError(v, ShortType.catalogString)
+    }
+    vShort
+  }
+
+  def yearMonthIntervalToByte(v: Int, endFiled: Byte): Byte = {
+    val vInt = yearMonthIntervalToInt(v, endFiled)
+    val vByte = vInt.toByte
+    if (vInt != vByte) {
+      throw QueryExecutionErrors.castingCauseOverflowError(v, ByteType.catalogString)
+    }
+    vByte
+  }
+
+  def intToDayTimeInterval(v: Int, endField: Byte): Long = {
+    endField match {
+      case DAY =>
+        try {
+          Math.multiplyExact(v, MICROS_PER_DAY)
+        } catch {
+          case _: ArithmeticException =>
+            throw QueryExecutionErrors.castingCauseOverflowError(v, DT(endField).catalogString)
+        }
+      case HOUR => v * MICROS_PER_HOUR
+      case MINUTE => v * MICROS_PER_MINUTE
+      case SECOND => v * MICROS_PER_SECOND
+    }
+  }
+
+  def longToDayTimeInterval(v: Long, endField: Byte): Long = {
     try {
       endField match {
         case DAY => Math.multiplyExact(v, MICROS_PER_DAY)
@@ -1300,5 +1338,32 @@ object IntervalUtils {
       case MINUTE => v / MICROS_PER_MINUTE
       case SECOND => v / MICROS_PER_SECOND
     }
+  }
+
+  def dayTimeIntervalToInt(v: Long, endFiled: Byte): Int = {
+    val vLong = dayTimeIntervalToLong(v, endFiled)
+    val vInt = vLong.toInt
+    if (vLong != vInt) {
+      throw QueryExecutionErrors.castingCauseOverflowError(v, IntegerType.catalogString)
+    }
+    vInt
+  }
+
+  def dayTimeIntervalToShort(v: Long, endFiled: Byte): Short = {
+    val vLong = dayTimeIntervalToLong(v, endFiled)
+    val vShort = vLong.toShort
+    if (vLong != vShort) {
+      throw QueryExecutionErrors.castingCauseOverflowError(v, ShortType.catalogString)
+    }
+    vShort
+  }
+
+  def dayTimeIntervalToByte(v: Long, endFiled: Byte): Byte = {
+    val vLong = dayTimeIntervalToLong(v, endFiled)
+    val vByte = vLong.toByte
+    if (vLong != vByte) {
+      throw QueryExecutionErrors.castingCauseOverflowError(v, ByteType.catalogString)
+    }
+    vByte
   }
 }

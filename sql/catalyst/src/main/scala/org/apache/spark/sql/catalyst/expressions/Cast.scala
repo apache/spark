@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
-import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToLong, yearMonthIntervalToInt}
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, dayTimeIntervalToInt, dayTimeIntervalToLong, dayTimeIntervalToShort, yearMonthIntervalToByte, yearMonthIntervalToInt, yearMonthIntervalToShort}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -594,9 +594,15 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       IntervalUtils.castStringToDTInterval(s, it.startField, it.endField))
     case _: DayTimeIntervalType => buildCast[Long](_, s =>
       IntervalUtils.durationToMicros(IntervalUtils.microsToDuration(s), it.endField))
-    case x: IntegralType if it.startField == it.endField =>
-      b => IntervalUtils.integralToDayTimeInterval(
-        x.exactNumeric.asInstanceOf[Numeric[Any]].toLong(b), it.endField)
+    case x: IntegralType =>
+      assert(it.startField == it.endField)
+      if (x == LongType) {
+        b => IntervalUtils.longToDayTimeInterval(
+          x.integral.asInstanceOf[Integral[Any]].toLong(b), it.endField)
+      } else {
+        b => IntervalUtils.intToDayTimeInterval(
+          x.integral.asInstanceOf[Integral[Any]].toInt(b), it.endField)
+      }
   }
 
   private[this] def castToYearMonthInterval(
@@ -606,9 +612,15 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       IntervalUtils.castStringToYMInterval(s, it.startField, it.endField))
     case _: YearMonthIntervalType => buildCast[Int](_, s =>
       IntervalUtils.periodToMonths(IntervalUtils.monthsToPeriod(s), it.endField))
-    case x: IntegralType if it.startField == it.endField =>
-      b => IntervalUtils.integralToYearMonthInterval(
-        x.exactNumeric.asInstanceOf[Numeric[Any]].toLong(b), it.endField)
+    case x: IntegralType =>
+      assert(it.startField == it.endField)
+      if (x == LongType) {
+        b => IntervalUtils.longToYearMonthInterval(
+          x.integral.asInstanceOf[Integral[Any]].toLong(b), it.endField)
+      } else {
+        b => IntervalUtils.intToYearMonthInterval(
+          x.integral.asInstanceOf[Integral[Any]].toInt(b), it.endField)
+      }
   }
 
   // LongConverter
@@ -661,14 +673,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b)
     case x: DayTimeIntervalType =>
-      buildCast[Long](_, i => {
-        val longValue = dayTimeIntervalToLong(i, x.endField)
-        if (longValue == longValue.toInt) {
-          longValue.toInt
-        } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(i, IntegerType.catalogString)
-        }
-      })
+      buildCast[Long](_, i => dayTimeIntervalToInt(i, x.endField))
     case x: YearMonthIntervalType =>
       buildCast[Int](_, i => yearMonthIntervalToInt(i, x.endField))
   }
@@ -715,23 +720,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
     case x: DayTimeIntervalType =>
-      buildCast[Long](_, i => {
-        val longValue = dayTimeIntervalToLong(i, x.endField)
-        if (longValue == longValue.toShort) {
-          longValue.toShort
-        } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(i, ShortType.catalogString)
-        }
-      })
+      buildCast[Long](_, i => dayTimeIntervalToShort(i, x.endField))
     case x: YearMonthIntervalType =>
-      buildCast[Int](_, i => {
-        val intValue = yearMonthIntervalToInt(i, x.endField)
-        if (intValue == intValue.toShort) {
-          intValue.toShort
-        } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(i, ShortType.catalogString)
-        }
-      })
+      buildCast[Int](_, i => yearMonthIntervalToShort(i, x.endField))
   }
 
   // ByteConverter
@@ -776,23 +767,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
     case x: DayTimeIntervalType =>
-      buildCast[Long](_, i => {
-        val longValue = dayTimeIntervalToLong(i, x.endField)
-        if (longValue == longValue.toByte) {
-          longValue.toByte
-        } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(i, ByteType.catalogString)
-        }
-      })
+      buildCast[Long](_, i => dayTimeIntervalToByte(i, x.endField))
     case x: YearMonthIntervalType =>
-      buildCast[Int](_, i => {
-        val intValue = yearMonthIntervalToInt(i, x.endField)
-        if (intValue == intValue.toByte) {
-          intValue.toByte
-        } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(i, ByteType.catalogString)
-        }
-      })
+      buildCast[Int](_, i => yearMonthIntervalToByte(i, x.endField))
   }
 
   /**
@@ -1564,12 +1541,20 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         code"""
           $evPrim = $util.durationToMicros($util.microsToDuration($c), (byte)${it.endField});
         """
-    case ByteType | ShortType | IntegerType | LongType if it.startField == it.endField =>
+    case x: IntegralType =>
+      assert(it.startField == it.endField)
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
-      (c, evPrim, _) =>
-        code"""
-          $evPrim = $util.integralToDayTimeInterval((long)$c, (byte)${it.endField});
-        """
+      if (x == LongType) {
+        (c, evPrim, _) =>
+          code"""
+            $evPrim = $util.longToDayTimeInterval($c, (byte)${it.endField});
+          """
+      } else {
+        (c, evPrim, _) =>
+          code"""
+            $evPrim = $util.intToDayTimeInterval($c, (byte)${it.endField});
+          """
+      }
   }
 
   private[this] def castToYearMonthIntervalCode(
@@ -1587,12 +1572,20 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         code"""
           $evPrim = $util.periodToMonths($util.monthsToPeriod($c), (byte)${it.endField});
         """
-    case ByteType | ShortType | IntegerType | LongType if it.startField == it.endField =>
+    case x: IntegralType =>
+      assert(it.startField == it.endField)
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
-      (c, evPrim, _) =>
-        code"""
-          $evPrim = $util.integralToYearMonthInterval((long)$c, (byte)${it.endField});
-        """
+      if (x == LongType) {
+        (c, evPrim, _) =>
+          code"""
+            $evPrim = $util.longToYearMonthInterval($c, (byte)${it.endField});
+          """
+      } else {
+        (c, evPrim, _) =>
+          code"""
+            $evPrim = $util.intToYearMonthInterval($c, (byte)${it.endField});
+          """
+      }
   }
 
   private[this] def decimalToTimestampCode(d: ExprValue): Block = {
@@ -1655,39 +1648,19 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   private[this] def castDayTimeIntervalToIntegralTypeCode(
-      ctx: CodegenContext,
       endFiled: Byte,
-      integralType: String,
-      catalogType: String): CastFunction = {
-    val longValue = ctx.freshName("longValue")
+      integralType: String): CastFunction = {
     val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
     (c, evPrim, _) =>
-      code"""
-          long $longValue = $util.dayTimeIntervalToLong((long)$c, (byte)$endFiled);
-          if ($longValue == ($integralType) $longValue) {
-            $evPrim = ($integralType) $longValue;
-          } else {
-            throw QueryExecutionErrors.castingCauseOverflowError($c, "$catalogType");
-          }
-      """
+      code"""$evPrim = $util.dayTimeIntervalTo$integralType($c, (byte)$endFiled);"""
   }
 
   private[this] def castYearMonthIntervalToIntegralTypeCode(
-      ctx: CodegenContext,
       endFiled: Byte,
-      integralType: String,
-      catalogType: String): CastFunction = {
-    val intValue = ctx.freshName("intValue")
+      integralType: String): CastFunction = {
     val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
     (c, evPrim, _) =>
-      code"""
-          int $intValue = $util.yearMonthIntervalToInt((int)$c, (byte)$endFiled);
-          if ($intValue == ($integralType) $intValue) {
-            $evPrim = ($integralType) $intValue;
-          } else {
-            throw QueryExecutionErrors.castingCauseOverflowError($c, "$catalogType");
-          }
-      """
+      code"""$evPrim = $util.yearMonthIntervalTo$integralType($c, (byte)$endFiled);"""
   }
 
   private[this] def castDecimalToIntegralTypeCode(
@@ -1775,9 +1748,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (byte) $c;"
     case x: DayTimeIntervalType =>
-      castDayTimeIntervalToIntegralTypeCode(ctx, x.endField, "byte", ByteType.catalogString)
+      castDayTimeIntervalToIntegralTypeCode(x.endField, "Byte")
     case x: YearMonthIntervalType =>
-      castYearMonthIntervalToIntegralTypeCode(ctx, x.endField, "byte", ByteType.catalogString)
+      castYearMonthIntervalToIntegralTypeCode(x.endField, "Byte")
   }
 
   private[this] def castToShortCode(
@@ -1811,9 +1784,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (short) $c;"
     case x: DayTimeIntervalType =>
-      castDayTimeIntervalToIntegralTypeCode(ctx, x.endField, "short", ShortType.catalogString)
+      castDayTimeIntervalToIntegralTypeCode(x.endField, "Short")
     case x: YearMonthIntervalType =>
-      castYearMonthIntervalToIntegralTypeCode(ctx, x.endField, "short", ShortType.catalogString)
+      castYearMonthIntervalToIntegralTypeCode(x.endField, "Short")
   }
 
   private[this] def castToIntCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
@@ -1845,9 +1818,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (int) $c;"
     case x: DayTimeIntervalType =>
-      castDayTimeIntervalToIntegralTypeCode(ctx, x.endField, "int", IntegerType.catalogString)
+      castDayTimeIntervalToIntegralTypeCode(x.endField, "Int")
     case x: YearMonthIntervalType =>
-      castYearMonthIntervalToIntegralTypeCode(ctx, x.endField, "int", IntegerType.catalogString)
+      castYearMonthIntervalToIntegralTypeCode(x.endField, "Int")
   }
 
   private[this] def castToLongCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
@@ -1878,9 +1851,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (long) $c;"
     case x: DayTimeIntervalType =>
-      castDayTimeIntervalToIntegralTypeCode(ctx, x.endField, "long", LongType.catalogString)
+      castDayTimeIntervalToIntegralTypeCode(x.endField, "Long")
     case x: YearMonthIntervalType =>
-      castYearMonthIntervalToIntegralTypeCode(ctx, x.endField, "long", LongType.catalogString)
+      castYearMonthIntervalToIntegralTypeCode(x.endField, "Int")
   }
 
   private[this] def castToFloatCode(from: DataType, ctx: CodegenContext): CastFunction = {
