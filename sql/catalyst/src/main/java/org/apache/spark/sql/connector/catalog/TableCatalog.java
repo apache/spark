@@ -110,7 +110,7 @@ public interface TableCatalog extends CatalogPlugin {
   }
 
   /**
-   * Load table metadata by {@link Identifier identifier} from the catalog.
+   * Load table metadata at a specific time by {@link Identifier identifier} from the catalog.
    * <p>
    * If the catalog supports views and contains a view for the identifier and not a table, this
    * must throw {@link NoSuchTableException}.
