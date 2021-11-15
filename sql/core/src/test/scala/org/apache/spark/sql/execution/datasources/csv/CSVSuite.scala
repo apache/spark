@@ -1012,7 +1012,7 @@ abstract class CSVSuite
     }
   }
 
-  test("Roundtrip in reading and writing TIMESTAMP_NTZ values with custom schema") {
+  test("SPARK-37326: Roundtrip in reading and writing TIMESTAMP_NTZ values with custom schema") {
     withTempDir { dir =>
       val path = s"${dir.getCanonicalPath}/csv"
 
@@ -1034,7 +1034,7 @@ abstract class CSVSuite
     }
   }
 
-  test("Timestamp type inference for a column with TIMESTAMP_NTZ values") {
+  test("SPARK-37326: Timestamp type inference for a column with TIMESTAMP_NTZ values") {
     withTempDir { dir =>
       val path = s"${dir.getCanonicalPath}/csv"
 
@@ -1074,7 +1074,7 @@ abstract class CSVSuite
     }
   }
 
-  test("Timestamp type inference for a column with both TIMESTAMP_NTZ and TIMESTAMP_LTZ") {
+  test("SPARK-37326: Timestamp type inference for a mix of TIMESTAMP_NTZ and TIMESTAMP_LTZ") {
     withTempDir { dir =>
       val path = s"${dir.getCanonicalPath}/csv"
 
