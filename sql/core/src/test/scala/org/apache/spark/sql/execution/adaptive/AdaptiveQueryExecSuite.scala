@@ -2223,6 +2223,54 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+  test("SPARK-37328: Fix bug that OptimizeSkewJoin may not work since it was moved from" +
+    "queryStageOptimizerRules to queryStagePreparationRules") {
+
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+      SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      withTempView("skewData1", "skewData2", "skewData3") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 3 as key1", "id % 3 as value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 1 as key2", "id as value2")
+          .createOrReplaceTempView("skewData2")
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 1 as key3", "id as value3")
+          .createOrReplaceTempView("skewData3")
+
+        // skewedJoin doesn't happen in last stage
+        val (_, adaptive1) =
+          runAdaptiveAndVerifyResult("SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 " +
+            "JOIN skewData3 ON value2 = value3")
+        val shuffles1 = collect(adaptive1) {
+          case s: ShuffleExchangeExec => s
+        }
+        assert(shuffles1.size == 4)
+        val smj1 = findTopLevelSortMergeJoin(adaptive1)
+        assert(smj1.size == 2 && smj1.last.isSkewJoin && !smj1.head.isSkewJoin)
+
+        // Query has two skewJoin in two continuous stages.
+        val (_, adaptive2) =
+          runAdaptiveAndVerifyResult("SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 " +
+            "JOIN skewData3 ON value1 = value3")
+        val shuffles2 = collect(adaptive2) {
+          case s: ShuffleExchangeExec => s
+        }
+        assert(shuffles2.size == 4)
+        val smj2 = findTopLevelSortMergeJoin(adaptive2)
+        assert(smj2.size == 2 && smj2.forall(_.isSkewJoin))
+      }
+    }
+  }
 }
 
 /**

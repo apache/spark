@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, Exchange}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -233,6 +233,20 @@ case class OptimizeSkewedJoin(
       return plan
     }
 
+    val newStageTopPlans = findNewStageTopPlans(plan)
+    if (newStageTopPlans.isEmpty) {
+      // Not ready to submit new stage, just skip it.
+      plan
+    } else {
+      // NewStageTopPlans could be more one, we should optimize them all.
+      plan.transform {
+        case p if newStageTopPlans.exists(_.fastEquals(p)) =>
+          applyInternal(p)
+      }
+    }
+  }
+
+  private def applyInternal(plan: SparkPlan): SparkPlan = {
     def collectShuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] = plan match {
       case stage: ShuffleQueryStageExec => Seq(stage)
       case _ => plan.children.flatMap(collectShuffleStages)
@@ -267,6 +281,38 @@ case class OptimizeSkewedJoin(
       }
     } else {
       plan
+    }
+  }
+
+  /**
+   * Find top plan of new stage which is about to submit. The following conditions should be met:
+   * 1. Can't collect any [[Exchange]], and all collected [[QueryStageExec]]s are isMaterialized.
+   * 2. Has no parent node or parent node is [[Exchange]].
+   */
+  private def findNewStageTopPlans(plan: SparkPlan): Seq[SparkPlan] = {
+    // 1. Building Map(plan -> whether plan belongs to new stage which is about to submit).
+    val plan2NewQueryStageMapping: mutable.Map[SparkPlan, Boolean] = mutable.Map.empty
+    plan.foreachUp {
+      case queryStageExec: QueryStageExec =>
+        // Materialized QueryStageExes must belong to new stage.
+        plan2NewQueryStageMapping.put(queryStageExec, queryStageExec.isMaterialized)
+      // LeafExecNodes except QueryStageExec must belongs to new stage.
+      case leafExec: LeafExecNode =>
+        plan2NewQueryStageMapping.put(leafExec, true)
+      case exchange: Exchange =>
+        // Exchange definitely doesn't belong to new stage.
+        plan2NewQueryStageMapping.put(exchange, false)
+      case other =>
+        // Other plans would only belong to new stage if all children belong to new stage.
+        plan2NewQueryStageMapping.put(other, other.children.forall(plan2NewQueryStageMapping))
+    }
+    // 2. Find topPlan which belong to new stage.
+    if (plan2NewQueryStageMapping(plan)) {
+      Seq(plan)
+    } else {
+      plan.collect {
+        case e: Exchange if plan2NewQueryStageMapping(e.child) => e.child
+      }
     }
   }
 
