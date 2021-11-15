@@ -19,6 +19,7 @@ package org.apache.spark.deploy.k8s
 private[spark] object Constants {
 
   // Labels
+  val SPARK_VERSION_LABEL = "spark-version"
   val SPARK_APP_ID_LABEL = "spark-app-selector"
   val SPARK_APP_NAME_LABEL = "spark-app-name"
   val SPARK_EXECUTOR_ID_LABEL = "spark-exec-id"
