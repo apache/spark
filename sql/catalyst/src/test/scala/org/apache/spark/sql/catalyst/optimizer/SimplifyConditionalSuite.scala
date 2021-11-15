@@ -281,4 +281,16 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
       checkEvaluation(originalExpr, optimizedVal, inputRow)
     }
   }
+
+  test("SPARK-37270: Remove elseValue if it is null Literal") {
+    assertEquivalent(
+      CaseWhen((GreaterThan('a, Rand(1)), Literal.create(null, BooleanType)) :: Nil,
+        Some(Literal.create(null, BooleanType))),
+      CaseWhen((GreaterThan('a, Rand(1)), Literal.create(null, BooleanType)) :: Nil))
+
+    assertEquivalent(
+      CaseWhen((GreaterThan('a, 1), Literal.create(1, IntegerType)) :: Nil,
+        Some(Literal.create(null, IntegerType))),
+      CaseWhen((GreaterThan('a, 1), Literal.create(1, IntegerType)) :: Nil))
+  }
 }

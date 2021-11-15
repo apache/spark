@@ -623,8 +623,14 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         if (i == 0) {
           elseValue
         } else {
-          e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
+          e.copy(
+            branches = branches.take(i).map(branch => (branch._1, elseValue)),
+            elseValue = elseOpt.filterNot(_.semanticEquals(Literal(null, e.dataType))))
         }
+
+      case e @ CaseWhen(_, elseOpt)
+          if elseOpt.exists(_.semanticEquals(Literal(null, e.dataType))) =>
+        e.copy(elseValue = None)
     }
   }
 }
@@ -681,9 +687,7 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
           if supportedUnaryExpression(u) && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = u.withNewChildren(Array(e._2)))),
-          elseValue
-            .orElse { if (u.isInstanceOf[IsNull]) Some(Literal(null, c.dataType)) else None }
-            .map(e => u.withNewChildren(Array(e))))
+          Some(u.withNewChildren(Array(elseValue.getOrElse(Literal(null, c.dataType))))))
 
       case b @ BinaryExpression(i @ If(_, trueValue, falseValue), right)
           if supportedBinaryExpression(b) && right.foldable &&
@@ -704,18 +708,14 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
             atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(e._2, right)))),
-          elseValue
-            .orElse { if (b.isInstanceOf[EqualNullSafe]) Some(Literal(null, c.dataType)) else None }
-            .map(e => b.withNewChildren(Array(e, right))))
+          Some(b.withNewChildren(Array(elseValue.getOrElse(Literal(null, c.dataType)), right))))
 
       case b @ BinaryExpression(left, c @ CaseWhen(branches, elseValue))
           if supportedBinaryExpression(b) && left.foldable &&
             atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(left, e._2)))),
-          elseValue
-            .orElse { if (b.isInstanceOf[EqualNullSafe]) Some(Literal(null, c.dataType)) else None }
-            .map(e => b.withNewChildren(Array(left, e))))
+          Some(b.withNewChildren(Array(left, elseValue.getOrElse(Literal(null, c.dataType))))))
     }
   }
 }
