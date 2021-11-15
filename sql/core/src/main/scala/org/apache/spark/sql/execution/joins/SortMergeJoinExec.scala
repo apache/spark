@@ -941,7 +941,6 @@ case class SortMergeJoinExec(
     val rightIndex = ctx.freshName("rightIndex")
 
     // Generate code for join condition
-    // val leftVars = genOneSideJoinVars(ctx, leftOutputRow, left, setDefaultValue = false)
     val leftResultVars = genOneSideJoinVars(
       ctx, leftOutputRow, left, setDefaultValue = true)
     val rightResultVars = genOneSideJoinVars(
