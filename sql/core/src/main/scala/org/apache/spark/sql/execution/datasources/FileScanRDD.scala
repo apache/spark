@@ -26,7 +26,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, MetadataAttribute, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.FileFormat._
@@ -68,7 +68,7 @@ class FileScanRDD(
     readFunction: (PartitionedFile) => Iterator[InternalRow],
     @transient val filePartitions: Seq[FilePartition],
     val requiredSchema: StructType = StructType(Seq.empty),
-    val metadataStruct: Option[MetadataAttribute] = None)
+    val metadataStruct: Option[AttributeReference] = None)
   extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
 
   private val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
@@ -176,7 +176,7 @@ class FileScanRDD(
        * Create a writable column vector containing all required metadata fields
        */
       private def createMetadataStructColumnVector(
-          c: ColumnarBatch, meta: MetadataAttribute): WritableColumnVector = {
+          c: ColumnarBatch, meta: AttributeReference): WritableColumnVector = {
         val columnVector = createColumnVector(c.numRows(), FILE_METADATA_COLUMNS.dataType)
         val filePathBytes = new File(currentFile.filePath).toString.getBytes
         val fileNameBytes = currentFile.filePath.split("/").last.getBytes

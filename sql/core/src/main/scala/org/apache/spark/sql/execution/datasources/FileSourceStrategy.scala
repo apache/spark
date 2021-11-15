@@ -214,7 +214,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
       // outputAttributes should also include referenced metadata columns at the every end
       val outputAttributes = readDataColumns ++ partitionColumns ++
-        plan.references.collect { case meta: MetadataAttribute => meta }
+        plan.references.collect { case MetadataAttribute(attr) => attr }
 
       val scan =
         FileSourceScanExec(

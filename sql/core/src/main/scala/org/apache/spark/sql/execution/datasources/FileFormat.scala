@@ -182,7 +182,7 @@ object FileFormat {
   val FILE_MODIFICATION_TIME = "file_modification_time"
 
   // supported metadata columns for hadoop fs relation
-  val FILE_METADATA_COLUMNS: MetadataAttribute = MetadataAttribute("_metadata",
+  val FILE_METADATA_COLUMNS: AttributeReference = MetadataAttribute("_metadata",
     new StructType()
       .add(StructField(FILE_PATH, StringType))
       .add(StructField(FILE_NAME, StringType))

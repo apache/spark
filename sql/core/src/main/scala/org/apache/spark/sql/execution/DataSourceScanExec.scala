@@ -195,15 +195,20 @@ case class FileSourceScanExec(
     disableBucketedScan: Boolean = false)
   extends DataSourceScanExec {
 
-  lazy val outputMetadataStruct: Option[MetadataAttribute] =
-    output.collectFirst { case meta: MetadataAttribute => meta }
+  lazy val outputMetadataStruct: Option[AttributeReference] =
+    output.collectFirst { case MetadataAttribute(attr) => attr }
 
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
   override lazy val supportsColumnar: Boolean = {
-    // schema without file metadata column
+    // schema without the file metadata column
     val fileSchema = if (outputMetadataStruct.isEmpty) schema else {
-      StructType.fromAttributes(output.filterNot(_.isInstanceOf[MetadataAttribute]))
+      StructType.fromAttributes(
+        output.filter {
+          case MetadataAttribute(_) => false
+          case _ => true
+        }
+      )
     }
     relation.fileFormat.supportBatch(relation.sparkSession, fileSchema)
   }
@@ -373,7 +378,12 @@ case class FileSourceScanExec(
   private lazy val pushedDownFilters = {
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
     dataFilters
-      .filterNot(_.references.exists(_.isInstanceOf[MetadataAttribute]))
+      .filterNot(
+        _.references.exists {
+          case MetadataAttribute(_) => true
+          case _ => false
+        }
+      )
       .flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
   }
 

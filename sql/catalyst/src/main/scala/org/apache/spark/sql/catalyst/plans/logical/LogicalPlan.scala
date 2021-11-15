@@ -278,7 +278,7 @@ object LogicalPlanIntegrity {
 }
 
 /**
- * A logical plan node with exposed metadata columns
+ * A logical plan node that can generate metadata columns
  */
 trait ExposesMetadataColumns extends LogicalPlan {
   def withMetadataColumns(): ExposesMetadataColumns

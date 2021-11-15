@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.quoteIfNeeded
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, METADATA_COL_ATTR_KEY}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
@@ -442,66 +442,15 @@ object VirtualColumn {
 /**
  * The internal representation of the hidden metadata column
  */
-class MetadataAttribute(
-    override val name: String,
-    override val dataType: DataType,
-    override val nullable: Boolean = true,
-    override val metadata: Metadata = Metadata.empty)(
-    override val exprId: ExprId = NamedExpression.newExprId,
-    override val qualifier: Seq[String] = Seq.empty[String])
-  extends AttributeReference(name, dataType, nullable, metadata)(exprId, qualifier) {
-
-  // use to resolve supported metadata column references (e.g. different casings)
-  override def withName(newName: String): MetadataAttribute = {
-    if (name == newName) {
-      this
-    } else {
-      MetadataAttribute(newName, dataType, nullable, metadata)(exprId, qualifier)
-    }
-  }
-
-  override def withNullability(newNullability: Boolean): MetadataAttribute = {
-    if (nullable == newNullability) {
-      this
-    } else {
-      MetadataAttribute(name, dataType, newNullability, metadata)(exprId, qualifier)
-    }
-  }
-
-  override def withQualifier(newQualifier: Seq[String]): MetadataAttribute = {
-    if (qualifier == newQualifier) {
-      this
-    } else {
-      MetadataAttribute(name, dataType, nullable, metadata)(exprId, newQualifier)
-    }
-  }
-
-  override def withExprId(newExprId: ExprId): MetadataAttribute = {
-    if (exprId == newExprId) {
-      this
-    } else {
-      MetadataAttribute(name, dataType, nullable, metadata)(newExprId, qualifier)
-    }
-  }
-
-  override def withDataType(newType: DataType): MetadataAttribute = {
-    MetadataAttribute(name, newType, nullable, metadata)(exprId, qualifier)
-  }
-
-  override def newInstance(): MetadataAttribute =
-    MetadataAttribute(name, dataType, nullable, metadata)(exprId, qualifier)
-
-  override def withMetadata(newMetadata: Metadata): MetadataAttribute = {
-    MetadataAttribute(name, dataType, nullable, newMetadata)(exprId, qualifier)
-  }
-}
-
 object MetadataAttribute {
+  def apply(name: String, dataType: DataType): AttributeReference =
+    AttributeReference(name, dataType, true,
+      new MetadataBuilder().putBoolean(METADATA_COL_ATTR_KEY, true).build())()
 
-  def apply(name: String, dataType: DataType): MetadataAttribute =
-    new MetadataAttribute(name, dataType, true)()
-
-  def apply(name: String, dataType: DataType, nullable: Boolean, metadata: Metadata)
-           (exprId: ExprId, qualifier: Seq[String]): MetadataAttribute =
-    new MetadataAttribute(name, dataType, nullable, metadata)(exprId, qualifier)
+  def unapply(attr: AttributeReference): Option[AttributeReference] = {
+    if (attr.metadata.contains(METADATA_COL_ATTR_KEY)
+      && attr.metadata.getBoolean(METADATA_COL_ATTR_KEY)) {
+      Some(attr)
+    } else None
+  }
 }
