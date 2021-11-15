@@ -245,8 +245,7 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
 
   test("inability to replace null in non-boolean values of CaseWhen") {
     val nestedCaseWhen = CaseWhen(
-      Seq((UnresolvedAttribute("i") > Literal(20)) -> Literal(2)),
-      Literal(null, IntegerType))
+      Seq((UnresolvedAttribute("i") > Literal(20)) -> Literal(2)))
     val branchValue = If(
       Literal(2) === nestedCaseWhen,
       TrueLiteral,

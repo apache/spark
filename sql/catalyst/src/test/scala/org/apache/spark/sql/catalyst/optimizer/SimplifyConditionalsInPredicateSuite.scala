@@ -108,7 +108,7 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
     Seq(Some(FalseLiteral), None, Some(Literal(null, BooleanType))).foreach { elseExp =>
       val originalCond = CaseWhen(
         Seq((UnresolvedAttribute("i") > Literal(10), UnresolvedAttribute("b"))),
-        elseExp)
+        elseExp).as("c")
       val expectedCond = And(
         UnresolvedAttribute("i") > Literal(10),
         UnresolvedAttribute("b"))
@@ -116,7 +116,10 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
       testJoin(originalCond, expectedCond = expectedCond)
       testDelete(originalCond, expectedCond = expectedCond)
       testUpdate(originalCond, expectedCond = expectedCond)
-      testProjection(originalCond, expectedExpr = originalCond)
+      testProjection(originalCond,
+        expectedExpr = CaseWhen(
+          Seq((UnresolvedAttribute("i") > Literal(10), UnresolvedAttribute("b"))),
+          elseExp.filterNot(_.semanticEquals(Literal(null, BooleanType)))).as("c"))
     }
   }
 
