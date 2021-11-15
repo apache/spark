@@ -29,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
  * V1 write includes both datasoruce and hive, that requires a specific ordering of data.
  * It should be resolved by [[V1Writes]].
  *
- * TODO: we can also support specific distribution here if necessary
+ * TODO(SPARK-37333): Specify the required distribution at V1Write
  */
 trait V1Write extends DataWritingCommand with V1WritesHelper {
   def partitionColumns: Seq[Attribute] = Seq.empty
