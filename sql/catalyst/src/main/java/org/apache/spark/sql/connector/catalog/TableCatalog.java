@@ -95,7 +95,7 @@ public interface TableCatalog extends CatalogPlugin {
   Table loadTable(Identifier ident) throws NoSuchTableException;
 
   /**
-   * Load table metadata by {@link Identifier identifier} from the catalog.
+   * Load table metadata of a specific version by {@link Identifier identifier} from the catalog.
    * <p>
    * If the catalog supports views and contains a view for the identifier and not a table, this
    * must throw {@link NoSuchTableException}.
