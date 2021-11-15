@@ -183,6 +183,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     }.size === 1)
     checkAnswer(joinUniqueDF, Seq(Row(0, 0), Row(1, 1), Row(2, 2), Row(3, 3), Row(4, 4),
       Row(null, 5), Row(null, 6), Row(null, 7), Row(null, 8), Row(null, 9)))
+    assert(joinUniqueDF.count() === 10)
 
     // test one join with non-unique key from build side
     val joinNonUniqueDF = df1.join(df2.hint("SHUFFLE_HASH"), $"k1" === $"k2" % 3, "full_outer")
@@ -213,12 +214,6 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         Row(null, 5, null), Row(null, 6, null), Row(null, 7, null), Row(null, 8, null),
         Row(null, 9, null), Row(null, null, 1)))
 
-    // test join with Aggregate
-    val joinWithAggregateDF = df1.join(df2.hint("SHUFFLE_HASH"), $"k1" === $"k2", "full_outer")
-    assert(joinWithAggregateDF.queryExecution.executedPlan.collect {
-      case WholeStageCodegenExec(_ : ShuffledHashJoinExec) => true
-    }.size === 1)
-    assert(joinWithAggregateDF.count() === 10)
   }
 
   test("Left/Right Outer SortMergeJoin should be included in WholeStageCodegen") {
