@@ -26,8 +26,6 @@ import org.apache.spark.sql.execution.command
  *
  *   - V1 In-Memory catalog:
  *     `org.apache.spark.sql.execution.command.v1.AlterTableAddColumnsSuite`
- *   - V1 Hive External catalog:
- *     `org.apache.spark.sql.hive.execution.command.AlterTableAddColumnsSuite`
  */
 trait AlterTableAddColumnsSuiteBase extends command.AlterTableAddColumnsSuiteBase
 
