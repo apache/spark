@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import java.util
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -48,7 +47,6 @@ import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransfo
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.random.RandomSampler
 
@@ -1259,18 +1257,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
     val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val properties = new util.HashMap[String, String]
     val timeTravel = if (ctx.temporalClause != null) {
       TimeTravelSpec.create(
         Option(ctx.temporalClause.timestamp).map(string),
-        Option(ctx.temporalClause.version).map(_.getText)))
+        Option(ctx.temporalClause.version).map(_.getText))
     } else {
       None
     }
 
     val table = mayApplyAliasPlan(ctx.tableAlias,
       UnresolvedRelation(tableId,
-        new CaseInsensitiveStringMap(properties),
         timeTravelSpec = timeTravel))
     table.optionalMap(ctx.sample)(withSample)
   }

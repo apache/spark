@@ -20,7 +20,8 @@ package org.apache.spark.sql.connector.expressions
 import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{stringToTimestamp, stringToTimestampWithoutTimeZone}
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -369,22 +370,13 @@ private[sql] case class AsOfVersion(version: String) extends TimeTravelSpec
 private[sql] object TimeTravelSpec {
   def create(timestamp: Option[String], version: Option[String]) : Option[TimeTravelSpec] = {
     if (timestamp.nonEmpty && version.nonEmpty) {
-      throw new IllegalArgumentException(
-        "Version and Timestamp can't both be set in TimeTravelSpec")
+      throw QueryCompilationErrors.invalidTimeTravelSpecError(
+        "Cannot specify both version and timestamp when scanning the table.")
     } else if (timestamp.nonEmpty) {
-      val timeZoneId = DateTimeUtils.parseTimestampString(UTF8String.fromString(timestamp.get))._2
-      val tsInLong = if (timeZoneId.isDefined) {
-        // If the input string contains time zone part, return a timestamp with the
-        // specified TimeZone
-        stringToTimestamp(UTF8String.fromString(timestamp.get), timeZoneId.get)
-      } else {
-        stringToTimestampWithoutTimeZone(UTF8String.fromString(timestamp.get))
-      }
-      if (tsInLong.isEmpty) {
-        throw new IllegalArgumentException(
-          s"Illegal timestamp value ${timestamp.get} in TIMESTAMP AS OF")
-      }
-      Some(AsOfTimestamp(tsInLong.get))
+      val ts = DateTimeUtils.stringToTimestampAnsi(
+        UTF8String.fromString(timestamp.get),
+        DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+      Some(AsOfTimestamp(ts))
     } else if (version.nonEmpty) {
       Some(AsOfVersion(version.get))
     } else {

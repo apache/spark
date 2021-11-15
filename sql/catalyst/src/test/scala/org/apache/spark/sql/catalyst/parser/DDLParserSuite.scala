@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import java.time.DateTimeException
 import java.util
 import java.util.Locale
 
@@ -2443,15 +2444,16 @@ class DDLParserSuite extends AnalysisTest {
 
   test("as of syntax") {
     val properties = new util.HashMap[String, String]
-    var timeTravel = TimeTravelSpec.create(None, Some("123456789"))
+    var timeTravel = TimeTravelSpec.create(None, Some("Snapshot123456789"))
     comparePlans(
-      parsePlan("SELECT * FROM a.b.c VERSION AS OF 123456789"),
+      parsePlan("SELECT * FROM a.b.c VERSION AS OF Snapshot123456789"),
       Project(Seq(UnresolvedStar(None)),
         UnresolvedRelation(
           Seq("a", "b", "c"),
           new CaseInsensitiveStringMap(properties),
           timeTravelSpec = timeTravel)))
 
+    timeTravel = TimeTravelSpec.create(None, Some("123456789"))
     comparePlans(
       parsePlan("SELECT * FROM a.b.c FOR SYSTEM_VERSION AS OF 123456789"),
       Project(Seq(UnresolvedStar(None)),
@@ -2492,14 +2494,14 @@ class DDLParserSuite extends AnalysisTest {
           new CaseInsensitiveStringMap(properties),
           timeTravelSpec = timeTravel)))
 
-    val e1 = intercept[IllegalArgumentException] {
+    val e1 = intercept[DateTimeException] {
       parsePlan("SELECT * FROM a.b.c TIMESTAMP AS OF '2019-01-11111'")
     }.getMessage
-    assert(e1.contains("Illegal timestamp value 2019-01-11111 in TIMESTAMP AS OF"))
+    assert(e1.contains("Cannot cast 2019-01-11111 to TimestampType."))
 
-    val e2 = intercept[IllegalArgumentException] {
+    val e2 = intercept[AnalysisException] {
       timeTravel = TimeTravelSpec.create(Some("2019-01-29 00:37:58"), Some("123456789"))
     }.getMessage
-    assert(e2.contains("Version and Timestamp can't both be set in TimeTravelSpec"))
+    assert(e2.contains("Cannot specify both version and timestamp when scanning the table."))
   }
 }

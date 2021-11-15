@@ -23,7 +23,6 @@ import scala.collection.JavaConverters._
 
 import com.fasterxml.jackson.databind.ObjectMapper
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -123,20 +122,10 @@ private[sql] object DataSourceV2Utils extends Logging {
         val version = hasCatalog.extractTimeTravelVersion(dsOptions)
         val timestamp = hasCatalog.extractTimeTravelTimestamp(dsOptions)
 
-        if (version.isPresent && timestamp.isPresent) {
-           throw new SparkException(
-             "Version and Timestamp can't both be set for the underlying data source.")
-        } else if (version.isPresent) {
-          val timeTravelVersion = Some(version.get)
-          (CatalogV2Util.loadTable(catalog, ident,
-            TimeTravelSpec.create(None, timeTravelVersion)).get, Some(catalog), Some(ident))
-        } else if (timestamp.isPresent) {
-          val ts = Some(timestamp.get)
-          (CatalogV2Util.loadTable(catalog, ident, TimeTravelSpec.create(ts, None)).get,
-            Some(catalog), Some(ident))
-        } else {
-          (CatalogV2Util.loadTable(catalog, ident).get, Some(catalog), Some(ident))
-        }
+        val timeTravelVersion = if (version.isEmpty) None else Some(version.get)
+        val timeTravelTimestamp = if (timestamp.isEmpty) None else Some(timestamp.get)
+        val timeTravel = TimeTravelSpec.create(timeTravelTimestamp, timeTravelVersion)
+        (CatalogV2Util.loadTable(catalog, ident, timeTravel).get, Some(catalog), Some(ident))
       case _ =>
         // TODO: Non-catalog paths for DSV2 are currently not well defined.
         val tbl = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)

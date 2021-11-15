@@ -288,8 +288,6 @@ private[sql] object CatalogV2Util {
             Option(catalog.asTableCatalog.loadTable(ident, v.version))
           case ts: AsOfTimestamp =>
             Option(catalog.asTableCatalog.loadTable(ident, ts.timestamp))
-          case _ =>
-            Option(catalog.asTableCatalog.loadTable(ident))
         }
       } else {
         Option(catalog.asTableCatalog.loadTable(ident))

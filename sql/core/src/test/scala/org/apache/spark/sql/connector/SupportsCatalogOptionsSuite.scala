@@ -25,15 +25,16 @@ import scala.util.Try
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestampWithoutTimeZone
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, SupportsCatalogOptions, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -276,23 +277,27 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
   }
 
   test("mock time travel test") {
-    sql(s"create table $catalogName.t123456789 (id bigint) using $format")
-    sql(s"create table $catalogName.t234567891 (id bigint) using $format")
+    sql(s"create table $catalogName.tSnapshot123456789 (id bigint) using $format")
+    sql(s"create table $catalogName.t2345678910 (id bigint) using $format")
 
     val df1 = spark.range(10)
-    df1.write.format(format).option("name", "t123456789").option("catalog", catalogName)
+    df1.write.format(format).option("name", "tSnapshot123456789").option("catalog", catalogName)
       .mode(SaveMode.Append).save()
 
     val df2 = spark.range(10, 20)
-    df2.write.format(format).option("name", "t234567891").option("catalog", catalogName)
+    df2.write.format(format).option("name", "t2345678910").option("catalog", catalogName)
       .mode(SaveMode.Overwrite).save()
 
     // load with version
-    checkAnswer(load("t", Some(catalogName), Some("123456789")), df1.toDF())
-    checkAnswer(load("t", Some(catalogName), Some("234567891")), df2.toDF())
+    checkAnswer(load("t", Some(catalogName), version = Some("Snapshot123456789")), df1.toDF())
+    checkAnswer(load("t", Some(catalogName), version = Some("2345678910")), df2.toDF())
 
-    val ts1 = stringToTimestampWithoutTimeZone(UTF8String.fromString("2019-01-29 00:37:58")).get
-    val ts2 = stringToTimestampWithoutTimeZone(UTF8String.fromString("2021-01-29 00:37:58")).get
+    val ts1 = DateTimeUtils.stringToTimestampAnsi(
+      UTF8String.fromString("2019-01-29 00:37:58"),
+      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+    val ts2 = DateTimeUtils.stringToTimestampAnsi(
+      UTF8String.fromString("2021-01-29 00:37:58"),
+      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
 
     sql(s"create table $catalogName.t$ts1 (id bigint) using $format")
     sql(s"create table $catalogName.t$ts2 (id bigint) using $format")
@@ -306,14 +311,17 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
       .mode(SaveMode.Overwrite).save()
 
     // load with timestamp
-    checkAnswer(load("t", Some(catalogName), None, Some("2019-01-29 00:37:58")), df3.toDF())
-    checkAnswer(load("t", Some(catalogName), None, Some("2021-01-29 00:37:58")), df4.toDF())
+    checkAnswer(load("t", Some(catalogName), version = None,
+      timestamp = Some("2019-01-29 00:37:58")), df3.toDF())
+    checkAnswer(load("t", Some(catalogName), version = None,
+      timestamp = Some("2021-01-29 00:37:58")), df4.toDF())
 
-    val e = intercept[SparkException] {
-      load("t", Some(catalogName), Some("12345678"), Some("2019-01-29 00:37:58"))
+    val e = intercept[AnalysisException] {
+      load("t", Some(catalogName), version = Some("12345678"),
+        timestamp = Some("2019-01-29 00:37:58"))
     }
     assert(e.getMessage
-      .contains("Version and Timestamp can't both be set for the underlying data source"))
+      .contains("Cannot specify both version and timestamp when scanning the table."))
   }
 
   private def checkV2Identifiers(
