@@ -976,7 +976,6 @@ case class SortMergeJoinExec(
          |$consumeFullOuterJoinRow();
        """.stripMargin
 
-
     // Generate a function to scan both sides to find rows with matched join keys.
     // The matched rows from both sides are copied in buffers separately. This function assumes
     // either non-empty `leftIter` and `rightIter`, or non-null `leftInputRow` and `rightInputRow`.
