@@ -1587,6 +1587,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
         return self._to_internal_pandas().copy()
 
+    def _to_pandas(self) -> pd.Series:
+        """
+        Same as `to_pandas()`, without issueing the advice log for internal usage.
+        """
+        return self._to_internal_pandas().copy()
+
     def to_list(self) -> List:
         """
         Return a list of the values.
