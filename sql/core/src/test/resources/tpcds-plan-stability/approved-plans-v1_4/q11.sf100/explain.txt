@@ -433,7 +433,7 @@ Arguments: [customer_id#88 ASC NULLS FIRST], false, 0
 (78) SortMergeJoin [codegen id : 35]
 Left keys [1]: [customer_id#22]
 Right keys [1]: [customer_id#88]
-Join condition: (CASE WHEN (year_total#68 > 0.00) THEN CheckOverflow((promote_precision(year_total#89) / promote_precision(year_total#68)), DecimalType(38,20), true) ELSE null END > CASE WHEN (year_total#23 > 0.00) THEN CheckOverflow((promote_precision(year_total#46) / promote_precision(year_total#23)), DecimalType(38,20), true) ELSE null END)
+Join condition: (CASE WHEN (year_total#68 > 0.00) THEN CheckOverflow((promote_precision(year_total#89) / promote_precision(year_total#68)), DecimalType(38,20), true) END > CASE WHEN (year_total#23 > 0.00) THEN CheckOverflow((promote_precision(year_total#46) / promote_precision(year_total#23)), DecimalType(38,20), true) END)
 
 (79) Project [codegen id : 35]
 Output [1]: [customer_preferred_cust_flag#45]
