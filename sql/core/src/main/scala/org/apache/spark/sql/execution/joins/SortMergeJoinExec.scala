@@ -932,9 +932,11 @@ case class SortMergeJoinExec(
        |    $exists = true;
        |  }
        |
-       |  // load all values of streamed row, because the values not in join condition are not
-       |  // loaded yet.
-       |  $loadStreamed
+       |  if (!$exists) {
+       |    // load all values of streamed row, because the values not in join condition are not
+       |    // loaded yet.
+       |    $loadStreamed
+       |  }
        |  $outputRow
        |
        |  if (shouldStop()) return;
