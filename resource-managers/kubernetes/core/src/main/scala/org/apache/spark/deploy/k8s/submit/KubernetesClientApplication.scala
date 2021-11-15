@@ -30,7 +30,7 @@ import org.apache.spark.deploy.SparkApplication
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
+import org.apache.spark.deploy.k8s.KubernetesUtils.createOrReplaceResource
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -133,6 +133,10 @@ private[spark] class Client(
       .build()
     val driverPodName = resolvedDriverPod.getMetadata.getName
 
+    // setup resources before pod create
+    val preKubernetesResources = resolvedDriverSpec.driverPreKubernetesResources
+    createOrReplaceResource(kubernetesClient, preKubernetesResources)
+
     var watch: Watch = null
     var createdDriverPod: Pod = null
     try {
@@ -142,15 +146,10 @@ private[spark] class Client(
         logError("Please check \"kubectl auth can-i create pod\" first. It should be yes.")
         throw e
     }
-    try {
-      val otherKubernetesResources = resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
-      addOwnerReference(createdDriverPod, otherKubernetesResources)
-      kubernetesClient.resourceList(otherKubernetesResources: _*).createOrReplace()
-    } catch {
-      case NonFatal(e) =>
-        kubernetesClient.pods().delete(createdDriverPod)
-        throw e
-    }
+
+    // setup resources after pod create, and refresh all resources owner references
+    val driverKubernetesResources = resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
+    createOrReplaceResource(kubernetesClient, driverKubernetesResources, createdDriverPod)
 
     if (conf.get(WAIT_FOR_APP_COMPLETION)) {
       val sId = Seq(conf.namespace, driverPodName).mkString(":")

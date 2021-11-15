@@ -22,6 +22,7 @@ import java.security.SecureRandom
 import java.util.{Collections, UUID}
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, HasMetadata, OwnerReferenceBuilder, Pod, PodBuilder, Quantity}
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -379,6 +380,23 @@ object KubernetesUtils extends Logging {
         val originalMetadata = resource.getMetadata
         originalMetadata.setOwnerReferences(Collections.singletonList(reference))
       }
+    }
+  }
+
+  @Since("3.3.0")
+  def createOrReplaceResource(
+      client: KubernetesClient,
+      resources: Seq[HasMetadata],
+      ownerPod: Pod = null): Unit = {
+    try {
+      addOwnerReference(ownerPod, resources)
+      client.resourceList(resources: _*).createOrReplace()
+    } catch {
+      case NonFatal(e) =>
+        if (ownerPod != null) {
+          client.pods().delete(ownerPod)
+        }
+        throw e
     }
   }
 }
