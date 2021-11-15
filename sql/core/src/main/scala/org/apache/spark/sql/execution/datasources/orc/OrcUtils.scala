@@ -298,8 +298,7 @@ object OrcUtils extends Logging {
           Some(typeDesc)
         case n: TimestampNTZType =>
           val typeDesc = new TypeDescription(TypeDescription.Category.TIMESTAMP)
-          typeDesc.setAttribute(
-            CATALYST_TYPE_ATTRIBUTE_NAME, n.typeName)
+          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, n.typeName)
           Some(typeDesc)
         case t: TimestampType =>
           val typeDesc = new TypeDescription(TypeDescription.Category.TIMESTAMP)
