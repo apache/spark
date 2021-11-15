@@ -342,21 +342,22 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            if not pser.hasnans:
-                self.assert_eq(pser.astype(int), psser.astype(int))
-                self.assert_eq(pser.astype(np.int32), psser.astype(np.int32))
-                self.assert_eq(pser.astype(np.int16), psser.astype(np.int16))
-                self.assert_eq(pser.astype(np.int8), psser.astype(np.int8))
-                # TODO(SPARK-37039): the np.nan series.astype(bool) should be True
-                self.assert_eq(pser.astype(bool), psser.astype(bool))
-            else:
-                for int_type in [int, np.int32, np.int16, np.int8]:
+
+            for int_type in [int, np.int32, np.int16, np.int8]:
+                if not pser.hasnans:
+                    self.assert_eq(pser.astype(int_type), psser.astype(int_type))
+                else:
                     self.assertRaisesRegex(
                         ValueError,
                         "Cannot convert %s with missing "
                         "values to integer" % psser._dtype_op.pretty_name,
                         lambda: psser.astype(int_type),
                     )
+
+            # TODO(SPARK-37039): the np.nan series.astype(bool) should be True
+            if not pser.hasnans:
+                self.assert_eq(pser.astype(bool), psser.astype(bool))
+
             self.assert_eq(pser.astype(float), psser.astype(float))
             self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
             self.assert_eq(pser.astype(str), psser.astype(str))
