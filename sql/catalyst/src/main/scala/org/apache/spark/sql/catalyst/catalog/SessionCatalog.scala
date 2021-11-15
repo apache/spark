@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionInfo, UpCast}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -877,7 +877,12 @@ class SessionCatalog(
     }
     val viewConfigs = metadata.viewSQLConfigs
     val parsedPlan = SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs, isTempView)) {
-      parser.parsePlan(viewText)
+      try {
+        parser.parseQuery(viewText)
+      } catch {
+        case _: ParseException =>
+          throw QueryCompilationErrors.invalidViewText(viewText, metadata.qualifiedName)
+      }
     }
     val projectList = if (!isHiveCreatedView(metadata)) {
       val viewColumnNames = if (metadata.viewQueryColumnNames.isEmpty) {
