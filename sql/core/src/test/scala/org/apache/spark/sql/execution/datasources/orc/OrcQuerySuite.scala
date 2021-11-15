@@ -781,9 +781,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     Seq("true", "false").foreach { key =>
       withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> key) {
         withOrcFile(data) { file =>
-          checkAnswer(
-            spark.read.orc(file),
-            data.toDF().collect())
+          checkAnswer(spark.read.orc(file), data.toDF().collect())
         }
       }
     }
