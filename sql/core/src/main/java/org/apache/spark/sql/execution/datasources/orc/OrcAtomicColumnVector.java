@@ -111,10 +111,8 @@ public class OrcAtomicColumnVector extends OrcColumnVector {
   @Override
   public long getLong(int rowId) {
     int index = getRowIndex(rowId);
-    if (isTimestamp) {
+    if (isTimestamp || isTimestampNTZ) {
       return DateTimeUtils.fromJavaTimestamp(timestampData.asScratchTimestamp(index));
-    } else if (isTimestampNTZ) {
-      return timestampData.asScratchTimestamp(index).getTime();
     } else {
       return longData.vector[index];
     }

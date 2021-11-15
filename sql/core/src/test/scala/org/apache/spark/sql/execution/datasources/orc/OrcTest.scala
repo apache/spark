@@ -143,6 +143,13 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
     spark.read.orc(file.getAbsolutePath)
   }
 
+  def withAllOrcReaders(code: => Unit): Unit = {
+    // test the row-based reader
+    withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false")(code)
+    // test the vectorized reader
+    withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "true")(code)
+  }
+
   /**
    * Takes a sequence of products `data` to generate multi-level nested
    * dataframes as new test data. It tests both non-nested and nested dataframes

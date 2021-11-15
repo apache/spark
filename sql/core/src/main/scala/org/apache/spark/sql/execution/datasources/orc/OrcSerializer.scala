@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.orc
 
 import org.apache.hadoop.io._
-import org.apache.orc.TypeDescription
 import org.apache.orc.mapred.{OrcList, OrcMap, OrcStruct, OrcTimestamp}
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -142,14 +141,11 @@ class OrcSerializer(dataSchema: StructType) {
 
     // The following cases are already expensive, reusing object or not doesn't matter.
 
-    case TimestampType => (getter, ordinal) =>
+    case TimestampType | TimestampNTZType => (getter, ordinal) =>
       val ts = DateTimeUtils.toJavaTimestamp(getter.getLong(ordinal))
       val result = new OrcTimestamp(ts.getTime)
       result.setNanos(ts.getNanos)
       result
-
-    case TimestampNTZType => (getter, ordinal) =>
-      new OrcTimestamp(getter.getLong(ordinal))
 
     case DecimalType.Fixed(precision, scale) =>
       OrcShimUtils.getHiveDecimalWritable(precision, scale)
