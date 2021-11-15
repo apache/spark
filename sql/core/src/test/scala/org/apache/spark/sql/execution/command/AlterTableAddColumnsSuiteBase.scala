@@ -32,11 +32,15 @@ import org.apache.spark.sql.{QueryTest, Row}
  *     `org.apache.spark.sql.execution.command.v1.AlterTableAddColumnsSuiteBase`
  *     - V1 In-Memory catalog:
  *       `org.apache.spark.sql.execution.command.v1.AlterTableAddColumnsSuite`
+ *     - V1 Hive External catalog:
+ *       `org.apache.spark.sql.hive.execution.command.AlterTableAddColumnsSuite`
  */
 trait AlterTableAddColumnsSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. ADD COLUMNS"
 
   test("add an ANSI interval columns") {
+    assume(!catalogVersion.contains("Hive")) // Hive catalog doesn't support the interval types
+
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint) $defaultUsing")
       sql(s"ALTER TABLE $t ADD COLUMNS (ym INTERVAL YEAR, dt INTERVAL HOUR)")

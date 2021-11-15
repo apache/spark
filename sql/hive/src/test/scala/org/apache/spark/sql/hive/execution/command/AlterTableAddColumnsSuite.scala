@@ -15,24 +15,32 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command.v1
+package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.execution.command
-
-/**
- * This base suite contains unified tests for the `ALTER TABLE .. ADD COLUMNS` command that
- * check V1 table catalogs. The tests that cannot run for all V1 catalogs are located in more
- * specific test suites:
- *
- *   - V1 In-Memory catalog:
- *     `org.apache.spark.sql.execution.command.v1.AlterTableAddColumnsSuite`
- *   - V1 Hive External catalog:
- *     `org.apache.spark.sql.hive.execution.command.AlterTableAddColumnsSuite`
- */
-trait AlterTableAddColumnsSuiteBase extends command.AlterTableAddColumnsSuiteBase
+import org.apache.spark.sql.execution.command.v1
 
 /**
  * The class contains tests for the `ALTER TABLE .. ADD COLUMNS` command to check
- * V1 In-Memory table catalog.
+ * V1 Hive external table catalog.
  */
-class AlterTableAddColumnsSuite extends AlterTableAddColumnsSuiteBase with CommandSuiteBase
+class AlterTableAddColumnsSuite
+  extends v1.AlterTableAddColumnsSuiteBase
+  with CommandSuiteBase {
+
+  test("SPARK-36949: Disallow tables with ANSI intervals when the provider is Hive") {
+    def check(tbl: String): Unit = {
+      val errMsg = intercept[UnsupportedOperationException] {
+        sql(s"ALTER TABLE $tbl ADD COLUMNS (ym INTERVAL YEAR)")
+      }.getMessage
+      assert(errMsg.contains("ANSI intervals is not supported"))
+    }
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"CREATE TABLE $tbl (id INT) $defaultUsing")
+      check(tbl)
+    }
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"CREATE TABLE $tbl STORED AS PARQUET AS SELECT 1")
+      check(tbl)
+    }
+  }
+}

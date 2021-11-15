@@ -3018,11 +3018,6 @@ class HiveDDLSuite
         }.getMessage
         assert(errMsg.contains(s"Hive table `default`.`$tbl` with ANSI intervals is not supported"))
       }
-      sql(s"CREATE TABLE $tbl STORED AS PARQUET AS SELECT 1")
-      val errMsg2 = intercept[ParseException] {
-        sql(s"ALTER TABLE $tbl ADD COLUMNS (ym INTERVAL YEAR)")
-      }.getMessage
-      assert(errMsg2.contains("Cannot use interval type in the table schema"))
     }
   }
 
