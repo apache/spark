@@ -183,6 +183,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     }.size === 1)
     checkAnswer(joinUniqueDF, Seq(Row(0, 0), Row(1, 1), Row(2, 2), Row(3, 3), Row(4, 4),
       Row(null, 5), Row(null, 6), Row(null, 7), Row(null, 8), Row(null, 9)))
+    assert(joinUniqueDF.count() === 10)
 
     // test one join with non-unique key from build side
     val joinNonUniqueDF = df1.join(df2.hint("SHUFFLE_HASH"), $"k1" === $"k2" % 3, "full_outer")

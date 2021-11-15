@@ -376,7 +376,7 @@ case class ShuffledHashJoinExec(
     val consumeFullOuterJoinRow = ctx.freshName("consumeFullOuterJoinRow")
     ctx.addNewFunction(consumeFullOuterJoinRow,
       s"""
-         |private void $consumeFullOuterJoinRow() {
+         |private void $consumeFullOuterJoinRow() throws java.io.IOException {
          |  ${metricTerm(ctx, "numOutputRows")}.add(1);
          |  ${consume(ctx, resultVars)}
          |}
