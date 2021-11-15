@@ -396,7 +396,7 @@ class SparkFrameMethods(object):
         See Also
         --------
         DataFrame.to_spark
-        DataFrame.to_pandas_on_spark
+        DataFrame.pandas_api
         DataFrame.spark.frame
 
         Examples
@@ -440,7 +440,7 @@ class SparkFrameMethods(object):
 
         >>> spark_df = df.to_spark(index_col="index")
         >>> spark_df = spark_df.filter("a == 2")
-        >>> spark_df.to_pandas_on_spark(index_col="index")  # doctest: +NORMALIZE_WHITESPACE
+        >>> spark_df.pandas_api(index_col="index")  # doctest: +NORMALIZE_WHITESPACE
                a  b  c
         index
         1      2  5  8
@@ -460,7 +460,7 @@ class SparkFrameMethods(object):
 
         Likewise, can be converted to back to pandas-on-Spark DataFrame.
 
-        >>> new_spark_df.to_pandas_on_spark(
+        >>> new_spark_df.pandas_api(
         ...     index_col=["index_1", "index_2"])  # doctest: +NORMALIZE_WHITESPACE
                          b  c
         index_1 index_2
@@ -893,7 +893,7 @@ class SparkFrameMethods(object):
             expensive in general.
 
         .. note:: it will lose column labels. This is a synonym of
-            ``func(psdf.to_spark(index_col)).to_pandas_on_spark(index_col)``.
+            ``func(psdf.to_spark(index_col)).pandas_api(index_col)``.
 
         Parameters
         ----------
@@ -941,7 +941,7 @@ class SparkFrameMethods(object):
                 "The output of the function [%s] should be of a "
                 "pyspark.sql.DataFrame; however, got [%s]." % (func, type(output))
             )
-        return output.to_pandas_on_spark(index_col)
+        return output.pandas_api(index_col)
 
     def repartition(self, num_partitions: int) -> "ps.DataFrame":
         """

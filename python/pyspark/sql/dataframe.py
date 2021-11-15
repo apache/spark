@@ -3198,7 +3198,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrameWriterV2(self, table)
 
-    def to_pandas_on_spark(
+    def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None
     ) -> "PandasOnSparkDataFrame":
         """
@@ -3230,7 +3230,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |   c|   3|
         +----+----+
 
-        >>> df.to_pandas_on_spark()  # doctest: +SKIP
+        >>> df.pandas_api()  # doctest: +SKIP
           Col1  Col2
         0    a     1
         1    b     2
@@ -3238,7 +3238,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         We can specify the index columns.
 
-        >>> df.to_pandas_on_spark(index_col="Col1"): # doctest: +SKIP
+        >>> df.pandas_api(index_col="Col1"): # doctest: +SKIP
               Col2
         Col1
         a        1
@@ -3262,10 +3262,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         self, index_col: Optional[Union[str, List[str]]] = None
     ) -> "PandasOnSparkDataFrame":
         warnings.warn(
-            "DataFrame.to_koalas is deprecated. Use DataFrame.to_pandas_on_spark instead.",
+            "DataFrame.to_koalas is deprecated. Use DataFrame.pandas_api instead.",
             FutureWarning,
         )
-        return self.to_pandas_on_spark(index_col)
+        return self.pandas_api(index_col)
 
 
 def _to_scala_map(sc: SparkContext, jm: Dict) -> JavaObject:
