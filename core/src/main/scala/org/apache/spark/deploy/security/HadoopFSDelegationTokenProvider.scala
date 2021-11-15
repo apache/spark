@@ -122,7 +122,7 @@ private[deploy] class HadoopFSDelegationTokenProvider
   }
 
   private def cancelDelegationTokens(hadoopConf: Configuration,
-                                     creds: Credentials) {
+                                     creds: Credentials) : Unit = {
 
     creds.getAllTokens
       .asScala
