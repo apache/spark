@@ -2878,6 +2878,12 @@ df.writeStream \
   .trigger(once=True) \
   .start()
 
+# Available-now trigger
+df.writeStream \
+  .format("console") \
+  .trigger(availableNow=True) \
+  .start()
+
 # Continuous trigger with one-second checkpointing interval
 df.writeStream
   .format("console")
