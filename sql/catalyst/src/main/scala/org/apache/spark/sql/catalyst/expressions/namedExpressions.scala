@@ -440,7 +440,10 @@ object VirtualColumn {
 }
 
 /**
- * The internal representation of the hidden metadata column
+ * The internal representation of the hidden metadata column:
+ * set `__metadata_col` to `true` in AttributeReference metadata
+ * - apply() will create a metadata attribute reference
+ * - unapply() will check if an attribute reference is the metadata attribute reference
  */
 object MetadataAttribute {
   def apply(name: String, dataType: DataType): AttributeReference =
