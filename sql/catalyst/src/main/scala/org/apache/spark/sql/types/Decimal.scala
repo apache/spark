@@ -414,15 +414,15 @@ final class Decimal extends Ordered[Decimal] with Serializable {
               longVal += (if (droppedDigits < 0) -1L else 1L)
             }
           case ROUND_UP =>
-            if (math.abs(droppedDigits) * 2 >= pow10diff) {
-              longVal += (if (droppedDigits < 0) -1L else 1L)
+            if (droppedDigits > 0) {
+              longVal += 1L
             }
           case ROUND_DOWN =>
-            if (math.abs(droppedDigits) * 2 >= pow10diff) {
-              longVal += (if (droppedDigits < 0) -1L else 1L)
+            if (droppedDigits < 0) {
+              longVal += -1L
             }
           case ROUND_HALF_DOWN =>
-            if (math.abs(droppedDigits) * 2 >= pow10diff) {
+            if (math.abs(droppedDigits) * 2 <= pow10diff) {
               longVal += (if (droppedDigits < 0) -1L else 1L)
             }
           case _ =>

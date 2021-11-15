@@ -375,7 +375,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(BigDecimal("5.9"), BigDecimal("6")))
     )
     checkAnswer(
-      df.withColumn("value_brounded", round('value, 0, "down")),
+      df.withColumn("value_rounded", round('value, 0, "down")),
       Seq(Row(BigDecimal("5.9"), BigDecimal("5")))
     )
     checkAnswer(
