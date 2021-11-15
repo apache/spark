@@ -5,7 +5,7 @@ TakeOrderedAndProject (37)
       +- * Sort (34)
          +- Exchange (33)
             +- * Project (32)
-               +- SortMergeJoin FullOuter (31)
+               +- * SortMergeJoin FullOuter (31)
                   :- * Sort (15)
                   :  +- Exchange (14)
                   :     +- * Project (13)
@@ -176,7 +176,7 @@ Arguments: hashpartitioning(item_sk#25, d_date#20, 5), ENSURE_REQUIREMENTS, [id=
 Input [3]: [item_sk#25, d_date#20, cume_sales#28]
 Arguments: [item_sk#25 ASC NULLS FIRST, d_date#20 ASC NULLS FIRST], false, 0
 
-(31) SortMergeJoin
+(31) SortMergeJoin [codegen id : 13]
 Left keys [2]: [item_sk#11, d_date#6]
 Right keys [2]: [item_sk#25, d_date#20]
 Join condition: None
