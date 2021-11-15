@@ -40,8 +40,8 @@ abstract class DynamicPartitionPruningHiveScanSuiteBase
   }
 }
 
-class DynamicPartitionPruningHiveScanSuiteAEOff extends DynamicPartitionPruningHiveScanSuite
+class DynamicPartitionPruningHiveScanSuiteAEOff extends DynamicPartitionPruningHiveScanSuiteBase
   with DisableAdaptiveExecutionSuite
 
-class DynamicPartitionPruningHiveScanSuiteAEOn extends DynamicPartitionPruningHiveScanSuite
+class DynamicPartitionPruningHiveScanSuiteAEOn extends DynamicPartitionPruningHiveScanSuiteBase
   with EnableAdaptiveExecutionSuite
