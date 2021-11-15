@@ -1012,6 +1012,97 @@ abstract class CSVSuite
     }
   }
 
+  test("Roundtrip in reading and writing TIMESTAMP_NTZ values with custom schema") {
+    withTempDir { dir =>
+      val path = s"${dir.getCanonicalPath}/csv"
+
+      val exp = spark.sql("""
+        select
+          timestamp_ntz'2020-12-12 12:12:12' as col1,
+          timestamp_ltz'2020-12-12 12:12:12' as col2
+        """)
+
+      exp.write.format("csv").option("header", "true").save(path)
+
+      val res = spark.read
+        .format("csv")
+        .schema("col1 TIMESTAMP_NTZ, col2 TIMESTAMP_LTZ")
+        .option("header", "true")
+        .load(path)
+
+      checkAnswer(res, exp)
+    }
+  }
+
+  test("Timestamp type inference for a column with TIMESTAMP_NTZ values") {
+    withTempDir { dir =>
+      val path = s"${dir.getCanonicalPath}/csv"
+
+      val exp = spark.sql("""
+        select
+          timestamp_ntz'2020-12-12 12:12:12' as col1,
+          timestamp_ltz'2020-12-12 12:12:12' as col2
+        """)
+
+      exp.write.format("csv").option("header", "true").save(path)
+
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+        val res = spark.read
+          .format("csv")
+          .option("inferSchema", "true")
+          .option("header", "true")
+          .load(path)
+
+        checkAnswer(res, exp)
+      }
+
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString) {
+        val res = spark.read
+          .format("csv")
+          .option("inferSchema", "true")
+          .option("header", "true")
+          .load(path)
+
+        val exp = spark.sql("""
+          select
+            timestamp_ltz'2020-12-12 12:12:12' as col1,
+            timestamp_ltz'2020-12-12 12:12:12' as col2
+          """)
+
+        checkAnswer(res, exp)
+      }
+    }
+  }
+
+  test("Timestamp type inference for a column with both TIMESTAMP_NTZ and TIMESTAMP_LTZ") {
+    withTempDir { dir =>
+      val path = s"${dir.getCanonicalPath}/csv"
+
+      Seq(
+        "2020-12-12T12:12:12.000",
+        "2020-12-12T17:12:12.000Z",
+        "2020-12-12T17:12:12.000+05:00",
+        "2020-12-12T12:12:12.000"
+      ).toDF("col0")
+        .coalesce(1)
+        .write.text(path)
+
+      val res = spark.read
+        .format("csv")
+        .option("inferSchema", "true")
+        .load(path)
+
+      val exp = spark.sql("""
+        select timestamp'2020-12-12T12:12:12.000' as col0 union all
+        select timestamp'2020-12-12T17:12:12.000Z' as col0 union all
+        select timestamp'2020-12-12T17:12:12.000+05:00' as col0 union all
+        select timestamp'2020-12-12T12:12:12.000' as col0
+        """)
+
+      checkAnswer(res, exp)
+    }
+  }
+
   test("Write dates correctly with dateFormat option") {
     val customSchema = new StructType(Array(StructField("date", DateType, true)))
     withTempDir { dir =>

@@ -71,6 +71,19 @@ sealed trait TimestampFormatter extends Serializable {
       s"The method `parseWithoutTimeZone(s: String)` should be implemented in the formatter " +
         "of timestamp without time zone")
 
+  /**
+   * Returns true if the parsed timestamp contains the time zone component, false otherwise.
+   * Used to determine if the timestamp can be inferred as timestamp without time zone.
+   *
+   * @param s - string with timestamp to inspect
+   * @return whether the timestamp string has the time zone component defined.
+   */
+  @throws(classOf[IllegalStateException])
+  def isTimeZoneSet(s: String): Boolean =
+    throw new IllegalStateException(
+      s"The method `isTimeZoneSet(s: String)` should be implemented in the formatter " +
+        "of timestamp without time zone")
+
   def format(us: Long): String
   def format(ts: Timestamp): String
   def format(instant: Instant): String
@@ -125,6 +138,14 @@ class Iso8601TimestampFormatter(
       val localTime = toLocalTime(parsed)
       DateTimeUtils.localDateTimeToMicros(LocalDateTime.of(localDate, localTime))
     } catch checkParsedDiff(s, legacyFormatter.parse)
+  }
+
+  override def isTimeZoneSet(s: String): Boolean = {
+    try {
+      val parsed = formatter.parse(s)
+      val parsedZoneId = parsed.query(TemporalQueries.zone())
+      parsedZoneId != null
+    } catch checkParsedDiff(s, legacyFormatter.isTimeZoneSet)
   }
 
   override def format(instant: Instant): String = {
@@ -190,6 +211,13 @@ class DefaultTimestampFormatter(
     try {
       DateTimeUtils.stringToTimestampWithoutTimeZoneAnsi(UTF8String.fromString(s))
     } catch checkParsedDiff(s, legacyFormatter.parse)
+  }
+
+  override def isTimeZoneSet(s: String): Boolean = {
+    try {
+      val (_, zoneIdOpt, _) = parseTimestampString(UTF8String.fromString(s))
+      zoneIdOpt.isDefined
+    } catch checkParsedDiff(s, legacyFormatter.isTimeZoneSet)
   }
 }
 
