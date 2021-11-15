@@ -39,7 +39,7 @@ class TopNPlotBase:
         # Simply use the first 1k elements and make it into a pandas dataframe
         # For categorical variables, it is likely called from df.x.value_counts().plot.xxx().
         if isinstance(data, (Series, DataFrame)):
-            data = data.head(max_rows + 1).to_pandas()
+            data = data.head(max_rows + 1)._to_pandas()
         else:
             raise TypeError("Only DataFrame and Series are supported for plotting.")
 
@@ -79,7 +79,7 @@ class SampledPlotBase:
             if isinstance(data, Series):
                 data = data.to_frame()
             sampled = data._internal.resolved_copy.spark_frame.sample(fraction=self.fraction)
-            return DataFrame(data._internal.with_new_sdf(sampled)).to_pandas()
+            return DataFrame(data._internal.with_new_sdf(sampled))._to_pandas()
         else:
             raise TypeError("Only DataFrame and Series are supported for plotting.")
 

@@ -495,6 +495,12 @@ class Index(IndexOpsMixin):
         )
         return self._to_internal_pandas().copy()
 
+    def _to_pandas(self) -> pd.Index:
+        """
+        Same as `to_pandas()`, without issueing the advice log for internal usage.
+        """
+        return self._to_internal_pandas().copy()
+
     def to_numpy(self, dtype: Optional[Union[str, Dtype]] = None, copy: bool = False) -> np.ndarray:
         """
         A NumPy ndarray representing the values in this Index or MultiIndex.

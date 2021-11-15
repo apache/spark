@@ -4848,6 +4848,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
         return self._internal.to_pandas_frame.copy()
 
+    def _to_pandas(self) -> pd.DataFrame:
+        """
+        Same as `to_pandas()`, without issueing the advice log for internal usage.
+        """
+        return self._internal.to_pandas_frame.copy()
+
     def assign(self, **kwargs: Any) -> "DataFrame":
         """
         Assign new columns to a DataFrame.
@@ -10871,7 +10877,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 object.__setattr__(self, "_data", self)
                 count_func = self.count
                 self.count = (  # type: ignore[assignment]
-                    lambda: count_func().to_pandas()  # type: ignore[assignment, misc, union-attr]
+                    lambda: count_func()._to_pandas()  # type: ignore[assignment, misc, union-attr]
                 )
                 return pd.DataFrame.info(
                     self,
