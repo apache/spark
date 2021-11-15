@@ -684,7 +684,8 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
           falseValue = u.withNewChildren(Array(falseValue)))
 
       case u @ UnaryExpression(c @ CaseWhen(branches, elseValue))
-          if supportedUnaryExpression(u) && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+          if supportedUnaryExpression(u) && atMostOneUnfoldable(branches.map(_._2) :+
+            elseValue.getOrElse(Literal(null, c.dataType))) =>
         c.copy(
           branches.map(e => e.copy(_2 = u.withNewChildren(Array(e._2)))),
           Some(u.withNewChildren(Array(elseValue.getOrElse(Literal(null, c.dataType))))))
@@ -705,14 +706,16 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
 
       case b @ BinaryExpression(c @ CaseWhen(branches, elseValue), right)
           if supportedBinaryExpression(b) && right.foldable &&
-            atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+            atMostOneUnfoldable(branches.map(_._2) :+
+              elseValue.getOrElse(Literal(null, c.dataType))) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(e._2, right)))),
           Some(b.withNewChildren(Array(elseValue.getOrElse(Literal(null, c.dataType)), right))))
 
       case b @ BinaryExpression(left, c @ CaseWhen(branches, elseValue))
           if supportedBinaryExpression(b) && left.foldable &&
-            atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+            atMostOneUnfoldable(branches.map(_._2) :+
+              elseValue.getOrElse(Literal(null, c.dataType))) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(left, e._2)))),
           Some(b.withNewChildren(Array(left, elseValue.getOrElse(Literal(null, c.dataType))))))
