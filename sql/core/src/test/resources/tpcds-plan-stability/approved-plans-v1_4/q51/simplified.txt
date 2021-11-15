@@ -9,8 +9,8 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                 Exchange [item_sk] #1
                   WholeStageCodegen (13)
                     Project [item_sk,item_sk,d_date,d_date,cume_sales,cume_sales]
-                      InputAdapter
-                        SortMergeJoin [item_sk,d_date,item_sk,d_date]
+                      SortMergeJoin [item_sk,d_date,item_sk,d_date]
+                        InputAdapter
                           WholeStageCodegen (6)
                             Sort [item_sk,d_date]
                               InputAdapter
@@ -45,6 +45,7 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                                                                                         Scan parquet default.date_dim [d_date_sk,d_date,d_month_seq]
                                                                   InputAdapter
                                                                     ReusedExchange [d_date_sk,d_date] #5
+                        InputAdapter
                           WholeStageCodegen (12)
                             Sort [item_sk,d_date]
                               InputAdapter
