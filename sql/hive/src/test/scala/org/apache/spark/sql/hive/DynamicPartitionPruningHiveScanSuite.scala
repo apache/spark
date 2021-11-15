@@ -25,7 +25,7 @@ import org.apache.spark.sql.hive.execution.HiveTableScanExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
-abstract class DynamicPartitionPruningHiveScanSuite
+abstract class DynamicPartitionPruningHiveScanSuiteBase
     extends DynamicPartitionPruningSuiteBase with TestHiveSingleton with SQLTestUtils {
 
   override val tableFormat: String = "hive"
