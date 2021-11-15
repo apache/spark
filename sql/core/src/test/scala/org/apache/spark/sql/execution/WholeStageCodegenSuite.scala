@@ -219,7 +219,6 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           Row(null, 5, null), Row(null, 6, null), Row(null, 7, null), Row(null, 8, null),
           Row(null, 9, null), Row(null, null, 1)))
     }
->>>>>>> f712f745a4 (Add codegen for full outer SMJ)
   }
 
   test("Left/Right Outer SortMergeJoin should be included in WholeStageCodegen") {
