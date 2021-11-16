@@ -428,7 +428,8 @@ trait RowToColumnarTransition extends UnaryExecNode
  * populate with [[RowToColumnConverter]], but the performance requirements are different and it
  * would only be to reduce code.
  */
-case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
+case class RowToColumnarExec(child: SparkPlan, useArrow: Boolean = false)
+  extends RowToColumnarTransition {
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -452,7 +453,7 @@ case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     val enableOffHeapColumnVector = conf.offHeapColumnVectorEnabled
-    val enableArrowColumnVector = conf.arrowColumnVectorEnabled
+    val enableArrowColumnVector = useArrow || conf.arrowColumnVectorEnabled
     val numInputRows = longMetric("numInputRows")
     val numOutputBatches = longMetric("numOutputBatches")
     // Instead of creating a new config we are reusing columnBatchSize. In the future if we do
