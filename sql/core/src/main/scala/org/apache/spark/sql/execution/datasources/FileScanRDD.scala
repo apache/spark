@@ -140,37 +140,37 @@ class FileScanRDD(
        * Only update metadata columns when `currentFile` is changed.
        */
       private def updateMetadataStruct(): Unit =
-        metadataStruct.foreach {
-          case meta if FILE_METADATA_COLUMNS.sameRef(meta) =>
-            if (currentFile == null) {
-              metadataStructUnsafeRow = new UnsafeRow(1)
-              metadataStructGenericRow = new GenericRow(1)
-            } else {
-              // make an generic row
-              assert(meta.dataType.isInstanceOf[StructType])
-              metadataStructGenericRow = Row.fromSeq(
-                meta.dataType.asInstanceOf[StructType].names.map {
-                  case FILE_PATH => UTF8String.fromString(new File(currentFile.filePath).toString)
-                  case FILE_NAME => UTF8String.fromString(
-                    currentFile.filePath.split("/").last)
-                  case FILE_SIZE => currentFile.fileSize
-                  case FILE_MODIFICATION_TIME => currentFile.modificationTime
-                  case _ => None // just be exhaustive, won't happen
-                }
-              )
-
-              // convert the generic row to an unsafe row
-              val unsafeRowConverter = {
-                val converter = UnsafeProjection.create(
-                  Array(FILE_METADATA_COLUMNS.dataType))
-                (row: Row) => {
-                  converter(CatalystTypeConverters.convertToCatalyst(row)
-                    .asInstanceOf[InternalRow])
-                }
+        if (metadataStruct.exists(_.sameRef(FILE_METADATA_COLUMNS))) {
+          val meta = metadataStruct.get
+          if (currentFile == null) {
+            metadataStructUnsafeRow = new UnsafeRow(1)
+            metadataStructGenericRow = new GenericRow(1)
+          } else {
+            // make an generic row
+            assert(meta.dataType.isInstanceOf[StructType])
+            metadataStructGenericRow = Row.fromSeq(
+              meta.dataType.asInstanceOf[StructType].names.map {
+                case FILE_PATH => UTF8String.fromString(new File(currentFile.filePath).toString)
+                case FILE_NAME => UTF8String.fromString(
+                  currentFile.filePath.split("/").last)
+                case FILE_SIZE => currentFile.fileSize
+                case FILE_MODIFICATION_TIME => currentFile.modificationTime
+                case _ => None // be exhaustive, won't happen
               }
-              metadataStructUnsafeRow =
-                unsafeRowConverter(Row.fromSeq(Seq(metadataStructGenericRow)))
+            )
+
+            // convert the generic row to an unsafe row
+            val unsafeRowConverter = {
+              val converter = UnsafeProjection.create(
+                Array(FILE_METADATA_COLUMNS.dataType))
+              (row: Row) => {
+                converter(CatalystTypeConverters.convertToCatalyst(row)
+                  .asInstanceOf[InternalRow])
+              }
             }
+            metadataStructUnsafeRow =
+              unsafeRowConverter(Row.fromSeq(Seq(metadataStructGenericRow)))
+          }
         }
 
       /**
@@ -204,7 +204,7 @@ class FileScanRDD(
               columnVector.getChild(ind).putLongs(0, c.numRows(), currentFile.fileSize)
             case FILE_MODIFICATION_TIME =>
               columnVector.getChild(ind).putLongs(0, c.numRows(), currentFile.modificationTime)
-            case _ => // just be exhaustive, won't happen: no-op
+            case _ => // be exhaustive, won't happen
           }
         }
         columnVector
@@ -215,21 +215,23 @@ class FileScanRDD(
        * For different row implementations, use different methods to update and append.
        */
       private def addMetadataStructIfNeeded(nextElement: Object): Object =
-        metadataStruct.map {
-          case meta if FILE_METADATA_COLUMNS.sameRef(meta) =>
-            nextElement match {
-              case c: ColumnarBatch =>
-                val columnVectorArr = Array.tabulate(c.numCols())(c.column) ++
-                  Array(createMetadataStructColumnVector(c, meta))
-                new ColumnarBatch(columnVectorArr, c.numRows())
-              case u: UnsafeRow =>
-                val joiner =
-                  GenerateUnsafeRowJoiner.create(requiredSchema, Seq(meta).toStructType)
-                joiner.join(u, metadataStructUnsafeRow)
-              case i: InternalRow =>
-                InternalRow.fromSeq(i.toSeq(requiredSchema) ++ metadataStructGenericRow.toSeq)
-            }
-        }.getOrElse(nextElement)
+        if (metadataStruct.exists(_.sameRef(FILE_METADATA_COLUMNS))) {
+          val meta = metadataStruct.get
+          nextElement match {
+            case c: ColumnarBatch =>
+              val columnVectorArr = Array.tabulate(c.numCols())(c.column) ++
+                Array(createMetadataStructColumnVector(c, meta))
+              new ColumnarBatch(columnVectorArr, c.numRows())
+            case u: UnsafeRow =>
+              val joiner =
+                GenerateUnsafeRowJoiner.create(requiredSchema, Seq(meta).toStructType)
+              joiner.join(u, metadataStructUnsafeRow)
+            case i: InternalRow =>
+              InternalRow.fromSeq(i.toSeq(requiredSchema) ++ metadataStructGenericRow.toSeq)
+          }
+        } else {
+          nextElement
+        }
 
       def next(): Object = {
         val nextElement = currentIterator.next()
