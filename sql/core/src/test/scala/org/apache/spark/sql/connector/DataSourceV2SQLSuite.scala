@@ -2962,11 +2962,11 @@ class DataSourceV2SQLSuite
       sql(s"INSERT INTO $t2 VALUES (3)")
       sql(s"INSERT INTO $t2 VALUES (4)")
 
-      assert(sql("SELECT * FROM t VERSION AS OF Snapshot123456789").collect
+      assert(sql("SELECT * FROM t VERSION AS OF 'Snapshot123456789'").collect
         === Array(Row(1), Row(2)))
       assert(sql("SELECT * FROM t VERSION AS OF 2345678910").collect
         === Array(Row(3), Row(4)))
-      assert(sql("SELECT * FROM t FOR SYSTEM_VERSION AS OF Snapshot123456789").collect
+      assert(sql("SELECT * FROM t FOR SYSTEM_VERSION AS OF 'Snapshot123456789'").collect
         === Array(Row(1), Row(2)))
       assert(sql("SELECT * FROM t FOR SYSTEM_VERSION AS OF 2345678910").collect
         === Array(Row(3), Row(4)))
@@ -2980,6 +2980,7 @@ class DataSourceV2SQLSuite
       DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
     val t3 = s"testcat.t$ts1"
     val t4 = s"testcat.t$ts2"
+
     withTable(t3, t4) {
       sql(s"CREATE TABLE $t3 (id int) USING foo")
       sql(s"CREATE TABLE $t4 (id int) USING foo")

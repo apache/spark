@@ -2446,7 +2446,7 @@ class DDLParserSuite extends AnalysisTest {
     val properties = new util.HashMap[String, String]
     var timeTravel = TimeTravelSpec.create(None, Some("Snapshot123456789"))
     comparePlans(
-      parsePlan("SELECT * FROM a.b.c VERSION AS OF Snapshot123456789"),
+      parsePlan("SELECT * FROM a.b.c VERSION AS OF 'Snapshot123456789'"),
       Project(Seq(UnresolvedStar(None)),
         UnresolvedRelation(
           Seq("a", "b", "c"),

@@ -600,7 +600,7 @@ fromClause
     ;
 
 temporalClause
-    : FOR? (SYSTEM_VERSION | VERSION) AS OF version=(INTEGER_VALUE | IDENTIFIER)
+    : FOR? (SYSTEM_VERSION | VERSION) AS OF version=(INTEGER_VALUE | STRING)
     | FOR? (SYSTEM_TIME | TIMESTAMP) AS OF timestamp=STRING
     ;
 
