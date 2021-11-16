@@ -165,7 +165,13 @@ class Iso8601TimestampFormatter(
   }
 
   override def format(localDateTime: LocalDateTime): String = {
-    localDateTime.format(formatter)
+    // If the legacy time parser policy is selected, we can only write timestamp with timezone,
+    // we will use the default time zone for it.
+    if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
+      format(toJavaTimestamp(instantToMicros(localDateTime.atZone(zoneId).toInstant)))
+    } else {
+      localDateTime.format(formatter)
+    }
   }
 
   override def validatePatternString(checkLegacy: Boolean): Unit = {
