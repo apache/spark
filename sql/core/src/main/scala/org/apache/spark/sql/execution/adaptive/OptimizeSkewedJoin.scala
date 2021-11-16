@@ -310,8 +310,10 @@ case class OptimizeSkewedJoin(
     if (plan2NewQueryStageMapping(plan)) {
       Seq(plan)
     } else {
+      // return exchange rather than it's child because ensureRequirements with requiredDistribution
+      // may bring extra shuffle if we just return child of exchange
       plan.collect {
-        case e: Exchange if plan2NewQueryStageMapping(e.child) => e.child
+        case e: Exchange if plan2NewQueryStageMapping(e.child) => e
       }
     }
   }
