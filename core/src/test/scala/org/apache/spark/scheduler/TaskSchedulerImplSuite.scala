@@ -2042,8 +2042,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     val busyTask = new Runnable {
       val lock : Object = new Object
+      var running : Boolean = false
       override def run(): Unit = {
         lock.synchronized {
+          running = true
           lock.wait()
         }
       }
@@ -2068,6 +2070,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskScheduler.executorLost(taskDescriptions(0).executorId, ExecutorProcessLost("Executor " +
       "heartbeat timed out"))
 
+    // Wait busyTask begin running
+    while (!busyTask.running) {
+      Thread.sleep(100)
+    }
     busyTask.markTaskDone
 
     // Wait until all events are processed
