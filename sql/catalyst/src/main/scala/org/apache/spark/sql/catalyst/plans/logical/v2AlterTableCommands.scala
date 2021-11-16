@@ -134,7 +134,7 @@ case class ReplaceColumns(
     table: LogicalPlan,
     columnsToAdd: Seq[QualifiedColType]) extends AlterTableCommand {
   columnsToAdd.foreach { c =>
-    TypeUtils.failWithIntervalType(c.dataType, forbidAnsiIntervals = false)
+    TypeUtils.failWithIntervalType(c.dataType)
   }
 
   override lazy val resolved: Boolean = table.resolved && columnsToAdd.forall(_.resolved)

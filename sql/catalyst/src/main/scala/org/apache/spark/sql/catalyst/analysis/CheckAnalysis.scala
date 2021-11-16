@@ -464,12 +464,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               failAnalysis(s"Invalid partitioning: ${badReferences.mkString(", ")}")
             }
 
-            create.tableSchema.foreach(f =>
-              TypeUtils.failWithIntervalType(f.dataType, forbidAnsiIntervals = false))
+            create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
           case write: V2WriteCommand if write.resolved =>
-            write.query.schema.foreach(f =>
-              TypeUtils.failWithIntervalType(f.dataType, forbidAnsiIntervals = false))
+            write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
           case alter: AlterTableCommand =>
             checkAlterTableCommand(alter)
