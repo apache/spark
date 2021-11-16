@@ -189,6 +189,7 @@ class TypesTests(ReusedSQLTestCase):
             "a",
             datetime.date(1970, 1, 1),
             datetime.datetime(1970, 1, 1, 0, 0),
+            datetime.timedelta(microseconds=123456678),
             1.0,
             [1.0],
             [1],
