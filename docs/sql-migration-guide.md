@@ -338,6 +338,11 @@ license: |
 
   - In Spark 3.0, datetime pattern letter `F` is **aligned day of week in month** that represents the concept of the count of days within the period of a week where the weeks are aligned to the start of the month. In Spark version 2.4 and earlier, it is **week of month** that represents the concept of the count of weeks within the month where weeks start on a fixed day-of-week, e.g. `2020-07-30` is 30 days (4 weeks and 2 days) after the first day of the month, so `date_format(date '2020-07-30', 'F')` returns 2 in Spark 3.0, but as a week count in Spark 2.x, it returns 5 because it locates in the 5th week of July 2020, where week one is 2020-07-01 to 07-04.
 
+  - In Spark 3.0, Spark will keep backslash in `spark-sql` interface when process command match `\;`, in Spark 2.4, Spark will not keep backslash in `spark-sql` interface when process command match `\;` and only keep `;`. Below examples show the sql will be executed when we pass the example query in to `spark-sql` interface:
+      | Query | Spark 2.4 | Spark 3.0 |
+      | ----- | --------- | --------- |
+      |`SELECT SPLIT('SPARK SQL;Quick', '\\\\;');` | `SELECT SPLIT('SPARK SQL;Quick', '\\\;');` | `SELECT SPLIT('SPARK SQL;Quick', '\\\\;');` |
+
 ### Data Sources
 
   - In Spark version 2.4 and below, when reading a Hive SerDe table with Spark native data sources(parquet/orc), Spark infers the actual file schema and update the table schema in metastore. In Spark 3.0, Spark doesn't infer the schema anymore. This should not cause any problems to end users, but if it does, set `spark.sql.hive.caseSensitiveInferenceMode` to `INFER_AND_SAVE`.
