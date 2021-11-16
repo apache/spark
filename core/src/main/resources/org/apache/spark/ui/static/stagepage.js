@@ -652,6 +652,38 @@ $(document).ready(function () {
             executorSummaryTableSelector.column(14).visible(dataToShow.showBytesSpilledData);
           });
 
+        // Prepare data for speculation metrics
+        $("#speculationSummaryTitle").hide();
+        $("#speculationSummary").hide();
+        var speculationSummaryInfo = responseBody.speculationSummary;
+        var speculationData;
+        if(speculationSummaryInfo) {
+          speculationData = [[
+            speculationSummaryInfo.numTasks,
+            speculationSummaryInfo.numActiveTasks,
+            speculationSummaryInfo.numCompletedTasks,
+            speculationSummaryInfo.numFailedTasks,
+            speculationSummaryInfo.numKilledTasks
+          ]];
+          if (speculationSummaryInfo.numTasks > 0) {
+            // Show speculationSummary if there is atleast one speculated task that ran
+            $("#speculationSummaryTitle").show();
+            $("#speculationSummary").show();
+          }
+        }
+        var speculationMetricsTableConf = {
+          "data": speculationData,
+          "paging": false,
+          "searching": false,
+          "order": [[0, "asc"]],
+          "bSort": false,
+          "bAutoWidth": false,
+          "oLanguage": {
+            "sEmptyTable": "No speculation metrics yet"
+          }
+        }
+        $("#speculation-metrics-table").DataTable(speculationMetricsTableConf);
+
         // prepare data for accumulatorUpdates
         var accumulatorTable = responseBody.accumulatorUpdates.filter(accumUpdate =>
           !(accumUpdate.name).toString().includes("internal."));
