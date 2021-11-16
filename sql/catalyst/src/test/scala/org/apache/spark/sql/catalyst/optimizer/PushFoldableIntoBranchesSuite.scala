@@ -136,7 +136,7 @@ class PushFoldableIntoBranchesSuite
     assertEquivalent(EqualTo(CaseWhen(Seq((a, b), (c, b + 1)), None), Literal(1)),
       EqualTo(CaseWhen(Seq((a, b), (c, b + 1)), None), Literal(1)))
     assertEquivalent(EqualTo(CaseWhen(Seq((a, b)), None), Literal(1)),
-      EqualTo(CaseWhen(Seq((a, b)), None), Literal(1)))
+      CaseWhen(Seq((a, EqualTo(b, Literal(1))))))
 
     // Push down non-deterministic expressions.
     val nonDeterministic =
