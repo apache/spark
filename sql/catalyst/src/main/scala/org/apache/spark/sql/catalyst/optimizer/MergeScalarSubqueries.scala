@@ -87,15 +87,11 @@ import org.apache.spark.sql.types.DataType
  */
 object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (conf.subqueryReuseEnabled) {
-      plan match {
-        case Subquery(_: CommonScalarSubqueries, _) => plan
-        case s: Subquery => s.copy(child = extractCommonScalarSubqueries(s.child))
-        case _: CommonScalarSubqueries => plan
-        case _ => extractCommonScalarSubqueries(plan)
-      }
-    } else {
-      plan
+    plan match {
+      case Subquery(_: CommonScalarSubqueries, _) => plan
+      case s: Subquery => s.copy(child = extractCommonScalarSubqueries(s.child))
+      case _: CommonScalarSubqueries => plan
+      case _ => extractCommonScalarSubqueries(plan)
     }
   }
 

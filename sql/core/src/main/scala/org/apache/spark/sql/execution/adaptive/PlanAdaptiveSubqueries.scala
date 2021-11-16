@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DynamicPruningExpression, GetStructField, ListQuery, Literal, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DynamicPruningExpression, GetStructField, ListQuery, Literal}
 import org.apache.spark.sql.catalyst.optimizer.ScalarSubqueryReference
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DYNAMIC_PRUNING_SUBQUERY, IN_SUBQUERY, SCALAR_SUBQUERY, SCALAR_SUBQUERY_REFERENCE}
@@ -30,8 +30,7 @@ case class PlanAdaptiveSubqueries(
 
   def apply(plan: SparkPlan): SparkPlan = {
     val (commonScalarSubqueries, child) = plan match {
-      case css: CommonScalarSubqueriesExec =>
-        css.scalarSubqueries.asInstanceOf[Seq[ScalarSubquery]] -> css.child
+      case css: CommonScalarSubqueriesExec => css.scalarSubqueries -> css.child
       case _ => Seq.empty -> plan
     }
 
